@@ -1,0 +1,47 @@
+import { proseGuardianAgentManifest } from "./prose-guardian/manifest.js";
+import { continuityAgentManifest } from "./continuity/manifest.js";
+import { directorAgentManifest } from "./director/manifest.js";
+import { echoChamberAgentManifest } from "./echo-chamber/manifest.js";
+import { worldStateAgentManifest } from "./world-state/manifest.js";
+import { expressionAgentManifest } from "./expression/manifest.js";
+import { questAgentManifest } from "./quest/manifest.js";
+import { backgroundAgentManifest } from "./background/manifest.js";
+import { characterTrackerAgentManifest } from "./character-tracker/manifest.js";
+import { personaStatsAgentManifest } from "./persona-stats/manifest.js";
+import { customTrackerAgentManifest } from "./custom-tracker/manifest.js";
+import { illustratorAgentManifest } from "./illustrator/manifest.js";
+import { lorebookKeeperAgentManifest } from "./lorebook-keeper/manifest.js";
+import { cardEvolutionAuditorAgentManifest } from "./card-evolution-auditor/manifest.js";
+import { combatAgentManifest } from "./combat/manifest.js";
+import { htmlAgentManifest } from "./html/manifest.js";
+import { spotifyAgentManifest } from "./spotify/manifest.js";
+import { knowledgeRetrievalAgentManifest } from "./knowledge-retrieval/manifest.js";
+import { knowledgeRouterAgentManifest } from "./knowledge-router/manifest.js";
+import { hapticAgentManifest } from "./haptic/manifest.js";
+import { cyoaAgentManifest } from "./cyoa/manifest.js";
+import { aboutMeKeeperAgentManifest } from "./about-me-keeper/manifest.js";
+export const BUILT_IN_AGENT_MANIFESTS = [
+    proseGuardianAgentManifest,
+    continuityAgentManifest,
+    directorAgentManifest,
+    echoChamberAgentManifest,
+    worldStateAgentManifest,
+    expressionAgentManifest,
+    questAgentManifest,
+    backgroundAgentManifest,
+    characterTrackerAgentManifest,
+    personaStatsAgentManifest,
+    customTrackerAgentManifest,
+    illustratorAgentManifest,
+    lorebookKeeperAgentManifest,
+    cardEvolutionAuditorAgentManifest,
+    combatAgentManifest,
+    htmlAgentManifest,
+    spotifyAgentManifest,
+    knowledgeRetrievalAgentManifest,
+    knowledgeRouterAgentManifest,
+    hapticAgentManifest,
+    cyoaAgentManifest,
+    aboutMeKeeperAgentManifest,
+];
+//# sourceMappingURL=agent-registry.generated.js.map

@@ -14,7 +14,22 @@
   ],
   "entrypoints": {
     "agents": "agents.json",
-    "server": "server.mjs"
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "conversation-surface"
+    ],
+    "conversationGame": {
+      "command": "/tictactoe",
+      "aliases": [
+        "tic-tac-toe",
+        "tic tac toe",
+        "noughts and crosses"
+      ],
+      "playerLabel": "1v1 strategy"
+    }
   },
   "files": [
     {
@@ -24,8 +39,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "c06170fd186af202efa5478ebef34e7ada7f6ed9099a57242c6d884ab30b736d",
-      "bytes": 66476
+      "sha256": "e2f41bb683082a62acde86e061e0f62c6a77783510d56becf05cdc28196a7a5b",
+      "bytes": 66598
+    },
+    {
+      "path": "client.js",
+      "sha256": "42585b0ee2ed4e305f5a6b25a0fc9f1e4595ef515fd52d3d865e23a5e6160faf",
+      "bytes": 613294
     }
   ],
   "permissions": [

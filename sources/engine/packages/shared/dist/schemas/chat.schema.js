@@ -1,0 +1,86 @@
+// ──────────────────────────────────────────────
+// Chat Zod Schemas
+// ──────────────────────────────────────────────
+import { z } from "zod";
+import { pendingSpatialTransitionSchema } from "./spatial-context.schema.js";
+export const chatModeSchema = z.enum(["conversation", "roleplay", "visual_novel", "game"]);
+export const messageRoleSchema = z.enum(["user", "assistant", "system", "narrator"]);
+export const createChatSchema = z.object({
+    name: z.string().min(1).max(200),
+    mode: chatModeSchema,
+    characterIds: z.array(z.string()).default([]),
+    groupId: z.string().nullable().default(null),
+    personaId: z.string().nullable().default(null),
+    promptPresetId: z.string().nullable().default(null),
+    connectionId: z.string().nullable().default(null),
+});
+export const createMessageSchema = z.object({
+    chatId: z.string(),
+    role: messageRoleSchema,
+    characterId: z.string().nullable().default(null),
+    content: z.string(),
+    extra: z.unknown().optional(),
+});
+export const generateRequestSchema = z.object({
+    chatId: z.string(),
+    userMessage: z.string().nullable().default(null),
+    regenerateMessageId: z.string().nullable().default(null),
+    continueMessageId: z.string().nullable().default(null),
+    connectionId: z.string().nullable().default(null),
+    pendingSpatialTransition: pendingSpatialTransitionSchema.nullable().optional().default(null),
+    impersonate: z.boolean().optional().default(false),
+    /** When true, this generation drives the active turn-game's bot seats instead of a normal chat reply. */
+    turnGameBots: z.boolean().optional().default(false),
+    streaming: z.boolean().optional().default(true),
+    userStatus: z.enum(["active", "idle", "dnd", "invisible"]).optional().default("active"),
+    userActivity: z.string().max(120).optional().default(""),
+    autonomous: z.boolean().optional().default(false),
+    autonomousIntentKey: z.string().max(100).optional().default(""),
+    userTimeZone: z.string().max(100).optional().default(""),
+    mentionedCharacterNames: z.array(z.string()).optional().default([]),
+    forCharacterId: z.string().nullable().optional().default(null),
+    skipPresenceDelay: z.boolean().optional().default(false),
+    narrativeDirectorMode: z.enum(["natural", "random"]).nullable().optional().default(null),
+    generationGuide: z.string().nullable().optional().default(null),
+    generationGuideSource: z.enum(["narrator", "guide", "game_start"]).nullable().optional().default(null),
+    agentInjectionOverrides: z
+        .array(z.object({
+        agentType: z.string().min(1).max(100),
+        agentName: z.string().min(1).max(200).optional(),
+        text: z.string().max(50_000),
+    }))
+        .optional()
+        .default([]),
+    debugMode: z.boolean().optional().default(false),
+    trimIncompleteModelOutput: z.boolean().optional().default(false),
+    musicPlayerEnabled: z.boolean().optional().default(true),
+    musicPlayerSource: z.enum(["spotify", "youtube", "custom"]).optional().default("spotify"),
+    attachments: z
+        .array(z.object({
+        type: z.string(),
+        data: z.string(),
+        filename: z.string().optional(),
+        name: z.string().optional(),
+    }))
+        .optional()
+        .default([]),
+    // Impersonate overrides (applied only when impersonate=true)
+    impersonatePresetId: z.string().nullish(),
+    impersonateConnectionId: z.string().nullish(),
+    impersonateBlockAgents: z.boolean().optional().default(false),
+    impersonatePromptTemplate: z.string().optional(),
+});
+// Auto-summarization entries — shape-only validation (no length caps).
+export const summaryEntrySchema = z.object({
+    summary: z.string(),
+    keyDetails: z.array(z.string()),
+});
+export const summariesPatchSchema = z.object({
+    daySummaries: z.record(z.string(), summaryEntrySchema).optional(),
+    weekSummaries: z.record(z.string(), summaryEntrySchema).optional(),
+});
+export const markAutonomousUnreadSchema = z.object({
+    characterId: z.string().min(1).nullable().optional().default(null),
+    count: z.number().int().positive().max(100).optional().default(1),
+});
+//# sourceMappingURL=chat.schema.js.map

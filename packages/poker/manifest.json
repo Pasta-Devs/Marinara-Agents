@@ -14,7 +14,22 @@
   ],
   "entrypoints": {
     "agents": "agents.json",
-    "server": "server.mjs"
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "conversation-surface"
+    ],
+    "conversationGame": {
+      "command": "/poker",
+      "aliases": [
+        "poker",
+        "hold'em",
+        "texas hold'em"
+      ],
+      "playerLabel": "Table game"
+    }
   },
   "files": [
     {
@@ -24,8 +39,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "d6133f6ead3f9bae4a7b62314c8aea392d4d42cda4ee243ecfda7bafd4e786e8",
-      "bytes": 83520
+      "sha256": "171b58dc63e712968aa5eeb7181ac7f409a4f5207a80fe995e3caf4ca6668c39",
+      "bytes": 83630
+    },
+    {
+      "path": "client.js",
+      "sha256": "796ea5a2141f5ad1083c14cbd402103741a539ed48b1b30a36b992765f249198",
+      "bytes": 621572
     }
   ],
   "permissions": [

@@ -14,7 +14,22 @@
   ],
   "entrypoints": {
     "agents": "agents.json",
-    "server": "server.mjs"
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "conversation-surface"
+    ],
+    "conversationGame": {
+      "command": "/rps",
+      "aliases": [
+        "rock paper scissors",
+        "rock-paper-scissors",
+        "rps"
+      ],
+      "playerLabel": "1v1 quick game"
+    }
   },
   "files": [
     {
@@ -24,8 +39,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "d23e0f7deef070a2b74705d928de11d9db3463944c289e497e56bae8f02ebf3c",
-      "bytes": 66552
+      "sha256": "36b778b8bf2a1f9a0a27e864d54c30af9baef358be4c5f5bcf145c152c27d4f2",
+      "bytes": 66690
+    },
+    {
+      "path": "client.js",
+      "sha256": "699b68a1f7653701884d259bc27b61f3dea0d7573237e8e55c7bec92eedda342",
+      "bytes": 617628
     }
   ],
   "permissions": [

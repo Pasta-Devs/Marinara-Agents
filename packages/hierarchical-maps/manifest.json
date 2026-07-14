@@ -14,7 +14,16 @@
   ],
   "entrypoints": {
     "agents": "agents.json",
-    "server": "server.mjs"
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "chat-settings",
+      "spatial-workspace",
+      "chat-runtime",
+      "game-world-map"
+    ]
   },
   "files": [
     {
@@ -24,8 +33,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "78690af4794e2bbcfa69f0169477d270dc6f58f9627f686962b61f6bf5154627",
-      "bytes": 1983529
+      "sha256": "52989e12bc05e954a7e006e1c177c8c6dce1066441fe66df6471d98976bfae62",
+      "bytes": 1947369
+    },
+    {
+      "path": "client.js",
+      "sha256": "d940320aba50612e70e206b2f82d9e2480be7961ebc5ae86abb2cf253165ce52",
+      "bytes": 745572
     }
   ],
   "permissions": [

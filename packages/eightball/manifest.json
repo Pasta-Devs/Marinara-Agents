@@ -14,7 +14,24 @@
   ],
   "entrypoints": {
     "agents": "agents.json",
-    "server": "server.mjs"
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "conversation-surface"
+    ],
+    "conversationGame": {
+      "command": "/8ball",
+      "aliases": [
+        "8-ball",
+        "8 ball",
+        "eightball",
+        "pool",
+        "billiards"
+      ],
+      "playerLabel": "1v1 table sport"
+    }
   },
   "files": [
     {
@@ -24,8 +41,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "82e99095eb853afa2527f564480fbf7a1bbc037e04ea112eee1c886d6b01c49b",
-      "bytes": 89991
+      "sha256": "8ad4ad32d97cfb7ae2df9134f3447b5f84969e2fca323b49a34087b513670fc1",
+      "bytes": 90109
+    },
+    {
+      "path": "client.js",
+      "sha256": "e2a3f8b0c2dfb06fb58ca8a74334fd806526e3b2906f1ea292e4f4c2bf21ad15",
+      "bytes": 625169
     }
   ],
   "permissions": [

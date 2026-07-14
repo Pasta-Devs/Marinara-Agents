@@ -1,79 +1,90 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
-const sharedEntry = process.env.MARINARA_SHARED_ENTRY ||
-  resolve(repoRoot, "../Marinara-Engine/packages/shared/dist/index.js");
-const shared = await import(pathToFileURL(sharedEntry).href);
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
+const catalogPath = join(repoRoot, "catalog/catalog.json");
 await mkdir(artifactsDir, { recursive: true });
-await mkdir(packagesDir, { recursive: true });
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const catalogPackages = [];
+const documentationAnchors = {
+  continuity: "continuity-checker",
+  director: "narrative-director",
+  expression: "expression-engine",
+  quest: "quest-tracker",
+  html: "immersive-html",
+  spotify: "music-dj",
+  haptic: "haptic-feedback",
+  cyoa: "cyoa-choices",
+};
 
-for (const agent of shared.BUILT_IN_AGENT_MANIFESTS) {
-  if (agent.libraryHidden || agent.runtimeDisabled) continue;
-  const id = agent.id;
-  const version = "1.0.0";
-  const agentDefinition = {
-    ...agent,
-    author: agent.author || "Pasta Devs",
-    defaultPromptTemplate: shared.getDefaultAgentPrompt(id),
-  };
-  const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
-  const manifest = {
-    schemaVersion: 1,
-    id,
-    name: agent.name,
-    version,
-    description: agent.description,
-    engine: { min: "2.2.2", maxExclusive: "3.0.0" },
-    kind: ["agent"],
-    entrypoints: { agents: "agents.json" },
-    files: [{ path: "agents.json", sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength }],
-    permissions: ["agent-runtime", "chat-read", "prompt-context", "storage", "ui"],
-    restartRequired: false,
-  };
+let catalog = { schemaVersion: 1, generatedAt: new Date().toISOString(), packages: [] };
+try {
+  catalog = JSON.parse(await readFile(catalogPath, "utf8"));
+} catch {
+  // The first catalog build starts from the package sources below.
+}
+
+const packageDirectories = (await readdir(packagesDir, { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort();
+const rebuiltIds = new Set();
+const rebuiltPackages = [];
+
+for (const id of packageDirectories) {
   const sourceDir = join(packagesDir, id);
-  await mkdir(sourceDir, { recursive: true });
-  await writeFile(join(sourceDir, "agents.json"), agentsBuffer);
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(join(sourceDir, "manifest.json"), "utf8"));
+  } catch {
+    continue;
+  }
+  // Feature packages own their build in build-feature-packages.mjs.
+  if (!manifest.kind?.includes("agent") || manifest.entrypoints?.server) continue;
+  const agentsBuffer = await readFile(join(sourceDir, manifest.entrypoints.agents));
+  manifest = {
+    ...manifest,
+    files: [{ path: manifest.entrypoints.agents, sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength }],
+  };
   await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
   const temporary = await mkdtemp(join(tmpdir(), `marinara-agent-${id}-`));
   try {
-    await writeFile(join(temporary, "agents.json"), agentsBuffer);
     await writeFile(join(temporary, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-    const artifactName = `${id}-${version}.zip`;
+    await writeFile(join(temporary, manifest.entrypoints.agents), agentsBuffer);
+    const artifactName = `${id}-${manifest.version}.zip`;
     const artifactPath = join(artifactsDir, artifactName);
     await rm(artifactPath, { force: true });
-    const zipped = spawnSync("zip", ["-X", "-q", artifactPath, "manifest.json", "agents.json"], {
+    const zipped = spawnSync("zip", ["-X", "-q", artifactPath, "manifest.json", manifest.entrypoints.agents], {
       cwd: temporary,
       stdio: "inherit",
     });
     if (zipped.status !== 0) throw new Error(`zip failed for ${id}`);
     const artifact = await readFile(artifactPath);
-    catalogPackages.push({
+    rebuiltPackages.push({
       manifest,
       artifact: {
         url: `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${basename(artifactPath)}`,
         sha256: sha256(artifact),
         bytes: artifact.byteLength,
       },
-      documentationUrl: `https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#${id}`,
+      documentationUrl: `https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#${documentationAnchors[id] || id}`,
     });
+    rebuiltIds.add(id);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
 }
 
-await writeFile(join(repoRoot, "catalog/catalog.json"), `${JSON.stringify({
-  schemaVersion: 1,
-  generatedAt: new Date().toISOString(),
-  packages: catalogPackages,
-}, null, 2)}\n`);
+catalog.packages = [
+  ...catalog.packages.filter((entry) => !rebuiltIds.has(entry.manifest.id)),
+  ...rebuiltPackages,
+].sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
+catalog.generatedAt = new Date().toISOString();
+await mkdir(dirname(catalogPath), { recursive: true });
+await writeFile(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);

@@ -1,54 +1,83 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-14T14:12:40.238Z",
+  "generatedAt": "2026-07-14T15:26:10.642Z",
   "packages": [
     {
       "manifest": {
         "schemaVersion": 1,
-        "id": "prose-guardian",
-        "name": "Prose Guardian",
+        "id": "eightball",
+        "name": "8-Ball Pool",
         "version": "1.0.0",
-        "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning.",
+        "description": "Play 8-Ball Pool with a Conversation character.",
         "engine": {
           "min": "2.2.2",
           "maxExclusive": "3.0.0"
         },
         "kind": [
-          "agent"
+          "agent",
+          "turn-game"
         ],
         "entrypoints": {
-          "agents": "agents.json"
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/8ball",
+            "aliases": [
+              "8-ball",
+              "8 ball",
+              "eightball",
+              "pool",
+              "billiards"
+            ],
+            "playerLabel": "1v1 table sport"
+          }
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "f391ee52c56212577d752206e5cb07ceb10af802f1583111778a25d5b7cce382",
-            "bytes": 1806
+            "sha256": "6be1eb2b14288c71a2c26b994a6bba162cfc6c2cd2f1eeeee4e809300c5cdc45",
+            "bytes": 437
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "8ad4ad32d97cfb7ae2df9134f3447b5f84969e2fca323b49a34087b513670fc1",
+            "bytes": 90109
+          },
+          {
+            "path": "client.js",
+            "sha256": "e2a3f8b0c2dfb06fb58ca8a74334fd806526e3b2906f1ea292e4f4c2bf21ad15",
+            "bytes": 625169
           }
         ],
         "permissions": [
           "agent-runtime",
           "chat-read",
-          "prompt-context",
+          "chat-write",
           "storage",
           "ui"
         ],
-        "restartRequired": false
+        "restartRequired": true
       },
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/prose-guardian-1.0.0.zip",
-        "sha256": "8a99bc75848c8bff09b246eff6847f14b6b25f1440b47277eeac3803952b1c71",
-        "bytes": 1472
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.0.zip",
+        "sha256": "7dbf917ad7af1b6c192360b5973b1cc3f37071f10496ad19bd757761fc337d6b",
+        "bytes": 200414
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#prose-guardian"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball"
     },
     {
       "manifest": {
         "schemaVersion": 1,
-        "id": "continuity",
-        "name": "Continuity Checker",
+        "id": "about-me-keeper",
+        "name": "About Me Keeper",
         "version": "1.0.0",
-        "description": "Post-processes the latest assistant message to fix concrete spatial, timeline, and physical logic errors without changing the story.",
+        "description": "Conversation mode: lets characters keep their own \"about me\" up to date — updating their public profile, or a private, chat-specific one, as the conversation reveals durable new self-facts.",
         "engine": {
           "min": "2.2.2",
           "maxExclusive": "3.0.0"
@@ -62,8 +91,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "8990ffadbf71440ba5a2ad0446343b15474dc68a53ec5c9d3c0db4c46737eab9",
-            "bytes": 1843
+            "sha256": "3aceeb1b7e353a5a1402fa2ff5d02459125631e03a1bea431893c6e603a4e0f5",
+            "bytes": 2661
           }
         ],
         "permissions": [
@@ -76,211 +105,11 @@
         "restartRequired": false
       },
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/continuity-1.0.0.zip",
-        "sha256": "df368c2980ff29dbedf6def6a1ba662a01759cf8e32fc25a04b0c8349aebd7fe",
-        "bytes": 1517
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/about-me-keeper-1.0.0.zip",
+        "sha256": "16b6e2d0ed41ddf5a510a72cc4badbb26c6ed394dc143443b51927300ac965a2",
+        "bytes": 1940
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#continuity"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "director",
-        "name": "Narrative Director",
-        "version": "1.0.0",
-        "description": "Creates one-shot story directions when you choose to push the next response forward.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "b885078af3840a1cb108c3372657a5f5326edc337011bd7fa8c8010ba4c1ae84",
-            "bytes": 1502
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/director-1.0.0.zip",
-        "sha256": "70c0c7049cfe02e7110ff3a377c41f1694cceaa1b733c682874a98a457617414",
-        "bytes": 1335
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#director"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "echo-chamber",
-        "name": "Echo Chamber",
-        "version": "1.0.0",
-        "description": "Simulates a live streaming-style chat reacting to your roleplay in real time.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "caa52303444ab0f603107dfe3f16fb231b41d6b64a37d1ab4134dab1fbc16f4f",
-            "bytes": 7146
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/echo-chamber-1.0.0.zip",
-        "sha256": "3a28e919db4850aa0754601edce1ca92f275c926268cbafa104ee760145e3e0b",
-        "bytes": 2335
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#echo-chamber"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "world-state",
-        "name": "World State",
-        "version": "1.0.0",
-        "description": "Tracks date, time, weather, location, temperature, and custom world details automatically.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "b86e3e8d81ead21e2290a763057e1d81daf307fec92ace5e039b494409e0a8e8",
-            "bytes": 2006
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.0.0.zip",
-        "sha256": "a969ee67dd81b9dfb955ecb3c6df4fd025225476d203a1e21bb9a46d57365037",
-        "bytes": 1547
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "expression",
-        "name": "Expression Engine",
-        "version": "1.0.0",
-        "description": "Detects character emotions and selects VN sprites/expressions.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "f605283de10ccd186d8b899d402be68a7fe1e58080ff9ff497a9ef22168bc883",
-            "bytes": 1882
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.0.zip",
-        "sha256": "df15c081f4ad83e5f954ad1ce709cf216bd4535214c15e5287f7f9a192a9dd29",
-        "bytes": 1490
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "quest",
-        "name": "Quest Tracker",
-        "version": "1.0.0",
-        "description": "Manages quest objectives, completion states, and rewards.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "e881765edd889b087abc369f298cfb89e649d05af4621e82bce125d7d4df665b",
-            "bytes": 1508
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quest-1.0.0.zip",
-        "sha256": "69aaa6bdfb2db1905e8e759ce3097e72b831e6da3f5474c4448087895ae2b6b5",
-        "bytes": 1295
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#about-me-keeper"
     },
     {
       "manifest": {
@@ -317,210 +146,10 @@
       },
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/background-1.0.0.zip",
-        "sha256": "89187007f28b0817905f1705c8a31322b9bd868c49de57cef7617fb7290333f4",
+        "sha256": "ed1628b421b6bf6f4ef368437b0c38b39438f97c6d34971ca36a7df876e93be9",
         "bytes": 1609
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#background"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "character-tracker",
-        "name": "Character Tracker",
-        "version": "1.0.0",
-        "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.).",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "bba2dfe845675480d48a707e934667e1d6403991930277288ebebe1832af9a01",
-            "bytes": 2446
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.0.0.zip",
-        "sha256": "cb13b4ded6b1f568eef1fcb4eeabbe9a03edca617c5c84b0838ca6b581853dd2",
-        "bytes": 1753
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "persona-stats",
-        "name": "Persona Stats",
-        "version": "1.0.0",
-        "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "610c97ae29ed06dc54120490603ef4ee22d9cdb429a35fb18460f5ba04c5a687",
-            "bytes": 2031
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/persona-stats-1.0.0.zip",
-        "sha256": "ddd67e12e6c86c161ad936d04c3561bbc1c6d012780289135be8796e3e75bca3",
-        "bytes": 1667
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#persona-stats"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "custom-tracker",
-        "name": "Custom Tracker",
-        "version": "1.0.0",
-        "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "1235e960aeb723842b1f2a092f332f06f60503265bdb2c485a0bb00554a811ca",
-            "bytes": 1410
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.0.0.zip",
-        "sha256": "2774b1cc989bfb54423c39093e8430e9d24c6b55c4468b3b253275a3846938ea",
-        "bytes": 1384
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "illustrator",
-        "name": "Illustrator",
-        "version": "1.0.0",
-        "description": "Generates image prompts for key scenes (requires image generation API).",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "6540f4dbf6bc22adc294ae859cda321b496209e68948bc016b62131b73fd2bf9",
-            "bytes": 11128
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/illustrator-1.0.0.zip",
-        "sha256": "377581a334473643246f0919f23a2017e21ea38248b2d16acde5f4e54707e0f5",
-        "bytes": 2695
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#illustrator"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "lorebook-keeper",
-        "name": "Lorebook Keeper",
-        "version": "1.0.0",
-        "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "bf67ad061c80088ce4351bc4c4a8e14004127771f0ec2f81b18c76f246a13adc",
-            "bytes": 1780
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/lorebook-keeper-1.0.0.zip",
-        "sha256": "966b52ead5570a1493dca16d82840a15b24aade86d31168d11b44b0bb29d7c1e",
-        "bytes": 1485
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#lorebook-keeper"
     },
     {
       "manifest": {
@@ -557,10 +186,115 @@
       },
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/card-evolution-auditor-1.0.0.zip",
-        "sha256": "570548e49b345e7a5bc51326c1505fc257bca19284d0a0595b91737f56b21652",
+        "sha256": "b8b4befc55b7a3b5946dcc8f4c2b6f3eaaf18d007d1f4b2371409941e69ecf98",
         "bytes": 1496
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#card-evolution-auditor"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "character-tracker",
+        "name": "Character Tracker",
+        "version": "1.0.0",
+        "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.).",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "bba2dfe845675480d48a707e934667e1d6403991930277288ebebe1832af9a01",
+            "bytes": 2446
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.0.0.zip",
+        "sha256": "cbb31c93535ebf1466f58008398c767166784aa693a02de2b3cbe48ed42cd020",
+        "bytes": 1753
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "chess",
+        "name": "Chess",
+        "version": "1.0.0",
+        "description": "Play Chess with a Conversation character.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/chess",
+            "aliases": [
+              "chess"
+            ],
+            "playerLabel": "1v1 strategy"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "9a3805fa3ee9a51a2a09dbae4c684efaf4b877f95c3a37fdf45305403597996c",
+            "bytes": 421
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "a6716f9b70ee9c9ae7210d2b66089b2f55fe0aa6e261cae9f3aed1dbba1eec07",
+            "bytes": 108043
+          },
+          {
+            "path": "client.js",
+            "sha256": "69268bd97f72138b71a5fd8ed2e872a34e4b73db98a729e763a5279daaf5204b",
+            "bytes": 619166
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.0.zip",
+        "sha256": "5e9bae3b62ef8414050e10444e04aecdf23c1ca623d783f99570329e6b41f327",
+        "bytes": 204211
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess"
     },
     {
       "manifest": {
@@ -597,10 +331,416 @@
       },
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/combat-1.0.0.zip",
-        "sha256": "7819cf0bd88706ace0c7201a60396f9e0bd2c5ad370adad90826c68631245dc7",
+        "sha256": "ce799f52f7001bd665bc292a178b5562fe0538729e7189fad56e00747d6723f8",
         "bytes": 1512
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#combat"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "continuity",
+        "name": "Continuity Checker",
+        "version": "1.0.0",
+        "description": "Post-processes the latest assistant message to fix concrete spatial, timeline, and physical logic errors without changing the story.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "8990ffadbf71440ba5a2ad0446343b15474dc68a53ec5c9d3c0db4c46737eab9",
+            "bytes": 1843
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/continuity-1.0.0.zip",
+        "sha256": "74965ea08c38ab8ab7e2ff980632f4657034b747113710093d851b426486d036",
+        "bytes": 1517
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#continuity-checker"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "conversation-calls",
+        "name": "Conversation Calls",
+        "version": "1.0.0",
+        "description": "Adds live audio and video calls with Conversation characters.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "conversation-calls"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-toolbar",
+            "conversation-surface",
+            "chat-settings"
+          ]
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "6a15f0d812f7f3e212996c98db0f6ed1dd3b65c9643765ca7e7131b8fc8eb714",
+            "bytes": 467
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "785ba190b0e02a3c417a4a13c4d57d9828710d6d38b57fa0200cad8e2dcfbb94",
+            "bytes": 2405712
+          },
+          {
+            "path": "client.js",
+            "sha256": "3189668a179c41ef0023522e347d6133b89498adcd5549ab89f7434300722e59",
+            "bytes": 900756
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.0.zip",
+        "sha256": "c9544cb746ecfe114a028dd81c1545b2242d50cdc2006bda1d14f970bace34eb",
+        "bytes": 922079
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "custom-tracker",
+        "name": "Custom Tracker",
+        "version": "1.0.0",
+        "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "1235e960aeb723842b1f2a092f332f06f60503265bdb2c485a0bb00554a811ca",
+            "bytes": 1410
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.0.0.zip",
+        "sha256": "962eec3fe6d6dccd3e09b02fffb1f7d4b78aabc2e07960a64ae764e930739fe9",
+        "bytes": 1384
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "cyoa",
+        "name": "CYOA Choices",
+        "version": "1.0.0",
+        "description": "Generates interactive Choose Your Own Adventure choices after each assistant message. Click a choice to send it as your response. Available in Roleplay chats.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "63066a601fee0c76241bddd40f96aa472c95abfe84bf01c15a80d86e4ff8ec00",
+            "bytes": 1363
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/cyoa-1.0.0.zip",
+        "sha256": "211cfcc669d2c3ac361ec2f27aa9344b1044b16c568cc74313985203d9b5cb7b",
+        "bytes": 1394
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#cyoa-choices"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "echo-chamber",
+        "name": "Echo Chamber",
+        "version": "1.0.0",
+        "description": "Simulates a live streaming-style chat reacting to your roleplay in real time.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "caa52303444ab0f603107dfe3f16fb231b41d6b64a37d1ab4134dab1fbc16f4f",
+            "bytes": 7146
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/echo-chamber-1.0.0.zip",
+        "sha256": "43cc0dab76d4b650e41a071d745fc3d7d26090d3bff86ae592a380a43026f04d",
+        "bytes": 2335
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#echo-chamber"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "expression",
+        "name": "Expression Engine",
+        "version": "1.0.0",
+        "description": "Detects character emotions and selects VN sprites/expressions.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "f605283de10ccd186d8b899d402be68a7fe1e58080ff9ff497a9ef22168bc883",
+            "bytes": 1882
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.0.zip",
+        "sha256": "3c2c24e40921ed1ca220b6e0998bc4943ae7b8c53a7e5e35af3f4b4b81eb169d",
+        "bytes": 1490
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "haptic",
+        "name": "Haptic Feedback",
+        "version": "1.0.0",
+        "description": "Analyzes narrative content and controls connected intimate toys in real time. Requires Intiface Central running locally — connect your toy there first, then enable this agent.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "c507079bee0aa5b689463467891e48ab7d26f26ce40d24f4c84638dc902f5064",
+            "bytes": 1841
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/haptic-1.0.0.zip",
+        "sha256": "9f56affbb1ef5620b5d3a117593d918f9054c48718b73e255c07039682bb91e3",
+        "bytes": 1603
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "hierarchical-maps",
+        "name": "Hierarchical Maps",
+        "version": "1.0.0",
+        "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "maps"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "chat-settings",
+            "spatial-workspace",
+            "chat-runtime",
+            "game-world-map"
+          ]
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "3e5762ff7755aadebb68b73b4fef2c7388a3f41fb82ae41642aa866a9e90f7f1",
+            "bytes": 520
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "52989e12bc05e954a7e006e1c177c8c6dce1066441fe66df6471d98976bfae62",
+            "bytes": 1947369
+          },
+          {
+            "path": "client.js",
+            "sha256": "d940320aba50612e70e206b2f82d9e2480be7961ebc5ae86abb2cf253165ce52",
+            "bytes": 745572
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "network",
+          "prompt-context",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.0.0.zip",
+        "sha256": "37215dd575ea83a2ad7052bdae5612ffaea78feefa03254cfcee174cf334ec19",
+        "bytes": 746628
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "illustrator",
+        "name": "Illustrator",
+        "version": "1.0.0",
+        "description": "Generates image prompts for key scenes (requires image generation API).",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "6540f4dbf6bc22adc294ae859cda321b496209e68948bc016b62131b73fd2bf9",
+            "bytes": 11128
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/illustrator-1.0.0.zip",
+        "sha256": "21da0dd2e61d4837e6e88cfd406421d12199ebf39a94719bca2a553684d48eda",
+        "bytes": 2695
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#illustrator"
     },
     {
       "manifest": {
@@ -637,50 +777,10 @@
       },
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/html-1.0.0.zip",
-        "sha256": "1eb3fc26d539a6c0b4029e566220f2e67130406d86855fe019f7792369402e0e",
+        "sha256": "f82b605c04dc73479e9f86fcf1929083b1b20fec9953f63523ffa5a9de2fba03",
         "bytes": 1586
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#html"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "spotify",
-        "name": "Music DJ",
-        "version": "1.0.0",
-        "description": "Analyzes the narrative mood and plays matching music through Spotify, YouTube, or local Game Assets music.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "07c1428044f4837a54938ceaf380589e80d6bb85d4543f28d9c997a75ba033e2",
-            "bytes": 7078
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "prompt-context",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": false
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/spotify-1.0.0.zip",
-        "sha256": "4573dfcbfe16915da6775a8b9deb9ed8ba42c0461f94c3e29ff1b3a009e216b9",
-        "bytes": 2421
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#spotify"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#immersive-html"
     },
     {
       "manifest": {
@@ -717,7 +817,7 @@
       },
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/knowledge-retrieval-1.0.0.zip",
-        "sha256": "5933934bf2d90f11680fddd241deea2f3cc6ee9d041b8d8bcafabf6bfd5eda20",
+        "sha256": "b92b37c9369628744362ce683af314c87140b0f84e8016ca26d77958bc5afb1e",
         "bytes": 1434
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-retrieval"
@@ -757,7 +857,7 @@
       },
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/knowledge-router-1.0.0.zip",
-        "sha256": "8d1c9734cbd896c7b209d5416362b4dc6b2802c644736b120bb75e74d0b43d96",
+        "sha256": "3dc8ac4fc03e7fec600fa972c8945d47d169161e7c527ce07b77f3155d45e805",
         "bytes": 1556
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-router"
@@ -765,10 +865,10 @@
     {
       "manifest": {
         "schemaVersion": 1,
-        "id": "haptic",
-        "name": "Haptic Feedback",
+        "id": "lorebook-keeper",
+        "name": "Lorebook Keeper",
         "version": "1.0.0",
-        "description": "Analyzes narrative content and controls connected intimate toys in real time. Requires Intiface Central running locally — connect your toy there first, then enable this agent.",
+        "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes.",
         "engine": {
           "min": "2.2.2",
           "maxExclusive": "3.0.0"
@@ -782,8 +882,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "c507079bee0aa5b689463467891e48ab7d26f26ce40d24f4c84638dc902f5064",
-            "bytes": 1841
+            "sha256": "bf67ad061c80088ce4351bc4c4a8e14004127771f0ec2f81b18c76f246a13adc",
+            "bytes": 1780
           }
         ],
         "permissions": [
@@ -796,19 +896,19 @@
         "restartRequired": false
       },
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/haptic-1.0.0.zip",
-        "sha256": "3b95c02883a24577af2412ea70d182ef7cee3bc4c78fa158aceb0f5e4923f731",
-        "bytes": 1603
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/lorebook-keeper-1.0.0.zip",
+        "sha256": "f112b1737fb46f95315491f6f2a105a3971dd460524a03ca79137464285ce7ca",
+        "bytes": 1485
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#lorebook-keeper"
     },
     {
       "manifest": {
         "schemaVersion": 1,
-        "id": "cyoa",
-        "name": "CYOA Choices",
+        "id": "spotify",
+        "name": "Music DJ",
         "version": "1.0.0",
-        "description": "Generates interactive Choose Your Own Adventure choices after each assistant message. Click a choice to send it as your response. Available in Roleplay chats.",
+        "description": "Analyzes the narrative mood and plays matching music through Spotify, YouTube, or local Game Assets music.",
         "engine": {
           "min": "2.2.2",
           "maxExclusive": "3.0.0"
@@ -822,8 +922,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "63066a601fee0c76241bddd40f96aa472c95abfe84bf01c15a80d86e4ff8ec00",
-            "bytes": 1363
+            "sha256": "07c1428044f4837a54938ceaf380589e80d6bb85d4543f28d9c997a75ba033e2",
+            "bytes": 7078
           }
         ],
         "permissions": [
@@ -836,200 +936,91 @@
         "restartRequired": false
       },
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/cyoa-1.0.0.zip",
-        "sha256": "aa3002a218e98f7bd6ab96850f13123d4c9e2657f1d00343f764d3def3a5dd52",
-        "bytes": 1394
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/spotify-1.0.0.zip",
+        "sha256": "6f3433ba288173d3ad6d1b36f13dac0f6ddebba39c63b242e2adf20ccbac9db4",
+        "bytes": 2421
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#cyoa"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#music-dj"
     },
     {
       "manifest": {
         "schemaVersion": 1,
-        "id": "hierarchical-maps",
-        "name": "Hierarchical Maps",
+        "id": "director",
+        "name": "Narrative Director",
         "version": "1.0.0",
-        "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
+        "description": "Creates one-shot story directions when you choose to push the next response forward.",
         "engine": {
           "min": "2.2.2",
           "maxExclusive": "3.0.0"
         },
         "kind": [
-          "agent",
-          "maps"
+          "agent"
         ],
         "entrypoints": {
-          "agents": "agents.json",
-          "server": "server.mjs"
+          "agents": "agents.json"
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "3e5762ff7755aadebb68b73b4fef2c7388a3f41fb82ae41642aa866a9e90f7f1",
-            "bytes": 520
-          },
-          {
-            "path": "server.mjs",
-            "sha256": "78690af4794e2bbcfa69f0169477d270dc6f58f9627f686962b61f6bf5154627",
-            "bytes": 1983529
+            "sha256": "b885078af3840a1cb108c3372657a5f5326edc337011bd7fa8c8010ba4c1ae84",
+            "bytes": 1502
           }
         ],
         "permissions": [
           "agent-runtime",
           "chat-read",
-          "chat-write",
-          "network",
           "prompt-context",
-          "routes",
           "storage",
           "ui"
         ],
-        "restartRequired": true
+        "restartRequired": false
       },
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.0.0.zip",
-        "sha256": "5b0d649919f9fd8cb0b9a20853f491001d3416c4146faa26825a7a4e68e7c6a2",
-        "bytes": 555206
-      }
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/director-1.0.0.zip",
+        "sha256": "554e25f40fa92588b02f89b96333159911dc3b2754f3ae75d0e07b5e28afe8f6",
+        "bytes": 1335
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director"
     },
     {
       "manifest": {
         "schemaVersion": 1,
-        "id": "conversation-calls",
-        "name": "Conversation Calls",
+        "id": "persona-stats",
+        "name": "Persona Stats",
         "version": "1.0.0",
-        "description": "Adds live audio and video calls with Conversation characters.",
+        "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events.",
         "engine": {
           "min": "2.2.2",
           "maxExclusive": "3.0.0"
         },
         "kind": [
-          "agent",
-          "conversation-calls"
+          "agent"
         ],
         "entrypoints": {
-          "agents": "agents.json",
-          "server": "server.mjs"
+          "agents": "agents.json"
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "6a15f0d812f7f3e212996c98db0f6ed1dd3b65c9643765ca7e7131b8fc8eb714",
-            "bytes": 467
-          },
-          {
-            "path": "server.mjs",
-            "sha256": "124a247460787cf14907425941badde2958c5de39cb6357472968d3ee3c8497f",
-            "bytes": 2437973
+            "sha256": "610c97ae29ed06dc54120490603ef4ee22d9cdb429a35fb18460f5ba04c5a687",
+            "bytes": 2031
           }
         ],
         "permissions": [
           "agent-runtime",
           "chat-read",
-          "chat-write",
-          "network",
-          "routes",
+          "prompt-context",
           "storage",
           "ui"
         ],
-        "restartRequired": true
+        "restartRequired": false
       },
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.0.zip",
-        "sha256": "c65738eeef177fa79329b92c91773e2ec4ec333e998189d689fa4caa39aeb031",
-        "bytes": 685685
-      }
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "uno",
-        "name": "UNO",
-        "version": "1.0.0",
-        "description": "Play UNO with Conversation characters.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent",
-          "turn-game"
-        ],
-        "entrypoints": {
-          "agents": "agents.json",
-          "server": "server.mjs"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "81e0c8a2da5563fe49672977348ff67e573daeecff401897eefb81fff87c3557",
-            "bytes": 414
-          },
-          {
-            "path": "server.mjs",
-            "sha256": "669e3f6f25f79ec271682e89ec2187d769314c35cb5ec9975c5cf717b452d158",
-            "bytes": 83626
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "chat-write",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": true
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/persona-stats-1.0.0.zip",
+        "sha256": "0fa59f4122ea4e206797148e1455f571a97df112d4c3fbf0e95d4e90d79f4af6",
+        "bytes": 1667
       },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.0.zip",
-        "sha256": "8a2965bcd19b602c6689c892b91d24ac2cbe6025a20ba72969714c97ba296417",
-        "bytes": 22762
-      }
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "chess",
-        "name": "Chess",
-        "version": "1.0.0",
-        "description": "Play Chess with a Conversation character.",
-        "engine": {
-          "min": "2.2.2",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent",
-          "turn-game"
-        ],
-        "entrypoints": {
-          "agents": "agents.json",
-          "server": "server.mjs"
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "9a3805fa3ee9a51a2a09dbae4c684efaf4b877f95c3a37fdf45305403597996c",
-            "bytes": 421
-          },
-          {
-            "path": "server.mjs",
-            "sha256": "c733dba43b84dd3651cb6b44e67f369979fb14ac89f17ed7cf9085d41d32debb",
-            "bytes": 107935
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "chat-write",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": true
-      },
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.0.zip",
-        "sha256": "176748c8d77ae2bb49a67a97b99e9cf92afc602547c84a4a1c3ed459d0288eff",
-        "bytes": 31962
-      }
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#persona-stats"
     },
     {
       "manifest": {
@@ -1048,7 +1039,22 @@
         ],
         "entrypoints": {
           "agents": "agents.json",
-          "server": "server.mjs"
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/poker",
+            "aliases": [
+              "poker",
+              "hold'em",
+              "texas hold'em"
+            ],
+            "playerLabel": "Table game"
+          }
         },
         "files": [
           {
@@ -1058,8 +1064,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "d6133f6ead3f9bae4a7b62314c8aea392d4d42cda4ee243ecfda7bafd4e786e8",
-            "bytes": 83520
+            "sha256": "171b58dc63e712968aa5eeb7181ac7f409a4f5207a80fe995e3caf4ca6668c39",
+            "bytes": 83630
+          },
+          {
+            "path": "client.js",
+            "sha256": "796ea5a2141f5ad1083c14cbd402103741a539ed48b1b30a36b992765f249198",
+            "bytes": 621572
           }
         ],
         "permissions": [
@@ -1073,101 +1084,90 @@
       },
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.0.zip",
-        "sha256": "6eecca2656fa36176175d0307977fbaf1620894fc9ef31064ac50f11fcdbec7f",
-        "bytes": 23257
-      }
+        "sha256": "f93989f13eaf7cbbdb9625ca23302a13e7515dd448d4f2539b3b324bccccc9ce",
+        "bytes": 195693
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker"
     },
     {
       "manifest": {
         "schemaVersion": 1,
-        "id": "eightball",
-        "name": "8-Ball Pool",
+        "id": "prose-guardian",
+        "name": "Prose Guardian",
         "version": "1.0.0",
-        "description": "Play 8-Ball Pool with a Conversation character.",
+        "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning.",
         "engine": {
           "min": "2.2.2",
           "maxExclusive": "3.0.0"
         },
         "kind": [
-          "agent",
-          "turn-game"
+          "agent"
         ],
         "entrypoints": {
-          "agents": "agents.json",
-          "server": "server.mjs"
+          "agents": "agents.json"
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "6be1eb2b14288c71a2c26b994a6bba162cfc6c2cd2f1eeeee4e809300c5cdc45",
-            "bytes": 437
-          },
-          {
-            "path": "server.mjs",
-            "sha256": "82e99095eb853afa2527f564480fbf7a1bbc037e04ea112eee1c886d6b01c49b",
-            "bytes": 89991
+            "sha256": "f391ee52c56212577d752206e5cb07ceb10af802f1583111778a25d5b7cce382",
+            "bytes": 1806
           }
         ],
         "permissions": [
           "agent-runtime",
           "chat-read",
-          "chat-write",
+          "prompt-context",
           "storage",
           "ui"
         ],
-        "restartRequired": true
+        "restartRequired": false
       },
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.0.zip",
-        "sha256": "7c8ac49afbad9cfe64154bbb948758477ff88e4a4f799858f87bfbf73c153f24",
-        "bytes": 26132
-      }
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/prose-guardian-1.0.0.zip",
+        "sha256": "b4d6c415bf7a5c7a9499525627a9f3a66f6c2eb1361c6249ac85e8b2540e0acb",
+        "bytes": 1472
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#prose-guardian"
     },
     {
       "manifest": {
         "schemaVersion": 1,
-        "id": "tic-tac-toe",
-        "name": "Tic-Tac-Toe",
+        "id": "quest",
+        "name": "Quest Tracker",
         "version": "1.0.0",
-        "description": "Play Tic-Tac-Toe with a Conversation character.",
+        "description": "Manages quest objectives, completion states, and rewards.",
         "engine": {
           "min": "2.2.2",
           "maxExclusive": "3.0.0"
         },
         "kind": [
-          "agent",
-          "turn-game"
+          "agent"
         ],
         "entrypoints": {
-          "agents": "agents.json",
-          "server": "server.mjs"
+          "agents": "agents.json"
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "b9225ad847695b22f5135caf3d86a4f5395ca1068c40c4f7774f4c1d1ae7140d",
-            "bytes": 439
-          },
-          {
-            "path": "server.mjs",
-            "sha256": "c06170fd186af202efa5478ebef34e7ada7f6ed9099a57242c6d884ab30b736d",
-            "bytes": 66476
+            "sha256": "e881765edd889b087abc369f298cfb89e649d05af4621e82bce125d7d4df665b",
+            "bytes": 1508
           }
         ],
         "permissions": [
           "agent-runtime",
           "chat-read",
-          "chat-write",
+          "prompt-context",
           "storage",
           "ui"
         ],
-        "restartRequired": true
+        "restartRequired": false
       },
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.0.zip",
-        "sha256": "9c596f4bcf6ad76012a9027c192ee5c7dd3de5f9988662c92d0d36b978b2a2df",
-        "bytes": 17881
-      }
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quest-1.0.0.zip",
+        "sha256": "5b5fd2fe72abb3382dcdac607b643f3104c3b2de776ea68cef66c3be24b59bf9",
+        "bytes": 1295
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest-tracker"
     },
     {
       "manifest": {
@@ -1186,7 +1186,22 @@
         ],
         "entrypoints": {
           "agents": "agents.json",
-          "server": "server.mjs"
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/rps",
+            "aliases": [
+              "rock paper scissors",
+              "rock-paper-scissors",
+              "rps"
+            ],
+            "playerLabel": "1v1 quick game"
+          }
         },
         "files": [
           {
@@ -1196,8 +1211,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "d23e0f7deef070a2b74705d928de11d9db3463944c289e497e56bae8f02ebf3c",
-            "bytes": 66552
+            "sha256": "36b778b8bf2a1f9a0a27e864d54c30af9baef358be4c5f5bcf145c152c27d4f2",
+            "bytes": 66690
+          },
+          {
+            "path": "client.js",
+            "sha256": "699b68a1f7653701884d259bc27b61f3dea0d7573237e8e55c7bec92eedda342",
+            "bytes": 617628
           }
         ],
         "permissions": [
@@ -1211,9 +1231,182 @@
       },
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.0.zip",
-        "sha256": "d066d4cb2139e52b8cb1d0c0f21867cbe117b92eae0daf122e5842561bef16ad",
-        "bytes": 17707
-      }
+        "sha256": "2fee97ce7f235799bfb662a2d425ddd93656cf902401cf4a3691eccfc8b3892c",
+        "bytes": 189073
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "tic-tac-toe",
+        "name": "Tic-Tac-Toe",
+        "version": "1.0.0",
+        "description": "Play Tic-Tac-Toe with a Conversation character.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/tictactoe",
+            "aliases": [
+              "tic-tac-toe",
+              "tic tac toe",
+              "noughts and crosses"
+            ],
+            "playerLabel": "1v1 strategy"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "b9225ad847695b22f5135caf3d86a4f5395ca1068c40c4f7774f4c1d1ae7140d",
+            "bytes": 439
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "e2f41bb683082a62acde86e061e0f62c6a77783510d56becf05cdc28196a7a5b",
+            "bytes": 66598
+          },
+          {
+            "path": "client.js",
+            "sha256": "42585b0ee2ed4e305f5a6b25a0fc9f1e4595ef515fd52d3d865e23a5e6160faf",
+            "bytes": 613294
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.0.zip",
+        "sha256": "3bf4604d9e4e81b25659de401dfd499e886c0d74c229f4a421fcfbd785c62fb8",
+        "bytes": 188262
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "uno",
+        "name": "UNO",
+        "version": "1.0.0",
+        "description": "Play UNO with Conversation characters.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/uno",
+            "aliases": [
+              "uno"
+            ],
+            "playerLabel": "Group card game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "81e0c8a2da5563fe49672977348ff67e573daeecff401897eefb81fff87c3557",
+            "bytes": 414
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "c5337752a41a6a4d221708eac51322b2324e63c68a562cabadc70b29eb6c3335",
+            "bytes": 83732
+          },
+          {
+            "path": "client.js",
+            "sha256": "ccd159d4e37aec2839013ba3b46ef1055c63c9602edc215f0f8eef601b426a73",
+            "bytes": 619914
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.0.zip",
+        "sha256": "8a4b3b07edf45474c7b3f35533e5dfaefa6e4e44e8cd021ca70acec6e2f0c60b",
+        "bytes": 195250
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "world-state",
+        "name": "World State",
+        "version": "1.0.0",
+        "description": "Tracks date, time, weather, location, temperature, and custom world details automatically.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "b86e3e8d81ead21e2290a763057e1d81daf307fec92ace5e039b494409e0a8e8",
+            "bytes": 2006
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.0.0.zip",
+        "sha256": "d132d8b0b22f686725007104145a434f7552ba25191ac79e757a3602bae7c881",
+        "bytes": 1547
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state"
     }
   ]
 }

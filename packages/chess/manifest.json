@@ -14,7 +14,20 @@
   ],
   "entrypoints": {
     "agents": "agents.json",
-    "server": "server.mjs"
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "conversation-surface"
+    ],
+    "conversationGame": {
+      "command": "/chess",
+      "aliases": [
+        "chess"
+      ],
+      "playerLabel": "1v1 strategy"
+    }
   },
   "files": [
     {
@@ -24,8 +37,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "c733dba43b84dd3651cb6b44e67f369979fb14ac89f17ed7cf9085d41d32debb",
-      "bytes": 107935
+      "sha256": "a6716f9b70ee9c9ae7210d2b66089b2f55fe0aa6e261cae9f3aed1dbba1eec07",
+      "bytes": 108043
+    },
+    {
+      "path": "client.js",
+      "sha256": "69268bd97f72138b71a5fd8ed2e872a34e4b73db98a729e763a5279daaf5204b",
+      "bytes": 619166
     }
   ],
   "permissions": [

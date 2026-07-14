@@ -14,7 +14,15 @@
   ],
   "entrypoints": {
     "agents": "agents.json",
-    "server": "server.mjs"
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "conversation-toolbar",
+      "conversation-surface",
+      "chat-settings"
+    ]
   },
   "files": [
     {
@@ -24,8 +32,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "124a247460787cf14907425941badde2958c5de39cb6357472968d3ee3c8497f",
-      "bytes": 2437973
+      "sha256": "785ba190b0e02a3c417a4a13c4d57d9828710d6d38b57fa0200cad8e2dcfbb94",
+      "bytes": 2405712
+    },
+    {
+      "path": "client.js",
+      "sha256": "3189668a179c41ef0023522e347d6133b89498adcd5549ab89f7434300722e59",
+      "bytes": 900756
     }
   ],
   "permissions": [

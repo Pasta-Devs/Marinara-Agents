@@ -1,0 +1,1265 @@
+// ──────────────────────────────────────────────
+// Storage: Lorebooks
+// ──────────────────────────────────────────────
+import { eq, desc, and, like, inArray, asc, or } from "drizzle-orm";
+import type { DB } from "../../db/connection.js";
+import {
+  characters,
+  lorebooks,
+  lorebookCharacterLinks,
+  lorebookEntries,
+  lorebookFolders,
+  lorebookPersonaLinks,
+  personas,
+} from "../../db/schema/index.js";
+import { newId, now } from "../../utils/id-generator.js";
+import {
+  LIMITS,
+  normalizeLorebookCategory,
+  type CreateLorebookInput,
+  type UpdateLorebookInput,
+  type CreateLorebookEntryInput,
+  type UpdateLorebookEntryInput,
+  type BulkUpdateLorebookEntriesInput,
+  type CreateLorebookFolderInput,
+  type UpdateLorebookFolderInput,
+} from "@marinara-engine/shared";
+import { collectEffectivelyDisabledFolderIds, collectFolderSubtreeIds } from "@marinara-engine/shared";
+import { normalizeTimestampOverrides, type TimestampOverrides } from "../import/import-timestamps.js";
+import { GAME_LOREBOOK_KEEPER_SOURCE_ID } from "../lorebook/game-lorebook-scope.js";
+import { toPaginatedList } from "../../utils/list-pagination.js";
+
+function normalizeLorebookEntryLimit(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return LIMITS.LOREBOOK_ENTRY_LIMIT_DEFAULT;
+  return Math.max(LIMITS.LOREBOOK_ENTRY_LIMIT_MIN, Math.min(LIMITS.LOREBOOK_ENTRY_LIMIT_MAX, Math.trunc(parsed)));
+}
+
+function normalizeNonNegativeLorebookInteger(value: unknown, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.trunc(parsed));
+}
+
+function normalizeLorebookMaxRecursionDepth(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return 3;
+  return Math.max(1, Math.min(10, Math.trunc(parsed)));
+}
+
+function normalizeLorebookVectorQueryDepth(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return LIMITS.LOREBOOK_VECTOR_QUERY_DEPTH_DEFAULT;
+  return Math.max(0, Math.min(LIMITS.LOREBOOK_VECTOR_QUERY_DEPTH_MAX, Math.trunc(parsed)));
+}
+
+function normalizeLorebookVectorScoreThreshold(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return LIMITS.LOREBOOK_VECTOR_SCORE_THRESHOLD_DEFAULT;
+  return Math.max(0, Math.min(1, parsed));
+}
+
+function normalizeLorebookVectorMaxResults(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return LIMITS.LOREBOOK_VECTOR_MAX_RESULTS_DEFAULT;
+  return Math.max(
+    LIMITS.LOREBOOK_VECTOR_MAX_RESULTS_MIN,
+    Math.min(LIMITS.LOREBOOK_VECTOR_MAX_RESULTS_MAX, Math.trunc(parsed)),
+  );
+}
+
+function resolveTimestamps(overrides?: TimestampOverrides | null) {
+  const normalized = normalizeTimestampOverrides(overrides);
+  const createdAt = normalized?.createdAt ?? now();
+  return {
+    createdAt,
+    updatedAt: normalized?.updatedAt ?? createdAt,
+  };
+}
+
+function uniqueStrings(values: unknown): string[] {
+  const raw = Array.isArray(values) ? values : [];
+  return Array.from(
+    new Set(raw.map((value) => (typeof value === "string" ? value.trim() : "")).filter((value) => value.length > 0)),
+  );
+}
+
+function resolveLinkIds(arrayValue: unknown, singleValue: unknown): string[] {
+  const fromArray = uniqueStrings(arrayValue);
+  if (fromArray.length > 0) return fromArray;
+  return uniqueStrings(typeof singleValue === "string" ? [singleValue] : []);
+}
+
+function parseLorebookScope(value: unknown): { mode: "all" | "disabled" | "specific"; chatIds: string[] } {
+  const raw = (() => {
+    if (value && typeof value === "object") return value as Record<string, unknown>;
+    if (typeof value === "string" && value.trim()) {
+      try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  })();
+  const mode = raw.mode === "disabled" || raw.mode === "specific" ? raw.mode : "all";
+  return {
+    mode,
+    chatIds: uniqueStrings(Array.isArray(raw.chatIds) ? raw.chatIds : []),
+  };
+}
+
+function isLorebookScopeActiveForChat(value: unknown, chatId?: string | null): boolean {
+  const scope = parseLorebookScope(value);
+  if (scope.mode === "disabled") return false;
+  if (scope.mode === "specific") return !!chatId && scope.chatIds.includes(chatId);
+  return true;
+}
+
+type LorebookScopeFilters = {
+  activeLorebookIds?: string[];
+  characterIds?: string[];
+  personaId?: string | null;
+  chatId?: string;
+};
+
+type LinkedLorebook = {
+  id: string;
+  characterId?: string | null;
+  characterIds?: string[];
+  personaId?: string | null;
+  personaIds?: string[];
+  chatId?: string | null;
+  sourceAgentId?: string | null;
+};
+
+function activeLorebookMatchesFilters(book: LinkedLorebook, filters: LorebookScopeFilters): boolean {
+  if (!filters.activeLorebookIds?.includes(book.id)) return false;
+  if (book.sourceAgentId === GAME_LOREBOOK_KEEPER_SOURCE_ID) return true;
+
+  const characterIds = resolveLinkIds(book.characterIds, book.characterId);
+  if (characterIds.length > 0) return characterIds.some((id) => filters.characterIds?.includes(id));
+
+  const personaIds = resolveLinkIds(book.personaIds, book.personaId);
+  if (personaIds.length > 0) return !!filters.personaId && personaIds.includes(filters.personaId);
+
+  if (book.chatId) return book.chatId === filters.chatId;
+  return true;
+}
+
+/** Parse DB row booleans ("true"/"false") → real booleans and JSON strings → objects. */
+function parseLorebookRow(row: Record<string, unknown>) {
+  const characterIds = resolveLinkIds(row.characterIds, row.characterId);
+  const personaIds = resolveLinkIds(row.personaIds, row.personaId);
+  return {
+    ...row,
+    category: normalizeLorebookCategory(row.category),
+    scanDepth: normalizeNonNegativeLorebookInteger(row.scanDepth, 2),
+    tokenBudget: normalizeNonNegativeLorebookInteger(row.tokenBudget, 2048),
+    recursiveScanning: row.recursiveScanning === "true",
+    entryLimit: normalizeLorebookEntryLimit(row.entryLimit),
+    maxRecursionDepth: normalizeLorebookMaxRecursionDepth(row.maxRecursionDepth),
+    excludeFromVectorization: row.excludeFromVectorization === "true",
+    vectorQueryDepth: normalizeLorebookVectorQueryDepth(row.vectorQueryDepth),
+    vectorScoreThreshold: normalizeLorebookVectorScoreThreshold(row.vectorScoreThreshold),
+    vectorMaxResults: normalizeLorebookVectorMaxResults(row.vectorMaxResults),
+    isGlobal: row.isGlobal === "true",
+    enabled: row.enabled === "true",
+    scope: parseLorebookScope(row.scope),
+    imagePath: row.imagePath || null,
+    generatedBy: row.generatedBy || null,
+    sourceAgentId: row.sourceAgentId || null,
+    characterId: characterIds[0] ?? null,
+    characterIds,
+    personaId: personaIds[0] ?? null,
+    personaIds,
+    chatId: row.chatId || null,
+    tags: JSON.parse((row.tags as string) || "[]"),
+  };
+}
+
+function parseStringArray(value: unknown): string[] {
+  const normalize = (items: unknown[]) =>
+    items
+      .map(String)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  if (Array.isArray(value)) return normalize(value);
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? normalize(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseEntryRow(row: Record<string, unknown>) {
+  return {
+    ...row,
+    enabled: row.enabled === "true",
+    constant: row.constant === "true",
+    selective: row.selective === "true",
+    matchWholeWords: row.matchWholeWords === "true",
+    caseSensitive: row.caseSensitive === "true",
+    useRegex: row.useRegex === "true",
+    locked: row.locked === "true",
+    preventRecursion: row.preventRecursion === "true",
+    excludeRecursion: row.excludeRecursion === "true",
+    delayUntilRecursion: row.delayUntilRecursion === "true",
+    excludeFromVectorization: row.excludeFromVectorization === "true",
+    folderId: (row.folderId as string | null | undefined) ?? null,
+    keys: parseStringArray(row.keys),
+    secondaryKeys: parseStringArray(row.secondaryKeys),
+    characterFilterMode: row.characterFilterMode || "any",
+    characterFilterIds: parseStringArray(row.characterFilterIds),
+    characterTagFilterMode: row.characterTagFilterMode || "any",
+    characterTagFilters: parseStringArray(row.characterTagFilters),
+    generationTriggerFilterMode: row.generationTriggerFilterMode || "any",
+    generationTriggerFilters: parseStringArray(row.generationTriggerFilters),
+    additionalMatchingSources: parseStringArray(row.additionalMatchingSources),
+    relationships: JSON.parse((row.relationships as string) || "{}"),
+    dynamicState: JSON.parse((row.dynamicState as string) || "{}"),
+    activationConditions: JSON.parse((row.activationConditions as string) || "[]"),
+    schedule: row.schedule ? JSON.parse(row.schedule as string) : null,
+    embedding: row.embedding ? JSON.parse(row.embedding as string) : null,
+  };
+}
+
+function parseFolderRow(row: Record<string, unknown>) {
+  return {
+    ...row,
+    enabled: row.enabled === "true",
+    parentFolderId: (row.parentFolderId as string | null | undefined) ?? null,
+  };
+}
+
+type LorebookRow = typeof lorebooks.$inferSelect;
+type LorebookListPageOptions = {
+  limit: number;
+  offset: number;
+  search?: string;
+  sort?: string;
+  category?: string;
+  active?: {
+    lorebookIds: string[];
+    characterIds: string[];
+    personaId?: string | null;
+    chatId?: string | null;
+  };
+};
+
+function likePattern(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? `%${trimmed}%` : "";
+}
+
+function lorebookOrder(sort: string | undefined) {
+  switch (sort) {
+    case "name-desc":
+      return [desc(lorebooks.name), asc(lorebooks.id)];
+    case "newest":
+      return [desc(lorebooks.createdAt), asc(lorebooks.id)];
+    case "oldest":
+      return [asc(lorebooks.createdAt), asc(lorebooks.id)];
+    case "tokens":
+      return [desc(lorebooks.tokenBudget), asc(lorebooks.id)];
+    case "name-asc":
+    default:
+      return [asc(lorebooks.name), asc(lorebooks.id)];
+  }
+}
+
+function parseCharacterName(row: typeof characters.$inferSelect) {
+  try {
+    const parsed = JSON.parse(row.data) as { name?: unknown };
+    return typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : "Unknown";
+  } catch {
+    return "Unknown";
+  }
+}
+
+async function hydrateLorebookRows(db: DB, rows: LorebookRow[], options: { includeLinkedNames?: boolean } = {}) {
+  if (rows.length === 0) return [];
+  const bookIds = rows.map((row) => row.id);
+  const [characterRows, personaRows] = await Promise.all([
+    db
+      .select()
+      .from(lorebookCharacterLinks)
+      .where(inArray(lorebookCharacterLinks.lorebookId, bookIds))
+      .orderBy(asc(lorebookCharacterLinks.lorebookId), asc(lorebookCharacterLinks.characterId)),
+    db
+      .select()
+      .from(lorebookPersonaLinks)
+      .where(inArray(lorebookPersonaLinks.lorebookId, bookIds))
+      .orderBy(asc(lorebookPersonaLinks.lorebookId), asc(lorebookPersonaLinks.personaId)),
+  ]);
+  const characterIdsByBook = new Map<string, string[]>();
+  for (const link of characterRows) {
+    const ids = characterIdsByBook.get(link.lorebookId) ?? [];
+    ids.push(link.characterId);
+    characterIdsByBook.set(link.lorebookId, ids);
+  }
+  const personaIdsByBook = new Map<string, string[]>();
+  for (const link of personaRows) {
+    const ids = personaIdsByBook.get(link.lorebookId) ?? [];
+    ids.push(link.personaId);
+    personaIdsByBook.set(link.lorebookId, ids);
+  }
+  const characterNameById = new Map<string, string>();
+  const personaNameById = new Map<string, string>();
+  if (options.includeLinkedNames) {
+    const characterIds = Array.from(new Set(characterRows.map((link) => link.characterId)));
+    const personaIds = Array.from(new Set(personaRows.map((link) => link.personaId)));
+    const [linkedCharacters, linkedPersonas] = await Promise.all([
+      characterIds.length > 0 ? db.select().from(characters).where(inArray(characters.id, characterIds)) : [],
+      personaIds.length > 0 ? db.select().from(personas).where(inArray(personas.id, personaIds)) : [],
+    ]);
+    for (const character of linkedCharacters) {
+      characterNameById.set(character.id, parseCharacterName(character));
+    }
+    for (const persona of linkedPersonas) {
+      personaNameById.set(persona.id, persona.comment ? `${persona.name} - ${persona.comment}` : persona.name);
+    }
+  }
+  return rows.map((row) => {
+    const characterIds = characterIdsByBook.get(row.id) ?? [];
+    const personaIds = personaIdsByBook.get(row.id) ?? [];
+    const hydratedRow: Record<string, unknown> = {
+      ...(row as Record<string, unknown>),
+      characterIds,
+      personaIds,
+    };
+    if (options.includeLinkedNames) {
+      hydratedRow.characterNames = characterIds.map((id) => characterNameById.get(id) ?? id);
+      hydratedRow.personaNames = personaIds.map((id) => personaNameById.get(id) ?? id);
+    }
+    return parseLorebookRow(hydratedRow);
+  });
+}
+
+async function syncLorebookLinks(
+  db: Pick<DB, "delete" | "insert">,
+  lorebookId: string,
+  characterIds: string[],
+  personaIds: string[],
+) {
+  const timestamp = now();
+  await db.delete(lorebookCharacterLinks).where(eq(lorebookCharacterLinks.lorebookId, lorebookId));
+  await db.delete(lorebookPersonaLinks).where(eq(lorebookPersonaLinks.lorebookId, lorebookId));
+  if (characterIds.length > 0) {
+    await db.insert(lorebookCharacterLinks).values(
+      characterIds.map((characterId) => ({
+        id: newId(),
+        lorebookId,
+        characterId,
+        createdAt: timestamp,
+      })),
+    );
+  }
+  if (personaIds.length > 0) {
+    await db.insert(lorebookPersonaLinks).values(
+      personaIds.map((personaId) => ({
+        id: newId(),
+        lorebookId,
+        personaId,
+        createdAt: timestamp,
+      })),
+    );
+  }
+}
+
+export function createLorebooksStorage(db: DB) {
+  const assertFolderBelongsToLorebook = async (lorebookId: string, folderId: string | null | undefined) => {
+    if (folderId === null || folderId === undefined) return;
+    const folderRows = await db
+      .select({ lorebookId: lorebookFolders.lorebookId })
+      .from(lorebookFolders)
+      .where(eq(lorebookFolders.id, folderId));
+    const folderRow = folderRows[0];
+    if (!folderRow || folderRow.lorebookId !== lorebookId) {
+      throw new Error("folderId does not belong to this lorebook");
+    }
+  };
+
+  return {
+    // ── Lorebooks ──
+
+    async list() {
+      const rows = await db.select().from(lorebooks).orderBy(desc(lorebooks.updatedAt));
+      return hydrateLorebookRows(db, rows);
+    },
+
+    async listByCategory(category: string) {
+      const rows = await db
+        .select()
+        .from(lorebooks)
+        .where(eq(lorebooks.category, category))
+        .orderBy(desc(lorebooks.updatedAt));
+      return hydrateLorebookRows(db, rows);
+    },
+
+    async listPage(options: LorebookListPageOptions) {
+      const clauses = [];
+      if (options.category) clauses.push(eq(lorebooks.category, options.category));
+      const pattern = likePattern(options.search);
+      if (pattern) {
+        clauses.push(
+          or(
+            like(lorebooks.name, pattern),
+            like(lorebooks.description, pattern),
+            like(lorebooks.category, pattern),
+            like(lorebooks.tags, pattern),
+            like(lorebooks.generatedBy, pattern),
+          ),
+        );
+      }
+
+      if (options.active) {
+        clauses.push(eq(lorebooks.enabled, "true"));
+        const activeLorebookIds = new Set(options.active.lorebookIds);
+        if (options.active.characterIds.length > 0) {
+          const linkedCharacters = await db
+            .select({ lorebookId: lorebookCharacterLinks.lorebookId })
+            .from(lorebookCharacterLinks)
+            .where(inArray(lorebookCharacterLinks.characterId, options.active.characterIds));
+          for (const link of linkedCharacters) activeLorebookIds.add(link.lorebookId);
+        }
+        if (options.active.personaId) {
+          const linkedPersonas = await db
+            .select({ lorebookId: lorebookPersonaLinks.lorebookId })
+            .from(lorebookPersonaLinks)
+            .where(eq(lorebookPersonaLinks.personaId, options.active.personaId));
+          for (const link of linkedPersonas) activeLorebookIds.add(link.lorebookId);
+        }
+        const activeClauses = [eq(lorebooks.isGlobal, "true")];
+        if (activeLorebookIds.size > 0) activeClauses.push(inArray(lorebooks.id, Array.from(activeLorebookIds)));
+        if (options.active.characterIds.length > 0) {
+          activeClauses.push(inArray(lorebooks.characterId, options.active.characterIds));
+        }
+        if (options.active.personaId) activeClauses.push(eq(lorebooks.personaId, options.active.personaId));
+        if (options.active.chatId) activeClauses.push(eq(lorebooks.chatId, options.active.chatId));
+        clauses.push(or(...activeClauses));
+      }
+
+      const whereClause = clauses.length > 0 ? and(...clauses) : undefined;
+      const rows = await (whereClause
+        ? db
+            .select()
+            .from(lorebooks)
+            .where(whereClause)
+            .orderBy(...lorebookOrder(options.sort))
+            .limit(options.limit + 1)
+            .offset(options.offset)
+        : db
+            .select()
+            .from(lorebooks)
+            .orderBy(...lorebookOrder(options.sort))
+            .limit(options.limit + 1)
+            .offset(options.offset));
+      const items = await hydrateLorebookRows(db, rows.slice(0, options.limit), { includeLinkedNames: true });
+      return {
+        ...toPaginatedList(rows, options.limit, options.offset),
+        items,
+      };
+    },
+
+    async listByCharacter(characterId: string) {
+      const all = (await this.list()) as Array<{ characterIds?: string[]; characterId?: string | null }>;
+      return all.filter((row) => row.characterIds?.includes(characterId) || row.characterId === characterId);
+    },
+
+    async listByPersona(personaId: string) {
+      const all = (await this.list()) as Array<{ personaIds?: string[]; personaId?: string | null }>;
+      return all.filter((row) => row.personaIds?.includes(personaId) || row.personaId === personaId);
+    },
+
+    async listByChat(chatId: string) {
+      const rows = await db
+        .select()
+        .from(lorebooks)
+        .where(eq(lorebooks.chatId, chatId))
+        .orderBy(desc(lorebooks.updatedAt));
+      return hydrateLorebookRows(db, rows);
+    },
+
+    async getById(id: string) {
+      const rows = await db.select().from(lorebooks).where(eq(lorebooks.id, id));
+      return (await hydrateLorebookRows(db, rows))[0] ?? null;
+    },
+
+    async create(input: CreateLorebookInput, timestampOverrides?: TimestampOverrides | null) {
+      const id = newId();
+      const timestamp = resolveTimestamps(timestampOverrides);
+      const characterIds = resolveLinkIds(input.characterIds, input.characterId);
+      const personaIds = resolveLinkIds(input.personaIds, input.personaId);
+      await db.transaction(async (tx) => {
+        await tx.insert(lorebooks).values({
+          id,
+          name: input.name,
+          description: input.description ?? "",
+          category: input.category ?? "uncategorized",
+          imagePath: input.imagePath ?? null,
+          scanDepth: input.scanDepth ?? 2,
+          tokenBudget: input.tokenBudget ?? 2048,
+          entryLimit: normalizeLorebookEntryLimit(input.entryLimit),
+          recursiveScanning: String(input.recursiveScanning ?? false),
+          maxRecursionDepth: input.maxRecursionDepth ?? 3,
+          excludeFromVectorization: String(input.excludeFromVectorization ?? true),
+          vectorQueryDepth: normalizeLorebookVectorQueryDepth(input.vectorQueryDepth),
+          vectorScoreThreshold: normalizeLorebookVectorScoreThreshold(input.vectorScoreThreshold),
+          vectorMaxResults: normalizeLorebookVectorMaxResults(input.vectorMaxResults),
+          characterId: characterIds[0] ?? null,
+          personaId: personaIds[0] ?? null,
+          chatId: input.chatId ?? null,
+          isGlobal: String(input.isGlobal ?? false),
+          enabled: String(input.enabled ?? true),
+          scope: JSON.stringify(parseLorebookScope(input.scope)),
+          tags: input.tags ? JSON.stringify(input.tags) : "[]",
+          generatedBy: input.generatedBy ?? null,
+          sourceAgentId: input.sourceAgentId ?? null,
+          createdAt: timestamp.createdAt,
+          updatedAt: timestamp.updatedAt,
+        });
+        await syncLorebookLinks(tx, id, characterIds, personaIds);
+      });
+      return this.getById(id);
+    },
+
+    async update(id: string, input: UpdateLorebookInput) {
+      const updates: Record<string, unknown> = { updatedAt: now() };
+      if (input.name !== undefined) updates.name = input.name;
+      if (input.description !== undefined) updates.description = input.description;
+      if (input.category !== undefined) updates.category = input.category;
+      if (input.imagePath !== undefined) updates.imagePath = input.imagePath;
+      if (input.scanDepth !== undefined) updates.scanDepth = input.scanDepth;
+      if (input.tokenBudget !== undefined) updates.tokenBudget = input.tokenBudget;
+      if (input.entryLimit !== undefined) updates.entryLimit = normalizeLorebookEntryLimit(input.entryLimit);
+      if (input.recursiveScanning !== undefined) updates.recursiveScanning = String(input.recursiveScanning);
+      if (input.maxRecursionDepth !== undefined) updates.maxRecursionDepth = input.maxRecursionDepth;
+      if (input.excludeFromVectorization !== undefined)
+        updates.excludeFromVectorization = String(input.excludeFromVectorization);
+      if (input.vectorQueryDepth !== undefined)
+        updates.vectorQueryDepth = normalizeLorebookVectorQueryDepth(input.vectorQueryDepth);
+      if (input.vectorScoreThreshold !== undefined)
+        updates.vectorScoreThreshold = normalizeLorebookVectorScoreThreshold(input.vectorScoreThreshold);
+      if (input.vectorMaxResults !== undefined)
+        updates.vectorMaxResults = normalizeLorebookVectorMaxResults(input.vectorMaxResults);
+      const shouldUpdateCharacterLinks = input.characterIds !== undefined || input.characterId !== undefined;
+      const shouldUpdatePersonaLinks = input.personaIds !== undefined || input.personaId !== undefined;
+      const current = shouldUpdateCharacterLinks || shouldUpdatePersonaLinks ? ((await this.getById(id)) as any) : null;
+      if ((shouldUpdateCharacterLinks || shouldUpdatePersonaLinks) && !current) return null;
+      const nextCharacterIds = shouldUpdateCharacterLinks
+        ? resolveLinkIds(input.characterIds, input.characterId)
+        : ((current?.characterIds as string[] | undefined) ?? []);
+      const nextPersonaIds = shouldUpdatePersonaLinks
+        ? resolveLinkIds(input.personaIds, input.personaId)
+        : ((current?.personaIds as string[] | undefined) ?? []);
+      if (shouldUpdateCharacterLinks) updates.characterId = nextCharacterIds[0] ?? null;
+      if (shouldUpdatePersonaLinks) updates.personaId = nextPersonaIds[0] ?? null;
+      if (input.chatId !== undefined) updates.chatId = input.chatId;
+      if (input.isGlobal !== undefined) updates.isGlobal = String(input.isGlobal);
+      if (input.enabled !== undefined) updates.enabled = String(input.enabled);
+      if (input.scope !== undefined) updates.scope = JSON.stringify(parseLorebookScope(input.scope));
+      if (input.tags !== undefined) updates.tags = JSON.stringify(input.tags);
+      if (input.generatedBy !== undefined) updates.generatedBy = input.generatedBy;
+      if (input.sourceAgentId !== undefined) updates.sourceAgentId = input.sourceAgentId;
+
+      await db.transaction(async (tx) => {
+        await tx.update(lorebooks).set(updates).where(eq(lorebooks.id, id));
+        if (shouldUpdateCharacterLinks || shouldUpdatePersonaLinks) {
+          await syncLorebookLinks(tx, id, nextCharacterIds, nextPersonaIds);
+        }
+      });
+      return this.getById(id);
+    },
+
+    async remove(id: string) {
+      await db.transaction(async (tx) => {
+        await tx.delete(lorebookCharacterLinks).where(eq(lorebookCharacterLinks.lorebookId, id));
+        await tx.delete(lorebookPersonaLinks).where(eq(lorebookPersonaLinks.lorebookId, id));
+        await tx.delete(lorebooks).where(eq(lorebooks.id, id));
+      });
+    },
+
+    // ── Entries ──
+
+    async listEntries(lorebookId: string) {
+      const rows = await db
+        .select()
+        .from(lorebookEntries)
+        .where(eq(lorebookEntries.lorebookId, lorebookId))
+        .orderBy(lorebookEntries.order);
+      return rows.map((r) => parseEntryRow(r as Record<string, unknown>));
+    },
+
+    /** Get all entries across multiple lorebooks (for prompt injection). */
+    async listEntriesByLorebooks(lorebookIds: string[]) {
+      if (lorebookIds.length === 0) return [];
+      const rows = await db
+        .select()
+        .from(lorebookEntries)
+        .where(inArray(lorebookEntries.lorebookId, lorebookIds))
+        .orderBy(lorebookEntries.order);
+      return rows.map((r) => parseEntryRow(r as Record<string, unknown>));
+    },
+
+    /**
+     * Resolve explicitly attached entries without requiring normal character/persona/global scope.
+     * Disabled books, entries, folders, chat exclusions, and excluded agent sources still win.
+     */
+    async listEligibleEntriesByIds(
+      entryIds: string[],
+      filters?: { excludedLorebookIds?: string[]; excludedSourceAgentIds?: string[] },
+    ) {
+      const requestedIds = uniqueStrings(entryIds).slice(0, LIMITS.MAX_LOREBOOK_ENTRIES);
+      if (requestedIds.length === 0) return [];
+
+      const entryRows = await db
+        .select()
+        .from(lorebookEntries)
+        .where(and(inArray(lorebookEntries.id, requestedIds), eq(lorebookEntries.enabled, "true")));
+      if (entryRows.length === 0) return [];
+
+      const candidateBookIds = uniqueStrings(entryRows.map((row) => row.lorebookId));
+      const enabledBookRows = await db
+        .select()
+        .from(lorebooks)
+        .where(and(inArray(lorebooks.id, candidateBookIds), eq(lorebooks.enabled, "true")));
+      const enabledBooks = (await hydrateLorebookRows(db, enabledBookRows)) as unknown as Array<{
+        id: string;
+        sourceAgentId?: string | null;
+      }>;
+      const excludedLorebookIds = new Set(filters?.excludedLorebookIds ?? []);
+      const excludedSourceAgentIds = new Set(filters?.excludedSourceAgentIds ?? []);
+      const allowedBookIds = new Set(
+        enabledBooks
+          .filter(
+            (book) =>
+              !excludedLorebookIds.has(book.id) &&
+              !(book.sourceAgentId && excludedSourceAgentIds.has(book.sourceAgentId)),
+          )
+          .map((book) => book.id),
+      );
+      if (allowedBookIds.size === 0) return [];
+
+      const folderRows = await db
+        .select({
+          id: lorebookFolders.id,
+          parentFolderId: lorebookFolders.parentFolderId,
+          enabled: lorebookFolders.enabled,
+        })
+        .from(lorebookFolders)
+        .where(inArray(lorebookFolders.lorebookId, Array.from(allowedBookIds)));
+      const disabledFolderIds = collectEffectivelyDisabledFolderIds(
+        folderRows.map((row) => ({
+          id: row.id,
+          parentFolderId: row.parentFolderId,
+          enabled: row.enabled === "true",
+        })),
+      );
+      const requestedOrder = new Map(requestedIds.map((id, index) => [id, index]));
+      const parsedEntries = entryRows.map((row) => parseEntryRow(row as Record<string, unknown>)) as Array<
+        ReturnType<typeof parseEntryRow> & { id: string; lorebookId: string; folderId: string | null }
+      >;
+      return parsedEntries
+        .filter(
+          (entry) =>
+            allowedBookIds.has(entry.lorebookId) &&
+            (!entry.folderId || !disabledFolderIds.has(entry.folderId as string)),
+        )
+        .sort((left, right) => (requestedOrder.get(left.id) ?? 0) - (requestedOrder.get(right.id) ?? 0));
+    },
+
+    /**
+     * Get all enabled entries from lorebooks that are relevant for a given context.
+     * A lorebook is relevant if it's enabled AND one of:
+     *  - `isGlobal` is true
+     *  - Its ID is in `activeLorebookIds`, while any character/persona/chat owner link still matches this context
+     *  - Its `characterId` matches one of the chat's active characters
+     *  - Its `personaId` matches the chat's active persona
+     *  - Its `chatId` matches the current chat
+     * When no filters are provided, returns entries from ALL enabled lorebooks (legacy behavior).
+     *
+     * Folder gate: an entry whose `folderId` points at a disabled folder is
+     * excluded here, regardless of the entry's own `enabled` flag. The entry's
+     * own flag is preserved in the database — re-enabling the folder restores
+     * each entry's previous individual setting. Entries with a NULL `folderId`
+     * (root-level entries) are unaffected.
+     */
+    async listActiveEntries(filters?: {
+      activeLorebookIds?: string[];
+      characterIds?: string[];
+      personaId?: string | null;
+      chatId?: string;
+      excludedLorebookIds?: string[];
+      excludedSourceAgentIds?: string[];
+    }) {
+      const enabledBookRows = await db.select().from(lorebooks).where(eq(lorebooks.enabled, "true"));
+      const enabledBooks = (await hydrateLorebookRows(db, enabledBookRows)) as unknown as Array<{
+        id: string;
+        isGlobal: boolean;
+        characterId?: string | null;
+        characterIds?: string[];
+        personaId?: string | null;
+        personaIds?: string[];
+        chatId?: string | null;
+        scope?: unknown;
+        sourceAgentId?: string | null;
+        excludeFromVectorization?: boolean;
+      }>;
+
+      let relevantBooks = enabledBooks.filter((b) => isLorebookScopeActiveForChat(b.scope, filters?.chatId));
+      if (filters) {
+        const excludedLorebookIds = new Set(filters.excludedLorebookIds ?? []);
+        const excludedSourceAgentIds = new Set(filters.excludedSourceAgentIds ?? []);
+        relevantBooks = relevantBooks.filter((b) => {
+          if (excludedLorebookIds.has(b.id)) return false;
+          if (b.sourceAgentId && excludedSourceAgentIds.has(b.sourceAgentId)) return false;
+          // Globally active lorebooks bypass all scope filters
+          if (b.isGlobal) return true;
+          // Explicitly added to this chat, while still respecting owner links.
+          if (activeLorebookMatchesFilters(b, filters)) return true;
+          // Belongs to one of the active characters
+          if ((b.characterIds ?? []).some((id) => filters.characterIds?.includes(id))) return true;
+          if (b.characterId && filters.characterIds?.includes(b.characterId)) return true;
+          // Belongs to the active persona
+          if (filters.personaId && (b.personaIds ?? []).includes(filters.personaId)) return true;
+          if (b.personaId && b.personaId === filters.personaId) return true;
+          // Belongs to this chat
+          if (b.chatId && b.chatId === filters.chatId) return true;
+          return false;
+        });
+      }
+
+      const bookIds = relevantBooks.map((b) => b.id);
+      if (bookIds.length === 0) return [];
+      const excludedVectorBookIds = new Set(
+        relevantBooks.filter((book) => book.excludeFromVectorization).map((book) => book.id),
+      );
+
+      // Build the *effectively* disabled-folder ID set: a folder is gated if it
+      // OR any ancestor is disabled (folders can nest). Fetch all folders for the
+      // relevant books and resolve ancestry in memory — per-book folder counts are
+      // small and this keeps the existing query shape.
+      const folderRows = await db
+        .select({
+          id: lorebookFolders.id,
+          parentFolderId: lorebookFolders.parentFolderId,
+          enabled: lorebookFolders.enabled,
+        })
+        .from(lorebookFolders)
+        .where(inArray(lorebookFolders.lorebookId, bookIds));
+      const disabledFolderIds = collectEffectivelyDisabledFolderIds(
+        folderRows.map((r) => ({ id: r.id, parentFolderId: r.parentFolderId, enabled: r.enabled === "true" })),
+      );
+
+      const rows = await db
+        .select()
+        .from(lorebookEntries)
+        .where(and(inArray(lorebookEntries.lorebookId, bookIds), eq(lorebookEntries.enabled, "true")))
+        .orderBy(lorebookEntries.order);
+      const parsed = rows.map((r) => {
+        const entry = parseEntryRow(r as Record<string, unknown>);
+        const lorebookId = String((entry as Record<string, unknown>).lorebookId ?? "");
+        return excludedVectorBookIds.has(lorebookId) ? { ...entry, excludeFromVectorization: true } : entry;
+      });
+      if (disabledFolderIds.size === 0) return parsed;
+      return parsed.filter((e) => !e.folderId || !disabledFolderIds.has(e.folderId as string));
+    },
+
+    async getEntry(id: string) {
+      const rows = await db.select().from(lorebookEntries).where(eq(lorebookEntries.id, id));
+      const row = rows[0];
+      return row ? parseEntryRow(row as Record<string, unknown>) : null;
+    },
+
+    async createEntry(input: CreateLorebookEntryInput) {
+      const id = newId();
+      const timestamp = now();
+      const requestedFolderId = input.folderId ?? null;
+      await assertFolderBelongsToLorebook(input.lorebookId, requestedFolderId);
+      await db.insert(lorebookEntries).values({
+        id,
+        lorebookId: input.lorebookId,
+        folderId: requestedFolderId,
+        name: input.name,
+        content: input.content ?? "",
+        description: input.description ?? "",
+        keys: JSON.stringify(input.keys ?? []),
+        secondaryKeys: JSON.stringify(input.secondaryKeys ?? []),
+        enabled: String(input.enabled ?? true),
+        constant: String(input.constant ?? false),
+        selective: String(input.selective ?? false),
+        selectiveLogic: input.selectiveLogic ?? "and",
+        probability: input.probability ?? null,
+        scanDepth: input.scanDepth ?? null,
+        matchWholeWords: String(input.matchWholeWords ?? false),
+        caseSensitive: String(input.caseSensitive ?? false),
+        useRegex: String(input.useRegex ?? false),
+        characterFilterMode: input.characterFilterMode ?? "any",
+        characterFilterIds: JSON.stringify(input.characterFilterIds ?? []),
+        characterTagFilterMode: input.characterTagFilterMode ?? "any",
+        characterTagFilters: JSON.stringify(input.characterTagFilters ?? []),
+        generationTriggerFilterMode: input.generationTriggerFilterMode ?? "any",
+        generationTriggerFilters: JSON.stringify(input.generationTriggerFilters ?? []),
+        additionalMatchingSources: JSON.stringify(input.additionalMatchingSources ?? []),
+        position: input.position ?? 0,
+        depth: input.depth ?? 0,
+        order: input.order ?? 100,
+        role: input.role ?? "system",
+        sticky: input.sticky ?? null,
+        cooldown: input.cooldown ?? null,
+        delay: input.delay ?? null,
+        ephemeral: input.ephemeral ?? null,
+        group: input.group ?? "",
+        groupWeight: input.groupWeight ?? null,
+        tag: input.tag ?? "",
+        relationships: JSON.stringify(input.relationships ?? {}),
+        dynamicState: JSON.stringify(input.dynamicState ?? {}),
+        activationConditions: JSON.stringify(input.activationConditions ?? []),
+        schedule: input.schedule ? JSON.stringify(input.schedule) : null,
+        locked: String(input.locked ?? false),
+        preventRecursion: String(input.preventRecursion ?? true),
+        excludeRecursion: String(input.excludeRecursion ?? false),
+        delayUntilRecursion: String(input.delayUntilRecursion ?? false),
+        excludeFromVectorization: String(input.excludeFromVectorization ?? false),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      return this.getEntry(id);
+    },
+
+    async updateEntry(id: string, input: UpdateLorebookEntryInput) {
+      const updates: Record<string, unknown> = { updatedAt: now() };
+      const shouldClearEmbedding =
+        input.name !== undefined ||
+        input.content !== undefined ||
+        input.keys !== undefined ||
+        input.secondaryKeys !== undefined ||
+        input.excludeFromVectorization === true;
+      if (input.name !== undefined) updates.name = input.name;
+      if (input.content !== undefined) updates.content = input.content;
+      if (input.description !== undefined) updates.description = input.description;
+      if (input.folderId !== undefined) {
+        if (input.folderId !== null) {
+          // Resolve the entry's lorebook so we can check the folder belongs to
+          // the same lorebook. The route layer doesn't carry the lorebookId
+          // through the update payload, so we look it up here.
+          const entryRows = await db
+            .select({ lorebookId: lorebookEntries.lorebookId })
+            .from(lorebookEntries)
+            .where(eq(lorebookEntries.id, id));
+          const entryRow = entryRows[0];
+          if (!entryRow) {
+            throw new Error("entry not found");
+          }
+          const folderRows = await db
+            .select({ lorebookId: lorebookFolders.lorebookId })
+            .from(lorebookFolders)
+            .where(eq(lorebookFolders.id, input.folderId));
+          const folderRow = folderRows[0];
+          if (!folderRow || folderRow.lorebookId !== entryRow.lorebookId) {
+            throw new Error("folderId does not belong to this lorebook");
+          }
+        }
+        updates.folderId = input.folderId;
+      }
+      if (input.keys !== undefined) updates.keys = JSON.stringify(input.keys);
+      if (input.secondaryKeys !== undefined) updates.secondaryKeys = JSON.stringify(input.secondaryKeys);
+      if (input.enabled !== undefined) updates.enabled = String(input.enabled);
+      if (input.constant !== undefined) updates.constant = String(input.constant);
+      if (input.selective !== undefined) updates.selective = String(input.selective);
+      if (input.selectiveLogic !== undefined) updates.selectiveLogic = input.selectiveLogic;
+      if (input.probability !== undefined) updates.probability = input.probability;
+      if (input.scanDepth !== undefined) updates.scanDepth = input.scanDepth;
+      if (input.matchWholeWords !== undefined) updates.matchWholeWords = String(input.matchWholeWords);
+      if (input.caseSensitive !== undefined) updates.caseSensitive = String(input.caseSensitive);
+      if (input.useRegex !== undefined) updates.useRegex = String(input.useRegex);
+      if (input.characterFilterMode !== undefined) updates.characterFilterMode = input.characterFilterMode;
+      if (input.characterFilterIds !== undefined) updates.characterFilterIds = JSON.stringify(input.characterFilterIds);
+      if (input.characterTagFilterMode !== undefined) updates.characterTagFilterMode = input.characterTagFilterMode;
+      if (input.characterTagFilters !== undefined)
+        updates.characterTagFilters = JSON.stringify(input.characterTagFilters);
+      if (input.generationTriggerFilterMode !== undefined)
+        updates.generationTriggerFilterMode = input.generationTriggerFilterMode;
+      if (input.generationTriggerFilters !== undefined)
+        updates.generationTriggerFilters = JSON.stringify(input.generationTriggerFilters);
+      if (input.additionalMatchingSources !== undefined)
+        updates.additionalMatchingSources = JSON.stringify(input.additionalMatchingSources);
+      if (input.position !== undefined) updates.position = input.position;
+      if (input.depth !== undefined) updates.depth = input.depth;
+      if (input.order !== undefined) updates.order = input.order;
+      if (input.role !== undefined) updates.role = input.role;
+      if (input.sticky !== undefined) updates.sticky = input.sticky;
+      if (input.cooldown !== undefined) updates.cooldown = input.cooldown;
+      if (input.delay !== undefined) updates.delay = input.delay;
+      if (input.ephemeral !== undefined) updates.ephemeral = input.ephemeral;
+      if (input.group !== undefined) updates.group = input.group;
+      if (input.groupWeight !== undefined) updates.groupWeight = input.groupWeight;
+      if (input.tag !== undefined) updates.tag = input.tag;
+      if (input.relationships !== undefined) updates.relationships = JSON.stringify(input.relationships);
+      if (input.dynamicState !== undefined) updates.dynamicState = JSON.stringify(input.dynamicState);
+      if (input.activationConditions !== undefined)
+        updates.activationConditions = JSON.stringify(input.activationConditions);
+      if (input.schedule !== undefined) updates.schedule = input.schedule ? JSON.stringify(input.schedule) : null;
+      if (input.locked !== undefined) updates.locked = String(input.locked);
+      if (input.preventRecursion !== undefined) updates.preventRecursion = String(input.preventRecursion);
+      if (input.excludeRecursion !== undefined) updates.excludeRecursion = String(input.excludeRecursion);
+      if (input.delayUntilRecursion !== undefined) updates.delayUntilRecursion = String(input.delayUntilRecursion);
+      if (input.excludeFromVectorization !== undefined)
+        updates.excludeFromVectorization = String(input.excludeFromVectorization);
+      if (shouldClearEmbedding) updates.embedding = null;
+
+      await db.update(lorebookEntries).set(updates).where(eq(lorebookEntries.id, id));
+      return this.getEntry(id);
+    },
+
+    async bulkUpdateEntries(
+      lorebookId: string,
+      entryIds: string[],
+      changes: BulkUpdateLorebookEntriesInput["changes"],
+    ) {
+      const uniqueEntryIds = Array.from(new Set(entryIds));
+      const rows = await db
+        .select({ id: lorebookEntries.id })
+        .from(lorebookEntries)
+        .where(and(eq(lorebookEntries.lorebookId, lorebookId), inArray(lorebookEntries.id, uniqueEntryIds)));
+      if (rows.length !== uniqueEntryIds.length) {
+        throw new Error("One or more selected entries do not belong to this lorebook");
+      }
+
+      const updates: Record<string, unknown> = { updatedAt: now() };
+      for (const [field, value] of Object.entries(changes)) {
+        if (value !== undefined) updates[field] = String(value);
+      }
+      if (changes.excludeFromVectorization === true) updates.embedding = null;
+
+      await db
+        .update(lorebookEntries)
+        .set(updates)
+        .where(and(eq(lorebookEntries.lorebookId, lorebookId), inArray(lorebookEntries.id, uniqueEntryIds)));
+      return { updated: rows.length };
+    },
+
+    /** Update just the embedding vector for an entry. */
+    async updateEntryEmbedding(id: string, embedding: number[] | null) {
+      await db
+        .update(lorebookEntries)
+        .set({ embedding: embedding ? JSON.stringify(embedding) : null, updatedAt: now() })
+        .where(eq(lorebookEntries.id, id));
+    },
+
+    /** Remove every stored embedding vector for entries in one lorebook. */
+    async clearEntryEmbeddings(lorebookId: string) {
+      await db
+        .update(lorebookEntries)
+        .set({ embedding: null, updatedAt: now() })
+        .where(eq(lorebookEntries.lorebookId, lorebookId));
+    },
+
+    /** Bulk create entries (for imports and AI generation). */
+    async bulkCreateEntries(lorebookId: string, entries: Omit<CreateLorebookEntryInput, "lorebookId">[]) {
+      const results = [];
+      for (const entry of entries) {
+        await assertFolderBelongsToLorebook(lorebookId, entry.folderId ?? null);
+      }
+      for (const entry of entries) {
+        const result = await this.createEntry({ ...entry, lorebookId });
+        results.push(result);
+      }
+      return results;
+    },
+
+    /**
+     * Reorder entries inside a single container.
+     *
+     * `folderId` (undefined = legacy, null = root, string = inside that
+     * folder) scopes the reorder so that dragging within one container does
+     * not renumber entries in another. When `folderId` is undefined we keep
+     * the legacy behavior of renumbering every entry in the lorebook.
+     *
+     * Renumbering uses (index + 1) * 10 within the container, so each
+     * container's order space starts back at 10 — that's intentional and
+     * matches the user-facing "each folder is its own container" semantic
+     * (a folder at the top can hold high-Order entries without affecting
+     * root entries below it).
+     */
+    async reorderEntries(lorebookId: string, entryIds: string[], folderId?: string | null) {
+      const allEntries = (await this.listEntries(lorebookId)) as unknown as Array<Record<string, unknown>>;
+
+      const inScope =
+        folderId === undefined
+          ? allEntries
+          : allEntries.filter((row) => {
+              const rowFolder = (row.folderId as string | null | undefined) ?? null;
+              return rowFolder === folderId;
+            });
+
+      const scopeEntries = inScope.map((row) => ({
+        id: String(row.id),
+        order: typeof row.order === "number" ? row.order : Number(row.order ?? 0),
+      }));
+      const orderById = new Map(scopeEntries.map((entry) => [entry.id, entry.order]));
+      const scopeIds = new Set(scopeEntries.map((entry) => entry.id));
+      const orderedIds = entryIds.filter((id, index, ids) => scopeIds.has(id) && ids.indexOf(id) === index);
+      const missingIds = scopeEntries
+        .map((entry) => entry.id)
+        .filter((id) => !orderedIds.includes(id))
+        .sort((leftId, rightId) => (orderById.get(leftId) ?? 0) - (orderById.get(rightId) ?? 0));
+      const nextIds = [...orderedIds, ...missingIds];
+      const timestamp = now();
+
+      for (const [index, id] of nextIds.entries()) {
+        await db
+          .update(lorebookEntries)
+          .set({ order: (index + 1) * 10, updatedAt: timestamp })
+          .where(and(eq(lorebookEntries.id, id), eq(lorebookEntries.lorebookId, lorebookId)));
+      }
+
+      return this.listEntries(lorebookId);
+    },
+
+    async removeEntry(id: string) {
+      await db.delete(lorebookEntries).where(eq(lorebookEntries.id, id));
+    },
+
+    // ── Folders ──
+
+    async listFolders(lorebookId: string) {
+      const rows = await db
+        .select()
+        .from(lorebookFolders)
+        .where(eq(lorebookFolders.lorebookId, lorebookId))
+        .orderBy(asc(lorebookFolders.order));
+      return rows.map((r) => parseFolderRow(r as Record<string, unknown>));
+    },
+
+    /**
+     * Look up a folder. When `lorebookId` is provided, the lookup is also
+     * scoped to that lorebook — needed because the route layer accepts both
+     * `:id` (lorebook) and `:folderId` and the two should always agree.
+     * Without this scope, `/lorebooks/A/folders/B` would happily return a
+     * folder belonging to lorebook `X`.
+     */
+    async getFolder(folderId: string, lorebookId?: string) {
+      const conditions = lorebookId
+        ? and(eq(lorebookFolders.id, folderId), eq(lorebookFolders.lorebookId, lorebookId))
+        : eq(lorebookFolders.id, folderId);
+      const rows = await db.select().from(lorebookFolders).where(conditions);
+      const row = rows[0];
+      return row ? parseFolderRow(row as Record<string, unknown>) : null;
+    },
+
+    async createFolder(lorebookId: string, input: CreateLorebookFolderInput) {
+      const id = newId();
+      const timestamp = now();
+      // If the caller didn't pass an explicit order, append after existing folders
+      // so the new one shows up at the bottom of the folder block by default.
+      let order = input.order ?? 0;
+      if (input.order === undefined || input.order === 0) {
+        const existing = await db
+          .select({ order: lorebookFolders.order })
+          .from(lorebookFolders)
+          .where(eq(lorebookFolders.lorebookId, lorebookId));
+        if (existing.length > 0) {
+          order = Math.max(...existing.map((r) => r.order ?? 0)) + 10;
+        } else {
+          order = 10;
+        }
+      }
+      await db.insert(lorebookFolders).values({
+        id,
+        lorebookId,
+        name: input.name,
+        enabled: String(input.enabled ?? true),
+        // Honors input.parentFolderId (null = root); the route layer validates
+        // the parent (exists, same lorebook, no cycle) before calling.
+        parentFolderId: input.parentFolderId ?? null,
+        order,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      return this.getFolder(id, lorebookId);
+    },
+
+    /**
+     * Update a folder. `lorebookId` is required so a malicious or buggy
+     * caller can't reach folders in a different lorebook by guessing the
+     * folder ID; the WHERE clause requires both to match.
+     */
+    async updateFolder(folderId: string, input: UpdateLorebookFolderInput, lorebookId?: string) {
+      const updates: Record<string, unknown> = { updatedAt: now() };
+      if (input.name !== undefined) updates.name = input.name;
+      if (input.enabled !== undefined) updates.enabled = String(input.enabled);
+      if (input.parentFolderId !== undefined) updates.parentFolderId = input.parentFolderId;
+      if (input.order !== undefined) updates.order = input.order;
+      const whereClause = lorebookId
+        ? and(eq(lorebookFolders.id, folderId), eq(lorebookFolders.lorebookId, lorebookId))
+        : eq(lorebookFolders.id, folderId);
+      await db.update(lorebookFolders).set(updates).where(whereClause);
+      return this.getFolder(folderId, lorebookId);
+    },
+
+    /**
+     * Remove a folder. Entries inside the folder are NOT deleted — their
+     * `folderId` is reset to NULL (root level) so the user doesn't lose
+     * data when they remove a folder by accident.
+     *
+     * `lorebookId` scopes the lookup so a request to
+     * `/lorebooks/A/folders/B` cannot reach a folder belonging to lorebook
+     * `X` and accidentally reparent that other lorebook's entries.
+     */
+    async removeFolder(folderId: string, lorebookId?: string, cascade = false) {
+      const folder = (await this.getFolder(folderId, lorebookId)) as Record<string, unknown> | null;
+      if (!folder) return;
+      const ownerLorebookId = folder.lorebookId as string;
+      // Cascade: delete the folder, every descendant folder, and all their entries.
+      if (cascade) {
+        const subtreeIds = collectFolderSubtreeIds(
+          (await this.listFolders(ownerLorebookId)) as unknown as Array<{ id: string; parentFolderId: string | null }>,
+          folderId,
+        );
+        await db
+          .delete(lorebookEntries)
+          .where(and(eq(lorebookEntries.lorebookId, ownerLorebookId), inArray(lorebookEntries.folderId, subtreeIds)));
+        await db
+          .delete(lorebookFolders)
+          .where(and(eq(lorebookFolders.lorebookId, ownerLorebookId), inArray(lorebookFolders.id, subtreeIds)));
+        return;
+      }
+      // Entries in this folder fall back to root...
+      await db
+        .update(lorebookEntries)
+        .set({ folderId: null, updatedAt: now() })
+        .where(and(eq(lorebookEntries.lorebookId, ownerLorebookId), eq(lorebookEntries.folderId, folderId)));
+      // ...and direct child folders are promoted to the top level (not cascade-
+      // deleted), so deleting a parent lifts its subtree up one level intact.
+      await db
+        .update(lorebookFolders)
+        .set({ parentFolderId: null, updatedAt: now() })
+        .where(and(eq(lorebookFolders.lorebookId, ownerLorebookId), eq(lorebookFolders.parentFolderId, folderId)));
+      await db
+        .delete(lorebookFolders)
+        .where(and(eq(lorebookFolders.id, folderId), eq(lorebookFolders.lorebookId, ownerLorebookId)));
+    },
+
+    /** Renumber folders within a lorebook to match `folderIds` left-to-right. */
+    async reorderFolders(lorebookId: string, folderIds: string[]) {
+      const existing = (await this.listFolders(lorebookId)) as unknown as Array<{ id: string; order: number }>;
+      const orderById = new Map(existing.map((f) => [f.id, f.order]));
+      const existingIds = new Set(existing.map((f) => f.id));
+      const orderedIds = folderIds.filter((id, index, ids) => existingIds.has(id) && ids.indexOf(id) === index);
+      const missingIds = existing
+        .map((f) => f.id)
+        .filter((id) => !orderedIds.includes(id))
+        .sort((a, b) => (orderById.get(a) ?? 0) - (orderById.get(b) ?? 0));
+      const nextIds = [...orderedIds, ...missingIds];
+      const timestamp = now();
+      for (const [index, id] of nextIds.entries()) {
+        await db
+          .update(lorebookFolders)
+          .set({ order: (index + 1) * 10, updatedAt: timestamp })
+          .where(and(eq(lorebookFolders.id, id), eq(lorebookFolders.lorebookId, lorebookId)));
+      }
+      return this.listFolders(lorebookId);
+    },
+
+    /**
+     * Deep-clone a folder into the same lorebook: the folder itself, its entries,
+     * and its entire subtree of sub-folders (with their entries). The clone is
+     * created as a sibling of the original (same parent); only the root copy is
+     * renamed "<name> (Copy)" — sub-folders keep their names. Folder and entry
+     * order is preserved within each group. Returns the new root folder.
+     *
+     * Folders are created top-down so each parent exists before its children, and
+     * entries are created afterwards so createEntry's "folder must belong to this
+     * lorebook" guard passes against the freshly-created folders.
+     */
+    async cloneFolder(folderId: string, lorebookId: string) {
+      const allFolders = (await this.listFolders(lorebookId)) as unknown as Array<{
+        id: string;
+        name: string;
+        enabled: boolean;
+        parentFolderId: string | null;
+        order: number;
+      }>;
+      const root = allFolders.find((f) => f.id === folderId);
+      if (!root) throw new Error("folder not found");
+      const allEntries = (await this.listEntries(lorebookId)) as unknown as Array<
+        Record<string, unknown> & { id: string; folderId: string | null; order: number }
+      >;
+
+      // Children indexed by parent, each group kept in display order.
+      const childrenByParent = new Map<string, typeof allFolders>();
+      for (const f of allFolders) {
+        if (f.parentFolderId == null) continue;
+        const group = childrenByParent.get(f.parentFolderId) ?? [];
+        group.push(f);
+        childrenByParent.set(f.parentFolderId, group);
+      }
+
+      // Depth-first list of the subtree (root first). A seen guard keeps a
+      // malformed cycle from looping forever.
+      const subtree: typeof allFolders = [];
+      const seen = new Set<string>();
+      const walk = (f: (typeof allFolders)[number]) => {
+        if (seen.has(f.id)) return;
+        seen.add(f.id);
+        subtree.push(f);
+        const kids = (childrenByParent.get(f.id) ?? []).slice().sort((a, b) => a.order - b.order);
+        for (const k of kids) walk(k);
+      };
+      walk(root);
+
+      // Recreate the folders. createFolder appends order, so creating in
+      // depth-first order preserves each group's relative ordering.
+      const idMap = new Map<string, string>();
+      for (const folder of subtree) {
+        const isRoot = folder.id === root.id;
+        const newParentId = isRoot ? root.parentFolderId : (idMap.get(folder.parentFolderId as string) ?? null);
+        const created = (await this.createFolder(lorebookId, {
+          name: isRoot ? `${folder.name} (Copy)` : folder.name,
+          enabled: folder.enabled,
+          parentFolderId: newParentId,
+        })) as { id: string } | null;
+        if (created) idMap.set(folder.id, created.id);
+      }
+
+      // Clone each entry into its matching new folder, preserving order. Drop the
+      // server-managed fields — createEntry re-derives id/timestamps and embedding
+      // is re-derived on demand, mirroring the single-entry duplicate path.
+      const subtreeFolderIds = new Set(subtree.map((f) => f.id));
+      const entriesToClone = allEntries
+        .filter((e) => e.folderId != null && subtreeFolderIds.has(e.folderId))
+        .sort((a, b) => a.order - b.order);
+      for (const entry of entriesToClone) {
+        const newFolderId = idMap.get(entry.folderId as string);
+        if (!newFolderId) continue;
+        const clone: Record<string, unknown> = { ...entry, lorebookId, folderId: newFolderId };
+        delete clone.id;
+        delete clone.createdAt;
+        delete clone.updatedAt;
+        delete clone.embedding;
+        await this.createEntry(clone as unknown as CreateLorebookEntryInput);
+      }
+
+      const newRootId = idMap.get(root.id);
+      return newRootId ? this.getFolder(newRootId, lorebookId) : null;
+    },
+
+    // ── Search ──
+
+    /** Search entries by keyword match in name/content/keys. */
+    async searchEntries(query: string) {
+      const pattern = `%${query}%`;
+      const rows = await db
+        .select()
+        .from(lorebookEntries)
+        .where(like(lorebookEntries.name, pattern))
+        .orderBy(lorebookEntries.order);
+      return rows.map((r) => parseEntryRow(r as Record<string, unknown>));
+    },
+  };
+}

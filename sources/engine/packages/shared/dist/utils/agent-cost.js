@@ -1,0 +1,62 @@
+// ──────────────────────────────────────────────
+// Agent Loadout Cost Estimator
+// ──────────────────────────────────────────────
+// Pure function that estimates the per-turn cost of an enabled agent set,
+// so the UI can show "~N tokens · ~M extra calls" alongside the agent picker.
+//
+// The estimate is intentionally rough. It is meant to help users sense when
+// a loadout is starting to get heavy, not to predict billing.
+//
+// Two axes:
+//   - instructionTokens: sum of agents' prompt-template tokens (chars/4).
+//     Does NOT include the chat context (recent messages, character cards,
+//     persona, lorebook, summary) that each call also carries — real per-turn
+//     usage will be substantially higher. UI copy should make that clear.
+//   - extraCalls: count of distinct (phase × connection × execution lane)
+//     groups. This mirrors
+//     the server-side batching in
+//     `packages/server/src/services/agents/agent-pipeline.ts`: agents that
+//     share a phase, connection, and lane batch into a single LLM call. Rewrite
+//     agents use a dedicated lane and never share tracker calls. v1 ignores
+//     the tool-extraction nuance (tool-using agents technically run alone,
+//     adding 1 call each beyond the batch) — fine for a soft signal.
+// ──────────────────────────────────────────────
+// v1 thresholds, tunable via user feedback:
+//   - 4 extra calls roughly doubles a typical 2-call baseline.
+//   - 4000 instruction tokens fills ~50% of an 8k local-model context.
+export const AGENT_COST_HIGH_CALLS = 4;
+export const AGENT_COST_HIGH_TOKENS = 4000;
+/**
+ * Agents whose template contributes to the main prompt but do NOT trigger an
+ * extra LLM call.
+ *
+ * `knowledge-retrieval` and `knowledge-router` ARE separate inference calls
+ * (they ask the LLM to pick or summarize lorebook entries), so they are not
+ * in this set.
+ */
+const NO_EXTRA_CALL_AGENT_TYPES = new Set();
+const BUILT_IN_REWRITE_AGENT_TYPES = new Set(["prose-guardian", "continuity", "html"]);
+function getAgentCostLane(agent) {
+    return agent.resultType === "text_rewrite" || BUILT_IN_REWRITE_AGENT_TYPES.has(agent.type) ? "rewrite" : "standard";
+}
+// TODO: replace chars/4 with a real tokenizer when the project picks one up.
+// Matches the existing `estimateTokens` helpers scattered across the client
+// (PeekPromptModal, LorebookFormFields, etc.).
+function approximateTokens(text) {
+    return Math.ceil(text.length / 4);
+}
+export function estimateAgentLoadCost(enabled, defaultConnectionId) {
+    let instructionTokens = 0;
+    const callKeys = new Set();
+    for (const a of enabled) {
+        instructionTokens += approximateTokens(a.promptTemplate);
+        if (NO_EXTRA_CALL_AGENT_TYPES.has(a.type))
+            continue;
+        const connection = a.connectionId ?? defaultConnectionId ?? "default";
+        callKeys.add(`${a.phase}::${connection}::${getAgentCostLane(a)}`);
+    }
+    const extraCalls = callKeys.size;
+    const level = extraCalls >= AGENT_COST_HIGH_CALLS || instructionTokens >= AGENT_COST_HIGH_TOKENS ? "high" : "ok";
+    return { instructionTokens, extraCalls, level };
+}
+//# sourceMappingURL=agent-cost.js.map
