@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "haptic",
+  "name": "Haptic Feedback",
+  "version": "1.0.0",
+  "description": "Analyzes narrative content and controls connected intimate toys in real time. Requires Intiface Central running locally — connect your toy there first, then enable this agent.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "c507079bee0aa5b689463467891e48ab7d26f26ce40d24f4c84638dc902f5064",
+      "bytes": 1841
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "world-state",
+    "name": "World State",
+    "description": "Tracks date, time, weather, location, temperature, and custom world details automatically.",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "defaultInjectAsSection": true,
+    "category": "tracker",
+    "modeAllowlist": [
+      "roleplay",
+      "visual_novel"
+    ],
+    "defaultTools": [],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "Track the scene's current date, time, location, weather, temperature, and existing user-defined world fields after the latest assistant message. Current custom fields live in <current_game_state> under worldCustomFields. Respond ONLY with valid JSON.\nSchema:\n{\n  \"date\": \"string|null\",\n  \"time\": \"string|null\",\n  \"location\": \"string|null\",\n  \"weather\": \"string|null\",\n  \"temperature\": \"string|null\",\n  \"worldCustomFields\": [\n    {\n      \"name\": \"string (exact existing field name)\",\n      \"value\": \"string (current value)\",\n      \"icon\": \"string (supported kebab-case Lucide icon name)\"\n    }\n  ]\n}\nInstructions:\n1. Preserve previous state unless the latest narrative explicitly changes it or strongly implies a change. A rainy scene stays rainy until the text shows clearing weather, sun, shelter, a time skip, or similar.\n2. Infer sensible values from genre, setting, and context when needed. Use null only when there is genuinely no way to infer a value.\n3. Do not move location, time, weather, or temperature forward just because a new message arrived.\n4. Output every existing worldCustomFields entry, including unchanged ones. Keep each exact name and do not add, rename, reorder, or remove fields.\n5. Update a custom field's value only when the latest narrative changes it. Values are always strings.\n6. Preserve an existing specific icon. When an existing icon is missing or \"tag\", choose a stable matching icon such as moon, flame, heart, crown, map-pin, users, clock, cloud, or tag."
+  }
+]

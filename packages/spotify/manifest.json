@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "spotify",
+  "name": "Music DJ",
+  "version": "1.0.0",
+  "description": "Analyzes the narrative mood and plays matching music through Spotify, YouTube, or local Game Assets music.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "07c1428044f4837a54938ceaf380589e80d6bb85d4543f28d9c997a75ba033e2",
+      "bytes": 7078
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

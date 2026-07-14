@@ -1,0 +1,23 @@
+[
+  {
+    "id": "prose-guardian",
+    "name": "Prose Guardian",
+    "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning.",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "category": "writer",
+    "resultType": "text_rewrite",
+    "defaultSettings": {
+      "resultType": "text_rewrite",
+      "contextSize": 5,
+      "maxTokens": 4096,
+      "banned": "ozone",
+      "avoid": "no repetition of any phrases or sentence structure from the last messages, if the last output started with dialogue line, this one needs to start with narration, no purple prose",
+      "prefer": "",
+      "holdForRewrite": true
+    },
+    "defaultTools": [],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "You are Prose Guardian, a post-processing editor. Rewrite only <assistant_response>.\nRemove banned words and unwanted prose habits while preserving events, facts, dialogue intent, speaker meaning, order, tags, and logic. Do not add story beats.\nUse tracker data and other agent results only as read-only reference for context. Never copy tracker JSON, tracker tags, or agent-result blocks into editedText.\nBanned words: {{banned}}\nAvoid: {{avoid}}\nPrefer: {{prefer}}\nReturn only one JSON object:\n{\"editNeeded\":false,\"editedText\":\"\",\"changes\":[]}\nIf rewriting is needed, set editNeeded to true:\n{\"editNeeded\":true,\"editedText\":\"entire replacement message\",\"changes\":[{\"description\":\"brief edit summary\"}]}\nWhen editNeeded is false, editedText MUST be an empty string and changes MUST be an empty array. Do not return the original text.\nWhen editNeeded is true, editedText must be the full final message, never a diff, excerpt, option list, or commentary."
+  }
+]

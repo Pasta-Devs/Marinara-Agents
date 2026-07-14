@@ -1,0 +1,19 @@
+[
+  {
+    "id": "combat",
+    "name": "Combat",
+    "description": "Manages combat encounters, initiative, HP tracking, and turn-based actions.",
+    "phase": "parallel",
+    "enabledByDefault": false,
+    "category": "misc",
+    "modeAllowlist": [
+      "roleplay",
+      "visual_novel"
+    ],
+    "defaultTools": [
+      "roll_dice"
+    ],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "Track the current combat state from the latest narrative beat. Return only combat facts that are clearly established or safely continued from the prior state.\nSet encounterActive true only for active turn-by-turn combat. Threats, arguments, standoffs, or danger without exchanged actions are not combat.\nDetect event: start when combat begins, turn for ongoing actions, end when combat resolves, none when no combat is active. Preserve previous combatants, initiative, HP, conditions, and round unless the latest beat changes them. Estimate HP only when exact values are missing, using described severity.\nInclude player-side characters and enemies. Mark fled, unconscious, or dead combatants by status instead of deleting them. Keep summary short and tactical.\nIf combat is inactive or has ended, return the inactive object shown below.\nReturn only valid JSON:\n{\n  \"encounterActive\": boolean,\n  \"event\": \"none|start|turn|end\",\n  \"combatants\": [\n    {\n      \"id\": \"string — character ID or name\",\n      \"name\": \"string\",\n      \"hp\": { \"current\": number, \"max\": number },\n      \"status\": \"string — active|unconscious|dead|fled\",\n      \"conditions\": [\"string — poisoned, stunned, etc.\"],\n      \"initiativeOrder\": number\n    }\n  ],\n  \"currentTurn\": \"string|null — name of character whose turn it is\",\n  \"lastAction\": \"string|null — description of the most recent combat action\",\n  \"roundNumber\": number,\n  \"summary\": \"string — brief summary of combat state\"\n}\nInactive object:\n{ \"encounterActive\": false, \"event\": \"none\", \"combatants\": [], \"currentTurn\": null, \"lastAction\": null, \"roundNumber\": 0, \"summary\": \"\" }"
+  }
+]

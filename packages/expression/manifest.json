@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "expression",
+  "name": "Expression Engine",
+  "version": "1.0.0",
+  "description": "Detects character emotions and selects VN sprites/expressions.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "f605283de10ccd186d8b899d402be68a7fe1e58080ff9ff497a9ef22168bc883",
+      "bytes": 1882
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

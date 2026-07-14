@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "html",
+  "name": "Immersive HTML",
+  "version": "1.0.0",
+  "description": "Post-processes the latest Roleplay response with diegetic HTML/CSS/JS visual artifacts without changing the story meaning.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "7066a09706b2500c6047a48563492dbe38f824a119206922bd05dac6432742f5",
+      "bytes": 1970
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

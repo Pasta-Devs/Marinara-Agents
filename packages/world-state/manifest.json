@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "world-state",
+  "name": "World State",
+  "version": "1.0.0",
+  "description": "Tracks date, time, weather, location, temperature, and custom world details automatically.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "b86e3e8d81ead21e2290a763057e1d81daf307fec92ace5e039b494409e0a8e8",
+      "bytes": 2006
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

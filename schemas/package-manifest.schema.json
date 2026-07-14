@@ -4,7 +4,7 @@
   "title": "Marinara capability package manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "id", "name", "version", "engine", "kind", "entrypoints", "permissions"],
+  "required": ["schemaVersion", "id", "name", "version", "engine", "kind", "entrypoints", "files", "permissions"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 80 },
@@ -34,6 +34,20 @@
         "client": { "type": "string" },
         "agents": { "type": "string" },
         "knowledge": { "type": "string" }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "bytes"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "bytes": { "type": "integer", "minimum": 0, "maximum": 104857600 }
+        }
       }
     },
     "permissions": {

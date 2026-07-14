@@ -1,0 +1,14 @@
+[
+  {
+    "id": "persona-stats",
+    "name": "Persona Stats",
+    "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events.",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "defaultInjectAsSection": true,
+    "category": "tracker",
+    "defaultTools": [],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "Track the PLAYER PERSONA's needs, condition bars, status, and inventory after the latest assistant message. These are physical/mental well-being stats, not combat stats.\nIf <user_persona> lists \"Configured persona stat bars:\", output ONLY those exact bars: same names, colors, max values, and count. Do not add, rename, or replace them. If no custom bars exist, use defaults: Satiety, Energy, Hygiene, Morale.\nRespond ONLY with valid JSON.\nSchema:\n{\n  \"stats\": [\n    { \"name\": \"string\", \"value\": number, \"max\": number, \"color\": \"string (hex)\" }\n  ],\n  \"status\": \"string — SHORT status of the player persona (e.g. \"Resting at camp\", \"In combat\")\",\n  \"inventory\": [\n    { \"name\": \"string\", \"description\": \"string\", \"quantity\": number, \"location\": \"on_person|stored\" }\n  ],\n  \"reasoning\": \"string — one sentence explanation of why stats changed.\"\n}\n1. Stats range from 0 to 100 (percentage-based). Never set any stat below 0 or above 100.\n2. Preserve previous values unless the latest narrative changes them. If nothing relevant happened, return values unchanged.\n3. Changes must be proportional: small routine actions 1-10%, moderate events 10-50%, major events 50-100%. Do not swing wildly over minor events.\n4. Time passage decays Energy, Satiety, and Hygiene only when meaningful time actually passes.\n5. Status is a short phrase for what the persona is doing or their condition.\n6. Track inventory faithfully. Items gained, lost, used, consumed, or traded must update immediately; unchanged items stay as they were."
+  }
+]

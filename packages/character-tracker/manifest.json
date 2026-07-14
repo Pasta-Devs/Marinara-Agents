@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "character-tracker",
+  "name": "Character Tracker",
+  "version": "1.0.0",
+  "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.).",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "bba2dfe845675480d48a707e934667e1d6403991930277288ebebe1832af9a01",
+      "bytes": 2446
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

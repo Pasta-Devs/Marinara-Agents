@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "knowledge-router",
+  "name": "Knowledge Router",
+  "version": "1.0.0",
+  "description": "Lower-cost alternative to Knowledge Retrieval. Reads a short catalog of lorebook entries (descriptions or content snippets), picks which ones are relevant to the current scene, and injects them verbatim — no per-entry summarization passes. Best for large lorebooks where you've written entry descriptions.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "95278ead9ba9b79b488b44d09dfd935ffd66abd43f2bd2948875f06546a0e6e6",
+      "bytes": 1628
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

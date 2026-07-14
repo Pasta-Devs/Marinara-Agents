@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "prose-guardian",
+  "name": "Prose Guardian",
+  "version": "1.0.0",
+  "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "f391ee52c56212577d752206e5cb07ceb10af802f1583111778a25d5b7cce382",
+      "bytes": 1806
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

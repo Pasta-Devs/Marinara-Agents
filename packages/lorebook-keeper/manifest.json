@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "lorebook-keeper",
+  "name": "Lorebook Keeper",
+  "version": "1.0.0",
+  "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "bf67ad061c80088ce4351bc4c4a8e14004127771f0ec2f81b18c76f246a13adc",
+      "bytes": 1780
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

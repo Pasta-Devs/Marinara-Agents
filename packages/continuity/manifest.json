@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "continuity",
+  "name": "Continuity Checker",
+  "version": "1.0.0",
+  "description": "Post-processes the latest assistant message to fix concrete spatial, timeline, and physical logic errors without changing the story.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "8990ffadbf71440ba5a2ad0446343b15474dc68a53ec5c9d3c0db4c46737eab9",
+      "bytes": 1843
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

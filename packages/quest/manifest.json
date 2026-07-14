@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "quest",
+  "name": "Quest Tracker",
+  "version": "1.0.0",
+  "description": "Manages quest objectives, completion states, and rewards.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "e881765edd889b087abc369f298cfb89e649d05af4621e82bce125d7d4df665b",
+      "bytes": 1508
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "knowledge-retrieval",
+  "name": "Knowledge Retrieval",
+  "version": "1.0.0",
+  "description": "Scans specified lorebooks for information relevant to the current conversation, summarizes the key data, and injects it into the prompt — a lightweight RAG pipeline without vector databases.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "c248e900e3e900eccb9e0b63a7de375cd8d9e0f6e8151bc8b9deaef46c233a20",
+      "bytes": 1477
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

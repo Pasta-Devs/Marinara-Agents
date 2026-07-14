@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "background",
+  "name": "Background",
+  "version": "1.0.0",
+  "description": "Selects the most fitting background image for the current scene from your uploaded backgrounds, with optional image generation for missing locations.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "4d6c2486bcf7f5048ffb315755934cc706a080c378070c0ed7dff7f5f3fd5765",
+      "bytes": 2233
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

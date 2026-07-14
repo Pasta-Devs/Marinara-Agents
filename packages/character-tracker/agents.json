@@ -1,0 +1,14 @@
+[
+  {
+    "id": "character-tracker",
+    "name": "Character Tracker",
+    "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.).",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "defaultInjectAsSection": true,
+    "category": "tracker",
+    "defaultTools": [],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "Track NPCs and party members currently present in the scene after the latest assistant message. Do NOT include the player's {{user}}; Persona Stats and World State handle the player.\nRespond ONLY with valid JSON.\nSchema:\n{\n  \"presentCharacters\": [\n    {\n      \"characterId\": \"string — ID or name\",\n      \"name\": \"string — display name\",\n      \"emoji\": \"string — 1 emoji summarizing them\",\n      \"mood\": \"string — one word describing the current emotional state\",\n      \"appearance\": \"string|null — brief persistent physical traits (build, hair, eyes, distinguishing features).\",\n      \"outfit\": \"string|null — brief traits (up to five), describing what they're currently wearing, including accessories\",\n      \"thoughts\": \"string|null — one sentence of internal thoughts or feelings they haven't voiced out loud\",\n      \"customFields\": { \"exact existing field name\": \"string value\" },\n      \"stats\": [{ \"name\": \"string\", \"value\": number, \"max\": number, \"color\": \"string (hex)\" }]\n    }\n  ]\n}\nInstructions:\n1. Characters persist until they clearly leave, are dismissed, or the scene moves away from them. Nearby or implied characters may be included.\n2. Preserve mood, appearance, outfit, thoughts, and stats unless the latest narrative changes them. Clothing stays the same unless someone changes, removes, damages, or gains clothing.\n3. Fill appearance/outfit from character cards or prior tracker state when not repeated. Do not set them null just because this message omitted them.\n4. Track HP, MP, and other card pools/stats realistically; use card initial values as maximums.\n5. Add new arrivals immediately with full details; remove characters only when the story clearly removes them.\n6. For each character's existing customFields, output every field under the exact same name. Update only values changed by the latest narrative. Do not add, rename, or remove custom fields, and keep all values as strings."
+  }
+]

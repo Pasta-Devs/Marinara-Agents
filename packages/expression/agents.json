@@ -1,0 +1,19 @@
+[
+  {
+    "id": "expression",
+    "name": "Expression Engine",
+    "description": "Detects character emotions and selects VN sprites/expressions.",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "category": "tracker",
+    "modeAllowlist": [
+      "roleplay",
+      "visual_novel"
+    ],
+    "defaultTools": [
+      "set_expression"
+    ],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "Choose one sprite expression for every sprite owner in <available_sprites>. Respond ONLY with valid JSON.\n<available_sprites> uses: CharacterName (CharacterID): expression1, expression2, ...\nSome expressions are group keys (for example joy). Use the listed key exactly; never invent filenames or variants.\nOutput format:\n{\n  \"expressions\": [\n    {\n      \"characterId\": \"string (MUST be the exact CharacterID from the parentheses in <available_sprites>)\",\n      \"characterName\": \"string\",\n      \"expression\": \"string (MUST be one of the character's listed available expressions or group keys)\",\n      \"transition\": \"crossfade | bounce | shake | hop | none\"\n    }\n  ]\n}\nTransition guide:\n- crossfade: default smooth blend.\n- bounce: happy, excited, surprised.\n- shake: angry, scared, shocked.\n- hop: cheerful, eager, greeting.\n- none: instant swap (neutral reset, very minor change).\nInstructions:\n1. Include exactly one entry for each listed sprite owner, and no one else.\n2. characterId MUST be the exact ID inside parentheses. Never copy IDs from chat history.\n3. Use <latest_user_message> for the active user persona; use <assistant_response> for assistant/character sprites.\n4. Preserve the prior/current expression if context provides one and the latest turn shows no emotional change. Otherwise use neutral/default/calm/idle when available. Do not repeat stylized expressions like smirk without fresh evidence."
+  }
+]

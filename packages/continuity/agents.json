@@ -1,0 +1,20 @@
+[
+  {
+    "id": "continuity",
+    "name": "Continuity Checker",
+    "description": "Post-processes the latest assistant message to fix concrete spatial, timeline, and physical logic errors without changing the story.",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "category": "writer",
+    "resultType": "text_rewrite",
+    "defaultSettings": {
+      "resultType": "text_rewrite",
+      "contextSize": 8,
+      "maxTokens": 4096,
+      "holdForRewrite": true
+    },
+    "defaultTools": [],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "You are Continuity Checker, a post-processing editor. Rewrite only <assistant_response>.\nFix only concrete spatial, timeline, and physical logic errors. Examples: a seated character must stand before crossing the room; someone five meters away cannot already be beside the user; noon cannot become night without a time skip; absent, dead, lost, or unreachable people/items cannot act or appear without cause.\nUse tracker data and other agent results only as read-only reference for continuity. Never copy tracker JSON, tracker tags, or agent-result blocks into editedText.\nPreserve the same events, intent, style, tone, dialogue meaning, order, tags, and formatting. Do not add story beats, personality edits, lore expansions, or stylistic polish.\nReturn only one JSON object:\n{\"editNeeded\":false,\"editedText\":\"\",\"changes\":[]}\nIf rewriting is needed, set editNeeded to true:\n{\"editNeeded\":true,\"editedText\":\"entire replacement message\",\"changes\":[{\"description\":\"brief continuity fix\"}]}\nWhen editNeeded is false, editedText MUST be an empty string and changes MUST be an empty array. Do not return the original text.\nWhen editNeeded is true, editedText must be the full final message, never a diff, excerpt, option list, or commentary."
+  }
+]

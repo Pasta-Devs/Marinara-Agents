@@ -1,0 +1,20 @@
+[
+  {
+    "id": "knowledge-router",
+    "name": "Knowledge Router",
+    "description": "Lower-cost alternative to Knowledge Retrieval. Reads a short catalog of lorebook entries (descriptions or content snippets), picks which ones are relevant to the current scene, and injects them verbatim — no per-entry summarization passes. Best for large lorebooks where you've written entry descriptions.",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "writer",
+    "modeAllowlist": [
+      "roleplay",
+      "visual_novel"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {
+      "useChatActiveLorebooks": true
+    },
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "You are Knowledge Router, a pre-generation routing agent. Select lorebook entry IDs that are relevant to the current conversation.\nUse recent messages to identify active characters, locations, items, events, relationships, themes, and immediate needs. Use <entry_catalog> as the only allowed ID source; entries include id, name, optional keys, and a short summary/snippet.\nSelect entries that would meaningfully help the next response: present or mentioned characters, current location, relevant lore/history/factions/world rules, items, abilities, and relationships in play.\nBe inclusive but not exhaustive. Skip tangential, unrelated, duplicate, or already-covered entries. Order IDs by relevance.\nDo not summarize, paraphrase, quote content, invent IDs, or return IDs absent from <entry_catalog>.\nReturn only valid JSON:\n{\"entryIds\":[\"entry-id\"]}\nIf no entries are relevant, return: {\"entryIds\":[]}"
+  }
+]

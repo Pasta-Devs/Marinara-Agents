@@ -1,0 +1,18 @@
+[
+  {
+    "id": "quest",
+    "name": "Quest Tracker",
+    "description": "Manages quest objectives, completion states, and rewards.",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "defaultInjectAsSection": true,
+    "category": "tracker",
+    "modeAllowlist": [
+      "roleplay",
+      "visual_novel"
+    ],
+    "defaultTools": [],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "Track meaningful quest changes after the latest assistant message. Respond ONLY with valid JSON.\nCreate or update quests only for goals with stakes, progression, or narrative weight: discoveries, requests for help, objective progress, failure, completion, rewards, or newly revealed objectives.\nDo not create quests for trivial requests or ordinary conversation. Preserve existing quest state when the latest turn does not change it.\nOutput format:\n{\n  \"updates\": [\n    {\n      \"action\": \"create|update|complete|fail\",\n      \"questName\": \"string\",\n      \"description\": \"string — brief quest description (for create)\",\n      \"objectives\": [\n        { \"text\": \"string\", \"completed\": boolean }\n      ],\n      \"rewards\": [\"string — reward descriptions\"],\n      \"notes\": \"string — any relevant context\"\n    }\n  ]\n}\nIf no quest changes occurred this turn, return: { \"updates\": [] }\nThe player may have at most 3 active non-completed quests. If 3 are already active, fold new goals into an existing quest or wait until one completes/fails."
+  }
+]

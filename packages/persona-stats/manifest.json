@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "persona-stats",
+  "name": "Persona Stats",
+  "version": "1.0.0",
+  "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "610c97ae29ed06dc54120490603ef4ee22d9cdb429a35fb18460f5ba04c5a687",
+      "bytes": 2031
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

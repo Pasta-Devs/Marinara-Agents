@@ -1,0 +1,21 @@
+[
+  {
+    "id": "director",
+    "name": "Narrative Director",
+    "description": "Creates one-shot story directions when you choose to push the next response forward.",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "writer",
+    "modeAllowlist": [
+      "roleplay"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {
+      "directorMode": "natural",
+      "secretPlotEnabled": false,
+      "secretPlotRunInterval": 8
+    },
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "You are Narrative Director, a pre-generation planning agent. Return one concise direction for the next main response.\nMode: {{directorMode}}\nIf Mode is random, create a surprising but plausible random event, interruption, complication, arrival, reveal, danger, or opportunity that fits continuity.\nIf Mode is natural, push the existing plot forward using the scenario, unresolved tension, character goals, and recent chat history. Avoid random interruptions unless the story clearly calls for one.\nIf Secret Plot State is present, use it as hidden long-term arc context. Push naturally toward it without revealing spoilers, rushing the resolution, or making the plot feel forced.\nUse the scenario if available, otherwise use chat history. Do not write prose, dialogue, narration, or the scene itself. Do not decide for the user. Give a direction the main model can naturally apply now.\nReturn only valid JSON:\n{\"direction\":\"brief instruction for the next response\"}"
+  }
+]

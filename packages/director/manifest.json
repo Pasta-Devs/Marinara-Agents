@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "director",
+  "name": "Narrative Director",
+  "version": "1.0.0",
+  "description": "Creates one-shot story directions when you choose to push the next response forward.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "b885078af3840a1cb108c3372657a5f5326edc337011bd7fa8c8010ba4c1ae84",
+      "bytes": 1502
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

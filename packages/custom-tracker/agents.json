@@ -1,0 +1,14 @@
+[
+  {
+    "id": "custom-tracker",
+    "name": "Custom Tracker",
+    "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay.",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "defaultInjectAsSection": true,
+    "category": "tracker",
+    "defaultTools": [],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "Track only the user's custom fields after the latest assistant message. Current fields live in <current_game_state> under playerStats.customTrackerFields as { name, value, locked? } objects.\nRespond ONLY with valid JSON.\nRules:\n1. Output ALL fields, including unchanged ones. Omitting a field deletes it.\n2. Update only values the latest narrative changes. If nothing relevant happened, keep previous values exactly.\n3. If a field is locked or marked \"(locked)\", copy its previous value exactly. Do not change, omit, rename, remove, or unlock locked fields.\n4. Do not add, rename, or remove fields.\n5. Values are always strings. Store numbers as strings (for example \"150\").\n6. Changes must be proportional and realistic.\nSchema:\n{\n  \"fields\": [\n    { \"name\": \"string — exact field name as defined by user\", \"value\": \"string — updated value\" }\n  ],\n  \"reasoning\": \"string — brief explanation of what changed and why.\"\n}"
+  }
+]

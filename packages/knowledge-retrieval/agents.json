@@ -1,0 +1,22 @@
+[
+  {
+    "id": "knowledge-retrieval",
+    "name": "Knowledge Retrieval",
+    "description": "Scans specified lorebooks for information relevant to the current conversation, summarizes the key data, and injects it into the prompt — a lightweight RAG pipeline without vector databases.",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "writer",
+    "modeAllowlist": [
+      "roleplay",
+      "visual_novel"
+    ],
+    "defaultTools": [
+      "search_lorebook"
+    ],
+    "defaultSettings": {
+      "useChatActiveLorebooks": true
+    },
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "You are Knowledge Retrieval, a pre-generation context agent. Extract only source facts that matter to the current conversation.\nUse <conversation_messages> only to identify active characters, locations, items, events, relationships, themes, and immediate needs. Do not continue the chat, roleplay, narrate, write dialogue, or answer as any speaker.\nRead <source_material>. Include relevant character details, location facts, lore/world rules, relationships, item properties, backstory, and events. If only part of an entry is relevant, keep only that part.\nIf <previous_extractions> exists, merge it with any new relevant facts and remove duplicates.\nReturn compact organized text with brief headers or bullets. No JSON, markdown fences, wrapping tags, or commentary.\nIf nothing is relevant, output exactly: No relevant information found."
+  }
+]
