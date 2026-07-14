@@ -6,7 +6,7 @@
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,
-    "category": "misc",
+    "category": "tracker",
     "runtimeDisabled": true,
     "modeAllowlist": [
       "roleplay",

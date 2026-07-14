@@ -28,8 +28,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "3e5762ff7755aadebb68b73b4fef2c7388a3f41fb82ae41642aa866a9e90f7f1",
-      "bytes": 520
+      "sha256": "2f32c170427dde4ccace7ad95ce681a7e84ea442b0ecede36a0bb4a35c7d26d5",
+      "bytes": 523
     },
     {
       "path": "server.mjs",

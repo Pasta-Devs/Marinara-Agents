@@ -5,7 +5,7 @@
     "description": "Audits durable roleplay changes against saved character cards and proposes precise edits for user approval.",
     "phase": "post_processing",
     "enabledByDefault": false,
-    "category": "misc",
+    "category": "writer",
     "defaultTools": [],
     "runInterval": 8,
     "author": "Pasta Devs",

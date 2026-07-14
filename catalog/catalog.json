@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-14T16:33:59.623Z",
+  "generatedAt": "2026-07-14T16:43:57.696Z",
   "packages": [
     {
       "manifest": {
@@ -133,8 +133,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "d4f8638f77251595bf8f3fe7fe4ce1ba71528bd858af48c9bfc8839a382c7807",
-            "bytes": 1768
+            "sha256": "ca425dcda3201d4cc8fe083a48b9faed5a3866ec6096fd9c6b2b405384165da5",
+            "bytes": 1770
           }
         ],
         "permissions": [
@@ -146,13 +146,13 @@
         ],
         "restartRequired": false
       },
+      "category": "writer",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/card-evolution-auditor-1.0.0.zip",
-        "sha256": "b8b4befc55b7a3b5946dcc8f4c2b6f3eaaf18d007d1f4b2371409941e69ecf98",
+        "sha256": "21d091b56483b80c50cdf9d0fb2795d6d7418dbf8ee85201d97e5ea35f62079d",
         "bytes": 1496
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#card-evolution-auditor",
-      "category": "misc"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#card-evolution-auditor"
     },
     {
       "manifest": {
@@ -642,8 +642,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "3e5762ff7755aadebb68b73b4fef2c7388a3f41fb82ae41642aa866a9e90f7f1",
-            "bytes": 520
+            "sha256": "2f32c170427dde4ccace7ad95ce681a7e84ea442b0ecede36a0bb4a35c7d26d5",
+            "bytes": 523
           },
           {
             "path": "server.mjs",
@@ -668,11 +668,11 @@
         ],
         "restartRequired": true
       },
-      "category": "misc",
+      "category": "tracker",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.0.0.zip",
-        "sha256": "860bf9dde9ec5fa291aef892274be0b139979848feb3748e9b97f02035a239cf",
-        "bytes": 744926
+        "sha256": "88f2891fe38f70966c8e6f4c98bc99f9417a0ac55a2e6161385725cde3e29184",
+        "bytes": 744931
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },

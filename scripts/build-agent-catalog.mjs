@@ -36,10 +36,18 @@ const packageDirectories = (await readdir(packagesDir, { withFileTypes: true }))
   .filter((id) => !nonDownloadableCoreFeatures.has(id))
   .sort();
 const sourcePackageIds = new Set(packageDirectories);
+const requestedPackageIds = new Set(process.argv.slice(2));
+const selectedPackageDirectories = requestedPackageIds.size > 0
+  ? packageDirectories.filter((id) => requestedPackageIds.has(id))
+  : packageDirectories;
+if (selectedPackageDirectories.length !== requestedPackageIds.size && requestedPackageIds.size > 0) {
+  const unknownIds = [...requestedPackageIds].filter((id) => !sourcePackageIds.has(id));
+  throw new Error(`Unknown agent package${unknownIds.length === 1 ? "" : "s"}: ${unknownIds.join(", ")}`);
+}
 const rebuiltIds = new Set();
 const rebuiltPackages = [];
 
-for (const id of packageDirectories) {
+for (const id of selectedPackageDirectories) {
   const sourceDir = join(packagesDir, id);
   let manifest;
   try {

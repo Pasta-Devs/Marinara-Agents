@@ -53,6 +53,10 @@ if (aboutMeKeeperMarkers.some((marker) => readme.includes(marker))) {
 }
 
 const ids = new Set();
+const expectedCategories = new Map([
+  ["card-evolution-auditor", "writer"],
+  ["hierarchical-maps", "tracker"],
+]);
 for (const entry of catalog.packages) {
   const { manifest, category, artifact, documentationUrl } = entry;
   if (!manifest?.id || ids.has(manifest.id)) throw new Error(`Duplicate or missing package id: ${manifest?.id}`);
@@ -62,6 +66,10 @@ for (const entry of catalog.packages) {
   ids.add(manifest.id);
   if (!["writer", "tracker", "misc"].includes(category)) {
     throw new Error(`Missing or invalid category for ${manifest.id}`);
+  }
+  const expectedCategory = expectedCategories.get(manifest.id);
+  if (expectedCategory && category !== expectedCategory) {
+    throw new Error(`Expected ${manifest.id} in ${expectedCategory}, found ${category}`);
   }
   if (!documentationUrl) throw new Error(`Missing documentation URL for ${manifest.id}`);
   const artifactPath = join(repoRoot, "artifacts", basename(new URL(artifact.url).pathname));

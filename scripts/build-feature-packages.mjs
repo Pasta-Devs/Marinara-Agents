@@ -36,6 +36,7 @@ const features = [
     id: "hierarchical-maps",
     name: "Hierarchical Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
+    category: "tracker",
     kind: ["agent", "maps"],
     modes: ["roleplay", "game"],
     permissions: ["agent-runtime", "chat-read", "chat-write", "network", "prompt-context", "routes", "storage", "ui"],
@@ -290,7 +291,7 @@ for (const feature of selectedFeatures) {
     author: "Pasta Devs",
     phase: "pre_generation",
     enabledByDefault: false,
-    category: "misc",
+    category: feature.category ?? "misc",
     runtimeDisabled: true,
     modeAllowlist: feature.modes,
     defaultTools: [],
@@ -370,7 +371,7 @@ for (const feature of selectedFeatures) {
     const artifact = await readFile(artifactPath);
     catalog.packages.push({
       manifest,
-      category: "misc",
+      category: feature.category ?? "misc",
       artifact: {
         url: `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${basename(artifactPath)}`,
         sha256: sha256(artifact),
