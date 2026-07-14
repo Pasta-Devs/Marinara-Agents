@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "uno",
+  "name": "UNO",
+  "version": "1.0.0",
+  "description": "Play UNO with Conversation characters.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent",
+    "turn-game"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "81e0c8a2da5563fe49672977348ff67e573daeecff401897eefb81fff87c3557",
+      "bytes": 414
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "669e3f6f25f79ec271682e89ec2187d769314c35cb5ec9975c5cf717b452d158",
+      "bytes": 83626
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "chat-write",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

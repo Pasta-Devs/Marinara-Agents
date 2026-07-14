@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "poker",
+  "name": "Poker",
+  "version": "1.0.0",
+  "description": "Play Texas Hold’em Poker with Conversation characters.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent",
+    "turn-game"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "ad483ef6fea9c052296e96054e581c959b3a36fc6641d37de520afd4efb45db7",
+      "bytes": 436
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "d6133f6ead3f9bae4a7b62314c8aea392d4d42cda4ee243ecfda7bafd4e786e8",
+      "bytes": 83520
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "chat-write",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "chess",
+  "name": "Chess",
+  "version": "1.0.0",
+  "description": "Play Chess with a Conversation character.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent",
+    "turn-game"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "9a3805fa3ee9a51a2a09dbae4c684efaf4b877f95c3a37fdf45305403597996c",
+      "bytes": 421
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "c733dba43b84dd3651cb6b44e67f369979fb14ac89f17ed7cf9085d41d32debb",
+      "bytes": 107935
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "chat-write",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

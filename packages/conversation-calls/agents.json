@@ -1,0 +1,19 @@
+[
+  {
+    "id": "conversation-calls",
+    "name": "Conversation Calls",
+    "description": "Adds live audio and video calls with Conversation characters.",
+    "author": "Pasta Devs",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "misc",
+    "runtimeDisabled": true,
+    "modeAllowlist": [
+      "conversation"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {},
+    "defaultPromptTemplate": "",
+    "execution": "feature"
+  }
+]

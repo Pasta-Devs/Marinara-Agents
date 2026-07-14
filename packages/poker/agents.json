@@ -1,0 +1,19 @@
+[
+  {
+    "id": "poker",
+    "name": "Poker",
+    "description": "Play Texas Hold’em Poker with Conversation characters.",
+    "author": "Pasta Devs",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "misc",
+    "runtimeDisabled": true,
+    "modeAllowlist": [
+      "conversation"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {},
+    "defaultPromptTemplate": "",
+    "execution": "feature"
+  }
+]

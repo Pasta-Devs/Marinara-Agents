@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "rock-paper-scissors",
+  "name": "Rock-Paper-Scissors",
+  "version": "1.0.0",
+  "description": "Play Rock-Paper-Scissors with a Conversation character.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent",
+    "turn-game"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "436f55f0bc7c191080d3cf73e6142f320259c83a564a537326d80ce1f867bbfd",
+      "bytes": 463
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "d23e0f7deef070a2b74705d928de11d9db3463944c289e497e56bae8f02ebf3c",
+      "bytes": 66552
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "chat-write",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

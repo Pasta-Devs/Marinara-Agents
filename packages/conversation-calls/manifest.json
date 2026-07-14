@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "conversation-calls",
+  "name": "Conversation Calls",
+  "version": "1.0.0",
+  "description": "Adds live audio and video calls with Conversation characters.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent",
+    "conversation-calls"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "6a15f0d812f7f3e212996c98db0f6ed1dd3b65c9643765ca7e7131b8fc8eb714",
+      "bytes": 467
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "124a247460787cf14907425941badde2958c5de39cb6357472968d3ee3c8497f",
+      "bytes": 2437973
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "chat-write",
+    "network",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

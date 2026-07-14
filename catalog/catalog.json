@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-14T13:55:11.831Z",
+  "generatedAt": "2026-07-14T14:12:40.238Z",
   "packages": [
     {
       "manifest": {
@@ -841,6 +841,379 @@
         "bytes": 1394
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#cyoa"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "hierarchical-maps",
+        "name": "Hierarchical Maps",
+        "version": "1.0.0",
+        "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "maps"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "3e5762ff7755aadebb68b73b4fef2c7388a3f41fb82ae41642aa866a9e90f7f1",
+            "bytes": 520
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "78690af4794e2bbcfa69f0169477d270dc6f58f9627f686962b61f6bf5154627",
+            "bytes": 1983529
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "network",
+          "prompt-context",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.0.0.zip",
+        "sha256": "5b0d649919f9fd8cb0b9a20853f491001d3416c4146faa26825a7a4e68e7c6a2",
+        "bytes": 555206
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "conversation-calls",
+        "name": "Conversation Calls",
+        "version": "1.0.0",
+        "description": "Adds live audio and video calls with Conversation characters.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "conversation-calls"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "6a15f0d812f7f3e212996c98db0f6ed1dd3b65c9643765ca7e7131b8fc8eb714",
+            "bytes": 467
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "124a247460787cf14907425941badde2958c5de39cb6357472968d3ee3c8497f",
+            "bytes": 2437973
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.0.zip",
+        "sha256": "c65738eeef177fa79329b92c91773e2ec4ec333e998189d689fa4caa39aeb031",
+        "bytes": 685685
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "uno",
+        "name": "UNO",
+        "version": "1.0.0",
+        "description": "Play UNO with Conversation characters.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "81e0c8a2da5563fe49672977348ff67e573daeecff401897eefb81fff87c3557",
+            "bytes": 414
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "669e3f6f25f79ec271682e89ec2187d769314c35cb5ec9975c5cf717b452d158",
+            "bytes": 83626
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.0.zip",
+        "sha256": "8a2965bcd19b602c6689c892b91d24ac2cbe6025a20ba72969714c97ba296417",
+        "bytes": 22762
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "chess",
+        "name": "Chess",
+        "version": "1.0.0",
+        "description": "Play Chess with a Conversation character.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "9a3805fa3ee9a51a2a09dbae4c684efaf4b877f95c3a37fdf45305403597996c",
+            "bytes": 421
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "c733dba43b84dd3651cb6b44e67f369979fb14ac89f17ed7cf9085d41d32debb",
+            "bytes": 107935
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.0.zip",
+        "sha256": "176748c8d77ae2bb49a67a97b99e9cf92afc602547c84a4a1c3ed459d0288eff",
+        "bytes": 31962
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "poker",
+        "name": "Poker",
+        "version": "1.0.0",
+        "description": "Play Texas Hold’em Poker with Conversation characters.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "ad483ef6fea9c052296e96054e581c959b3a36fc6641d37de520afd4efb45db7",
+            "bytes": 436
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "d6133f6ead3f9bae4a7b62314c8aea392d4d42cda4ee243ecfda7bafd4e786e8",
+            "bytes": 83520
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.0.zip",
+        "sha256": "6eecca2656fa36176175d0307977fbaf1620894fc9ef31064ac50f11fcdbec7f",
+        "bytes": 23257
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "eightball",
+        "name": "8-Ball Pool",
+        "version": "1.0.0",
+        "description": "Play 8-Ball Pool with a Conversation character.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "6be1eb2b14288c71a2c26b994a6bba162cfc6c2cd2f1eeeee4e809300c5cdc45",
+            "bytes": 437
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "82e99095eb853afa2527f564480fbf7a1bbc037e04ea112eee1c886d6b01c49b",
+            "bytes": 89991
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.0.zip",
+        "sha256": "7c8ac49afbad9cfe64154bbb948758477ff88e4a4f799858f87bfbf73c153f24",
+        "bytes": 26132
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "tic-tac-toe",
+        "name": "Tic-Tac-Toe",
+        "version": "1.0.0",
+        "description": "Play Tic-Tac-Toe with a Conversation character.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "b9225ad847695b22f5135caf3d86a4f5395ca1068c40c4f7774f4c1d1ae7140d",
+            "bytes": 439
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "c06170fd186af202efa5478ebef34e7ada7f6ed9099a57242c6d884ab30b736d",
+            "bytes": 66476
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.0.zip",
+        "sha256": "9c596f4bcf6ad76012a9027c192ee5c7dd3de5f9988662c92d0d36b978b2a2df",
+        "bytes": 17881
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "rock-paper-scissors",
+        "name": "Rock-Paper-Scissors",
+        "version": "1.0.0",
+        "description": "Play Rock-Paper-Scissors with a Conversation character.",
+        "engine": {
+          "min": "2.2.2",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "436f55f0bc7c191080d3cf73e6142f320259c83a564a537326d80ce1f867bbfd",
+            "bytes": 463
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "d23e0f7deef070a2b74705d928de11d9db3463944c289e497e56bae8f02ebf3c",
+            "bytes": 66552
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.0.zip",
+        "sha256": "d066d4cb2139e52b8cb1d0c0f21867cbe117b92eae0daf122e5842561bef16ad",
+        "bytes": 17707
+      }
     }
   ]
 }

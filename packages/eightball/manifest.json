@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "eightball",
+  "name": "8-Ball Pool",
+  "version": "1.0.0",
+  "description": "Play 8-Ball Pool with a Conversation character.",
+  "engine": {
+    "min": "2.2.2",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent",
+    "turn-game"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "6be1eb2b14288c71a2c26b994a6bba162cfc6c2cd2f1eeeee4e809300c5cdc45",
+      "bytes": 437
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "82e99095eb853afa2527f564480fbf7a1bbc037e04ea112eee1c886d6b01c49b",
+      "bytes": 89991
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "chat-write",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

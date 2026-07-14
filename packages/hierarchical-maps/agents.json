@@ -1,0 +1,20 @@
+[
+  {
+    "id": "hierarchical-maps",
+    "name": "Hierarchical Maps",
+    "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
+    "author": "Pasta Devs",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "misc",
+    "runtimeDisabled": true,
+    "modeAllowlist": [
+      "roleplay",
+      "game"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {},
+    "defaultPromptTemplate": "",
+    "execution": "feature"
+  }
+]
