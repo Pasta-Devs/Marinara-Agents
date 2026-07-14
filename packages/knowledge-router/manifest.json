@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Lower-cost alternative to Knowledge Retrieval. Reads a short catalog of lorebook entries (descriptions or content snippets), picks which ones are relevant to the current scene, and injects them verbatim — no per-entry summarization passes. Best for large lorebooks where you've written entry descriptions.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [

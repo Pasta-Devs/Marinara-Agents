@@ -13,6 +13,7 @@ const sourcesRoot = join(repoRoot, "sources/engine");
 const sourceRoot = existsSync(sourcesRoot) ? sourcesRoot : engineRoot;
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
+const MIN_ENGINE_VERSION = "2.3.0";
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const featureSource = (relativePath) => {
   const packaged = resolve(sourceRoot, relativePath);
@@ -47,6 +48,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Conversation Calls",
+    version: "1.0.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -254,15 +256,109 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Loader2, Phone, PhoneIncoming, PhoneOff, Video } from "lucide-react";
+import { Loader2, Phone, PhoneIncoming, PhoneOff } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { ConversationCallSurface } from ${JSON.stringify(surface)};
 import { useAcceptConversationCall, useConversationCallStatus, useDeclineConversationCall, useStartConversationCall } from ${JSON.stringify(hooks)};
 import { useTTSConfig, useUpdateTTSConfig } from ${JSON.stringify(ttsHooks)};
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); window.addEventListener("marinara-capability-server-event", (event) => { if (event.detail?.packageId === "conversation-calls") void client.invalidateQueries({ queryKey: ["conversation-calls"] }); }); let expandedChatId = null; const listeners = new Set(); function setExpanded(chatId) { expandedChatId = chatId; for (const listener of listeners) listener(); } function useExpanded(chatId) { const [, redraw] = useState(0); useEffect(() => { const fn = () => redraw((v) => v + 1); listeners.add(fn); return () => listeners.delete(fn); }, []); return expandedChatId === chatId; }
-function Toggle({ label, description, enabled, disabled, onClick }) { return <button type="button" disabled={disabled} onClick={onClick} className={\`flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--background)]/35 px-2.5 py-2 text-left transition-colors hover:bg-[var(--secondary)]/50 \${disabled ? "cursor-not-allowed opacity-60" : ""}\`}><span className="min-w-0 flex-1"><span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">{label}</span>{description ? <span className="mt-0.5 block text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">{description}</span> : null}</span><span className={\`h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors \${enabled ? "bg-[var(--primary)]" : "bg-[var(--muted-foreground)]/50"}\`}><span className={\`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform \${enabled ? "translate-x-3.5" : ""}\`} /></span></button>; }
-function Settings({ props }) { const metadata = props.metadata && typeof props.metadata === "object" ? props.metadata : {}; const updateMetadata = typeof props.updateMetadata === "function" ? props.updateMetadata : () => {}; const config = useTTSConfig(); const updateConfig = useUpdateTTSConfig(); const value = config.data; const patch = (next) => { if (!value) return toast.error("Conversation call settings are still loading."); updateConfig.mutate({ ...value, callSttConnectionId: "", callSttModel: "", ...next }); }; const audio = value?.callAudioEnabled === true; const videoPresence = value?.callCharacterVideoEnabled === true; const callsEnabled = metadata.conversationCallsEnabled === true; const activateCalls = () => { const ids = Array.isArray(metadata.activeAgentIds) ? metadata.activeAgentIds.filter((id) => typeof id === "string") : []; updateMetadata({ conversationCallsEnabled: !callsEnabled, ...(!callsEnabled ? { enableAgents: true, activeAgentIds: Array.from(new Set([...ids, "conversation-calls"])) } : {}) }); }; return <section style={props.style} className="mari-chat-option-field space-y-3 rounded-lg px-3 py-2.5"><div className="flex items-start gap-2"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--secondary)] text-[var(--muted-foreground)]"><Video size="0.875rem" /></span><span><span className="block text-xs font-medium text-[var(--foreground)]">Conversation Calls</span><span className="text-[0.625rem] leading-snug text-[var(--muted-foreground)]">Audio/video calls, microphone handling, camera or screen input, and character video presence.</span></span></div><div className="space-y-1.5"><Toggle label="Audio/Video Calls" description="Show the call button in this conversation." enabled={callsEnabled} onClick={activateCalls} /><Toggle label="Generate voice cues in [tags]" description="Ask call models for cues such as [whispering], [laughing], and [sighs]." enabled={metadata.conversationCallVoiceCues !== false} onClick={() => updateMetadata({ conversationCallVoiceCues: metadata.conversationCallVoiceCues === false })} /><Toggle label="Call Audio Pipeline" description="Listen while unmuted and transcribe speech into the call." enabled={audio} disabled={!value || updateConfig.isPending} onClick={() => patch({ callAudioEnabled: !audio, ...(!audio ? { callAudioInputMode: "local_whisper" } : {}) })} /></div>{audio ? <div className="space-y-2 border-t border-[var(--border)]/60 pt-3"><label className="flex flex-col gap-1 text-[0.625rem] font-medium"><span>Audio input mode</span><select value={value?.callAudioInputMode || "local_whisper"} disabled={updateConfig.isPending} onChange={(event) => patch({ callAudioInputMode: event.target.value })} className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs"><option value="local_whisper">Mic recording + Local Whisper</option><option value="transcribe">Browser speech recognition</option><option value="system">Manual system dictation</option><option value="auto">Provider-native audio/video</option></select></label><Toggle label="Camera and screen input" enabled={value?.callVideoInputEnabled === true} disabled={updateConfig.isPending} onClick={() => patch({ callVideoInputEnabled: value?.callVideoInputEnabled !== true })} /><Toggle label="Character video presence" enabled={videoPresence} disabled={updateConfig.isPending} onClick={() => patch({ callCharacterVideoEnabled: !videoPresence, ...(!videoPresence ? {} : { callAutomaticVideoClipsEnabled: false, callCustomVideoClipsEnabled: false }) })} />{videoPresence ? <><Toggle label="Automatic video clip generation" enabled={value?.callAutomaticVideoClipsEnabled === true} disabled={updateConfig.isPending} onClick={() => patch({ callAutomaticVideoClipsEnabled: value?.callAutomaticVideoClipsEnabled !== true })} /><Toggle label="Custom clips" enabled={value?.callCustomVideoClipsEnabled === true} disabled={updateConfig.isPending} onClick={() => patch({ callCustomVideoClipsEnabled: value?.callCustomVideoClipsEnabled !== true })} /></> : null}</div> : null}</section>; }
-function Root({ element }) { const [, redraw] = useState(0); useEffect(() => { const update = () => redraw((v) => v + 1); element.addEventListener("marinara-capability-props", update); return () => element.removeEventListener("marinara-capability-props", update); }, [element]); const props = element.capabilityProps || {}; const chatId = typeof props.chatId === "string" ? props.chatId : ""; const status = useConversationCallStatus(chatId, !!chatId); const start = useStartConversationCall(chatId); const accept = useAcceptConversationCall(chatId); const decline = useDeclineConversationCall(chatId); const expanded = useExpanded(chatId); const active = status.data?.activeCall || null; const ringing = status.data?.ringingCall || null; if (!chatId) return null; if (element.getAttribute("view") === "settings") return <Settings props={props} />; if (element.getAttribute("view") === "toolbar") return <button type="button" className="mari-chrome-control flex h-9 w-9 items-center justify-center p-0" title={active ? "Open call" : "Start call"} onClick={async () => { if (active) return setExpanded(chatId); try { await start.mutateAsync(); setExpanded(chatId); } catch (error) { toast.error(error instanceof Error ? error.message : "Could not start the call."); } }}>{start.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : active ? <PhoneIncoming size="0.875rem" /> : <Phone size="0.875rem" />}</button>; if (expanded && active) return <div className="absolute inset-0 z-40 flex min-h-0 bg-[var(--background)]"><ConversationCallSurface chatId={chatId} session={active} characterMap={props.characterMap || new Map()} chatCharIds={props.chatCharIds || []} personaInfo={props.personaInfo} onEnded={() => setExpanded(null)} embedded /><Toaster richColors /></div>; if (ringing && !active) return <div className="px-3 pb-2"><div className="flex w-full items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--popover)] p-3 shadow-xl"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400"><PhoneIncoming size="1rem" /></div><div className="min-w-0 flex-1 text-sm font-semibold">Incoming call</div><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-[var(--destructive)]" onClick={() => void decline.mutateAsync(ringing.id)}><PhoneOff size="0.875rem" /></button><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-emerald-400" onClick={async () => { await accept.mutateAsync(ringing.id); setExpanded(chatId); }}><Phone size="0.875rem" /></button></div><Toaster richColors /></div>; return null; }
+function Toggle({ label, description, enabled, disabled, pending, compact, onClick }) {
+  return <button type="button" disabled={disabled} onClick={onClick} className={(compact ? "mari-chat-option-field " : "") + "flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--background)]/35 px-2.5 py-2 text-left transition-all hover:bg-[var(--secondary)]/50" + (enabled && compact ? " mari-chat-option-field--active" : "") + (disabled ? " cursor-not-allowed opacity-60" : "")}>
+    <span className="min-w-0 flex-1">
+      <span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">{label}</span>
+      {description ? <span className="mt-0.5 block text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">{description}</span> : null}
+    </span>
+    <span className="flex shrink-0 items-center gap-2">
+      {pending ? <Loader2 size="0.75rem" className="animate-spin" /> : null}
+      <span className={"mari-chat-option-switch h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors" + (enabled ? " mari-chat-option-switch--active" : "")}>
+        <span className={"block h-4 w-4 rounded-full bg-white shadow-sm transition-transform" + (enabled ? " translate-x-3.5" : "")} />
+      </span>
+    </span>
+  </button>;
+}
+function Settings({ props }) {
+  const metadata = props.metadata && typeof props.metadata === "object" ? props.metadata : {};
+  const updateMetadata = typeof props.updateMetadata === "function" ? props.updateMetadata : () => {};
+  const config = useTTSConfig();
+  const updateConfig = useUpdateTTSConfig();
+  const value = config.data;
+  const disabled = !value || updateConfig.isPending;
+  const patch = (next) => {
+    if (!value) return toast.error("Conversation call settings are still loading.");
+    updateConfig.mutate({ ...value, callSttConnectionId: "", callSttModel: "", ...next });
+  };
+  const callsEnabled = metadata.conversationCallsEnabled === true;
+  const audio = value?.callAudioEnabled === true;
+  const videoInput = value?.callVideoInputEnabled === true;
+  const videoPresence = value?.callCharacterVideoEnabled === true;
+  const automaticClips = videoPresence && value?.callAutomaticVideoClipsEnabled === true;
+  const customClips = videoPresence && value?.callCustomVideoClipsEnabled === true;
+  return <section style={props.style} className={"mari-chat-option-field space-y-3 rounded-lg px-3 py-2.5 transition-all" + (callsEnabled ? " mari-chat-option-field--active" : "")}>
+    <div className="flex items-start gap-2">
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--secondary)] text-[var(--muted-foreground)]"><Phone size="0.875rem" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-medium text-[var(--foreground)]">Conversation Calls</span>
+        <span className="text-[0.625rem] leading-snug text-[var(--muted-foreground)]">Per-chat call access, microphone handling, camera/screen input, and character video setup.</span>
+      </span>
+    </div>
+    <Toggle label="Audio/Video Calls" description="Show the call button for you in this conversation." enabled={callsEnabled} onClick={() => updateMetadata({ conversationCallsEnabled: !callsEnabled })} />
+    {callsEnabled ? <>
+      <div className="space-y-1.5 border-t border-[var(--border)]/60 pt-3">
+        <Toggle label="Generate voice cues in [tags]" description="Ask call models for cues like [whispering], [laughing], and [sighs] for TTS/video timing." enabled={metadata.conversationCallVoiceCues !== false} onClick={() => updateMetadata({ conversationCallVoiceCues: metadata.conversationCallVoiceCues === false })} />
+        <Toggle label="Call Audio Pipeline" description="Request microphone access, listen while unmuted, and transcribe speech into the call." enabled={audio} disabled={disabled} pending={updateConfig.isPending} onClick={() => patch({ callAudioEnabled: !audio, ...(!audio ? { callAudioInputMode: "local_whisper" } : {}) })} />
+      </div>
+      {audio ? <div className="space-y-2 border-t border-[var(--border)]/60 pt-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[0.625rem] font-medium text-[var(--foreground)]">Audio input mode</span>
+          <select value={value?.callAudioInputMode || "local_whisper"} disabled={disabled} onChange={(event) => patch({ callAudioInputMode: event.target.value })} className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-60"><option value="local_whisper">Mic recording + Local Whisper</option><option value="transcribe">Browser speech recognition</option><option value="system">Manual system dictation</option><option value="auto">Provider-native audio/video</option></select>
+          <span className="text-[0.55rem] leading-snug text-[var(--muted-foreground)]">Local Whisper records mic audio while you are unmuted and transcribes speech locally. Browser speech uses Web Speech where supported. Manual system dictation focuses the call input. Provider-native mode sends media to the selected conversation model.</span>
+        </label>
+        <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
+          <Toggle compact label="Camera and screen input" enabled={videoInput} disabled={disabled} onClick={() => patch({ callVideoInputEnabled: !videoInput })} />
+          <Toggle compact label="Character video presence" enabled={videoPresence} disabled={disabled} onClick={() => patch({ callCharacterVideoEnabled: !videoPresence, ...(!videoPresence ? {} : { callAutomaticVideoClipsEnabled: false, callCustomVideoClipsEnabled: false }) })} />
+          {videoPresence ? <Toggle compact label="Automatic video clips generation" enabled={automaticClips} disabled={disabled} onClick={() => patch({ callAutomaticVideoClipsEnabled: !automaticClips })} /> : null}
+          {videoPresence ? <Toggle compact label="Custom clips" enabled={customClips} disabled={disabled} onClick={() => patch({ callCustomVideoClipsEnabled: !customClips })} /> : null}
+        </div>
+        {videoPresence ? <p className="text-[0.55rem] leading-snug text-[var(--muted-foreground)]">Character video presence uses clips from Character Sprites. Automatic clips generate cached idle and talking clips from character avatars; Custom clips let characters sparsely create one-off requested clips.</p> : null}
+      </div> : <p className="rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2 text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">Turn on the call audio pipeline here to use local mic transcription, browser speech recognition, manual system dictation, optional provider-native audio/video input, and call controls.</p>}
+    </> : null}
+  </section>;
+}
+function Root({ element }) {
+  const [, redraw] = useState(0);
+  useEffect(() => {
+    const update = () => redraw((value) => value + 1);
+    element.addEventListener("marinara-capability-props", update);
+    return () => element.removeEventListener("marinara-capability-props", update);
+  }, [element]);
+  const props = element.capabilityProps || {};
+  const chatId = typeof props.chatId === "string" ? props.chatId : "";
+  const callsEnabled = props.metadata?.conversationCallsEnabled === true;
+  const status = useConversationCallStatus(chatId, !!chatId);
+  const start = useStartConversationCall(chatId);
+  const accept = useAcceptConversationCall(chatId);
+  const decline = useDeclineConversationCall(chatId);
+  const expanded = useExpanded(chatId);
+  const active = status.data?.activeCall || null;
+  const ringing = status.data?.ringingCall || null;
+  if (!chatId) return null;
+  if (element.getAttribute("view") === "settings") return <Settings props={props} />;
+  if (element.getAttribute("view") === "toolbar") {
+    if (!callsEnabled && !active) return null;
+    return <button type="button" className="mari-chrome-control flex h-9 w-9 items-center justify-center p-0" title={active ? "Open call" : "Start call"} onClick={async () => {
+      if (active) return setExpanded(chatId);
+      try {
+        await start.mutateAsync();
+        setExpanded(chatId);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not start the call.");
+      }
+    }}>{start.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : active ? <PhoneIncoming size="0.875rem" /> : <Phone size="0.875rem" />}</button>;
+  }
+  if (expanded && active) return <div className="absolute inset-0 z-40 flex min-h-0 bg-[var(--background)]"><ConversationCallSurface chatId={chatId} session={active} characterMap={props.characterMap || new Map()} chatCharIds={props.chatCharIds || []} personaInfo={props.personaInfo} onEnded={() => setExpanded(null)} embedded /><Toaster richColors /></div>;
+  if (ringing && !active) return <div className="px-3 pb-2"><div className="flex w-full items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--popover)] p-3 shadow-xl"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400"><PhoneIncoming size="1rem" /></div><div className="min-w-0 flex-1 text-sm font-semibold">Incoming call</div><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-[var(--destructive)]" onClick={() => void decline.mutateAsync(ringing.id)}><PhoneOff size="0.875rem" /></button><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-emerald-400" onClick={async () => { await accept.mutateAsync(ringing.id); setExpanded(chatId); }}><Phone size="0.875rem" /></button></div><Toaster richColors /></div>;
+  return null;
+}
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else return;
@@ -281,7 +377,7 @@ catalog.packages = catalog.packages.filter(
 );
 
 for (const feature of selectedFeatures) {
-  const version = "1.0.0";
+  const version = feature.version ?? "1.0.0";
   const sourceDir = join(packagesDir, feature.id);
   await mkdir(sourceDir, { recursive: true });
   const agentDefinition = {
@@ -322,7 +418,7 @@ for (const feature of selectedFeatures) {
     name: feature.name,
     version,
     description: feature.description,
-    engine: { min: "2.2.2", maxExclusive: "3.0.0" },
+    engine: { min: MIN_ENGINE_VERSION, maxExclusive: "3.0.0" },
     kind: feature.kind,
     entrypoints: {
       agents: "agents.json",

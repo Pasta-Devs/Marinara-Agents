@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [
@@ -33,7 +33,7 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "859a61fb2c92c4a29195ecc973aff7eed3f4784172815280bccce537304f0dc0",
+      "sha256": "4220a5d45aa527477e2aab56e026c1639e3e815785b1927918b8da127210ee56",
       "bytes": 1945366
     },
     {

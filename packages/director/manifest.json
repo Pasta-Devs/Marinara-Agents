@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Creates one-shot story directions when you choose to push the next response forward.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [

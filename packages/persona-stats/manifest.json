@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [

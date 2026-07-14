@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Scans specified lorebooks for information relevant to the current conversation, summarizes the key data, and injects it into the prompt — a lightweight RAG pipeline without vector databases.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [
