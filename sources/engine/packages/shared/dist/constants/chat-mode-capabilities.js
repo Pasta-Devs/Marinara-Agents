@@ -22,8 +22,9 @@ export const SHARED_CHAT_SETTINGS_SECTIONS = [
 ];
 export const ROLEPLAY_AGENT_PICKER_HIDDEN_IDS = [];
 export const CONVERSATION_AGENT_IDS = [];
-// Conversation-only opt-in agents: available to add in Convo mode, but not on by default.
-export const CONVERSATION_ALLOWED_AGENT_IDS = ["about-me-keeper"];
+// Conversation mode's About Me profile and update_about_me tool are core features,
+// not downloadable agents. Conversation still permits user-authored custom agents.
+export const CONVERSATION_ALLOWED_AGENT_IDS = [];
 export const ROLEPLAY_DEFAULT_AGENT_IDS = [
     "world-state",
     "prose-guardian",

@@ -8,6 +8,7 @@ const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
+const nonDownloadableCoreFeatures = new Set(["about-me-keeper"]);
 await mkdir(artifactsDir, { recursive: true });
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
@@ -32,7 +33,9 @@ try {
 const packageDirectories = (await readdir(packagesDir, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
+  .filter((id) => !nonDownloadableCoreFeatures.has(id))
   .sort();
+const sourcePackageIds = new Set(packageDirectories);
 const rebuiltIds = new Set();
 const rebuiltPackages = [];
 
@@ -87,7 +90,9 @@ for (const id of packageDirectories) {
 }
 
 catalog.packages = [
-  ...catalog.packages.filter((entry) => !rebuiltIds.has(entry.manifest.id)),
+  ...catalog.packages.filter(
+    (entry) => sourcePackageIds.has(entry.manifest.id) && !rebuiltIds.has(entry.manifest.id),
+  ),
   ...rebuiltPackages,
 ].sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
 catalog.generatedAt = new Date().toISOString();

@@ -78,6 +78,16 @@ const features = [
   })),
 ];
 
+const requestedFeatureIds = new Set(process.argv.slice(2));
+const selectedFeatures = requestedFeatureIds.size > 0
+  ? features.filter((feature) => requestedFeatureIds.has(feature.id))
+  : features;
+if (selectedFeatures.length !== requestedFeatureIds.size && requestedFeatureIds.size > 0) {
+  const knownIds = new Set(features.map((feature) => feature.id));
+  const unknownIds = [...requestedFeatureIds].filter((id) => !knownIds.has(id));
+  throw new Error(`Unknown feature package${unknownIds.length === 1 ? "" : "s"}: ${unknownIds.join(", ")}`);
+}
+
 async function bundleServer(feature, output) {
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-entry-${feature.id}-`));
   try {
@@ -263,10 +273,13 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
 }
 
 const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
-const featureIds = new Set(features.map((feature) => feature.id));
-catalog.packages = catalog.packages.filter((entry) => !featureIds.has(entry.manifest.id));
+const featureIds = new Set(selectedFeatures.map((feature) => feature.id));
+const nonDownloadableCoreFeatures = new Set(["about-me-keeper"]);
+catalog.packages = catalog.packages.filter(
+  (entry) => !featureIds.has(entry.manifest.id) && !nonDownloadableCoreFeatures.has(entry.manifest.id),
+);
 
-for (const feature of features) {
+for (const feature of selectedFeatures) {
   const version = "1.0.0";
   const sourceDir = join(packagesDir, feature.id);
   await mkdir(sourceDir, { recursive: true });

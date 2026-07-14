@@ -8,7 +8,7 @@ Users upgrading from an older Engine keep every feature that was available befor
 
 ## What is published here
 
-- All first-party Roleplay and Game agents, including trackers, writers, Illustrator, Echo Chamber, Music DJ, and About Me Keeper.
+- All first-party downloadable Roleplay and Game agents, including trackers, writers, Illustrator, Echo Chamber, and Music DJ.
 - Hierarchical Maps for Roleplay and Game.
 - Conversation audio and video calls.
 - UNO, Chess, Poker, 8-Ball Pool, Tic-Tac-Toe, and Rock-Paper-Scissors for Conversation mode.
@@ -52,6 +52,8 @@ The Engine downloads only entries from the official HTTPS catalog, validates the
 Package source and reproducible build scripts live in this repository instead of the base Engine distribution. Generated artifacts are published under `artifacts/`, package manifests under `packages/`, and the catalog under `catalog/catalog.json`.
 
 Catalog entries classify packages as `writer`, `tracker`, or `misc`. Creators may also provide an HTTPS `iconUrl`; Marinara displays that artwork in Download Agents and falls back to the Agents star icon when artwork is omitted or unavailable. Agent code does not need to be repackaged when catalog artwork changes.
+
+Conversation mode's About Me profile and `update_about_me` tool are built into Marinara Engine. They are not agents and must not be published in this catalog.
 
 ## Maintainer build
 
