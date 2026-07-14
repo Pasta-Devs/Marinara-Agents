@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "conversation-calls",
   "name": "Conversation Calls",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Adds live audio and video calls with Conversation characters.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [
@@ -32,13 +32,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "560c228dfd7bcd934b1289f8fa8ac17ee1411aa6cadb0ee2f5f220569da72add",
+      "sha256": "19926fe3b6f89302e000b5d2d588f9184177ea2f9f8d9ac890ba3d9add116597",
       "bytes": 2403709
     },
     {
       "path": "client.js",
-      "sha256": "8bde5e61abb606c7c0e43a329b69f5727337650b359b130a69e34e26920b1eb4",
-      "bytes": 898753
+      "sha256": "150201913f676257efb537f032e2290cfac2fa23aab5f42780c5e2ce244987a7",
+      "bytes": 900301
     }
   ],
   "permissions": [

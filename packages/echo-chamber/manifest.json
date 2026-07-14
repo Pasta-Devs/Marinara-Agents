@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Simulates a live streaming-style chat reacting to your roleplay in real time.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [

@@ -1,0 +1,114 @@
+name: Pull Request Triage
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited, synchronize, ready_for_review]
+
+concurrency:
+  group: pull-request-triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    name: Auto-label
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Label by title or branch
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const labels = {
+              feature: { color: 'a2eeef', description: 'New package or enhancement' },
+              bugfix: { color: 'd73a4a', description: 'Bug fix' },
+            };
+
+            async function ensureLabel(name) {
+              const opts = { owner: context.repo.owner, repo: context.repo.repo };
+              try {
+                await github.rest.issues.createLabel({ ...opts, name, ...labels[name] });
+              } catch (error) {
+                if (error.status === 422) {
+                  await github.rest.issues.updateLabel({ ...opts, name, ...labels[name] });
+                  return;
+                }
+                throw error;
+              }
+            }
+
+            const pr = context.payload.pull_request;
+            const title = pr.title.toLowerCase();
+            const branch = (pr.head.ref || '').toLowerCase();
+            const add = [];
+
+            if (title.includes('[feature]') || title.startsWith('feat') || branch.startsWith('feat/') || branch.startsWith('feature/')) add.push('feature');
+            if (title.includes('[issue]') || title.includes('[bug]') || title.startsWith('fix') || branch.startsWith('fix/') || branch.startsWith('bugfix/')) add.push('bugfix');
+
+            for (const name of add) await ensureLabel(name);
+            if (add.length) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: add,
+              });
+            }
+
+      - name: Label by path
+        uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b3 # v6.0.1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+          sync-labels: true
+
+  template-check:
+    name: Pull Request template check
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.author_association != 'MEMBER' &&
+      github.event.pull_request.author_association != 'OWNER' &&
+      github.event.pull_request.author_association != 'COLLABORATOR'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check Pull Request body against template
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          failed=0
+
+          if ! echo "$PR_BODY" | grep -qP '(Closes|Fixes|Resolves) #\d'; then
+            echo "::error::Missing linked issue. Add Closes #<number>, Fixes #<number>, or Resolves #<number>."
+            failed=1
+          fi
+
+          section_content() {
+            echo "$PR_BODY" | sed -n "/## $1/,/^## /p" | head -n -1 \
+              | sed "/^## $1/d" | sed 's/<!--.*-->//g' | sed '/^\s*$/d'
+          }
+
+          if [ -z "$(section_content 'Why this change')" ]; then
+            echo "::error::The 'Why this change' section is empty."
+            failed=1
+          fi
+
+          what_content=$(section_content 'What changed' | sed '/^-\s*$/d')
+          if [ -z "$what_content" ]; then
+            echo "::error::The 'What changed' section is empty."
+            failed=1
+          fi
+
+          validation_section=$(echo "$PR_BODY" | sed -n '/## Validation/,/^## /p' | head -n -1)
+          if ! echo "$validation_section" | grep -qP '\[x\]'; then
+            echo "::error::No validation checkbox is ticked. Tick only checks you actually performed."
+            failed=1
+          fi
+
+          if [ "$failed" -eq 1 ]; then
+            exit 1
+          fi
+
+          echo "Pull Request template checks passed."

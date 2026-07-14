@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Manages quest objectives, completion states, and rewards.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [

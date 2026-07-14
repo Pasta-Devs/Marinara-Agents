@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Analyzes the narrative mood and plays matching music through Spotify, YouTube, or local Game Assets music.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [

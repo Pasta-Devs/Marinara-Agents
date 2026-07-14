@@ -2,7 +2,7 @@
   {
     "id": "illustrator",
     "name": "Illustrator",
-    "description": "Generates image prompts for key scenes (requires image generation API).",
+    "description": "Responsible for image and video generations.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",

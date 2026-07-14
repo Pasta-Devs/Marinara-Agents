@@ -8,6 +8,7 @@ const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
+const MIN_ENGINE_VERSION = "2.3.0";
 const nonDownloadableCoreFeatures = new Set(["about-me-keeper"]);
 await mkdir(artifactsDir, { recursive: true });
 
@@ -64,6 +65,7 @@ for (const id of selectedPackageDirectories) {
     : "misc";
   manifest = {
     ...manifest,
+    engine: { ...manifest.engine, min: MIN_ENGINE_VERSION },
     files: [{ path: manifest.entrypoints.agents, sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength }],
   };
   await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
