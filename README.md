@@ -4,56 +4,105 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Users upgrading from an older Engine keep every feature that was available before the package split. The migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+The catalog currently contains **29 first-party packages** for **Marinara Engine v2.3.0+**: 6 Writer Agents, 8 Tracker Agents, and 15 Misc Agents. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
-## What is published here
+## Official catalog
 
-- All first-party downloadable Roleplay and Game agents, including trackers, writers, Illustrator, Echo Chamber, and Music DJ.
-- Hierarchical Maps for Roleplay and Game.
-- Conversation audio and video calls.
-- UNO, Chess, Poker, 8-Ball Pool, Tic-Tac-Toe, and Rock-Paper-Scissors for Conversation mode.
+### Writer Agents
 
-## Hierarchical Maps
+| Agent | Package | What it does |
+| --- | --- | --- |
+| Card Evolution Auditor | [`card-evolution-auditor`](packages/card-evolution-auditor/manifest.json) | Audits durable roleplay changes and proposes precise character-card edits for approval. |
+| Continuity Checker | [`continuity`](packages/continuity/manifest.json) | Fixes concrete spatial, timeline, and physical logic errors without changing the story. |
+| Knowledge Retrieval | [`knowledge-retrieval`](packages/knowledge-retrieval/manifest.json) | Finds relevant lorebook information, summarizes it, and injects it into the prompt. |
+| Knowledge Router | [`knowledge-router`](packages/knowledge-router/manifest.json) | Selects relevant lorebook entries from a lightweight catalog and injects them verbatim. |
+| Narrative Director | [`director`](packages/director/manifest.json) | Creates one-shot story directions when the user chooses to push the next response forward. |
+| Prose Guardian | [`prose-guardian`](packages/prose-guardian/manifest.json) | Removes banned words, repetition, and unwanted prose habits without changing meaning. |
+
+### Tracker Agents
+
+| Agent | Package | What it does |
+| --- | --- | --- |
+| Background | [`background`](packages/background/manifest.json) | Selects the best uploaded scene background and can request missing-location artwork. |
+| Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks present characters, moods, actions, appearance, thoughts, and character stats. |
+| Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks user-defined currencies, counters, flags, and other custom fields. |
+| Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |
+| [Hierarchical Maps](#hierarchical-maps) | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, spatial context, map authoring, and movement. |
+| Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks the player persona's status bars and custom stats from narrative events. |
+| Quest Tracker | [`quest`](packages/quest/manifest.json) | Manages quest objectives, completion states, and rewards. |
+| World State | [`world-state`](packages/world-state/manifest.json) | Tracks date, time, weather, location, temperature, and custom world details. |
+
+### Misc Agents
+
+| Agent | Package | What it does |
+| --- | --- | --- |
+| [8-Ball Pool](#eightball) | [`eightball`](packages/eightball/manifest.json) | Adds a complete Conversation-mode 8-Ball Pool table and `/8ball` command. |
+| [Chess](#chess) | [`chess`](packages/chess/manifest.json) | Adds a Conversation-mode chess board and `/chess` command. |
+| Combat | [`combat`](packages/combat/manifest.json) | Manages combat encounters, initiative, HP tracking, and turn-based actions. |
+| [Conversation Calls](#conversation-calls) | [`conversation-calls`](packages/conversation-calls/manifest.json) | Adds live audio/video calls, microphone transcription, and character video presence. |
+| CYOA Choices | [`cyoa`](packages/cyoa/manifest.json) | Generates clickable Choose Your Own Adventure choices after Roleplay responses. |
+| Echo Chamber | [`echo-chamber`](packages/echo-chamber/manifest.json) | Simulates a streaming-style audience chat reacting to Roleplay in real time. |
+| Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls connected Intiface devices from analyzed narrative content. |
+| Illustrator | [`illustrator`](packages/illustrator/manifest.json) | Responsible for image and video generations. |
+| Immersive HTML | [`html`](packages/html/manifest.json) | Adds diegetic HTML/CSS/JS visual artifacts without changing story meaning. |
+| Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Creates and updates durable lorebook entries from important story facts. |
+| Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
+| [Poker](#poker) | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
+| [Rock-Paper-Scissors](#rock-paper-scissors) | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
+| [Tic-Tac-Toe](#tic-tac-toe) | [`tic-tac-toe`](packages/tic-tac-toe/manifest.json) | Adds one-on-one Conversation matches and the `/tictactoe` command. |
+| [UNO](#uno) | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
+
+For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
+
+## Feature-package setup
+
+### Hierarchical Maps
 
 Adds persistent nested locations, map authoring, spatial prompt context, and movement controls. After installing and restarting, enable **Hierarchical Maps** for a Roleplay chat from Chat Settings. In Game mode, select it as an agent during game creation or add it later; its map workspace and world-map views appear only for chats where it is active.
 
-## Conversation Calls
+### Conversation Calls
 
 Adds audio/video calls, incoming rings, microphone transcription, camera or screen input, and optional generated character video presence. After installing and restarting, enable **Conversation Calls** for a Conversation chat, then configure its audio and video controls in Chat Settings. Text to Speech and model connections remain configured in Marinara Engine.
 
-## UNO
+### UNO
 
 Adds the Conversation-mode UNO table, setup flow, `/uno` command, and character turns. Install and restart, then open the games picker or type `/uno` in a Conversation chat.
 
-## Chess
+### Chess
 
 Adds the Conversation-mode chess board, setup flow, `/chess` command, and character turns. Install and restart, then open the games picker or type `/chess`.
 
-## Poker
+### Poker
 
 Adds No-Limit Texas Hold'em for Conversation chats, including seeded dealing, betting, side pots, showdowns, and optional character dealers. Install and restart, then open the games picker or type `/poker`.
 
-## Eightball
+<a id="eightball"></a>
+
+### 8-Ball Pool
 
 Adds the Conversation-mode 8-Ball Pool table, physics simulation, setup flow, and character shots. Install and restart, then open the games picker or type `/8ball` or `/pool`.
 
-## Tic-Tac-Toe
+### Tic-Tac-Toe
 
 Adds one-on-one Tic-Tac-Toe to Conversation mode. Install and restart, then open the games picker or type `/tictactoe` or `/ttt`.
 
-## Rock-Paper-Scissors
+### Rock-Paper-Scissors
 
 Adds best-of-three, five, or seven Rock-Paper-Scissors matches to Conversation mode. Install and restart, then open the games picker or type `/rps`.
 
 ## Package trust and storage
 
-The Engine downloads only entries from the official HTTPS catalog, validates the catalog schema, checks Engine version compatibility, verifies the archive SHA-256 checksum, rejects unsafe archive paths and undeclared files, validates each declared file hash and size, and installs atomically into the Engine data directory. Installed packages remain available offline. Server-capability packages run with their declared permissions and require a restart when their runtime changes.
+The Engine downloads only entries from this official HTTPS catalog, validates the catalog schema, checks Engine version compatibility, verifies the archive SHA-256 checksum, rejects unsafe archive paths and undeclared files, validates each declared file hash and size, and installs atomically into the Engine data directory. Installed packages remain available offline. Server-capability packages run with their declared permissions and require a restart when their runtime changes.
 
-Package source and reproducible build scripts live in this repository instead of the base Engine distribution. Generated artifacts are published under `artifacts/`, package manifests under `packages/`, and the catalog under `catalog/catalog.json`.
+Package source and reproducible build scripts live in this repository instead of the base Engine distribution. Generated artifacts are published under [`artifacts/`](artifacts/), package manifests under [`packages/`](packages/), and the machine-readable catalog at [`catalog/catalog.json`](catalog/catalog.json).
 
 Catalog entries classify packages as `writer`, `tracker`, or `misc`. Creators may also provide an HTTPS `iconUrl`; Marinara displays that artwork in Download Agents and falls back to the Agents star icon when artwork is omitted or unavailable. Agent code does not need to be repackaged when catalog artwork changes.
 
 Conversation mode's About Me profile and `update_about_me` tool are built into Marinara Engine. They are not agents and must not be published in this catalog.
+
+## Contributing
+
+Agent ideas, bugs, documentation corrections, and package improvements are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before starting: contributions begin with an issue, target the `staging` branch, must be marked ready for review, and require an approving review before merge. CodeRabbit automatically reviews ready pull requests.
 
 ## Maintainer build
 
@@ -66,3 +115,7 @@ node scripts/validate-catalog.mjs
 ```
 
 The build records every Engine source dependency needed by a package under `sources/engine`, so future catalog builds do not depend on those implementations remaining in the base Engine.
+
+## License
+
+Marinara Agents is released under the [GNU Affero General Public License v3.0](LICENSE).

@@ -3,9 +3,11 @@ import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const catalog = JSON.parse(await readFile(join(repoRoot, "catalog/catalog.json"), "utf8"));
+const MIN_ENGINE_VERSION = "2.3.0";
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
 
 const forbiddenAboutMeKeeperPaths = [
@@ -53,10 +55,76 @@ if (aboutMeKeeperMarkers.some((marker) => readme.includes(marker))) {
 }
 
 const ids = new Set();
+const agentDefinitionIds = new Set();
 const expectedCategories = new Map([
   ["card-evolution-auditor", "writer"],
   ["hierarchical-maps", "tracker"],
 ]);
+
+async function validateTurnGameRuntime(manifest, packageRoot) {
+  const serverPath = join(packageRoot, manifest.entrypoints.server);
+  const runtime = await import(`${pathToFileURL(serverPath).href}?validation=${Date.now()}`);
+  if (typeof runtime.activate !== "function") {
+    throw new Error(`${manifest.id} server runtime does not export activate()`);
+  }
+
+  const gameEngines = new Map();
+  const conversationCommands = new Map();
+  const unregister = (registry, key) => {
+    if (registry.has(key)) throw new Error(`${manifest.id} registered duplicate runtime contribution: ${key}`);
+    return () => registry.delete(key);
+  };
+  const api = {
+    registerTurnGameEngine(engine) {
+      if (!engine?.gameType) throw new Error(`${manifest.id} registered an invalid turn-game engine`);
+      const cleanup = unregister(gameEngines, engine.gameType);
+      gameEngines.set(engine.gameType, engine);
+      return cleanup;
+    },
+    registerConversationCommand(command) {
+      if (!command?.commandType) throw new Error(`${manifest.id} registered an invalid Conversation command`);
+      const cleanup = unregister(conversationCommands, command.commandType);
+      conversationCommands.set(command.commandType, command);
+      return cleanup;
+    },
+  };
+
+  const cleanup = await runtime.activate({ api });
+  if (typeof cleanup !== "function") throw new Error(`${manifest.id} activate() did not return cleanup()`);
+
+  const commandType = manifest.id.replaceAll("-", "_");
+  const engine = gameEngines.get(manifest.id);
+  const command = conversationCommands.get(commandType);
+  if (gameEngines.size !== 1 || !engine) {
+    throw new Error(`${manifest.id} did not register its turn-game engine`);
+  }
+  if (conversationCommands.size !== 1 || !command || !command.tags?.includes(commandType)) {
+    throw new Error(`${manifest.id} did not register its Conversation command`);
+  }
+
+  const seats = [
+    { seatId: "human", displayName: "Human", kind: "human" },
+    { seatId: "character", displayName: "Character", kind: "character" },
+  ];
+  const state = engine.setup(engine.defaultConfig(), seats, 17);
+  if (!state || typeof state !== "object") throw new Error(`${manifest.id} could not create initial game state`);
+  const currentSeatId = engine.currentSeat(state);
+  if (currentSeatId !== null && !seats.some((seat) => seat.seatId === currentSeatId)) {
+    throw new Error(`${manifest.id} returned an unknown current seat`);
+  }
+  if (currentSeatId !== null && !Array.isArray(engine.legalMoves(state, currentSeatId))) {
+    throw new Error(`${manifest.id} did not return legal moves for its opening state`);
+  }
+  if (!engine.publicView(state, "human") || !engine.spectatorSummary(state)) {
+    throw new Error(`${manifest.id} could not render its opening state`);
+  }
+
+  await cleanup();
+  if (gameEngines.size || conversationCommands.size) {
+    throw new Error(`${manifest.id} cleanup left runtime contributions registered`);
+  }
+}
+
 for (const entry of catalog.packages) {
   const { manifest, category, artifact, documentationUrl } = entry;
   if (!manifest?.id || ids.has(manifest.id)) throw new Error(`Duplicate or missing package id: ${manifest?.id}`);
@@ -64,6 +132,13 @@ for (const entry of catalog.packages) {
     throw new Error("About Me is a core Conversation feature and must not appear in the agent catalog");
   }
   ids.add(manifest.id);
+  const readmePackageLink = `](packages/${manifest.id}/manifest.json)`;
+  if (!readme.includes(readmePackageLink)) {
+    throw new Error(`README.md must list package ${manifest.id} in the official catalog`);
+  }
+  if (manifest.engine?.min !== MIN_ENGINE_VERSION) {
+    throw new Error(`${manifest.id} must require Marinara Engine ${MIN_ENGINE_VERSION}+`);
+  }
   if (!["writer", "tracker", "misc"].includes(category)) {
     throw new Error(`Missing or invalid category for ${manifest.id}`);
   }
@@ -72,6 +147,11 @@ for (const entry of catalog.packages) {
     throw new Error(`Expected ${manifest.id} in ${expectedCategory}, found ${category}`);
   }
   if (!documentationUrl) throw new Error(`Missing documentation URL for ${manifest.id}`);
+  const packageRoot = join(repoRoot, "packages", manifest.id);
+  const sourceManifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
+  if (JSON.stringify(sourceManifest) !== JSON.stringify(manifest)) {
+    throw new Error(`Catalog manifest does not match packages/${manifest.id}/manifest.json`);
+  }
   const artifactPath = join(repoRoot, "artifacts", basename(new URL(artifact.url).pathname));
   const archive = await readFile(artifactPath);
   if (archive.byteLength !== artifact.bytes) throw new Error(`Artifact size mismatch for ${manifest.id}`);
@@ -84,6 +164,105 @@ for (const entry of catalog.packages) {
   const declaredFiles = ["manifest.json", ...manifest.files.map((file) => file.path)].sort();
   if (JSON.stringify(actualFiles) !== JSON.stringify(declaredFiles)) {
     throw new Error(`Artifact file list mismatch for ${manifest.id}`);
+  }
+
+  const archivedManifest = spawnSync("unzip", ["-p", artifactPath, "manifest.json"], {
+    maxBuffer: 120 * 1024 * 1024,
+  });
+  if (archivedManifest.status !== 0) {
+    throw new Error(archivedManifest.stderr?.toString() || `Could not read archived manifest for ${manifest.id}`);
+  }
+  if (JSON.stringify(JSON.parse(archivedManifest.stdout.toString("utf8"))) !== JSON.stringify(manifest)) {
+    throw new Error(`Archived manifest does not match the catalog for ${manifest.id}`);
+  }
+
+  const declaredPaths = new Set(manifest.files.map((file) => file.path));
+  for (const entrypoint of Object.values(manifest.entrypoints)) {
+    if (entrypoint && !declaredPaths.has(entrypoint)) {
+      throw new Error(`Undeclared entrypoint ${entrypoint} for ${manifest.id}`);
+    }
+  }
+  for (const declared of manifest.files) {
+    const sourcePayload = await readFile(join(packageRoot, declared.path));
+    const archivedPayload = spawnSync("unzip", ["-p", artifactPath, declared.path], {
+      maxBuffer: 120 * 1024 * 1024,
+    });
+    if (archivedPayload.status !== 0) {
+      throw new Error(archivedPayload.stderr?.toString() || `Could not read ${declared.path} from ${manifest.id}`);
+    }
+    for (const [location, payload] of [
+      ["source", sourcePayload],
+      ["artifact", archivedPayload.stdout],
+    ]) {
+      if (payload.byteLength !== declared.bytes) {
+        throw new Error(`${manifest.id} ${declared.path} ${location} size does not match its manifest`);
+      }
+      if (createHash("sha256").update(payload).digest("hex") !== declared.sha256) {
+        throw new Error(`${manifest.id} ${declared.path} ${location} hash does not match its manifest`);
+      }
+    }
+    if (!sourcePayload.equals(archivedPayload.stdout)) {
+      throw new Error(`${manifest.id} ${declared.path} differs between package source and artifact`);
+    }
+  }
+
+  for (const entrypoint of [manifest.entrypoints.server, manifest.entrypoints.client].filter(Boolean)) {
+    const syntax = spawnSync(process.execPath, ["--check", join(packageRoot, entrypoint)], { encoding: "utf8" });
+    if (syntax.status !== 0) {
+      throw new Error(syntax.stderr || syntax.stdout || `Invalid ${entrypoint} syntax for ${manifest.id}`);
+    }
+  }
+  if (manifest.kind.includes("turn-game")) await validateTurnGameRuntime(manifest, packageRoot);
+
+  if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
+  const agentDefinitions = JSON.parse(
+    await readFile(join(packageRoot, manifest.entrypoints.agents), "utf8"),
+  );
+  if (!Array.isArray(agentDefinitions) || agentDefinitions.length === 0) {
+    throw new Error(`Missing agent definitions for ${manifest.id}`);
+  }
+  if (!agentDefinitions.some((definition) => definition.id === manifest.id)) {
+    throw new Error(`Package ${manifest.id} does not define its matching agent id`);
+  }
+  for (const definition of agentDefinitions) {
+    if (!definition?.id || agentDefinitionIds.has(definition.id)) {
+      throw new Error(`Duplicate or missing agent definition id: ${definition?.id}`);
+    }
+    if (!["writer", "tracker", "misc"].includes(definition.category)) {
+      throw new Error(`Invalid agent category for ${definition.id}`);
+    }
+    if (typeof definition.defaultPromptTemplate !== "string") {
+      throw new Error(`Missing default prompt template for ${definition.id}`);
+    }
+    agentDefinitionIds.add(definition.id);
+  }
+
+  const hasServer = Boolean(manifest.entrypoints.server);
+  const hasClient = Boolean(manifest.entrypoints.client);
+  if (hasServer !== Boolean(manifest.restartRequired)) {
+    throw new Error(`${manifest.id} restart requirement does not match its server runtime`);
+  }
+  if (hasClient && !manifest.permissions.includes("ui")) {
+    throw new Error(`${manifest.id} client runtime is missing the ui permission`);
+  }
+  if (manifest.kind.includes("turn-game")) {
+    if (!hasServer || !hasClient || !manifest.contributions?.conversationGame) {
+      throw new Error(`${manifest.id} does not provide the complete Conversation game contract`);
+    }
+  }
+  if (manifest.kind.includes("maps")) {
+    if (!manifest.permissions.includes("routes")) throw new Error(`${manifest.id} is missing the routes permission`);
+    const slots = new Set(manifest.contributions?.slots ?? []);
+    for (const slot of ["chat-settings", "spatial-workspace", "chat-runtime", "game-world-map"]) {
+      if (!slots.has(slot)) throw new Error(`${manifest.id} is missing the ${slot} contribution`);
+    }
+  }
+  if (manifest.kind.includes("conversation-calls")) {
+    if (!manifest.permissions.includes("routes")) throw new Error(`${manifest.id} is missing the routes permission`);
+    const slots = new Set(manifest.contributions?.slots ?? []);
+    for (const slot of ["conversation-toolbar", "conversation-surface", "chat-settings"]) {
+      if (!slots.has(slot)) throw new Error(`${manifest.id} is missing the ${slot} contribution`);
+    }
   }
 }
 

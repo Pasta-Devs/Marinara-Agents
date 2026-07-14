@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Manages combat encounters, initiative, HP tracking, and turn-based actions.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [

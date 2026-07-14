@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "illustrator",
   "name": "Illustrator",
-  "version": "1.0.0",
-  "description": "Generates image prompts for key scenes (requires image generation API).",
+  "version": "1.0.1",
+  "description": "Responsible for image and video generations.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "6540f4dbf6bc22adc294ae859cda321b496209e68948bc016b62131b73fd2bf9",
-      "bytes": 11128
+      "sha256": "a22a4723672859b8915a112836088ca0e9799c69225015a27f3636b7ea983d52",
+      "bytes": 11101
     }
   ],
   "permissions": [

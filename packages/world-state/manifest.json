@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Tracks date, time, weather, location, temperature, and custom world details automatically.",
   "engine": {
-    "min": "2.2.2",
+    "min": "2.3.0",
     "maxExclusive": "3.0.0"
   },
   "kind": [

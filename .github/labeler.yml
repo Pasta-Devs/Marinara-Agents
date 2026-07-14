@@ -1,0 +1,33 @@
+packages:
+  - changed-files:
+      - any-glob-to-any-file:
+          - packages/**
+
+artifacts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - artifacts/**
+
+catalog:
+  - changed-files:
+      - any-glob-to-any-file:
+          - catalog/**
+          - schemas/**
+
+build:
+  - changed-files:
+      - any-glob-to-any-file:
+          - scripts/**
+          - sources/**
+          - tests/**
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+          - .coderabbit.yaml
