@@ -51,6 +51,8 @@ The Engine downloads only entries from the official HTTPS catalog, validates the
 
 Package source and reproducible build scripts live in this repository instead of the base Engine distribution. Generated artifacts are published under `artifacts/`, package manifests under `packages/`, and the catalog under `catalog/catalog.json`.
 
+Catalog entries classify packages as `writer`, `tracker`, or `misc`. Creators may also provide an HTTPS `iconUrl`; Marinara displays that artwork in Download Agents and falls back to the Agents star icon when artwork is omitted or unavailable. Agent code does not need to be repackaged when catalog artwork changes.
+
 ## Maintainer build
 
 Build the shared package snapshot and all feature bundles from a neighboring Marinara Engine checkout:

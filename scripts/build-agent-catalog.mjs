@@ -47,6 +47,10 @@ for (const id of packageDirectories) {
   // Feature packages own their build in build-feature-packages.mjs.
   if (!manifest.kind?.includes("agent") || manifest.entrypoints?.server) continue;
   const agentsBuffer = await readFile(join(sourceDir, manifest.entrypoints.agents));
+  const agentDefinitions = JSON.parse(agentsBuffer.toString("utf8"));
+  const category = ["writer", "tracker", "misc"].includes(agentDefinitions[0]?.category)
+    ? agentDefinitions[0].category
+    : "misc";
   manifest = {
     ...manifest,
     files: [{ path: manifest.entrypoints.agents, sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength }],
@@ -68,6 +72,7 @@ for (const id of packageDirectories) {
     const artifact = await readFile(artifactPath);
     rebuiltPackages.push({
       manifest,
+      category,
       artifact: {
         url: `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${basename(artifactPath)}`,
         sha256: sha256(artifact),

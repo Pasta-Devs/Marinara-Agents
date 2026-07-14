@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-14T15:26:10.642Z",
+  "generatedAt": "2026-07-14T16:07:50.055Z",
   "packages": [
     {
       "manifest": {
@@ -69,7 +69,8 @@
         "sha256": "7dbf917ad7af1b6c192360b5973b1cc3f37071f10496ad19bd757761fc337d6b",
         "bytes": 200414
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -109,7 +110,8 @@
         "sha256": "16b6e2d0ed41ddf5a510a72cc4badbb26c6ed394dc143443b51927300ac965a2",
         "bytes": 1940
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#about-me-keeper"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#about-me-keeper",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -149,7 +151,8 @@
         "sha256": "ed1628b421b6bf6f4ef368437b0c38b39438f97c6d34971ca36a7df876e93be9",
         "bytes": 1609
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#background"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#background",
+      "category": "tracker"
     },
     {
       "manifest": {
@@ -189,7 +192,8 @@
         "sha256": "b8b4befc55b7a3b5946dcc8f4c2b6f3eaaf18d007d1f4b2371409941e69ecf98",
         "bytes": 1496
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#card-evolution-auditor"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#card-evolution-auditor",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -229,7 +233,8 @@
         "sha256": "cbb31c93535ebf1466f58008398c767166784aa693a02de2b3cbe48ed42cd020",
         "bytes": 1753
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker",
+      "category": "tracker"
     },
     {
       "manifest": {
@@ -294,7 +299,8 @@
         "sha256": "5e9bae3b62ef8414050e10444e04aecdf23c1ca623d783f99570329e6b41f327",
         "bytes": 204211
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -334,7 +340,8 @@
         "sha256": "ce799f52f7001bd665bc292a178b5562fe0538729e7189fad56e00747d6723f8",
         "bytes": 1512
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#combat"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#combat",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -374,7 +381,8 @@
         "sha256": "74965ea08c38ab8ab7e2ff980632f4657034b747113710093d851b426486d036",
         "bytes": 1517
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#continuity-checker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#continuity-checker",
+      "category": "writer"
     },
     {
       "manifest": {
@@ -436,7 +444,8 @@
         "sha256": "c9544cb746ecfe114a028dd81c1545b2242d50cdc2006bda1d14f970bace34eb",
         "bytes": 922079
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -476,7 +485,8 @@
         "sha256": "962eec3fe6d6dccd3e09b02fffb1f7d4b78aabc2e07960a64ae764e930739fe9",
         "bytes": 1384
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker",
+      "category": "tracker"
     },
     {
       "manifest": {
@@ -516,7 +526,8 @@
         "sha256": "211cfcc669d2c3ac361ec2f27aa9344b1044b16c568cc74313985203d9b5cb7b",
         "bytes": 1394
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#cyoa-choices"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#cyoa-choices",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -556,7 +567,8 @@
         "sha256": "43cc0dab76d4b650e41a071d745fc3d7d26090d3bff86ae592a380a43026f04d",
         "bytes": 2335
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#echo-chamber"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#echo-chamber",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -596,7 +608,8 @@
         "sha256": "3c2c24e40921ed1ca220b6e0998bc4943ae7b8c53a7e5e35af3f4b4b81eb169d",
         "bytes": 1490
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine",
+      "category": "tracker"
     },
     {
       "manifest": {
@@ -636,7 +649,8 @@
         "sha256": "9f56affbb1ef5620b5d3a117593d918f9054c48718b73e255c07039682bb91e3",
         "bytes": 1603
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -700,7 +714,8 @@
         "sha256": "37215dd575ea83a2ad7052bdae5612ffaea78feefa03254cfcee174cf334ec19",
         "bytes": 746628
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -740,7 +755,8 @@
         "sha256": "21da0dd2e61d4837e6e88cfd406421d12199ebf39a94719bca2a553684d48eda",
         "bytes": 2695
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#illustrator"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#illustrator",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -780,7 +796,8 @@
         "sha256": "f82b605c04dc73479e9f86fcf1929083b1b20fec9953f63523ffa5a9de2fba03",
         "bytes": 1586
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#immersive-html"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#immersive-html",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -820,7 +837,8 @@
         "sha256": "b92b37c9369628744362ce683af314c87140b0f84e8016ca26d77958bc5afb1e",
         "bytes": 1434
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-retrieval"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-retrieval",
+      "category": "writer"
     },
     {
       "manifest": {
@@ -860,7 +878,8 @@
         "sha256": "3dc8ac4fc03e7fec600fa972c8945d47d169161e7c527ce07b77f3155d45e805",
         "bytes": 1556
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-router"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-router",
+      "category": "writer"
     },
     {
       "manifest": {
@@ -900,7 +919,8 @@
         "sha256": "f112b1737fb46f95315491f6f2a105a3971dd460524a03ca79137464285ce7ca",
         "bytes": 1485
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#lorebook-keeper"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#lorebook-keeper",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -940,7 +960,8 @@
         "sha256": "6f3433ba288173d3ad6d1b36f13dac0f6ddebba39c63b242e2adf20ccbac9db4",
         "bytes": 2421
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#music-dj"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#music-dj",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -980,7 +1001,8 @@
         "sha256": "554e25f40fa92588b02f89b96333159911dc3b2754f3ae75d0e07b5e28afe8f6",
         "bytes": 1335
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director",
+      "category": "writer"
     },
     {
       "manifest": {
@@ -1020,7 +1042,8 @@
         "sha256": "0fa59f4122ea4e206797148e1455f571a97df112d4c3fbf0e95d4e90d79f4af6",
         "bytes": 1667
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#persona-stats"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#persona-stats",
+      "category": "tracker"
     },
     {
       "manifest": {
@@ -1087,7 +1110,8 @@
         "sha256": "f93989f13eaf7cbbdb9625ca23302a13e7515dd448d4f2539b3b324bccccc9ce",
         "bytes": 195693
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -1127,7 +1151,8 @@
         "sha256": "b4d6c415bf7a5c7a9499525627a9f3a66f6c2eb1361c6249ac85e8b2540e0acb",
         "bytes": 1472
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#prose-guardian"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#prose-guardian",
+      "category": "writer"
     },
     {
       "manifest": {
@@ -1167,7 +1192,8 @@
         "sha256": "5b5fd2fe72abb3382dcdac607b643f3104c3b2de776ea68cef66c3be24b59bf9",
         "bytes": 1295
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest-tracker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest-tracker",
+      "category": "tracker"
     },
     {
       "manifest": {
@@ -1234,7 +1260,8 @@
         "sha256": "2fee97ce7f235799bfb662a2d425ddd93656cf902401cf4a3691eccfc8b3892c",
         "bytes": 189073
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -1301,7 +1328,8 @@
         "sha256": "3bf4604d9e4e81b25659de401dfd499e886c0d74c229f4a421fcfbd785c62fb8",
         "bytes": 188262
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -1366,7 +1394,8 @@
         "sha256": "8a4b3b07edf45474c7b3f35533e5dfaefa6e4e44e8cd021ca70acec6e2f0c60b",
         "bytes": 195250
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno",
+      "category": "misc"
     },
     {
       "manifest": {
@@ -1406,7 +1435,8 @@
         "sha256": "d132d8b0b22f686725007104145a434f7552ba25191ac79e757a3602bae7c881",
         "bytes": 1547
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state",
+      "category": "tracker"
     }
   ]
 }

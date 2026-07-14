@@ -9,9 +9,12 @@ if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new E
 
 const ids = new Set();
 for (const entry of catalog.packages) {
-  const { manifest, artifact, documentationUrl } = entry;
+  const { manifest, category, artifact, documentationUrl } = entry;
   if (!manifest?.id || ids.has(manifest.id)) throw new Error(`Duplicate or missing package id: ${manifest?.id}`);
   ids.add(manifest.id);
+  if (!["writer", "tracker", "misc"].includes(category)) {
+    throw new Error(`Missing or invalid category for ${manifest.id}`);
+  }
   if (!documentationUrl) throw new Error(`Missing documentation URL for ${manifest.id}`);
   const artifactPath = join(repoRoot, "artifacts", basename(new URL(artifact.url).pathname));
   const archive = await readFile(artifactPath);
