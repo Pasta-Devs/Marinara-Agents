@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Pasta-Devs/Marinara-Agents/schemas/package-manifest.schema.json",
+  "title": "Marinara capability package manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "version", "engine", "kind", "entrypoints", "permissions"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 80 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "description": { "type": "string", "maxLength": 2000 },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "maxExclusive"],
+      "properties": {
+        "min": { "type": "string" },
+        "maxExclusive": { "type": "string" }
+      }
+    },
+    "kind": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["agent", "maps", "conversation-calls", "turn-game"] }
+    },
+    "entrypoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "server": { "type": "string" },
+        "client": { "type": "string" },
+        "agents": { "type": "string" },
+        "knowledge": { "type": "string" }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["agent-runtime", "chat-read", "chat-write", "network", "prompt-context", "routes", "storage", "ui"]
+      }
+    },
+    "restartRequired": { "type": "boolean", "default": false }
+  }
+}
