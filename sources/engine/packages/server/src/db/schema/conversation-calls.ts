@@ -1,16 +1,18 @@
 // ──────────────────────────────────────────────
 // Schema: Conversation Calls
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 import { chats } from "./chats.js";
 
-export const conversationCallSessions = sqliteTable("conversation_call_sessions", {
+export const conversationCallSessions = fileTable("conversation_call_sessions", {
   id: text("id").primaryKey(),
   chatId: text("chat_id")
     .notNull()
     .references(() => chats.id, { onDelete: "cascade" }),
   status: text("status", { enum: ["ringing", "active", "ended", "declined", "missed"] }).notNull(),
-  mode: text("mode", { enum: ["audio", "video"] }).notNull().default("audio"),
+  mode: text("mode", { enum: ["audio", "video"] })
+    .notNull()
+    .default("audio"),
   initiator: text("initiator", { enum: ["user", "character"] }).notNull(),
   initiatorCharacterId: text("initiator_character_id"),
   startedAt: text("started_at"),
@@ -21,7 +23,7 @@ export const conversationCallSessions = sqliteTable("conversation_call_sessions"
   updatedAt: text("updated_at").notNull(),
 });
 
-export const conversationCallMessages = sqliteTable("conversation_call_messages", {
+export const conversationCallMessages = fileTable("conversation_call_messages", {
   id: text("id").primaryKey(),
   callId: text("call_id")
     .notNull()
@@ -38,7 +40,7 @@ export const conversationCallMessages = sqliteTable("conversation_call_messages"
   createdAt: text("created_at").notNull(),
 });
 
-export const conversationCallSounds = sqliteTable("conversation_call_sounds", {
+export const conversationCallSounds = fileTable("conversation_call_sounds", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   filePath: text("file_path"),

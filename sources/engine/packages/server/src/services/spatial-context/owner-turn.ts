@@ -7,7 +7,7 @@ import {
   type SpatialContextSnapshot,
   type SpatialTransitionErrorCode,
 } from "@marinara-engine/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { chats, gameStateSnapshots, messages, messageSwipes } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";

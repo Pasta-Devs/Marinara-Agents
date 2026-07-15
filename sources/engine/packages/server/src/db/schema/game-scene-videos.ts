@@ -1,7 +1,7 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 import { chats } from "./chats.js";
 
-export const gameSceneVideos = sqliteTable("game_scene_videos", {
+export const gameSceneVideos = fileTable("game_scene_videos", {
   id: text("id").primaryKey(),
   chatId: text("chat_id")
     .notNull()

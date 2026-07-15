@@ -1,9 +1,9 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 import { chats } from "./chats.js";
 import { chatImages } from "./gallery.js";
 import { gameSceneVideos } from "./game-scene-videos.js";
 
-export const gameTurnStoryboards = sqliteTable("game_turn_storyboards", {
+export const gameTurnStoryboards = fileTable("game_turn_storyboards", {
   id: text("id").primaryKey(),
   chatId: text("chat_id")
     .notNull()
@@ -25,7 +25,7 @@ export const gameTurnStoryboards = sqliteTable("game_turn_storyboards", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const gameTurnStoryboardKeyframes = sqliteTable("game_turn_storyboard_keyframes", {
+export const gameTurnStoryboardKeyframes = fileTable("game_turn_storyboard_keyframes", {
   id: text("id").primaryKey(),
   storyboardId: text("storyboard_id")
     .notNull()

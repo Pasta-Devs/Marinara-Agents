@@ -14,10 +14,6 @@ const DEFAULT_DOCKER_DATA_DIR = "/app/data";
 const DEFAULT_PORT = 7860;
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_DATA_DIR = resolve(SERVER_ROOT, "data");
-const REGRESSION_DATA_DIR = resolve(MONOREPO_ROOT, "data");
-const DEFAULT_DATABASE_FILE = "marinara-engine.db";
-const DEFAULT_DATABASE_PATH = resolve(DEFAULT_DATA_DIR, DEFAULT_DATABASE_FILE);
-const REGRESSION_DATABASE_PATH = resolve(REGRESSION_DATA_DIR, DEFAULT_DATABASE_FILE);
 const DEFAULT_MAX_TOOL_ROUNDS = 100;
 const MAX_CONFIGURED_TOOL_ROUNDS = 10_000;
 const DEFAULT_CUSTOM_TOOL_TIMEOUT_MS = 60_000;
@@ -288,62 +284,10 @@ export function getDataDir() {
   return DEFAULT_DATA_DIR;
 }
 
-export function getDatabaseDriver() {
-  return normalizeEnvValue(process.env.DATABASE_DRIVER);
-}
-
-export function getStorageBackend() {
-  const raw = normalizeEnvValue(process.env.STORAGE_BACKEND ?? process.env.MARINARA_STORAGE_BACKEND);
-  if (raw) return raw.toLowerCase();
-
-  // New default for v1.5.7+: user data is persisted as files. Advanced users
-  // can opt back into the legacy persistent SQLite database with
-  // STORAGE_BACKEND=sqlite.
-  return "files";
-}
-
-export function isFileStorageBackend() {
-  return getStorageBackend() !== "sqlite";
-}
-
 export function getFileStorageDir() {
   const raw = normalizeEnvValue(process.env.FILE_STORAGE_DIR ?? process.env.MARINARA_FILE_STORAGE_DIR);
   if (raw) return resolveFromServerRoot(raw);
   return resolve(getDataDir(), "storage");
-}
-
-export function getDatabaseUrl() {
-  const raw = normalizeEnvValue(process.env.DATABASE_URL);
-  if (!raw) {
-    return `file:${resolve(getDataDir(), "marinara-engine.db")}`;
-  }
-
-  if (!raw.startsWith("file:")) {
-    return raw;
-  }
-
-  const rawPath = raw.slice("file:".length);
-  if (!rawPath || rawPath === ":memory:" || rawPath.startsWith(":memory:")) {
-    return raw;
-  }
-
-  return `file:${resolveFromServerRoot(rawPath)}`;
-}
-
-export function getDatabaseFilePath() {
-  const url = getDatabaseUrl();
-  if (!url.startsWith("file:")) return null;
-
-  const filePath = url.slice("file:".length);
-  if (!filePath || filePath === ":memory:" || filePath.startsWith(":memory:")) return null;
-  return filePath;
-}
-
-export function getLegacyDatabaseImportPaths() {
-  const candidates = [getDatabaseFilePath(), DEFAULT_DATABASE_PATH, REGRESSION_DATABASE_PATH].filter(
-    (path): path is string => Boolean(path),
-  );
-  return [...new Set(candidates)];
 }
 
 export function getIpAllowlist() {
@@ -647,47 +591,7 @@ export function isAutoCreateDefaultConnectionDisabled(value = process.env.AUTO_C
   return isDisabledFlag(value);
 }
 
-export function logStorageDiagnostics(
-  logger: { info(...args: any[]): void; warn(...args: any[]): void } = sharedLogger,
-) {
-  const dataDir = getDataDir();
-  const dbPath = getDatabaseFilePath();
-  const backend = getStorageBackend();
-  const legacyImportPaths = getLegacyDatabaseImportPaths();
-
-  logger.info(`[storage] DATA_DIR=${dataDir}`);
-  logger.info(`[storage] STORAGE_BACKEND=${backend}`);
-  if (backend !== "sqlite") {
-    logger.info(`[storage] FILE_STORAGE_DIR=${getFileStorageDir()}`);
-    if (legacyImportPaths.length > 0) {
-      logger.info(`[storage] LEGACY_DATABASE_IMPORT_SOURCES=${legacyImportPaths.join(", ")}`);
-    }
-  } else if (dbPath) {
-    logger.info(`[storage] DATABASE_FILE=${dbPath}`);
-  } else {
-    logger.info(`[storage] DATABASE_URL=${getDatabaseUrl()}`);
-  }
-
-  if (existsSync(DEFAULT_DATABASE_PATH) && existsSync(REGRESSION_DATABASE_PATH)) {
-    if (dbPath === DEFAULT_DATABASE_PATH) {
-      logger.warn(
-        `[storage] Both database locations exist: ${DEFAULT_DATABASE_PATH} and ${REGRESSION_DATABASE_PATH}. ` +
-          `Using ${DEFAULT_DATABASE_PATH} for compatibility. The repo-root database may contain data written during the recent path regression. ` +
-          `Do not delete either file until recovery is confirmed.`,
-      );
-      return;
-    }
-
-    logger.warn(
-      `[storage] Both database locations exist: ${DEFAULT_DATABASE_PATH} and ${REGRESSION_DATABASE_PATH}. ` +
-        `The current database resolves to ${dbPath ?? getDatabaseUrl()}. Do not delete either file until recovery is confirmed.`,
-    );
-  }
-
-  if (dbPath === DEFAULT_DATABASE_PATH && !existsSync(DEFAULT_DATABASE_PATH) && existsSync(REGRESSION_DATABASE_PATH)) {
-    logger.warn(
-      `[storage] Found a repo-root database at ${REGRESSION_DATABASE_PATH}, but the current compatibility path resolves to ${DEFAULT_DATABASE_PATH}. ` +
-        `If data appears missing, inspect both locations and do not delete either file until recovery is confirmed.`,
-    );
-  }
+export function logStorageDiagnostics(logger: { info(...args: any[]): void } = sharedLogger) {
+  logger.info("[storage] DATA_DIR=%s", getDataDir());
+  logger.info("[storage] FILE_STORAGE_DIR=%s", getFileStorageDir());
 }

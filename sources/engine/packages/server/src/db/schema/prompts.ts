@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Prompt Presets, Groups, Sections & Choices
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 
-export const promptPresets = sqliteTable("prompt_presets", {
+export const promptPresets = fileTable("prompt_presets", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
@@ -33,7 +33,7 @@ export const promptPresets = sqliteTable("prompt_presets", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const promptGroups = sqliteTable("prompt_groups", {
+export const promptGroups = fileTable("prompt_groups", {
   id: text("id").primaryKey(),
   presetId: text("preset_id")
     .notNull()
@@ -46,7 +46,7 @@ export const promptGroups = sqliteTable("prompt_groups", {
   createdAt: text("created_at").notNull(),
 });
 
-export const promptSections = sqliteTable("prompt_sections", {
+export const promptSections = fileTable("prompt_sections", {
   id: text("id").primaryKey(),
   presetId: text("preset_id")
     .notNull()
@@ -74,7 +74,7 @@ export const promptSections = sqliteTable("prompt_sections", {
   forbidOverrides: text("forbid_overrides").notNull().default("false"),
 });
 
-export const choiceBlocks = sqliteTable("choice_blocks", {
+export const choiceBlocks = fileTable("choice_blocks", {
   id: text("id").primaryKey(),
   presetId: text("preset_id")
     .notNull()

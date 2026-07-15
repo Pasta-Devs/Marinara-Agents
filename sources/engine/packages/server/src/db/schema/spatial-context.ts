@@ -1,7 +1,7 @@
 // Schema: Hierarchical spatial context snapshots
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, fileTable, text } from "../file-schema.js";
 
-export const spatialContextSnapshots = sqliteTable("spatial_context_snapshots", {
+export const spatialContextSnapshots = fileTable("spatial_context_snapshots", {
   id: text("id").primaryKey(),
   chatId: text("chat_id").notNull(),
   /** Empty for the pre-message bootstrap state; otherwise references messages.id. */

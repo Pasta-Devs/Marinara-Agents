@@ -1,5 +1,6 @@
 export const OPENROUTER_APP_REFERER = "https://github.com/Pasta-Devs/Marinara-Engine";
 export const OPENROUTER_APP_TITLE = "Marinara Engine";
+export const OPENROUTER_APP_CATEGORIES = "roleplay,game";
 
 export function isOpenRouterApiUrl(value: string | URL): boolean {
   try {
@@ -27,5 +28,6 @@ export function requestHeadersWithOpenRouterAttribution(
   const headers = new Headers(headersInit);
   headers.set("HTTP-Referer", OPENROUTER_APP_REFERER);
   headers.set("X-OpenRouter-Title", OPENROUTER_APP_TITLE);
+  headers.set("X-OpenRouter-Categories", OPENROUTER_APP_CATEGORIES);
   return headers;
 }

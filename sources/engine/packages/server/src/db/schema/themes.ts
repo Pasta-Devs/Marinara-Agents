@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Synced Custom Themes
 // ──────────────────────────────────────────────
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { fileTable, text } from "../file-schema.js";
 
-export const customThemes = sqliteTable("custom_themes", {
+export const customThemes = fileTable("custom_themes", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   css: text("css").notNull().default(""),

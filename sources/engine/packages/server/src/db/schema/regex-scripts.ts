@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Regex Scripts
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 
-export const regexScripts = sqliteTable("regex_scripts", {
+export const regexScripts = fileTable("regex_scripts", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   enabled: text("enabled").notNull().default("true"),

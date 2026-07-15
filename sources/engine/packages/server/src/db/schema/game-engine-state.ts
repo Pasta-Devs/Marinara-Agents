@@ -6,9 +6,9 @@
 // game_state_snapshots so regenerate / branch / undo rewind the game
 // correctly. The `state` column holds the engine's own JSON blob;
 // `game_type` + `schema_version` make it self-describing.
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 
-export const gameEngineState = sqliteTable("game_engine_state", {
+export const gameEngineState = fileTable("game_engine_state", {
   id: text("id").primaryKey(),
   chatId: text("chat_id").notNull(),
   /** Anchor message — "" before any message exists for the opening deal. */
