@@ -114,6 +114,15 @@ const gameGeneratedDefinition = {
 } as const;
 
 test.beforeEach(async ({ page }) => {
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get("/api/health").catch(() => null);
+        return response?.ok() ?? false;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   const healthResponse = await page.request.get("/api/health");
   expect(healthResponse.ok()).toBeTruthy();
   const { version } = (await healthResponse.json()) as { version: string };
@@ -858,7 +867,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
   }
 });
 
-test("Game screen shows the hierarchical World map alongside the Local tactical map", async ({ page }, testInfo) => {
+test("Game screen gives the hierarchical World map precedence over the session Local map", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const chatResponse = await page.request.post("/api/chats", {
     data: {
@@ -871,24 +880,37 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
   expect(chatResponse.ok()).toBeTruthy();
   const chat = (await chatResponse.json()) as { id: string };
   await activateHierarchicalMaps(page, chat.id);
-  const tacticalMap = {
-    id: "coast-map",
-    type: "grid",
-    name: "Shrouded Coast Tactical Map",
-    description: "A local tactical map.",
-    width: 1,
-    height: 1,
-    cells: [
+  const sessionMap = {
+    id: "the-crownscar",
+    type: "node",
+    name: "The Crownscar",
+    description: "A game-created map stored in Session → Edit Spoilers → Maps.",
+    nodes: [
       {
-        x: 0,
-        y: 0,
-        emoji: "⚓",
-        label: "Harbor Gate",
+        id: "region_1",
+        emoji: "🏘️",
+        label: "Embercross",
+        x: 50,
+        y: 15,
         discovered: true,
-        terrain: "city",
+        description: "A lively bridge-town serving as the safest base for expeditions.",
+      },
+      {
+        id: "architect_s_shrine",
+        emoji: "⛩️",
+        label: "Architect's Shrine",
+        x: 50,
+        y: 50,
+        discovered: true,
       },
     ],
-    partyPosition: { x: 0, y: 0 },
+    edges: [
+      {
+        from: "region_1",
+        to: "architect_s_shrine",
+      },
+    ],
+    partyPosition: "architect_s_shrine",
   };
 
   try {
@@ -896,9 +918,9 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
       data: {
         gameId: `world-map-game-${chat.id}`,
         gameSessionStatus: "active",
-        gameMaps: [tacticalMap],
-        gameMap: tacticalMap,
-        activeGameMapId: tacticalMap.id,
+        gameMaps: [sessionMap],
+        gameMap: sessionMap,
+        activeGameMapId: sessionMap.id,
         gameIntroPresented: true,
       },
     });
@@ -948,6 +970,7 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
 
     const mapView = page.getByRole("group", { name: "Map view" });
     await expect(mapView.getByRole("button", { name: "World" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("The Crownscar", { exact: true })).toHaveCount(0);
     const worldMap = page.getByRole("region", { name: "Hierarchical world map" });
     await expect(worldMap).toBeVisible();
     await expect(worldMap.getByRole("button", { name: /Gloam Harbor/ })).toBeVisible();
@@ -959,7 +982,7 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
 
     await mapView.getByRole("button", { name: "Local" }).click();
     await expect(mapView.getByRole("button", { name: "Local" })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByText("Shrouded Coast Tactical Map", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("The Crownscar", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("region", { name: "Hierarchical world map" })).toHaveCount(0);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`);

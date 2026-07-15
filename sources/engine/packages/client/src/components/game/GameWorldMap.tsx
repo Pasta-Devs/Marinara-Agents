@@ -265,7 +265,14 @@ export function GameWorldMap({
             </p>
           </div>
         ) : presentation === "map" ? (
-          <div className={cn("relative overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]", compact ? "h-56" : "h-52")}>
+          <div
+            data-marinara-maps-world-canvas
+            data-compact={compact ? "true" : "false"}
+            className={cn(
+              "relative overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]",
+              compact ? "h-56" : "h-52",
+            )}
+          >
             <div
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 opacity-25"

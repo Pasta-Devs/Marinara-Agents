@@ -292,6 +292,8 @@ for (const entry of catalog.packages) {
     }
     for (const marker of [
       "data-marinara-maps-workspace-styles",
+      "data-marinara-maps-world-canvas",
+      "data-marinara-maps-world-styles",
       "mari-maps-workspace-grid",
       "mari-maps-ai-grid",
     ]) {
