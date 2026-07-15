@@ -96,7 +96,7 @@ The Engine downloads only entries from this official HTTPS catalog, validates th
 
 Package source and reproducible build scripts live in this repository instead of the base Engine distribution. Generated artifacts are published under [`artifacts/`](artifacts/), package manifests under [`packages/`](packages/), and the machine-readable catalog at [`catalog/catalog.json`](catalog/catalog.json).
 
-Catalog entries classify packages as `writer`, `tracker`, or `misc`. Creators may also provide an HTTPS `iconUrl`; Marinara displays that artwork in Download Agents and falls back to the Agents star icon when artwork is omitted or unavailable. Agent code does not need to be repackaged when catalog artwork changes.
+Catalog entries classify packages as `writer`, `tracker`, or `misc`. Every official package has a square Professor Mari cover under [`artwork/agent-covers/`](artwork/agent-covers/), published through its HTTPS `iconUrl`; Marinara displays that artwork in Download Agents and falls back to the Agents star icon when artwork is unavailable. Agent code does not need to be repackaged when catalog artwork changes.
 
 Conversation mode's About Me profile and `update_about_me` tool are built into Marinara Engine. They are not agents and must not be published in this catalog.
 

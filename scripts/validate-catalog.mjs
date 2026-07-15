@@ -4,6 +4,11 @@ import { readFile, readdir } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import {
+  CATALOG_ARTWORK_SIZE,
+  catalogArtworkRelativePath,
+  catalogArtworkUrl,
+} from "./catalog-artwork.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const catalog = JSON.parse(await readFile(join(repoRoot, "catalog/catalog.json"), "utf8"));
@@ -126,7 +131,7 @@ async function validateTurnGameRuntime(manifest, packageRoot) {
 }
 
 for (const entry of catalog.packages) {
-  const { manifest, category, artifact, documentationUrl } = entry;
+  const { manifest, category, artifact, iconUrl, documentationUrl } = entry;
   if (!manifest?.id || ids.has(manifest.id)) throw new Error(`Duplicate or missing package id: ${manifest?.id}`);
   if (manifest.id === "about-me-keeper") {
     throw new Error("About Me is a core Conversation feature and must not appear in the agent catalog");
@@ -147,6 +152,22 @@ for (const entry of catalog.packages) {
     throw new Error(`Expected ${manifest.id} in ${expectedCategory}, found ${category}`);
   }
   if (!documentationUrl) throw new Error(`Missing documentation URL for ${manifest.id}`);
+  if (iconUrl !== catalogArtworkUrl(manifest.id)) {
+    throw new Error(`Missing or invalid catalog artwork URL for ${manifest.id}`);
+  }
+  const artworkPath = join(repoRoot, catalogArtworkRelativePath(manifest.id));
+  const artwork = await readFile(artworkPath);
+  const pngSignature = artwork.subarray(0, 8).toString("hex");
+  if (pngSignature !== "89504e470d0a1a0a" || artwork.subarray(12, 16).toString("ascii") !== "IHDR") {
+    throw new Error(`Catalog artwork for ${manifest.id} must be a valid PNG`);
+  }
+  const artworkWidth = artwork.readUInt32BE(16);
+  const artworkHeight = artwork.readUInt32BE(20);
+  if (artworkWidth !== CATALOG_ARTWORK_SIZE || artworkHeight !== CATALOG_ARTWORK_SIZE) {
+    throw new Error(
+      `Catalog artwork for ${manifest.id} must be ${CATALOG_ARTWORK_SIZE}x${CATALOG_ARTWORK_SIZE}, found ${artworkWidth}x${artworkHeight}`,
+    );
+  }
   const packageRoot = join(repoRoot, "packages", manifest.id);
   const sourceManifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
   if (JSON.stringify(sourceManifest) !== JSON.stringify(manifest)) {

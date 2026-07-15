@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-14T22:34:38.532Z",
+  "generatedAt": "2026-07-15T11:03:03.298Z",
   "packages": [
     {
       "manifest": {
@@ -70,7 +70,8 @@
         "sha256": "42cd970bfb270ffb3e30caa4d3e6133a591751d3cb0a1cbfaffb9228ae6d8e4c",
         "bytes": 199574
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/eightball.png"
     },
     {
       "manifest": {
@@ -111,7 +112,8 @@
         "sha256": "c7ac76cb3af70822d4ddc2e40331f67590d218ebf4c8b6e0fffbe8e45d1d48c2",
         "bytes": 1608
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#background"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#background",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/background.png"
     },
     {
       "manifest": {
@@ -152,7 +154,8 @@
         "sha256": "be76d752858b50dbc299bbe007985f882f5d42aaa5868ac209df6ca6492f3408",
         "bytes": 1495
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#card-evolution-auditor"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#card-evolution-auditor",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/card-evolution-auditor.png"
     },
     {
       "manifest": {
@@ -193,7 +196,8 @@
         "sha256": "044fcedb1be7274338dbf180d4fe3568a5cf5f2e5940a5babf6890bd55aa5edc",
         "bytes": 1753
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/character-tracker.png"
     },
     {
       "manifest": {
@@ -259,7 +263,8 @@
         "sha256": "c202aee6a00e036aa138aa33be52941521cf811dbc0934ff0acdd67493d99525",
         "bytes": 203379
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/chess.png"
     },
     {
       "manifest": {
@@ -300,7 +305,8 @@
         "sha256": "d678f8ba00d3d24925daced632d14f24e96505143565032023d1fda2f81f64fd",
         "bytes": 1511
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#combat"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#combat",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/combat.png"
     },
     {
       "manifest": {
@@ -341,7 +347,8 @@
         "sha256": "cd717c6051280590e939511fe812693c4f962ebef0611ddb4d4b114d1bb6f460",
         "bytes": 1516
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#continuity-checker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#continuity-checker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/continuity.png"
     },
     {
       "manifest": {
@@ -404,7 +411,8 @@
         "sha256": "a07a3be0e738742979a39b11c44522890141419b9a5cae11d9cc6eeb8beb8f26",
         "bytes": 920676
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png"
     },
     {
       "manifest": {
@@ -445,7 +453,8 @@
         "sha256": "6e0154e48465bbf2860b015760d718f8d51532caf67e805ab7891eb84da8fb66",
         "bytes": 1383
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/custom-tracker.png"
     },
     {
       "manifest": {
@@ -486,7 +495,8 @@
         "sha256": "7d7c2c0b2ec2ebc8b6e2e933077304b33c83699a9bee198add2b0a672445fe01",
         "bytes": 1393
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#cyoa-choices"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#cyoa-choices",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/cyoa.png"
     },
     {
       "manifest": {
@@ -527,7 +537,8 @@
         "sha256": "d8c3e5d6c58166673a5b85eaebcd69ff5b808d1e0b7e64cdce1b956c05036e73",
         "bytes": 2335
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#echo-chamber"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#echo-chamber",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/echo-chamber.png"
     },
     {
       "manifest": {
@@ -568,7 +579,8 @@
         "sha256": "b2811cbfa99b745ee981bcea76f941dcb55034e73485801e4e67e0e0fbe22943",
         "bytes": 1489
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/expression.png"
     },
     {
       "manifest": {
@@ -609,7 +621,8 @@
         "sha256": "92016fcd4d1c3b688bfa85fe9cab41d2eb69c3e3c4d1960801845bbe101f4603",
         "bytes": 1602
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/haptic.png"
     },
     {
       "manifest": {
@@ -674,7 +687,8 @@
         "sha256": "f10091b66327b48e86f5c5295c6a7e6d1b17c0a96d6b93d2136da55d10d637b0",
         "bytes": 744929
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png"
     },
     {
       "manifest": {
@@ -715,7 +729,8 @@
         "sha256": "80f7aeb5b2ee2fe32339c9fe45706c96436d2f0e7a9bf6a200179c1575ac16d7",
         "bytes": 2667
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#illustrator"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#illustrator",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/illustrator.png"
     },
     {
       "manifest": {
@@ -756,7 +771,8 @@
         "sha256": "c9e2f362709799757a46ab40750f63412d291a29ca2d7230d0d24b5f826e67ad",
         "bytes": 1585
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#immersive-html"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#immersive-html",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/html.png"
     },
     {
       "manifest": {
@@ -797,7 +813,8 @@
         "sha256": "6240a4bbe8ffa472cd53cb222347cbebacc7e3fd21376e7cae3afe45ad4510a2",
         "bytes": 1433
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-retrieval"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-retrieval",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/knowledge-retrieval.png"
     },
     {
       "manifest": {
@@ -838,7 +855,8 @@
         "sha256": "0bebc251e4bd17134b665d2182b2d864eb2b11e770bbd125131a01251a74c499",
         "bytes": 1555
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-router"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-router",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/knowledge-router.png"
     },
     {
       "manifest": {
@@ -879,7 +897,8 @@
         "sha256": "7c153ca72396f607c68320095651b930f07056a92119c065c3f2b118dd14d0c5",
         "bytes": 1485
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#lorebook-keeper"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#lorebook-keeper",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/lorebook-keeper.png"
     },
     {
       "manifest": {
@@ -920,7 +939,8 @@
         "sha256": "ac706f817d0036fd45b4aec8312a7049ecc5a2b5ba5738b28da30aad821f62a3",
         "bytes": 2420
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#music-dj"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#music-dj",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/spotify.png"
     },
     {
       "manifest": {
@@ -961,7 +981,8 @@
         "sha256": "428bb1ecd2cae9aeb111d7be60ce08a730eae1e3de2d956dc81be35e06b49cbb",
         "bytes": 1331
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/director.png"
     },
     {
       "manifest": {
@@ -1002,7 +1023,8 @@
         "sha256": "ff6dbc2459bfd499ce4d0b85b2bd66dea8aa9d53c8e16f798dae0810141bdccb",
         "bytes": 1665
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#persona-stats"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#persona-stats",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/persona-stats.png"
     },
     {
       "manifest": {
@@ -1070,7 +1092,8 @@
         "sha256": "8607ae1d599cbf4994802392cac7cbd500e3fb9bca646df2d2110737fc16908e",
         "bytes": 194866
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/poker.png"
     },
     {
       "manifest": {
@@ -1111,7 +1134,8 @@
         "sha256": "00f41b486a64c590cfe5b55623dab8a2a049d272cd3a244fb44b36401af0574c",
         "bytes": 1472
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#prose-guardian"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#prose-guardian",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/prose-guardian.png"
     },
     {
       "manifest": {
@@ -1152,7 +1176,8 @@
         "sha256": "db2f5c48dba9c93b6002039f6250bca5cd133c995d966a2a745665ed75582acd",
         "bytes": 1294
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest-tracker"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest-tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quest.png"
     },
     {
       "manifest": {
@@ -1220,7 +1245,8 @@
         "sha256": "94d6269be8a6dbcc8c5b5c609b28f0f8e1b207b2ccc03b0205396b1303982394",
         "bytes": 188244
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/rock-paper-scissors.png"
     },
     {
       "manifest": {
@@ -1288,7 +1314,8 @@
         "sha256": "eb76af8d262abccf7c19be75611783ef5ee2f722714e0457bbc22aecb53cd787",
         "bytes": 187431
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/tic-tac-toe.png"
     },
     {
       "manifest": {
@@ -1354,7 +1381,8 @@
         "sha256": "d836603be4083d4b8125bba88d3cc34959a2c253393b660a533d2015c26604c0",
         "bytes": 194412
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/uno.png"
     },
     {
       "manifest": {
@@ -1395,7 +1423,8 @@
         "sha256": "ac20a90ac6eb6f511886679fa8f0a0ec29c4b785c55d1c60c2ce431c7f22859f",
         "bytes": 1546
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/world-state.png"
     }
   ]
 }
