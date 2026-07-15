@@ -33,6 +33,7 @@ interface NormalizeSpatialMapPlanOptions {
   maxDepth?: number;
   sourceEntryIdsByKey?: ReadonlyMap<string, string>;
   requireLoreSource?: boolean;
+  requiredLocationNames?: readonly string[];
 }
 
 interface BuildSpatialMapPromptOptions {
@@ -42,6 +43,7 @@ interface BuildSpatialMapPromptOptions {
   instructions?: string;
   groundingMode?: SpatialMapGroundingMode;
   loreCatalog?: string;
+  requiredLocationNames?: readonly string[];
 }
 
 interface NormalizeSpatialMapExpansionOptions {
@@ -210,6 +212,27 @@ function readPlanLocations(value: unknown): Record<string, unknown>[] {
   if (!isRecord(value)) return [];
   const container = Array.isArray(value.locations) ? value : isRecord(value.map) ? value.map : value;
   return Array.isArray(container.locations) ? container.locations.filter(isRecord) : [];
+}
+
+function assertRequiredLocationNames(
+  definition: SpatialContextDefinition,
+  requiredLocationNames: readonly string[] = [],
+): void {
+  if (requiredLocationNames.length === 0) return;
+  const normalizeRequiredName = (name: string) => name.normalize("NFC").trim().replace(/\s+/gu, " ");
+  const counts = new Map<string, number>();
+  for (const location of definition.locations) {
+    const name = normalizeRequiredName(location.name);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const missing = requiredLocationNames.filter((name) => (counts.get(normalizeRequiredName(name)) ?? 0) === 0);
+  if (missing.length > 0) {
+    throw new Error(`The generated hierarchy omitted accepted Game map locations: ${missing.join(", ")}.`);
+  }
+  const duplicated = requiredLocationNames.filter((name) => (counts.get(normalizeRequiredName(name)) ?? 0) > 1);
+  if (duplicated.length > 0) {
+    throw new Error(`The generated hierarchy duplicated accepted Game map locations: ${duplicated.join(", ")}.`);
+  }
 }
 export interface SpatialMapPlanProvenanceRecord {
   sourceKeys: string[];
@@ -398,6 +421,7 @@ export function normalizeSpatialMapPlan(
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "The generated map is invalid.");
   }
+  assertRequiredLocationNames(parsed.data, options.requiredLocationNames);
   return parsed.data;
 }
 
@@ -582,6 +606,7 @@ export function buildSpatialMapDraftPrompt(options: BuildSpatialMapPromptOptions
   maxTokens: number;
 } {
   const size = SPATIAL_DRAFT_SIZE_SPECS[options.size];
+  const requiredLocationNames = Array.from(new Set(options.requiredLocationNames ?? []));
   const system = [
     "You design practical hierarchical world maps for an AI roleplay and game engine.",
     "Return one JSON object only. Do not include markdown fences, commentary, or tool calls.",
@@ -595,6 +620,13 @@ export function buildSpatialMapDraftPrompt(options: BuildSpatialMapPromptOptions
     "Use links only for meaningful travel that parent and child movement cannot express. Ordinary travel links should be bidirectional.",
     "Coordinates use 0 to 100. Keep map siblings separated. Layer order starts at 0.",
     "Every location key must be unique and stable within this response. parentKey, startingLocationKey, and targetKey refer to those keys.",
+    ...(options.ownerMode === "game" && requiredLocationNames.length > 0
+      ? [
+          "The accepted Game map in the setup reference is authoritative source input, not a competing map.",
+          "Preserve every required Game map location exactly once with the supplied spelling and capitalization. Do not rename, alias, merge, or omit one.",
+          "Place the accepted map name as its appropriate world container and place its nodes or cells within that hierarchy. You may add broader ancestors or useful nested detail around them.",
+        ]
+      : []),
     'Schema: {"worldName":string,"startingLocationKey":string,"locations":[{"key":string,"parentKey":string|null,"name":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}',
   ].join("\n");
   const user = [
@@ -603,6 +635,9 @@ export function buildSpatialMapDraftPrompt(options: BuildSpatialMapPromptOptions
     options.instructions?.trim()
       ? `Creator request:\n${options.instructions.trim()}`
       : "Creator request: Infer a coherent, playable map from the setup.",
+    ...(requiredLocationNames.length > 0
+      ? [`Required accepted Game map location names:\n${JSON.stringify(requiredLocationNames, null, 2)}`]
+      : []),
     `Chat and setup reference:\n${options.sourceContext}`,
     "Generate the complete map draft now.",
     ...(options.loreCatalog ? [`Selected lore catalog:\n${options.loreCatalog}`] : []),

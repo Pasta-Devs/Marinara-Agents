@@ -41,7 +41,7 @@ async function captureEngineSources(metafilePath) {
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.0.3",
+    version: "1.0.4",
     maxEngineExclusive: "2.4.0",
     name: "Hierarchical Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
@@ -166,7 +166,9 @@ export async function selfCheck() {
       encoding: "utf8",
       env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
     });
-    if (result.status !== 0) throw new Error(result.stderr || result.stdout || `esbuild failed for ${feature.id}`);
+    if (result.status !== 0) {
+      throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
+    }
     await captureEngineSources(metafile);
   } finally {
     await rm(temporary, { recursive: true, force: true });

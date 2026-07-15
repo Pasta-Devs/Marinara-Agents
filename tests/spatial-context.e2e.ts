@@ -113,6 +113,48 @@ const gameGeneratedDefinition = {
   ownerMode: "game",
 } as const;
 
+const acceptedGameSetupMap = {
+  id: "shrouded-coast",
+  type: "node",
+  name: "Shrouded Coast",
+  description: "A game-created starting map accepted before the hierarchy draft.",
+  nodes: [
+    {
+      id: "gloam-harbor",
+      emoji: "⚓",
+      label: "Gloam Harbor",
+      x: 20,
+      y: 55,
+      discovered: true,
+      description: "A busy harbor of black piers.",
+    },
+    {
+      id: "blackglass-lighthouse",
+      emoji: "🗼",
+      label: "Blackglass Lighthouse",
+      x: 72,
+      y: 25,
+      discovered: true,
+      description: "A dark lighthouse on the cliffs.",
+    },
+    {
+      id: "old-sewers",
+      emoji: "🕳️",
+      label: "Old Sewers",
+      x: 55,
+      y: 82,
+      discovered: false,
+      description: "Flooded tunnels beneath the coast.",
+      spatialLocationId: "existing-old-sewers-binding",
+    },
+  ],
+  edges: [
+    { from: "gloam-harbor", to: "blackglass-lighthouse" },
+    { from: "blackglass-lighthouse", to: "old-sewers" },
+  ],
+  partyPosition: "gloam-harbor",
+} as const;
+
 test.beforeEach(async ({ page }) => {
   await expect
     .poll(
@@ -306,6 +348,9 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
       data: {
         gameSessionStatus: "ready",
         gameWorldOverview: "A fogbound coast ruled by rival harbor guilds.",
+        gameMaps: [acceptedGameSetupMap],
+        gameMap: acceptedGameSetupMap,
+        activeGameMapId: acceptedGameSetupMap.id,
       },
     });
     expect(readyResponse.ok()).toBeTruthy();
@@ -722,8 +767,81 @@ test("Game setup hands an optional map draft into review before Save", async ({ 
       "ai_lighthouse",
       "ai_sewers",
     ]);
+
+    const boundChatResponse = await page.request.get(`/api/chats/${chat.id}`);
+    expect(boundChatResponse.ok()).toBeTruthy();
+    const boundChat = (await boundChatResponse.json()) as { metadata: unknown };
+    const boundMetadata =
+      typeof boundChat.metadata === "string"
+        ? (JSON.parse(boundChat.metadata) as {
+            gameMap: { spatialLocationId?: string; nodes: Array<{ id: string; spatialLocationId?: string }> };
+          })
+        : (boundChat.metadata as {
+            gameMap: { spatialLocationId?: string; nodes: Array<{ id: string; spatialLocationId?: string }> };
+          });
+    expect(boundMetadata.gameMap.spatialLocationId).toBe("ai_world");
+    expect(
+      Object.fromEntries(boundMetadata.gameMap.nodes.map((node) => [node.id, node.spatialLocationId])),
+    ).toEqual({
+      "gloam-harbor": "ai_harbor",
+      "blackglass-lighthouse": "ai_lighthouse",
+      "old-sewers": "existing-old-sewers-binding",
+    });
   } finally {
     if (!testInfo.project.name.includes("mobile")) await page.request.delete(`/api/chats/${chat.id}`);
+  }
+});
+
+test("Game hierarchy drafting refuses to truncate an accepted local map", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The server-side size guard needs one project.");
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: "Oversized accepted Game map",
+      mode: "game",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const nodes = Array.from({ length: 51 }, (_, index) => ({
+    id: `location-${index + 1}`,
+    emoji: "📍",
+    label: `Location ${index + 1}`,
+    x: 50,
+    y: 50,
+    discovered: true,
+  }));
+
+  try {
+    const metadataResponse = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: {
+        gameMap: {
+          id: "oversized-map",
+          type: "node",
+          name: "Oversized Map",
+          description: "A map that cannot fit in one bounded hierarchy draft.",
+          nodes,
+          edges: [],
+          partyPosition: nodes[0]!.id,
+        },
+      },
+    });
+    expect(metadataResponse.ok()).toBeTruthy();
+
+    const generationResponse = await page.request.post(`/api/chats/${chat.id}/spatial-context/generate`, {
+      data: {
+        operation: "create",
+        size: "large",
+        debugMode: false,
+      },
+    });
+    expect(generationResponse.status()).toBe(409);
+    expect((await generationResponse.json()) as { code: string }).toMatchObject({
+      code: "spatial_ai_game_map_reference_too_large",
+    });
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`);
   }
 });
 

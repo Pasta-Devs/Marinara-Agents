@@ -23,6 +23,7 @@ import {
   normalizeSpatialMapExpansionPlan,
   normalizeSpatialMapPlan,
   readSpatialMapPlanProvenance,
+  SPATIAL_DRAFT_SIZE_SPECS,
 } from "../services/spatial-context/ai-draft.js";
 import {
   createSpatialContextService,
@@ -33,6 +34,10 @@ import { createChatsStorage } from "../services/storage/chats.storage.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
 import { commitSpatialOwnerTurn, SpatialOwnerTurnError } from "../services/spatial-context/owner-turn.js";
+import {
+  buildGameMapDraftReference,
+  type GameMapDraftReference,
+} from "../services/spatial-context/game-map-binding.js";
 import { resolveLorebookScopeExclusions } from "../services/lorebook/game-lorebook-scope.js";
 import { parseSpatialMetadata } from "../services/spatial-context/metadata.js";
 
@@ -243,6 +248,7 @@ async function resolveDraftConnection(
 async function buildDraftSourceContext(
   chat: NonNullable<Awaited<ReturnType<ReturnType<typeof createChatsStorage>["getById"]>>>,
   characters: ReturnType<typeof createCharactersStorage>,
+  gameMapReference: GameMapDraftReference | null,
 ): Promise<string> {
   const metadata = parseSpatialMetadata(chat.metadata);
   const setup = parseSpatialMetadata(metadata.gameSetupConfig);
@@ -274,6 +280,14 @@ async function buildDraftSourceContext(
           },
           worldOverview: excerpt(metadata.gameWorldOverview, 3_000),
           storyArc: excerpt(metadata.gameStoryArc, 2_000),
+          ...(gameMapReference
+            ? {
+                acceptedGameMap: {
+                  authority: "accepted_game_setup_map",
+                  maps: gameMapReference.maps,
+                },
+              }
+            : {}),
           characters: characterContext,
         }
       : {
@@ -424,6 +438,26 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       });
     }
 
+    const gameMapReference =
+      ownerMode === "game" && operation !== "expand"
+        ? buildGameMapDraftReference(parseSpatialMetadata(chat.metadata))
+        : null;
+    const requiredLocationNames = gameMapReference?.requiredLocationNames ?? [];
+    const draftSize = SPATIAL_DRAFT_SIZE_SPECS[parsed.data.size];
+    if (gameMapReference?.truncated) {
+      return reply.status(409).send({
+        error:
+          "The accepted Game maps are too large to include safely in one hierarchy draft. Reconcile them manually so no locations or connections are silently omitted.",
+        code: "spatial_ai_game_map_reference_too_large",
+      });
+    }
+    if (requiredLocationNames.length > draftSize.maxLocations) {
+      return reply.status(409).send({
+        error: `The accepted Game map has ${requiredLocationNames.length} named locations, but the ${parsed.data.size} hierarchy can preserve at most ${draftSize.maxLocations}. Choose a larger draft size or reconcile the maps manually.`,
+        code: "spatial_ai_game_map_too_large",
+      });
+    }
+
     let resolved;
     try {
       resolved = await resolveDraftConnection(connections, parsed.data.connectionId, chat.connectionId);
@@ -434,7 +468,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       });
     }
 
-    const sourceContext = await buildDraftSourceContext(chat, characters);
+    const sourceContext = await buildDraftSourceContext(chat, characters, gameMapReference);
     const groundingMode = parsed.data.groundingMode;
     const lorebookScopeExclusions = resolveLorebookScopeExclusions(chat.mode, parseSpatialMetadata(chat.metadata));
     const loreCatalog = await buildSpatialLoreCatalog(
@@ -472,6 +506,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
               loreCatalog: loreCatalog.prompt,
               sourceContext,
               instructions: parsed.data.instructions,
+              requiredLocationNames,
             });
     } catch (error) {
       return reply.status(409).send({
@@ -531,6 +566,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
               size: parsed.data.size,
               sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
               requireLoreSource: groundingMode === "lore_strict",
+              requiredLocationNames,
             });
       const generatedLocationCount =
         operation === "expand"
