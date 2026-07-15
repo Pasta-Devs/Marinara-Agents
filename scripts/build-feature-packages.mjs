@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -19,6 +19,7 @@ const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
 const MIN_ENGINE_VERSION = "2.3.0";
+const ARTIFACT_MTIME = new Date("2000-01-01T00:00:00.000Z");
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const featureSource = (relativePath) => {
   const packaged = resolve(sourceRoot, relativePath);
@@ -476,13 +477,19 @@ for (const feature of selectedFeatures) {
     await writeFile(join(temporary, "agents.json"), agentsBuffer);
     await writeFile(join(temporary, "server.mjs"), serverBuffer);
     if (clientBuffer) await writeFile(join(temporary, "client.js"), clientBuffer);
+    const artifactFiles = ["manifest.json", "agents.json", "server.mjs", ...(clientBuffer ? ["client.js"] : [])];
+    for (const artifactFile of artifactFiles) {
+      const artifactSource = join(temporary, artifactFile);
+      await chmod(artifactSource, 0o644);
+      await utimes(artifactSource, ARTIFACT_MTIME, ARTIFACT_MTIME);
+    }
     const artifactName = `${feature.id}-${version}.zip`;
     const artifactPath = join(artifactsDir, artifactName);
     await rm(artifactPath, { force: true });
     const zipped = spawnSync(
       "zip",
-      ["-X", "-q", artifactPath, "manifest.json", "agents.json", "server.mjs", ...(clientBuffer ? ["client.js"] : [])],
-      { cwd: temporary },
+      ["-X", "-q", artifactPath, ...artifactFiles],
+      { cwd: temporary, env: { ...process.env, TZ: "UTC" } },
     );
     if (zipped.status !== 0) throw new Error(`zip failed for ${feature.id}`);
     const artifact = await readFile(artifactPath);
