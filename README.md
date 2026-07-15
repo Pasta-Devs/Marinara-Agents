@@ -116,6 +116,29 @@ node scripts/validate-catalog.mjs
 
 The build records every Engine source dependency needed by a package under `sources/engine`, so future catalog builds do not depend on those implementations remaining in the base Engine.
 
+---
+
+## Community & Support
+
+- [**Join our Discord**](https://discord.com/invite/KdAkTg94ME) — Chat, get help, share characters, and give feedback
+- [**Support on Ko-fi**](https://ko-fi.com/marinara_spaghetti) — Help keep the project alive
+
+---
+
+## Contributors
+
+<p align="left">
+  <a href="https://github.com/Pasta-Devs/Marinara-Agents/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=Pasta-Devs/Marinara-Agents" alt="Marinara Agents contributors" />
+  </a>
+</p>
+
+<p align="left">
+  Made with <a href="https://contrib.rocks">contrib.rocks</a>.
+</p>
+
+---
+
 ## License
 
-Marinara Agents is released under the [GNU Affero General Public License v3.0](LICENSE).
+[AGPL-3.0](LICENSE)
