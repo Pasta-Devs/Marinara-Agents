@@ -55,7 +55,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Conversation Calls",
-    version: "1.0.1",
+    version: "1.0.2",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -130,13 +130,20 @@ export async function selfCheck() {
       ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
 import * as commandRuntime from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
 import * as characterVideos from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
+import { createConversationCallsStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
+let readinessStorage = null;
 export async function activate({ app, api }) {
   await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
+  readinessStorage = createConversationCallsStorage(app.db);
   const cleanups = [
     api.registerService("conversation-calls:command", commandRuntime),
     api.registerService("conversation-calls:character-videos", characterVideos),
   ];
-  return () => { for (const cleanup of cleanups.reverse()) cleanup(); };
+  return () => { readinessStorage = null; for (const cleanup of cleanups.reverse()) cleanup(); };
+}
+export async function selfCheck() {
+  if (!readinessStorage) throw new Error("Conversation Calls storage did not initialize");
+  await readinessStorage.getActiveForChat("__marinara_capability_self_check__");
 }\n`
       : feature.serverImport
       ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};\nexport async function activate({ app }) { await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} }); }\n`
