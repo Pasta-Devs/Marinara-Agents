@@ -1069,6 +1069,7 @@ test("Game screen gives the hierarchical World map precedence over the session L
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            gameTutorialDisabled: true,
             sidebarOpen: false,
             rightPanelOpen: false,
           },
@@ -1103,7 +1104,102 @@ test("Game screen gives the hierarchical World map precedence over the session L
     await expect(page.getByText("The Crownscar", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("region", { name: "Hierarchical world map" })).toHaveCount(0);
   } finally {
-    await page.request.delete(`/api/chats/${chat.id}`);
+    await page.goto("about:blank");
+    await page.request.delete(`/api/chats/${chat.id}?force=true`);
+  }
+});
+
+test("Game prompt scopes the legacy map beneath the hierarchical world location", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The package prompt contract is mode-independent.");
+  const connectionResponse = await page.request.post("/api/connections", {
+    data: {
+      name: `Maps Prompt Contract ${Date.now()}`,
+      provider: "custom",
+      baseUrl: "https://example.invalid/v1",
+      model: "maps-prompt-contract",
+      apiKey: "maps-prompt-contract",
+    },
+  });
+  expect(connectionResponse.ok()).toBeTruthy();
+  const connection = (await connectionResponse.json()) as { id: string };
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: "Game Map Prompt Contract",
+      mode: "game",
+      characterIds: [],
+      connectionId: connection.id,
+    },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await activateHierarchicalMaps(page, chat.id);
+    const metadataResponse = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: {
+        gameSystemPrompt: [
+          "Run the game.",
+          "<map_state>",
+          "Map: The Crownscar",
+          "Party position: Architect's Shrine",
+          "</map_state>",
+          "",
+          "COMMANDS:",
+          `- [map_update: new_location="Location Name" connected_to="Previous Location Name" node_emoji="emoji"] - only when the party arrives at an entirely new location on the current node map.`,
+        ].join("\n"),
+      },
+    });
+    expect(metadataResponse.ok()).toBeTruthy();
+    const previewPrompt = async () => {
+      const promptResponse = await page.request.post("/api/generate/dryRun", {
+        data: {
+          chatId: chat.id,
+          connectionId: connection.id,
+          returnPrompt: true,
+          skipPreset: true,
+          userMessage: "Look around.",
+        },
+      });
+      expect(promptResponse.ok()).toBeTruthy();
+      const preview = (await promptResponse.json()) as {
+        prompt: { messages: Array<{ role: string; content: string }> };
+      };
+      return preview.prompt.messages.map((message) => message.content).join("\n\n");
+    };
+
+    const legacyOnlyPrompt = await previewPrompt();
+    expect(legacyOnlyPrompt).toContain("<map_state>");
+    expect(legacyOnlyPrompt).toContain("only when the party arrives at an entirely new location");
+    expect(legacyOnlyPrompt).not.toContain("<local_map_state");
+    expect(legacyOnlyPrompt).not.toContain("<spatial_context");
+
+    const spatialSave = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: {
+          ...gameGeneratedDefinition,
+          enabled: true,
+        },
+      },
+    });
+    expect(spatialSave.ok()).toBeTruthy();
+
+    const prompt = await previewPrompt();
+    expect(prompt).toContain(`<spatial_context mode="game" authority="application">`);
+    expect(prompt).toContain("Current path: Shrouded Coast");
+    expect(prompt).toContain(`<local_map_state authority="tactical" world_location_source="spatial_context">`);
+    expect(prompt).toContain("Map: The Crownscar");
+    expect(prompt).not.toContain("<map_state>");
+    expect(prompt).not.toContain("</map_state>");
+    expect(prompt).toContain("only to add local/tactical detail inside the current hierarchical location");
+    expect(prompt).toContain("it must never represent or cause travel between hierarchical locations");
+    expect(prompt).toContain("[map_update:");
+  } finally {
+    await Promise.all([
+      page.request.delete(`/api/chats/${chat.id}`),
+      page.request.delete(`/api/connections/${connection.id}`),
+    ]);
   }
 });
 

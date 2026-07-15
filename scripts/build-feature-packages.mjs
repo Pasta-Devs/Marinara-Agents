@@ -41,7 +41,7 @@ async function captureEngineSources(metafilePath) {
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.0.4",
+    version: "1.0.5",
     maxEngineExclusive: "2.4.0",
     name: "Hierarchical Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
