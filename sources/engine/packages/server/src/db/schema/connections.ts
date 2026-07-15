@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: API Connections
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 
-export const apiConnections = sqliteTable("api_connections", {
+export const apiConnections = fileTable("api_connections", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   provider: text("provider", {

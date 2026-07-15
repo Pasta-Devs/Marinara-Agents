@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Game State Snapshots
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 
-export const gameStateSnapshots = sqliteTable("game_state_snapshots", {
+export const gameStateSnapshots = fileTable("game_state_snapshots", {
   id: text("id").primaryKey(),
   chatId: text("chat_id").notNull(),
   /** FK to messages.id — cascade handled at application level */

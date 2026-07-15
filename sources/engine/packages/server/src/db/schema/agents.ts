@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Agent Configs & Runs
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 
-export const agentConfigs = sqliteTable("agent_configs", {
+export const agentConfigs = fileTable("agent_configs", {
   id: text("id").primaryKey(),
   type: text("type").notNull(),
   name: text("name").notNull(),
@@ -19,7 +19,7 @@ export const agentConfigs = sqliteTable("agent_configs", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const agentRuns = sqliteTable("agent_runs", {
+export const agentRuns = fileTable("agent_runs", {
   id: text("id").primaryKey(),
   agentConfigId: text("agent_config_id")
     .notNull()
@@ -37,7 +37,7 @@ export const agentRuns = sqliteTable("agent_runs", {
 });
 
 /** Persistent memory for agents (key-value per agent per chat). */
-export const agentMemory = sqliteTable("agent_memory", {
+export const agentMemory = fileTable("agent_memory", {
   id: text("id").primaryKey(),
   agentConfigId: text("agent_config_id")
     .notNull()

@@ -3,7 +3,7 @@ import {
   type SpatialContextDefinition,
   type SpatialContextSnapshot,
 } from "@marinara-engine/shared";
-import { eq } from "drizzle-orm";
+import { eq } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { chats, messages } from "../../db/schema/index.js";
 import { createSpatialContextStorage } from "../storage/spatial-context.storage.js";

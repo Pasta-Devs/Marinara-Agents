@@ -11,7 +11,11 @@ const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, ".
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
-const sourceRoot = existsSync(sourcesRoot) ? sourcesRoot : engineRoot;
+const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
+  ? resolve(process.env.MARINARA_ENGINE_SOURCE_ROOT)
+  : existsSync(sourcesRoot)
+    ? sourcesRoot
+    : engineRoot;
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
 const MIN_ENGINE_VERSION = "2.3.0";
@@ -25,8 +29,8 @@ async function captureEngineSources(metafilePath) {
   const metafile = JSON.parse(await readFile(metafilePath, "utf8"));
   for (const input of Object.keys(metafile.inputs || {})) {
     const absolute = resolve(engineRoot, input);
-    if (!absolute.startsWith(`${engineRoot}/`) || absolute.includes("/node_modules/")) continue;
-    const relative = absolute.slice(engineRoot.length + 1);
+    if (!absolute.startsWith(`${sourceRoot}/`) || absolute.includes("/node_modules/")) continue;
+    const relative = absolute.slice(sourceRoot.length + 1);
     const destination = join(sourcesRoot, relative);
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(absolute, destination);
@@ -36,6 +40,8 @@ async function captureEngineSources(metafilePath) {
 const features = [
   {
     id: "hierarchical-maps",
+    version: "1.0.2",
+    maxEngineExclusive: "2.4.0",
     name: "Hierarchical Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
     category: "tracker",
@@ -49,7 +55,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Conversation Calls",
-    version: "1.0.1",
+    version: "1.0.2",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -103,8 +109,10 @@ import * as stateResolution from ${JSON.stringify(resolve(sourceRoot, "packages/
 import * as ownerTurn from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/spatial-context/owner-turn.ts"))};
 import * as gameMapBinding from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/spatial-context/game-map-binding.ts"))};
 import { createSpatialContextStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/spatial-context.storage.ts"))};
+let readinessStorage = null;
 export async function activate({ app, api }) {
   await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
+  readinessStorage = createSpatialContextStorage(app.db);
   const cleanups = [
     api.registerService("hierarchical-maps:projection", projection),
     api.registerService("hierarchical-maps:state-resolution", stateResolution),
@@ -112,19 +120,30 @@ export async function activate({ app, api }) {
     api.registerService("hierarchical-maps:game-map-binding", gameMapBinding),
     api.registerService("hierarchical-maps:storage", { create: createSpatialContextStorage }),
   ];
-  return () => { for (const cleanup of cleanups.reverse()) cleanup(); };
+  return () => { readinessStorage = null; for (const cleanup of cleanups.reverse()) cleanup(); };
+}
+export async function selfCheck() {
+  if (!readinessStorage) throw new Error("Hierarchical Maps storage did not initialize");
+  await readinessStorage.listForChat("__marinara_capability_self_check__");
 }\n`
       : feature.id === "conversation-calls"
       ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
 import * as commandRuntime from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
 import * as characterVideos from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
+import { createConversationCallsStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
+let readinessStorage = null;
 export async function activate({ app, api }) {
   await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
+  readinessStorage = createConversationCallsStorage(app.db);
   const cleanups = [
     api.registerService("conversation-calls:command", commandRuntime),
     api.registerService("conversation-calls:character-videos", characterVideos),
   ];
-  return () => { for (const cleanup of cleanups.reverse()) cleanup(); };
+  return () => { readinessStorage = null; for (const cleanup of cleanups.reverse()) cleanup(); };
+}
+export async function selfCheck() {
+  if (!readinessStorage) throw new Error("Conversation Calls storage did not initialize");
+  await readinessStorage.getActiveForChat("__marinara_capability_self_check__");
 }\n`
       : feature.serverImport
       ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};\nexport async function activate({ app }) { await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} }); }\n`
@@ -204,6 +223,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const result = spawnSync("pnpm", [
       "exec", "esbuild", entry,
       "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify",
+      "--jsx=automatic",
       "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false",
       "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"",
       `--alias:@marinara-engine/shared=${packageSharedEntry}`,
@@ -364,7 +384,7 @@ class Element extends HTMLElement { connectedCallback() { if (!this.__root) this
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else return;
     const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
-    const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
+    const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
     if (result.status !== 0) throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
     await captureEngineSources(metafile);
   } finally { await rm(temporary, { recursive: true, force: true }); }
@@ -419,7 +439,7 @@ for (const feature of selectedFeatures) {
     name: feature.name,
     version,
     description: feature.description,
-    engine: { min: MIN_ENGINE_VERSION, maxExclusive: "3.0.0" },
+    engine: { min: MIN_ENGINE_VERSION, maxExclusive: feature.maxEngineExclusive ?? "3.0.0" },
     kind: feature.kind,
     entrypoints: {
       agents: "agents.json",

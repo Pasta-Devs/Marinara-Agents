@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Lorebooks
 // ──────────────────────────────────────────────
-import { eq, desc, and, like, inArray, asc, or } from "drizzle-orm";
+import { eq, desc, and, like, inArray, asc, or } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import {
   characters,

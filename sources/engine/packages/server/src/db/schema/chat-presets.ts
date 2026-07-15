@@ -1,10 +1,10 @@
 // ──────────────────────────────────────────────
 // Schema: Chat Presets
 // ──────────────────────────────────────────────
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { fileTable, text } from "../file-schema.js";
 
 /** Reusable bundles of chat settings used as defaults for new chats. */
-export const chatPresets = sqliteTable("chat_presets", {
+export const chatPresets = fileTable("chat_presets", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   /** Which chat mode this preset applies to. */

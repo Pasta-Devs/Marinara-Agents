@@ -1,10 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Noodle Fake Social Media
 // ──────────────────────────────────────────────
-import { sql } from "drizzle-orm";
-import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { fileTable, text } from "../file-schema.js";
 
-export const noodleAccounts = sqliteTable("noodle_accounts", {
+export const noodleAccounts = fileTable("noodle_accounts", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),
   entityId: text("entity_id").notNull(),
@@ -18,7 +17,7 @@ export const noodleAccounts = sqliteTable("noodle_accounts", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const noodlePosts = sqliteTable("noodle_posts", {
+export const noodlePosts = fileTable("noodle_posts", {
   id: text("id").primaryKey(),
   authorAccountId: text("author_account_id").notNull(),
   content: text("content").notNull().default(""),
@@ -33,7 +32,7 @@ export const noodlePosts = sqliteTable("noodle_posts", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const noodleInteractions = sqliteTable(
+export const noodleInteractions = fileTable(
   "noodle_interactions",
   {
     id: text("id").primaryKey(),
@@ -46,17 +45,17 @@ export const noodleInteractions = sqliteTable(
     actorSnapshot: text("actor_snapshot").notNull().default("{}"),
     createdAt: text("created_at").notNull(),
   },
-  (table) => ({
-    noodleRootToggleInteractionUnique: uniqueIndex("uniq_noodle_root_toggle_interactions")
-      .on(table.postId, table.actorAccountId, table.type)
-      .where(sql`type IN ('like', 'repost') AND parent_interaction_id IS NULL`),
-    noodleReplyLikeUnique: uniqueIndex("uniq_noodle_reply_like")
-      .on(table.postId, table.actorAccountId, table.type, table.parentInteractionId)
-      .where(sql`type = 'like' AND parent_interaction_id IS NOT NULL`),
-  }),
+  {
+    uniqueBy: [
+      {
+        keys: ["postId", "actorAccountId", "type", "parentInteractionId"],
+        when: (row) => row.type === "like" || row.type === "repost",
+      },
+    ],
+  },
 );
 
-export const noodleActivityDigests = sqliteTable("noodle_activity_digests", {
+export const noodleActivityDigests = fileTable("noodle_activity_digests", {
   id: text("id").primaryKey(),
   accountIds: text("account_ids").notNull().default("[]"),
   content: text("content").notNull().default(""),
@@ -66,7 +65,7 @@ export const noodleActivityDigests = sqliteTable("noodle_activity_digests", {
   createdAt: text("created_at").notNull(),
 });
 
-export const noodleRefreshRuns = sqliteTable("noodle_refresh_runs", {
+export const noodleRefreshRuns = fileTable("noodle_refresh_runs", {
   id: text("id").primaryKey(),
   status: text("status").notNull(),
   activeAccountIds: text("active_account_ids").notNull().default("[]"),

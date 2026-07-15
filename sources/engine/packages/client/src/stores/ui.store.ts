@@ -30,6 +30,7 @@ type Panel =
 export type ChatModeShortcut = "conversation" | "roleplay" | "game";
 export const CHARACTER_LIBRARY_SORT_OPTIONS = ["name-asc", "name-desc", "newest", "oldest", "favorites"] as const;
 export type CharacterLibrarySort = (typeof CHARACTER_LIBRARY_SORT_OPTIONS)[number];
+export type CardLibraryKind = "characters" | "personas";
 export const CHARACTER_PANEL_FAVORITE_FILTER_OPTIONS = ["all", "favorites", "non-favorites"] as const;
 export type CharacterPanelFavoriteFilter = (typeof CHARACTER_PANEL_FAVORITE_FILTER_OPTIONS)[number];
 export const LOREBOOK_PANEL_CATEGORY_OPTIONS = [
@@ -223,7 +224,12 @@ function normalizePanelText(value: unknown) {
 function normalizePanelStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
   return Array.from(
-    new Set(value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)),
+    new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
   );
 }
 
@@ -492,10 +498,18 @@ interface UIState {
   noodleSelectedPersonaId: string | null;
   /** When true, the main area shows the full-page character library */
   characterLibraryOpen: boolean;
+  /** Which resource collection the shared full-page card library displays */
+  cardLibraryKind: CardLibraryKind;
+  /** When true, the main area shows the full-page downloadable agent catalog */
+  agentCatalogOpen: boolean;
   /** Last selected character card inside the full-page character library */
   characterLibrarySelectedId: string | null;
+  /** Last selected persona card inside the full-page card library */
+  personaLibrarySelectedId: string | null;
   /** Last selected sort order for character lists and the full-page character library */
   characterLibrarySort: CharacterLibrarySort;
+  /** Last selected sort order for the full-page persona library */
+  personaLibrarySort: ResourcePanelSort;
   /** Search text for the compact Characters panel */
   characterPanelSearch: string;
   /** Included tag filters for the compact Characters panel */
@@ -510,6 +524,8 @@ interface UIState {
   characterPanelScrollTop: number;
   /** Last scroll offset for the full-page Character Library list */
   characterLibraryScrollTop: number;
+  /** Last scroll offset for the full-page Persona Library list */
+  personaLibraryScrollTop: number;
   /** Selected category for the compact Lorebooks panel */
   lorebookPanelCategory: LorebookPanelCategory;
   /** Search text for the compact Lorebooks panel */
@@ -520,7 +536,7 @@ interface UIState {
   lorebookPanelActiveTag: string | null;
   /** Whether the compact Lorebooks panel tag/category shelf is expanded */
   lorebookPanelTagsExpanded: boolean;
-  /** Sort order for imported characters in the Bot Browser panel */
+  /** Sort order for imported characters in the Card Browser panel */
   botBrowserPanelSort: ResourcePanelSort;
   /** Sort order for the compact Presets panel */
   presetPanelSort: ResourcePanelSort;
@@ -799,7 +815,9 @@ interface UIState {
   setDefaultRoleplayBackground: (url: string) => void;
   setChatBackgroundBlur: (v: number) => void;
   setCharacterLibrarySelectedId: (id: string | null) => void;
+  setPersonaLibrarySelectedId: (id: string | null) => void;
   setCharacterLibrarySort: (sort: CharacterLibrarySort) => void;
+  setPersonaLibrarySort: (sort: ResourcePanelSort) => void;
   setCharacterPanelSearch: (search: string) => void;
   setCharacterPanelIncludedTags: (tags: string[]) => void;
   setCharacterPanelExcludedTags: (tags: string[]) => void;
@@ -807,6 +825,7 @@ interface UIState {
   setCharacterPanelFavoriteFilter: (filter: CharacterPanelFavoriteFilter) => void;
   setCharacterPanelScrollTop: (scrollTop: number) => void;
   setCharacterLibraryScrollTop: (scrollTop: number) => void;
+  setPersonaLibraryScrollTop: (scrollTop: number) => void;
   setLorebookPanelCategory: (category: LorebookPanelCategory) => void;
   setLorebookPanelSearch: (search: string) => void;
   setLorebookPanelSort: (sort: LorebookPanelSort) => void;
@@ -828,7 +847,7 @@ interface UIState {
   closeAgentDetail: () => void;
   openToolDetail: (id: string) => void;
   closeToolDetail: () => void;
-  openPersonaDetail: (id: string) => void;
+  openPersonaDetail: (id: string, options?: { preservePersonaLibrary?: boolean }) => void;
   closePersonaDetail: () => void;
   openRegexDetail: (
     id: string,
@@ -840,7 +859,10 @@ interface UIState {
   clearPendingSpatialMapDraftReview: () => void;
   closeSpatialMapDetail: () => void;
   openCharacterLibrary: () => void;
+  openPersonaLibrary: () => void;
   closeCharacterLibrary: () => void;
+  openAgentCatalog: () => void;
+  closeAgentCatalog: () => void;
   openBotBrowser: () => void;
   closeBotBrowser: () => void;
   openGameAssetsBrowser: () => void;
@@ -985,8 +1007,7 @@ interface UIState {
 }
 
 function getMobileDetailReturnState(state: UIState) {
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-  const useOverlayDetailReturn = isMobile || state.centerCompact;
+  const useOverlayDetailReturn = isMobileShellViewport();
   return {
     detailReturnRightPanel: useOverlayDetailReturn && state.rightPanelOpen ? state.rightPanel : null,
     ...(useOverlayDetailReturn && { rightPanelOpen: false }),
@@ -1011,6 +1032,7 @@ function normalizePersistedMainSurface(persisted: Record<string, unknown>) {
     "characterDetailId",
     "lorebookDetailId",
     "characterLibraryOpen",
+    "agentCatalogOpen",
     "botBrowserOpen",
     "gameAssetsBrowserOpen",
     "noodleOpen",
@@ -1222,8 +1244,12 @@ export const useUIStore = create<UIState>()(
       noodleOpen: false,
       noodleSelectedPersonaId: null,
       characterLibraryOpen: false,
+      cardLibraryKind: "characters" as CardLibraryKind,
+      agentCatalogOpen: false,
       characterLibrarySelectedId: null,
+      personaLibrarySelectedId: null,
       characterLibrarySort: "name-asc" as CharacterLibrarySort,
+      personaLibrarySort: "name-asc" as ResourcePanelSort,
       characterPanelSearch: "",
       characterPanelIncludedTags: [],
       characterPanelExcludedTags: [],
@@ -1231,6 +1257,7 @@ export const useUIStore = create<UIState>()(
       characterPanelFavoriteFilter: "all" as CharacterPanelFavoriteFilter,
       characterPanelScrollTop: 0,
       characterLibraryScrollTop: 0,
+      personaLibraryScrollTop: 0,
       lorebookPanelCategory: "all" as LorebookPanelCategory,
       lorebookPanelSearch: "",
       lorebookPanelSort: "name-asc" as LorebookPanelSort,
@@ -1468,10 +1495,13 @@ export const useUIStore = create<UIState>()(
       setAppAccentRgbMode: (enabled) => set({ appAccentRgbMode: enabled }),
       setCustomCursorEnabled: (enabled) => set({ customCursorEnabled: enabled }),
       setChatBackground: (url) => set({ chatBackground: url }),
-      setDefaultRoleplayBackground: (url) => set({ defaultRoleplayBackground: normalizeDefaultRoleplayBackground(url) }),
+      setDefaultRoleplayBackground: (url) =>
+        set({ defaultRoleplayBackground: normalizeDefaultRoleplayBackground(url) }),
       setChatBackgroundBlur: (v) => set({ chatBackgroundBlur: Math.max(0, Math.min(24, Math.round(v))) }),
       setCharacterLibrarySelectedId: (id) => set({ characterLibrarySelectedId: id }),
+      setPersonaLibrarySelectedId: (id) => set({ personaLibrarySelectedId: id }),
       setCharacterLibrarySort: (sort) => set({ characterLibrarySort: normalizeCharacterLibrarySort(sort) }),
+      setPersonaLibrarySort: (sort) => set({ personaLibrarySort: normalizeBasicPanelSort(sort) }),
       setCharacterPanelSearch: (search) => set({ characterPanelSearch: normalizePanelText(search) }),
       setCharacterPanelIncludedTags: (tags) => set({ characterPanelIncludedTags: normalizePanelStringArray(tags) }),
       setCharacterPanelExcludedTags: (tags) => set({ characterPanelExcludedTags: normalizePanelStringArray(tags) }),
@@ -1480,6 +1510,7 @@ export const useUIStore = create<UIState>()(
         set({ characterPanelFavoriteFilter: normalizeCharacterPanelFavoriteFilter(filter) }),
       setCharacterPanelScrollTop: (scrollTop) => set({ characterPanelScrollTop: normalizeScrollTop(scrollTop) }),
       setCharacterLibraryScrollTop: (scrollTop) => set({ characterLibraryScrollTop: normalizeScrollTop(scrollTop) }),
+      setPersonaLibraryScrollTop: (scrollTop) => set({ personaLibraryScrollTop: normalizeScrollTop(scrollTop) }),
       setLorebookPanelCategory: (category) => set({ lorebookPanelCategory: normalizeLorebookPanelCategory(category) }),
       setLorebookPanelSearch: (search) => set({ lorebookPanelSearch: normalizePanelText(search) }),
       setLorebookPanelSort: (sort) => set({ lorebookPanelSort: normalizeLorebookPanelSort(sort) }),
@@ -1491,7 +1522,8 @@ export const useUIStore = create<UIState>()(
       setAgentPanelSort: (sort) => set({ agentPanelSort: normalizeBasicPanelSort(sort) }),
       openCharacterDetail: (id, options) =>
         set((s) => {
-          const preserveCharacterLibrary = options?.preserveCharacterLibrary ?? s.characterLibraryOpen;
+          const preserveCharacterLibrary =
+            options?.preserveCharacterLibrary ?? (s.characterLibraryOpen && s.cardLibraryKind === "characters");
           return {
             characterDetailId: id,
             characterDetailInitialTab: null,
@@ -1504,6 +1536,7 @@ export const useUIStore = create<UIState>()(
             regexDetailId: null,
             spatialMapDetailChatId: null,
             characterLibraryOpen: preserveCharacterLibrary ? s.characterLibraryOpen : false,
+            agentCatalogOpen: false,
             characterLibrarySelectedId: preserveCharacterLibrary ? id : s.characterLibrarySelectedId,
             botBrowserOpen: false,
             gameAssetsBrowserOpen: false,
@@ -1521,6 +1554,7 @@ export const useUIStore = create<UIState>()(
         set((s) => ({
           lorebookDetailId: id,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -1544,6 +1578,7 @@ export const useUIStore = create<UIState>()(
         set((s) => ({
           presetDetailId: id,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -1567,6 +1602,7 @@ export const useUIStore = create<UIState>()(
         set((s) => ({
           connectionDetailId: id,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -1590,6 +1626,7 @@ export const useUIStore = create<UIState>()(
         set((s) => ({
           agentDetailId: agentType,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -1614,6 +1651,7 @@ export const useUIStore = create<UIState>()(
           toolDetailId: id,
           agentDetailId: null,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -1632,23 +1670,29 @@ export const useUIStore = create<UIState>()(
           editorDirty: false,
           ...restoreMobileDetailReturnPanel(s.detailReturnRightPanel),
         })),
-      openPersonaDetail: (id) =>
-        set((s) => ({
-          personaDetailId: id,
-          characterLibraryOpen: false,
-          botBrowserOpen: false,
-          gameAssetsBrowserOpen: false,
-          noodleOpen: false,
-          characterDetailId: null,
-          lorebookDetailId: null,
-          presetDetailId: null,
-          connectionDetailId: null,
-          agentDetailId: null,
-          toolDetailId: null,
-          regexDetailId: null,
-          spatialMapDetailChatId: null,
-          ...getMobileDetailReturnState(s),
-        })),
+      openPersonaDetail: (id, options) =>
+        set((s) => {
+          const preservePersonaLibrary =
+            options?.preservePersonaLibrary ?? (s.characterLibraryOpen && s.cardLibraryKind === "personas");
+          return {
+            personaDetailId: id,
+            characterLibraryOpen: preservePersonaLibrary ? s.characterLibraryOpen : false,
+            personaLibrarySelectedId: preservePersonaLibrary ? id : s.personaLibrarySelectedId,
+            agentCatalogOpen: false,
+            botBrowserOpen: false,
+            gameAssetsBrowserOpen: false,
+            noodleOpen: false,
+            characterDetailId: null,
+            lorebookDetailId: null,
+            presetDetailId: null,
+            connectionDetailId: null,
+            agentDetailId: null,
+            toolDetailId: null,
+            regexDetailId: null,
+            spatialMapDetailChatId: null,
+            ...getMobileDetailReturnState(s),
+          };
+        }),
       closePersonaDetail: () =>
         set((s) => ({
           personaDetailId: null,
@@ -1662,6 +1706,7 @@ export const useUIStore = create<UIState>()(
           regexDetailReturn: options?.returnTo ?? null,
           personaDetailId: null,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -1707,6 +1752,7 @@ export const useUIStore = create<UIState>()(
           personaDetailId: null,
           regexDetailId: null,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -1725,6 +1771,7 @@ export const useUIStore = create<UIState>()(
           personaDetailId: null,
           regexDetailId: null,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -1739,8 +1786,10 @@ export const useUIStore = create<UIState>()(
           ...restoreMobileDetailReturnPanel(s.detailReturnRightPanel),
         })),
       openCharacterLibrary: () =>
-        set({
+        set((state) => ({
           characterLibraryOpen: true,
+          cardLibraryKind: "characters",
+          agentCatalogOpen: false,
           characterDetailId: null,
           lorebookDetailId: null,
           presetDetailId: null,
@@ -1752,18 +1801,64 @@ export const useUIStore = create<UIState>()(
           spatialMapDetailChatId: null,
           pendingSpatialMapDraftReview: null,
           botBrowserOpen: false,
+          gameAssetsBrowserOpen: false,
           noodleOpen: false,
           editorDirty: false,
           detailReturnRightPanel: null,
-          rightPanelOpen: false,
-        }),
+          rightPanelOpen: isMobileShellViewport() ? false : state.rightPanelOpen,
+        })),
+      openPersonaLibrary: () =>
+        set((state) => ({
+          characterLibraryOpen: true,
+          cardLibraryKind: "personas",
+          agentCatalogOpen: false,
+          characterDetailId: null,
+          lorebookDetailId: null,
+          presetDetailId: null,
+          connectionDetailId: null,
+          agentDetailId: null,
+          toolDetailId: null,
+          personaDetailId: null,
+          regexDetailId: null,
+          spatialMapDetailChatId: null,
+          pendingSpatialMapDraftReview: null,
+          botBrowserOpen: false,
+          gameAssetsBrowserOpen: false,
+          noodleOpen: false,
+          editorDirty: false,
+          detailReturnRightPanel: null,
+          rightPanelOpen: isMobileShellViewport() ? false : state.rightPanelOpen,
+        })),
       closeCharacterLibrary: () => set({ characterLibraryOpen: false }),
+      openAgentCatalog: () =>
+        set((state) => ({
+          agentCatalogOpen: true,
+          characterLibraryOpen: false,
+          characterDetailId: null,
+          lorebookDetailId: null,
+          presetDetailId: null,
+          connectionDetailId: null,
+          agentDetailId: null,
+          toolDetailId: null,
+          personaDetailId: null,
+          regexDetailId: null,
+          spatialMapDetailChatId: null,
+          pendingSpatialMapDraftReview: null,
+          botBrowserOpen: false,
+          gameAssetsBrowserOpen: false,
+          noodleOpen: false,
+          editorDirty: false,
+          detailReturnRightPanel: null,
+          rightPanelOpen: isMobileShellViewport() ? false : state.rightPanelOpen,
+        })),
+      closeAgentCatalog: () => set({ agentCatalogOpen: false }),
       openBotBrowser: () =>
         set({
           botBrowserOpen: true,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           detailReturnRightPanel: null,
           regexDetailId: null,
           spatialMapDetailChatId: null,
@@ -1783,6 +1878,7 @@ export const useUIStore = create<UIState>()(
           botBrowserOpen: false,
           noodleOpen: false,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           detailReturnRightPanel: null,
           regexDetailId: null,
           spatialMapDetailChatId: null,
@@ -1802,6 +1898,7 @@ export const useUIStore = create<UIState>()(
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           detailReturnRightPanel: null,
           regexDetailId: null,
           spatialMapDetailChatId: null,
@@ -1831,6 +1928,7 @@ export const useUIStore = create<UIState>()(
           s.regexDetailId ||
           s.spatialMapDetailChatId ||
           s.characterLibraryOpen ||
+          s.agentCatalogOpen ||
           s.botBrowserOpen ||
           s.gameAssetsBrowserOpen ||
           s.noodleOpen
@@ -1848,6 +1946,7 @@ export const useUIStore = create<UIState>()(
           regexDetailId: null,
           spatialMapDetailChatId: null,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -1869,6 +1968,7 @@ export const useUIStore = create<UIState>()(
           regexDetailId: null,
           spatialMapDetailChatId: null,
           characterLibraryOpen: false,
+          agentCatalogOpen: false,
           botBrowserOpen: false,
           gameAssetsBrowserOpen: false,
           noodleOpen: false,
@@ -2148,7 +2248,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "marinara-engine-ui",
-      version: 73,
+      version: 74,
       // Debounce localStorage writes to avoid sync I/O on every state change
       storage: createJSONStorage(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -2618,13 +2718,18 @@ export const useUIStore = create<UIState>()(
           persisted.appAccentColorBeforeRgbMode = null;
         }
         persisted.characterLibrarySort = normalizeCharacterLibrarySort(persisted.characterLibrarySort);
+        persisted.cardLibraryKind = persisted.cardLibraryKind === "personas" ? "personas" : "characters";
+        persisted.personaLibrarySort = normalizeBasicPanelSort(persisted.personaLibrarySort);
         persisted.characterPanelSearch = normalizePanelText(persisted.characterPanelSearch);
         persisted.characterPanelIncludedTags = normalizePanelStringArray(persisted.characterPanelIncludedTags);
         persisted.characterPanelExcludedTags = normalizePanelStringArray(persisted.characterPanelExcludedTags);
         persisted.characterPanelTagsExpanded = persisted.characterPanelTagsExpanded === true;
-        persisted.characterPanelFavoriteFilter = normalizeCharacterPanelFavoriteFilter(persisted.characterPanelFavoriteFilter);
+        persisted.characterPanelFavoriteFilter = normalizeCharacterPanelFavoriteFilter(
+          persisted.characterPanelFavoriteFilter,
+        );
         persisted.characterPanelScrollTop = normalizeScrollTop(persisted.characterPanelScrollTop);
         persisted.characterLibraryScrollTop = normalizeScrollTop(persisted.characterLibraryScrollTop);
+        persisted.personaLibraryScrollTop = normalizeScrollTop(persisted.personaLibraryScrollTop);
         persisted.lorebookPanelCategory = normalizeLorebookPanelCategory(persisted.lorebookPanelCategory);
         persisted.lorebookPanelSearch = normalizePanelText(persisted.lorebookPanelSearch);
         persisted.lorebookPanelSort = normalizeLorebookPanelSort(persisted.lorebookPanelSort);
@@ -2698,8 +2803,12 @@ export const useUIStore = create<UIState>()(
         noodleOpen: state.noodleOpen,
         noodleSelectedPersonaId: state.noodleSelectedPersonaId,
         characterLibraryOpen: state.characterLibraryOpen,
+        cardLibraryKind: state.cardLibraryKind,
+        agentCatalogOpen: state.agentCatalogOpen,
         characterLibrarySelectedId: state.characterLibrarySelectedId,
+        personaLibrarySelectedId: state.personaLibrarySelectedId,
         characterLibrarySort: state.characterLibrarySort,
+        personaLibrarySort: state.personaLibrarySort,
         characterPanelSearch: state.characterPanelSearch,
         characterPanelIncludedTags: state.characterPanelIncludedTags,
         characterPanelExcludedTags: state.characterPanelExcludedTags,
@@ -2707,6 +2816,7 @@ export const useUIStore = create<UIState>()(
         characterPanelFavoriteFilter: state.characterPanelFavoriteFilter,
         characterPanelScrollTop: state.characterPanelScrollTop,
         characterLibraryScrollTop: state.characterLibraryScrollTop,
+        personaLibraryScrollTop: state.personaLibraryScrollTop,
         lorebookPanelCategory: state.lorebookPanelCategory,
         lorebookPanelSearch: state.lorebookPanelSearch,
         lorebookPanelSort: state.lorebookPanelSort,

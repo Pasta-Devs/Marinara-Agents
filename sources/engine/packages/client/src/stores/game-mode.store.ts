@@ -2,6 +2,7 @@
 // Store: Game Mode
 // ──────────────────────────────────────────────
 import { create } from "zustand";
+import { isSameNpcAvatarResource, withFreshNpcAvatarRevision } from "../lib/game-npc-avatar";
 import { api } from "../lib/api-client";
 import type {
   GameActiveState,
@@ -300,9 +301,12 @@ export const useGameModeStore = create<GameModeStore>((set) => ({
         }
       }
       const merged = npcs.map((npc) => {
-        if (npc.avatarUrl) return npc;
         const preserved = existingByName.get((npc.name ?? "").toLowerCase());
-        return preserved ? { ...npc, avatarUrl: preserved } : npc;
+        if (!preserved) return npc;
+        if (!npc.avatarUrl || isSameNpcAvatarResource(npc.avatarUrl, preserved)) {
+          return { ...npc, avatarUrl: preserved };
+        }
+        return npc;
       });
       return { npcs: merged };
     }),
@@ -311,9 +315,10 @@ export const useGameModeStore = create<GameModeStore>((set) => ({
       let modified = false;
       const nextNpcs = s.npcs.map((npc) => {
         const match = avatars.find((a) => a.name.toLowerCase() === npc.name.toLowerCase());
-        if (match && match.avatarUrl !== npc.avatarUrl) {
+        if (match) {
+          const avatarUrl = withFreshNpcAvatarRevision(match.avatarUrl);
           modified = true;
-          return { ...npc, avatarUrl: match.avatarUrl };
+          return { ...npc, avatarUrl };
         }
         return npc; // preserve reference — no churn
       });
@@ -321,7 +326,7 @@ export const useGameModeStore = create<GameModeStore>((set) => ({
       for (const avatar of avatars) {
         const exists = nextNpcs.some((npc) => npc.name.toLowerCase() === avatar.name.toLowerCase());
         if (!exists) {
-          nextNpcs.push(buildTrackedNpcStub(avatar.name, avatar.avatarUrl));
+          nextNpcs.push(buildTrackedNpcStub(avatar.name, withFreshNpcAvatarRevision(avatar.avatarUrl)));
           modified = true;
         }
       }

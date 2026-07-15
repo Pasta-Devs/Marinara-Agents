@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Assets (Backgrounds, Sprites)
 // ──────────────────────────────────────────────
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { fileTable, text } from "../file-schema.js";
 
-export const assets = sqliteTable("assets", {
+export const assets = fileTable("assets", {
   id: text("id").primaryKey(),
   /** "background" | "sprite" */
   type: text("type", { enum: ["background", "sprite"] }).notNull(),

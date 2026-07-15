@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, or } from "drizzle-orm";
+import { and, desc, eq, ne, or } from "../../db/file-query.js";
 import type { SpatialContextSnapshot, SpatialSnapshotSource } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { spatialContextSnapshots } from "../../db/schema/index.js";
