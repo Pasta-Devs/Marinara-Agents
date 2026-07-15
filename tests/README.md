@@ -10,3 +10,18 @@ pnpm exec playwright test ../Marinara-Agents/tests/spatial-context.e2e.ts -c pla
 ```
 
 The package must be installed in the test data directory before launching the Playwright web server.
+
+## Exact-artifact lifecycle regression
+
+`hierarchical-maps-lifecycle.regression.ts` installs the immutable Maps 1.0.5
+artifact through an isolated catalog, updates it to the exact 1.0.6 artifact,
+then proves offline restart, uninstall, reinstall, full-backup creation, and
+full-backup restore without deleting the stored definition or spatial snapshot.
+
+Run it with the Engine server toolchain so the package is exercised against the
+real host runtime:
+
+```bash
+cd ../Marinara-Engine
+pnpm --filter @marinara-engine/server exec tsx ../Marinara-Agents/tests/hierarchical-maps-lifecycle.regression.ts
+```
