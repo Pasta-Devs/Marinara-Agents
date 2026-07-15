@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "noodle-posting",
+  "name": "Noodle Posting",
+  "version": "0.1.0",
+  "description": "Lets characters publish Noodle and NoodleR posts when enabled for a chat.",
+  "engine": {
+    "min": "2.3.0",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "3c2aebcd699b6460b0b3d45bde6579c84c82ec9120d6ca46ced666d9ec9618fb",
+      "bytes": 511
+    }
+  ],
+  "permissions": [],
+  "restartRequired": true
+}

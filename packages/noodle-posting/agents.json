@@ -1,0 +1,21 @@
+[
+  {
+    "id": "noodle-posting",
+    "name": "Noodle Posting",
+    "description": "Lets characters publish Noodle and NoodleR posts when enabled for a chat.",
+    "author": "Pasta Devs",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "misc",
+    "runtimeDisabled": true,
+    "modeAllowlist": [
+      "conversation",
+      "roleplay",
+      "visual_novel"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {},
+    "defaultPromptTemplate": "",
+    "execution": "feature"
+  }
+]
