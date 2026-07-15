@@ -41,7 +41,7 @@ async function captureEngineSources(metafilePath) {
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.0.3",
+    version: "1.0.6",
     maxEngineExclusive: "2.4.0",
     name: "Hierarchical Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
@@ -166,7 +166,9 @@ export async function selfCheck() {
       encoding: "utf8",
       env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
     });
-    if (result.status !== 0) throw new Error(result.stderr || result.stdout || `esbuild failed for ${feature.id}`);
+    if (result.status !== 0) {
+      throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
+    }
     await captureEngineSources(metafile);
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -251,8 +253,44 @@ async function bundleSpecialClient(feature, output) {
       const spatialHooks = featureSource("packages/client/src/hooks/use-spatial-context.ts");
       const chatStore = featureSource("packages/client/src/stores/chat.store.ts");
       const uiStore = featureSource("packages/client/src/stores/ui.store.ts");
+      const workspaceStyles = `
+[data-marinara-maps-workspace-overlay] {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+[data-marinara-maps-workspace-overlay] > .mari-editor-shell,
+[data-marinara-maps-workspace-root] {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+@media (min-width: 64rem) {
+  .mari-maps-workspace-grid {
+    grid-template-columns: minmax(15rem, 18rem) minmax(20rem, 1fr) minmax(18rem, 22rem);
+  }
+
+  .mari-maps-ai-grid {
+    grid-template-columns: minmax(20rem, 0.9fr) minmax(22rem, 1.1fr);
+  }
+}
+`;
+      const worldMapStyles = `
+[data-marinara-maps-world-canvas] {
+  height: 13rem;
+}
+
+[data-marinara-maps-world-canvas][data-compact="true"] {
+  height: 14rem;
+}
+`;
       source = `
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -264,12 +302,14 @@ import { GameWorldMap } from ${JSON.stringify(worldMap)};
 import { useSpatialContext } from ${JSON.stringify(spatialHooks)};
 import { useChatStore } from ${JSON.stringify(chatStore)};
 import { useUIStore } from ${JSON.stringify(uiStore)};
+const workspaceStyles = ${JSON.stringify(workspaceStyles)};
+const worldMapStyles = ${JSON.stringify(worldMapStyles)};
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 window.addEventListener("marinara-capability-server-event", (event) => { if (event.detail?.packageId === "hierarchical-maps") void client.invalidateQueries({ queryKey: ["spatial-context"] }); });
-function PendingBridge({ chatId, onChange }) { const pending = useChatStore((state) => state.pendingSpatialTransitions.get(chatId) || null); useEffect(() => { if (typeof onChange === "function") onChange(pending); }, [onChange, pending]); return null; }
-function WorldMapView({ props, chatId }) { const spatial = useSpatialContext(chatId); if (spatial.isLoading) return <div className="flex h-full items-center justify-center text-xs text-[var(--muted-foreground)]">Loading world map…</div>; if (!spatial.data?.definition?.enabled) return <div className="flex h-full items-center justify-center text-xs text-[var(--muted-foreground)]">No hierarchical map yet</div>; return <><GameWorldMap chatId={chatId} spatial={spatial.data} disabled={props.disabled === true} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} /></>; }
-function WorkspaceOverlay({ chatId, onClose }) { return createPortal(<div data-marinara-maps-workspace-overlay className="fixed inset-0 isolate overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }}><SpatialMapWorkspace chatId={chatId} onClose={onClose} /><Toaster richColors /></div>, document.body); }
-function Root({ element }) { const [, redraw] = useState(0); const [workspaceOpen, setWorkspaceOpen] = useState(false); useEffect(() => { const update = () => redraw((v) => v + 1); element.addEventListener("marinara-capability-props", update); return () => element.removeEventListener("marinara-capability-props", update); }, [element]); const props = element.capabilityProps || {}; const chatId = typeof props.chatId === "string" ? props.chatId : ""; const view = element.getAttribute("view"); useEffect(() => { if (props.pendingDraftReview && typeof props.pendingDraftReview === "object") useUIStore.getState().openSpatialMapDraftReview(props.pendingDraftReview); }, [props.pendingDraftReview]); if (!chatId) return null; if (view === "runtime") return <><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} /></>; if (view === "world-map") return <WorldMapView props={props} chatId={chatId} />; if (view === "workspace" || workspaceOpen) return <WorkspaceOverlay chatId={chatId} onClose={() => { useUIStore.getState().clearPendingSpatialMapDraftReview(); setWorkspaceOpen(false); props.onClose?.(); }} />; return <><SpatialContextSettingsSection chatId={chatId} style={props.style} onOpenEditor={() => setWorkspaceOpen(true)} /><Toaster richColors /></>; }
+function PendingBridge({ chatId, onChange, disabled }) { const pending = useChatStore((state) => state.pendingSpatialTransitions.get(chatId) || null); const onChangeRef = useRef(onChange); const wasDisabledRef = useRef(disabled === true); useEffect(() => { onChangeRef.current = onChange; }, [onChange]); useEffect(() => { if (typeof onChangeRef.current === "function") onChangeRef.current(pending); }, [pending]); useEffect(() => { const turnFinished = wasDisabledRef.current && disabled !== true; wasDisabledRef.current = disabled === true; if (!turnFinished || !pending) return; let cancelled = false; void fetch("/api/chats/" + encodeURIComponent(chatId) + "/spatial-context", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((spatial) => { if (cancelled || !spatial) return; client.setQueryData(["spatial-context", chatId], spatial); if (spatial.currentLocationId === pending.transition.destinationId) useChatStore.getState().clearPendingSpatialTransition(chatId, pending.transition.commandId); else useChatStore.getState().setPendingSpatialTransitionStatus(chatId, "needs_review"); }).catch(() => {}); return () => { cancelled = true; }; }, [chatId, disabled, pending]); return null; }
+function WorldMapView({ props, chatId }) { const spatial = useSpatialContext(chatId); if (spatial.isLoading) return <div className="flex h-full items-center justify-center text-xs text-[var(--muted-foreground)]">Loading world map…</div>; if (!spatial.data?.definition?.enabled) return <div className="flex h-full items-center justify-center text-xs text-[var(--muted-foreground)]">No hierarchical map yet</div>; return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><GameWorldMap chatId={chatId} spatial={spatial.data} disabled={props.disabled === true} compact={props.compact === true} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>; }
+function WorkspaceOverlay({ chatId, onClose }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} onClose={onClose} /><Toaster richColors /></div>, document.body); }
+function Root({ element }) { const [, redraw] = useState(0); const [workspaceOpen, setWorkspaceOpen] = useState(false); useEffect(() => { const update = () => redraw((v) => v + 1); element.addEventListener("marinara-capability-props", update); return () => element.removeEventListener("marinara-capability-props", update); }, [element]); const props = element.capabilityProps || {}; const chatId = typeof props.chatId === "string" ? props.chatId : ""; const view = element.getAttribute("view"); useEffect(() => { if (props.pendingDraftReview && typeof props.pendingDraftReview === "object") useUIStore.getState().openSpatialMapDraftReview(props.pendingDraftReview); }, [props.pendingDraftReview]); if (!chatId) return null; if (view === "runtime") return <><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>; if (view === "world-map") return <WorldMapView props={props} chatId={chatId} />; if (view === "workspace" || workspaceOpen) return <WorkspaceOverlay chatId={chatId} onClose={() => { useUIStore.getState().clearPendingSpatialMapDraftReview(); setWorkspaceOpen(false); props.onClose?.(); }} />; return <><SpatialContextSettingsSection chatId={chatId} style={props.style} onOpenEditor={() => setWorkspaceOpen(true)} /><Toaster richColors /></>; }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.id === "conversation-calls") {

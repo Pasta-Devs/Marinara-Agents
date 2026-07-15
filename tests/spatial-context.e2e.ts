@@ -1,4 +1,106 @@
+import { createServer } from "node:http";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+
+type CapturedOpenAiRequest = {
+  messages?: Array<{ role?: string; content?: unknown }>;
+};
+
+async function startOpenAiTestServer(responses: string[]) {
+  const requests: CapturedOpenAiRequest[] = [];
+  let responseIndex = 0;
+  const server = createServer((request, response) => {
+    if (request.method !== "POST" || request.url !== "/v1/chat/completions") {
+      response.writeHead(404, { "Content-Type": "application/json", Connection: "close" });
+      response.end(JSON.stringify({ error: { message: "Unexpected test-provider request." } }));
+      return;
+    }
+
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      try {
+        const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as CapturedOpenAiRequest;
+        requests.push(parsed);
+        const content = responses[Math.min(responseIndex, responses.length - 1)] ?? "Continue.";
+        responseIndex += 1;
+        response.writeHead(200, { "Content-Type": "application/json", Connection: "close" });
+        response.end(
+          JSON.stringify({
+            id: `chatcmpl-maps-${responseIndex}`,
+            object: "chat.completion",
+            created: Math.floor(Date.now() / 1_000),
+            model: "maps-authority-e2e",
+            choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 8, completion_tokens: 8, total_tokens: 16 },
+          }),
+        );
+      } catch (error) {
+        response.writeHead(400, { "Content-Type": "application/json", Connection: "close" });
+        response.end(JSON.stringify({ error: { message: String(error) } }));
+      }
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => reject(error);
+    server.once("error", onError);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", onError);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Test provider did not bind a TCP port.");
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}/v1`,
+    requests,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
+  };
+}
+
+function capturedPrompt(request: CapturedOpenAiRequest | undefined): string {
+  return (request?.messages ?? [])
+    .map((message) => (typeof message.content === "string" ? message.content : JSON.stringify(message.content)))
+    .join("\n\n");
+}
+
+async function generateTurn(
+  page: Page,
+  data: Record<string, unknown>,
+): Promise<Array<{ type?: string; data?: unknown }>> {
+  const response = await page.request.post("/api/generate", {
+    data: {
+      streaming: false,
+      skipPresenceDelay: true,
+      musicPlayerEnabled: false,
+      ...data,
+    },
+  });
+  const body = await response.text();
+  expect(response.ok(), body).toBeTruthy();
+  return body
+    .split(/\r?\n/u)
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice(6)) as { type?: string; data?: unknown });
+}
+
+async function expectDeletedInOrder(page: Page, paths: Array<string | null>) {
+  const failures: string[] = [];
+  for (const path of paths) {
+    if (!path) continue;
+    const response = await page.request.delete(path);
+    if (!response.ok()) failures.push(`DELETE ${path} returned ${response.status()}: ${await response.text()}`);
+  }
+  expect(failures).toEqual([]);
+}
+
+async function expectDeleted(page: Page, path: string) {
+  await expectDeletedInOrder(page, [path]);
+}
 
 const generatedDefinition = {
   schemaVersion: 1,
@@ -113,6 +215,194 @@ const gameGeneratedDefinition = {
   ownerMode: "game",
 } as const;
 
+const acceptedGameSetupMap = {
+  id: "shrouded-coast",
+  type: "node",
+  name: "Shrouded Coast",
+  description: "A game-created starting map accepted before the hierarchy draft.",
+  nodes: [
+    {
+      id: "gloam-harbor",
+      emoji: "⚓",
+      label: "Gloam Harbor",
+      x: 20,
+      y: 55,
+      discovered: true,
+      description: "A busy harbor of black piers.",
+    },
+    {
+      id: "blackglass-lighthouse",
+      emoji: "🗼",
+      label: "Blackglass Lighthouse",
+      x: 72,
+      y: 25,
+      discovered: true,
+      description: "A dark lighthouse on the cliffs.",
+    },
+    {
+      id: "old-sewers",
+      emoji: "🕳️",
+      label: "Old Sewers",
+      x: 55,
+      y: 82,
+      discovered: false,
+      description: "Flooded tunnels beneath the coast.",
+      spatialLocationId: "existing-old-sewers-binding",
+    },
+  ],
+  edges: [
+    { from: "gloam-harbor", to: "blackglass-lighthouse" },
+    { from: "blackglass-lighthouse", to: "old-sewers" },
+  ],
+  partyPosition: "gloam-harbor",
+} as const;
+
+test.beforeEach(async ({ page }) => {
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get("/api/health").catch(() => null);
+        return response?.ok() ?? false;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  const healthResponse = await page.request.get("/api/health");
+  expect(healthResponse.ok()).toBeTruthy();
+  const { version } = (await healthResponse.json()) as { version: string };
+  await page.addInitScript((appVersion) => {
+    localStorage.setItem("marinara:whats-new:seen-version", appVersion);
+  }, version);
+});
+
+async function activateHierarchicalMaps(page: Page, chatId: string) {
+  const response = await page.request.patch(`/api/chats/${chatId}/metadata`, {
+    data: {
+      enableAgents: true,
+      activeAgentIds: ["hierarchical-maps"],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
+async function dismissOnboardingTutorial(page: Page) {
+  const skip = page.getByRole("button", { name: "Skip Tutorial" });
+  const appeared = await skip.waitFor({ state: "visible", timeout: 3_000 }).then(
+    () => true,
+    () => false,
+  );
+  if (appeared) await skip.click();
+}
+
+async function expectWorkspaceFillsOverlay(page: Page) {
+  const overlay = page.locator("[data-marinara-maps-workspace-overlay]");
+  await expect(overlay).toBeVisible();
+  const geometry = await overlay.evaluate((element) => {
+    const root =
+      element.querySelector<HTMLElement>("[data-marinara-maps-workspace-root]") ??
+      element.querySelector<HTMLElement>(":scope > .mari-editor-shell");
+    if (!root) return null;
+    const overlayRect = element.getBoundingClientRect();
+    const rootRect = root.getBoundingClientRect();
+    return {
+      overlay: {
+        x: overlayRect.x,
+        y: overlayRect.y,
+        width: overlayRect.width,
+        height: overlayRect.height,
+      },
+      root: {
+        x: rootRect.x,
+        y: rootRect.y,
+        width: rootRect.width,
+        height: rootRect.height,
+      },
+    };
+  });
+  expect(geometry).not.toBeNull();
+  expect(Math.abs(geometry!.root.x - geometry!.overlay.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry!.root.y - geometry!.overlay.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry!.root.width - geometry!.overlay.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry!.root.height - geometry!.overlay.height)).toBeLessThanOrEqual(1);
+}
+
+async function expectAuthoringWorkspaceLayout(page: Page, mobile: boolean) {
+  await expectWorkspaceFillsOverlay(page);
+  const layout = await page.locator("[data-marinara-maps-workspace-overlay]").evaluate((overlay) => {
+    const desktopGrid = overlay.querySelector<HTMLElement>(".mari-maps-workspace-grid");
+    const mobileNav = overlay.querySelector<HTMLElement>('[aria-label="Map editor panes"]');
+    if (!desktopGrid || !mobileNav) return null;
+    const overlayRect = overlay.getBoundingClientRect();
+    const gridRect = desktopGrid.getBoundingClientRect();
+    const navRect = mobileNav.getBoundingClientRect();
+    return {
+      overlayRight: overlayRect.right,
+      overlayBottom: overlayRect.bottom,
+      desktopDisplay: getComputedStyle(desktopGrid).display,
+      gridTemplateColumns: getComputedStyle(desktopGrid).gridTemplateColumns,
+      grid: {
+        left: gridRect.left,
+        right: gridRect.right,
+        top: gridRect.top,
+        bottom: gridRect.bottom,
+      },
+      children: Array.from(desktopGrid.children).map((child) => {
+        const rect = child.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width };
+      }),
+      mobileNav: {
+        display: getComputedStyle(mobileNav).display,
+        width: navRect.width,
+        height: navRect.height,
+        bottom: navRect.bottom,
+      },
+    };
+  });
+  expect(layout).not.toBeNull();
+  if (mobile) {
+    expect(layout!.desktopDisplay).toBe("none");
+    expect(layout!.mobileNav.width).toBeGreaterThan(0);
+    expect(layout!.mobileNav.height).toBeGreaterThan(0);
+    expect(layout!.mobileNav.bottom).toBeLessThanOrEqual(layout!.overlayBottom + 1);
+    return;
+  }
+  expect(layout!.desktopDisplay).toBe("grid");
+  expect(layout!.children).toHaveLength(3);
+  expect(layout!.grid.right).toBeLessThanOrEqual(layout!.overlayRight + 1);
+  expect(layout!.grid.bottom).toBeLessThanOrEqual(layout!.overlayBottom + 1);
+  expect(layout!.children.every((child) => child.width >= 240)).toBe(true);
+  expect(Math.abs(layout!.children[0]!.top - layout!.children[1]!.top)).toBeLessThanOrEqual(1);
+  expect(Math.abs(layout!.children[1]!.top - layout!.children[2]!.top)).toBeLessThanOrEqual(1);
+  expect(layout!.children[0]!.right).toBeLessThanOrEqual(layout!.children[1]!.left + 1);
+  expect(layout!.children[1]!.right).toBeLessThanOrEqual(layout!.children[2]!.left + 1);
+  expect(layout!.gridTemplateColumns.split(/\s+/u)).toHaveLength(3);
+  await expect(page.locator('.mari-maps-workspace-grid section[aria-label^="Details for "]')).toBeVisible();
+  await expect(page.locator(".mari-maps-workspace-grid").getByText("Linked lore", { exact: true })).toHaveCount(1);
+}
+
+async function expectAiBuilderLayout(page: Page, mobile: boolean) {
+  await expectWorkspaceFillsOverlay(page);
+  const layout = await page.locator(".mari-maps-ai-grid").evaluate((grid) => {
+    const style = getComputedStyle(grid);
+    return {
+      columns: style.gridTemplateColumns,
+      children: Array.from(grid.children).map((child) => {
+        const rect = child.getBoundingClientRect();
+        return { left: rect.left, top: rect.top, width: rect.width };
+      }),
+    };
+  });
+  expect(layout.children).toHaveLength(2);
+  if (mobile) {
+    expect(Math.abs(layout.children[0]!.left - layout.children[1]!.left)).toBeLessThanOrEqual(1);
+    expect(layout.children[1]!.top).toBeGreaterThan(layout.children[0]!.top);
+  } else {
+    expect(layout.columns.split(/\s+/u)).toHaveLength(2);
+    expect(layout.children[1]!.left).toBeGreaterThan(layout.children[0]!.left);
+    expect(Math.abs(layout.children[0]!.top - layout.children[1]!.top)).toBeLessThanOrEqual(1);
+  }
+}
+
 async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   const suffix = `${testInfo.project.name}-${Date.now()}`;
   const chatResponse = await page.request.post("/api/chats", {
@@ -124,6 +414,7 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   });
   expect(chatResponse.ok()).toBeTruthy();
   const chat = (await chatResponse.json()) as Record<string, unknown> & { id: string };
+  await activateHierarchicalMaps(page, chat.id);
   const connection = {
     id: `e2-connection-${suffix}`,
     name: `E2 Setup Connection ${suffix}`,
@@ -159,6 +450,9 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
       data: {
         gameSessionStatus: "ready",
         gameWorldOverview: "A fogbound coast ruled by rival harbor guilds.",
+        gameMaps: [acceptedGameSetupMap],
+        gameMap: acceptedGameSetupMap,
+        activeGameMapId: acceptedGameSetupMap.id,
       },
     });
     expect(readyResponse.ok()).toBeTruthy();
@@ -221,6 +515,7 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
     await route.fulfill({ status: 204, body: "" });
   });
   await page.goto("/");
+  await dismissOnboardingTutorial(page);
 
   await expect(page.getByRole("heading", { name: "New Game" })).toBeVisible();
   const wizard = page.getByRole("dialog", { name: "New Game" });
@@ -241,6 +536,7 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   await expect(page.getByText("4 new locations", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Skip map" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Use this draft" })).toBeVisible();
+  await expectAiBuilderLayout(page, testInfo.project.name.includes("mobile"));
 
   return { chat };
 }
@@ -256,6 +552,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
   });
   expect(response.ok()).toBeTruthy();
   const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
   const mobile = testInfo.project.name.includes("mobile");
 
   await page.route(`**/api/chats/${chat.id}/spatial-context/generate`, async (route) => {
@@ -308,6 +605,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       await route.fulfill({ status: 204, body: "" });
     });
     await page.goto("/");
+    await dismissOnboardingTutorial(page);
 
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
@@ -316,8 +614,10 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       await drawer.getByRole("button", { name: "Create hierarchical map" }).click();
     }
 
+    await expectWorkspaceFillsOverlay(page);
     await page.getByRole("button", { name: "Draft with AI" }).click();
     await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
+    await expectAiBuilderLayout(page, mobile);
     await page.getByLabel("What should this world include?").fill("A foggy port with a lighthouse and secret sewers.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
     await page.getByRole("button", { name: "Generate draft" }).click();
@@ -352,7 +652,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       "Old Sewers",
     ]);
   } finally {
-    if (!mobile) await page.request.delete(`/api/chats/${chat.id}`);
+    await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });
 
@@ -367,6 +667,7 @@ test("AI map expansion preserves a campaign map and its current location", async
   });
   expect(response.ok()).toBeTruthy();
   const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
   const mobile = testInfo.project.name.includes("mobile");
 
   const anchorResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
@@ -443,6 +744,7 @@ test("AI map expansion preserves a campaign map and its current location", async
       await route.fulfill({ status: 204, body: "" });
     });
     await page.goto("/");
+    await dismissOnboardingTutorial(page);
 
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
@@ -451,13 +753,29 @@ test("AI map expansion preserves a campaign map and its current location", async
       await drawer.getByRole("button", { name: "Edit hierarchical map" }).click();
     } else {
       const mobileMusicLayer = page.locator('[data-component="MobileMusicWidgetLayer"]');
-      await expect(mobileMusicLayer.locator(".fixed")).toHaveCount(1);
-      await expect(mobileMusicLayer).toHaveCSS("display", "none");
+      const mobileMusicWidget = mobileMusicLayer.locator(".fixed");
+      await expect(mobileMusicWidget).toHaveCount(1);
+      const widgetIsCoveredByWorkspace = await mobileMusicWidget.evaluate((widget) => {
+        const rect = widget.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return Boolean(hit?.closest("[data-marinara-maps-workspace-overlay]"));
+      });
+      expect(widgetIsCoveredByWorkspace).toBe(true);
       await expect(page.getByRole("button", { name: "Expand with AI" })).toBeVisible();
     }
 
+    await expectAuthoringWorkspaceLayout(page, mobile);
+    await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
+    await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
+    if (mobile) {
+      await expect(page.getByRole("button", { name: "local", exact: true })).toHaveAttribute("aria-pressed", "true");
+    }
+    await expectAuthoringWorkspaceLayout(page, mobile);
+
     await page.getByRole("button", { name: "Expand with AI" }).click();
     await expect(page.getByRole("heading", { name: "Expand the map with AI" })).toBeVisible();
+    await expectAiBuilderLayout(page, mobile);
     await expect(page.getByText(/Campaign history is protected/)).toBeVisible();
     await expect(page.getByRole("button", { name: /Replace draft/ })).toHaveCount(0);
     await expect(page.getByLabel("Expand beneath")).toHaveValue("ai_world");
@@ -498,11 +816,10 @@ test("AI map expansion preserves a campaign map and its current location", async
     if (mobile) {
       await page.getByRole("button", { name: "Back to chat" }).click();
       const mobileMusicLayer = page.locator('[data-component="MobileMusicWidgetLayer"]');
-      await expect(mobileMusicLayer).toHaveCSS("display", "contents");
       await expect(mobileMusicLayer.locator(".fixed")).toBeVisible();
     }
   } finally {
-    if (!mobile) await page.request.delete(`/api/chats/${chat.id}`);
+    await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });
 
@@ -517,6 +834,19 @@ test("Game setup hands an optional map draft into review before Save", async ({ 
 
     await page.getByRole("button", { name: "Use this draft" }).click();
     await expect(page.getByText("AI map draft applied. Review it, then Save.")).toBeVisible();
+
+    const mobile = testInfo.project.name.includes("mobile");
+    await expectAuthoringWorkspaceLayout(page, mobile);
+    await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
+    await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
+    if (mobile) {
+      await expect(page.getByRole("button", { name: "local", exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    }
+    await expectAuthoringWorkspaceLayout(page, mobile);
 
     const afterApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(((await afterApply.json()) as { definition: unknown }).definition).toBeNull();
@@ -539,8 +869,97 @@ test("Game setup hands an optional map draft into review before Save", async ({ 
       "ai_lighthouse",
       "ai_sewers",
     ]);
+
+    const boundChatResponse = await page.request.get(`/api/chats/${chat.id}`);
+    expect(boundChatResponse.ok()).toBeTruthy();
+    const boundChat = (await boundChatResponse.json()) as { metadata: unknown };
+    type BoundGameMap = {
+      id: string;
+      spatialLocationId?: string;
+      nodes: Array<{ id: string; spatialLocationId?: string }>;
+    };
+    const boundMetadata =
+      typeof boundChat.metadata === "string"
+        ? (JSON.parse(boundChat.metadata) as {
+            gameMap: BoundGameMap;
+            gameMaps: BoundGameMap[];
+            activeGameMapId: string;
+          })
+        : (boundChat.metadata as {
+            gameMap: BoundGameMap;
+            gameMaps: BoundGameMap[];
+            activeGameMapId: string;
+          });
+    const expectedNodeBindings = {
+      "gloam-harbor": "ai_harbor",
+      "blackglass-lighthouse": "ai_lighthouse",
+      "old-sewers": "existing-old-sewers-binding",
+    };
+    expect(boundMetadata.gameMap.spatialLocationId).toBe("ai_world");
+    expect(
+      Object.fromEntries(boundMetadata.gameMap.nodes.map((node) => [node.id, node.spatialLocationId])),
+    ).toEqual(expectedNodeBindings);
+    expect(boundMetadata.activeGameMapId).toBe(acceptedGameSetupMap.id);
+    const selectedGameMap = boundMetadata.gameMaps.find((map) => map.id === boundMetadata.activeGameMapId);
+    expect(selectedGameMap?.spatialLocationId).toBe("ai_world");
+    expect(
+      Object.fromEntries((selectedGameMap?.nodes ?? []).map((node) => [node.id, node.spatialLocationId])),
+    ).toEqual(expectedNodeBindings);
   } finally {
-    if (!testInfo.project.name.includes("mobile")) await page.request.delete(`/api/chats/${chat.id}`);
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+  }
+});
+
+test("Game hierarchy drafting refuses to truncate an accepted local map", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The server-side size guard needs one project.");
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: "Oversized accepted Game map",
+      mode: "game",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const nodes = Array.from({ length: 51 }, (_, index) => ({
+    id: `location-${index + 1}`,
+    emoji: "📍",
+    label: `Location ${index + 1}`,
+    x: 50,
+    y: 50,
+    discovered: true,
+  }));
+
+  try {
+    const metadataResponse = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: {
+        gameMap: {
+          id: "oversized-map",
+          type: "node",
+          name: "Oversized Map",
+          description: "A map that cannot fit in one bounded hierarchy draft.",
+          nodes,
+          edges: [],
+          partyPosition: nodes[0]!.id,
+        },
+      },
+    });
+    expect(metadataResponse.ok()).toBeTruthy();
+
+    const generationResponse = await page.request.post(`/api/chats/${chat.id}/spatial-context/generate`, {
+      data: {
+        operation: "create",
+        size: "large",
+        debugMode: false,
+      },
+    });
+    expect(generationResponse.status()).toBe(409);
+    expect((await generationResponse.json()) as { code: string }).toMatchObject({
+      code: "spatial_ai_game_map_reference_too_large",
+    });
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`);
   }
 });
 
@@ -551,13 +970,12 @@ test("Game setup can skip a generated map without persisting it", async ({ page 
   try {
     await page.getByRole("button", { name: "Skip map" }).click();
     await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toHaveCount(0);
-    await expect(page.getByText("Map draft skipped. You can build one later from Chat Settings.")).toBeVisible();
 
     const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(storedResponse.ok()).toBeTruthy();
     expect(((await storedResponse.json()) as { definition: unknown }).definition).toBeNull();
   } finally {
-    if (!testInfo.project.name.includes("mobile")) await page.request.delete(`/api/chats/${chat.id}`);
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
 });
 
@@ -573,6 +991,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
   });
   expect(chatResponse.ok()).toBeTruthy();
   const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
   const runtimeDefinition = {
     ...generatedDefinition,
     enabled: true,
@@ -604,13 +1023,20 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       };
     };
     expect(request.chatId).toBe(chat.id);
-    expect(request.pendingSpatialTransition).toMatchObject({
-      destinationId: "ai_harbor",
-      expectedDefinitionRevision: saved.definition.revision,
-      expectedCurrentLocationId: "ai_world",
-    });
     expect(request.userMessage).not.toContain("moves to");
     if (generationRequestCount === 1) {
+      expect(request.pendingSpatialTransition).toMatchObject({
+        destinationId: "ai_harbor",
+        expectedDefinitionRevision: saved.definition.revision,
+        expectedCurrentLocationId: "ai_world",
+      });
+      const commitResponse = await page.request.post(`/api/chats/${chat.id}/spatial-context/turn`, {
+        data: {
+          content: request.userMessage,
+          transition: request.pendingSpatialTransition,
+        },
+      });
+      expect(commitResponse.ok()).toBeTruthy();
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
@@ -627,6 +1053,11 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       });
       return;
     }
+    expect(request.pendingSpatialTransition).toMatchObject({
+      destinationId: "ai_world",
+      expectedDefinitionRevision: saved.definition.revision,
+      expectedCurrentLocationId: "ai_harbor",
+    });
     await route.fulfill({
       status: 409,
       contentType: "application/json",
@@ -634,7 +1065,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
         error: "The hierarchical map changed. Review the available destinations.",
         code: "spatial_transition_stale_definition",
         currentRevision: saved.definition.revision + 1,
-        currentLocationId: "ai_world",
+        currentLocationId: "ai_harbor",
       }),
     });
   });
@@ -651,6 +1082,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       await route.fulfill({ status: 204, body: "" });
     });
     await page.goto("/");
+    await dismissOnboardingTutorial(page);
 
     const storyLocation = page.getByRole("region", { name: "Story location" });
     await expect(storyLocation).toContainText("Shrouded Coast");
@@ -665,9 +1097,10 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await page.locator("button.mari-chat-send-btn").click();
     await expect(page.getByText("Moves with your next turn")).toHaveCount(0);
     await expect(input).toHaveValue("");
+    await expect(storyLocation).toContainText("Gloam Harbor");
 
-    await storyLocation.getByRole("button", { name: /Story location.*Shrouded Coast/ }).click();
-    await storyLocation.getByRole("button", { name: /Enter Gloam Harbor/ }).click();
+    await storyLocation.getByRole("button", { name: /Story location.*Gloam Harbor/ }).click();
+    await storyLocation.getByRole("button", { name: /Leave for Shrouded Coast/ }).click();
     await input.fill("Wait for me at the gate.");
     await page.locator("button.mari-chat-send-btn").click();
     await expect(input).toHaveValue("Wait for me at the gate.");
@@ -678,11 +1111,11 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(page.getByRole("region", { name: "Story location" }).getByText(/Needs review/)).toBeVisible();
   } finally {
     await page.unroute("**/api/generate");
-    if (!testInfo.project.name.includes("mobile")) await page.request.delete(`/api/chats/${chat.id}`);
+    await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });
 
-test("Game screen shows the hierarchical World map alongside the Local tactical map", async ({ page }, testInfo) => {
+test("Game screen gives the hierarchical World map precedence over the session Local map", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const chatResponse = await page.request.post("/api/chats", {
     data: {
@@ -694,24 +1127,38 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
   });
   expect(chatResponse.ok()).toBeTruthy();
   const chat = (await chatResponse.json()) as { id: string };
-  const tacticalMap = {
-    id: "coast-map",
-    type: "grid",
-    name: "Shrouded Coast Tactical Map",
-    description: "A local tactical map.",
-    width: 1,
-    height: 1,
-    cells: [
+  await activateHierarchicalMaps(page, chat.id);
+  const sessionMap = {
+    id: "the-crownscar",
+    type: "node",
+    name: "The Crownscar",
+    description: "A game-created map stored in Session → Edit Spoilers → Maps.",
+    nodes: [
       {
-        x: 0,
-        y: 0,
-        emoji: "⚓",
-        label: "Harbor Gate",
+        id: "region_1",
+        emoji: "🏘️",
+        label: "Embercross",
+        x: 50,
+        y: 15,
         discovered: true,
-        terrain: "city",
+        description: "A lively bridge-town serving as the safest base for expeditions.",
+      },
+      {
+        id: "architect_s_shrine",
+        emoji: "⛩️",
+        label: "Architect's Shrine",
+        x: 50,
+        y: 50,
+        discovered: true,
       },
     ],
-    partyPosition: { x: 0, y: 0 },
+    edges: [
+      {
+        from: "region_1",
+        to: "architect_s_shrine",
+      },
+    ],
+    partyPosition: "architect_s_shrine",
   };
 
   try {
@@ -719,9 +1166,9 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
       data: {
         gameId: `world-map-game-${chat.id}`,
         gameSessionStatus: "active",
-        gameMaps: [tacticalMap],
-        gameMap: tacticalMap,
-        activeGameMapId: tacticalMap.id,
+        gameMaps: [sessionMap],
+        gameMap: sessionMap,
+        activeGameMapId: sessionMap.id,
         gameIntroPresented: true,
       },
     });
@@ -752,6 +1199,7 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            gameTutorialDisabled: true,
             sidebarOpen: false,
             rightPanelOpen: false,
           },
@@ -763,6 +1211,7 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
       await route.fulfill({ status: 204, body: "" });
     });
     await page.goto("/");
+    await dismissOnboardingTutorial(page);
 
     if (testInfo.project.name.includes("mobile")) {
       await page.getByRole("button", { name: "Open map" }).click();
@@ -770,6 +1219,7 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
 
     const mapView = page.getByRole("group", { name: "Map view" });
     await expect(mapView.getByRole("button", { name: "World" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("The Crownscar", { exact: true })).toHaveCount(0);
     const worldMap = page.getByRole("region", { name: "Hierarchical world map" });
     await expect(worldMap).toBeVisible();
     await expect(worldMap.getByRole("button", { name: /Gloam Harbor/ })).toBeVisible();
@@ -781,10 +1231,328 @@ test("Game screen shows the hierarchical World map alongside the Local tactical 
 
     await mapView.getByRole("button", { name: "Local" }).click();
     await expect(mapView.getByRole("button", { name: "Local" })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByText("Shrouded Coast Tactical Map", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("The Crownscar", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("region", { name: "Hierarchical world map" })).toHaveCount(0);
   } finally {
-    await page.request.delete(`/api/chats/${chat.id}`);
+    await page.goto("about:blank");
+    await page.request.delete(`/api/chats/${chat.id}?force=true`);
+  }
+});
+
+test("Game prompt scopes the legacy map beneath the hierarchical world location", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The package prompt contract is mode-independent.");
+  const connectionResponse = await page.request.post("/api/connections", {
+    data: {
+      name: `Maps Prompt Contract ${Date.now()}`,
+      provider: "custom",
+      baseUrl: "https://example.invalid/v1",
+      model: "maps-prompt-contract",
+      apiKey: "maps-prompt-contract",
+    },
+  });
+  expect(connectionResponse.ok()).toBeTruthy();
+  const connection = (await connectionResponse.json()) as { id: string };
+  let chat: { id: string } | null = null;
+
+  try {
+    const chatResponse = await page.request.post("/api/chats", {
+      data: {
+        name: "Game Map Prompt Contract",
+        mode: "game",
+        characterIds: [],
+        connectionId: connection.id,
+      },
+    });
+    expect(chatResponse.ok()).toBeTruthy();
+    chat = (await chatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, chat.id);
+    const metadataResponse = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: {
+        gameSystemPrompt: [
+          "Run the game.",
+          "<map_state>",
+          "Map: The Crownscar",
+          "Party position: Architect's Shrine",
+          "</map_state>",
+          "",
+          "COMMANDS:",
+          `- [map_update: new_location="Location Name" connected_to="Previous Location Name" node_emoji="emoji"] - only when the party arrives at an entirely new location on the current node map.`,
+        ].join("\n"),
+      },
+    });
+    expect(metadataResponse.ok()).toBeTruthy();
+    const previewPrompt = async () => {
+      const promptResponse = await page.request.post("/api/generate/dryRun", {
+        data: {
+          chatId: chat.id,
+          connectionId: connection.id,
+          returnPrompt: true,
+          skipPreset: true,
+          userMessage: "Look around.",
+        },
+      });
+      expect(promptResponse.ok()).toBeTruthy();
+      const preview = (await promptResponse.json()) as {
+        prompt: { messages: Array<{ role: string; content: string }> };
+      };
+      return preview.prompt.messages.map((message) => message.content).join("\n\n");
+    };
+
+    const legacyOnlyPrompt = await previewPrompt();
+    expect(legacyOnlyPrompt).toContain("<map_state>");
+    expect(legacyOnlyPrompt).toContain("only when the party arrives at an entirely new location");
+    expect(legacyOnlyPrompt).not.toContain("<local_map_state");
+    expect(legacyOnlyPrompt).not.toContain("<spatial_context");
+
+    const spatialSave = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: {
+          ...gameGeneratedDefinition,
+          enabled: true,
+        },
+      },
+    });
+    expect(spatialSave.ok()).toBeTruthy();
+
+    const prompt = await previewPrompt();
+    expect(prompt).toContain(`<spatial_context mode="game" authority="application">`);
+    expect(prompt).toContain("Current path: Shrouded Coast");
+    expect(prompt).toContain(`<local_map_state authority="tactical" world_location_source="spatial_context">`);
+    expect(prompt).toContain("Map: The Crownscar");
+    expect(prompt).not.toContain("<map_state>");
+    expect(prompt).not.toContain("</map_state>");
+    expect(prompt).toContain("only to add local/tactical detail inside the current hierarchical location");
+    expect(prompt).toContain("it must never represent or cause travel between hierarchical locations");
+    expect(prompt).toContain("[map_update:");
+  } finally {
+    await expectDeletedInOrder(page, [chat ? `/api/chats/${chat.id}` : null, `/api/connections/${connection.id}`]);
+  }
+});
+
+test("Roleplay generated turns cannot move the hierarchical location without an owner transition", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The generated-turn authority contract is viewport-independent.");
+  test.setTimeout(90_000);
+  const provider = await startOpenAiTestServer([
+    `We cross the cliffs and arrive at Blackglass Lighthouse.\n[spatial_transition: destination_id="ai_lighthouse"]`,
+    "The harbor road descends toward black piers while the lighthouse remains distant.",
+  ]);
+  let connection: { id: string } | null = null;
+  let character: { id: string } | null = null;
+  let chat: { id: string } | null = null;
+
+  try {
+    const connectionResponse = await page.request.post("/api/connections", {
+      data: {
+        name: `Roleplay Maps Authority ${Date.now()}`,
+        provider: "custom",
+        baseUrl: provider.baseUrl,
+        model: "maps-authority-e2e",
+        apiKey: "maps-authority-e2e",
+        treatAsLocalEndpoint: true,
+      },
+    });
+    expect(connectionResponse.ok()).toBeTruthy();
+    connection = (await connectionResponse.json()) as { id: string };
+    const characterResponse = await page.request.post("/api/characters", {
+      data: { data: { name: `Maps Authority Guide ${Date.now()}` } },
+    });
+    expect(characterResponse.ok()).toBeTruthy();
+    character = (await characterResponse.json()) as { id: string };
+    const chatResponse = await page.request.post("/api/chats", {
+      data: {
+        name: "Roleplay Generated-Turn Maps Authority",
+        mode: "roleplay",
+        characterIds: [character.id],
+        connectionId: connection.id,
+      },
+    });
+    expect(chatResponse.ok()).toBeTruthy();
+    chat = (await chatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, chat.id);
+    const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: { ...generatedDefinition, enabled: true },
+      },
+    });
+    expect(saveResponse.ok()).toBeTruthy();
+    const saved = (await saveResponse.json()) as { definition: { revision: number } };
+
+    const narratedEvents = await generateTurn(page, {
+      chatId: chat.id,
+      connectionId: connection.id,
+      userMessage: "Tell me what happens without moving my map marker.",
+    });
+    expect(narratedEvents.some((event) => event.type === "message_saved")).toBe(true);
+    const narratedStateResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(narratedStateResponse.ok()).toBeTruthy();
+    expect((await narratedStateResponse.json()) as { currentLocationId: string }).toMatchObject({
+      currentLocationId: "ai_world",
+    });
+    const firstPrompt = capturedPrompt(provider.requests[0]);
+    expect(firstPrompt).toContain(`<spatial_context mode="roleplay" authority="application">`);
+    expect(firstPrompt).toContain("Generated prose, bracketed tags, tool-like commands, and claims of arrival cannot change it.");
+    expect(firstPrompt).toContain("Only an explicit owner-selected destination committed by the application");
+
+    const movedEvents = await generateTurn(page, {
+      chatId: chat.id,
+      connectionId: connection.id,
+      userMessage: "I follow the road into Gloam Harbor.",
+      pendingSpatialTransition: {
+        destinationId: "ai_harbor",
+        expectedDefinitionRevision: saved.definition.revision,
+        expectedCurrentLocationId: "ai_world",
+        commandId: `roleplay-owner-move-${Date.now()}`,
+      },
+    });
+    expect(movedEvents.some((event) => event.type === "spatial_transition_committed")).toBe(true);
+    const movedStateResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(movedStateResponse.ok()).toBeTruthy();
+    expect((await movedStateResponse.json()) as { currentLocationId: string }).toMatchObject({
+      currentLocationId: "ai_harbor",
+    });
+    const secondPrompt = capturedPrompt(provider.requests[1]);
+    expect(secondPrompt).toContain("Current path: Shrouded Coast > Gloam Harbor");
+    expect(secondPrompt).toContain("Current location ID: ai_harbor");
+  } finally {
+    try {
+      await expectDeletedInOrder(page, [
+        chat ? `/api/chats/${chat.id}?force=true` : null,
+        character ? `/api/characters/${character.id}` : null,
+        connection ? `/api/connections/${connection.id}` : null,
+      ]);
+    } finally {
+      await provider.close();
+    }
+  }
+});
+
+test("Game generated map updates remain local beneath the hierarchical world location", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The generated-turn authority contract is viewport-independent.");
+  test.setTimeout(90_000);
+  const provider = await startOpenAiTestServer([
+    `The party slips beneath the harbor warehouses.\n[map_update: new_location="Smuggler's Den" connected_to="Gloam Harbor" node_emoji="🕳️"]`,
+  ]);
+  let connection: { id: string } | null = null;
+  let chat: { id: string } | null = null;
+  const localMap = {
+    id: "gloam-harbor-local",
+    type: "node",
+    name: "Gloam Harbor Local Map",
+    description: "Tactical streets and interiors inside Gloam Harbor.",
+    nodes: [
+      {
+        id: "gloam-harbor",
+        emoji: "⚓",
+        label: "Gloam Harbor",
+        x: 50,
+        y: 50,
+        discovered: true,
+        description: "The local harbor approach.",
+      },
+    ],
+    edges: [],
+    partyPosition: "gloam-harbor",
+  };
+
+  try {
+    const connectionResponse = await page.request.post("/api/connections", {
+      data: {
+        name: `Game Maps Authority ${Date.now()}`,
+        provider: "custom",
+        baseUrl: provider.baseUrl,
+        model: "maps-authority-e2e",
+        apiKey: "maps-authority-e2e",
+        treatAsLocalEndpoint: true,
+      },
+    });
+    expect(connectionResponse.ok()).toBeTruthy();
+    connection = (await connectionResponse.json()) as { id: string };
+    const chatResponse = await page.request.post("/api/chats", {
+      data: {
+        name: "Game Generated-Turn Maps Authority",
+        mode: "game",
+        characterIds: [],
+        connectionId: connection.id,
+      },
+    });
+    expect(chatResponse.ok()).toBeTruthy();
+    chat = (await chatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, chat.id);
+    const metadataResponse = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: {
+        gameId: `maps-authority-${chat.id}`,
+        gameSessionStatus: "active",
+        gameMap: localMap,
+        gameMaps: [localMap],
+        activeGameMapId: localMap.id,
+        gameSystemPrompt: [
+          "Run the game.",
+          "<map_state>",
+          "Map: Gloam Harbor Local Map",
+          "Party position: Gloam Harbor",
+          "</map_state>",
+          "",
+          "COMMANDS:",
+          `- [map_update: new_location="Location Name" connected_to="Previous Location Name" node_emoji="emoji"] - only when the party arrives at an entirely new location on the current node map.`,
+        ].join("\n"),
+      },
+    });
+    expect(metadataResponse.ok()).toBeTruthy();
+    const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: { ...gameGeneratedDefinition, enabled: true },
+      },
+    });
+    expect(saveResponse.ok()).toBeTruthy();
+
+    const events = await generateTurn(page, {
+      chatId: chat.id,
+      connectionId: connection.id,
+      userMessage: "Search below the harbor without leaving the current world location.",
+    });
+    expect(events.some((event) => event.type === "game_map_update")).toBe(true);
+
+    const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(spatialResponse.ok()).toBeTruthy();
+    expect((await spatialResponse.json()) as { currentLocationId: string }).toMatchObject({
+      currentLocationId: "ai_world",
+    });
+
+    const storedChatResponse = await page.request.get(`/api/chats/${chat.id}`);
+    expect(storedChatResponse.ok()).toBeTruthy();
+    const storedChat = (await storedChatResponse.json()) as { metadata?: string | Record<string, unknown> };
+    const metadata =
+      typeof storedChat.metadata === "string"
+        ? (JSON.parse(storedChat.metadata) as Record<string, unknown>)
+        : (storedChat.metadata ?? {});
+    const storedLocalMap = metadata.gameMap as {
+      nodes?: Array<{ label?: string }>;
+      partyPosition?: string;
+    };
+    expect(storedLocalMap.nodes?.some((node) => node.label === "Smuggler's Den")).toBe(true);
+    expect(storedLocalMap.partyPosition).not.toBe("gloam-harbor");
+
+    const prompt = capturedPrompt(provider.requests[0]);
+    expect(prompt).toContain(`<spatial_context mode="game" authority="application">`);
+    expect(prompt).toContain(`<local_map_state authority="tactical" world_location_source="spatial_context">`);
+    expect(prompt).toContain("Generated prose, its party marker, and [map_update] commands cannot change the hierarchical world location");
+  } finally {
+    try {
+      await expectDeletedInOrder(page, [
+        chat ? `/api/chats/${chat.id}?force=true` : null,
+        connection ? `/api/connections/${connection.id}` : null,
+      ]);
+    } finally {
+      await provider.close();
+    }
   }
 });
 
@@ -800,6 +1568,7 @@ test("Game Location Details binds and clears a tactical cell", async ({ page }, 
   });
   expect(chatResponse.ok()).toBeTruthy();
   const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
   const tacticalMap = {
     id: "coast-map",
     type: "grid",
@@ -863,6 +1632,7 @@ test("Game Location Details binds and clears a tactical cell", async ({ page }, 
       await route.fulfill({ status: 204, body: "" });
     });
     await page.goto("/");
+    await dismissOnboardingTutorial(page);
 
     await expect(page.getByText("Game map binding", { exact: true })).toBeVisible();
     await page.getByLabel("Map position").selectOption("cell:0:0");
