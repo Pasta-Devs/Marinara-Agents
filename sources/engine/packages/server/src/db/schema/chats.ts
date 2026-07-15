@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Chats, Messages & Folders
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 
-export const chatFolders = sqliteTable("chat_folders", {
+export const chatFolders = fileTable("chat_folders", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   mode: text("mode", { enum: ["conversation", "roleplay", "visual_novel", "game"] }).notNull(),
@@ -14,7 +14,7 @@ export const chatFolders = sqliteTable("chat_folders", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const chats = sqliteTable("chats", {
+export const chats = fileTable("chats", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   mode: text("mode", { enum: ["conversation", "roleplay", "visual_novel", "game"] }).notNull(),
@@ -39,7 +39,7 @@ export const chats = sqliteTable("chats", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const messages = sqliteTable("messages", {
+export const messages = fileTable("messages", {
   id: text("id").primaryKey(),
   chatId: text("chat_id")
     .notNull()
@@ -53,7 +53,7 @@ export const messages = sqliteTable("messages", {
   createdAt: text("created_at").notNull(),
 });
 
-export const messageSwipes = sqliteTable("message_swipes", {
+export const messageSwipes = fileTable("message_swipes", {
   id: text("id").primaryKey(),
   messageId: text("message_id")
     .notNull()
@@ -65,7 +65,7 @@ export const messageSwipes = sqliteTable("message_swipes", {
   createdAt: text("created_at").notNull(),
 });
 
-export const oocInfluences = sqliteTable("ooc_influences", {
+export const oocInfluences = fileTable("ooc_influences", {
   id: text("id").primaryKey(),
   /** The conversation chat that created this influence */
   sourceChatId: text("source_chat_id")
@@ -84,7 +84,7 @@ export const oocInfluences = sqliteTable("ooc_influences", {
   createdAt: text("created_at").notNull(),
 });
 
-export const conversationNotes = sqliteTable("conversation_notes", {
+export const conversationNotes = fileTable("conversation_notes", {
   id: text("id").primaryKey(),
   /** The conversation chat that emitted this note */
   sourceChatId: text("source_chat_id")
@@ -102,7 +102,7 @@ export const conversationNotes = sqliteTable("conversation_notes", {
 });
 
 // ── Memory Chunks: embedded conversation fragments for semantic recall ──
-export const memoryChunks = sqliteTable("memory_chunks", {
+export const memoryChunks = fileTable("memory_chunks", {
   id: text("id").primaryKey(),
   chatId: text("chat_id")
     .notNull()

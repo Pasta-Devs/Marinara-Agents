@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Lorebooks, Folders & Entries
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer, real } from "../file-schema.js";
 
-export const lorebooks = sqliteTable("lorebooks", {
+export const lorebooks = fileTable("lorebooks", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
@@ -33,7 +33,7 @@ export const lorebooks = sqliteTable("lorebooks", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const lorebookCharacterLinks = sqliteTable(
+export const lorebookCharacterLinks = fileTable(
   "lorebook_character_links",
   {
     id: text("id").primaryKey(),
@@ -43,12 +43,10 @@ export const lorebookCharacterLinks = sqliteTable(
     characterId: text("character_id").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (table) => ({
-    lorebookCharacterUnique: uniqueIndex("uniq_lorebook_character_links_pair").on(table.lorebookId, table.characterId),
-  }),
+  { uniqueBy: [["lorebookId", "characterId"]] },
 );
 
-export const lorebookPersonaLinks = sqliteTable(
+export const lorebookPersonaLinks = fileTable(
   "lorebook_persona_links",
   {
     id: text("id").primaryKey(),
@@ -58,9 +56,7 @@ export const lorebookPersonaLinks = sqliteTable(
     personaId: text("persona_id").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (table) => ({
-    lorebookPersonaUnique: uniqueIndex("uniq_lorebook_persona_links_pair").on(table.lorebookId, table.personaId),
-  }),
+  { uniqueBy: [["lorebookId", "personaId"]] },
 );
 
 /**
@@ -72,13 +68,13 @@ export const lorebookPersonaLinks = sqliteTable(
  * excluded from activation regardless of the entry's own enabled flag —
  * gating happens at `listActiveEntries` time, not by mutating entry rows.
  */
-export const lorebookFolders = sqliteTable("lorebook_folders", {
+export const lorebookFolders = fileTable("lorebook_folders", {
   id: text("id").primaryKey(),
   lorebookId: text("lorebook_id")
     .notNull()
     .references(() => lorebooks.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  /** SQLite-style "true"/"false" string, matches the rest of this schema. */
+  /** Boolean encoded as "true"/"false" text, matching the rest of this table. */
   enabled: text("enabled").notNull().default("true"),
   /** Parent folder for nesting; NULL for a root-level folder. */
   parentFolderId: text("parent_folder_id"),
@@ -88,14 +84,14 @@ export const lorebookFolders = sqliteTable("lorebook_folders", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const lorebookEntries = sqliteTable("lorebook_entries", {
+export const lorebookEntries = fileTable("lorebook_entries", {
   id: text("id").primaryKey(),
   lorebookId: text("lorebook_id")
     .notNull()
     .references(() => lorebooks.id, { onDelete: "cascade" }),
   /**
    * Folder this entry belongs to, or NULL for root-level. Not enforced as a
-   * foreign key in SQLite to keep folder deletion cheap (the storage layer
+   * enforced foreign key to keep folder deletion cheap (the storage layer
    * sets entries' folderId back to null when a folder is removed instead of
    * cascading the entries themselves).
    */

@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Installed Extensions
 // ──────────────────────────────────────────────
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { fileTable, text } from "../file-schema.js";
 
-export const installedExtensions = sqliteTable("installed_extensions", {
+export const installedExtensions = fileTable("installed_extensions", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").notNull().default(""),

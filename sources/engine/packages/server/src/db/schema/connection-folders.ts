@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: API Connection Folders
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 
-export const apiConnectionFolders = sqliteTable("api_connection_folders", {
+export const apiConnectionFolders = fileTable("api_connection_folders", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   color: text("color").notNull().default(""),

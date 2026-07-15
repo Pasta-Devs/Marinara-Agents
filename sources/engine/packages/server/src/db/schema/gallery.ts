@@ -1,11 +1,11 @@
 // ──────────────────────────────────────────────
 // Schema: Chat Gallery Images
 // ──────────────────────────────────────────────
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { fileTable, text, integer } from "../file-schema.js";
 import { chats } from "./chats.js";
 import { characters, personas } from "./characters.js";
 
-export const chatImages = sqliteTable("chat_images", {
+export const chatImages = fileTable("chat_images", {
   id: text("id").primaryKey(),
   chatId: text("chat_id")
     .notNull()
@@ -25,7 +25,7 @@ export const chatImages = sqliteTable("chat_images", {
   createdAt: text("created_at").notNull(),
 });
 
-export const characterImages = sqliteTable("character_images", {
+export const characterImages = fileTable("character_images", {
   id: text("id").primaryKey(),
   characterId: text("character_id")
     .notNull()
@@ -49,7 +49,7 @@ export const characterImages = sqliteTable("character_images", {
   createdAt: text("created_at").notNull(),
 });
 
-export const personaImages = sqliteTable("persona_images", {
+export const personaImages = fileTable("persona_images", {
   id: text("id").primaryKey(),
   personaId: text("persona_id")
     .notNull()
@@ -77,13 +77,13 @@ export const personaImages = sqliteTable("persona_images", {
 // Schema: Global Gallery (profile-wide images + flat folders)
 // ──────────────────────────────────────────────
 
-export const galleryFolders = sqliteTable("gallery_folders", {
+export const galleryFolders = fileTable("gallery_folders", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   createdAt: text("created_at").notNull(),
 });
 
-export const globalImages = sqliteTable("global_images", {
+export const globalImages = fileTable("global_images", {
   id: text("id").primaryKey(),
   /** Owning folder; null = root / "Unfiled". Set null when the folder is deleted. */
   folderId: text("folder_id").references(() => galleryFolders.id, { onDelete: "set null" }),

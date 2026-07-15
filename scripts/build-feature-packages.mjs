@@ -11,7 +11,11 @@ const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, ".
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
-const sourceRoot = existsSync(sourcesRoot) ? sourcesRoot : engineRoot;
+const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
+  ? resolve(process.env.MARINARA_ENGINE_SOURCE_ROOT)
+  : existsSync(sourcesRoot)
+    ? sourcesRoot
+    : engineRoot;
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
 const MIN_ENGINE_VERSION = "2.3.0";
@@ -25,8 +29,8 @@ async function captureEngineSources(metafilePath) {
   const metafile = JSON.parse(await readFile(metafilePath, "utf8"));
   for (const input of Object.keys(metafile.inputs || {})) {
     const absolute = resolve(engineRoot, input);
-    if (!absolute.startsWith(`${engineRoot}/`) || absolute.includes("/node_modules/")) continue;
-    const relative = absolute.slice(engineRoot.length + 1);
+    if (!absolute.startsWith(`${sourceRoot}/`) || absolute.includes("/node_modules/")) continue;
+    const relative = absolute.slice(sourceRoot.length + 1);
     const destination = join(sourcesRoot, relative);
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(absolute, destination);
@@ -36,6 +40,8 @@ async function captureEngineSources(metafilePath) {
 const features = [
   {
     id: "hierarchical-maps",
+    version: "1.0.1",
+    maxEngineExclusive: "2.4.0",
     name: "Hierarchical Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
     category: "tracker",
@@ -103,8 +109,10 @@ import * as stateResolution from ${JSON.stringify(resolve(sourceRoot, "packages/
 import * as ownerTurn from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/spatial-context/owner-turn.ts"))};
 import * as gameMapBinding from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/spatial-context/game-map-binding.ts"))};
 import { createSpatialContextStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/spatial-context.storage.ts"))};
+let readinessStorage = null;
 export async function activate({ app, api }) {
   await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
+  readinessStorage = createSpatialContextStorage(app.db);
   const cleanups = [
     api.registerService("hierarchical-maps:projection", projection),
     api.registerService("hierarchical-maps:state-resolution", stateResolution),
@@ -112,7 +120,11 @@ export async function activate({ app, api }) {
     api.registerService("hierarchical-maps:game-map-binding", gameMapBinding),
     api.registerService("hierarchical-maps:storage", { create: createSpatialContextStorage }),
   ];
-  return () => { for (const cleanup of cleanups.reverse()) cleanup(); };
+  return () => { readinessStorage = null; for (const cleanup of cleanups.reverse()) cleanup(); };
+}
+export async function selfCheck() {
+  if (!readinessStorage) throw new Error("Hierarchical Maps storage did not initialize");
+  await readinessStorage.listForChat("__marinara_capability_self_check__");
 }\n`
       : feature.id === "conversation-calls"
       ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
@@ -419,7 +431,7 @@ for (const feature of selectedFeatures) {
     name: feature.name,
     version,
     description: feature.description,
-    engine: { min: MIN_ENGINE_VERSION, maxExclusive: "3.0.0" },
+    engine: { min: MIN_ENGINE_VERSION, maxExclusive: feature.maxEngineExclusive ?? "3.0.0" },
     kind: feature.kind,
     entrypoints: {
       agents: "agents.json",

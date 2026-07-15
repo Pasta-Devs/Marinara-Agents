@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: API Connections
 // ──────────────────────────────────────────────
-import { eq, desc, and, ne } from "drizzle-orm";
+import { eq, desc, and, ne } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { apiConnections } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";
@@ -65,7 +65,7 @@ export function createConnectionsStorage(db: DB) {
       return { ...row, apiKey: decryptApiKey(row.apiKeyEncrypted) };
     },
 
-    /** Get the image-generation connection marked as default for Illustrator (with decrypted key). */
+    /** Get the image-generation connection selected under Defaults → Images (with decrypted key). */
     async getDefaultForImageGeneration() {
       const rows = await db
         .select()

@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Schema: Custom Function Tools
 // ──────────────────────────────────────────────
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, fileTable, text } from "../file-schema.js";
 
-export const customTools = sqliteTable("custom_tools", {
+export const customTools = fileTable("custom_tools", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").notNull().default(""),

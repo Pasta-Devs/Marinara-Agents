@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Characters, Personas & Groups
 // ──────────────────────────────────────────────
-import { and, asc, desc, eq, inArray, like, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, ne, or } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import {
   characters,
