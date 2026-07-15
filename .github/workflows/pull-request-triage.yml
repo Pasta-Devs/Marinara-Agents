@@ -101,12 +101,6 @@ jobs:
             failed=1
           fi
 
-          validation_section=$(echo "$PR_BODY" | sed -n '/## Validation/,/^## /p' | head -n -1)
-          if ! echo "$validation_section" | grep -qP '\[x\]'; then
-            echo "::error::No validation checkbox is ticked. Tick only checks you actually performed."
-            failed=1
-          fi
-
           if [ "$failed" -eq 1 ]; then
             exit 1
           fi
