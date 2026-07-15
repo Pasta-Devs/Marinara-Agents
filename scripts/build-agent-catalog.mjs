@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const artifactsDir = join(repoRoot, "artifacts");
@@ -86,6 +87,7 @@ for (const id of selectedPackageDirectories) {
     rebuiltPackages.push({
       manifest,
       category,
+      iconUrl: catalogArtworkUrl(id),
       artifact: {
         url: `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${basename(artifactPath)}`,
         sha256: sha256(artifact),
