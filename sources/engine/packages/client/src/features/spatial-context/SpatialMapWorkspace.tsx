@@ -675,7 +675,10 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
   );
 
   return (
-    <div className="mari-editor-shell mari-editor-legacy-bridge relative z-[46] flex flex-1 flex-col overflow-hidden">
+    <div
+      data-marinara-maps-workspace-root
+      className="mari-editor-shell mari-editor-legacy-bridge relative z-[46] flex flex-1 flex-col overflow-hidden"
+    >
       <div className="mari-editor-header relative z-50">
         <button
           type="button"
@@ -900,7 +903,7 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
         </div>
       ) : (
         <>
-          <div className="hidden min-h-0 flex-1 grid-cols-[minmax(15rem,18rem)_minmax(20rem,1fr)_minmax(18rem,22rem)] divide-x divide-[var(--marinara-chat-chrome-panel-divider)] lg:grid">
+          <div className="mari-maps-workspace-grid hidden min-h-0 flex-1 divide-x divide-[var(--marinara-chat-chrome-panel-divider)] lg:grid">
             <HierarchyNavigator
               definition={draft}
               selectedId={selectedId}
