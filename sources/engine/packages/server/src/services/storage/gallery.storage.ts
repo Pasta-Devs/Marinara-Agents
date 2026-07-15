@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Chat Gallery Images
 // ──────────────────────────────────────────────
-import { and, eq, desc, inArray } from "drizzle-orm";
+import { and, eq, desc, inArray } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { chatImages } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";
