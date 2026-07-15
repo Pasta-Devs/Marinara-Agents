@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-15T19:58:34.771Z",
+  "generatedAt": "2026-07-15T20:26:50.259Z",
   "packages": [
     {
       "manifest": {
@@ -629,7 +629,7 @@
         "schemaVersion": 1,
         "id": "hierarchical-maps",
         "name": "Hierarchical Maps",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
         "engine": {
           "min": "2.3.0",
@@ -660,13 +660,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "ce0e5e10d34c006792b306c412c9eca7b9f793e579f0f0f06dfe10d88fd0aaea",
-            "bytes": 1922652
+            "sha256": "6c2f6a275ffe09d939f31fbb182d41c601ba41cfbf285cd975234a40b3d8abc7",
+            "bytes": 1917993
           },
           {
             "path": "client.js",
-            "sha256": "b34e41bc88e3883de2cd3a6c89bea125598f913b374fd13451501352be785af5",
-            "bytes": 744516
+            "sha256": "407af4ae956f5b08db2a05679f7e52a3eea2efd9aed9f3604cc4447ec2080af3",
+            "bytes": 745416
           }
         ],
         "permissions": [
@@ -684,9 +684,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.0.2.zip",
-        "sha256": "f4e701fb1cbf343599c17d12bfa3dc96059a407988d539102e095564bac1e21a",
-        "bytes": 740070
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.0.3.zip",
+        "sha256": "866b93889653299e18b1df701a5375f2544c8d82ac0cbf841a895974098789ad",
+        "bytes": 738850
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },
