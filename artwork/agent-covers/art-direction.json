@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "asset": {
+    "purpose": "Marinara Engine Download Agents catalog artwork",
+    "format": "png",
+    "width": 512,
+    "height": 512,
+    "displaySizes": [44, 80, 96]
+  },
+  "referenceRoles": [
+    "chibi-professor-mari.png: compact chibi proportions, mascot silhouette, thick outline language",
+    "Mari_greet.png: canonical hair, glasses, hoodie, face, and welcoming energy",
+    "Mari_thinking.png: expression range and hand-to-face posing",
+    "Mari_profile.png: blue eye color, glasses, lashes, and facial detail"
+  ],
+  "sharedPrompt": "Use the supplied Professor Mari references as identity and style anchors. Draw Professor Mari in her wholesome chibi mascot form: an adult human woman with voluminous wavy golden-blonde hair, very large bright light-blue eyes, dramatic black lashes, black rectangular glasses, a navy-blue hoodie, charcoal-gray trousers, and black boots. Do not add animal ears or a tail; the chibi reference is for proportions and line language only. Preserve the compact rounded proportions, thick dark outlines, bold flat colors, and gentle cel shading of the references. Square 1:1 illustrated catalog cover with Mari large and centered, a dynamic readable pose, one clear thematic action, and a colorful layered backdrop. The concept must remain legible at 44px. Keep her face unobstructed and expressive. No title, letters, readable words, logo, watermark, photorealism, 3D rendering, extra people, malformed hands, or visual clutter.",
+  "covers": [
+    { "id": "eightball", "name": "8-Ball Pool", "concept": "Mari leans over a pool table lining up a playful shot, with the black 8-ball and a few colorful billiard balls sweeping through the composition.", "palette": "emerald felt, cyan, violet, warm gold" },
+    { "id": "background", "name": "Background", "concept": "Mari relaxes contentedly against a spectacular layered fantasy landscape with mountains, flowers, a lake, and a glowing sunset, visibly enjoying the scenery.", "palette": "sunset coral, sky blue, leaf green, warm gold" },
+    { "id": "card-evolution-auditor", "name": "Card Evolution Auditor", "concept": "Mari audits two illustrated character profile cards at a desk with a magnifying glass, comparing before-and-after details and marking one precise approved change with a check stamp.", "palette": "deep blue, parchment cream, teal, approval green" },
+    { "id": "character-tracker", "name": "Character Tracker", "concept": "Mari is a cheerful detective tracking character silhouettes and clues with a magnifying glass, tiny footprint trail, and connected portrait tokens.", "palette": "indigo, detective amber, crimson accents, cream" },
+    { "id": "chess", "name": "Chess", "concept": "Mari makes a confident move with a knight on a dramatic chessboard, smiling as black and white pieces frame the action.", "palette": "royal purple, ivory, charcoal, electric blue" },
+    { "id": "combat", "name": "Combat", "concept": "Mari performs an energetic but wholesome fantasy training move with a wooden practice sword and round shield against a straw training dummy, no injury or gore.", "palette": "fiery orange, cobalt blue, steel gray, gold" },
+    { "id": "continuity", "name": "Continuity Checker", "concept": "Mari studies a large checklist while comparing two adjacent scene panels, catching a mismatched prop and connecting the correct timeline with a neat arrow.", "palette": "cyan, navy, paper white, correction coral" },
+    { "id": "conversation-calls", "name": "Conversation Calls", "concept": "Mari happily makes a video call on a smartphone while wearing a headset, with a friendly avatar bubble, camera symbol, and colorful sound waves around her.", "palette": "aqua, violet, navy, soft pink" },
+    { "id": "custom-tracker", "name": "Custom Tracker", "concept": "Mari wears an obviously fake curled mustache with a mischievous grin while updating a customizable board of counters, toggles, stars, coins, and progress markers.", "palette": "mustard gold, teal, plum, navy" },
+    { "id": "cyoa", "name": "CYOA Choices", "concept": "Mari pauses dramatically at a three-way storybook crossroads, pointing between distinct glowing path icons while making an expressive choice.", "palette": "storybook magenta, turquoise, sunset orange, gold" },
+    { "id": "echo-chamber", "name": "Echo Chamber", "concept": "Mari hosts an upbeat livestream at a desk with microphone and camera, surrounded by cascading colorful chat bubbles, hearts, and reaction icons without readable text.", "palette": "neon violet, hot pink, cyan, midnight blue" },
+    { "id": "expression", "name": "Expression Engine", "concept": "Mari makes an exaggerated funny face while several playful theater-mask expressions orbit her: delighted, shocked, grumpy, and teary-eyed.", "palette": "rainbow brights, cobalt, coral, lemon yellow" },
+    { "id": "haptic", "name": "Haptic Feedback", "concept": "Mari gives a knowing sideways smirk while holding a small game controller, with subtle concentric vibration waves and a tiny sparkling wink.", "palette": "deep navy, electric cyan, magenta, silver" },
+    { "id": "hierarchical-maps", "name": "Hierarchical Maps", "concept": "Mari is an enthusiastic cartographer leaning over a large nested fantasy map with compass, quill, rolled charts, and map layers unfolding from world to region to room.", "palette": "parchment gold, forest green, ocean blue, burgundy" },
+    { "id": "illustrator", "name": "Illustrator", "concept": "Mari joyfully paints a vivid scene on a canvas with a brush and palette, sending colorful ribbons, stars, and tiny illustrated scenery flowing from the brushstroke.", "palette": "full-spectrum paint colors anchored by navy" },
+    { "id": "html", "name": "Immersive HTML", "concept": "Mari acts like a playful web magician, arranging floating colorful interface cards, angle-bracket symbols, nested boxes, and sparkling layout blocks with both hands.", "palette": "electric blue, orange, mint, violet" },
+    { "id": "knowledge-retrieval", "name": "Knowledge Retrieval", "concept": "Mari thinks deeply in a cozy magical library while a glowing relevant book rises from many shelves toward her outstretched hand.", "palette": "library amber, deep blue, luminous cyan, parchment" },
+    { "id": "knowledge-router", "name": "Knowledge Router", "concept": "Mari directs a stream of glowing page, book, and speech symbols through branching arrows into the correct color-coded destinations like a cheerful traffic controller.", "palette": "cyan, lime, amber, violet on navy" },
+    { "id": "lorebook-keeper", "name": "Lorebook Keeper", "concept": "Mari protectively hugs a large ancient lorebook secured with an ornate lock while holding its golden key, surrounded by gentle magical runes and shelves.", "palette": "antique gold, burgundy, midnight blue, parchment" },
+    { "id": "spotify", "name": "Music DJ", "concept": "Mari performs as an exuberant DJ in oversized headphones behind turntables, one hand on the mixer and the other raised amid colorful music notes and equalizer lights.", "palette": "neon cyan, violet, hot pink, deep navy" },
+    { "id": "director", "name": "Narrative Director", "concept": "Mari is a charismatic movie director wearing a beret, holding a megaphone and unlettered clapperboard while directing a tiny dramatic set with spotlight and camera.", "palette": "cinema red, gold, black, electric blue" },
+    { "id": "persona-stats", "name": "Persona Stats", "concept": "Mari proudly poses like an RPG hero while clean floating status bars, hearts, stars, energy gems, and upward arrows frame her silhouette without numbers or words.", "palette": "emerald, ruby, sapphire, gold" },
+    { "id": "poker", "name": "Poker", "concept": "Mari sits at a friendly poker table with a confident smile, fanning a small hand of playing cards while colorful chips arc toward the center.", "palette": "casino emerald, crimson, gold, navy" },
+    { "id": "prose-guardian", "name": "Prose Guardian", "concept": "Mari stands heroically behind a luminous shield shaped from a clean book page, deflecting tangled scribbles while holding a feather quill like a guardian.", "palette": "royal blue, luminous white, gold, ink black" },
+    { "id": "quest", "name": "Quest Tracker", "concept": "Mari adventures through a colorful MMORPG-style fantasy scene with quest scroll, small sword, backpack, glowing waypoint, treasure chest, and distant castle.", "palette": "adventure green, sky blue, quest gold, warm red" },
+    { "id": "rock-paper-scissors", "name": "Rock-Paper-Scissors", "concept": "Mari throws an enthusiastic hand sign during a playful match as bold rock, paper, and scissors symbols orbit in a dynamic triangular burst.", "palette": "coral red, paper white, steel blue, sunny yellow" },
+    { "id": "tic-tac-toe", "name": "Tic-Tac-Toe", "concept": "Mari excitedly draws the winning symbol on a large glowing three-by-three grid, with chunky circles and crosses arranged in a clean playful pattern.", "palette": "aqua, coral, cream, navy" },
+    { "id": "uno", "name": "UNO", "concept": "Mari plays a lively hand of bright red, yellow, blue, and green action cards at a friendly table, tossing one card into the center with delighted energy; no brand logo or words.", "palette": "primary red, yellow, blue, green with navy" },
+    { "id": "world-state", "name": "World State", "concept": "Mari carefully holds a glowing miniature world showing tiny mountains and ocean, with day and night, sun, moon, rain cloud, snowflake, and temperature symbols orbiting it.", "palette": "planet blue, leaf green, sunlight gold, night violet" }
+  ]
+}
