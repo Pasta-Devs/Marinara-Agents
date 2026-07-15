@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Prompt Overrides
 // ──────────────────────────────────────────────
-import { eq } from "drizzle-orm";
+import { eq } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { promptOverrides } from "../../db/schema/index.js";
 import { now } from "../../utils/id-generator.js";

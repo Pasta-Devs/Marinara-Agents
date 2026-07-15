@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Synced App Settings (key/value)
 // ──────────────────────────────────────────────
-import { eq } from "drizzle-orm";
+import { eq } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { appSettings } from "../../db/schema/index.js";
 import { now } from "../../utils/id-generator.js";
