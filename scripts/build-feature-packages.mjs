@@ -40,7 +40,7 @@ async function captureEngineSources(metafilePath) {
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.0.1",
+    version: "1.0.2",
     maxEngineExclusive: "2.4.0",
     name: "Hierarchical Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
@@ -216,6 +216,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const result = spawnSync("pnpm", [
       "exec", "esbuild", entry,
       "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify",
+      "--jsx=automatic",
       "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false",
       "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"",
       `--alias:@marinara-engine/shared=${packageSharedEntry}`,
@@ -376,7 +377,7 @@ class Element extends HTMLElement { connectedCallback() { if (!this.__root) this
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else return;
     const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
-    const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
+    const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
     if (result.status !== 0) throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
     await captureEngineSources(metafile);
   } finally { await rm(temporary, { recursive: true, force: true }); }
