@@ -281,6 +281,12 @@ for (const entry of catalog.packages) {
     if (/\bReact\.createElement\b/u.test(clientSource)) {
       throw new Error(`${manifest.id} client runtime references an undefined classic React JSX global`);
     }
+    if (/\bcreatePortal\s*\(/u.test(clientSource)) {
+      throw new Error(`${manifest.id} client runtime references an undefined createPortal global`);
+    }
+    if (!clientSource.includes("data-marinara-maps-workspace-overlay")) {
+      throw new Error(`${manifest.id} client runtime is missing the viewport workspace overlay contract`);
+    }
   }
   if (manifest.kind.includes("conversation-calls")) {
     if (!manifest.permissions.includes("routes")) throw new Error(`${manifest.id} is missing the routes permission`);
