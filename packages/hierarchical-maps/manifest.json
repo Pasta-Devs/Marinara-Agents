@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "hierarchical-maps",
   "name": "Hierarchical Maps",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
   "engine": {
     "min": "2.3.0",
@@ -33,13 +33,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "bd120de3b205a1983bf0d2a4bc44ef2560f4001916052d3c8c4ecf6eedca91c9",
-      "bytes": 1928490
+      "sha256": "3f9a0cb25e1718e11efe69eb60a0734e46dd7d0ca7f11a65b6b8a68b1bef2624",
+      "bytes": 1928744
     },
     {
       "path": "client.js",
-      "sha256": "b29d11da116440839107e0ea7a1927b76340c41b90fb8a15fef3b9d8df11cb7d",
-      "bytes": 745771
+      "sha256": "3c6347eb87d0bb858a78fe23696df14e401dc9d276ca548960e3a56638152e26",
+      "bytes": 746342
     }
   ],
   "permissions": [

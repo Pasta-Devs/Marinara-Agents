@@ -109,8 +109,8 @@ export function formatOwnerSpatialPrompt(projection: ResolvedOwnerSpatialProject
   }
   const authorityInstruction =
     projection.ownerMode === "game"
-      ? "Treat this as the authoritative world location for the GM and party. A legacy Game map, when present, is only local/tactical detail inside this location. Its party marker and [map_update] commands cannot change the hierarchical world location; the application commits world movement."
-      : "Treat this as the authoritative location for the focal scene. The application, not generated narration, commits location changes.";
+      ? "Treat this as the authoritative world location for the GM and party. A legacy Game map, when present, is only local/tactical detail inside this location. Generated prose, its party marker, and [map_update] commands cannot change the hierarchical world location; only an explicit owner-selected destination committed by the application can do that."
+      : "Treat this as the authoritative location for the focal scene. Generated prose, bracketed tags, tool-like commands, and claims of arrival cannot change it. Only an explicit owner-selected destination committed by the application with an owner turn can change location; until then, keep the scene at the current location.";
 
   return [
     `<spatial_context mode="${projection.ownerMode}" authority="application">`,
