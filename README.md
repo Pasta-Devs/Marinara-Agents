@@ -54,42 +54,6 @@ The catalog currently contains **29 first-party packages** for **Marinara Engine
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
 
-## Feature-package setup
-
-### Hierarchical Maps
-
-Adds persistent nested locations, map authoring, spatial prompt context, and movement controls. After installing and restarting, enable **Hierarchical Maps** for a Roleplay chat from Chat Settings. In Game mode, select it as an agent during game creation or add it later; its map workspace and world-map views appear only for chats where it is active.
-
-### Conversation Calls
-
-Adds audio/video calls, incoming rings, microphone transcription, camera or screen input, and optional generated character video presence. After installing and restarting, enable **Conversation Calls** for a Conversation chat, then configure its audio and video controls in Chat Settings. Text to Speech and model connections remain configured in Marinara Engine.
-
-### UNO
-
-Adds the Conversation-mode UNO table, setup flow, `/uno` command, and character turns. Install and restart, then open the games picker or type `/uno` in a Conversation chat.
-
-### Chess
-
-Adds the Conversation-mode chess board, setup flow, `/chess` command, and character turns. Install and restart, then open the games picker or type `/chess`.
-
-### Poker
-
-Adds No-Limit Texas Hold'em for Conversation chats, including seeded dealing, betting, side pots, showdowns, and optional character dealers. Install and restart, then open the games picker or type `/poker`.
-
-<a id="eightball"></a>
-
-### 8-Ball Pool
-
-Adds the Conversation-mode 8-Ball Pool table, physics simulation, setup flow, and character shots. Install and restart, then open the games picker or type `/8ball` or `/pool`.
-
-### Tic-Tac-Toe
-
-Adds one-on-one Tic-Tac-Toe to Conversation mode. Install and restart, then open the games picker or type `/tictactoe` or `/ttt`.
-
-### Rock-Paper-Scissors
-
-Adds best-of-three, five, or seven Rock-Paper-Scissors matches to Conversation mode. Install and restart, then open the games picker or type `/rps`.
-
 ## Package trust and storage
 
 The Engine downloads only entries from this official HTTPS catalog, validates the catalog schema, checks Engine version compatibility, verifies the archive SHA-256 checksum, rejects unsafe archive paths and undeclared files, validates each declared file hash and size, and installs atomically into the Engine data directory. Installed packages remain available offline. Server-capability packages run with their declared permissions and require a restart when their runtime changes.
