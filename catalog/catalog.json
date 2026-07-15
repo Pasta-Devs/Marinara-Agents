@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-15T20:01:25.772Z",
+  "generatedAt": "2026-07-15T20:26:50.259Z",
   "packages": [
     {
       "manifest": {
@@ -355,7 +355,7 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Conversation Calls",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Adds live audio and video calls with Conversation characters.",
         "engine": {
           "min": "2.3.0",
@@ -385,13 +385,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "19926fe3b6f89302e000b5d2d588f9184177ea2f9f8d9ac890ba3d9add116597",
-            "bytes": 2403709
+            "sha256": "59eaebe58d3a831f5dd31366c10b90f8ba371b1bc2e77de036ccbbe0aeca396c",
+            "bytes": 2380823
           },
           {
             "path": "client.js",
-            "sha256": "150201913f676257efb537f032e2290cfac2fa23aab5f42780c5e2ce244987a7",
-            "bytes": 900301
+            "sha256": "b32e6ebadd12b60baf385a190946bced8e354a846c931b598c8be30278e9840d",
+            "bytes": 901485
           }
         ],
         "permissions": [
@@ -406,13 +406,13 @@
         "restartRequired": true
       },
       "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.1.zip",
-        "sha256": "a07a3be0e738742979a39b11c44522890141419b9a5cae11d9cc6eeb8beb8f26",
-        "bytes": 920676
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.2.zip",
+        "sha256": "074653e102ad1cd7c232b1e446405e7db5934c4e2441a0f4435cdf7bf01c55df",
+        "bytes": 915318
       },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png"
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
     {
       "manifest": {
@@ -660,13 +660,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "ce0e5e10d34c006792b306c412c9eca7b9f793e579f0f0f06dfe10d88fd0aaea",
-            "bytes": 1922652
+            "sha256": "6c2f6a275ffe09d939f31fbb182d41c601ba41cfbf285cd975234a40b3d8abc7",
+            "bytes": 1917993
           },
           {
             "path": "client.js",
-            "sha256": "2352dab06ddb775ca2ed1037e367d5592360880abc13f8a61c4828ad9331bab0",
-            "bytes": 744752
+            "sha256": "407af4ae956f5b08db2a05679f7e52a3eea2efd9aed9f3604cc4447ec2080af3",
+            "bytes": 745416
           }
         ],
         "permissions": [
@@ -685,8 +685,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.0.3.zip",
-        "sha256": "4840e17a7c4382cfcd75c39f56670403dedbbdab57f5a9481631f7b974acbf5d",
-        "bytes": 740153
+        "sha256": "866b93889653299e18b1df701a5375f2544c8d82ac0cbf841a895974098789ad",
+        "bytes": 738850
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },

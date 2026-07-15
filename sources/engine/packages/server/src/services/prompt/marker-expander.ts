@@ -21,7 +21,7 @@ import { processLorebooks, type LorebookFinalContentResolver, type LorebookScanR
 import { wrapContent } from "./format-engine.js";
 import { sanitizeExampleDialoguePromptLeaf, sanitizePromptLeaf } from "./prompt-escaping.js";
 import { agentRuns } from "../../db/schema/index.js";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc } from "../../db/file-query.js";
 
 /** Context required for expanding markers. */
 export interface MarkerContext {
