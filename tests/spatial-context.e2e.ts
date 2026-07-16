@@ -1790,6 +1790,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       ? await page.locator("textarea.mari-chat-input-textarea").boundingBox()
       : null;
     if (mobileRuntime) {
+      expect(composerBeforeMap, "Composer must have measurable browser geometry").not.toBeNull();
       const collapsedRuntimeBox = await storyLocation.boundingBox();
       expect(collapsedRuntimeBox?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(52);
       expect(collapsedRuntimeBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(48);
@@ -1799,7 +1800,8 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(roleplayMap).toBeVisible();
     if (mobileRuntime) {
       const composerAfterMap = await page.locator("textarea.mari-chat-input-textarea").boundingBox();
-      expect(Math.abs((composerAfterMap?.y ?? 0) - (composerBeforeMap?.y ?? 0))).toBeLessThanOrEqual(1);
+      expect(composerAfterMap, "Composer must remain measurable after opening the map").not.toBeNull();
+      expect(Math.abs(composerAfterMap!.y - composerBeforeMap!.y)).toBeLessThanOrEqual(1);
       const closeMapToggle = storyLocation.getByRole("button", { name: "Close story map", exact: true });
       await expectMinimumInteractiveSize(closeMapToggle, "Roleplay story-map close toggle");
       await closeMapToggle.click();
@@ -1811,6 +1813,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       await expectMinimumInteractiveSize(closeMapPanel, "Roleplay story-map panel close control");
       await closeMapPanel.click();
       await expect(roleplayMap).toHaveCount(0);
+      await expect(openStoryMap).toBeFocused();
       await storyLocation.getByRole("button", { name: "Open story map" }).click();
       roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
       await expect(roleplayMap).toBeVisible();
@@ -2034,7 +2037,13 @@ test("Game screen gives the hierarchical World map precedence over the session L
       expect(panelBackground).not.toMatch(/^rgba\([^)]*,\s*(?:0|0?\.\d+)\)$/);
       const gameInputAfterMap = await gameInput.boundingBox();
       expect(Math.abs((gameInputAfterMap?.y ?? 0) - (gameInputBeforeMap?.y ?? 0))).toBeLessThanOrEqual(1);
-      await storyLocation.getByRole("button", { name: "Close story map", exact: true }).click();
+      await storyLocation.getByRole("button", { name: /Open story location options/ }).click();
+      const runtimeOptions = storyLocation.locator("[data-marinara-maps-runtime-options]");
+      await expect(runtimeOptions).toBeVisible();
+      const closeRuntimeOptions = runtimeOptions.getByRole("button", { name: "Close story location options" });
+      await expectMinimumInteractiveSize(closeRuntimeOptions, "Game story-location options close control");
+      await closeRuntimeOptions.click();
+      await expect(runtimeOptions).toHaveCount(0);
 
       await page.getByRole("button", { name: "Open map" }).click();
     }

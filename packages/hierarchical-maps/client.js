@@ -477,6 +477,10 @@ Return only valid JSON:
     pointer-events: auto;
   }
 
+  [data-marinara-maps-runtime-root][data-runtime-layout="compact"][data-runtime-mode="game"] [data-marinara-maps-runtime-options] {
+    pointer-events: auto;
+  }
+
   [data-marinara-maps-runtime-desktop] {
     display: none !important;
   }
