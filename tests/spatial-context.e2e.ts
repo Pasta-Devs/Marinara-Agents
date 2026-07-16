@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 type CapturedOpenAiRequest = {
   messages?: Array<{ role?: string; content?: unknown }>;
@@ -68,6 +68,58 @@ function capturedPrompt(request: CapturedOpenAiRequest | undefined): string {
     .join("\n\n");
 }
 
+function promptText(messages: Array<{ content?: unknown }>): string {
+  return messages
+    .map((message) => (typeof message.content === "string" ? message.content : JSON.stringify(message.content)))
+    .join("\n\n");
+}
+
+function countOccurrences(value: string, marker: string): number {
+  return value.split(marker).length - 1;
+}
+
+function expectNormalizedSpatialPrompt(
+  value: string,
+  ownerMode: "roleplay" | "game",
+  source: string,
+  loreMarkers: {
+    forced: string;
+    duplicate: string;
+    disabled: string;
+    excluded: string;
+    oversized: string;
+  },
+  expectedLocation: {
+    path: string;
+    id: string;
+    forcedLore: boolean;
+  } = {
+    path: "Shrouded Coast > Gloam Harbor",
+    id: "ai_harbor",
+    forcedLore: true,
+  },
+): string {
+  expect(
+    countOccurrences(value, `<spatial_context mode="${ownerMode}" authority="application">`),
+    `${source} must contain one spatial projection`,
+  ).toBe(1);
+  expect(value, `${source} must contain the current path`).toContain(`Current path: ${expectedLocation.path}`);
+  expect(value, `${source} must contain the current location ID`).toContain(
+    `Current location ID: ${expectedLocation.id}`,
+  );
+  expect(countOccurrences(value, loreMarkers.forced), `${source} must scope forced-only lore to its location`).toBe(
+    expectedLocation.forcedLore ? 1 : 0,
+  );
+  expect(countOccurrences(value, loreMarkers.duplicate), `${source} must deduplicate ordinary and forced lore`).toBe(1);
+  expect(value, `${source} must exclude disabled lore`).not.toContain(loreMarkers.disabled);
+  expect(value, `${source} must honor chat lore exclusions`).not.toContain(loreMarkers.excluded);
+  expect(value, `${source} must omit over-budget location lore`).not.toContain(loreMarkers.oversized);
+
+  const block = value.match(/<spatial_context\b[^>]*>[\s\S]*?<\/spatial_context>/u)?.[0];
+  expect(block).toBeTruthy();
+  return block!.replace(/\r\n/gu, "\n").trim();
+}
+
 async function generateTurn(
   page: Page,
   data: Record<string, unknown>,
@@ -86,6 +138,16 @@ async function generateTurn(
     .split(/\r?\n/u)
     .filter((line) => line.startsWith("data: "))
     .map((line) => JSON.parse(line.slice(6)) as { type?: string; data?: unknown });
+}
+
+function savedAssistantMessage(events: Array<{ type?: string; data?: unknown }>, source: string) {
+  const saved = events.find((event) => event.type === "message_saved")?.data as
+    | { id?: unknown; role?: unknown; activeSwipeIndex?: unknown; content?: unknown }
+    | undefined;
+  expect(saved, `${source} must save an assistant message`).toBeTruthy();
+  expect(saved?.role, `${source} must save an assistant role`).toBe("assistant");
+  expect(typeof saved?.id, `${source} must return the saved message ID`).toBe("string");
+  return saved as { id: string; role: "assistant"; activeSwipeIndex: number; content: string };
 }
 
 async function expectDeletedInOrder(page: Page, paths: Array<string | null>) {
@@ -174,6 +236,19 @@ const generatedDefinition = {
   ],
 } as const;
 
+const regeneratedDefinition = {
+  ...generatedDefinition,
+  locations: generatedDefinition.locations.map((location) =>
+    location.id === "ai_world"
+      ? {
+          ...location,
+          name: "Recharted Coast",
+          description: "A coast redrawn around a safer harbor approach.",
+        }
+      : location,
+  ),
+} as const;
+
 const expandedDefinition = {
   ...generatedDefinition,
   enabled: true,
@@ -182,7 +257,7 @@ const expandedDefinition = {
     ...generatedDefinition.locations,
     {
       id: "ai_riverside",
-      parentId: "ai_world",
+      parentId: "ai_harbor",
       name: "Riverside Ward",
       kind: "place",
       description: "A lantern-lit district beside the tidal river.",
@@ -208,6 +283,34 @@ const expandedDefinition = {
       sortOrder: 0,
     },
   ],
+} as const;
+
+const longLocationLabel =
+  "The Observatory of Patient Stars Beyond the Lantern Archive and the Twelve Weathered Gates of the Northern Reach";
+
+const deepMapDefinition = {
+  schemaVersion: 1,
+  ownerMode: "roleplay",
+  enabled: true,
+  revision: 0,
+  startingLocationId: "deep-00",
+  locations: Array.from({ length: 12 }, (_, index) => ({
+    id: `deep-${String(index).padStart(2, "0")}`,
+    parentId: index === 0 ? null : `deep-${String(index - 1).padStart(2, "0")}`,
+    name: `${longLocationLabel} ${String(index + 1).padStart(2, "0")}`,
+    kind: index === 0 ? "region" : index % 3 === 0 ? "building" : "place",
+    description: `A deliberately deep browser-recovery fixture at level ${index + 1}.`,
+    modelMemory: `Deep-map anchor ${index + 1}.`,
+    icon: index === 0 ? "🌌" : "📍",
+    childPresentation: "map",
+    placement: { x: 50, y: 50 },
+    links:
+      index === 0
+        ? [{ targetId: "deep-01", label: "Archive stair", bidirectional: true, state: "available" }]
+        : [],
+    status: "active",
+    sortOrder: 0,
+  })),
 } as const;
 
 const gameGeneratedDefinition = {
@@ -285,6 +388,30 @@ async function activateHierarchicalMaps(page: Page, chatId: string) {
   expect(response.ok()).toBeTruthy();
 }
 
+async function openHierarchicalMapsAgentCategory(page: Page) {
+  const drawer = page.locator(".mari-chat-settings-drawer");
+  await expect(drawer).toBeVisible();
+  await expect(
+    drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Hierarchical map/ }),
+  ).toHaveCount(0);
+  await drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents/ }).click();
+  const enableAgents = drawer.getByRole("checkbox", { name: /^Enable Agents/ });
+  if (!(await enableAgents.isChecked())) {
+    await drawer.getByText("Enable Agents", { exact: true }).click();
+    await expect(enableAgents).toBeChecked();
+  }
+  await drawer.getByRole("button", { name: /Tracker Agents/ }).click();
+  return drawer;
+}
+
+async function openHierarchicalMapsAgentControls(page: Page) {
+  const drawer = await openHierarchicalMapsAgentCategory(page);
+  const agentEntry = drawer.locator('[data-chat-agent-entry="hierarchical-maps"]');
+  await expect(agentEntry).toBeVisible();
+  await agentEntry.getByText("Hierarchical map", { exact: true }).click();
+  return { drawer, agentEntry };
+}
+
 async function dismissOnboardingTutorial(page: Page) {
   const skip = page.getByRole("button", { name: "Skip Tutorial" });
   const appeared = await skip.waitFor({ state: "visible", timeout: 3_000 }).then(
@@ -324,6 +451,45 @@ async function expectWorkspaceFillsOverlay(page: Page) {
   expect(Math.abs(geometry!.root.y - geometry!.overlay.y)).toBeLessThanOrEqual(1);
   expect(Math.abs(geometry!.root.width - geometry!.overlay.width)).toBeLessThanOrEqual(1);
   expect(Math.abs(geometry!.root.height - geometry!.overlay.height)).toBeLessThanOrEqual(1);
+}
+
+async function expectMinimumInteractiveSize(locator: Locator, source: string) {
+  await expect(locator, `${source} must be visible`).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box, `${source} must have measurable browser geometry`).not.toBeNull();
+  expect(box!.width, `${source} must be at least 44 CSS pixels wide`).toBeGreaterThanOrEqual(44);
+  expect(box!.height, `${source} must be at least 44 CSS pixels tall`).toBeGreaterThanOrEqual(44);
+}
+
+async function expectWorkspaceTheme(
+  page: Page,
+  expected: { theme: "dark" | "light"; visualTheme: "default" | "sillytavern" },
+) {
+  await expectWorkspaceFillsOverlay(page);
+  const appearance = await page.locator("[data-marinara-maps-workspace-overlay]").evaluate((overlay) => {
+    const root = document.documentElement;
+    const shell = overlay.querySelector<HTMLElement>(".mari-editor-shell");
+    const title = overlay.querySelector<HTMLElement>("h1, h2");
+    if (!shell || !title) return null;
+    const shellStyle = getComputedStyle(shell);
+    const titleStyle = getComputedStyle(title);
+    return {
+      theme: root.dataset.theme ?? null,
+      visualTheme: root.dataset.visualTheme ?? null,
+      shellBackground: shellStyle.backgroundColor,
+      titleColor: titleStyle.color,
+      viewportOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      overlayOverflow: overlay.scrollWidth - overlay.clientWidth,
+    };
+  });
+  expect(appearance).not.toBeNull();
+  expect(appearance!.theme).toBe(expected.theme);
+  expect(appearance!.visualTheme).toBe(expected.visualTheme === "default" ? null : expected.visualTheme);
+  expect(appearance!.shellBackground).not.toBe("rgba(0, 0, 0, 0)");
+  expect(appearance!.titleColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(appearance!.titleColor).not.toBe(appearance!.shellBackground);
+  expect(appearance!.viewportOverflow).toBeLessThanOrEqual(1);
+  expect(appearance!.overlayOverflow).toBeLessThanOrEqual(1);
 }
 
 async function expectAuthoringWorkspaceLayout(page: Page, mobile: boolean) {
@@ -533,13 +699,437 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
   await expect(page.getByText(/Your game world is ready/)).toBeVisible();
   await expect(page.getByText("Validated", { exact: true })).toBeVisible();
-  await expect(page.getByText("4 new locations", { exact: true })).toBeVisible();
+  await expect(page.getByText("4 locations · 2 levels · not saved", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Skip map" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Use this draft" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue to editor" })).toBeVisible();
   await expectAiBuilderLayout(page, testInfo.project.name.includes("mobile"));
 
   return { chat };
 }
+
+test("Hierarchical Maps activates inside its Tracker Agents entry", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Maps Activation UX Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  const resetMetadata = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+    data: { enableAgents: false, activeAgentIds: [] },
+  });
+  expect(resetMetadata.ok()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
+          version: 72,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    if (testInfo.project.name.includes("mobile")) {
+      await page.getByRole("button", { name: "More options" }).click();
+      const overflowMenu = page.locator("[data-chat-toolbar-overflow-menu]");
+      await expect(overflowMenu).toBeVisible();
+      await overflowMenu.getByRole("button", { name: "Chat Settings" }).click();
+    } else {
+      await page.getByRole("button", { name: "Chat Settings" }).click();
+    }
+    const drawer = await openHierarchicalMapsAgentCategory(page);
+    await drawer.getByRole("button").filter({ hasText: /^Hierarchical Maps/ }).click();
+    const addDialog = page.getByRole("dialog", { name: "Add Hierarchical Maps" });
+    await expect(addDialog).toBeVisible();
+    await addDialog.getByRole("button", { name: "Add", exact: true }).click();
+
+    const agentEntry = drawer.locator('[data-chat-agent-entry="hierarchical-maps"]');
+    await expect(agentEntry).toBeVisible();
+    await agentEntry.getByText("Hierarchical map", { exact: true }).click();
+    const activation = agentEntry.getByRole("switch", { name: /Use in this chat/ });
+    await expect(activation).toHaveAttribute("aria-checked", "true");
+    const activationHeight = await activation.evaluate((element) => element.getBoundingClientRect().height);
+    expect(activationHeight).toBeGreaterThanOrEqual(44);
+    await expect(agentEntry.getByRole("button", { name: "Create hierarchical map" })).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const chatResponse = await page.request.get(`/api/chats/${chat.id}`);
+        const stored = (await chatResponse.json()) as { metadata?: unknown };
+        const metadata =
+          typeof stored.metadata === "string"
+            ? (JSON.parse(stored.metadata) as { enableAgents?: boolean; activeAgentIds?: string[] })
+            : ((stored.metadata ?? {}) as { enableAgents?: boolean; activeAgentIds?: string[] });
+        return {
+          enableAgents: metadata.enableAgents,
+          activeAgentIds: metadata.activeAgentIds,
+        };
+      })
+      .toEqual({ enableAgents: true, activeAgentIds: ["hierarchical-maps"] });
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("global Hierarchical Maps home activates and opens the current chat map", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Maps Global Home Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  const resetMetadata = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+    data: { enableAgents: false, activeAgentIds: [] },
+  });
+  expect(resetMetadata.ok(), await resetMetadata.text()).toBeTruthy();
+  const mobile = testInfo.project.name.includes("mobile");
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator(
+      mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
+    );
+    await expect(agentsPanel).toBeVisible();
+    const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
+    await expect(mapsCard).toBeVisible();
+    await mapsCard.getByText("Hierarchical Maps", { exact: true }).click();
+
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(home).toBeVisible();
+    await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
+    await expect(home.getByText("v1.1.0", { exact: true })).toBeVisible();
+    await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
+    await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
+    await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
+
+    const activation = home.getByRole("switch", { name: /Use in this chat/ });
+    const createMap = home.getByRole("button", { name: "Create map", exact: true });
+    await expect(activation).toHaveAttribute("aria-checked", "false");
+    await expect(createMap).toBeDisabled();
+    await expectMinimumInteractiveSize(activation, "Global Maps activation control");
+    await expectMinimumInteractiveSize(home.getByRole("button", { name: "Manage package" }), "Manage package control");
+    await expectMinimumInteractiveSize(home.getByRole("button", { name: "Back to Agents" }), "Global Maps back control");
+
+    await activation.click();
+    await expect(activation).toHaveAttribute("aria-checked", "true");
+    await expect(home).toContainText("Active in this chat. Saved map context can participate in turns.");
+    await expect(createMap).toBeEnabled();
+
+    await expect
+      .poll(async () => {
+        const chatResponse = await page.request.get(`/api/chats/${chat.id}`);
+        const stored = (await chatResponse.json()) as { metadata?: unknown };
+        const metadata =
+          typeof stored.metadata === "string"
+            ? (JSON.parse(stored.metadata) as { enableAgents?: boolean; activeAgentIds?: string[] })
+            : ((stored.metadata ?? {}) as { enableAgents?: boolean; activeAgentIds?: string[] });
+        return {
+          enableAgents: metadata.enableAgents,
+          activeAgentIds: metadata.activeAgentIds,
+        };
+      })
+      .toEqual({ enableAgents: true, activeAgentIds: ["hierarchical-maps"] });
+
+    await createMap.click();
+    await expect(page.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Back to chat" }).click();
+    const discardDialog = page.getByRole("dialog", { name: "Discard map changes?" });
+    if (await discardDialog.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await discardDialog.getByRole("button", { name: "Discard changes", exact: true }).click();
+    }
+    await expect(home).toBeVisible();
+    await expect(home.getByRole("button", { name: "Create map", exact: true })).toBeEnabled();
+    await home.getByRole("button", { name: "Back to Agents" }).click();
+    await expect(home).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Story location" })).toContainText(
+      "No map yet. Create one from Agents → Hierarchical Maps; your message draft is unchanged.",
+    );
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("Deep maps and long labels remain keyboard and touch operable across themes", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: `Deep Maps Theme Recovery ${testInfo.project.name}`,
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: deepMapDefinition,
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      const requestedAppearance = JSON.parse(
+        localStorage.getItem("marinara-maps-e2-appearance") ??
+          JSON.stringify({ theme: "dark", visualTheme: "default" }),
+      ) as { theme: "dark" | "light"; visualTheme: "default" | "sillytavern" };
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem("marinara-engine-ui-updated-at", String(Date.now() + 60_000));
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+            theme: requestedAppearance.theme,
+            visualTheme: requestedAppearance.visualTheme,
+            appBackgroundColor: "",
+            appAccentColor: "",
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await expectWorkspaceFillsOverlay(page);
+
+    const hierarchy = page.locator('section[aria-label="Location hierarchy"]:visible');
+    const rootName = deepMapDefinition.locations[0]!.name;
+    const rootExpand = hierarchy.getByRole("button", { name: `Expand ${rootName}`, exact: true });
+    const rootEnter = hierarchy.getByRole("button", { name: `Enter ${rootName}`, exact: true });
+    await expectMinimumInteractiveSize(rootExpand, "Hierarchy expand control");
+    await expectMinimumInteractiveSize(rootEnter, "Hierarchy enter control");
+
+    for (let index = 0; index < deepMapDefinition.locations.length - 1; index += 1) {
+      const location = deepMapDefinition.locations[index]!;
+      const nextLocation = deepMapDefinition.locations[index + 1]!;
+      const expand = hierarchy.getByRole("button", { name: `Expand ${location.name}`, exact: true });
+      await expand.scrollIntoViewIfNeeded();
+      if (index === 0) {
+        await expand.focus();
+        await page.keyboard.press("Enter");
+      } else {
+        await expand.click();
+      }
+      await expect(hierarchy.getByRole("button", { name: `Enter ${nextLocation.name}`, exact: true })).toBeVisible();
+    }
+
+    const hierarchyOverflow = await hierarchy.evaluate((element) => element.scrollWidth - element.clientWidth);
+    expect(hierarchyOverflow).toBeLessThanOrEqual(1);
+
+    await rootEnter.scrollIntoViewIfNeeded();
+    await rootEnter.focus();
+    await page.keyboard.press("Space");
+
+    const localView = page.locator('section[aria-label="Local location view"]:visible');
+    await expect(localView.getByRole("heading", { name: rootName, exact: true })).toBeVisible();
+    const leaveLocation = localView.getByRole("button", { name: "Leave this location" });
+    const localEnter = localView.getByRole("button", { name: "Enter", exact: true });
+    await expectMinimumInteractiveSize(leaveLocation, "Local map leave control");
+    await expectMinimumInteractiveSize(localEnter, "Local map enter control");
+
+    const childName = deepMapDefinition.locations[1]!.name;
+    const childLocation = localView.getByRole("button", { name: childName, exact: true });
+    await childLocation.focus();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator('section[aria-label^="Details for "]:visible').getByLabel("Name", { exact: true }),
+    ).toHaveValue(childName);
+
+    if (testInfo.project.name.includes("mobile")) {
+      for (const pane of ["hierarchy", "local", "details"] as const) {
+        await expectMinimumInteractiveSize(
+          page.getByRole("button", { name: pane, exact: true }),
+          `Mobile ${pane} pane control`,
+        );
+      }
+    }
+
+    for (const appearance of [
+      { theme: "dark", visualTheme: "default" },
+      { theme: "light", visualTheme: "default" },
+      { theme: "dark", visualTheme: "sillytavern" },
+    ] as const) {
+      await page.evaluate((nextAppearance) => {
+        localStorage.setItem("marinara-maps-e2-appearance", JSON.stringify(nextAppearance));
+      }, appearance);
+      await page.reload();
+      await dismissOnboardingTutorial(page);
+      await expectWorkspaceTheme(page, appearance);
+      await expect(page.getByText(rootName, { exact: true }).first()).toBeVisible();
+    }
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("Map loading retry and stale-write recovery preserve the working copy", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The recovery state is shared across viewports.");
+  test.setTimeout(90_000);
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: "Maps Loading and Conflict Recovery",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: { ...generatedDefinition, enabled: true },
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+  const saved = (await saveResponse.json()) as {
+    currentLocationId: string;
+    definition: typeof generatedDefinition;
+  };
+
+  let releaseInitialRead: (() => void) | null = null;
+  const initialReadHeld = new Promise<void>((resolve) => {
+    releaseInitialRead = resolve;
+  });
+  let heldInitialRead = false;
+  let allowSuccessfulRead = false;
+
+  try {
+    await page.route(`**/api/chats/${chat.id}/spatial-context`, async (route) => {
+      if (route.request().method() === "GET" && !allowSuccessfulRead) {
+        if (!heldInitialRead) {
+          heldInitialRead = true;
+          await initialReadHeld;
+        }
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Temporary map service interruption." }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await expect(page.getByLabel("Loading hierarchical map editor")).toBeVisible();
+
+    releaseInitialRead?.();
+    await expect(page.getByRole("heading", { name: "Hierarchical map unavailable" })).toBeVisible();
+    const recovery = page.getByRole("region", { name: "Hierarchical map recovery" });
+    const retry = recovery.getByRole("button", { name: "Retry", exact: true });
+    const back = recovery.getByRole("button", { name: "Back", exact: true });
+    await expectMinimumInteractiveSize(retry, "Map retry control");
+    await expectMinimumInteractiveSize(back, "Map recovery back control");
+    allowSuccessfulRead = true;
+    await retry.click();
+
+    await expect(page.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+    const localName = "Local unsaved harbor name";
+    const serverName = "Server-updated harbor name";
+    const nameInput = page.locator('section[aria-label^="Details for "]:visible').getByLabel("Name", { exact: true });
+    await nameInput.fill(localName);
+
+    const externalSave = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: saved.definition.revision,
+        expectedCurrentLocationId: saved.currentLocationId,
+        definition: {
+          ...saved.definition,
+          locations: saved.definition.locations.map((location) =>
+            location.id === saved.definition.startingLocationId ? { ...location, name: serverName } : location,
+          ),
+        },
+      },
+    });
+    expect(externalSave.ok(), await externalSave.text()).toBeTruthy();
+
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("alert").getByText("The map changed elsewhere. Your working copy is preserved.")).toBeVisible();
+    await expect(nameInput).toHaveValue(localName);
+
+    const reloadServer = page.getByRole("button", { name: "Reload server version" });
+    const reviewDifferences = page.getByRole("button", { name: "Review differences" });
+    await expectMinimumInteractiveSize(reloadServer, "Conflict reload control");
+    await expectMinimumInteractiveSize(reviewDifferences, "Conflict review control");
+    await reviewDifferences.click();
+    await expect(page.getByText("1 changed", { exact: true })).toBeVisible();
+    await reloadServer.click();
+    await expect(nameInput).toHaveValue(serverName);
+    await expect(page.getByText("The map changed elsewhere. Your working copy is preserved.")).toHaveCount(0);
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
 
 test("AI map builder previews a validated local draft before save", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
@@ -554,8 +1144,10 @@ test("AI map builder previews a validated local draft before save", async ({ pag
   const chat = (await response.json()) as { id: string };
   await activateHierarchicalMaps(page, chat.id);
   const mobile = testInfo.project.name.includes("mobile");
+  let generationRequestCount = 0;
 
   await page.route(`**/api/chats/${chat.id}/spatial-context/generate`, async (route) => {
+    generationRequestCount += 1;
     const request = route.request().postDataJSON() as {
       operation: string;
       size: string;
@@ -575,8 +1167,8 @@ test("AI map builder previews a validated local draft before save", async ({ pag
         operation: "create",
         size: "small",
         source: "roleplay_setup",
-        generatedLocationCount: generatedDefinition.locations.length,
-        definition: generatedDefinition,
+        generatedLocationCount: regeneratedDefinition.locations.length,
+        definition: generationRequestCount === 1 ? generatedDefinition : regeneratedDefinition,
       }),
     });
   });
@@ -609,9 +1201,8 @@ test("AI map builder previews a validated local draft before save", async ({ pag
 
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
-      const drawer = page.locator(".mari-chat-settings-drawer");
-      await drawer.getByText("Hierarchical map", { exact: true }).click();
-      await drawer.getByRole("button", { name: "Create hierarchical map" }).click();
+      const { agentEntry } = await openHierarchicalMapsAgentControls(page);
+      await agentEntry.getByRole("button", { name: "Create hierarchical map" }).click();
     }
 
     await expectWorkspaceFillsOverlay(page);
@@ -622,31 +1213,93 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
     await page.getByRole("button", { name: "Generate draft" }).click();
     await expect(page.getByText("Validated", { exact: true })).toBeVisible();
-    await expect(page.getByText("4 new locations", { exact: true })).toBeVisible();
-    await expect(page.getByText("Shrouded Coast", { exact: true })).toBeVisible();
+    await expect(page.getByText("4 locations · 2 levels · not saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Proposed start:").getByText("Shrouded Coast", { exact: true })).toBeVisible();
+
+    const draftHierarchy = page.getByRole("region", {
+      name: "Generated location hierarchy",
+    });
+    await expect(draftHierarchy.getByRole("button", { name: /^Gloam Harbor/ })).toBeVisible();
+    await expect(draftHierarchy.getByRole("button", { name: /^Blackglass Lighthouse/ })).toBeVisible();
+    await draftHierarchy.getByRole("button", { name: /^Blackglass Lighthouse/ }).click();
+
+    const draftDetails = page.getByRole("region", {
+      name: "Selected generated location details",
+    });
+    await expect(draftDetails.getByRole("heading", { name: "Blackglass Lighthouse" })).toBeVisible();
+    await expect(
+      draftDetails.getByText("A dark lighthouse on the cliffs.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      draftDetails.getByText("Its lamp reveals hidden ink at midnight.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+
+    await page.getByLabel("Search generated locations").fill("sewers");
+    await expect(draftHierarchy.getByRole("button", { name: /^Old Sewers/ })).toBeVisible();
+    await expect(draftHierarchy.getByRole("button", { name: /^Gloam Harbor/ })).toHaveCount(0);
+    await page.getByLabel("Search generated locations").clear();
 
     const beforeApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(((await beforeApply.json()) as { definition: unknown }).definition).toBeNull();
 
-    await page.getByRole("button", { name: "Use this draft" }).click();
-    await expect(page.getByText("AI map draft applied. Review it, then Save.")).toBeVisible();
+    await page.getByRole("button", { name: "Continue to editor" }).click();
+    await expect(page.getByText("AI map draft applied. Review it, choose a start, then enable and save.")).toBeVisible();
     const hierarchy = page.locator('section[aria-label="Location hierarchy"]:visible');
     await expect(hierarchy.getByRole("button", { name: "Shrouded Coast region" })).toBeVisible();
+    await expect(hierarchy.getByRole("button", { name: "Collapse Shrouded Coast" })).toBeVisible();
+    await expect(hierarchy.getByRole("button", { name: "Enter Gloam Harbor" })).toBeVisible();
+
+    const firstMapSetup = page.getByRole("region", { name: "First map setup" });
+    await expect(firstMapSetup).toContainText("4 locations · 2 levels · Working draft, not saved");
+    await expect(firstMapSetup.getByRole("list", { name: "First map progress" })).toContainText(
+      /Build.*Review.*Start here.*Enable map/u,
+    );
+    await expectMinimumInteractiveSize(firstMapSetup.getByRole("button", { name: "Discard draft" }), "Discard draft control");
+    await expectMinimumInteractiveSize(firstMapSetup.getByRole("button", { name: "Regenerate" }), "Regenerate draft control");
+    await firstMapSetup.getByRole("button", { name: "Regenerate" }).click();
+    const regenerateDialog = page.getByRole("dialog", { name: "Regenerate this working draft?" });
+    await expect(regenerateDialog).toBeVisible();
+    const confirmRegeneration = regenerateDialog.getByRole("button", { name: "Regenerate draft", exact: true });
+    await confirmRegeneration.focus();
+    await page.keyboard.press("Enter");
+    await expect(regenerateDialog).toBeHidden();
+    await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
+    await expect(page.getByLabel("What should this world include?")).toHaveValue(
+      "A foggy port with a lighthouse and secret sewers.",
+    );
+    await expect(page.getByRole("button", { name: /Small About 8 places/ })).toHaveAttribute("aria-pressed", "true");
+    const regeneratedHierarchy = page.getByRole("region", { name: "Generated location hierarchy" });
+    await expect(regeneratedHierarchy.getByRole("button", { name: /^Recharted Coast/ })).toBeVisible();
+    expect(generationRequestCount).toBe(2);
+    await page.getByRole("button", { name: "Replace working draft" }).click();
+    await expect(hierarchy.getByRole("button", { name: "Recharted Coast region" })).toBeVisible();
+    const startingLocation = firstMapSetup.getByLabel("Starting location");
+    await expect(startingLocation).toHaveValue("ai_world");
+    await startingLocation.selectOption("ai_harbor");
 
     const afterApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(((await afterApply.json()) as { definition: unknown }).definition).toBeNull();
 
-    await page.getByLabel("Disabled", { exact: true }).check();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByLabel("Disabled", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Enable and save map", exact: true }).click();
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Map ready · 4 locations · Starting at Gloam Harbor", { exact: true })).toBeVisible();
+    await expectMinimumInteractiveSize(page.getByRole("button", { name: "Return to chat" }), "First-save return control");
 
     const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     const stored = (await storedResponse.json()) as {
-      definition: { enabled: boolean; locations: Array<{ name: string }> };
+      currentLocationId: string;
+      definition: { enabled: boolean; startingLocationId: string; locations: Array<{ name: string }> };
     };
     expect(stored.definition.enabled).toBe(true);
+    expect(stored.definition.startingLocationId).toBe("ai_harbor");
+    expect(stored.currentLocationId).toBe("ai_harbor");
     expect(stored.definition.locations.map((location) => location.name)).toEqual([
-      "Shrouded Coast",
+      "Recharted Coast",
       "Gloam Harbor",
       "Blackglass Lighthouse",
       "Old Sewers",
@@ -697,7 +1350,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     };
     expect(request).toMatchObject({
       operation: "expand",
-      targetLocationId: "ai_world",
+      targetLocationId: "ai_harbor",
       size: "small",
       instructions: "Add a riverside ward with an inn for ferrymen.",
       debugMode: false,
@@ -707,7 +1360,7 @@ test("AI map expansion preserves a campaign map and its current location", async
       contentType: "application/json",
       body: JSON.stringify({
         operation: "expand",
-        targetLocationId: "ai_world",
+        targetLocationId: "ai_harbor",
         size: "small",
         source: "roleplay_setup",
         generatedLocationCount: 2,
@@ -748,9 +1401,8 @@ test("AI map expansion preserves a campaign map and its current location", async
 
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
-      const drawer = page.locator(".mari-chat-settings-drawer");
-      await drawer.getByText("Hierarchical map", { exact: true }).click();
-      await drawer.getByRole("button", { name: "Edit hierarchical map" }).click();
+      const { agentEntry } = await openHierarchicalMapsAgentControls(page);
+      await agentEntry.getByRole("button", { name: "Edit hierarchical map" }).click();
     } else {
       const mobileMusicLayer = page.locator('[data-component="MobileMusicWidgetLayer"]');
       const mobileMusicWidget = mobileMusicLayer.locator(".fixed");
@@ -778,13 +1430,20 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expectAiBuilderLayout(page, mobile);
     await expect(page.getByText(/Campaign history is protected/)).toBeVisible();
     await expect(page.getByRole("button", { name: /Replace draft/ })).toHaveCount(0);
-    await expect(page.getByLabel("Expand beneath")).toHaveValue("ai_world");
+    await expect(page.getByText("Adding beneath", { exact: true })).toBeVisible();
+    await expect(page.getByText("Gloam Harbor", { exact: true })).toBeVisible();
+    const advancedOptions = page.getByRole("button", { name: "Advanced options", exact: true });
+    await expect(advancedOptions).toHaveAttribute("aria-expanded", "false");
+    await expectMinimumInteractiveSize(advancedOptions, "AI expansion advanced options control");
+    await expect(page.getByLabel("Expand beneath")).toHaveCount(0);
     await page.getByLabel("What should be added?").fill("Add a riverside ward with an inn for ferrymen.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
     await page.getByRole("button", { name: "Generate expansion" }).click();
     await expect(page.getByText("Validated", { exact: true })).toBeVisible();
-    await expect(page.getByText("2 new locations", { exact: true })).toBeVisible();
-    await expect(page.getByText("Riverside Ward", { exact: true })).toBeVisible();
+    await expect(page.getByText("2 new locations · 2 levels · not applied", { exact: true })).toBeVisible();
+    const expansionHierarchy = page.getByRole("region", { name: "Generated location hierarchy" });
+    await expect(expansionHierarchy.getByRole("button", { name: /^Riverside Ward/ })).toBeVisible();
+    await expect(expansionHierarchy.getByRole("button", { name: /^Silver Minnow Inn/ })).toBeVisible();
 
     const beforeApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(((await beforeApply.json()) as { definition: { locations: unknown[] } }).definition.locations).toHaveLength(4);
@@ -832,12 +1491,15 @@ test("Game setup hands an optional map draft into review before Save", async ({ 
     expect(beforeApply.ok()).toBeTruthy();
     expect(((await beforeApply.json()) as { definition: unknown }).definition).toBeNull();
 
-    await page.getByRole("button", { name: "Use this draft" }).click();
-    await expect(page.getByText("AI map draft applied. Review it, then Save.")).toBeVisible();
+    await page.getByRole("button", { name: "Continue to editor" }).click();
+    await expect(page.getByText("AI map draft applied. Review it, choose a start, then enable and save.")).toBeVisible();
 
     const mobile = testInfo.project.name.includes("mobile");
     await expectAuthoringWorkspaceLayout(page, mobile);
-    await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    await expect(page.getByRole("region", { name: "First map setup" }).getByLabel("Starting location")).toHaveValue(
+      "ai_world",
+    );
+    await expect(page.getByRole("button", { name: "Collapse Shrouded Coast" })).toBeVisible();
     await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
     if (mobile) {
@@ -851,9 +1513,9 @@ test("Game setup hands an optional map draft into review before Save", async ({ 
     const afterApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(((await afterApply.json()) as { definition: unknown }).definition).toBeNull();
 
-    await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("button", { name: "Enable and save map", exact: true }).click();
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Map ready · 4 locations · Starting at Shrouded Coast", { exact: true })).toBeVisible();
 
     const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     const stored = (await storedResponse.json()) as {
@@ -1087,7 +1749,14 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     const storyLocation = page.getByRole("region", { name: "Story location" });
     await expect(storyLocation).toContainText("Shrouded Coast");
     await storyLocation.getByRole("button", { name: /Story location.*Shrouded Coast/ }).click();
-    await storyLocation.getByRole("button", { name: /Enter Gloam Harbor/ }).click();
+    const inspectHarbor = storyLocation.getByRole("button", { name: "Inspect Gloam Harbor" });
+    await expectMinimumInteractiveSize(inspectHarbor, "Roleplay destination inspect control");
+    await inspectHarbor.focus();
+    await page.keyboard.press("Enter");
+    await expect(storyLocation.getByText("A busy harbor of black piers.", { exact: true })).toBeVisible();
+    const setHarborDestination = storyLocation.getByRole("button", { name: "Set destination: Gloam Harbor" });
+    await expectMinimumInteractiveSize(setHarborDestination, "Roleplay set-destination control");
+    await setHarborDestination.click();
     await expect(storyLocation.getByText("Moves with your next turn")).toBeVisible();
 
     await page.reload();
@@ -1100,7 +1769,8 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(storyLocation).toContainText("Gloam Harbor");
 
     await storyLocation.getByRole("button", { name: /Story location.*Gloam Harbor/ }).click();
-    await storyLocation.getByRole("button", { name: /Leave for Shrouded Coast/ }).click();
+    await storyLocation.getByRole("button", { name: "Inspect Shrouded Coast" }).click();
+    await storyLocation.getByRole("button", { name: "Set destination: Shrouded Coast" }).click();
     await input.fill("Wait for me at the gate.");
     await page.locator("button.mari-chat-send-btn").click();
     await expect(input).toHaveValue("Wait for me at the gate.");
@@ -1108,7 +1778,28 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
 
     await page.reload();
     await expect(page.locator("textarea.mari-chat-input-textarea")).toHaveValue("Wait for me at the gate.");
-    await expect(page.getByRole("region", { name: "Story location" }).getByText(/Needs review/)).toBeVisible();
+    const recoveredStoryLocation = page.getByRole("region", { name: "Story location" });
+    await expect(recoveredStoryLocation.getByText(/Needs review/)).toBeVisible();
+    await recoveredStoryLocation.getByRole("button", { name: "Cancel move to Shrouded Coast" }).click();
+
+    const currentSpatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(currentSpatialResponse.ok(), await currentSpatialResponse.text()).toBeTruthy();
+    const currentSpatial = (await currentSpatialResponse.json()) as {
+      currentLocationId: string;
+      definition: typeof runtimeDefinition & { revision: number };
+    };
+    const disableResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: currentSpatial.definition.revision,
+        expectedCurrentLocationId: currentSpatial.currentLocationId,
+        definition: { ...currentSpatial.definition, enabled: false },
+      },
+    });
+    expect(disableResponse.ok(), await disableResponse.text()).toBeTruthy();
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Story location" })).toContainText(
+      "Map disabled. Its saved hierarchy and history are preserved until you enable it again.",
+    );
   } finally {
     await page.unroute("**/api/generate");
     await expectDeleted(page, `/api/chats/${chat.id}`);
@@ -1180,6 +1871,22 @@ test("Game screen gives the hierarchical World map precedence over the session L
         definition: {
           ...gameGeneratedDefinition,
           enabled: true,
+          locations: [
+            ...gameGeneratedDefinition.locations,
+            {
+              id: "ai_harbor_docks",
+              parentId: "ai_harbor",
+              name: "Fogbound Docks",
+              kind: "place",
+              description: "Low docks tucked beneath Gloam Harbor's black piers.",
+              modelMemory: "The dockhands track every boat that arrives after midnight.",
+              icon: "🛶",
+              childPresentation: "list",
+              links: [],
+              status: "active",
+              sortOrder: 0,
+            },
+          ],
         },
       },
     });
@@ -1222,11 +1929,24 @@ test("Game screen gives the hierarchical World map precedence over the session L
     await expect(page.getByText("The Crownscar", { exact: true })).toHaveCount(0);
     const worldMap = page.getByRole("region", { name: "Hierarchical world map" });
     await expect(worldMap).toBeVisible();
-    await expect(worldMap.getByRole("button", { name: /Gloam Harbor/ })).toBeVisible();
+    const listToggle = worldMap.getByRole("button", { name: "Show places as list" });
+    await expectMinimumInteractiveSize(listToggle, "Game world-map list alternative control");
+    await listToggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(worldMap.getByRole("list", { name: "Locations" })).toBeVisible();
+    await expect(worldMap.getByRole("button", { name: /Inspect Gloam Harbor/ })).toBeVisible();
     await expect(worldMap.getByText("⚓", { exact: true })).toBeVisible();
 
-    await worldMap.getByRole("button", { name: /Gloam Harbor/ }).click();
+    await worldMap.getByRole("button", { name: /Inspect Gloam Harbor/ }).click();
     await expect(worldMap.getByText("A busy harbor of black piers.")).toBeVisible();
+    const exploreHarbor = worldMap.getByRole("button", { name: "Explore inside" });
+    const setHarborDestination = worldMap.getByRole("button", { name: "Set destination: Gloam Harbor" });
+    await expectMinimumInteractiveSize(exploreHarbor, "Game world-map explore control");
+    await expectMinimumInteractiveSize(setHarborDestination, "Game world-map set-destination control");
+    await exploreHarbor.click();
+    await expect(worldMap.getByText("Fogbound Docks", { exact: true })).toBeVisible();
+    await worldMap.getByRole("button", { name: "Center current story location" }).click();
+    await worldMap.getByRole("button", { name: /Inspect Gloam Harbor/ }).click();
     await expect(worldMap.getByRole("button", { name: "Set destination: Gloam Harbor" })).toBeVisible();
 
     await mapView.getByRole("button", { name: "Local" }).click();
@@ -1328,6 +2048,570 @@ test("Game prompt scopes the legacy map beneath the hierarchical world location"
     expect(prompt).toContain("[map_update:");
   } finally {
     await expectDeletedInOrder(page, [chat ? `/api/chats/${chat.id}` : null, `/api/connections/${connection.id}`]);
+  }
+});
+
+test("Roleplay and Game generation, retry, and continuation share historical prompt parity", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The prompt and lore contract is viewport-independent.");
+  test.setTimeout(120_000);
+
+  const provider = await startOpenAiTestServer([
+    "ROLEPLAY_HARBOR_NORMAL: The harbor bells answer across the water.",
+    "ROLEPLAY_WORLD_NORMAL: The wider coast opens beyond the harbor road.",
+    "ROLEPLAY_HARBOR_RETRY: The harbor answer changes while its anchor remains.",
+    "ROLEPLAY_WORLD_CONTINUATION: The coast continues beyond the headland.",
+    "GAME_HARBOR_NORMAL: The party remains within Gloam Harbor.",
+    "GAME_WORLD_NORMAL: The party surveys the whole Shrouded Coast.",
+    "GAME_HARBOR_RETRY: A different harbor scene keeps the historical anchor.",
+    "GAME_WORLD_CONTINUATION: The GM continues the wider coastal scene.",
+  ]);
+  const loreMarkers = {
+    forced: "FORCED_LOCATION_LORE: cedar pilings mark the safe channel.",
+    duplicate: "DUPLICATE_LOCATION_LORE: the tide clock rings at dusk.",
+    disabled: "DISABLED_LOCATION_LORE_MUST_NOT_APPEAR",
+    excluded: "EXCLUDED_LOCATION_LORE_MUST_NOT_APPEAR",
+    oversized: "OVERSIZED_LOCATION_LORE_MUST_BE_REPORTED_AS_TRUNCATED",
+  } as const;
+  const lorebookIds: string[] = [];
+  let connection: { id: string } | null = null;
+  let character: { id: string } | null = null;
+  let roleplayChat: { id: string } | null = null;
+  let gameChat: { id: string } | null = null;
+
+  const createLorebook = async (name: string) => {
+    const response = await page.request.post("/api/lorebooks", {
+      data: {
+        name: `${name} ${Date.now()}`,
+        description: "Normalized Hierarchical Maps prompt parity fixture.",
+        category: "world",
+        enabled: true,
+      },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const lorebook = (await response.json()) as { id: string };
+    lorebookIds.push(lorebook.id);
+    return lorebook;
+  };
+  const createLorebookEntry = async (lorebookId: string, data: Record<string, unknown>) => {
+    const response = await page.request.post(`/api/lorebooks/${lorebookId}/entries`, { data });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    return (await response.json()) as { id: string };
+  };
+  const previewPrompt = async (chatId: string, messageId?: string) => {
+    const response = await page.request.post(`/api/chats/${chatId}/peek-prompt`, {
+      data: messageId ? { messageId } : {},
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const preview = (await response.json()) as {
+      source: string;
+      exact: boolean;
+      messages: Array<{ role?: string; content?: unknown }>;
+    };
+    return { ...preview, text: promptText(preview.messages) };
+  };
+  const generateCapturedTurn = async (data: Record<string, unknown>, source: string) => {
+    const requestIndex = provider.requests.length;
+    const events = await generateTurn(page, data);
+    expect(provider.requests.length, `${source} must make one provider request`).toBe(requestIndex + 1);
+    return {
+      events,
+      message: savedAssistantMessage(events, source),
+      prompt: capturedPrompt(provider.requests[requestIndex]),
+    };
+  };
+  const expectRejectedBeforeProvider = async (
+    data: Record<string, unknown>,
+    status: number,
+    code: string,
+    source: string,
+  ) => {
+    const requestCount = provider.requests.length;
+    const response = await page.request.post("/api/generate", {
+      data: {
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+        ...data,
+      },
+    });
+    const body = await response.text();
+    expect(response.status(), body).toBe(status);
+    expect(JSON.parse(body) as { code?: string }, source).toMatchObject({ code });
+    expect(provider.requests.length, `${source} must stop before the provider`).toBe(requestCount);
+  };
+  const dryRunPrompt = async (chatId: string) => {
+    const response = await page.request.post("/api/generate/dryRun", {
+      data: {
+        chatId,
+        connectionId: connection!.id,
+        returnPrompt: true,
+        skipPreset: true,
+        injectLorebook: true,
+        userMessage: "Check the normalized harbor projection.",
+      },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const preview = (await response.json()) as {
+      prompt: { messages: Array<{ role?: string; content?: unknown }> };
+    };
+    return promptText(preview.prompt.messages);
+  };
+  const expectActiveContext = async (
+    chatId: string,
+    entries: {
+      forced: string;
+      duplicate: string;
+      disabled: string;
+      excluded: string;
+      oversized: string;
+    },
+  ) => {
+    const response = await page.request.get(`/api/lorebooks/scan/${chatId}`);
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const scan = (await response.json()) as {
+      entries: Array<{ id: string; activationSources?: string[] }>;
+      budgetSkippedEntries?: Array<{ id: string; blockedBy?: string }>;
+    };
+    expect(scan.entries.map((entry) => entry.id).sort()).toEqual([entries.duplicate, entries.forced].sort());
+    expect(scan.entries.find((entry) => entry.id === entries.forced)?.activationSources).toEqual(["current_location"]);
+    expect(scan.entries.find((entry) => entry.id === entries.duplicate)?.activationSources).toEqual(
+      expect.arrayContaining(["constant", "current_location"]),
+    );
+    expect(scan.entries.some((entry) => entry.id === entries.disabled)).toBe(false);
+    expect(scan.entries.some((entry) => entry.id === entries.excluded)).toBe(false);
+    expect(scan.entries.some((entry) => entry.id === entries.oversized)).toBe(false);
+    expect(scan.budgetSkippedEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: entries.oversized,
+          blockedBy: "location",
+        }),
+      ]),
+    );
+  };
+
+  try {
+    const connectionResponse = await page.request.post("/api/connections", {
+      data: {
+        name: `Maps Prompt Parity ${Date.now()}`,
+        provider: "custom",
+        baseUrl: provider.baseUrl,
+        model: "maps-authority-e2e",
+        apiKey: "maps-authority-e2e",
+        treatAsLocalEndpoint: true,
+      },
+    });
+    expect(connectionResponse.ok(), await connectionResponse.text()).toBeTruthy();
+    connection = (await connectionResponse.json()) as { id: string };
+
+    const forcedBook = await createLorebook("Maps forced-only lore");
+    const activeBook = await createLorebook("Maps active duplicate lore");
+    const excludedBook = await createLorebook("Maps excluded lore");
+    const forcedEntry = await createLorebookEntry(forcedBook.id, {
+      name: "Forced current-location truth",
+      content: loreMarkers.forced,
+      order: 0,
+    });
+    const duplicateEntry = await createLorebookEntry(activeBook.id, {
+      name: "Ordinary and current-location truth",
+      content: loreMarkers.duplicate,
+      constant: true,
+      order: 10,
+    });
+    const disabledEntry = await createLorebookEntry(activeBook.id, {
+      name: "Disabled current-location truth",
+      content: loreMarkers.disabled,
+      constant: true,
+      enabled: false,
+      order: 20,
+    });
+    const excludedEntry = await createLorebookEntry(excludedBook.id, {
+      name: "Excluded current-location truth",
+      content: loreMarkers.excluded,
+      constant: true,
+      order: 30,
+    });
+    const oversizedEntry = await createLorebookEntry(forcedBook.id, {
+      name: "Over-budget current-location truth",
+      content: `${loreMarkers.oversized}: ${"boundary ".repeat(9_000)}`,
+      order: 100,
+    });
+    const entryIds = {
+      forced: forcedEntry.id,
+      duplicate: duplicateEntry.id,
+      disabled: disabledEntry.id,
+      excluded: excludedEntry.id,
+      oversized: oversizedEntry.id,
+    };
+    const missingEntryId = `missing-location-lore-${Date.now()}`;
+    const buildParityDefinition = (ownerMode: "roleplay" | "game") => ({
+      ...generatedDefinition,
+      ownerMode,
+      enabled: true,
+      startingLocationId: "ai_harbor",
+      locations: generatedDefinition.locations.map((location) =>
+        location.id === "ai_harbor"
+          ? {
+              ...location,
+              lorebookEntryIds: [
+                forcedEntry.id,
+                duplicateEntry.id,
+                disabledEntry.id,
+                excludedEntry.id,
+                oversizedEntry.id,
+                missingEntryId,
+              ],
+            }
+          : location,
+      ),
+    });
+
+    const characterResponse = await page.request.post("/api/characters", {
+      data: { data: { name: `Maps Prompt Parity Guide ${Date.now()}` } },
+    });
+    expect(characterResponse.ok(), await characterResponse.text()).toBeTruthy();
+    character = (await characterResponse.json()) as { id: string };
+    const roleplayChatResponse = await page.request.post("/api/chats", {
+      data: {
+        name: "Roleplay normalized Maps prompt parity",
+        mode: "roleplay",
+        characterIds: [character.id],
+        connectionId: connection.id,
+      },
+    });
+    expect(roleplayChatResponse.ok(), await roleplayChatResponse.text()).toBeTruthy();
+    roleplayChat = (await roleplayChatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, roleplayChat.id);
+    const roleplayMetadataResponse = await page.request.patch(`/api/chats/${roleplayChat.id}/metadata`, {
+      data: {
+        activeLorebookIds: [activeBook.id, excludedBook.id],
+        excludedLorebookIds: [excludedBook.id],
+      },
+    });
+    expect(roleplayMetadataResponse.ok(), await roleplayMetadataResponse.text()).toBeTruthy();
+    const roleplaySaveResponse = await page.request.put(`/api/chats/${roleplayChat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: buildParityDefinition("roleplay"),
+      },
+    });
+    expect(roleplaySaveResponse.ok(), await roleplaySaveResponse.text()).toBeTruthy();
+    const roleplaySave = (await roleplaySaveResponse.json()) as {
+      currentLocationId: string;
+      definition: { revision: number };
+      warnings?: Array<{ code?: string }>;
+    };
+    expect(roleplaySave.currentLocationId).toBe("ai_harbor");
+    expect(roleplaySave.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "lorebook_entry_missing" })]),
+    );
+
+    const roleplayLive = await previewPrompt(roleplayChat.id);
+    expect(roleplayLive).toMatchObject({
+      source: "live_preview",
+      exact: false,
+    });
+    const roleplayDryRun = await dryRunPrompt(roleplayChat.id);
+    const roleplayNormalTurn = await generateCapturedTurn(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        userMessage: "Generate from the normalized harbor projection.",
+      },
+      "Roleplay normal generation",
+    );
+    const roleplayNormal = roleplayNormalTurn.prompt;
+    const roleplayCached = await previewPrompt(roleplayChat.id);
+    expect(roleplayCached).toMatchObject({ source: "cached", exact: true });
+    expect(roleplayCached.text).toBe(roleplayNormal);
+    expect(
+      new Set(
+        [
+          ["Roleplay live Peek Prompt", roleplayLive.text],
+          ["Roleplay dry run", roleplayDryRun],
+          ["Roleplay normal generation", roleplayNormal],
+          ["Roleplay cached Peek Prompt", roleplayCached.text],
+        ].map(([source, value]) =>
+          expectNormalizedSpatialPrompt(value!, "roleplay", source!, loreMarkers),
+        ),
+      ).size,
+    ).toBe(1);
+    await expectActiveContext(roleplayChat.id, entryIds);
+
+    const roleplayWorldTurn = await generateCapturedTurn(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        userMessage: "Return to the Shrouded Coast overview.",
+        pendingSpatialTransition: {
+          destinationId: "ai_world",
+          expectedDefinitionRevision: roleplaySave.definition.revision,
+          expectedCurrentLocationId: "ai_harbor",
+          commandId: "roleplay-parity-return-to-world",
+        },
+      },
+      "Roleplay accepted owner transition",
+    );
+    expect(roleplayWorldTurn.events.some((event) => event.type === "spatial_transition_committed")).toBe(true);
+    expectNormalizedSpatialPrompt(
+      roleplayWorldTurn.prompt,
+      "roleplay",
+      "Roleplay accepted owner transition",
+      loreMarkers,
+      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
+    );
+
+    await expectRejectedBeforeProvider(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        userMessage: "Try a stale return to the harbor.",
+        pendingSpatialTransition: {
+          destinationId: "ai_harbor",
+          expectedDefinitionRevision: roleplaySave.definition.revision - 1,
+          expectedCurrentLocationId: "ai_world",
+          commandId: "roleplay-parity-stale-return",
+        },
+      },
+      409,
+      "spatial_transition_stale_definition",
+      "Roleplay stale transition",
+    );
+    await expectRejectedBeforeProvider(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        userMessage: "Duplicate the accepted owner transition.",
+        pendingSpatialTransition: {
+          destinationId: "ai_world",
+          expectedDefinitionRevision: roleplaySave.definition.revision,
+          expectedCurrentLocationId: "ai_harbor",
+          commandId: "roleplay-parity-return-to-world",
+        },
+      },
+      409,
+      "spatial_transition_already_applied",
+      "Roleplay duplicate transition",
+    );
+    await expectRejectedBeforeProvider(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        regenerateMessageId: roleplayNormalTurn.message.id,
+        pendingSpatialTransition: {
+          destinationId: "ai_harbor",
+          expectedDefinitionRevision: roleplaySave.definition.revision,
+          expectedCurrentLocationId: "ai_world",
+          commandId: "roleplay-parity-invalid-retry-move",
+        },
+      },
+      400,
+      "spatial_transition_requires_new_turn",
+      "Roleplay retry transition rejection",
+    );
+
+    const roleplayRetry = await generateCapturedTurn(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        regenerateMessageId: roleplayNormalTurn.message.id,
+      },
+      "Roleplay historical retry",
+    );
+    expect(roleplayRetry.message.id).toBe(roleplayNormalTurn.message.id);
+    expect(roleplayRetry.message.activeSwipeIndex).toBe(1);
+    expectNormalizedSpatialPrompt(
+      roleplayRetry.prompt,
+      "roleplay",
+      "Roleplay historical retry",
+      loreMarkers,
+    );
+    expect(roleplayRetry.prompt).not.toContain("Current location ID: ai_world");
+    const roleplayRetryCached = await previewPrompt(roleplayChat.id, roleplayNormalTurn.message.id);
+    expect(roleplayRetryCached).toMatchObject({ source: "cached", exact: true });
+    expect(roleplayRetryCached.text).toBe(roleplayRetry.prompt);
+
+    const roleplayContinuation = await generateCapturedTurn(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        continueMessageId: roleplayWorldTurn.message.id,
+      },
+      "Roleplay continuation",
+    );
+    expect(roleplayContinuation.message.id).toBe(roleplayWorldTurn.message.id);
+    expectNormalizedSpatialPrompt(
+      roleplayContinuation.prompt,
+      "roleplay",
+      "Roleplay continuation",
+      loreMarkers,
+      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
+    );
+    expect(roleplayContinuation.prompt).not.toContain("Current location ID: ai_harbor");
+    const roleplayContinuationCached = await previewPrompt(roleplayChat.id, roleplayWorldTurn.message.id);
+    expect(roleplayContinuationCached).toMatchObject({ source: "cached", exact: true });
+    expect(roleplayContinuationCached.text).toBe(roleplayContinuation.prompt);
+
+    const gameChatResponse = await page.request.post("/api/chats", {
+      data: {
+        name: "Game normalized Maps prompt parity",
+        mode: "game",
+        characterIds: [],
+        connectionId: connection.id,
+      },
+    });
+    expect(gameChatResponse.ok(), await gameChatResponse.text()).toBeTruthy();
+    gameChat = (await gameChatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, gameChat.id);
+    const gameMetadataResponse = await page.request.patch(`/api/chats/${gameChat.id}/metadata`, {
+      data: {
+        activeLorebookIds: [activeBook.id, excludedBook.id],
+        excludedLorebookIds: [excludedBook.id],
+        gameId: `maps-prompt-parity-${gameChat.id}`,
+        gameSessionStatus: "active",
+        gameIntroPresented: true,
+        gameSystemPrompt: "Run the normalized Hierarchical Maps parity fixture.",
+      },
+    });
+    expect(gameMetadataResponse.ok(), await gameMetadataResponse.text()).toBeTruthy();
+    const gameSaveResponse = await page.request.put(`/api/chats/${gameChat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: buildParityDefinition("game"),
+      },
+    });
+    expect(gameSaveResponse.ok(), await gameSaveResponse.text()).toBeTruthy();
+    const gameSave = (await gameSaveResponse.json()) as {
+      currentLocationId: string;
+      definition: { revision: number };
+      warnings?: Array<{ code?: string }>;
+    };
+    expect(gameSave.currentLocationId).toBe("ai_harbor");
+    expect(gameSave.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "lorebook_entry_missing" })]),
+    );
+
+    const gameLive = await previewPrompt(gameChat.id);
+    expect(gameLive).toMatchObject({ source: "live_preview", exact: false });
+    const gameDryRun = await dryRunPrompt(gameChat.id);
+    const gameNormalTurn = await generateCapturedTurn(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        userMessage: "Generate the GM turn from the normalized harbor projection.",
+      },
+      "Game GM generation",
+    );
+    const gameNormal = gameNormalTurn.prompt;
+    const gameCached = await previewPrompt(gameChat.id);
+    expect(gameCached).toMatchObject({ source: "cached", exact: true });
+    expect(gameCached.text).toBe(gameNormal);
+    expect(
+      new Set(
+        [
+          ["Game live Peek Prompt", gameLive.text],
+          ["Game dry run", gameDryRun],
+          ["Game GM generation", gameNormal],
+          ["Game cached Peek Prompt", gameCached.text],
+        ].map(([source, value]) =>
+          expectNormalizedSpatialPrompt(value!, "game", source!, loreMarkers),
+        ),
+      ).size,
+    ).toBe(1);
+    await expectActiveContext(gameChat.id, entryIds);
+
+    const gameWorldTurn = await generateCapturedTurn(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        userMessage: "Return the party to the Shrouded Coast overview.",
+        pendingSpatialTransition: {
+          destinationId: "ai_world",
+          expectedDefinitionRevision: gameSave.definition.revision,
+          expectedCurrentLocationId: "ai_harbor",
+          commandId: "game-parity-return-to-world",
+        },
+      },
+      "Game accepted owner transition",
+    );
+    expect(gameWorldTurn.events.some((event) => event.type === "spatial_transition_committed")).toBe(true);
+    expectNormalizedSpatialPrompt(
+      gameWorldTurn.prompt,
+      "game",
+      "Game accepted owner transition",
+      loreMarkers,
+      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
+    );
+
+    await expectRejectedBeforeProvider(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        regenerateMessageId: gameNormalTurn.message.id,
+        pendingSpatialTransition: {
+          destinationId: "ai_harbor",
+          expectedDefinitionRevision: gameSave.definition.revision,
+          expectedCurrentLocationId: "ai_world",
+          commandId: "game-parity-invalid-retry-move",
+        },
+      },
+      400,
+      "spatial_transition_requires_new_turn",
+      "Game retry transition rejection",
+    );
+
+    const gameRetry = await generateCapturedTurn(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        regenerateMessageId: gameNormalTurn.message.id,
+      },
+      "Game historical retry",
+    );
+    expect(gameRetry.message.id).toBe(gameNormalTurn.message.id);
+    expect(gameRetry.message.activeSwipeIndex).toBe(1);
+    expectNormalizedSpatialPrompt(gameRetry.prompt, "game", "Game historical retry", loreMarkers);
+    expect(gameRetry.prompt).not.toContain("Current location ID: ai_world");
+    const gameRetryCached = await previewPrompt(gameChat.id, gameNormalTurn.message.id);
+    expect(gameRetryCached).toMatchObject({ source: "cached", exact: true });
+    expect(gameRetryCached.text).toBe(gameRetry.prompt);
+
+    const gameContinuation = await generateCapturedTurn(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        continueMessageId: gameWorldTurn.message.id,
+      },
+      "Game continuation",
+    );
+    expect(gameContinuation.message.id).toBe(gameWorldTurn.message.id);
+    expectNormalizedSpatialPrompt(
+      gameContinuation.prompt,
+      "game",
+      "Game continuation",
+      loreMarkers,
+      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
+    );
+    expect(gameContinuation.prompt).not.toContain("Current location ID: ai_harbor");
+    const gameContinuationCached = await previewPrompt(gameChat.id, gameWorldTurn.message.id);
+    expect(gameContinuationCached).toMatchObject({ source: "cached", exact: true });
+    expect(gameContinuationCached.text).toBe(gameContinuation.prompt);
+  } finally {
+    try {
+      await expectDeletedInOrder(page, [
+        roleplayChat ? `/api/chats/${roleplayChat.id}?force=true` : null,
+        gameChat ? `/api/chats/${gameChat.id}?force=true` : null,
+        character ? `/api/characters/${character.id}` : null,
+        ...lorebookIds.map((id) => `/api/lorebooks/${id}`),
+        connection ? `/api/connections/${connection.id}` : null,
+      ]);
+    } finally {
+      await provider.close();
+    }
   }
 });
 
