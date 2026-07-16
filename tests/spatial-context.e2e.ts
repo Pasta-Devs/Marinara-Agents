@@ -541,6 +541,84 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   return { chat };
 }
 
+test("Hierarchical Maps activates beside its chat setup controls", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Maps Activation UX Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  const resetMetadata = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+    data: { enableAgents: false, activeAgentIds: [] },
+  });
+  expect(resetMetadata.ok()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
+          version: 72,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    if (testInfo.project.name.includes("mobile")) {
+      await page.getByRole("button", { name: "More options" }).click();
+      const overflowMenu = page.locator("[data-chat-toolbar-overflow-menu]");
+      await expect(overflowMenu).toBeVisible();
+      await overflowMenu.getByRole("button", { name: "Chat Settings" }).click();
+    } else {
+      await page.getByRole("button", { name: "Chat Settings" }).click();
+    }
+    const drawer = page.locator(".mari-chat-settings-drawer");
+    await expect(drawer.getByText("Hierarchical map", { exact: true })).toBeVisible();
+    await drawer.getByText("Hierarchical map", { exact: true }).click();
+
+    const activation = drawer.getByRole("switch", { name: /Use in this chat/ });
+    await expect(activation).toHaveAttribute("aria-checked", "false");
+    await expect(drawer.getByText("Maps is ready to add", { exact: true })).toBeVisible();
+    const activationHeight = await activation.evaluate((element) => element.getBoundingClientRect().height);
+    expect(activationHeight).toBeGreaterThanOrEqual(44);
+
+    await activation.click();
+    await expect(activation).toHaveAttribute("aria-checked", "true");
+    await expect(drawer.getByRole("button", { name: "Create hierarchical map" })).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const chatResponse = await page.request.get(`/api/chats/${chat.id}`);
+        const stored = (await chatResponse.json()) as { metadata?: unknown };
+        const metadata =
+          typeof stored.metadata === "string"
+            ? (JSON.parse(stored.metadata) as { enableAgents?: boolean; activeAgentIds?: string[] })
+            : ((stored.metadata ?? {}) as { enableAgents?: boolean; activeAgentIds?: string[] });
+        return {
+          enableAgents: metadata.enableAgents,
+          activeAgentIds: metadata.activeAgentIds,
+        };
+      })
+      .toEqual({ enableAgents: true, activeAgentIds: ["hierarchical-maps"] });
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
 test("AI map builder previews a validated local draft before save", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const response = await page.request.post("/api/chats", {

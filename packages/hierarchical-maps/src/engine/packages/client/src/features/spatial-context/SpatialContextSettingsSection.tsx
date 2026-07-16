@@ -6,6 +6,8 @@ import { cn } from "./package-utils";
 interface SpatialContextSettingsSectionProps {
   chatId: string;
   style?: CSSProperties;
+  enabledForChat: boolean;
+  onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
   onOpenEditor: () => void;
 }
 
@@ -61,12 +63,32 @@ function SettingsSection({
   );
 }
 
-export function SpatialContextSettingsSection({ chatId, style, onOpenEditor }: SpatialContextSettingsSectionProps) {
+export function SpatialContextSettingsSection({
+  chatId,
+  style,
+  enabledForChat,
+  onEnabledForChatChange,
+  onOpenEditor,
+}: SpatialContextSettingsSectionProps) {
   const spatial = useSpatialContext(chatId);
+  const [activationPending, setActivationPending] = useState(false);
+  const [activationError, setActivationError] = useState<string | null>(null);
   const definition = spatial.data?.definition ?? null;
   const activeCount = definition?.locations.filter((location) => location.status === "active").length ?? 0;
   const archivedCount = definition?.locations.filter((location) => location.status === "archived").length ?? 0;
   const breadcrumb = spatial.data?.breadcrumb.map((item) => item.name).join(" / ") ?? "";
+  const toggleForChat = async () => {
+    if (!onEnabledForChatChange || activationPending) return;
+    setActivationPending(true);
+    setActivationError(null);
+    try {
+      await onEnabledForChatChange(!enabledForChat);
+    } catch (error) {
+      setActivationError(error instanceof Error ? error.message : "Hierarchical Maps could not be updated for this chat.");
+    } finally {
+      setActivationPending(false);
+    }
+  };
 
   return (
     <SettingsSection
@@ -76,7 +98,59 @@ export function SpatialContextSettingsSection({ chatId, style, onOpenEditor }: S
       help="Give the AI spatial orientation with nested locations. Only the current location context is active during a chat."
       style={style}
     >
-      {spatial.isLoading ? (
+      <div className="mb-3 space-y-2">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabledForChat}
+          disabled={!onEnabledForChatChange || activationPending}
+          onClick={() => void toggleForChat()}
+          className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 ${
+            enabledForChat
+              ? "bg-[var(--primary)]/10 ring-[var(--primary)]/30"
+              : "bg-[var(--secondary)] ring-[var(--border)] hover:bg-[var(--accent)]"
+          }`}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-medium text-[var(--foreground)]">Use in this chat</span>
+            <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+              {enabledForChat
+                ? "Hierarchical Maps can provide location context during generation."
+                : "Turn on Maps here before creating or editing this chat's map."}
+            </span>
+          </span>
+          <span
+            aria-hidden="true"
+            className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors ${
+              enabledForChat ? "bg-[var(--primary)]" : "bg-[var(--muted-foreground)]/50"
+            }`}
+          >
+            <span
+              className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                enabledForChat ? "translate-x-3.5" : ""
+              }`}
+            />
+          </span>
+        </button>
+        {activationPending && (
+          <p role="status" aria-live="polite" className="px-1 text-[0.625rem] text-[var(--muted-foreground)]">
+            Updating Hierarchical Maps…
+          </p>
+        )}
+        {activationError && (
+          <p role="alert" className="rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]">
+            {activationError}
+          </p>
+        )}
+      </div>
+      {!enabledForChat ? (
+        <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--secondary)]/35 px-3 py-4 text-center">
+          <p className="text-xs font-medium text-[var(--foreground)]">Maps is ready to add</p>
+          <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+            Turn on “Use in this chat” above to create a map or return to an existing one.
+          </p>
+        </div>
+      ) : spatial.isLoading ? (
         <div className="space-y-2" aria-label="Loading hierarchical map summary">
           <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
           <div className="h-12 animate-pulse rounded-lg bg-[var(--muted)]" />
