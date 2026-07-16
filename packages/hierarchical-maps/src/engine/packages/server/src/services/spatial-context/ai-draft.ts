@@ -15,7 +15,7 @@ import {
   type SpatialMapGroundingMode,
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
-import { newId } from "../../utils/id-generator.js";
+import { newId } from "./package-runtime.js";
 
 interface SpatialDraftSizeSpec {
   targetLocations: number;

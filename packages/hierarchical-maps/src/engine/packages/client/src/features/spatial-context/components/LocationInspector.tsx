@@ -10,7 +10,7 @@ import type {
   SpatialLocationKind,
   SpatialLinkState,
 } from "@marinara-engine/shared";
-import { cn } from "../../../lib/utils";
+import { cn } from "../package-utils";
 import { getSpatialDescendantIds } from "@marinara-engine/shared";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
 

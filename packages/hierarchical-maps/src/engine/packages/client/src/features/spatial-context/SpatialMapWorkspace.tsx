@@ -30,7 +30,7 @@ import { useChat } from "../../hooks/use-chats";
 import { getSpatialContextProblem, useSpatialContext, useUpdateSpatialContext } from "../../hooks/use-spatial-context";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { useEntriesAcrossLorebooks, useLorebooks } from "../../hooks/use-lorebooks";
-import { cn } from "../../lib/utils";
+import { cn } from "./package-utils";
 import { useUIStore } from "../../stores/ui.store";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { getChatExcludedLorebookIds } from "../../lib/chat-lorebooks";

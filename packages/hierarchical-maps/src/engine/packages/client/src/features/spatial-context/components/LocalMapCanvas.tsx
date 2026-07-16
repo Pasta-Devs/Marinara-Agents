@@ -1,6 +1,6 @@
 import { CornerDownRight, MapPin } from "lucide-react";
 import type { SpatialLocation } from "@marinara-engine/shared";
-import { cn } from "../../../lib/utils";
+import { cn } from "../package-utils";
 
 interface LocalMapCanvasProps {
   locations: SpatialLocation[];

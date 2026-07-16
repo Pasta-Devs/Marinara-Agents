@@ -1,5 +1,5 @@
 import type { GameMap, SpatialContextDefinition } from "@marinara-engine/shared";
-import { getGameMapId, getGameMapsFromMeta, withActiveGameMapMeta } from "../game/map-position.service.js";
+import { getGameMapId, getGameMapsFromMeta, withActiveGameMapMeta } from "./game-map-metadata.js";
 
 export interface GameMapDraftReference {
   maps: Array<Record<string, unknown>>;

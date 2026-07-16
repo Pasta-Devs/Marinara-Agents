@@ -11,7 +11,7 @@ import type {
 } from "@marinara-engine/shared";
 import { useGenerateSpatialMapDraft } from "../../../hooks/use-spatial-context";
 import { useUIStore } from "../../../stores/ui.store";
-import { cn } from "../../../lib/utils";
+import { cn } from "../package-utils";
 
 interface SpatialMapAiBuilderProps {
   chatId: string;

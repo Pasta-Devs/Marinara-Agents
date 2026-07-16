@@ -2,7 +2,7 @@ import { and, desc, eq, ne, or } from "../../db/file-query.js";
 import type { SpatialContextSnapshot, SpatialSnapshotSource } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { spatialContextSnapshots } from "../../db/schema/index.js";
-import { newTimeSortableId, now } from "../../utils/id-generator.js";
+import { newTimeSortableId, now } from "../spatial-context/package-runtime.js";
 
 type SpatialSnapshotConnection = Pick<DB, "select" | "insert" | "delete" | "update">;
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, ChevronDown, ChevronRight, Copy, CornerDownRight, MapPin, Plus, Split } from "lucide-react";
 import { compareSpatialLocations, type SpatialContextDefinition, type SpatialLocation } from "@marinara-engine/shared";
-import { cn } from "../../../lib/utils";
+import { cn } from "../package-utils";
 
 interface HierarchyNavigatorProps {
   definition: SpatialContextDefinition;

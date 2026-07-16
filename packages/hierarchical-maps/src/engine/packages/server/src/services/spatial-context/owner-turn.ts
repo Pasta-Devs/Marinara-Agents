@@ -10,7 +10,7 @@ import {
 import { and, eq } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { chats, gameStateSnapshots, messages, messageSwipes } from "../../db/schema/index.js";
-import { newId, now } from "../../utils/id-generator.js";
+import { newId, now } from "./package-runtime.js";
 import { withChatMetadataPatchQueue } from "../storage/chats.storage.js";
 import { createSpatialContextStorage } from "../storage/spatial-context.storage.js";
 import { parseStoredSpatialDefinition, resolveEffectiveSpatialState } from "./state-resolution.js";

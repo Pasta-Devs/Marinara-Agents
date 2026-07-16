@@ -10,7 +10,7 @@ import {
 import { eq } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { chats } from "../../db/schema/index.js";
-import { now } from "../../utils/id-generator.js";
+import { now } from "./package-runtime.js";
 import { logger } from "../../lib/logger.js";
 import { createLorebooksStorage } from "../storage/lorebooks.storage.js";
 import { withChatMetadataPatchQueue } from "../storage/chats.storage.js";

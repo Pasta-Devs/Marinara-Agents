@@ -3,7 +3,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, MapPin, Route, X } from "luci
 import type { SpatialDestination, SpatialDestinationRelation } from "@marinara-engine/shared";
 import { useSpatialContext } from "../../../hooks/use-spatial-context";
 import { useChatStore } from "../../../stores/chat.store";
-import { cn, generateClientId } from "../../../lib/utils";
+import { cn, generateClientId } from "../package-utils";
 
 interface SpatialContextRuntimeBarProps {
   chatId: string | null;

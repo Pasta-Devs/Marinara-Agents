@@ -15,7 +15,7 @@ import {
   type SpatialLocation,
 } from "@marinara-engine/shared";
 import { useChatStore } from "../../stores/chat.store";
-import { cn, generateClientId } from "../../lib/utils";
+import { cn, generateClientId } from "../../features/spatial-context/package-utils";
 
 interface GameWorldMapProps {
   chatId: string;
