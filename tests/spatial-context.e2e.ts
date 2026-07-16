@@ -836,7 +836,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
-    await expect(home.getByText("v1.1.3", { exact: true })).toBeVisible();
+    await expect(home.getByText("v1.1.4", { exact: true })).toBeVisible();
     await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
     await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
@@ -2006,6 +2006,36 @@ test("Game screen gives the hierarchical World map precedence over the session L
     await dismissOnboardingTutorial(page);
 
     if (testInfo.project.name.includes("mobile")) {
+      const storyLocation = page.getByRole("region", { name: "Story location" });
+      const storyMapToggle = storyLocation.getByRole("button", { name: "Open story map" });
+      const actionButton = page.getByRole("button", { name: "Start combat", exact: true });
+      const gameInput = page.getByPlaceholder("What do you do?");
+      await expect(storyMapToggle).toBeVisible();
+      await expect(actionButton).toBeVisible();
+      await expect(gameInput).toBeVisible();
+      const [storyLocationBox, storyMapToggleBox, actionButtonBox, gameInputBeforeMap] = await Promise.all([
+        storyLocation.boundingBox(),
+        storyMapToggle.boundingBox(),
+        actionButton.boundingBox(),
+        gameInput.boundingBox(),
+      ]);
+      expect(storyLocationBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(
+          (storyMapToggleBox?.y ?? 0) + (storyMapToggleBox?.height ?? 0) / 2 -
+            ((actionButtonBox?.y ?? 0) + (actionButtonBox?.height ?? 0) / 2),
+        ),
+      ).toBeLessThanOrEqual(1);
+
+      await storyMapToggle.click();
+      const runtimeMapPanel = storyLocation.locator("[data-marinara-maps-runtime-popover]");
+      await expect(runtimeMapPanel).toBeVisible();
+      const panelBackground = await runtimeMapPanel.evaluate((panel) => getComputedStyle(panel).backgroundColor);
+      expect(panelBackground).not.toMatch(/^rgba\([^)]*,\s*(?:0|0?\.\d+)\)$/);
+      const gameInputAfterMap = await gameInput.boundingBox();
+      expect(Math.abs((gameInputAfterMap?.y ?? 0) - (gameInputBeforeMap?.y ?? 0))).toBeLessThanOrEqual(1);
+      await storyLocation.getByRole("button", { name: "Close story map", exact: true }).click();
+
       await page.getByRole("button", { name: "Open map" }).click();
     }
 

@@ -174,6 +174,7 @@ export function SpatialContextRuntimeBar({
     <section
       aria-label="Story location"
       data-marinara-maps-runtime-root
+      data-runtime-mode={data?.definition?.ownerMode ?? "unknown"}
       data-runtime-layout={pending || !enabled ? "recovery" : "compact"}
       className={cn(
         "relative mb-2 text-[var(--marinara-chat-chrome-panel-text)]",
@@ -248,12 +249,19 @@ export function SpatialContextRuntimeBar({
             aria-label={mobilePanelOpen ? "Close story map" : "Open story map"}
             title={mobilePanelOpen ? "Close story map" : `Open story map: ${breadcrumbLabel}`}
             className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] text-[var(--marinara-chat-chrome-button-text)] shadow-lg shadow-black/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:opacity-50",
-              mobilePanelOpen &&
-                "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] text-[var(--marinara-chat-chrome-button-text-active)]",
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:opacity-50",
             )}
           >
-            <MapIcon size="1rem" />
+            <span
+              aria-hidden="true"
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] text-[var(--marinara-chat-chrome-button-text)]",
+                mobilePanelOpen &&
+                  "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] text-[var(--marinara-chat-chrome-button-text-active)]",
+              )}
+            >
+              <MapIcon size="0.75rem" />
+            </span>
           </button>
 
           {mapOpen && data?.definition && chatId && (

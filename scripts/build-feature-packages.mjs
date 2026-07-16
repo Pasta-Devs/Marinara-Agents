@@ -74,7 +74,7 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.1.3",
+    version: "1.1.4",
     minEngineVersion: "3.2.0",
     maxEngineExclusive: "3.3.0",
     name: "Hierarchical Maps",
@@ -361,6 +361,10 @@ async function bundleSpecialClient(feature, output) {
 `;
       const runtimeStyles = `
 @media (max-width: 39.999rem) {
+  marinara-capability-hierarchical-maps[view="runtime"] {
+    display: block;
+  }
+
   [data-marinara-maps-runtime-root][data-runtime-layout="compact"] {
     width: 2.75rem;
     height: 2.75rem;
@@ -369,6 +373,18 @@ async function bundleSpecialClient(feature, output) {
     border: 0;
     background: transparent;
     box-shadow: none;
+  }
+
+  [data-marinara-maps-runtime-root][data-runtime-layout="compact"][data-runtime-mode="game"] {
+    height: 0;
+    margin-bottom: 0;
+    transform: translateY(-2.75rem);
+    pointer-events: none;
+    z-index: 110;
+  }
+
+  [data-marinara-maps-runtime-root][data-runtime-layout="compact"][data-runtime-mode="game"] [data-marinara-maps-runtime-mobile] {
+    pointer-events: auto;
   }
 
   [data-marinara-maps-runtime-desktop] {
@@ -386,6 +402,12 @@ async function bundleSpecialClient(feature, output) {
     z-index: 100;
     width: min(22rem, calc(100vw - 1.5rem));
     max-height: min(70dvh, 36rem);
+    background-color: var(--background) !important;
+    background-image: linear-gradient(
+      var(--marinara-chat-chrome-highlight-bg),
+      var(--marinara-chat-chrome-highlight-bg)
+    );
+    backdrop-filter: none;
   }
 
   [data-marinara-maps-runtime-options] {
@@ -398,7 +420,12 @@ async function bundleSpecialClient(feature, output) {
     overflow-y: auto;
     border: 1px solid var(--marinara-chat-chrome-panel-border);
     border-radius: 0.75rem;
-    background: var(--marinara-chat-chrome-panel-bg);
+    background-color: var(--background);
+    background-image: linear-gradient(
+      var(--marinara-chat-chrome-highlight-bg),
+      var(--marinara-chat-chrome-highlight-bg)
+    );
+    backdrop-filter: none;
     box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 45%);
   }
 }
