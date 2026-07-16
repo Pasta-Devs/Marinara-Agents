@@ -880,6 +880,9 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(home.getByRole("button", { name: "Create map", exact: true })).toBeEnabled();
     await home.getByRole("button", { name: "Back to Agents" }).click();
     await expect(home).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Story location" })).toContainText(
+      "No map yet. Create one from Agents → Hierarchical Maps; your message draft is unchanged.",
+    );
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }
@@ -1082,8 +1085,9 @@ test("Map loading retry and stale-write recovery preserve the working copy", asy
 
     releaseInitialRead?.();
     await expect(page.getByRole("heading", { name: "Hierarchical map unavailable" })).toBeVisible();
-    const retry = page.getByRole("button", { name: "Retry", exact: true });
-    const back = page.getByRole("button", { name: "Back", exact: true });
+    const recovery = page.getByRole("region", { name: "Hierarchical map recovery" });
+    const retry = recovery.getByRole("button", { name: "Retry", exact: true });
+    const back = recovery.getByRole("button", { name: "Back", exact: true });
     await expectMinimumInteractiveSize(retry, "Map retry control");
     await expectMinimumInteractiveSize(back, "Map recovery back control");
     allowSuccessfulRead = true;
@@ -1745,7 +1749,14 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     const storyLocation = page.getByRole("region", { name: "Story location" });
     await expect(storyLocation).toContainText("Shrouded Coast");
     await storyLocation.getByRole("button", { name: /Story location.*Shrouded Coast/ }).click();
-    await storyLocation.getByRole("button", { name: /Enter Gloam Harbor/ }).click();
+    const inspectHarbor = storyLocation.getByRole("button", { name: "Inspect Gloam Harbor" });
+    await expectMinimumInteractiveSize(inspectHarbor, "Roleplay destination inspect control");
+    await inspectHarbor.focus();
+    await page.keyboard.press("Enter");
+    await expect(storyLocation.getByText("A busy harbor of black piers.", { exact: true })).toBeVisible();
+    const setHarborDestination = storyLocation.getByRole("button", { name: "Set destination: Gloam Harbor" });
+    await expectMinimumInteractiveSize(setHarborDestination, "Roleplay set-destination control");
+    await setHarborDestination.click();
     await expect(storyLocation.getByText("Moves with your next turn")).toBeVisible();
 
     await page.reload();
@@ -1758,7 +1769,8 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(storyLocation).toContainText("Gloam Harbor");
 
     await storyLocation.getByRole("button", { name: /Story location.*Gloam Harbor/ }).click();
-    await storyLocation.getByRole("button", { name: /Leave for Shrouded Coast/ }).click();
+    await storyLocation.getByRole("button", { name: "Inspect Shrouded Coast" }).click();
+    await storyLocation.getByRole("button", { name: "Set destination: Shrouded Coast" }).click();
     await input.fill("Wait for me at the gate.");
     await page.locator("button.mari-chat-send-btn").click();
     await expect(input).toHaveValue("Wait for me at the gate.");
@@ -1766,7 +1778,28 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
 
     await page.reload();
     await expect(page.locator("textarea.mari-chat-input-textarea")).toHaveValue("Wait for me at the gate.");
-    await expect(page.getByRole("region", { name: "Story location" }).getByText(/Needs review/)).toBeVisible();
+    const recoveredStoryLocation = page.getByRole("region", { name: "Story location" });
+    await expect(recoveredStoryLocation.getByText(/Needs review/)).toBeVisible();
+    await recoveredStoryLocation.getByRole("button", { name: "Cancel move to Shrouded Coast" }).click();
+
+    const currentSpatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(currentSpatialResponse.ok(), await currentSpatialResponse.text()).toBeTruthy();
+    const currentSpatial = (await currentSpatialResponse.json()) as {
+      currentLocationId: string;
+      definition: typeof runtimeDefinition & { revision: number };
+    };
+    const disableResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: currentSpatial.definition.revision,
+        expectedCurrentLocationId: currentSpatial.currentLocationId,
+        definition: { ...currentSpatial.definition, enabled: false },
+      },
+    });
+    expect(disableResponse.ok(), await disableResponse.text()).toBeTruthy();
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Story location" })).toContainText(
+      "Map disabled. Its saved hierarchy and history are preserved until you enable it again.",
+    );
   } finally {
     await page.unroute("**/api/generate");
     await expectDeleted(page, `/api/chats/${chat.id}`);
@@ -1838,6 +1871,22 @@ test("Game screen gives the hierarchical World map precedence over the session L
         definition: {
           ...gameGeneratedDefinition,
           enabled: true,
+          locations: [
+            ...gameGeneratedDefinition.locations,
+            {
+              id: "ai_harbor_docks",
+              parentId: "ai_harbor",
+              name: "Fogbound Docks",
+              kind: "place",
+              description: "Low docks tucked beneath Gloam Harbor's black piers.",
+              modelMemory: "The dockhands track every boat that arrives after midnight.",
+              icon: "🛶",
+              childPresentation: "list",
+              links: [],
+              status: "active",
+              sortOrder: 0,
+            },
+          ],
         },
       },
     });
@@ -1880,11 +1929,24 @@ test("Game screen gives the hierarchical World map precedence over the session L
     await expect(page.getByText("The Crownscar", { exact: true })).toHaveCount(0);
     const worldMap = page.getByRole("region", { name: "Hierarchical world map" });
     await expect(worldMap).toBeVisible();
-    await expect(worldMap.getByRole("button", { name: /Gloam Harbor/ })).toBeVisible();
+    const listToggle = worldMap.getByRole("button", { name: "Show places as list" });
+    await expectMinimumInteractiveSize(listToggle, "Game world-map list alternative control");
+    await listToggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(worldMap.getByRole("list", { name: "Locations" })).toBeVisible();
+    await expect(worldMap.getByRole("button", { name: /Inspect Gloam Harbor/ })).toBeVisible();
     await expect(worldMap.getByText("⚓", { exact: true })).toBeVisible();
 
-    await worldMap.getByRole("button", { name: /Gloam Harbor/ }).click();
+    await worldMap.getByRole("button", { name: /Inspect Gloam Harbor/ }).click();
     await expect(worldMap.getByText("A busy harbor of black piers.")).toBeVisible();
+    const exploreHarbor = worldMap.getByRole("button", { name: "Explore inside" });
+    const setHarborDestination = worldMap.getByRole("button", { name: "Set destination: Gloam Harbor" });
+    await expectMinimumInteractiveSize(exploreHarbor, "Game world-map explore control");
+    await expectMinimumInteractiveSize(setHarborDestination, "Game world-map set-destination control");
+    await exploreHarbor.click();
+    await expect(worldMap.getByText("Fogbound Docks", { exact: true })).toBeVisible();
+    await worldMap.getByRole("button", { name: "Center current story location" }).click();
+    await worldMap.getByRole("button", { name: /Inspect Gloam Harbor/ }).click();
     await expect(worldMap.getByRole("button", { name: "Set destination: Gloam Harbor" })).toBeVisible();
 
     await mapView.getByRole("button", { name: "Local" }).click();

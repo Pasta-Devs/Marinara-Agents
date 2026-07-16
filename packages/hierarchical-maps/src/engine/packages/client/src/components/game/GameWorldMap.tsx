@@ -4,7 +4,9 @@ import {
   ChevronLeft,
   ChevronRight,
   CornerDownRight,
+  List,
   LocateFixed,
+  Map as MapIcon,
   Route,
 } from "lucide-react";
 import {
@@ -64,6 +66,7 @@ export function GameWorldMap({
   const centeredViewLocationId = defaultViewLocationId(spatial);
   const [viewLocationId, setViewLocationId] = useState<string | null>(() => centeredViewLocationId);
   const [selectedId, setSelectedId] = useState<string | null>(spatial.currentLocationId);
+  const [showListView, setShowListView] = useState(false);
   const pending = usePendingSpatialTransition(chatId);
 
   useEffect(() => {
@@ -168,7 +171,7 @@ export function GameWorldMap({
             ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]"
             : "border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)]",
         )}
-        aria-label={`${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
+        aria-label={`Inspect ${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-lg" aria-hidden="true">
           {location.icon || "⌖"}
@@ -238,6 +241,19 @@ export function GameWorldMap({
             ))}
           </div>
         )}
+        {presentation === "map" && visibleLocations.length > 0 && (
+          <div className="mt-1 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowListView((value) => !value)}
+              aria-pressed={showListView}
+              className="flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-[0.6875rem] font-semibold text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
+            >
+              {showListView ? <MapIcon size="0.8125rem" /> : <List size="0.8125rem" />}
+              {showListView ? "Show places on map" : "Show places as list"}
+            </button>
+          </div>
+        )}
       </div>
 
       {pending && (
@@ -266,7 +282,7 @@ export function GameWorldMap({
               Browse up to see nearby places.
             </p>
           </div>
-        ) : presentation === "map" ? (
+        ) : presentation === "map" && !showListView ? (
           <div
             data-marinara-maps-world-canvas
             data-compact={compact ? "true" : "false"}
@@ -316,7 +332,7 @@ export function GameWorldMap({
                   onClick={() => setSelectedId(location.id)}
                   className="absolute z-10 flex w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-lg p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                   style={{ left: `${displayCoordinate(placement.x)}%`, top: `${displayCoordinate(placement.y)}%` }}
-                  aria-label={`${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
+                  aria-label={`Inspect ${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
                 >
                   <span
                     className={cn(
@@ -375,7 +391,7 @@ export function GameWorldMap({
                 onClick={() => browseTo(selected.id)}
                 className="flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-3 text-[0.6875rem] font-semibold text-[var(--marinara-chat-chrome-button-text-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
               >
-                <CornerDownRight size="0.75rem" /> Explore
+                <CornerDownRight size="0.75rem" /> Explore inside
               </button>
             )}
             {selected.id === spatial.currentLocationId ? (

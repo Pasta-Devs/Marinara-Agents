@@ -603,7 +603,11 @@ export function SpatialMapWorkspace({
 
   if (spatial.isError) {
     return (
-      <div className="mari-editor-shell flex flex-1 items-center justify-center p-6">
+      <div
+        className="mari-editor-shell flex flex-1 items-center justify-center p-6"
+        role="region"
+        aria-label="Hierarchical map recovery"
+      >
         <div className="max-w-sm text-center">
           <AlertCircle className="mx-auto text-[var(--destructive)]" />
           <h1 className="mt-3 text-base font-semibold">Hierarchical map unavailable</h1>
