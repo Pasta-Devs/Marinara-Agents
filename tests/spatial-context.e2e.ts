@@ -89,14 +89,27 @@ function expectNormalizedSpatialPrompt(
     excluded: string;
     oversized: string;
   },
+  expectedLocation: {
+    path: string;
+    id: string;
+    forcedLore: boolean;
+  } = {
+    path: "Shrouded Coast > Gloam Harbor",
+    id: "ai_harbor",
+    forcedLore: true,
+  },
 ): string {
   expect(
     countOccurrences(value, `<spatial_context mode="${ownerMode}" authority="application">`),
     `${source} must contain one spatial projection`,
   ).toBe(1);
-  expect(value, `${source} must contain the current path`).toContain("Current path: Shrouded Coast > Gloam Harbor");
-  expect(value, `${source} must contain the current location ID`).toContain("Current location ID: ai_harbor");
-  expect(countOccurrences(value, loreMarkers.forced), `${source} must inject forced-only lore once`).toBe(1);
+  expect(value, `${source} must contain the current path`).toContain(`Current path: ${expectedLocation.path}`);
+  expect(value, `${source} must contain the current location ID`).toContain(
+    `Current location ID: ${expectedLocation.id}`,
+  );
+  expect(countOccurrences(value, loreMarkers.forced), `${source} must scope forced-only lore to its location`).toBe(
+    expectedLocation.forcedLore ? 1 : 0,
+  );
   expect(countOccurrences(value, loreMarkers.duplicate), `${source} must deduplicate ordinary and forced lore`).toBe(1);
   expect(value, `${source} must exclude disabled lore`).not.toContain(loreMarkers.disabled);
   expect(value, `${source} must honor chat lore exclusions`).not.toContain(loreMarkers.excluded);
@@ -125,6 +138,16 @@ async function generateTurn(
     .split(/\r?\n/u)
     .filter((line) => line.startsWith("data: "))
     .map((line) => JSON.parse(line.slice(6)) as { type?: string; data?: unknown });
+}
+
+function savedAssistantMessage(events: Array<{ type?: string; data?: unknown }>, source: string) {
+  const saved = events.find((event) => event.type === "message_saved")?.data as
+    | { id?: unknown; role?: unknown; activeSwipeIndex?: unknown; content?: unknown }
+    | undefined;
+  expect(saved, `${source} must save an assistant message`).toBeTruthy();
+  expect(saved?.role, `${source} must save an assistant role`).toBe("assistant");
+  expect(typeof saved?.id, `${source} must return the saved message ID`).toBe("string");
+  return saved as { id: string; role: "assistant"; activeSwipeIndex: number; content: string };
 }
 
 async function expectDeletedInOrder(page: Page, paths: Array<string | null>) {
@@ -1477,15 +1500,21 @@ test("Game prompt scopes the legacy map beneath the hierarchical world location"
   }
 });
 
-test("Roleplay and Game prompt paths share one bounded spatial and location-lore projection", async ({
+test("Roleplay and Game generation, retry, and continuation share historical prompt parity", async ({
   page,
 }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "The prompt and lore contract is viewport-independent.");
   test.setTimeout(120_000);
 
   const provider = await startOpenAiTestServer([
-    "The harbor bells answer across the water.",
-    "The party remains within Gloam Harbor.",
+    "ROLEPLAY_HARBOR_NORMAL: The harbor bells answer across the water.",
+    "ROLEPLAY_WORLD_NORMAL: The wider coast opens beyond the harbor road.",
+    "ROLEPLAY_HARBOR_RETRY: The harbor answer changes while its anchor remains.",
+    "ROLEPLAY_WORLD_CONTINUATION: The coast continues beyond the headland.",
+    "GAME_HARBOR_NORMAL: The party remains within Gloam Harbor.",
+    "GAME_WORLD_NORMAL: The party surveys the whole Shrouded Coast.",
+    "GAME_HARBOR_RETRY: A different harbor scene keeps the historical anchor.",
+    "GAME_WORLD_CONTINUATION: The GM continues the wider coastal scene.",
   ]);
   const loreMarkers = {
     forced: "FORCED_LOCATION_LORE: cedar pilings mark the safe channel.",
@@ -1519,8 +1548,10 @@ test("Roleplay and Game prompt paths share one bounded spatial and location-lore
     expect(response.ok(), await response.text()).toBeTruthy();
     return (await response.json()) as { id: string };
   };
-  const previewPrompt = async (chatId: string) => {
-    const response = await page.request.post(`/api/chats/${chatId}/peek-prompt`, { data: {} });
+  const previewPrompt = async (chatId: string, messageId?: string) => {
+    const response = await page.request.post(`/api/chats/${chatId}/peek-prompt`, {
+      data: messageId ? { messageId } : {},
+    });
     expect(response.ok(), await response.text()).toBeTruthy();
     const preview = (await response.json()) as {
       source: string;
@@ -1528,6 +1559,36 @@ test("Roleplay and Game prompt paths share one bounded spatial and location-lore
       messages: Array<{ role?: string; content?: unknown }>;
     };
     return { ...preview, text: promptText(preview.messages) };
+  };
+  const generateCapturedTurn = async (data: Record<string, unknown>, source: string) => {
+    const requestIndex = provider.requests.length;
+    const events = await generateTurn(page, data);
+    expect(provider.requests.length, `${source} must make one provider request`).toBe(requestIndex + 1);
+    return {
+      events,
+      message: savedAssistantMessage(events, source),
+      prompt: capturedPrompt(provider.requests[requestIndex]),
+    };
+  };
+  const expectRejectedBeforeProvider = async (
+    data: Record<string, unknown>,
+    status: number,
+    code: string,
+    source: string,
+  ) => {
+    const requestCount = provider.requests.length;
+    const response = await page.request.post("/api/generate", {
+      data: {
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+        ...data,
+      },
+    });
+    const body = await response.text();
+    expect(response.status(), body).toBe(status);
+    expect(JSON.parse(body) as { code?: string }, source).toMatchObject({ code });
+    expect(provider.requests.length, `${source} must stop before the provider`).toBe(requestCount);
   };
   const dryRunPrompt = async (chatId: string) => {
     const response = await page.request.post("/api/generate/dryRun", {
@@ -1688,8 +1749,11 @@ test("Roleplay and Game prompt paths share one bounded spatial and location-lore
     });
     expect(roleplaySaveResponse.ok(), await roleplaySaveResponse.text()).toBeTruthy();
     const roleplaySave = (await roleplaySaveResponse.json()) as {
+      currentLocationId: string;
+      definition: { revision: number };
       warnings?: Array<{ code?: string }>;
     };
+    expect(roleplaySave.currentLocationId).toBe("ai_harbor");
     expect(roleplaySave.warnings).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: "lorebook_entry_missing" })]),
     );
@@ -1700,13 +1764,15 @@ test("Roleplay and Game prompt paths share one bounded spatial and location-lore
       exact: false,
     });
     const roleplayDryRun = await dryRunPrompt(roleplayChat.id);
-    const roleplayEvents = await generateTurn(page, {
-      chatId: roleplayChat.id,
-      connectionId: connection.id,
-      userMessage: "Generate from the normalized harbor projection.",
-    });
-    expect(roleplayEvents.some((event) => event.type === "message_saved")).toBe(true);
-    const roleplayNormal = capturedPrompt(provider.requests[0]);
+    const roleplayNormalTurn = await generateCapturedTurn(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        userMessage: "Generate from the normalized harbor projection.",
+      },
+      "Roleplay normal generation",
+    );
+    const roleplayNormal = roleplayNormalTurn.prompt;
     const roleplayCached = await previewPrompt(roleplayChat.id);
     expect(roleplayCached).toMatchObject({ source: "cached", exact: true });
     expect(roleplayCached.text).toBe(roleplayNormal);
@@ -1723,6 +1789,120 @@ test("Roleplay and Game prompt paths share one bounded spatial and location-lore
       ).size,
     ).toBe(1);
     await expectActiveContext(roleplayChat.id, entryIds);
+
+    const roleplayWorldTurn = await generateCapturedTurn(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        userMessage: "Return to the Shrouded Coast overview.",
+        pendingSpatialTransition: {
+          destinationId: "ai_world",
+          expectedDefinitionRevision: roleplaySave.definition.revision,
+          expectedCurrentLocationId: "ai_harbor",
+          commandId: "roleplay-parity-return-to-world",
+        },
+      },
+      "Roleplay accepted owner transition",
+    );
+    expect(roleplayWorldTurn.events.some((event) => event.type === "spatial_transition_committed")).toBe(true);
+    expectNormalizedSpatialPrompt(
+      roleplayWorldTurn.prompt,
+      "roleplay",
+      "Roleplay accepted owner transition",
+      loreMarkers,
+      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
+    );
+
+    await expectRejectedBeforeProvider(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        userMessage: "Try a stale return to the harbor.",
+        pendingSpatialTransition: {
+          destinationId: "ai_harbor",
+          expectedDefinitionRevision: roleplaySave.definition.revision - 1,
+          expectedCurrentLocationId: "ai_world",
+          commandId: "roleplay-parity-stale-return",
+        },
+      },
+      409,
+      "spatial_transition_stale_definition",
+      "Roleplay stale transition",
+    );
+    await expectRejectedBeforeProvider(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        userMessage: "Duplicate the accepted owner transition.",
+        pendingSpatialTransition: {
+          destinationId: "ai_world",
+          expectedDefinitionRevision: roleplaySave.definition.revision,
+          expectedCurrentLocationId: "ai_harbor",
+          commandId: "roleplay-parity-return-to-world",
+        },
+      },
+      409,
+      "spatial_transition_already_applied",
+      "Roleplay duplicate transition",
+    );
+    await expectRejectedBeforeProvider(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        regenerateMessageId: roleplayNormalTurn.message.id,
+        pendingSpatialTransition: {
+          destinationId: "ai_harbor",
+          expectedDefinitionRevision: roleplaySave.definition.revision,
+          expectedCurrentLocationId: "ai_world",
+          commandId: "roleplay-parity-invalid-retry-move",
+        },
+      },
+      400,
+      "spatial_transition_requires_new_turn",
+      "Roleplay retry transition rejection",
+    );
+
+    const roleplayRetry = await generateCapturedTurn(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        regenerateMessageId: roleplayNormalTurn.message.id,
+      },
+      "Roleplay historical retry",
+    );
+    expect(roleplayRetry.message.id).toBe(roleplayNormalTurn.message.id);
+    expect(roleplayRetry.message.activeSwipeIndex).toBe(1);
+    expectNormalizedSpatialPrompt(
+      roleplayRetry.prompt,
+      "roleplay",
+      "Roleplay historical retry",
+      loreMarkers,
+    );
+    expect(roleplayRetry.prompt).not.toContain("Current location ID: ai_world");
+    const roleplayRetryCached = await previewPrompt(roleplayChat.id, roleplayNormalTurn.message.id);
+    expect(roleplayRetryCached).toMatchObject({ source: "cached", exact: true });
+    expect(roleplayRetryCached.text).toBe(roleplayRetry.prompt);
+
+    const roleplayContinuation = await generateCapturedTurn(
+      {
+        chatId: roleplayChat.id,
+        connectionId: connection.id,
+        continueMessageId: roleplayWorldTurn.message.id,
+      },
+      "Roleplay continuation",
+    );
+    expect(roleplayContinuation.message.id).toBe(roleplayWorldTurn.message.id);
+    expectNormalizedSpatialPrompt(
+      roleplayContinuation.prompt,
+      "roleplay",
+      "Roleplay continuation",
+      loreMarkers,
+      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
+    );
+    expect(roleplayContinuation.prompt).not.toContain("Current location ID: ai_harbor");
+    const roleplayContinuationCached = await previewPrompt(roleplayChat.id, roleplayWorldTurn.message.id);
+    expect(roleplayContinuationCached).toMatchObject({ source: "cached", exact: true });
+    expect(roleplayContinuationCached.text).toBe(roleplayContinuation.prompt);
 
     const gameChatResponse = await page.request.post("/api/chats", {
       data: {
@@ -1755,8 +1935,11 @@ test("Roleplay and Game prompt paths share one bounded spatial and location-lore
     });
     expect(gameSaveResponse.ok(), await gameSaveResponse.text()).toBeTruthy();
     const gameSave = (await gameSaveResponse.json()) as {
+      currentLocationId: string;
+      definition: { revision: number };
       warnings?: Array<{ code?: string }>;
     };
+    expect(gameSave.currentLocationId).toBe("ai_harbor");
     expect(gameSave.warnings).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: "lorebook_entry_missing" })]),
     );
@@ -1764,13 +1947,15 @@ test("Roleplay and Game prompt paths share one bounded spatial and location-lore
     const gameLive = await previewPrompt(gameChat.id);
     expect(gameLive).toMatchObject({ source: "live_preview", exact: false });
     const gameDryRun = await dryRunPrompt(gameChat.id);
-    const gameEvents = await generateTurn(page, {
-      chatId: gameChat.id,
-      connectionId: connection.id,
-      userMessage: "Generate the GM turn from the normalized harbor projection.",
-    });
-    expect(gameEvents.some((event) => event.type === "message_saved")).toBe(true);
-    const gameNormal = capturedPrompt(provider.requests[1]);
+    const gameNormalTurn = await generateCapturedTurn(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        userMessage: "Generate the GM turn from the normalized harbor projection.",
+      },
+      "Game GM generation",
+    );
+    const gameNormal = gameNormalTurn.prompt;
     const gameCached = await previewPrompt(gameChat.id);
     expect(gameCached).toMatchObject({ source: "cached", exact: true });
     expect(gameCached.text).toBe(gameNormal);
@@ -1787,6 +1972,83 @@ test("Roleplay and Game prompt paths share one bounded spatial and location-lore
       ).size,
     ).toBe(1);
     await expectActiveContext(gameChat.id, entryIds);
+
+    const gameWorldTurn = await generateCapturedTurn(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        userMessage: "Return the party to the Shrouded Coast overview.",
+        pendingSpatialTransition: {
+          destinationId: "ai_world",
+          expectedDefinitionRevision: gameSave.definition.revision,
+          expectedCurrentLocationId: "ai_harbor",
+          commandId: "game-parity-return-to-world",
+        },
+      },
+      "Game accepted owner transition",
+    );
+    expect(gameWorldTurn.events.some((event) => event.type === "spatial_transition_committed")).toBe(true);
+    expectNormalizedSpatialPrompt(
+      gameWorldTurn.prompt,
+      "game",
+      "Game accepted owner transition",
+      loreMarkers,
+      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
+    );
+
+    await expectRejectedBeforeProvider(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        regenerateMessageId: gameNormalTurn.message.id,
+        pendingSpatialTransition: {
+          destinationId: "ai_harbor",
+          expectedDefinitionRevision: gameSave.definition.revision,
+          expectedCurrentLocationId: "ai_world",
+          commandId: "game-parity-invalid-retry-move",
+        },
+      },
+      400,
+      "spatial_transition_requires_new_turn",
+      "Game retry transition rejection",
+    );
+
+    const gameRetry = await generateCapturedTurn(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        regenerateMessageId: gameNormalTurn.message.id,
+      },
+      "Game historical retry",
+    );
+    expect(gameRetry.message.id).toBe(gameNormalTurn.message.id);
+    expect(gameRetry.message.activeSwipeIndex).toBe(1);
+    expectNormalizedSpatialPrompt(gameRetry.prompt, "game", "Game historical retry", loreMarkers);
+    expect(gameRetry.prompt).not.toContain("Current location ID: ai_world");
+    const gameRetryCached = await previewPrompt(gameChat.id, gameNormalTurn.message.id);
+    expect(gameRetryCached).toMatchObject({ source: "cached", exact: true });
+    expect(gameRetryCached.text).toBe(gameRetry.prompt);
+
+    const gameContinuation = await generateCapturedTurn(
+      {
+        chatId: gameChat.id,
+        connectionId: connection.id,
+        continueMessageId: gameWorldTurn.message.id,
+      },
+      "Game continuation",
+    );
+    expect(gameContinuation.message.id).toBe(gameWorldTurn.message.id);
+    expectNormalizedSpatialPrompt(
+      gameContinuation.prompt,
+      "game",
+      "Game continuation",
+      loreMarkers,
+      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
+    );
+    expect(gameContinuation.prompt).not.toContain("Current location ID: ai_harbor");
+    const gameContinuationCached = await previewPrompt(gameChat.id, gameWorldTurn.message.id);
+    expect(gameContinuationCached).toMatchObject({ source: "cached", exact: true });
+    expect(gameContinuationCached.text).toBe(gameContinuation.prompt);
   } finally {
     try {
       await expectDeletedInOrder(page, [

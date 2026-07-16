@@ -80,6 +80,9 @@ const fixtures = new Map(
 let catalogVersion = "1.0.5";
 let catalogOnline = true;
 let generationProviderRequestCount = 0;
+const generationProviderRequests: Array<{
+  messages?: Array<{ role?: string; content?: unknown }>;
+}> = [];
 
 const candidateFixture = fixtures.get("1.1.0");
 assert.ok(candidateFixture);
@@ -115,7 +118,7 @@ function catalogFixture(version: string) {
   };
 }
 
-globalThis.fetch = (async (input: string | URL | Request) => {
+globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url =
     typeof input === "string"
       ? input
@@ -124,6 +127,13 @@ globalThis.fetch = (async (input: string | URL | Request) => {
         : input.url;
   if (url === `${generationProviderBaseUrl}/chat/completions`) {
     generationProviderRequestCount += 1;
+    const body =
+      typeof init?.body === "string"
+        ? (JSON.parse(init.body) as { messages?: Array<{ role?: string; content?: unknown }> })
+        : input instanceof Request
+          ? ((await input.clone().json()) as { messages?: Array<{ role?: string; content?: unknown }> })
+          : {};
+    generationProviderRequests.push(body);
     return new Response(
       JSON.stringify({
         id: `chatcmpl-maps-lifecycle-${generationProviderRequestCount}`,
@@ -164,6 +174,14 @@ globalThis.fetch = (async (input: string | URL | Request) => {
   }
   throw new Error(`Unexpected lifecycle fetch: ${url}`);
 }) as typeof fetch;
+
+function capturedProviderPrompt(request: (typeof generationProviderRequests)[number] | undefined): string {
+  return (request?.messages ?? [])
+    .map((message) =>
+      typeof message.content === "string" ? message.content : JSON.stringify(message.content),
+    )
+    .join("\n\n");
+}
 
 async function importEngine<T>(relativePath: string): Promise<T> {
   const url = pathToFileURL(resolve(engineRoot, relativePath)).href;
@@ -286,6 +304,31 @@ async function main() {
           snapshot: { currentLocationId: string } | null;
         }>;
       }>("packages/server/src/services/spatial-context/state-resolution.ts");
+    const { createGameStateStorage } = await importEngine<{
+      createGameStateStorage(db: unknown): {
+        create(
+          state: {
+            chatId: string;
+            messageId: string;
+            swipeIndex: number;
+            date: string | null;
+            time: string | null;
+            location: string | null;
+            weather: string | null;
+            temperature: string | null;
+            worldCustomFields: unknown[];
+            presentCharacters: unknown[];
+            recentEvents: unknown[];
+            playerStats: unknown;
+            personaStats: unknown;
+            fieldLocks: Record<string, boolean> | null;
+            hiddenTrackerFields: Record<string, boolean> | null;
+            committed: boolean;
+          },
+          manualOverrides?: Record<string, string> | null,
+        ): Promise<string>;
+      };
+    }>("packages/server/src/services/storage/game-state.storage.ts");
 
     const installed105 =
       await capabilityPackageManager.install("hierarchical-maps");
@@ -455,7 +498,7 @@ async function main() {
       headers: csrfHeaders,
       payload: {
         enableAgents: true,
-        activeAgentIds: ["hierarchical-maps"],
+        activeAgentIds: ["hierarchical-maps", "world-state"],
         gameSessionStatus: "active",
         gameMaps: [existingGameMap],
         gameMap: existingGameMap,
@@ -694,6 +737,25 @@ async function main() {
         "unknown-ruin": undefined,
       },
     );
+    const gameStateStore = createGameStateStorage(app.db);
+    await gameStateStore.create({
+      chatId: existingGame.id,
+      messageId: "",
+      swipeIndex: 0,
+      date: null,
+      time: null,
+      location: "Existing World > Existing Harbor",
+      weather: "HARBOR_HISTORY_GAME_STATE",
+      temperature: null,
+      worldCustomFields: [],
+      presentCharacters: [],
+      recentEvents: [],
+      playerStats: null,
+      personaStats: null,
+      fieldLocks: null,
+      hiddenTrackerFields: null,
+      committed: true,
+    });
     const gamePeek = (await expectJson(app, {
       method: "POST",
       url: `/api/chats/${existingGame.id}/peek-prompt`,
@@ -739,6 +801,7 @@ async function main() {
       "existing_harbor",
     );
 
+    const gameWorldGenerationRequestIndex = generationProviderRequests.length;
     const gameGeneration = await app.inject({
       method: "POST",
       url: "/api/generate",
@@ -761,7 +824,12 @@ async function main() {
     assert.equal(gameGeneration.statusCode, 200, gameGeneration.body);
     assert.match(gameGeneration.body, /spatial_transition_committed/u);
     assert.match(gameGeneration.body, /message_saved/u);
-    assert.equal(generationProviderRequestCount, 1);
+    assert.ok(generationProviderRequestCount >= 1);
+    const gameWorldGenerationPrompt = capturedProviderPrompt(
+      generationProviderRequests[gameWorldGenerationRequestIndex],
+    );
+    assert.match(gameWorldGenerationPrompt, /Current location ID: existing_world/u);
+    assert.match(gameWorldGenerationPrompt, /HARBOR_HISTORY_GAME_STATE/u);
     const gameMessages = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${existingGame.id}/messages`,
@@ -788,44 +856,121 @@ async function main() {
       gameAssistantAtWorld.createdAt > gameWorldTurn.createdAt,
       "Live Game assistant messages must sort after the owner turn they answer",
     );
-    const gameContinuationSnapshot = await materializeAssistantSpatialState(
-      app.db,
-      {
-        chatId: existingGame.id,
-        messageId: gameAssistantAtWorld.id,
-        swipeIndex: 0,
-        regenerate: false,
-        continuation: true,
-      },
-    );
-    assert.equal(
-      gameContinuationSnapshot?.currentLocationId,
-      "existing_world",
-    );
+    await gameStateStore.create({
+      chatId: existingGame.id,
+      messageId: gameAssistantAtWorld.id,
+      swipeIndex: 0,
+      date: null,
+      time: null,
+      location: "Existing World",
+      weather: "WORLD_CURRENT_GAME_STATE",
+      temperature: null,
+      worldCustomFields: [],
+      presentCharacters: [],
+      recentEvents: [],
+      playerStats: null,
+      personaStats: null,
+      fieldLocks: null,
+      hiddenTrackerFields: null,
+      committed: true,
+    });
 
-    const regeneratedGameSwipe = (await expectJson(app, {
+    const gameRetryRequestIndex = generationProviderRequests.length;
+    const gameRetry = await app.inject({
       method: "POST",
-      url: `/api/chats/${existingGame.id}/messages/${gameAssistantAtHarbor.id}/swipes`,
+      url: "/api/generate",
       headers: csrfHeaders,
       payload: {
-        content: "A second Game answer preserves the earlier harbor anchor.",
-      },
-    })) as { index: number };
-    assert.equal(regeneratedGameSwipe.index, 1);
-    const regeneratedGameSnapshot = await materializeAssistantSpatialState(
-      app.db,
-      {
         chatId: existingGame.id,
-        messageId: gameAssistantAtHarbor.id,
-        swipeIndex: regeneratedGameSwipe.index,
-        regenerate: true,
-        continuation: false,
+        connectionId: gameGenerationConnection.id,
+        regenerateMessageId: gameAssistantAtHarbor.id,
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
       },
+    });
+    assert.equal(gameRetry.statusCode, 200, gameRetry.body);
+    assert.match(gameRetry.body, /message_saved/u);
+    const gameRetryPrompt = capturedProviderPrompt(
+      generationProviderRequests[gameRetryRequestIndex],
     );
+    assert.match(gameRetryPrompt, /Current location ID: existing_harbor/u);
+    assert.doesNotMatch(gameRetryPrompt, /Current location ID: existing_world/u);
+    assert.match(gameRetryPrompt, /HARBOR_HISTORY_GAME_STATE/u);
+    assert.doesNotMatch(gameRetryPrompt, /WORLD_CURRENT_GAME_STATE/u);
     assert.equal(
-      regeneratedGameSnapshot?.currentLocationId,
-      "existing_harbor",
+      gameRetryPrompt.match(/LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./gu)?.length,
+      1,
     );
+    const gameMessagesAfterRetry = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}/messages`,
+    })) as Array<{ id: string; activeSwipeIndex: number }>;
+    const retriedGameMessage = gameMessagesAfterRetry.find(
+      (message) => message.id === gameAssistantAtHarbor.id,
+    );
+    assert.equal(retriedGameMessage?.activeSwipeIndex, 1);
+    const gameRetryCached = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/peek-prompt`,
+      headers: csrfHeaders,
+      payload: { messageId: gameAssistantAtHarbor.id },
+    })) as {
+      source: string;
+      exact: boolean;
+      messages: Array<{ content: string }>;
+    };
+    assert.equal(gameRetryCached.source, "cached");
+    assert.equal(gameRetryCached.exact, true);
+    assert.equal(
+      gameRetryCached.messages.map((message) => message.content).join("\n\n"),
+      gameRetryPrompt,
+    );
+
+    const gameContinuationRequestIndex = generationProviderRequests.length;
+    const gameContinuation = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: existingGame.id,
+        connectionId: gameGenerationConnection.id,
+        continueMessageId: gameAssistantAtWorld.id,
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+      },
+    });
+    assert.equal(gameContinuation.statusCode, 200, gameContinuation.body);
+    assert.match(gameContinuation.body, /message_saved/u);
+    const gameContinuationPrompt = capturedProviderPrompt(
+      generationProviderRequests[gameContinuationRequestIndex],
+    );
+    assert.match(gameContinuationPrompt, /Current location ID: existing_world/u);
+    assert.doesNotMatch(gameContinuationPrompt, /Current location ID: existing_harbor/u);
+    assert.match(gameContinuationPrompt, /WORLD_CURRENT_GAME_STATE/u);
+    assert.doesNotMatch(gameContinuationPrompt, /HARBOR_HISTORY_GAME_STATE/u);
+    assert.doesNotMatch(
+      gameContinuationPrompt,
+      /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u,
+    );
+    const gameContinuationCached = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/peek-prompt`,
+      headers: csrfHeaders,
+      payload: { messageId: gameAssistantAtWorld.id },
+    })) as {
+      source: string;
+      exact: boolean;
+      messages: Array<{ content: string }>;
+    };
+    assert.equal(gameContinuationCached.source, "cached");
+    assert.equal(gameContinuationCached.exact, true);
+    assert.equal(
+      gameContinuationCached.messages.map((message) => message.content).join("\n\n"),
+      gameContinuationPrompt,
+    );
+
     const exactRegeneratedGameState = await resolveEffectiveSpatialState(
       app.db,
       existingGame.id,
