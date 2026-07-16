@@ -11,6 +11,7 @@ import {
 } from "./catalog-artwork.mjs";
 import {
   LEGACY_CATALOG_MAJOR,
+  assertManifestBuildProvenance,
   compareEngineVersions,
   createCatalogLanes,
   readCatalogFamily,
@@ -202,17 +203,7 @@ for (const entry of catalog.packages) {
   if (compareEngineVersions(manifest.engine.maxExclusive, manifest.engine.min) <= 0) {
     throw new Error(`${manifest.id} Engine compatibility range must be increasing`);
   }
-  if (
-    manifest.schemaVersion === 2 &&
-    (
-      compareEngineVersions(manifest.builtAgainst.engineVersion, manifest.engine.min) < 0 ||
-      compareEngineVersions(manifest.builtAgainst.engineVersion, manifest.engine.maxExclusive) >= 0
-    )
-  ) {
-    throw new Error(
-      `${manifest.id} was built against Engine ${manifest.builtAgainst.engineVersion}, outside its declared compatibility range`,
-    );
-  }
+  assertManifestBuildProvenance(manifest);
   if (!OFFICIAL_PACKAGE_GUIDANCE[manifest.id]) {
     throw new Error(`Missing activation guidance and mode metadata for ${manifest.id}`);
   }

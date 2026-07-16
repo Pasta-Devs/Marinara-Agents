@@ -53,6 +53,20 @@ export function catalogMajorsForManifest(manifest) {
   return catalogMajorsForRange(manifest.engine.min, manifest.engine.maxExclusive);
 }
 
+export function assertManifestBuildProvenance(manifest) {
+  if (manifest.schemaVersion !== 2) return;
+  const builtAgainstEngineVersion = manifest.builtAgainst?.engineVersion;
+  if (!builtAgainstEngineVersion) throw new Error(`${manifest.id} must declare its exact builtAgainst Engine version`);
+  if (
+    compareEngineVersions(builtAgainstEngineVersion, manifest.engine.min) < 0 ||
+    compareEngineVersions(builtAgainstEngineVersion, manifest.engine.maxExclusive) >= 0
+  ) {
+    throw new Error(
+      `${manifest.id} was built against Engine ${builtAgainstEngineVersion}, outside its declared compatibility range`,
+    );
+  }
+}
+
 export function createCatalogLanes(catalog) {
   if (catalog?.schemaVersion !== 1 || !Array.isArray(catalog.packages)) {
     throw new Error("Invalid catalog envelope");

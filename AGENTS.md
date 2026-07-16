@@ -11,7 +11,7 @@ This file is a thin maintainer note for contributors using coding agents. Canoni
 
 - Start from `main` and open an issue before implementation.
 - Open a draft PR when issue work begins so ownership is visible, then mark it ready only after validation and self-review are complete.
-- Run `node scripts/validate-catalog.mjs` as the baseline validation command.
+- Run `node scripts/test-catalog-lanes.mjs` and `node scripts/validate-catalog.mjs` as the baseline validation commands.
 - Rebuild the affected package and catalog entry whenever source payloads, manifests, Engine snapshots, or generated bundles change.
 - Treat each manifest's `engine.min` / `engine.maxExclusive` range as the catalog-lane source of truth. The builders route packages into `catalog/v*/catalog.json`; do not hand-place or copy entries between lanes.
 

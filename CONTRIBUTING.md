@@ -85,6 +85,7 @@ Hierarchical Maps also owns `packages/hierarchical-maps/engine-boundary.json`. I
 Every pull request must run:
 
 ```bash
+node scripts/test-catalog-lanes.mjs
 node scripts/validate-catalog.mjs
 git diff --check
 ```
