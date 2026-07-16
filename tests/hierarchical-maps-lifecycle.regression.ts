@@ -18,6 +18,7 @@ const engineRoot = resolve(
 );
 const dataDir = mkdtempSync(join(tmpdir(), "marinara-maps-lifecycle-"));
 const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
+const generationProviderBaseUrl = "http://127.0.0.1:9/v1";
 const csrfHeaders = { "x-marinara-csrf": "1" };
 const originalFetch = globalThis.fetch;
 
@@ -78,6 +79,7 @@ const fixtures = new Map(
 );
 let catalogVersion = "1.0.5";
 let catalogOnline = true;
+let generationProviderRequestCount = 0;
 
 const candidateFixture = fixtures.get("1.1.0");
 assert.ok(candidateFixture);
@@ -88,7 +90,7 @@ assert.deepEqual(candidateFixture.manifest.capabilityApi, {
 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineVersion: "2.3.1",
-  engineCommit: "ba3063e536c197c59a7c4e7e82d666f64108fae2",
+  engineCommit: "044f839f55f2855271dbbb9340f443f61f67f167",
 });
 
 function catalogFixture(version: string) {
@@ -114,13 +116,37 @@ function catalogFixture(version: string) {
 }
 
 globalThis.fetch = (async (input: string | URL | Request) => {
-  if (!catalogOnline) throw new Error("Lifecycle fixture is offline");
   const url =
     typeof input === "string"
       ? input
       : input instanceof URL
         ? input.toString()
         : input.url;
+  if (url === `${generationProviderBaseUrl}/chat/completions`) {
+    generationProviderRequestCount += 1;
+    return new Response(
+      JSON.stringify({
+        id: `chatcmpl-maps-lifecycle-${generationProviderRequestCount}`,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1_000),
+        model: "maps-lifecycle-e2e",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content:
+                "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 8, completion_tokens: 8, total_tokens: 16 },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }
+  if (!catalogOnline) throw new Error("Lifecycle fixture is offline");
   if (url === catalogUrl) {
     return new Response(JSON.stringify(catalogFixture(catalogVersion)), {
       status: 200,
@@ -363,6 +389,19 @@ async function main() {
           "LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar.",
       },
     })) as { id: string };
+    const gameGenerationConnection = (await expectJson(app, {
+      method: "POST",
+      url: "/api/connections",
+      headers: csrfHeaders,
+      payload: {
+        name: "Hierarchical Maps lifecycle Game provider",
+        provider: "custom",
+        baseUrl: generationProviderBaseUrl,
+        model: "maps-lifecycle-e2e",
+        apiKey: "maps-lifecycle-e2e",
+        treatAsLocalEndpoint: true,
+      },
+    })) as { id: string };
 
     const existingGameMap = {
       id: "existing-campaign-map",
@@ -407,6 +446,7 @@ async function main() {
         name: "Existing Game reconciliation fixture",
         mode: "game",
         characterIds: [],
+        connectionId: gameGenerationConnection.id,
       },
     })) as { id: string };
     await expectJson(app, {
@@ -674,6 +714,256 @@ async function main() {
       /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u,
     );
     assert.match(gamePeekText, /Existing Harbor/u);
+
+    const gameAssistantAtHarbor = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/messages`,
+      headers: csrfHeaders,
+      payload: {
+        role: "assistant",
+        content: "The existing harbor watch records the party's arrival.",
+      },
+    })) as { id: string; activeSwipeIndex: number };
+    const normalGameAssistantSnapshot = await materializeAssistantSpatialState(
+      app.db,
+      {
+        chatId: existingGame.id,
+        messageId: gameAssistantAtHarbor.id,
+        swipeIndex: 0,
+        regenerate: false,
+        continuation: false,
+      },
+    );
+    assert.equal(
+      normalGameAssistantSnapshot?.currentLocationId,
+      "existing_harbor",
+    );
+
+    const gameGeneration = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: existingGame.id,
+        connectionId: gameGenerationConnection.id,
+        userMessage: "The party returns to the Existing World overview.",
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+        pendingSpatialTransition: {
+          destinationId: "existing_world",
+          expectedDefinitionRevision: existingGameSpatial.definition.revision,
+          expectedCurrentLocationId: "existing_harbor",
+          commandId: "existing-game-return-to-world",
+        },
+      },
+    });
+    assert.equal(gameGeneration.statusCode, 200, gameGeneration.body);
+    assert.match(gameGeneration.body, /spatial_transition_committed/u);
+    assert.match(gameGeneration.body, /message_saved/u);
+    assert.equal(generationProviderRequestCount, 1);
+    const gameMessages = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}/messages`,
+    })) as Array<{
+      id: string;
+      role: string;
+      content: string;
+      createdAt: string;
+    }>;
+    const gameWorldTurn = gameMessages.find(
+      (message) =>
+        message.role === "user" &&
+        message.content ===
+          "The party returns to the Existing World overview.",
+    );
+    const gameAssistantAtWorld = gameMessages.find(
+      (message) =>
+        message.role === "assistant" &&
+        message.content.includes("GAME_HISTORY_PROVIDER_RESPONSE"),
+    );
+    assert.ok(gameWorldTurn);
+    assert.ok(gameAssistantAtWorld);
+    assert.ok(
+      gameAssistantAtWorld.createdAt > gameWorldTurn.createdAt,
+      "Live Game assistant messages must sort after the owner turn they answer",
+    );
+    const gameContinuationSnapshot = await materializeAssistantSpatialState(
+      app.db,
+      {
+        chatId: existingGame.id,
+        messageId: gameAssistantAtWorld.id,
+        swipeIndex: 0,
+        regenerate: false,
+        continuation: true,
+      },
+    );
+    assert.equal(
+      gameContinuationSnapshot?.currentLocationId,
+      "existing_world",
+    );
+
+    const regeneratedGameSwipe = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/messages/${gameAssistantAtHarbor.id}/swipes`,
+      headers: csrfHeaders,
+      payload: {
+        content: "A second Game answer preserves the earlier harbor anchor.",
+      },
+    })) as { index: number };
+    assert.equal(regeneratedGameSwipe.index, 1);
+    const regeneratedGameSnapshot = await materializeAssistantSpatialState(
+      app.db,
+      {
+        chatId: existingGame.id,
+        messageId: gameAssistantAtHarbor.id,
+        swipeIndex: regeneratedGameSwipe.index,
+        regenerate: true,
+        continuation: false,
+      },
+    );
+    assert.equal(
+      regeneratedGameSnapshot?.currentLocationId,
+      "existing_harbor",
+    );
+    const exactRegeneratedGameState = await resolveEffectiveSpatialState(
+      app.db,
+      existingGame.id,
+      {
+        exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 1 },
+      },
+    );
+    assert.equal(
+      exactRegeneratedGameState.currentLocationId,
+      "existing_harbor",
+    );
+
+    await expectJson(app, {
+      method: "DELETE",
+      url: `/api/chats/${existingGame.id}/messages/${gameAssistantAtHarbor.id}/swipes/0`,
+      headers: csrfHeaders,
+    });
+    const shiftedGameSwipeState = await resolveEffectiveSpatialState(
+      app.db,
+      existingGame.id,
+      {
+        exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 0 },
+      },
+    );
+    assert.equal(shiftedGameSwipeState.currentLocationId, "existing_harbor");
+    const removedGameSwipeState = await resolveEffectiveSpatialState(
+      app.db,
+      existingGame.id,
+      {
+        exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 1 },
+      },
+    );
+    assert.equal(removedGameSwipeState.snapshot, null);
+
+    const gameBranch = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/branch`,
+      headers: csrfHeaders,
+      payload: { upToMessageId: gameAssistantAtWorld.id },
+    })) as { id: string };
+    const gameBranchSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${gameBranch.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(gameBranchSpatial.currentLocationId, "existing_world");
+
+    const exportedGameBranch = await app.inject({
+      method: "GET",
+      url: `/api/chats/${gameBranch.id}/export?format=jsonl`,
+    });
+    assert.equal(
+      exportedGameBranch.statusCode,
+      200,
+      exportedGameBranch.body,
+    );
+    const gameExportHeader = JSON.parse(
+      exportedGameBranch.body.split("\n")[0]!,
+    ) as {
+      chat_metadata: {
+        marinara_metadata: {
+          spatialContextHistory: Array<{ currentLocationId: string }>;
+        };
+      };
+    };
+    assert.ok(
+      gameExportHeader.chat_metadata.marinara_metadata.spatialContextHistory.some(
+        (snapshot) => snapshot.currentLocationId === "existing_world",
+      ),
+    );
+
+    const gameImportBoundary = `marinara-maps-game-history-${Date.now()}`;
+    const gameImportBody = Buffer.concat([
+      Buffer.from(
+        `--${gameImportBoundary}\r\nContent-Disposition: form-data; name="file"; filename="maps-game-history.jsonl"\r\nContent-Type: application/jsonl\r\n\r\n`,
+      ),
+      Buffer.from(exportedGameBranch.body, "utf8"),
+      Buffer.from(`\r\n--${gameImportBoundary}--\r\n`),
+    ]);
+    const importedGameResponse = await app.inject({
+      method: "POST",
+      url: "/api/import/st-chat",
+      headers: {
+        ...csrfHeaders,
+        "content-type": `multipart/form-data; boundary=${gameImportBoundary}`,
+        "content-length": String(gameImportBody.byteLength),
+      },
+      payload: gameImportBody,
+    });
+    assert.equal(
+      importedGameResponse.statusCode,
+      200,
+      importedGameResponse.body,
+    );
+    const importedGame = JSON.parse(importedGameResponse.body) as {
+      success: boolean;
+      chatId: string;
+    };
+    assert.equal(importedGame.success, true);
+    const importedGameSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${importedGame.chatId}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(importedGameSpatial.currentLocationId, "existing_world");
+
+    await expectJson(
+      app,
+      {
+        method: "POST",
+        url: `/api/chats/${existingGame.id}/messages/bulk-delete`,
+        headers: csrfHeaders,
+        payload: {
+          messageIds: [gameWorldTurn.id, gameAssistantAtWorld.id],
+        },
+      },
+      204,
+    );
+    const rewoundGameSource = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(rewoundGameSource.currentLocationId, "existing_harbor");
+    const unchangedGameBranch = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${gameBranch.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(unchangedGameBranch.currentLocationId, "existing_world");
+    for (const disposableGameChatId of [gameBranch.id, importedGame.chatId]) {
+      await expectJson(
+        app,
+        {
+          method: "DELETE",
+          url: `/api/chats/${disposableGameChatId}?force=true`,
+          headers: csrfHeaders,
+        },
+        204,
+      );
+    }
+
     const checkpointGameState = (await expectJson(app, {
       method: "PATCH",
       url: `/api/chats/${existingGame.id}/game-state`,
@@ -720,6 +1010,15 @@ async function main() {
       {
         method: "DELETE",
         url: `/api/chats/${existingGame.id}?force=true`,
+        headers: csrfHeaders,
+      },
+      204,
+    );
+    await expectJson(
+      app,
+      {
+        method: "DELETE",
+        url: `/api/connections/${gameGenerationConnection.id}`,
         headers: csrfHeaders,
       },
       204,
@@ -1217,7 +1516,7 @@ async function main() {
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, owner-turn persistence, live prompt parity, swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);
