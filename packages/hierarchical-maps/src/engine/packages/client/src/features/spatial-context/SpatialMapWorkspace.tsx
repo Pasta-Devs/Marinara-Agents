@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import {
   compareSpatialLocations,
+  resolveSpatialLocationDepth,
   resolveSpatialBreadcrumb,
   spatialContextDefinitionSchema,
   validateSpatialArchive,
@@ -54,6 +55,11 @@ import {
 } from "./use-spatial-resources";
 
 type MobilePane = "hierarchy" | "local" | "details";
+
+type FirstSaveResult = {
+  locationCount: number;
+  startingLocationName: string;
+};
 
 interface SpatialMapWorkspaceProps {
   chatId: string;
@@ -132,6 +138,7 @@ export function SpatialMapWorkspace({
   const [conflict, setConflict] = useState(false);
   const [reviewConflict, setReviewConflict] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [firstSaveResult, setFirstSaveResult] = useState<FirstSaveResult | null>(null);
   const [archiveRequestId, setArchiveRequestId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [archiveReplacementId, setArchiveReplacementId] = useState("");
@@ -176,6 +183,7 @@ export function SpatialMapWorkspace({
     setEnteredParentId(null);
     setConflict(false);
     setAiBuilderOpen(false);
+    setFirstSaveResult(null);
   }, [chatId]);
 
   useEffect(() => {
@@ -203,6 +211,20 @@ export function SpatialMapWorkspace({
   const selected = draft?.locations.find((location) => location.id === selectedId) ?? null;
   const currentLocationId = spatial.data?.currentLocationId ?? null;
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
+  const canEnable =
+    !!draft?.startingLocationId &&
+    draft.locations.some((location) => location.id === draft.startingLocationId && location.status === "active");
+  const isFirstMapDraft = baseDefinition === null && (draft?.locations.length ?? 0) > 0;
+  const firstMapDepth = useMemo(
+    () =>
+      draft
+        ? draft.locations.reduce(
+            (maximum, location) => Math.max(maximum, resolveSpatialLocationDepth(draft, location)),
+            0,
+          )
+        : 0,
+    [draft],
+  );
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -229,6 +251,7 @@ export function SpatialMapWorkspace({
     setDraft(next);
     setServerIssues([]);
     setSavedFlash(false);
+    setFirstSaveResult(null);
   }, []);
 
   const selectLocation = useCallback((locationId: string, showDetails = true) => {
@@ -385,8 +408,11 @@ export function SpatialMapWorkspace({
     onClose();
   }, [confirmAction, dirty, onClose]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (enableForFirstSave = false) => {
     if (!draft || !dirty || issues.length > 0) return;
+    const completingFirstMap = enableForFirstSave && baseDefinition === null;
+    if (completingFirstMap && !canEnable) return;
+    const definitionToSave = completingFirstMap ? { ...draft, enabled: true } : draft;
     setServerIssues([]);
     setConflict(false);
     setReviewConflict(false);
@@ -396,7 +422,7 @@ export function SpatialMapWorkspace({
         expectedRevision: baseDefinition?.revision ?? 0,
         expectedCurrentLocationId: currentLocationId,
         ...(replacementCurrentLocationId ? { replacementCurrentLocationId } : {}),
-        definition: { ...draft, ownerMode, revision: baseDefinition?.revision ?? 0 },
+        definition: { ...definitionToSave, ownerMode, revision: baseDefinition?.revision ?? 0 },
       });
       const saved = response.definition;
       if (!saved) throw new Error("The server did not return the saved map.");
@@ -405,8 +431,15 @@ export function SpatialMapWorkspace({
       setServerIssues(response.warnings);
       setReplacementCurrentLocationId(null);
       setSavedFlash(true);
+      if (completingFirstMap) {
+        const startingLocation = saved.locations.find((location) => location.id === saved.startingLocationId);
+        setFirstSaveResult({
+          locationCount: saved.locations.length,
+          startingLocationName: startingLocation?.name ?? "the starting location",
+        });
+      }
       onDirtyChange?.(false);
-      toast.success("Hierarchical map saved.");
+      toast.success(completingFirstMap ? "Map ready for turns." : "Hierarchical map saved.");
     } catch (error) {
       const problem = getSpatialContextProblem(error);
       setServerIssues(problem.issues);
@@ -419,6 +452,7 @@ export function SpatialMapWorkspace({
     }
   }, [
     baseDefinition,
+    canEnable,
     chatId,
     currentLocationId,
     dirty,
@@ -444,6 +478,7 @@ export function SpatialMapWorkspace({
     setReviewConflict(false);
     setServerIssues(result.data.warnings);
     setReplacementCurrentLocationId(null);
+    setFirstSaveResult(null);
   }, [ownerMode, spatial]);
 
   const applyGeneratedDraft = useCallback(
@@ -484,7 +519,7 @@ export function SpatialMapWorkspace({
       toast.success(
         expandedExistingMap
           ? "AI expansion added to the working map. Review it, then Save."
-          : "AI map draft applied. Review it, then Save.",
+          : "AI map draft applied. Review it, choose a start, then enable and save.",
       );
     },
     [applyDraft, baseDefinition?.revision, currentLocationId, draft, onClearPendingDraftReview, ownerMode],
@@ -568,9 +603,6 @@ export function SpatialMapWorkspace({
   const localChildren = sortedChildren(draft, enteredParentId);
   const localPresentation = currentContext?.childPresentation ?? "list";
   const localBreadcrumb = resolveSpatialBreadcrumb(draft, enteredParentId);
-  const canEnable =
-    !!draft.startingLocationId &&
-    draft.locations.some((location) => location.id === draft.startingLocationId && location.status === "active");
   const conflictDifference = compareSpatialDefinitions(spatial.data?.definition ?? null, draft);
   const archiveRequest = draft.locations.find((location) => location.id === archiveRequestId) ?? null;
   const archiveReplacementChoices = activeLocations.filter((location) => location.id !== archiveRequestId);
@@ -777,22 +809,30 @@ export function SpatialMapWorkspace({
             {status.icon}
             {status.label}
           </span>
-          <label className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs">
-            <input
-              type="checkbox"
-              checked={draft.enabled}
-              disabled={!canEnable && !draft.enabled}
-              onChange={(event) => applyDraft({ ...draft, enabled: event.target.checked })}
-            />
-            <span>{draft.enabled ? "Enabled" : "Disabled"}</span>
-          </label>
+          {!isFirstMapDraft && (
+            <label className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs">
+              <input
+                type="checkbox"
+                checked={draft.enabled}
+                disabled={!canEnable && !draft.enabled}
+                onChange={(event) => applyDraft({ ...draft, enabled: event.target.checked })}
+              />
+              <span>{draft.enabled ? "Enabled" : "Disabled"}</span>
+            </label>
+          )}
           <button
             type="button"
-            onClick={() => void handleSave()}
-            disabled={!dirty || issues.length > 0 || updateSpatial.isPending || conflict}
+            onClick={() => void handleSave(isFirstMapDraft)}
+            disabled={
+              !dirty ||
+              issues.length > 0 ||
+              updateSpatial.isPending ||
+              conflict ||
+              (isFirstMapDraft && !canEnable)
+            }
             className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 disabled:opacity-45"
           >
-            <Save size="0.8125rem" /> Save
+            <Save size="0.8125rem" /> {isFirstMapDraft ? "Enable and save map" : "Save"}
           </button>
         </div>
       </div>
@@ -813,6 +853,75 @@ export function SpatialMapWorkspace({
         onClose={closeAiBuilder}
         onApply={applyGeneratedDraft}
       />
+
+      {!aiBuilderOpen && isFirstMapDraft && (
+        <section
+          aria-label="First map setup"
+          className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)] px-4 py-3"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-52 flex-1">
+              <p className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-[var(--marinara-chat-chrome-accent)]">
+                First map
+              </p>
+              <p className="mt-1 text-xs font-medium text-[var(--marinara-editor-title)]">
+                {draft.locations.length} {draft.locations.length === 1 ? "location" : "locations"} · {firstMapDepth}{" "}
+                {firstMapDepth === 1 ? "level" : "levels"} · Working draft, not saved
+              </p>
+            </div>
+            <ol
+              aria-label="First map progress"
+              className="flex flex-wrap items-center gap-1.5 text-[0.625rem] font-semibold text-[var(--marinara-editor-muted)]"
+            >
+              <li className="inline-flex min-h-8 items-center gap-1 rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-2.5 text-[var(--marinara-chat-chrome-accent)]">
+                <Check size="0.6875rem" /> Build
+              </li>
+              <li className="inline-flex min-h-8 items-center rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-2.5 text-[var(--marinara-editor-title)]">
+                Review
+              </li>
+              <li className="inline-flex min-h-8 items-center rounded-full px-2.5">Start here</li>
+              <li className="inline-flex min-h-8 items-center rounded-full px-2.5">Enable map</li>
+            </ol>
+            <label className="flex min-w-52 items-center gap-2 text-xs font-medium text-[var(--marinara-editor-title)] max-sm:w-full">
+              <span className="shrink-0">Start here</span>
+              <select
+                aria-label="Starting location"
+                value={draft.startingLocationId ?? ""}
+                onChange={(event) => {
+                  const startingLocationId = event.target.value || null;
+                  applyDraft({ ...draft, startingLocationId });
+                  if (startingLocationId) setSelectedId(startingLocationId);
+                }}
+                className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--marinara-chat-chrome-input-border)] bg-[var(--marinara-chat-chrome-input-bg)] px-3 text-xs text-[var(--marinara-chat-chrome-panel-title)] outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-focus-ring)]"
+              >
+                <option value="">Choose a starting location</option>
+                {activeLocations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+      )}
+
+      {!aiBuilderOpen && firstSaveResult && (
+        <div
+          className="flex flex-wrap items-center gap-3 border-b border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-4 py-3 text-xs text-[var(--marinara-editor-title)]"
+          role="status"
+          aria-live="polite"
+        >
+          <Check size="0.875rem" className="text-[var(--marinara-chat-chrome-accent)]" />
+          <span className="min-w-52 flex-1 font-semibold">
+            Map ready · {firstSaveResult.locationCount}{" "}
+            {firstSaveResult.locationCount === 1 ? "location" : "locations"} · Starting at {firstSaveResult.startingLocationName}
+          </span>
+          <button type="button" onClick={() => void handleClose()} className="mari-chrome-control min-h-11 px-3 text-xs">
+            Return to chat
+          </button>
+        </div>
+      )}
 
       {!aiBuilderOpen && conflict && (
         <div
@@ -955,6 +1064,7 @@ export function SpatialMapWorkspace({
               definition={draft}
               selectedId={selectedId}
               currentLocationId={currentLocationId}
+              expandSelectedChildren={isFirstMapDraft}
               onSelect={(id) => selectLocation(id, false)}
               onEnter={enterLocation}
               onAddChild={addChild}
@@ -994,6 +1104,7 @@ export function SpatialMapWorkspace({
                   definition={draft}
                   selectedId={selectedId}
                   currentLocationId={currentLocationId}
+                  expandSelectedChildren={isFirstMapDraft}
                   onSelect={selectLocation}
                   onEnter={enterLocation}
                   onAddChild={addChild}

@@ -15,6 +15,17 @@ import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./cata
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const catalog = JSON.parse(await readFile(join(repoRoot, "catalog/catalog.json"), "utf8"));
 const MIN_ENGINE_VERSION = "2.3.0";
+const ENGINE_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)$/u;
+function compareEngineVersions(left, right) {
+  const leftMatch = ENGINE_VERSION_PATTERN.exec(left);
+  const rightMatch = ENGINE_VERSION_PATTERN.exec(right);
+  if (!leftMatch || !rightMatch) throw new Error(`Invalid Engine compatibility version: ${left} / ${right}`);
+  for (let index = 1; index <= 3; index += 1) {
+    const difference = Number(leftMatch[index]) - Number(rightMatch[index]);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
 const hierarchicalMapsBoundary = await assertHierarchicalMapsPrivateImportBoundary();
 
@@ -174,8 +185,14 @@ for (const entry of catalog.packages) {
   if (!readme.includes(readmePackageLink)) {
     throw new Error(`README.md must list package ${manifest.id} in the official catalog`);
   }
-  if (manifest.engine?.min !== MIN_ENGINE_VERSION) {
-    throw new Error(`${manifest.id} must require Marinara Engine ${MIN_ENGINE_VERSION}+`);
+  if (!manifest.engine?.min || !manifest.engine?.maxExclusive) {
+    throw new Error(`${manifest.id} must declare an Engine compatibility range`);
+  }
+  if (compareEngineVersions(manifest.engine.min, MIN_ENGINE_VERSION) < 0) {
+    throw new Error(`${manifest.id} cannot support Engine versions below ${MIN_ENGINE_VERSION}`);
+  }
+  if (compareEngineVersions(manifest.engine.maxExclusive, manifest.engine.min) <= 0) {
+    throw new Error(`${manifest.id} Engine compatibility range must be increasing`);
   }
   if (!OFFICIAL_PACKAGE_GUIDANCE[manifest.id]) {
     throw new Error(`Missing activation guidance and mode metadata for ${manifest.id}`);

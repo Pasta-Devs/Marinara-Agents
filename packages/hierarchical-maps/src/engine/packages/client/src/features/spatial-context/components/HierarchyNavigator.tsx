@@ -7,6 +7,7 @@ interface HierarchyNavigatorProps {
   definition: SpatialContextDefinition;
   selectedId: string | null;
   currentLocationId: string | null;
+  expandSelectedChildren?: boolean;
   onSelect: (locationId: string) => void;
   onEnter: (locationId: string) => void;
   onAddChild: (locationId: string) => void;
@@ -19,6 +20,7 @@ export function HierarchyNavigator({
   definition,
   selectedId,
   currentLocationId,
+  expandSelectedChildren = false,
   onSelect,
   onEnter,
   onAddChild,
@@ -46,8 +48,11 @@ export function HierarchyNavigator({
       parents.push(current.parentId);
       current = definition.locations.find((location) => location.id === current?.parentId);
     }
+    if (expandSelectedChildren && definition.locations.some((location) => location.parentId === selectedId)) {
+      parents.push(selectedId);
+    }
     if (parents.length > 0) setExpanded((previous) => new Set([...previous, ...parents]));
-  }, [definition.locations, selectedId]);
+  }, [definition.locations, expandSelectedChildren, selectedId]);
 
   const toggleExpanded = (locationId: string) => {
     setExpanded((previous) => {

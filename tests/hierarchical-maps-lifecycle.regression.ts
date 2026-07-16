@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -44,6 +45,7 @@ type Manifest = {
 type ArtifactFixture = {
   bytes: Buffer;
   manifest: Manifest;
+  path: string;
   url: string;
 };
 
@@ -66,18 +68,18 @@ function artifactFixture(version: string): ArtifactFixture {
   return {
     bytes,
     manifest,
+    path,
     url: `https://1.1.1.1/artifacts/hierarchical-maps-${version}.zip`,
   };
 }
 
 const fixtures = new Map(
   [
-    artifactFixture("1.0.5"),
     artifactFixture("1.0.6"),
     artifactFixture("1.1.0"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
-let catalogVersion = "1.0.5";
+let catalogVersion = "1.1.0";
 let catalogOnline = true;
 let generationProviderRequestCount = 0;
 const generationProviderRequests: Array<{
@@ -92,9 +94,48 @@ assert.deepEqual(candidateFixture.manifest.capabilityApi, {
   minor: 2,
 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
-  engineVersion: "2.3.1",
-  engineCommit: "044f839f55f2855271dbbb9340f443f61f67f167",
+  engineVersion: "3.2.2",
+  engineCommit: "fbfb57605de0c9ebb6cced61fd5b5288db428fad",
 });
+
+function seedInstalledProfile(version: string) {
+  const fixture = fixtures.get(version);
+  assert.ok(fixture, `Missing installed-profile fixture for Maps ${version}`);
+  const packageRoot = join(
+    dataDir,
+    "capability-packages",
+    "versions",
+    fixture.manifest.id,
+    fixture.manifest.version,
+  );
+  mkdirSync(packageRoot, { recursive: true });
+  execFileSync("unzip", ["-q", fixture.path, "-d", packageRoot]);
+  const registryPath = join(dataDir, "capability-packages", "installed.json");
+  mkdirSync(dirname(registryPath), { recursive: true });
+  writeFileSync(
+    registryPath,
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        packages: [
+          {
+            id: fixture.manifest.id,
+            version: fixture.manifest.version,
+            manifest: fixture.manifest,
+            installedAt: "2026-07-15T00:00:00.000Z",
+            status: "active",
+            error: null,
+            readiness: "ready",
+            readinessError: null,
+            legacy: false,
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+}
 
 function catalogFixture(version: string) {
   const fixture = fixtures.get(version);
@@ -330,29 +371,12 @@ async function main() {
       };
     }>("packages/server/src/services/storage/game-state.storage.ts");
 
-    const installed105 =
-      await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(installed105.version, "1.0.5");
-    assert.equal(installed105.status, "restart-required");
+    seedInstalledProfile("1.0.6");
+    const installedProfile = await capabilityPackageManager.installed();
+    assert.equal(installedProfile.length, 1);
+    assert.equal(installedProfile[0]?.version, "1.0.6");
+    assert.equal(installedProfile[0]?.status, "active");
 
-    catalogVersion = "1.0.6";
-    const installed106 =
-      await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(installed106.version, "1.0.6");
-    assert.equal(installed106.previousVersion, "1.0.5");
-    assert.ok(
-      existsSync(
-        join(
-          dataDir,
-          "capability-packages",
-          "versions",
-          "hierarchical-maps",
-          "1.0.5",
-        ),
-      ),
-    );
-
-    catalogVersion = "1.1.0";
     const installed110 =
       await capabilityPackageManager.install("hierarchical-maps");
     assert.equal(installed110.version, "1.1.0");

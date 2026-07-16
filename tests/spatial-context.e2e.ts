@@ -375,6 +375,30 @@ async function activateHierarchicalMaps(page: Page, chatId: string) {
   expect(response.ok()).toBeTruthy();
 }
 
+async function openHierarchicalMapsAgentCategory(page: Page) {
+  const drawer = page.locator(".mari-chat-settings-drawer");
+  await expect(drawer).toBeVisible();
+  await expect(
+    drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Hierarchical map/ }),
+  ).toHaveCount(0);
+  await drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents/ }).click();
+  const enableAgents = drawer.getByRole("checkbox", { name: /^Enable Agents/ });
+  if (!(await enableAgents.isChecked())) {
+    await drawer.getByText("Enable Agents", { exact: true }).click();
+    await expect(enableAgents).toBeChecked();
+  }
+  await drawer.getByRole("button", { name: /Tracker Agents/ }).click();
+  return drawer;
+}
+
+async function openHierarchicalMapsAgentControls(page: Page) {
+  const drawer = await openHierarchicalMapsAgentCategory(page);
+  const agentEntry = drawer.locator('[data-chat-agent-entry="hierarchical-maps"]');
+  await expect(agentEntry).toBeVisible();
+  await agentEntry.getByText("Hierarchical map", { exact: true }).click();
+  return { drawer, agentEntry };
+}
+
 async function dismissOnboardingTutorial(page: Page) {
   const skip = page.getByRole("button", { name: "Skip Tutorial" });
   const appeared = await skip.waitFor({ state: "visible", timeout: 3_000 }).then(
@@ -670,8 +694,8 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   return { chat };
 }
 
-test("Hierarchical Maps activates beside its chat setup controls", async ({ page }, testInfo) => {
-  test.setTimeout(60_000);
+test("Hierarchical Maps activates inside its Tracker Agents entry", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   const response = await page.request.post("/api/chats", {
     data: {
       name: "Maps Activation UX Smoke",
@@ -715,19 +739,20 @@ test("Hierarchical Maps activates beside its chat setup controls", async ({ page
     } else {
       await page.getByRole("button", { name: "Chat Settings" }).click();
     }
-    const drawer = page.locator(".mari-chat-settings-drawer");
-    await expect(drawer.getByText("Hierarchical map", { exact: true })).toBeVisible();
-    await drawer.getByText("Hierarchical map", { exact: true }).click();
+    const drawer = await openHierarchicalMapsAgentCategory(page);
+    await drawer.getByRole("button").filter({ hasText: /^Hierarchical Maps/ }).click();
+    const addDialog = page.getByRole("dialog", { name: "Add Hierarchical Maps" });
+    await expect(addDialog).toBeVisible();
+    await addDialog.getByRole("button", { name: "Add", exact: true }).click();
 
-    const activation = drawer.getByRole("switch", { name: /Use in this chat/ });
-    await expect(activation).toHaveAttribute("aria-checked", "false");
-    await expect(drawer.getByText("Maps is ready to add", { exact: true })).toBeVisible();
+    const agentEntry = drawer.locator('[data-chat-agent-entry="hierarchical-maps"]');
+    await expect(agentEntry).toBeVisible();
+    await agentEntry.getByText("Hierarchical map", { exact: true }).click();
+    const activation = agentEntry.getByRole("switch", { name: /Use in this chat/ });
+    await expect(activation).toHaveAttribute("aria-checked", "true");
     const activationHeight = await activation.evaluate((element) => element.getBoundingClientRect().height);
     expect(activationHeight).toBeGreaterThanOrEqual(44);
-
-    await activation.click();
-    await expect(activation).toHaveAttribute("aria-checked", "true");
-    await expect(drawer.getByRole("button", { name: "Create hierarchical map" })).toBeVisible();
+    await expect(agentEntry.getByRole("button", { name: "Create hierarchical map" })).toBeVisible();
 
     await expect
       .poll(async () => {
@@ -1058,9 +1083,8 @@ test("AI map builder previews a validated local draft before save", async ({ pag
 
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
-      const drawer = page.locator(".mari-chat-settings-drawer");
-      await drawer.getByText("Hierarchical map", { exact: true }).click();
-      await drawer.getByRole("button", { name: "Create hierarchical map" }).click();
+      const { agentEntry } = await openHierarchicalMapsAgentControls(page);
+      await agentEntry.getByRole("button", { name: "Create hierarchical map" }).click();
     }
 
     await expectWorkspaceFillsOverlay(page);
@@ -1105,22 +1129,38 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     expect(((await beforeApply.json()) as { definition: unknown }).definition).toBeNull();
 
     await page.getByRole("button", { name: "Continue to editor" }).click();
-    await expect(page.getByText("AI map draft applied. Review it, then Save.")).toBeVisible();
+    await expect(page.getByText("AI map draft applied. Review it, choose a start, then enable and save.")).toBeVisible();
     const hierarchy = page.locator('section[aria-label="Location hierarchy"]:visible');
     await expect(hierarchy.getByRole("button", { name: "Shrouded Coast region" })).toBeVisible();
+    await expect(hierarchy.getByRole("button", { name: "Collapse Shrouded Coast" })).toBeVisible();
+    await expect(hierarchy.getByRole("button", { name: "Enter Gloam Harbor" })).toBeVisible();
+
+    const firstMapSetup = page.getByRole("region", { name: "First map setup" });
+    await expect(firstMapSetup).toContainText("4 locations · 2 levels · Working draft, not saved");
+    await expect(firstMapSetup.getByRole("list", { name: "First map progress" })).toContainText(
+      /Build.*Review.*Start here.*Enable map/u,
+    );
+    const startingLocation = firstMapSetup.getByLabel("Starting location");
+    await expect(startingLocation).toHaveValue("ai_world");
+    await startingLocation.selectOption("ai_harbor");
 
     const afterApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(((await afterApply.json()) as { definition: unknown }).definition).toBeNull();
 
-    await page.getByLabel("Disabled", { exact: true }).check();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByLabel("Disabled", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Enable and save map", exact: true }).click();
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Map ready · 4 locations · Starting at Gloam Harbor", { exact: true })).toBeVisible();
+    await expectMinimumInteractiveSize(page.getByRole("button", { name: "Return to chat" }), "First-save return control");
 
     const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     const stored = (await storedResponse.json()) as {
-      definition: { enabled: boolean; locations: Array<{ name: string }> };
+      currentLocationId: string;
+      definition: { enabled: boolean; startingLocationId: string; locations: Array<{ name: string }> };
     };
     expect(stored.definition.enabled).toBe(true);
+    expect(stored.definition.startingLocationId).toBe("ai_harbor");
+    expect(stored.currentLocationId).toBe("ai_harbor");
     expect(stored.definition.locations.map((location) => location.name)).toEqual([
       "Shrouded Coast",
       "Gloam Harbor",
@@ -1224,9 +1264,8 @@ test("AI map expansion preserves a campaign map and its current location", async
 
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
-      const drawer = page.locator(".mari-chat-settings-drawer");
-      await drawer.getByText("Hierarchical map", { exact: true }).click();
-      await drawer.getByRole("button", { name: "Edit hierarchical map" }).click();
+      const { agentEntry } = await openHierarchicalMapsAgentControls(page);
+      await agentEntry.getByRole("button", { name: "Edit hierarchical map" }).click();
     } else {
       const mobileMusicLayer = page.locator('[data-component="MobileMusicWidgetLayer"]');
       const mobileMusicWidget = mobileMusicLayer.locator(".fixed");
@@ -1311,11 +1350,14 @@ test("Game setup hands an optional map draft into review before Save", async ({ 
     expect(((await beforeApply.json()) as { definition: unknown }).definition).toBeNull();
 
     await page.getByRole("button", { name: "Continue to editor" }).click();
-    await expect(page.getByText("AI map draft applied. Review it, then Save.")).toBeVisible();
+    await expect(page.getByText("AI map draft applied. Review it, choose a start, then enable and save.")).toBeVisible();
 
     const mobile = testInfo.project.name.includes("mobile");
     await expectAuthoringWorkspaceLayout(page, mobile);
-    await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    await expect(page.getByRole("region", { name: "First map setup" }).getByLabel("Starting location")).toHaveValue(
+      "ai_world",
+    );
+    await expect(page.getByRole("button", { name: "Collapse Shrouded Coast" })).toBeVisible();
     await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
     if (mobile) {
@@ -1329,9 +1371,9 @@ test("Game setup hands an optional map draft into review before Save", async ({ 
     const afterApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(((await afterApply.json()) as { definition: unknown }).definition).toBeNull();
 
-    await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("button", { name: "Enable and save map", exact: true }).click();
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Map ready · 4 locations · Starting at Shrouded Coast", { exact: true })).toBeVisible();
 
     const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     const stored = (await storedResponse.json()) as {
