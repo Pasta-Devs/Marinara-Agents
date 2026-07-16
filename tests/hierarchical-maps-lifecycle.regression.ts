@@ -31,9 +31,12 @@ process.env.MARINARA_LITE = "true";
 process.env.NODE_ENV = "test";
 
 type Manifest = {
+  schemaVersion: number;
   id: string;
   name: string;
   version: string;
+  capabilityApi?: { major: number; minor: number };
+  builtAgainst?: { engineVersion: string; engineCommit: string };
   [key: string]: unknown;
 };
 
@@ -74,6 +77,15 @@ const fixtures = new Map(
 );
 let catalogVersion = "1.0.5";
 let catalogOnline = true;
+
+const candidateFixture = fixtures.get("1.1.0");
+assert.ok(candidateFixture);
+assert.equal(candidateFixture.manifest.schemaVersion, 2);
+assert.deepEqual(candidateFixture.manifest.capabilityApi, { major: 1, minor: 0 });
+assert.deepEqual(candidateFixture.manifest.builtAgainst, {
+  engineVersion: "2.3.0",
+  engineCommit: "0561e00e0b1f46f5426b4a67431c5aee3b375639",
+});
 
 function catalogFixture(version: string) {
   const fixture = fixtures.get(version);

@@ -72,6 +72,8 @@ Both builders accept package IDs for a focused rebuild. When a build changes an 
 
 Feature implementations belong under `packages/<id>/src/`. Hierarchical Maps uses an Engine-shaped source overlay at `packages/hierarchical-maps/src/engine/`; the feature builder overlays it on the captured generic Engine dependencies before bundling. Do not move Maps implementation files back into `sources/engine/`.
 
+Hierarchical Maps also owns `packages/hierarchical-maps/engine-boundary.json`. It records the capability API and exact Engine source baseline used for the package manifest, plus the temporary private-import inventory that must only shrink during extraction. The feature builder and catalog validator reject unrecorded private Engine imports. Update the inventory only when removing dependencies or deliberately changing the paired Engine baseline; never use it to normalize new private imports.
+
 ## Validation
 
 Every pull request must run:

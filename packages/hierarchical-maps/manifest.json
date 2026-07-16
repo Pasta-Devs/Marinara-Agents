@@ -1,5 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 0
+  },
+  "builtAgainst": {
+    "engineVersion": "2.3.0",
+    "engineCommit": "0561e00e0b1f46f5426b4a67431c5aee3b375639"
+  },
   "id": "hierarchical-maps",
   "name": "Hierarchical Maps",
   "version": "1.1.0",

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
+import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
@@ -126,6 +127,9 @@ if (selectedFeatures.length !== requestedFeatureIds.size && requestedFeatureIds.
   const unknownIds = [...requestedFeatureIds].filter((id) => !knownIds.has(id));
   throw new Error(`Unknown feature package${unknownIds.length === 1 ? "" : "s"}: ${unknownIds.join(", ")}`);
 }
+const hierarchicalMapsBoundary = selectedFeatures.some((feature) => feature.id === "hierarchical-maps")
+  ? await assertHierarchicalMapsPrivateImportBoundary()
+  : null;
 
 async function bundleServer(feature, output) {
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-entry-${feature.id}-`));
@@ -519,8 +523,13 @@ for (const feature of selectedFeatures) {
   }
   const clientBuffer = clientPath ? await readFile(clientPath) : null;
   await writeFile(join(sourceDir, "agents.json"), agentsBuffer);
+  const boundary = feature.id === "hierarchical-maps" ? hierarchicalMapsBoundary : null;
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: boundary ? 2 : 1,
+    ...(boundary ? {
+      capabilityApi: boundary.capabilityApi,
+      builtAgainst: boundary.builtAgainst,
+    } : {}),
     id: feature.id,
     name: feature.name,
     version,

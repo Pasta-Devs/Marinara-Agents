@@ -9,11 +9,13 @@ import {
   catalogArtworkRelativePath,
   catalogArtworkUrl,
 } from "./catalog-artwork.mjs";
+import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const catalog = JSON.parse(await readFile(join(repoRoot, "catalog/catalog.json"), "utf8"));
 const MIN_ENGINE_VERSION = "2.3.0";
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
+const hierarchicalMapsBoundary = await assertHierarchicalMapsPrivateImportBoundary();
 
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
@@ -154,6 +156,17 @@ for (const entry of catalog.packages) {
   if (!manifest?.id || ids.has(manifest.id)) throw new Error(`Duplicate or missing package id: ${manifest?.id}`);
   if (manifest.id === "about-me-keeper") {
     throw new Error("About Me is a core Conversation feature and must not appear in the agent catalog");
+  }
+  if (manifest.id === "hierarchical-maps") {
+    if (manifest.schemaVersion !== 2) {
+      throw new Error("Hierarchical Maps must use capability package manifest v2");
+    }
+    if (JSON.stringify(manifest.capabilityApi) !== JSON.stringify(hierarchicalMapsBoundary.capabilityApi)) {
+      throw new Error("Hierarchical Maps capability API does not match engine-boundary.json");
+    }
+    if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(hierarchicalMapsBoundary.builtAgainst)) {
+      throw new Error("Hierarchical Maps build provenance does not match engine-boundary.json");
+    }
   }
   ids.add(manifest.id);
   const readmePackageLink = `](packages/${manifest.id}/manifest.json)`;
