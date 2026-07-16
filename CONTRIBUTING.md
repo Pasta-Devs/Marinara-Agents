@@ -44,12 +44,12 @@ Set `MARINARA_ENGINE_ROOT` when the Engine checkout is elsewhere.
 
 ## Repository Layout
 
-- `packages/<id>/` — package manifest and declared source/generated payloads
+- `packages/<id>/` — package manifest, package-owned source, and declared/generated payloads
 - `artifacts/` — reproducible ZIP packages downloaded by Marinara Engine
 - `catalog/catalog.json` — machine-readable official catalog
 - `schemas/` — package schema documents
 - `scripts/` — catalog builders and validation
-- `sources/engine/` — captured Engine sources required to reproduce feature bundles
+- `sources/engine/` — captured generic Engine dependencies required to reproduce feature bundles
 - `tests/` — integration proof for package behavior
 
 The catalog contains Writer, Tracker, and Misc Agents. Feature packages such as Maps, Calls, and Conversation games are still represented by Agent definitions so installation and per-chat availability use one consistent lifecycle.
@@ -69,6 +69,8 @@ node scripts/build-feature-packages.mjs
 ```
 
 Both builders accept package IDs for a focused rebuild. When a build changes an artifact, commit the package payload, manifest, ZIP, catalog entry, and captured Engine sources together. Do not hand-edit generated bundles, checksums, byte sizes, or ZIP contents.
+
+Feature implementations belong under `packages/<id>/src/`. Hierarchical Maps uses an Engine-shaped source overlay at `packages/hierarchical-maps/src/engine/`; the feature builder overlays it on the captured generic Engine dependencies before bundling. Do not move Maps implementation files back into `sources/engine/`.
 
 ## Validation
 

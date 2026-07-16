@@ -78,7 +78,7 @@ node scripts/build-feature-packages.mjs
 node scripts/validate-catalog.mjs
 ```
 
-The build records every Engine source dependency needed by a package under `sources/engine`, so future catalog builds do not depend on those implementations remaining in the base Engine.
+The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, Hierarchical Maps source lives under `packages/hierarchical-maps/src/engine/` and is overlaid on those generic dependencies during its build.
 
 ---
 

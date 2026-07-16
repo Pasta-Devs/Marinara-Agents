@@ -15,6 +15,25 @@ const catalog = JSON.parse(await readFile(join(repoRoot, "catalog/catalog.json")
 const MIN_ENGINE_VERSION = "2.3.0";
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
 
+const hierarchicalMapsOwnedSourcePaths = [
+  "packages/server/src/routes/spatial-context.routes.ts",
+  "packages/server/src/services/spatial-context",
+  "packages/server/src/services/storage/spatial-context.storage.ts",
+  "packages/client/src/features/spatial-context",
+  "packages/client/src/hooks/use-spatial-context.ts",
+  "packages/client/src/components/game/GameWorldMap.tsx",
+];
+for (const relativePath of hierarchicalMapsOwnedSourcePaths) {
+  const packageOwnedPath = join(repoRoot, "packages/hierarchical-maps/src/engine", relativePath);
+  const capturedEnginePath = join(repoRoot, "sources/engine", relativePath);
+  if (!existsSync(packageOwnedPath)) {
+    throw new Error(`Hierarchical Maps package source is missing: ${relativePath}`);
+  }
+  if (existsSync(capturedEnginePath)) {
+    throw new Error(`Hierarchical Maps source must not be captured as generic Engine material: ${relativePath}`);
+  }
+}
+
 const forbiddenAboutMeKeeperPaths = [
   "packages/about-me-keeper/manifest.json",
   "packages/about-me-keeper/agents.json",

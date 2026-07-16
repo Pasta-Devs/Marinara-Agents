@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -11,6 +11,7 @@ const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, ".
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
+const hierarchicalMapsSourceRoot = join(packagesDir, "hierarchical-maps/src/engine");
 const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
   ? resolve(process.env.MARINARA_ENGINE_SOURCE_ROOT)
   : existsSync(sourcesRoot)
@@ -20,19 +21,46 @@ const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
 const MIN_ENGINE_VERSION = "2.3.0";
 const ARTIFACT_MTIME = new Date("2000-01-01T00:00:00.000Z");
+const hierarchicalMapsOwnedSourcePaths = [
+  "packages/server/src/routes/spatial-context.routes.ts",
+  "packages/server/src/services/spatial-context",
+  "packages/server/src/services/storage/spatial-context.storage.ts",
+  "packages/client/src/features/spatial-context",
+  "packages/client/src/hooks/use-spatial-context.ts",
+  "packages/client/src/components/game/GameWorldMap.tsx",
+];
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const featureSource = (relativePath) => {
-  const packaged = resolve(sourceRoot, relativePath);
+const featureSource = (relativePath, buildRoot = sourceRoot) => {
+  const packaged = resolve(buildRoot, relativePath);
   return existsSync(packaged) ? packaged : resolve(engineRoot, relativePath);
 };
 
-async function captureEngineSources(metafilePath) {
+async function prepareFeatureBuildRoot(feature) {
+  if (feature.id !== "hierarchical-maps") {
+    return { buildRoot: sourceRoot, cleanup: async () => {} };
+  }
+  if (!existsSync(hierarchicalMapsSourceRoot)) {
+    throw new Error("Missing package-owned Hierarchical Maps source");
+  }
+  const buildRoot = await mkdtemp(join(tmpdir(), "marinara-hierarchical-maps-source-"));
+  await cp(join(sourceRoot, "packages"), join(buildRoot, "packages"), { recursive: true, force: true });
+  await cp(hierarchicalMapsSourceRoot, buildRoot, { recursive: true, force: true });
+  return {
+    buildRoot,
+    cleanup: () => rm(buildRoot, { recursive: true, force: true }),
+  };
+}
+
+async function captureEngineSources(metafilePath, buildRoot = sourceRoot, excludedPaths = []) {
   const metafile = JSON.parse(await readFile(metafilePath, "utf8"));
+  const normalizedBuildRoot = resolve(buildRoot);
   for (const input of Object.keys(metafile.inputs || {})) {
     const absolute = resolve(engineRoot, input);
-    if (!absolute.startsWith(`${sourceRoot}/`) || absolute.includes("/node_modules/")) continue;
-    const relative = absolute.slice(sourceRoot.length + 1);
+    if (!absolute.startsWith(`${normalizedBuildRoot}/`) || absolute.includes("/node_modules/")) continue;
+    const relative = absolute.slice(normalizedBuildRoot.length + 1);
+    if (excludedPaths.some((path) => relative === path || relative.startsWith(`${path}/`))) continue;
     const destination = join(sourcesRoot, relative);
+    if (absolute === destination) continue;
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(absolute, destination);
   }
@@ -101,15 +129,16 @@ if (selectedFeatures.length !== requestedFeatureIds.size && requestedFeatureIds.
 
 async function bundleServer(feature, output) {
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-entry-${feature.id}-`));
+  const prepared = await prepareFeatureBuildRoot(feature);
   try {
-    const target = resolve(sourceRoot, feature.serverImport || feature.engineImport);
+    const target = resolve(prepared.buildRoot, feature.serverImport || feature.engineImport);
     const source = feature.id === "hierarchical-maps"
       ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
-import * as projection from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/spatial-context/projection.ts"))};
-import * as stateResolution from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/spatial-context/state-resolution.ts"))};
-import * as ownerTurn from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/spatial-context/owner-turn.ts"))};
-import * as gameMapBinding from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/spatial-context/game-map-binding.ts"))};
-import { createSpatialContextStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/spatial-context.storage.ts"))};
+import * as projection from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/projection.ts"))};
+import * as stateResolution from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/state-resolution.ts"))};
+import * as ownerTurn from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/owner-turn.ts"))};
+import * as gameMapBinding from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/game-map-binding.ts"))};
+import { createSpatialContextStorage } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/storage/spatial-context.storage.ts"))};
 let readinessStorage = null;
 export async function activate({ app, api }) {
   await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
@@ -169,9 +198,14 @@ export async function selfCheck() {
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
     }
-    await captureEngineSources(metafile);
+    await captureEngineSources(
+      metafile,
+      prepared.buildRoot,
+      feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+    );
   } finally {
     await rm(temporary, { recursive: true, force: true });
+    await prepared.cleanup();
   }
 }
 
@@ -242,17 +276,18 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
 
 async function bundleSpecialClient(feature, output) {
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-client-${feature.id}-`));
+  const prepared = await prepareFeatureBuildRoot(feature);
   try {
     let source = "";
     const tag = `marinara-capability-${feature.id}`;
     if (feature.id === "hierarchical-maps") {
-      const settings = resolve(sourceRoot, "packages/client/src/features/spatial-context/SpatialContextSettingsSection.tsx");
-      const workspace = resolve(sourceRoot, "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx");
-      const runtimeBar = featureSource("packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx");
-      const worldMap = featureSource("packages/client/src/components/game/GameWorldMap.tsx");
-      const spatialHooks = featureSource("packages/client/src/hooks/use-spatial-context.ts");
-      const chatStore = featureSource("packages/client/src/stores/chat.store.ts");
-      const uiStore = featureSource("packages/client/src/stores/ui.store.ts");
+      const settings = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/SpatialContextSettingsSection.tsx");
+      const workspace = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx");
+      const runtimeBar = featureSource("packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx", prepared.buildRoot);
+      const worldMap = featureSource("packages/client/src/components/game/GameWorldMap.tsx", prepared.buildRoot);
+      const spatialHooks = featureSource("packages/client/src/hooks/use-spatial-context.ts", prepared.buildRoot);
+      const chatStore = featureSource("packages/client/src/stores/chat.store.ts", prepared.buildRoot);
+      const uiStore = featureSource("packages/client/src/stores/ui.store.ts", prepared.buildRoot);
       const workspaceStyles = `
 [data-marinara-maps-workspace-overlay] {
   display: flex;
@@ -313,9 +348,9 @@ function Root({ element }) { const [, redraw] = useState(0); const [workspaceOpe
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.id === "conversation-calls") {
-      const surface = resolve(sourceRoot, "packages/client/src/components/chat/ConversationCallSurface.tsx");
-      const hooks = resolve(sourceRoot, "packages/client/src/hooks/use-conversation-calls.ts");
-      const ttsHooks = resolve(sourceRoot, "packages/client/src/hooks/use-tts.ts");
+      const surface = resolve(prepared.buildRoot, "packages/client/src/components/chat/ConversationCallSurface.tsx");
+      const hooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-conversation-calls.ts");
+      const ttsHooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-tts.ts");
       source = `
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -429,8 +464,15 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
     const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
     if (result.status !== 0) throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
-    await captureEngineSources(metafile);
-  } finally { await rm(temporary, { recursive: true, force: true }); }
+    await captureEngineSources(
+      metafile,
+      prepared.buildRoot,
+      feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+    );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+    await prepared.cleanup();
+  }
 }
 
 const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
@@ -461,7 +503,8 @@ for (const feature of selectedFeatures) {
   };
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
   const serverPath = join(sourceDir, "server.mjs");
-  const serverSource = resolve(sourceRoot, feature.serverImport || feature.engineImport);
+  const serverSourceRoot = feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : sourceRoot;
+  const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
   if (existsSync(serverSource)) {
     await bundleServer(feature, serverPath);
   } else if (!existsSync(serverPath)) {
