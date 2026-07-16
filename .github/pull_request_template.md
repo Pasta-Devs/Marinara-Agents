@@ -1,4 +1,4 @@
-<!-- Target branch: `staging`. Change the base from `main` before submitting unless this is a maintainer-approved mainline hotfix. -->
+<!-- Target branch: `main`. -->
 <!-- Open as a draft while implementation is in progress. Mark Ready for review only after validation and self-review. -->
 
 ## Linked issue

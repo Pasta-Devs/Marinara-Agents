@@ -26,6 +26,6 @@ reviews:
     auto_incremental_review: true
     auto_pause_after_reviewed_commits: 0
     base_branches:
-      - "staging"
+      - "main"
 chat:
   auto_reply: true
