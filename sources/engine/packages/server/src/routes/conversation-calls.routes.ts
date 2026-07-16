@@ -1326,7 +1326,6 @@ async function createCallTurns(input: {
   nativeMedia?: ChatMediaAttachment[];
   musicPlayerEnabled?: boolean;
   musicPlayerSource?: "spotify" | "youtube" | "custom" | null;
-  throwOnGenerationError?: boolean;
   debugMode?: boolean;
 }): Promise<{ turns: ConversationCallTurn[]; fallbackSpeaker: string }> {
   const connId = input.chat.connectionId;
@@ -1367,7 +1366,6 @@ async function createCallTurns(input: {
       model: conn.model,
       maxTokens: 1400,
       temperature: 0.75,
-      responseFormat: { type: "json_object" },
     });
     const rawContent = result.content ?? "";
     const turns = parseModelTurns(rawContent, fallbackSpeaker);
@@ -1389,18 +1387,7 @@ async function createCallTurns(input: {
     return { turns, fallbackSpeaker };
   } catch (error) {
     logger.warn(error, "[conversation-call] Call generation failed");
-    if (input.throwOnGenerationError) throw error;
-    if (prompt.characters.length === 0) return { turns: [], fallbackSpeaker };
-    return {
-      turns: [
-        {
-          speakerName: fallbackSpeaker,
-          mode: "text",
-          content: "I lost the thread for a second. Could you repeat that?",
-        },
-      ],
-      fallbackSpeaker,
-    };
+    throw error;
   }
 }
 
@@ -2917,7 +2904,6 @@ export async function conversationCallsRoutes(app: FastifyInstance) {
           userText: content,
           userInputKind: "speech",
           nativeMedia,
-          throwOnGenerationError: true,
           debugMode: requestDebug,
           musicPlayerEnabled: requestMusicPlayerEnabled,
           musicPlayerSource: requestMusicPlayerSource,
