@@ -79,7 +79,7 @@ export function HierarchyNavigator({
             onClick={() => toggleExpanded(location.id)}
             disabled={children.length === 0}
             aria-label={isExpanded ? `Collapse ${location.name}` : `Expand ${location.name}`}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] disabled:opacity-25"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] disabled:opacity-25"
           >
             {isExpanded ? <ChevronDown size="0.875rem" /> : <ChevronRight size="0.875rem" />}
           </button>
@@ -108,7 +108,7 @@ export function HierarchyNavigator({
             onClick={() => onEnter(location.id)}
             aria-label={`Enter ${location.name}`}
             title="Enter location"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-button-text-hover)]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-button-text-hover)]"
           >
             <CornerDownRight size="0.875rem" />
           </button>

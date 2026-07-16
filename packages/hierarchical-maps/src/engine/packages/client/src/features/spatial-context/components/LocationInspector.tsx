@@ -478,7 +478,7 @@ export function LocationInspector({
                       type="button"
                       onClick={() => removeLink(index)}
                       aria-label={`Remove link to ${target?.name ?? "missing location"}`}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-red-500/10 hover:text-red-400"
+                      className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-red-500/10 hover:text-[var(--destructive)]"
                     >
                       <Trash2 size="0.75rem" />
                     </button>

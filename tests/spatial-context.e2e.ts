@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 type CapturedOpenAiRequest = {
   messages?: Array<{ role?: string; content?: unknown }>;
@@ -272,6 +272,34 @@ const expandedDefinition = {
   ],
 } as const;
 
+const longLocationLabel =
+  "The Observatory of Patient Stars Beyond the Lantern Archive and the Twelve Weathered Gates of the Northern Reach";
+
+const deepMapDefinition = {
+  schemaVersion: 1,
+  ownerMode: "roleplay",
+  enabled: true,
+  revision: 0,
+  startingLocationId: "deep-00",
+  locations: Array.from({ length: 12 }, (_, index) => ({
+    id: `deep-${String(index).padStart(2, "0")}`,
+    parentId: index === 0 ? null : `deep-${String(index - 1).padStart(2, "0")}`,
+    name: `${longLocationLabel} ${String(index + 1).padStart(2, "0")}`,
+    kind: index === 0 ? "region" : index % 3 === 0 ? "building" : "place",
+    description: `A deliberately deep browser-recovery fixture at level ${index + 1}.`,
+    modelMemory: `Deep-map anchor ${index + 1}.`,
+    icon: index === 0 ? "🌌" : "📍",
+    childPresentation: "map",
+    placement: { x: 50, y: 50 },
+    links:
+      index === 0
+        ? [{ targetId: "deep-01", label: "Archive stair", bidirectional: true, state: "available" }]
+        : [],
+    status: "active",
+    sortOrder: 0,
+  })),
+} as const;
+
 const gameGeneratedDefinition = {
   ...generatedDefinition,
   ownerMode: "game",
@@ -386,6 +414,45 @@ async function expectWorkspaceFillsOverlay(page: Page) {
   expect(Math.abs(geometry!.root.y - geometry!.overlay.y)).toBeLessThanOrEqual(1);
   expect(Math.abs(geometry!.root.width - geometry!.overlay.width)).toBeLessThanOrEqual(1);
   expect(Math.abs(geometry!.root.height - geometry!.overlay.height)).toBeLessThanOrEqual(1);
+}
+
+async function expectMinimumInteractiveSize(locator: Locator, source: string) {
+  await expect(locator, `${source} must be visible`).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box, `${source} must have measurable browser geometry`).not.toBeNull();
+  expect(box!.width, `${source} must be at least 44 CSS pixels wide`).toBeGreaterThanOrEqual(44);
+  expect(box!.height, `${source} must be at least 44 CSS pixels tall`).toBeGreaterThanOrEqual(44);
+}
+
+async function expectWorkspaceTheme(
+  page: Page,
+  expected: { theme: "dark" | "light"; visualTheme: "default" | "sillytavern" },
+) {
+  await expectWorkspaceFillsOverlay(page);
+  const appearance = await page.locator("[data-marinara-maps-workspace-overlay]").evaluate((overlay) => {
+    const root = document.documentElement;
+    const shell = overlay.querySelector<HTMLElement>(".mari-editor-shell");
+    const title = overlay.querySelector<HTMLElement>("h1, h2");
+    if (!shell || !title) return null;
+    const shellStyle = getComputedStyle(shell);
+    const titleStyle = getComputedStyle(title);
+    return {
+      theme: root.dataset.theme ?? null,
+      visualTheme: root.dataset.visualTheme ?? null,
+      shellBackground: shellStyle.backgroundColor,
+      titleColor: titleStyle.color,
+      viewportOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      overlayOverflow: overlay.scrollWidth - overlay.clientWidth,
+    };
+  });
+  expect(appearance).not.toBeNull();
+  expect(appearance!.theme).toBe(expected.theme);
+  expect(appearance!.visualTheme).toBe(expected.visualTheme === "default" ? null : expected.visualTheme);
+  expect(appearance!.shellBackground).not.toBe("rgba(0, 0, 0, 0)");
+  expect(appearance!.titleColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(appearance!.titleColor).not.toBe(appearance!.shellBackground);
+  expect(appearance!.viewportOverflow).toBeLessThanOrEqual(1);
+  expect(appearance!.overlayOverflow).toBeLessThanOrEqual(1);
 }
 
 async function expectAuthoringWorkspaceLayout(page: Page, mobile: boolean) {
@@ -676,6 +743,248 @@ test("Hierarchical Maps activates beside its chat setup controls", async ({ page
         };
       })
       .toEqual({ enableAgents: true, activeAgentIds: ["hierarchical-maps"] });
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("Deep maps and long labels remain keyboard and touch operable across themes", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: `Deep Maps Theme Recovery ${testInfo.project.name}`,
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: deepMapDefinition,
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      const requestedAppearance = JSON.parse(
+        localStorage.getItem("marinara-maps-e2-appearance") ??
+          JSON.stringify({ theme: "dark", visualTheme: "default" }),
+      ) as { theme: "dark" | "light"; visualTheme: "default" | "sillytavern" };
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem("marinara-engine-ui-updated-at", String(Date.now() + 60_000));
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+            theme: requestedAppearance.theme,
+            visualTheme: requestedAppearance.visualTheme,
+            appBackgroundColor: "",
+            appAccentColor: "",
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await expectWorkspaceFillsOverlay(page);
+
+    const hierarchy = page.locator('section[aria-label="Location hierarchy"]:visible');
+    const rootName = deepMapDefinition.locations[0]!.name;
+    const rootExpand = hierarchy.getByRole("button", { name: `Expand ${rootName}`, exact: true });
+    const rootEnter = hierarchy.getByRole("button", { name: `Enter ${rootName}`, exact: true });
+    await expectMinimumInteractiveSize(rootExpand, "Hierarchy expand control");
+    await expectMinimumInteractiveSize(rootEnter, "Hierarchy enter control");
+
+    for (let index = 0; index < deepMapDefinition.locations.length - 1; index += 1) {
+      const location = deepMapDefinition.locations[index]!;
+      const nextLocation = deepMapDefinition.locations[index + 1]!;
+      const expand = hierarchy.getByRole("button", { name: `Expand ${location.name}`, exact: true });
+      await expand.scrollIntoViewIfNeeded();
+      if (index === 0) {
+        await expand.focus();
+        await page.keyboard.press("Enter");
+      } else {
+        await expand.click();
+      }
+      await expect(hierarchy.getByRole("button", { name: `Enter ${nextLocation.name}`, exact: true })).toBeVisible();
+    }
+
+    const hierarchyOverflow = await hierarchy.evaluate((element) => element.scrollWidth - element.clientWidth);
+    expect(hierarchyOverflow).toBeLessThanOrEqual(1);
+
+    await rootEnter.scrollIntoViewIfNeeded();
+    await rootEnter.focus();
+    await page.keyboard.press("Space");
+
+    const localView = page.locator('section[aria-label="Local location view"]:visible');
+    await expect(localView.getByRole("heading", { name: rootName, exact: true })).toBeVisible();
+    const leaveLocation = localView.getByRole("button", { name: "Leave this location" });
+    const localEnter = localView.getByRole("button", { name: "Enter", exact: true });
+    await expectMinimumInteractiveSize(leaveLocation, "Local map leave control");
+    await expectMinimumInteractiveSize(localEnter, "Local map enter control");
+
+    const childName = deepMapDefinition.locations[1]!.name;
+    const childLocation = localView.getByRole("button", { name: childName, exact: true });
+    await childLocation.focus();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator('section[aria-label^="Details for "]:visible').getByLabel("Name", { exact: true }),
+    ).toHaveValue(childName);
+
+    if (testInfo.project.name.includes("mobile")) {
+      for (const pane of ["hierarchy", "local", "details"] as const) {
+        await expectMinimumInteractiveSize(
+          page.getByRole("button", { name: pane, exact: true }),
+          `Mobile ${pane} pane control`,
+        );
+      }
+    }
+
+    for (const appearance of [
+      { theme: "dark", visualTheme: "default" },
+      { theme: "light", visualTheme: "default" },
+      { theme: "dark", visualTheme: "sillytavern" },
+    ] as const) {
+      await page.evaluate((nextAppearance) => {
+        localStorage.setItem("marinara-maps-e2-appearance", JSON.stringify(nextAppearance));
+      }, appearance);
+      await page.reload();
+      await dismissOnboardingTutorial(page);
+      await expectWorkspaceTheme(page, appearance);
+      await expect(page.getByText(rootName, { exact: true }).first()).toBeVisible();
+    }
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("Map loading retry and stale-write recovery preserve the working copy", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The recovery state is shared across viewports.");
+  test.setTimeout(90_000);
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: "Maps Loading and Conflict Recovery",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: { ...generatedDefinition, enabled: true },
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+  const saved = (await saveResponse.json()) as {
+    currentLocationId: string;
+    definition: typeof generatedDefinition;
+  };
+
+  let releaseInitialRead: (() => void) | null = null;
+  const initialReadHeld = new Promise<void>((resolve) => {
+    releaseInitialRead = resolve;
+  });
+  let heldInitialRead = false;
+  let allowSuccessfulRead = false;
+
+  try {
+    await page.route(`**/api/chats/${chat.id}/spatial-context`, async (route) => {
+      if (route.request().method() === "GET" && !allowSuccessfulRead) {
+        if (!heldInitialRead) {
+          heldInitialRead = true;
+          await initialReadHeld;
+        }
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Temporary map service interruption." }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await expect(page.getByLabel("Loading hierarchical map editor")).toBeVisible();
+
+    releaseInitialRead?.();
+    await expect(page.getByRole("heading", { name: "Hierarchical map unavailable" })).toBeVisible();
+    const retry = page.getByRole("button", { name: "Retry", exact: true });
+    const back = page.getByRole("button", { name: "Back", exact: true });
+    await expectMinimumInteractiveSize(retry, "Map retry control");
+    await expectMinimumInteractiveSize(back, "Map recovery back control");
+    allowSuccessfulRead = true;
+    await retry.click();
+
+    await expect(page.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+    const localName = "Local unsaved harbor name";
+    const serverName = "Server-updated harbor name";
+    const nameInput = page.locator('section[aria-label^="Details for "]:visible').getByLabel("Name", { exact: true });
+    await nameInput.fill(localName);
+
+    const externalSave = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: saved.definition.revision,
+        expectedCurrentLocationId: saved.currentLocationId,
+        definition: {
+          ...saved.definition,
+          locations: saved.definition.locations.map((location) =>
+            location.id === saved.definition.startingLocationId ? { ...location, name: serverName } : location,
+          ),
+        },
+      },
+    });
+    expect(externalSave.ok(), await externalSave.text()).toBeTruthy();
+
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("alert").getByText("The map changed elsewhere. Your working copy is preserved.")).toBeVisible();
+    await expect(nameInput).toHaveValue(localName);
+
+    const reloadServer = page.getByRole("button", { name: "Reload server version" });
+    const reviewDifferences = page.getByRole("button", { name: "Review differences" });
+    await expectMinimumInteractiveSize(reloadServer, "Conflict reload control");
+    await expectMinimumInteractiveSize(reviewDifferences, "Conflict review control");
+    await reviewDifferences.click();
+    await expect(page.getByText("1 changed", { exact: true })).toBeVisible();
+    await reloadServer.click();
+    await expect(nameInput).toHaveValue(serverName);
+    await expect(page.getByText("The map changed elsewhere. Your working copy is preserved.")).toHaveCount(0);
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }

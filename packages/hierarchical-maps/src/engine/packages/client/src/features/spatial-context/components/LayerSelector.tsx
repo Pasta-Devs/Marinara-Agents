@@ -35,7 +35,11 @@ export function LayerSelector({ locations, selectedId, onSelect, onEnter }: Laye
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-accent)]">
               <Layers3 size="0.875rem" />
             </span>
-            <button type="button" onClick={() => onSelect(location.id)} className="min-w-0 flex-1 text-left">
+            <button
+              type="button"
+              onClick={() => onSelect(location.id)}
+              className="min-w-0 flex-1 self-stretch rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
+            >
               <span className="block truncate text-sm font-medium text-[var(--marinara-chat-chrome-panel-title)]">
                 {location.name || "Untitled layer"}
               </span>

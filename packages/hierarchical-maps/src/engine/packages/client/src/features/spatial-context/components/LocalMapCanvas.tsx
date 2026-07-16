@@ -52,7 +52,7 @@ export function LocalMapCanvas({ locations, selectedId, onSelect, onEnter }: Loc
             <button
               type="button"
               onClick={() => onEnter(location.id)}
-              className="mari-chrome-control mari-chrome-control--small mx-auto mt-1 min-h-8 px-2 text-[0.625rem]"
+              className="mari-chrome-control mx-auto mt-1 min-h-11 px-3 text-[0.625rem]"
             >
               <CornerDownRight size="0.6875rem" /> Enter
             </button>

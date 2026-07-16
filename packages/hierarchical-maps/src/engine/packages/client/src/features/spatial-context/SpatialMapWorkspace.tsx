@@ -89,11 +89,22 @@ function statusCopy(options: {
   savedFlash: boolean;
 }) {
   if (options.pending)
-    return { label: "Saving", className: "text-sky-400", icon: <Loader2 size="0.6875rem" className="animate-spin" /> };
-  if (options.conflict) return { label: "Conflict", className: "text-red-400", icon: <AlertCircle size="0.6875rem" /> };
-  if (options.invalid) return { label: "Invalid", className: "text-red-400", icon: <AlertCircle size="0.6875rem" /> };
-  if (options.dirty) return { label: "Unsaved", className: "text-amber-400", icon: null };
-  if (options.savedFlash) return { label: "Saved", className: "text-emerald-400", icon: <Check size="0.6875rem" /> };
+    return {
+      label: "Saving",
+      className: "text-[var(--marinara-chat-chrome-accent)]",
+      icon: <Loader2 size="0.6875rem" className="animate-spin" />,
+    };
+  if (options.conflict)
+    return { label: "Conflict", className: "text-[var(--destructive)]", icon: <AlertCircle size="0.6875rem" /> };
+  if (options.invalid)
+    return { label: "Invalid", className: "text-[var(--destructive)]", icon: <AlertCircle size="0.6875rem" /> };
+  if (options.dirty) return { label: "Unsaved", className: "text-[var(--marinara-editor-muted)]", icon: null };
+  if (options.savedFlash)
+    return {
+      label: "Saved",
+      className: "text-[var(--marinara-chat-chrome-accent)]",
+      icon: <Check size="0.6875rem" />,
+    };
   return { label: "Up to date", className: "text-[var(--marinara-editor-muted)]", icon: <Check size="0.6875rem" /> };
 }
 
@@ -516,16 +527,24 @@ export function SpatialMapWorkspace({
     return (
       <div className="mari-editor-shell flex flex-1 items-center justify-center p-6">
         <div className="max-w-sm text-center">
-          <AlertCircle className="mx-auto text-red-400" />
+          <AlertCircle className="mx-auto text-[var(--destructive)]" />
           <h1 className="mt-3 text-base font-semibold">Hierarchical map unavailable</h1>
           <p className="mt-1 text-sm text-[var(--marinara-editor-muted)]">
             {getSpatialContextProblem(spatial.error).message}
           </p>
           <div className="mt-4 flex justify-center gap-2">
-            <button type="button" onClick={() => void spatial.refetch()} className="mari-editor-action inline-flex">
+            <button
+              type="button"
+              onClick={() => void spatial.refetch()}
+              className="mari-editor-action inline-flex min-h-11 px-3"
+            >
               <RefreshCw size="0.8125rem" /> Retry
             </button>
-            <button type="button" onClick={() => void handleClose()} className="mari-editor-action inline-flex">
+            <button
+              type="button"
+              onClick={() => void handleClose()}
+              className="mari-editor-action inline-flex min-h-11 px-3"
+            >
               <ArrowLeft size="0.8125rem" /> Back
             </button>
           </div>
@@ -565,7 +584,7 @@ export function SpatialMapWorkspace({
               type="button"
               onClick={() => setEnteredParentId(currentContext.parentId)}
               aria-label="Leave this location"
-              className="mari-chrome-control mari-chrome-control--small h-9 w-9 p-0"
+              className="mari-chrome-control h-11 w-11 p-0"
             >
               <ArrowLeft size="0.8125rem" />
             </button>
@@ -575,17 +594,17 @@ export function SpatialMapWorkspace({
               <button
                 type="button"
                 onClick={() => setEnteredParentId(null)}
-                className="shrink-0 hover:text-[var(--marinara-chat-chrome-button-text-hover)]"
+                className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md px-1 hover:text-[var(--marinara-chat-chrome-button-text-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
               >
                 World
               </button>
               {localBreadcrumb.map((location) => (
-                <span key={location.id} className="flex min-w-0 items-center gap-1">
+                <span key={location.id} className="flex min-w-0 items-center gap-1 self-stretch">
                   <ChevronRight size="0.625rem" className="shrink-0" />
                   <button
                     type="button"
                     onClick={() => setEnteredParentId(location.id)}
-                    className="truncate hover:text-[var(--marinara-chat-chrome-button-text-hover)]"
+                    className="flex min-h-11 min-w-0 items-center truncate rounded-md px-1 hover:text-[var(--marinara-chat-chrome-button-text-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                   >
                     {location.name}
                   </button>
@@ -640,7 +659,7 @@ export function SpatialMapWorkspace({
                 <button
                   type="button"
                   onClick={() => selectLocation(location.id)}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  className="flex min-w-0 flex-1 self-stretch items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                 >
                   <span className="text-lg" aria-hidden="true">
                     {location.icon || "⌖"}
@@ -796,7 +815,10 @@ export function SpatialMapWorkspace({
       />
 
       {!aiBuilderOpen && conflict && (
-        <div className="border-b border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-red-300" role="alert">
+        <div
+          className="border-b border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-[var(--destructive)]"
+          role="alert"
+        >
           <div className="flex flex-wrap items-center gap-2">
             <AlertCircle size="0.8125rem" />
             <span className="min-w-52 flex-1 font-medium">
@@ -829,7 +851,7 @@ export function SpatialMapWorkspace({
       )}
 
       {!aiBuilderOpen && archiveRequest && (
-        <div className="border-b border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+        <div className="border-b border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-[var(--marinara-editor-text)]">
           <div className="flex flex-wrap items-center gap-2">
             <AlertCircle size="0.8125rem" />
             <span className="min-w-52 flex-1">
@@ -867,7 +889,10 @@ export function SpatialMapWorkspace({
       )}
 
       {!aiBuilderOpen && issues.length > 0 && (
-        <div className="border-b border-red-500/25 bg-red-500/10 px-4 py-2 text-xs text-red-300" role="alert">
+        <div
+          className="border-b border-red-500/25 bg-red-500/10 px-4 py-2 text-xs text-[var(--destructive)]"
+          role="alert"
+        >
           <div className="flex items-start gap-2">
             <AlertCircle size="0.8125rem" className="mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
@@ -878,7 +903,7 @@ export function SpatialMapWorkspace({
                     key={`${issue.code}-${index}`}
                     type="button"
                     onClick={() => issue.locationId && selectLocation(issue.locationId)}
-                    className="text-left underline decoration-red-300/40 underline-offset-2 hover:text-red-200"
+                    className="inline-flex min-h-11 items-center rounded px-1 text-left underline decoration-current/40 underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                   >
                     {issue.message}
                   </button>
