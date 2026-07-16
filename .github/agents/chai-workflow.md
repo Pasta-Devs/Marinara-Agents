@@ -22,10 +22,10 @@ Follow instructions in this order:
 
 ## Package Change Lane
 
-1. Confirm the expected Engine version, category, supported modes, entrypoints, permissions, restart behavior, and storage lifecycle.
+1. Confirm the expected Engine version, category, supported modes, entrypoints, permissions, restart behavior, and storage lifecycle. If the package uses APIs from Engine `staging`, declare that staging version (or later) as `engine.min`; never widen compatibility merely to enter an older catalog lane.
 2. Identify whether the package is agent-only or an Engine-derived feature bundle.
 3. Change source inputs or builders rather than generated bundles and hashes.
-4. Rebuild the narrowest affected package set.
+4. Rebuild the narrowest affected package set. The builder derives every `catalog/v*/catalog.json` membership from the manifest compatibility range; never edit a lane by hand.
 5. Run `node scripts/validate-catalog.mjs` and `git diff --check`.
 6. Manually exercise install, activation, update, restart, and uninstall paths when user-facing behavior changed.
 7. Review the package, artifact, catalog, README, and Engine documentation as one unit.

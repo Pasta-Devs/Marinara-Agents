@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-The catalog currently contains **29 first-party packages** for **Marinara Engine v2.3.0+**: 6 Writer Agents, 8 Tracker Agents, and 15 Misc Agents. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **29 first-party packages** for **Marinara Engine v2.3.0+**: 6 Writer Agents, 8 Tracker Agents, and 15 Misc Agents. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -56,9 +56,9 @@ For complete mode, lifecycle, and settings documentation for every package, see 
 
 ## Package trust and storage
 
-The Engine downloads only entries from this official HTTPS catalog, validates the catalog schema, checks Engine version compatibility, verifies the archive SHA-256 checksum, rejects unsafe archive paths and undeclared files, validates each declared file hash and size, and installs atomically into the Engine data directory. Installed packages remain available offline. Server-capability packages run with their declared permissions and require a restart when their runtime changes.
+The Engine downloads only entries from its Engine-major lane in this official HTTPS catalog, validates the catalog schema, checks Engine version compatibility, verifies the archive SHA-256 checksum, rejects unsafe archive paths and undeclared files, validates each declared file hash and size, and installs atomically into the Engine data directory. Installed packages remain available offline. Server-capability packages run with their declared permissions and require a restart when their runtime changes.
 
-Package source and reproducible build scripts live in this repository instead of the base Engine distribution. Generated artifacts are published under [`artifacts/`](artifacts/), package manifests under [`packages/`](packages/), and the machine-readable catalog at [`catalog/catalog.json`](catalog/catalog.json).
+Package source and reproducible build scripts live in this repository instead of the base Engine distribution. Generated artifacts are published under [`artifacts/`](artifacts/), package manifests under [`packages/`](packages/), and machine-readable catalogs under [`catalog/`](catalog/). Engine 2 uses [`catalog/v2/catalog.json`](catalog/v2/catalog.json), Engine 3 uses [`catalog/v3/catalog.json`](catalog/v3/catalog.json), and [`catalog/catalog.json`](catalog/catalog.json) remains the legacy Engine 2 alias.
 
 Catalog entries classify packages as `writer`, `tracker`, or `misc`. Every official package has a square Professor Mari cover under [`artwork/agent-covers/`](artwork/agent-covers/), published through its HTTPS `iconUrl`; Marinara displays that artwork in Download Agents and falls back to the Agents star icon when artwork is unavailable. Agent code does not need to be repackaged when catalog artwork changes.
 

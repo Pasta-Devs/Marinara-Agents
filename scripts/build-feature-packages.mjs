@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
+import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
@@ -20,7 +21,6 @@ const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
     ? sourcesRoot
     : engineRoot;
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
-const catalogPath = join(repoRoot, "catalog/catalog.json");
 const MIN_ENGINE_VERSION = "2.3.0";
 const ARTIFACT_MTIME = new Date("2000-01-01T00:00:00.000Z");
 const hierarchicalMapsOwnedSourcePaths = [
@@ -571,7 +571,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
   }
 }
 
-const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
+const { catalog } = await readCatalogFamily(repoRoot);
 const featureIds = new Set(selectedFeatures.map((feature) => feature.id));
 const nonDownloadableCoreFeatures = new Set(["about-me-keeper"]);
 catalog.packages = catalog.packages.filter(
@@ -706,4 +706,4 @@ for (const feature of selectedFeatures) {
 
 catalog.generatedAt = new Date().toISOString();
 catalog.packages.sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
-await writeFile(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
+await writeCatalogFamily(repoRoot, catalog);

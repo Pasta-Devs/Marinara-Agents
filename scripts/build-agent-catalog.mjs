@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
+import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
-const catalogPath = join(repoRoot, "catalog/catalog.json");
 const MIN_ENGINE_VERSION = "2.3.0";
 const nonDownloadableCoreFeatures = new Set(["about-me-keeper"]);
 await mkdir(artifactsDir, { recursive: true });
@@ -26,12 +26,7 @@ const documentationAnchors = {
   cyoa: "cyoa-choices",
 };
 
-let catalog = { schemaVersion: 1, generatedAt: new Date().toISOString(), packages: [] };
-try {
-  catalog = JSON.parse(await readFile(catalogPath, "utf8"));
-} catch {
-  // The first catalog build starts from the package sources below.
-}
+const { catalog } = await readCatalogFamily(repoRoot);
 
 const packageDirectories = (await readdir(packagesDir, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
@@ -74,7 +69,7 @@ for (const id of selectedPackageDirectories) {
   manifest = {
     ...manifest,
     description: withPackageActivationGuidance(id, manifest.description),
-    engine: { ...manifest.engine, min: MIN_ENGINE_VERSION },
+    engine: { ...manifest.engine, min: manifest.engine?.min ?? MIN_ENGINE_VERSION },
     files: [{ path: manifest.entrypoints.agents, sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength }],
   };
   await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -116,5 +111,4 @@ catalog.packages = [
   ...rebuiltPackages,
 ].sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
 catalog.generatedAt = new Date().toISOString();
-await mkdir(dirname(catalogPath), { recursive: true });
-await writeFile(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
+await writeCatalogFamily(repoRoot, catalog);
