@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import {
+  type CapabilityMessageRecord,
+  type CapabilityPersistenceSession,
   resolveSpatialBreadcrumb,
   validateSpatialTransition,
   type MessageAttachment,
@@ -7,12 +9,7 @@ import {
   type SpatialContextSnapshot,
   type SpatialTransitionErrorCode,
 } from "@marinara-engine/shared";
-import { and, eq } from "../../db/file-query.js";
-import type { DB } from "../../db/connection.js";
-import { chats, gameStateSnapshots, messages, messageSwipes } from "../../db/schema/index.js";
-import { newId, now } from "./package-runtime.js";
-import { withChatMetadataPatchQueue } from "../storage/chats.storage.js";
-import { createSpatialContextStorage } from "../storage/spatial-context.storage.js";
+import { getPackagePersistence, newId, newTimeSortableId, now } from "./package-runtime.js";
 import { parseStoredSpatialDefinition, resolveEffectiveSpatialState } from "./state-resolution.js";
 import { selectBoundGameMapForLocation } from "./game-map-binding.js";
 import { parseSpatialMetadata } from "./metadata.js";
@@ -65,23 +62,22 @@ function transitionPayloadHash(transition: PendingSpatialTransition): string {
 }
 
 function messageExtra(attachments?: MessageAttachment[]) {
-  return JSON.stringify({
+  return {
     displayText: null,
     isGenerated: false,
     tokenCount: null,
     generationInfo: null,
     ...(attachments?.length ? { attachments } : {}),
-  });
+  };
 }
 
 export async function commitSpatialOwnerTurn(
-  db: DB,
   input: CommitSpatialOwnerTurnInput,
-): Promise<{ message: typeof messages.$inferSelect; snapshot: SpatialContextSnapshot }> {
-  return withChatMetadataPatchQueue(input.chatId, async () =>
-    db.transaction(async (tx) => {
-      const chatRows = await tx.select().from(chats).where(eq(chats.id, input.chatId)).limit(1);
-      const chat = chatRows[0];
+): Promise<{ message: CapabilityMessageRecord; snapshot: SpatialContextSnapshot }> {
+  const persistence = getPackagePersistence();
+  return persistence.withChatLock(input.chatId, async () =>
+    persistence.transaction(async (transaction: CapabilityPersistenceSession) => {
+      const chat = await transaction.getChat(input.chatId);
       if (!chat) throw new SpatialOwnerTurnError("chat_not_found", "Chat not found.", 404);
       if (chat.mode !== "roleplay" && chat.mode !== "game") {
         throw new SpatialOwnerTurnError(
@@ -100,7 +96,7 @@ export async function commitSpatialOwnerTurn(
         );
       }
 
-      const storage = createSpatialContextStorage(tx);
+      const storage = transaction.spatialSnapshots;
       const payloadHash = transitionPayloadHash(input.transition);
       const existing = await storage.getByCommand(input.chatId, input.transition.commandId);
       if (existing) {
@@ -119,7 +115,7 @@ export async function commitSpatialOwnerTurn(
         );
       }
 
-      const state = await resolveEffectiveSpatialState(tx, input.chatId);
+      const state = await resolveEffectiveSpatialState(input.chatId, {}, transaction);
       const validation = validateSpatialTransition(definition, state.currentLocationId, input.transition);
       if (!validation.ok) {
         const stale =
@@ -135,12 +131,7 @@ export async function commitSpatialOwnerTurn(
         });
       }
       if (chat.mode === "game" && input.gameStateSnapshotId) {
-        await tx
-          .update(gameStateSnapshots)
-          .set({ committed: 1 })
-          .where(
-            and(eq(gameStateSnapshots.id, input.gameStateSnapshotId), eq(gameStateSnapshots.chatId, input.chatId)),
-          );
+        await transaction.markGameStateSnapshotCommitted(input.chatId, input.gameStateSnapshotId);
       }
       const nextGameMetadata =
         chat.mode === "game"
@@ -150,26 +141,19 @@ export async function commitSpatialOwnerTurn(
       const timestamp = now();
       const messageId = newId();
       const swipeId = newId();
-      await tx.insert(messages).values({
+      const message = await transaction.createMessageWithSwipe({
         id: messageId,
+        swipeId,
         chatId: input.chatId,
         role: "user",
         characterId: null,
         content: input.content,
-        activeSwipeIndex: 0,
         extra: messageExtra(input.attachments),
-        createdAt: timestamp,
-      });
-      await tx.insert(messageSwipes).values({
-        id: swipeId,
-        messageId,
-        index: 0,
-        content: input.content,
-        extra: JSON.stringify({}),
         createdAt: timestamp,
       });
 
       const snapshot = await storage.create({
+        id: newTimeSortableId(),
         chatId: input.chatId,
         messageId,
         swipeIndex: 0,
@@ -178,19 +162,14 @@ export async function commitSpatialOwnerTurn(
         source: "owner_turn",
         transitionCommandId: input.transition.commandId,
         transitionPayloadHash: payloadHash,
+        createdAt: timestamp,
       });
-      await tx
-        .update(chats)
-        .set({
-          lastMessageAt: timestamp,
-          updatedAt: timestamp,
-          ...(nextGameMetadata ? { metadata: JSON.stringify(nextGameMetadata) } : {}),
-        })
-        .where(eq(chats.id, input.chatId));
-
-      const createdRows = await tx.select().from(messages).where(eq(messages.id, messageId)).limit(1);
-      const message = createdRows[0];
-      if (!message) throw new Error("Spatial owner turn committed without a user message.");
+      await transaction.updateChatActivity({
+        chatId: input.chatId,
+        lastMessageAt: timestamp,
+        updatedAt: timestamp,
+        ...(nextGameMetadata ? { metadata: nextGameMetadata } : {}),
+      });
       return { message, snapshot };
     }),
   );

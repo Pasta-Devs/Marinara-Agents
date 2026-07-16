@@ -152,7 +152,7 @@ export function createSpatialContextService(db: DB) {
       const stored = readDefinition(parseSpatialMetadata(chat.metadata));
       if (!stored.definition) return buildResponse(null, null, stored.corrupt, hasCommittedSpatialHistory);
 
-      const state = await resolveEffectiveSpatialState(db, chatId);
+      const state = await resolveEffectiveSpatialState(chatId);
       return buildResponse(
         stored.definition,
         state.currentLocationId,
@@ -273,7 +273,7 @@ export function createSpatialContextService(db: DB) {
           );
         }
 
-        const state = await resolveEffectiveSpatialState(db, chatId);
+        const state = await resolveEffectiveSpatialState(chatId);
         const currentLocationId = state.currentLocationId;
         if (input.expectedCurrentLocationId !== currentLocationId) {
           throw new SpatialContextServiceError(

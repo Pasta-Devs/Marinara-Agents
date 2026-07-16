@@ -1,15 +1,11 @@
 import {
+  type CapabilityPersistenceSession,
   spatialContextDefinitionSchema,
   type SpatialContextDefinition,
   type SpatialContextSnapshot,
 } from "@marinara-engine/shared";
-import { eq } from "../../db/file-query.js";
-import type { DB } from "../../db/connection.js";
-import { chats, messages } from "../../db/schema/index.js";
-import { createSpatialContextStorage } from "../storage/spatial-context.storage.js";
+import { getPackagePersistence, newTimeSortableId, now } from "./package-runtime.js";
 import { parseSpatialMetadata } from "./metadata.js";
-
-type SpatialReadConnection = Pick<DB, "select" | "insert" | "delete" | "update">;
 
 export interface SpatialMessageAnchor {
   messageId: string;
@@ -45,13 +41,13 @@ function anchorForMessage(message: { id: string; role: string; activeSwipeIndex:
 }
 
 export async function resolveEffectiveSpatialState(
-  db: SpatialReadConnection,
   chatId: string,
   options: ResolveSpatialStateOptions = {},
+  persistence: CapabilityPersistenceSession = getPackagePersistence(),
 ): Promise<EffectiveSpatialState> {
-  const chatRows = await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
-  const definition = chatRows[0] ? parseStoredSpatialDefinition(chatRows[0].metadata) : null;
-  const storage = createSpatialContextStorage(db);
+  const chat = await persistence.getChat(chatId);
+  const definition = chat ? parseStoredSpatialDefinition(chat.metadata) : null;
+  const storage = persistence.spatialSnapshots;
 
   if (options.exactAnchor) {
     const snapshot = await storage.getByAnchor(chatId, options.exactAnchor.messageId, options.exactAnchor.swipeIndex);
@@ -65,11 +61,7 @@ export async function resolveEffectiveSpatialState(
     };
   }
 
-  const ordered = await db
-    .select()
-    .from(messages)
-    .where(eq(messages.chatId, chatId))
-    .orderBy(messages.createdAt, messages.id);
+  const ordered = await persistence.listMessages(chatId);
 
   let end = ordered.length - 1;
   if (options.beforeMessageId) {
@@ -127,7 +119,6 @@ export async function resolveEffectiveSpatialState(
 }
 
 export async function materializeAssistantSpatialState(
-  db: DB,
   input: {
     chatId: string;
     messageId: string;
@@ -136,14 +127,16 @@ export async function materializeAssistantSpatialState(
     continuation: boolean;
   },
 ): Promise<SpatialContextSnapshot | null> {
+  const persistence = getPackagePersistence();
   const state = input.regenerate
-    ? await resolveEffectiveSpatialState(db, input.chatId, { beforeMessageId: input.messageId })
+    ? await resolveEffectiveSpatialState(input.chatId, { beforeMessageId: input.messageId }, persistence)
     : input.continuation
-      ? await resolveEffectiveSpatialState(db, input.chatId, { throughMessageId: input.messageId })
-      : await resolveEffectiveSpatialState(db, input.chatId);
+      ? await resolveEffectiveSpatialState(input.chatId, { throughMessageId: input.messageId }, persistence)
+      : await resolveEffectiveSpatialState(input.chatId, {}, persistence);
 
   if (!state.definition?.enabled || state.currentLocationId === null) return null;
-  return createSpatialContextStorage(db).replaceAtAnchor({
+  return persistence.spatialSnapshots.replaceAtAnchor({
+    id: newTimeSortableId(),
     chatId: input.chatId,
     messageId: input.messageId,
     swipeIndex: input.swipeIndex,
@@ -152,5 +145,6 @@ export async function materializeAssistantSpatialState(
     source: "assistant_swipe",
     transitionCommandId: null,
     transitionPayloadHash: null,
+    createdAt: now(),
   });
 }

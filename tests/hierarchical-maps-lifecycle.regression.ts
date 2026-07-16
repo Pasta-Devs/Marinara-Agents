@@ -81,10 +81,10 @@ let catalogOnline = true;
 const candidateFixture = fixtures.get("1.1.0");
 assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
-assert.deepEqual(candidateFixture.manifest.capabilityApi, { major: 1, minor: 1 });
+assert.deepEqual(candidateFixture.manifest.capabilityApi, { major: 1, minor: 2 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
-  engineVersion: "2.3.0",
-  engineCommit: "08fcbf1eaabe47fc3b450c0b4a733a01cde81cd6",
+  engineVersion: "2.3.1",
+  engineCommit: "000d0d37ec2fa970a9e53acfe9f02e3b4e0a44fa",
 });
 
 function catalogFixture(version: string) {
@@ -592,9 +592,54 @@ async function main() {
         expectedCurrentLocationId: null,
         definition,
       },
-    })) as { currentLocationId: string; hasCommittedSpatialHistory: boolean };
+    })) as {
+      currentLocationId: string;
+      hasCommittedSpatialHistory: boolean;
+      definition: { revision: number };
+    };
     assert.equal(saved.currentLocationId, "lifecycle_world");
     assert.equal(saved.hasCommittedSpatialHistory, true);
+
+    const ownerTurn = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${chatId}/spatial-context/turn`,
+      headers: csrfHeaders,
+      payload: {
+        content: "I follow the road into Lifecycle Harbor.",
+        transition: {
+          destinationId: "lifecycle_harbor",
+          expectedDefinitionRevision: saved.definition.revision,
+          expectedCurrentLocationId: "lifecycle_world",
+          commandId: "lifecycle-owner-turn",
+        },
+      },
+    })) as {
+      message: { chatId: string; role: string; content: string };
+      spatial: { currentLocationId: string };
+    };
+    assert.equal(ownerTurn.message.chatId, chatId);
+    assert.equal(ownerTurn.message.role, "user");
+    assert.equal(ownerTurn.message.content, "I follow the road into Lifecycle Harbor.");
+    assert.equal(ownerTurn.spatial.currentLocationId, "lifecycle_harbor");
+    const duplicateOwnerTurn = (await expectJson(
+      app,
+      {
+        method: "POST",
+        url: `/api/chats/${chatId}/spatial-context/turn`,
+        headers: csrfHeaders,
+        payload: {
+          content: "I follow the road into Lifecycle Harbor.",
+          transition: {
+            destinationId: "lifecycle_harbor",
+            expectedDefinitionRevision: saved.definition.revision,
+            expectedCurrentLocationId: "lifecycle_world",
+            commandId: "lifecycle-owner-turn",
+          },
+        },
+      },
+      409,
+    )) as { code: string };
+    assert.equal(duplicateOwnerTurn.code, "spatial_transition_already_applied");
 
     await app.close();
     app = null;
@@ -609,7 +654,7 @@ async function main() {
       currentLocationId: string;
       definition: { locations: Array<{ id: string }> };
     };
-    assert.equal(restarted.currentLocationId, "lifecycle_world");
+    assert.equal(restarted.currentLocationId, "lifecycle_harbor");
     assert.ok(
       restarted.definition.locations.some(
         (location) => location.id === "lifecycle_harbor",
@@ -681,7 +726,7 @@ async function main() {
       method: "GET",
       url: `/api/chats/${chatId}/spatial-context`,
     })) as { currentLocationId: string };
-    assert.equal(stateAfterReinstall.currentLocationId, "lifecycle_world");
+    assert.equal(stateAfterReinstall.currentLocationId, "lifecycle_harbor");
 
     await expectJson(
       app,
@@ -735,7 +780,7 @@ async function main() {
       currentLocationId: string;
       definition: { locations: Array<{ id: string }> };
     };
-    assert.equal(restoredState.currentLocationId, "lifecycle_world");
+    assert.equal(restoredState.currentLocationId, "lifecycle_harbor");
     assert.ok(
       restoredState.definition.locations.some(
         (location) => location.id === "lifecycle_harbor",
@@ -755,7 +800,7 @@ async function main() {
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, owner-turn persistence, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);

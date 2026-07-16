@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "capabilityApi": {
     "major": 1,
-    "minor": 1
+    "minor": 2
   },
   "builtAgainst": {
-    "engineVersion": "2.3.0",
-    "engineCommit": "08fcbf1eaabe47fc3b450c0b4a733a01cde81cd6"
+    "engineVersion": "2.3.1",
+    "engineCommit": "000d0d37ec2fa970a9e53acfe9f02e3b4e0a44fa"
   },
   "privateEngineImports": [
     {
@@ -108,38 +108,6 @@
     {
       "source": "packages/server/src/services/spatial-context/definition.service.ts",
       "specifier": "../storage/lorebooks.storage.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/owner-turn.ts",
-      "specifier": "../../db/connection.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/owner-turn.ts",
-      "specifier": "../../db/file-query.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/owner-turn.ts",
-      "specifier": "../../db/schema/index.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/owner-turn.ts",
-      "specifier": "../storage/chats.storage.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/projection.ts",
-      "specifier": "../../db/connection.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/state-resolution.ts",
-      "specifier": "../../db/connection.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/state-resolution.ts",
-      "specifier": "../../db/file-query.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/state-resolution.ts",
-      "specifier": "../../db/schema/index.js"
     },
     {
       "source": "packages/server/src/services/storage/spatial-context.storage.ts",

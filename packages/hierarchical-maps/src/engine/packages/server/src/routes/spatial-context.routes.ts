@@ -410,7 +410,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       });
     }
     try {
-      const committed = await commitSpatialOwnerTurn(app.db, {
+      const committed = await commitSpatialOwnerTurn({
         chatId: req.params.chatId,
         content: parsed.data.content,
         transition: parsed.data.transition,

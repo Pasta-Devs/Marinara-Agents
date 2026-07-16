@@ -6,7 +6,6 @@ import {
   type ResolvedOwnerSpatialProjection,
   type SpatialContextDefinition,
 } from "@marinara-engine/shared";
-import type { DB } from "../../db/connection.js";
 import { resolveEffectiveSpatialState, type ResolveSpatialStateOptions } from "./state-resolution.js";
 
 const MAX_PROMPT_BREADCRUMB_NODES = 20;
@@ -81,11 +80,10 @@ export function buildOwnerSpatialProjection(
 }
 
 export async function resolveOwnerSpatialProjection(
-  db: DB,
   chatId: string,
   options: ResolveSpatialStateOptions = {},
 ): Promise<ResolvedOwnerSpatialProjection | null> {
-  const state = await resolveEffectiveSpatialState(db, chatId, options);
+  const state = await resolveEffectiveSpatialState(chatId, options);
   return buildOwnerSpatialProjection(chatId, state.definition, state.currentLocationId);
 }
 

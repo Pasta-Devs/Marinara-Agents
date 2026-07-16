@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import type {
+  CapabilityPersistenceHost,
   CapabilityRuntimeHost,
   CapabilityRuntimeLogArgument,
   CapabilityRuntimeLogger,
@@ -47,6 +48,10 @@ export const logger: CapabilityRuntimeLogger = {
 
 export function isDebugAgentsEnabled(): boolean {
   return getRuntimeHost().isDebugAgentsEnabled();
+}
+
+export function getPackagePersistence(): CapabilityPersistenceHost {
+  return getRuntimeHost().persistence;
 }
 
 export function logDebugOverride(
