@@ -84,7 +84,7 @@ assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, { major: 1, minor: 2 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineVersion: "2.3.1",
-  engineCommit: "c797c0da1500d25776c8f74b5b246a90adf5a588",
+  engineCommit: "a56e50e1354e3c6518ea08d9591c52d8f7a2bce1",
 });
 
 function catalogFixture(version: string) {
