@@ -19,21 +19,17 @@ import { toast } from "sonner";
 import {
   compareSpatialLocations,
   resolveSpatialBreadcrumb,
+  spatialContextDefinitionSchema,
   validateSpatialArchive,
   type GameMap,
-  spatialContextDefinitionSchema,
+  type GenerateSpatialMapDraftResponse,
   type SpatialContextDefinition,
   type SpatialDefinitionIssue,
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
-import { useChat } from "../../hooks/use-chats";
 import { getSpatialContextProblem, useSpatialContext, useUpdateSpatialContext } from "../../hooks/use-spatial-context";
-import { showConfirmDialog } from "../../lib/app-dialogs";
-import { useEntriesAcrossLorebooks, useLorebooks } from "../../hooks/use-lorebooks";
 import { cn } from "./package-utils";
-import { useUIStore } from "../../stores/ui.store";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
-import { getChatExcludedLorebookIds } from "../../lib/chat-lorebooks";
 import { LayerSelector } from "./components/LayerSelector";
 import { LocalMapCanvas } from "./components/LocalMapCanvas";
 import { LocationInspector } from "./components/LocationInspector";
@@ -50,12 +46,33 @@ import {
   spatialDefinitionIssues,
   updateSpatialLocation,
 } from "./editor-state";
+import {
+  getSpatialExcludedLorebookIds,
+  useSpatialChat,
+  useSpatialLorebookEntries,
+  useSpatialLorebooks,
+} from "./use-spatial-resources";
 
 type MobilePane = "hierarchy" | "local" | "details";
 
 interface SpatialMapWorkspaceProps {
   chatId: string;
-  onClose?: () => void;
+  debugMode?: boolean;
+  pendingDraftReview?: { chatId: string; result: GenerateSpatialMapDraftResponse } | null;
+  onClearPendingDraftReview?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onOpenLorebook?: (lorebookId: string) => void;
+  confirmAction?: (options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    tone?: "destructive";
+  }) => Promise<boolean>;
+  onClose: () => void;
+}
+
+async function browserConfirm(options: { message: string }): Promise<boolean> {
+  return window.confirm(options.message);
 }
 
 function sortedChildren(definition: SpatialContextDefinition, parentId: string | null) {
@@ -80,17 +97,20 @@ function statusCopy(options: {
   return { label: "Up to date", className: "text-[var(--marinara-editor-muted)]", icon: <Check size="0.6875rem" /> };
 }
 
-export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProps) {
+export function SpatialMapWorkspace({
+  chatId,
+  debugMode = false,
+  pendingDraftReview = null,
+  onClearPendingDraftReview,
+  onDirtyChange,
+  onOpenLorebook,
+  confirmAction = browserConfirm,
+  onClose,
+}: SpatialMapWorkspaceProps) {
   const spatial = useSpatialContext(chatId);
   const updateSpatial = useUpdateSpatialContext();
-  const { data: chat } = useChat(chatId);
-  const closeStoredDetail = useUIStore((state) => state.closeSpatialMapDetail);
-  const closeDetail = onClose ?? closeStoredDetail;
-  const pendingSetupReview = useUIStore((state) =>
-    state.pendingSpatialMapDraftReview?.chatId === chatId ? state.pendingSpatialMapDraftReview : null,
-  );
-  const clearPendingSetupReview = useUIStore((state) => state.clearPendingSpatialMapDraftReview);
-  const setEditorDirty = useUIStore((state) => state.setEditorDirty);
+  const { data: chat } = useSpatialChat(chatId);
+  const pendingSetupReview = pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
   const [baseDefinition, setBaseDefinition] = useState<SpatialContextDefinition | null>(null);
   const [draft, setDraft] = useState<SpatialContextDefinition | null>(null);
   const [initialized, setInitialized] = useState(false);
@@ -104,10 +124,10 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
   const [archiveRequestId, setArchiveRequestId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [archiveReplacementId, setArchiveReplacementId] = useState("");
-  const { data: lorebooks = [] } = useLorebooks();
-  const lorebookEntriesQuery = useEntriesAcrossLorebooks(lorebooks.map((lorebook) => lorebook.id));
+  const { data: lorebooks = [] } = useSpatialLorebooks();
+  const lorebookEntriesQuery = useSpatialLorebookEntries(lorebooks.map((lorebook) => lorebook.id));
   const excludedLorebookIds = useMemo(
-    () => (chat ? getChatExcludedLorebookIds(chat) : []),
+    () => (chat ? getSpatialExcludedLorebookIds(chat) : []),
     [chat],
   );
   const [replacementCurrentLocationId, setReplacementCurrentLocationId] = useState<string | null>(null);
@@ -174,9 +194,9 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
 
   useEffect(() => {
-    setEditorDirty(dirty);
-    return () => setEditorDirty(false);
-  }, [dirty, setEditorDirty]);
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -250,7 +270,7 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
       if (!draft) return;
       const location = draft.locations.find((candidate) => candidate.id === locationId);
       if (!location) return;
-      const confirmed = await showConfirmDialog({
+      const confirmed = await confirmAction({
         title: "Archive location",
         message: `Archive ${location.name || "this location"}? It remains in the map and can be restored later.`,
         confirmLabel: "Archive",
@@ -263,7 +283,7 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
       setArchiveRequestId(null);
       setArchiveReplacementId("");
     },
-    [applyDraft, currentLocationId, draft, enteredParentId],
+    [applyDraft, confirmAction, currentLocationId, draft, enteredParentId],
   );
 
   const requestArchive = useCallback(
@@ -343,7 +363,7 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
 
   const handleClose = useCallback(async () => {
     if (dirty) {
-      const discard = await showConfirmDialog({
+      const discard = await confirmAction({
         title: "Discard map changes?",
         message: "You have unsaved hierarchical map changes. Leave the editor and discard them?",
         confirmLabel: "Discard changes",
@@ -351,8 +371,8 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
       });
       if (!discard) return;
     }
-    closeDetail();
-  }, [closeDetail, dirty]);
+    onClose();
+  }, [confirmAction, dirty, onClose]);
 
   const handleSave = useCallback(async () => {
     if (!draft || !dirty || issues.length > 0) return;
@@ -374,7 +394,7 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
       setServerIssues(response.warnings);
       setReplacementCurrentLocationId(null);
       setSavedFlash(true);
-      setEditorDirty(false);
+      onDirtyChange?.(false);
       toast.success("Hierarchical map saved.");
     } catch (error) {
       const problem = getSpatialContextProblem(error);
@@ -395,7 +415,7 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
     issues.length,
     ownerMode,
     replacementCurrentLocationId,
-    setEditorDirty,
+    onDirtyChange,
     spatial,
     updateSpatial,
   ]);
@@ -448,7 +468,7 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
           ? next.startingLocationId
           : null,
       );
-      clearPendingSetupReview();
+      onClearPendingDraftReview?.();
       setAiBuilderOpen(false);
       toast.success(
         expandedExistingMap
@@ -456,17 +476,18 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
           : "AI map draft applied. Review it, then Save.",
       );
     },
-    [applyDraft, baseDefinition?.revision, clearPendingSetupReview, currentLocationId, draft, ownerMode],
+    [applyDraft, baseDefinition?.revision, currentLocationId, draft, onClearPendingDraftReview, ownerMode],
   );
 
   const closeAiBuilder = useCallback(() => {
     if (pendingSetupReview) {
-      closeDetail();
+      onClearPendingDraftReview?.();
+      onClose();
       toast.info("Map draft skipped. You can build one later from Chat Settings.");
       return;
     }
     setAiBuilderOpen(false);
-  }, [closeDetail, pendingSetupReview]);
+  }, [onClearPendingDraftReview, onClose, pendingSetupReview]);
 
   if (!spatial.isError && (spatial.isLoading || !initialized || !draft)) {
     return (
@@ -658,7 +679,7 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
       lorebookEntries={lorebookEntriesQuery.entries ?? []}
       excludedLorebookIds={excludedLorebookIds}
       lorebooksLoading={lorebookEntriesQuery.isLoading}
-      onOpenLorebook={(lorebookId) => useUIStore.getState().openLorebookDetail(lorebookId)}
+      onOpenLorebook={onOpenLorebook}
       onReparent={(parentId) => selected && applyDraft(reparentSpatialLocation(draft, selected.id, parentId))}
       onSetStarting={() => selected && applyDraft({ ...draft, startingLocationId: selected.id })}
       onArchive={() => selected && requestArchive(selected.id)}
@@ -759,6 +780,7 @@ export function SpatialMapWorkspace({ chatId, onClose }: SpatialMapWorkspaceProp
 
       <SpatialMapAiBuilder
         chatId={chatId}
+        debugMode={debugMode}
         ownerMode={ownerMode}
         open={aiBuilderOpen}
         definition={draft}

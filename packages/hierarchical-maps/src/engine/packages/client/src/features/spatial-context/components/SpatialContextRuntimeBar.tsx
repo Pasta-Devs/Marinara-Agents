@@ -2,8 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, MapPin, Route, X } from "lucide-react";
 import type { SpatialDestination, SpatialDestinationRelation } from "@marinara-engine/shared";
 import { useSpatialContext } from "../../../hooks/use-spatial-context";
-import { useChatStore } from "../../../stores/chat.store";
 import { cn, generateClientId } from "../package-utils";
+import {
+  clearPendingSpatialTransition,
+  setPendingSpatialTransition,
+  setPendingSpatialTransitionStatus,
+  usePendingSpatialTransition,
+} from "../pending-spatial-transitions";
 
 interface SpatialContextRuntimeBarProps {
   chatId: string | null;
@@ -35,18 +40,13 @@ export function SpatialContextRuntimeBar({
 }: SpatialContextRuntimeBarProps) {
   const [open, setOpen] = useState(false);
   const spatial = useSpatialContext(chatId);
-  const pending = useChatStore((state) =>
-    chatId ? (state.pendingSpatialTransitions.get(chatId) ?? null) : null,
-  );
-  const setPending = useChatStore((state) => state.setPendingSpatialTransition);
-  const clearPending = useChatStore((state) => state.clearPendingSpatialTransition);
-  const setPendingStatus = useChatStore((state) => state.setPendingSpatialTransitionStatus);
+  const pending = usePendingSpatialTransition(chatId);
   const data = spatial.data;
 
   useEffect(() => {
     if (!chatId || !pending || !data) return;
     if (data.currentLocationId === pending.transition.destinationId) {
-      clearPending(chatId, pending.transition.commandId);
+      clearPendingSpatialTransition(chatId, pending.transition.commandId);
       return;
     }
     const destinationStillAvailable = data.destinations.some(
@@ -56,8 +56,8 @@ export function SpatialContextRuntimeBar({
       data.definition?.revision !== pending.transition.expectedDefinitionRevision ||
       data.currentLocationId !== pending.transition.expectedCurrentLocationId ||
       !destinationStillAvailable;
-    if (isStale) setPendingStatus(chatId, "needs_review");
-  }, [chatId, clearPending, data, pending, setPendingStatus]);
+    if (isStale) setPendingSpatialTransitionStatus(chatId, "needs_review");
+  }, [chatId, data, pending]);
 
   const destinationsByRelation = useMemo(() => {
     const result = new Map<SpatialDestinationRelation, SpatialDestination[]>();
@@ -73,7 +73,7 @@ export function SpatialContextRuntimeBar({
 
   const queueDestination = (destination: SpatialDestination) => {
     if (!chatId || !data?.definition || !data.currentLocationId || disabled) return;
-    setPending(chatId, {
+    setPendingSpatialTransition(chatId, {
       transition: {
         destinationId: destination.id,
         expectedDefinitionRevision: data.definition.revision,
@@ -138,7 +138,7 @@ export function SpatialContextRuntimeBar({
           </span>
           <button
             type="button"
-            onClick={() => chatId && clearPending(chatId, pending.transition.commandId)}
+            onClick={() => chatId && clearPendingSpatialTransition(chatId, pending.transition.commandId)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
             aria-label={`Cancel move to ${pending.destinationName}`}
           >

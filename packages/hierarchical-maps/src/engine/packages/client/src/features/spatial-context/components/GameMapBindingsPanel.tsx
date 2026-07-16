@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Link2, Loader2, Map, RefreshCw, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import type { GameMap, SpatialContextDefinition, SpatialLocation } from "@marinara-engine/shared";
-import { useUpdateGameMapBinding, type UpdateGameMapBindingInput } from "../../../hooks/use-game";
 import {
-  spatialContextKeys,
+  useUpdateSpatialGameMapBinding,
+  type UpdateGameMapBindingInput,
+} from "../use-spatial-resources";
+import {
   useApplyGameMapBindingReconciliation,
   useGameMapBindingReconciliation,
   type GameMapBindingReference,
@@ -255,8 +256,7 @@ export function GameMapBindingsPanel({
   maps,
   disabled = false,
 }: GameMapBindingsPanelProps) {
-  const queryClient = useQueryClient();
-  const updateBinding = useUpdateGameMapBinding();
+  const updateBinding = useUpdateSpatialGameMapBinding();
   const [selectedMapId, setSelectedMapId] = useState(() => (maps[0] ? mapId(maps[0], 0) : ""));
   const [targetValue, setTargetValue] = useState("map");
   const selectedMap = useMemo(
@@ -299,7 +299,6 @@ export function GameMapBindingsPanel({
     if (!effectiveMapId || disabled || updateBinding.isPending) return;
     try {
       await updateBinding.mutateAsync(buildInput(chatId, effectiveMapId, targetValue, spatialLocationId));
-      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.gameMapReconciliation(chatId) });
       toast.success(spatialLocationId ? `Bound ${targetLabel} to ${location.name}.` : `Cleared ${targetLabel} binding.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to update the Game map binding.");

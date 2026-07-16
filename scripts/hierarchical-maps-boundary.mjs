@@ -126,6 +126,11 @@ export async function assertHierarchicalMapsPrivateImportBoundary() {
     findHierarchicalMapsPrivateEngineImports(),
   ]);
   const expected = boundary.privateEngineImports;
+  if (expected.length > 0) {
+    throw new Error(
+      "Hierarchical Maps must not record private Engine imports after package isolation",
+    );
+  }
   if (JSON.stringify(actual) === JSON.stringify(expected)) return boundary;
 
   const key = (entry) => `${entry.source}\0${entry.specifier}`;

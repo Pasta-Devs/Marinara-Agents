@@ -9,9 +9,12 @@ import type {
   SpatialContextResponse,
   SpatialDefinitionIssue,
 } from "@marinara-engine/shared";
-import { api, ApiError } from "../lib/api-client";
-import { useChatStore } from "../stores/chat.store";
-import { chatKeys } from "./use-chats";
+import { PackageApiError, packageApi } from "../features/spatial-context/package-api";
+import {
+  clearPendingSpatialTransition,
+  setPendingSpatialTransitionStatus,
+} from "../features/spatial-context/pending-spatial-transitions";
+import { spatialResourceKeys } from "../features/spatial-context/use-spatial-resources";
 
 export const spatialContextKeys = {
   all: ["spatial-context"] as const,
@@ -124,7 +127,7 @@ function readIssues(value: unknown): SpatialDefinitionIssue[] {
 }
 
 export function getSpatialContextProblem(error: unknown): SpatialContextProblem {
-  if (!(error instanceof ApiError)) {
+  if (!(error instanceof PackageApiError)) {
     return {
       status: null,
       code: null,
@@ -148,11 +151,11 @@ export function getSpatialContextProblem(error: unknown): SpatialContextProblem 
 export function useSpatialContext(chatId: string | null) {
   return useQuery({
     queryKey: spatialContextKeys.detail(chatId ?? ""),
-    queryFn: () => api.get<SpatialContextResponse>(`/chats/${chatId}/spatial-context`),
+    queryFn: () => packageApi.get<SpatialContextResponse>(`/chats/${chatId}/spatial-context`),
     enabled: !!chatId,
     staleTime: 30_000,
     retry: (failureCount, error) => {
-      if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+      if (error instanceof PackageApiError && error.status >= 400 && error.status < 500) return false;
       return failureCount < 3;
     },
   });
@@ -162,7 +165,7 @@ export function useUpdateSpatialContext() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, ...request }: UpdateSpatialContextInput) =>
-      api.put<SpatialContextResponse>(`/chats/${chatId}/spatial-context`, request),
+      packageApi.put<SpatialContextResponse>(`/chats/${chatId}/spatial-context`, request),
     onSuccess: (response, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), response);
     },
@@ -178,19 +181,14 @@ export function useCommitSpatialOwnerTurn() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, ...request }: CommitSpatialOwnerTurnInput) =>
-      api.post<CommitSpatialOwnerTurnResponse>(`/chats/${chatId}/spatial-context/turn`, request),
+      packageApi.post<CommitSpatialOwnerTurnResponse>(`/chats/${chatId}/spatial-context/turn`, request),
     onSuccess: (response, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), response.spatial);
-      useChatStore
-        .getState()
-        .clearPendingSpatialTransition(variables.chatId, variables.transition.commandId);
-      void queryClient.invalidateQueries({ queryKey: chatKeys.messages(variables.chatId) });
-      void queryClient.invalidateQueries({ queryKey: chatKeys.messageCount(variables.chatId) });
-      void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
-      void queryClient.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
+      clearPendingSpatialTransition(variables.chatId, variables.transition.commandId);
+      void queryClient.invalidateQueries({ queryKey: spatialResourceKeys.chat(variables.chatId) });
     },
     onError: (_error, variables) => {
-      useChatStore.getState().setPendingSpatialTransitionStatus(variables.chatId, "needs_review");
+      setPendingSpatialTransitionStatus(variables.chatId, "needs_review");
       void queryClient.invalidateQueries({ queryKey: spatialContextKeys.detail(variables.chatId) });
     },
   });
@@ -199,7 +197,7 @@ export function useCommitSpatialOwnerTurn() {
 export function useGenerateSpatialMapDraft() {
   return useMutation({
     mutationFn: ({ chatId, ...request }: GenerateSpatialMapDraftInput) =>
-      api.post<GenerateSpatialMapDraftResponse>(`/chats/${chatId}/spatial-context/generate`, request),
+      packageApi.post<GenerateSpatialMapDraftResponse>(`/chats/${chatId}/spatial-context/generate`, request),
   });
 }
 
@@ -207,13 +205,13 @@ export function useGameMapBindingReconciliation(chatId: string | null, enabled =
   return useQuery({
     queryKey: spatialContextKeys.gameMapReconciliation(chatId ?? ""),
     queryFn: () =>
-      api.get<GameMapBindingReconciliationPreview>(
+      packageApi.get<GameMapBindingReconciliationPreview>(
         `/chats/${chatId}/spatial-context/game-map-bindings/reconciliation`,
       ),
     enabled: enabled && !!chatId,
     staleTime: 30_000,
     retry: (failureCount, error) => {
-      if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+      if (error instanceof PackageApiError && error.status >= 400 && error.status < 500) return false;
       return failureCount < 3;
     },
   });
@@ -223,14 +221,13 @@ export function useApplyGameMapBindingReconciliation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, ...request }: ApplyGameMapBindingReconciliationInput) =>
-      api.post<GameMapBindingReconciliationPreview>(
+      packageApi.post<GameMapBindingReconciliationPreview>(
         `/chats/${chatId}/spatial-context/game-map-bindings/reconciliation`,
         request,
       ),
     onSuccess: (response, variables) => {
       queryClient.setQueryData(spatialContextKeys.gameMapReconciliation(variables.chatId), response);
-      void queryClient.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
-      void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
+      void queryClient.invalidateQueries({ queryKey: spatialResourceKeys.chat(variables.chatId) });
     },
     onError: (_error, variables) => {
       void queryClient.invalidateQueries({

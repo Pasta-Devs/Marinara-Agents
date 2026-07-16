@@ -6,60 +6,7 @@
   },
   "builtAgainst": {
     "engineVersion": "2.3.1",
-    "engineCommit": "940417c2693fc303365872a38b548a7d2cd344f1"
+    "engineCommit": "c797c0da1500d25776c8f74b5b246a90adf5a588"
   },
-  "privateEngineImports": [
-    {
-      "source": "packages/client/src/components/game/GameWorldMap.tsx",
-      "specifier": "../../stores/chat.store"
-    },
-    {
-      "source": "packages/client/src/features/spatial-context/components/GameMapBindingsPanel.tsx",
-      "specifier": "../../../hooks/use-game"
-    },
-    {
-      "source": "packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx",
-      "specifier": "../../../stores/chat.store"
-    },
-    {
-      "source": "packages/client/src/features/spatial-context/components/SpatialMapAiBuilder.tsx",
-      "specifier": "../../../stores/ui.store"
-    },
-    {
-      "source": "packages/client/src/features/spatial-context/SpatialContextSettingsSection.tsx",
-      "specifier": "../chat-settings/ChatSettingsSection"
-    },
-    {
-      "source": "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx",
-      "specifier": "../../hooks/use-chats"
-    },
-    {
-      "source": "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx",
-      "specifier": "../../hooks/use-lorebooks"
-    },
-    {
-      "source": "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx",
-      "specifier": "../../lib/app-dialogs"
-    },
-    {
-      "source": "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx",
-      "specifier": "../../lib/chat-lorebooks"
-    },
-    {
-      "source": "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx",
-      "specifier": "../../stores/ui.store"
-    },
-    {
-      "source": "packages/client/src/hooks/use-spatial-context.ts",
-      "specifier": "../lib/api-client"
-    },
-    {
-      "source": "packages/client/src/hooks/use-spatial-context.ts",
-      "specifier": "../stores/chat.store"
-    },
-    {
-      "source": "packages/client/src/hooks/use-spatial-context.ts",
-      "specifier": "./use-chats"
-    }
-  ]
+  "privateEngineImports": []
 }

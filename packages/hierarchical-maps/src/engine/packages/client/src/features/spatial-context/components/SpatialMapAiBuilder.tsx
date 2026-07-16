@@ -10,7 +10,6 @@ import type {
   SpatialOwnerMode,
 } from "@marinara-engine/shared";
 import { useGenerateSpatialMapDraft } from "../../../hooks/use-spatial-context";
-import { useUIStore } from "../../../stores/ui.store";
 import { cn } from "../package-utils";
 
 interface SpatialMapAiBuilderProps {
@@ -25,6 +24,7 @@ interface SpatialMapAiBuilderProps {
   setupReview?: boolean;
   lorebooks?: Lorebook[];
   excludedLorebookIds?: string[];
+  debugMode?: boolean;
   onClose: () => void;
   onApply: (definition: SpatialContextDefinition) => void;
 }
@@ -63,10 +63,10 @@ export function SpatialMapAiBuilder({
   setupReview = false,
   lorebooks = [],
   excludedLorebookIds = [],
+  debugMode = false,
   onClose,
   onApply,
 }: SpatialMapAiBuilderProps) {
-  const debugMode = useUIStore((state) => state.debugMode);
   const generateDraft = useGenerateSpatialMapDraft();
   const hasLocations = definition.locations.length > 0;
   const activeLocations = useMemo(

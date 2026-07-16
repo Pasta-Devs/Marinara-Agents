@@ -1,12 +1,64 @@
-import type { CSSProperties } from "react";
-import { AlertTriangle, ChevronRight, Map, MapPin } from "lucide-react";
-import { ChatSettingsSection } from "../chat-settings/ChatSettingsSection";
+import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { AlertTriangle, ChevronDown, ChevronRight, CircleHelp, Map, MapPin } from "lucide-react";
 import { useSpatialContext } from "../../hooks/use-spatial-context";
+import { cn } from "./package-utils";
 
 interface SpatialContextSettingsSectionProps {
   chatId: string;
   style?: CSSProperties;
   onOpenEditor: () => void;
+}
+
+function SettingsSection({
+  label,
+  icon,
+  count,
+  help,
+  style,
+  children,
+}: {
+  label: string;
+  icon: ReactNode;
+  count: number;
+  help: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen((value) => !value);
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    toggle();
+  };
+  return (
+    <div className="border-b border-[var(--border)]" style={style}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={toggle}
+        onKeyDown={onKeyDown}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-[var(--accent)]/50"
+      >
+        <span className="text-[var(--muted-foreground)]">{icon}</span>
+        <span className="flex-1 text-xs font-semibold">{label}</span>
+        {count > 0 && (
+          <span className="rounded-full bg-[var(--primary)]/15 px-1.5 py-0.5 text-[0.625rem] font-medium text-[var(--primary)]">
+            {count}
+          </span>
+        )}
+        <span title={help} aria-label={help} className="text-[var(--muted-foreground)]">
+          <CircleHelp size="0.75rem" />
+        </span>
+        <ChevronDown
+          size="0.75rem"
+          className={cn("text-[var(--muted-foreground)] transition-transform", open && "rotate-180")}
+        />
+      </div>
+      {open && <div className="px-4 pb-3 pt-3">{children}</div>}
+    </div>
+  );
 }
 
 export function SpatialContextSettingsSection({ chatId, style, onOpenEditor }: SpatialContextSettingsSectionProps) {
@@ -17,7 +69,7 @@ export function SpatialContextSettingsSection({ chatId, style, onOpenEditor }: S
   const breadcrumb = spatial.data?.breadcrumb.map((item) => item.name).join(" / ") ?? "";
 
   return (
-    <ChatSettingsSection
+    <SettingsSection
       label="Hierarchical map"
       icon={<Map size="0.875rem" />}
       count={activeCount}
@@ -79,6 +131,6 @@ export function SpatialContextSettingsSection({ chatId, style, onOpenEditor }: S
           </button>
         </div>
       )}
-    </ChatSettingsSection>
+    </SettingsSection>
   );
 }

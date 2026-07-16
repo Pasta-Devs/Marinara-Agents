@@ -14,8 +14,11 @@ import {
   type SpatialContextResponse,
   type SpatialLocation,
 } from "@marinara-engine/shared";
-import { useChatStore } from "../../stores/chat.store";
 import { cn, generateClientId } from "../../features/spatial-context/package-utils";
+import {
+  setPendingSpatialTransition,
+  usePendingSpatialTransition,
+} from "../../features/spatial-context/pending-spatial-transitions";
 
 interface GameWorldMapProps {
   chatId: string;
@@ -61,8 +64,7 @@ export function GameWorldMap({
   const centeredViewLocationId = defaultViewLocationId(spatial);
   const [viewLocationId, setViewLocationId] = useState<string | null>(() => centeredViewLocationId);
   const [selectedId, setSelectedId] = useState<string | null>(spatial.currentLocationId);
-  const pending = useChatStore((state) => state.pendingSpatialTransitions.get(chatId) ?? null);
-  const setPending = useChatStore((state) => state.setPendingSpatialTransition);
+  const pending = usePendingSpatialTransition(chatId);
 
   useEffect(() => {
     setViewLocationId(centeredViewLocationId);
@@ -135,7 +137,7 @@ export function GameWorldMap({
 
   const queueDestination = () => {
     if (!definition || !spatial.currentLocationId || !selectedDestination || disabled) return;
-    setPending(chatId, {
+    setPendingSpatialTransition(chatId, {
       transition: {
         destinationId: selectedDestination.id,
         expectedDefinitionRevision: definition.revision,
