@@ -68,6 +68,45 @@ function capturedPrompt(request: CapturedOpenAiRequest | undefined): string {
     .join("\n\n");
 }
 
+function promptText(messages: Array<{ content?: unknown }>): string {
+  return messages
+    .map((message) => (typeof message.content === "string" ? message.content : JSON.stringify(message.content)))
+    .join("\n\n");
+}
+
+function countOccurrences(value: string, marker: string): number {
+  return value.split(marker).length - 1;
+}
+
+function expectNormalizedSpatialPrompt(
+  value: string,
+  ownerMode: "roleplay" | "game",
+  source: string,
+  loreMarkers: {
+    forced: string;
+    duplicate: string;
+    disabled: string;
+    excluded: string;
+    oversized: string;
+  },
+): string {
+  expect(
+    countOccurrences(value, `<spatial_context mode="${ownerMode}" authority="application">`),
+    `${source} must contain one spatial projection`,
+  ).toBe(1);
+  expect(value, `${source} must contain the current path`).toContain("Current path: Shrouded Coast > Gloam Harbor");
+  expect(value, `${source} must contain the current location ID`).toContain("Current location ID: ai_harbor");
+  expect(countOccurrences(value, loreMarkers.forced), `${source} must inject forced-only lore once`).toBe(1);
+  expect(countOccurrences(value, loreMarkers.duplicate), `${source} must deduplicate ordinary and forced lore`).toBe(1);
+  expect(value, `${source} must exclude disabled lore`).not.toContain(loreMarkers.disabled);
+  expect(value, `${source} must honor chat lore exclusions`).not.toContain(loreMarkers.excluded);
+  expect(value, `${source} must omit over-budget location lore`).not.toContain(loreMarkers.oversized);
+
+  const block = value.match(/<spatial_context\b[^>]*>[\s\S]*?<\/spatial_context>/u)?.[0];
+  expect(block).toBeTruthy();
+  return block!.replace(/\r\n/gu, "\n").trim();
+}
+
 async function generateTurn(
   page: Page,
   data: Record<string, unknown>,
@@ -1435,6 +1474,331 @@ test("Game prompt scopes the legacy map beneath the hierarchical world location"
     expect(prompt).toContain("[map_update:");
   } finally {
     await expectDeletedInOrder(page, [chat ? `/api/chats/${chat.id}` : null, `/api/connections/${connection.id}`]);
+  }
+});
+
+test("Roleplay and Game prompt paths share one bounded spatial and location-lore projection", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The prompt and lore contract is viewport-independent.");
+  test.setTimeout(120_000);
+
+  const provider = await startOpenAiTestServer([
+    "The harbor bells answer across the water.",
+    "The party remains within Gloam Harbor.",
+  ]);
+  const loreMarkers = {
+    forced: "FORCED_LOCATION_LORE: cedar pilings mark the safe channel.",
+    duplicate: "DUPLICATE_LOCATION_LORE: the tide clock rings at dusk.",
+    disabled: "DISABLED_LOCATION_LORE_MUST_NOT_APPEAR",
+    excluded: "EXCLUDED_LOCATION_LORE_MUST_NOT_APPEAR",
+    oversized: "OVERSIZED_LOCATION_LORE_MUST_BE_REPORTED_AS_TRUNCATED",
+  } as const;
+  const lorebookIds: string[] = [];
+  let connection: { id: string } | null = null;
+  let character: { id: string } | null = null;
+  let roleplayChat: { id: string } | null = null;
+  let gameChat: { id: string } | null = null;
+
+  const createLorebook = async (name: string) => {
+    const response = await page.request.post("/api/lorebooks", {
+      data: {
+        name: `${name} ${Date.now()}`,
+        description: "Normalized Hierarchical Maps prompt parity fixture.",
+        category: "world",
+        enabled: true,
+      },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const lorebook = (await response.json()) as { id: string };
+    lorebookIds.push(lorebook.id);
+    return lorebook;
+  };
+  const createLorebookEntry = async (lorebookId: string, data: Record<string, unknown>) => {
+    const response = await page.request.post(`/api/lorebooks/${lorebookId}/entries`, { data });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    return (await response.json()) as { id: string };
+  };
+  const previewPrompt = async (chatId: string) => {
+    const response = await page.request.post(`/api/chats/${chatId}/peek-prompt`, { data: {} });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const preview = (await response.json()) as {
+      source: string;
+      exact: boolean;
+      messages: Array<{ role?: string; content?: unknown }>;
+    };
+    return { ...preview, text: promptText(preview.messages) };
+  };
+  const dryRunPrompt = async (chatId: string) => {
+    const response = await page.request.post("/api/generate/dryRun", {
+      data: {
+        chatId,
+        connectionId: connection!.id,
+        returnPrompt: true,
+        skipPreset: true,
+        injectLorebook: true,
+        userMessage: "Check the normalized harbor projection.",
+      },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const preview = (await response.json()) as {
+      prompt: { messages: Array<{ role?: string; content?: unknown }> };
+    };
+    return promptText(preview.prompt.messages);
+  };
+  const expectActiveContext = async (
+    chatId: string,
+    entries: {
+      forced: string;
+      duplicate: string;
+      disabled: string;
+      excluded: string;
+      oversized: string;
+    },
+  ) => {
+    const response = await page.request.get(`/api/lorebooks/scan/${chatId}`);
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const scan = (await response.json()) as {
+      entries: Array<{ id: string; activationSources?: string[] }>;
+      budgetSkippedEntries?: Array<{ id: string; blockedBy?: string }>;
+    };
+    expect(scan.entries.map((entry) => entry.id).sort()).toEqual([entries.duplicate, entries.forced].sort());
+    expect(scan.entries.find((entry) => entry.id === entries.forced)?.activationSources).toEqual(["current_location"]);
+    expect(scan.entries.find((entry) => entry.id === entries.duplicate)?.activationSources).toEqual(
+      expect.arrayContaining(["constant", "current_location"]),
+    );
+    expect(scan.entries.some((entry) => entry.id === entries.disabled)).toBe(false);
+    expect(scan.entries.some((entry) => entry.id === entries.excluded)).toBe(false);
+    expect(scan.entries.some((entry) => entry.id === entries.oversized)).toBe(false);
+    expect(scan.budgetSkippedEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: entries.oversized,
+          blockedBy: "location",
+        }),
+      ]),
+    );
+  };
+
+  try {
+    const connectionResponse = await page.request.post("/api/connections", {
+      data: {
+        name: `Maps Prompt Parity ${Date.now()}`,
+        provider: "custom",
+        baseUrl: provider.baseUrl,
+        model: "maps-authority-e2e",
+        apiKey: "maps-authority-e2e",
+        treatAsLocalEndpoint: true,
+      },
+    });
+    expect(connectionResponse.ok(), await connectionResponse.text()).toBeTruthy();
+    connection = (await connectionResponse.json()) as { id: string };
+
+    const forcedBook = await createLorebook("Maps forced-only lore");
+    const activeBook = await createLorebook("Maps active duplicate lore");
+    const excludedBook = await createLorebook("Maps excluded lore");
+    const forcedEntry = await createLorebookEntry(forcedBook.id, {
+      name: "Forced current-location truth",
+      content: loreMarkers.forced,
+      order: 0,
+    });
+    const duplicateEntry = await createLorebookEntry(activeBook.id, {
+      name: "Ordinary and current-location truth",
+      content: loreMarkers.duplicate,
+      constant: true,
+      order: 10,
+    });
+    const disabledEntry = await createLorebookEntry(activeBook.id, {
+      name: "Disabled current-location truth",
+      content: loreMarkers.disabled,
+      constant: true,
+      enabled: false,
+      order: 20,
+    });
+    const excludedEntry = await createLorebookEntry(excludedBook.id, {
+      name: "Excluded current-location truth",
+      content: loreMarkers.excluded,
+      constant: true,
+      order: 30,
+    });
+    const oversizedEntry = await createLorebookEntry(forcedBook.id, {
+      name: "Over-budget current-location truth",
+      content: `${loreMarkers.oversized}: ${"boundary ".repeat(9_000)}`,
+      order: 100,
+    });
+    const entryIds = {
+      forced: forcedEntry.id,
+      duplicate: duplicateEntry.id,
+      disabled: disabledEntry.id,
+      excluded: excludedEntry.id,
+      oversized: oversizedEntry.id,
+    };
+    const missingEntryId = `missing-location-lore-${Date.now()}`;
+    const buildParityDefinition = (ownerMode: "roleplay" | "game") => ({
+      ...generatedDefinition,
+      ownerMode,
+      enabled: true,
+      startingLocationId: "ai_harbor",
+      locations: generatedDefinition.locations.map((location) =>
+        location.id === "ai_harbor"
+          ? {
+              ...location,
+              lorebookEntryIds: [
+                forcedEntry.id,
+                duplicateEntry.id,
+                disabledEntry.id,
+                excludedEntry.id,
+                oversizedEntry.id,
+                missingEntryId,
+              ],
+            }
+          : location,
+      ),
+    });
+
+    const characterResponse = await page.request.post("/api/characters", {
+      data: { data: { name: `Maps Prompt Parity Guide ${Date.now()}` } },
+    });
+    expect(characterResponse.ok(), await characterResponse.text()).toBeTruthy();
+    character = (await characterResponse.json()) as { id: string };
+    const roleplayChatResponse = await page.request.post("/api/chats", {
+      data: {
+        name: "Roleplay normalized Maps prompt parity",
+        mode: "roleplay",
+        characterIds: [character.id],
+        connectionId: connection.id,
+      },
+    });
+    expect(roleplayChatResponse.ok(), await roleplayChatResponse.text()).toBeTruthy();
+    roleplayChat = (await roleplayChatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, roleplayChat.id);
+    const roleplayMetadataResponse = await page.request.patch(`/api/chats/${roleplayChat.id}/metadata`, {
+      data: {
+        activeLorebookIds: [activeBook.id, excludedBook.id],
+        excludedLorebookIds: [excludedBook.id],
+      },
+    });
+    expect(roleplayMetadataResponse.ok(), await roleplayMetadataResponse.text()).toBeTruthy();
+    const roleplaySaveResponse = await page.request.put(`/api/chats/${roleplayChat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: buildParityDefinition("roleplay"),
+      },
+    });
+    expect(roleplaySaveResponse.ok(), await roleplaySaveResponse.text()).toBeTruthy();
+    const roleplaySave = (await roleplaySaveResponse.json()) as {
+      warnings?: Array<{ code?: string }>;
+    };
+    expect(roleplaySave.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "lorebook_entry_missing" })]),
+    );
+
+    const roleplayLive = await previewPrompt(roleplayChat.id);
+    expect(roleplayLive).toMatchObject({
+      source: "live_preview",
+      exact: false,
+    });
+    const roleplayDryRun = await dryRunPrompt(roleplayChat.id);
+    const roleplayEvents = await generateTurn(page, {
+      chatId: roleplayChat.id,
+      connectionId: connection.id,
+      userMessage: "Generate from the normalized harbor projection.",
+    });
+    expect(roleplayEvents.some((event) => event.type === "message_saved")).toBe(true);
+    const roleplayNormal = capturedPrompt(provider.requests[0]);
+    const roleplayCached = await previewPrompt(roleplayChat.id);
+    expect(roleplayCached).toMatchObject({ source: "cached", exact: true });
+    expect(roleplayCached.text).toBe(roleplayNormal);
+    expect(
+      new Set(
+        [
+          ["Roleplay live Peek Prompt", roleplayLive.text],
+          ["Roleplay dry run", roleplayDryRun],
+          ["Roleplay normal generation", roleplayNormal],
+          ["Roleplay cached Peek Prompt", roleplayCached.text],
+        ].map(([source, value]) =>
+          expectNormalizedSpatialPrompt(value!, "roleplay", source!, loreMarkers),
+        ),
+      ).size,
+    ).toBe(1);
+    await expectActiveContext(roleplayChat.id, entryIds);
+
+    const gameChatResponse = await page.request.post("/api/chats", {
+      data: {
+        name: "Game normalized Maps prompt parity",
+        mode: "game",
+        characterIds: [],
+        connectionId: connection.id,
+      },
+    });
+    expect(gameChatResponse.ok(), await gameChatResponse.text()).toBeTruthy();
+    gameChat = (await gameChatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, gameChat.id);
+    const gameMetadataResponse = await page.request.patch(`/api/chats/${gameChat.id}/metadata`, {
+      data: {
+        activeLorebookIds: [activeBook.id, excludedBook.id],
+        excludedLorebookIds: [excludedBook.id],
+        gameId: `maps-prompt-parity-${gameChat.id}`,
+        gameSessionStatus: "active",
+        gameIntroPresented: true,
+        gameSystemPrompt: "Run the normalized Hierarchical Maps parity fixture.",
+      },
+    });
+    expect(gameMetadataResponse.ok(), await gameMetadataResponse.text()).toBeTruthy();
+    const gameSaveResponse = await page.request.put(`/api/chats/${gameChat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: buildParityDefinition("game"),
+      },
+    });
+    expect(gameSaveResponse.ok(), await gameSaveResponse.text()).toBeTruthy();
+    const gameSave = (await gameSaveResponse.json()) as {
+      warnings?: Array<{ code?: string }>;
+    };
+    expect(gameSave.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "lorebook_entry_missing" })]),
+    );
+
+    const gameLive = await previewPrompt(gameChat.id);
+    expect(gameLive).toMatchObject({ source: "live_preview", exact: false });
+    const gameDryRun = await dryRunPrompt(gameChat.id);
+    const gameEvents = await generateTurn(page, {
+      chatId: gameChat.id,
+      connectionId: connection.id,
+      userMessage: "Generate the GM turn from the normalized harbor projection.",
+    });
+    expect(gameEvents.some((event) => event.type === "message_saved")).toBe(true);
+    const gameNormal = capturedPrompt(provider.requests[1]);
+    const gameCached = await previewPrompt(gameChat.id);
+    expect(gameCached).toMatchObject({ source: "cached", exact: true });
+    expect(gameCached.text).toBe(gameNormal);
+    expect(
+      new Set(
+        [
+          ["Game live Peek Prompt", gameLive.text],
+          ["Game dry run", gameDryRun],
+          ["Game GM generation", gameNormal],
+          ["Game cached Peek Prompt", gameCached.text],
+        ].map(([source, value]) =>
+          expectNormalizedSpatialPrompt(value!, "game", source!, loreMarkers),
+        ),
+      ).size,
+    ).toBe(1);
+    await expectActiveContext(gameChat.id, entryIds);
+  } finally {
+    try {
+      await expectDeletedInOrder(page, [
+        roleplayChat ? `/api/chats/${roleplayChat.id}?force=true` : null,
+        gameChat ? `/api/chats/${gameChat.id}?force=true` : null,
+        character ? `/api/characters/${character.id}` : null,
+        ...lorebookIds.map((id) => `/api/lorebooks/${id}`),
+        connection ? `/api/connections/${connection.id}` : null,
+      ]);
+    } finally {
+      await provider.close();
+    }
   }
 });
 
