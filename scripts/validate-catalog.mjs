@@ -294,6 +294,10 @@ for (const entry of catalog.packages) {
     for (const slot of ["conversation-toolbar", "conversation-surface", "chat-settings"]) {
       if (!slots.has(slot)) throw new Error(`${manifest.id} is missing the ${slot} contribution`);
     }
+    const serverSource = await readFile(join(packageRoot, manifest.entrypoints.server), "utf8");
+    if (serverSource.includes("I lost the thread for a second. Could you repeat that?")) {
+      throw new Error(`${manifest.id} server runtime still contains the hardcoded generation fallback`);
+    }
   }
 }
 

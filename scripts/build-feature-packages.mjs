@@ -56,7 +56,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Conversation Calls",
-    version: "1.0.2",
+    version: "1.0.3",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
