@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-16T14:00:31.988Z",
+  "generatedAt": "2026-07-16T15:36:38.995Z",
   "packages": [
     {
       "manifest": {
@@ -626,14 +626,22 @@
     },
     {
       "manifest": {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 3
+        },
+        "builtAgainst": {
+          "engineVersion": "3.2.2",
+          "engineCommit": "7d5c09975abfd28e7e5e6645ff3b0bdeef86e1d7"
+        },
         "id": "hierarchical-maps",
         "name": "Hierarchical Maps",
-        "version": "1.0.7",
+        "version": "1.1.0",
         "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
-          "min": "2.3.0",
-          "maxExclusive": "2.4.0"
+          "min": "3.2.0",
+          "maxExclusive": "3.3.0"
         },
         "kind": [
           "agent",
@@ -645,6 +653,11 @@
           "client": "client.js"
         },
         "contributions": {
+          "agentDetail": {
+            "agentIds": [
+              "hierarchical-maps"
+            ]
+          },
           "slots": [
             "chat-settings",
             "spatial-workspace",
@@ -660,13 +673,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "3f9a0cb25e1718e11efe69eb60a0734e46dd7d0ca7f11a65b6b8a68b1bef2624",
-            "bytes": 1928744
+            "sha256": "8d90c5a73b08bc85aac184cd10ffd4887a91727ef736d1f13d9254ce0dd64225",
+            "bytes": 293319
           },
           {
             "path": "client.js",
-            "sha256": "3c6347eb87d0bb858a78fe23696df14e401dc9d276ca548960e3a56638152e26",
-            "bytes": 746342
+            "sha256": "b3fa145bde3b7a6109194daf3874311ed4325aa459656d282c5ab23dd861e732",
+            "bytes": 692951
           }
         ],
         "permissions": [
@@ -684,9 +697,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.0.7.zip",
-        "sha256": "f1fc222b05cbd199ea91ea4ebb90eeba235e093fefd8381479a92029a3375685",
-        "bytes": 742770
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.1.0.zip",
+        "sha256": "0d8866516155ea85750d8f41f4f8a6ad49319b09359d1fd7037bb79b768be65f",
+        "bytes": 268692
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },

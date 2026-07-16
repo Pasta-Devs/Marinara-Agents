@@ -6,7 +6,28 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "id", "name", "version", "engine", "kind", "entrypoints", "files", "permissions"],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "enum": [1, 2] },
+    "capabilityApi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["major", "minor"],
+      "properties": {
+        "major": { "type": "integer", "minimum": 1 },
+        "minor": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "builtAgainst": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engineVersion", "engineCommit"],
+      "properties": {
+        "engineVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        },
+        "engineCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+      }
+    },
     "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 80 },
     "name": { "type": "string", "minLength": 1, "maxLength": 120 },
     "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
@@ -58,5 +79,22 @@
       }
     },
     "restartRequired": { "type": "boolean", "default": false }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "schemaVersion": { "const": 2 } },
+        "required": ["schemaVersion"]
+      },
+      "then": { "required": ["capabilityApi", "builtAgainst"] },
+      "else": {
+        "not": {
+          "anyOf": [
+            { "required": ["capabilityApi"] },
+            { "required": ["builtAgainst"] }
+          ]
+        }
+      }
+    }
+  ]
 }
