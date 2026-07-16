@@ -11,11 +11,13 @@ import { eq } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { chats } from "../../db/schema/index.js";
 import { now } from "../../utils/id-generator.js";
+import { logger } from "../../lib/logger.js";
 import { createLorebooksStorage } from "../storage/lorebooks.storage.js";
 import { withChatMetadataPatchQueue } from "../storage/chats.storage.js";
 import { createSpatialContextStorage } from "../storage/spatial-context.storage.js";
 import { resolveEffectiveSpatialState } from "./state-resolution.js";
 import { parseSpatialMetadata } from "./metadata.js";
+import { bindGameMapsToExactSpatialLocations } from "./game-map-binding.js";
 
 const METADATA_KEY = "spatialContext";
 
@@ -239,7 +241,11 @@ export function createSpatialContextService(db: DB) {
           );
         }
 
-        const nextMetadata = { ...metadata, [METADATA_KEY]: definition };
+        const initialGameMapBindings =
+          chat.mode === "game" && !stored.definition
+            ? bindGameMapsToExactSpatialLocations(metadata, definition)
+            : { metadata, bindingCount: 0 };
+        const nextMetadata = { ...initialGameMapBindings.metadata, [METADATA_KEY]: definition };
         await db.transaction(async (tx) => {
           await tx
             .update(chats)
@@ -274,6 +280,14 @@ export function createSpatialContextService(db: DB) {
             }
           }
         });
+
+        if (initialGameMapBindings.bindingCount > 0) {
+          logger.info(
+            "[spatial/game-map-binding] Bound %d accepted Game map positions for chat %s",
+            initialGameMapBindings.bindingCount,
+            chatId,
+          );
+        }
 
         return buildResponse(
           definition,

@@ -2,7 +2,7 @@
   {
     "id": "persona-stats",
     "name": "Persona Stats",
-    "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events.",
+    "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "defaultInjectAsSection": true,

@@ -2,7 +2,7 @@
   {
     "id": "lorebook-keeper",
     "name": "Lorebook Keeper",
-    "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes.",
+    "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes. Add the Agent in Chat Settings → Agents → Misc Agents/Lorebook Keeper for Roleplay and Game modes.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",

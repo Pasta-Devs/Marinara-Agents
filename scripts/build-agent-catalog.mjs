@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
+import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const artifactsDir = join(repoRoot, "artifacts");
@@ -59,13 +60,20 @@ for (const id of selectedPackageDirectories) {
   }
   // Feature packages own their build in build-feature-packages.mjs.
   if (!manifest.kind?.includes("agent") || manifest.entrypoints?.server) continue;
-  const agentsBuffer = await readFile(join(sourceDir, manifest.entrypoints.agents));
-  const agentDefinitions = JSON.parse(agentsBuffer.toString("utf8"));
+  const agentDefinitions = JSON.parse(await readFile(join(sourceDir, manifest.entrypoints.agents), "utf8"));
+  for (const definition of agentDefinitions) {
+    if (definition.id === id) {
+      definition.description = withPackageActivationGuidance(id, definition.description);
+    }
+  }
+  const agentsBuffer = Buffer.from(`${JSON.stringify(agentDefinitions, null, 2)}\n`);
+  await writeFile(join(sourceDir, manifest.entrypoints.agents), agentsBuffer);
   const category = ["writer", "tracker", "misc"].includes(agentDefinitions[0]?.category)
     ? agentDefinitions[0].category
     : "misc";
   manifest = {
     ...manifest,
+    description: withPackageActivationGuidance(id, manifest.description),
     engine: { ...manifest.engine, min: MIN_ENGINE_VERSION },
     files: [{ path: manifest.entrypoints.agents, sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength }],
   };

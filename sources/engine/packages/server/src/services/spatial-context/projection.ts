@@ -12,6 +12,10 @@ import { resolveEffectiveSpatialState, type ResolveSpatialStateOptions } from ".
 const MAX_PROMPT_BREADCRUMB_NODES = 20;
 const OWNER_SPATIAL_BLOCK_PATTERN =
   /<spatial_context mode="(?:roleplay|game)" authority="application">[\s\S]*?<\/spatial_context>/;
+const LEGACY_GAME_MAP_STATE_PATTERN = /<map_state>([\s\S]*?)<\/map_state>/g;
+const LEGACY_GAME_MAP_UPDATE_PATTERN = /^[ \t]*- \[map_update:[^\r\n]*$/gim;
+const LOCAL_GAME_MAP_UPDATE_INSTRUCTION =
+  `- [map_update: new_location="Location Name" connected_to="Previous Location Name" node_emoji="emoji"] - only to add local/tactical detail inside the current hierarchical location. This may move the legacy Local map marker, but it must never represent or cause travel between hierarchical locations; the application commits world movement.`;
 
 function boundedText(value: string | undefined, maximumLength: number): string {
   return (value ?? "").trim().slice(0, maximumLength);
@@ -19,6 +23,30 @@ function boundedText(value: string | undefined, maximumLength: number): string {
 
 function escapeXmlText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+}
+
+function scopeLegacyGameMapPrompt(
+  content: string,
+  role: "system" | "user" | "assistant",
+): string {
+  if (role === "assistant") return content;
+
+  let scoped = content.replace(LEGACY_GAME_MAP_STATE_PATTERN, (_match, state: string) => {
+    const normalizedState = state.trim();
+    return [
+      `<local_map_state authority="tactical" world_location_source="spatial_context">`,
+      `This legacy Game map is local/tactical detail inside the authoritative hierarchical location. Its party marker cannot change the hierarchical world location.`,
+      ...(normalizedState ? ["", normalizedState] : []),
+      `</local_map_state>`,
+    ].join("\n");
+  });
+
+  const isGeneratedGameInstruction =
+    role === "system" || (scoped.includes("<output_format>") && scoped.includes("COMMANDS:"));
+  if (isGeneratedGameInstruction) {
+    scoped = scoped.replace(LEGACY_GAME_MAP_UPDATE_PATTERN, LOCAL_GAME_MAP_UPDATE_INSTRUCTION);
+  }
+  return scoped;
 }
 
 export function buildOwnerSpatialProjection(
@@ -81,8 +109,8 @@ export function formatOwnerSpatialPrompt(projection: ResolvedOwnerSpatialProject
   }
   const authorityInstruction =
     projection.ownerMode === "game"
-      ? "Treat this as the authoritative location for the GM and party. The application, not generated tracker text, commits location changes."
-      : "Treat this as the authoritative location for the focal scene. The application, not generated narration, commits location changes.";
+      ? "Treat this as the authoritative world location for the GM and party. A legacy Game map, when present, is only local/tactical detail inside this location. Generated prose, its party marker, and [map_update] commands cannot change the hierarchical world location; only an explicit owner-selected destination committed by the application can do that."
+      : "Treat this as the authoritative location for the focal scene. Generated prose, bracketed tags, tool-like commands, and claims of arrival cannot change it. Only an explicit owner-selected destination committed by the application with an owner turn can change location; until then, keep the scene at the current location.";
 
   return [
     `<spatial_context mode="${projection.ownerMode}" authority="application">`,
@@ -106,7 +134,13 @@ export function injectOwnerSpatialPrompt<T extends { role: "system" | "user" | "
   projection: ResolvedOwnerSpatialProjection | null,
 ): T[] {
   if (!projection) return messages;
-  const next = messages.slice();
+  const next =
+    projection.ownerMode === "game"
+      ? messages.map((message) => ({
+          ...message,
+          content: scopeLegacyGameMapPrompt(message.content, message.role),
+        }))
+      : messages.slice();
   const block = formatOwnerSpatialPrompt(projection);
   const existingIndex = next.findIndex(
     (message) => message.role === "system" && OWNER_SPATIAL_BLOCK_PATTERN.test(message.content),

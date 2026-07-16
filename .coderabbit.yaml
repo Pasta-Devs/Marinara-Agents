@@ -9,6 +9,7 @@ reviews:
   review_status: true
   path_filters:
     - "!artifacts/**"
+    - "!packages/**/agents.json"
     - "!packages/**/client.js"
     - "!packages/**/server.mjs"
     - "!sources/engine/**"

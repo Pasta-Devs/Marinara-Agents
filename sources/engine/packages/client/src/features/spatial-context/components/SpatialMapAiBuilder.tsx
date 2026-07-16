@@ -191,7 +191,7 @@ export function SpatialMapAiBuilder({
         </button>
       </div>
 
-      <div className="grid min-h-0 gap-px bg-[var(--marinara-editor-divider)] lg:grid-cols-[minmax(20rem,0.9fr)_minmax(22rem,1.1fr)]">
+      <div className="mari-maps-ai-grid grid min-h-0 gap-px bg-[var(--marinara-editor-divider)]">
         <div className="bg-[var(--marinara-editor-bg)] p-4">
           {hasLocations && !hasCommittedSpatialHistory && (
             <fieldset className="mb-4">
