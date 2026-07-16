@@ -70,10 +70,11 @@ function artifactFixture(version: string): ArtifactFixture {
 }
 
 const fixtures = new Map(
-  [artifactFixture("1.0.5"), artifactFixture("1.0.6"), artifactFixture("1.1.0")].map((fixture) => [
-    fixture.manifest.version,
-    fixture,
-  ]),
+  [
+    artifactFixture("1.0.5"),
+    artifactFixture("1.0.6"),
+    artifactFixture("1.1.0"),
+  ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.0.5";
 let catalogOnline = true;
@@ -81,10 +82,13 @@ let catalogOnline = true;
 const candidateFixture = fixtures.get("1.1.0");
 assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
-assert.deepEqual(candidateFixture.manifest.capabilityApi, { major: 1, minor: 2 });
+assert.deepEqual(candidateFixture.manifest.capabilityApi, {
+  major: 1,
+  minor: 2,
+});
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineVersion: "2.3.1",
-  engineCommit: "8afe4a2857ae5731a494dcc765a20ebfddbfbaef",
+  engineCommit: "20bd419e9bd5b5550f3e26e068cd083aa4ff8745",
 });
 
 function catalogFixture(version: string) {
@@ -235,6 +239,27 @@ async function main() {
     const { buildApp } = await importEngine<{
       buildApp(): Promise<NonNullable<typeof app>>;
     }>("packages/server/src/app.ts");
+    const { materializeAssistantSpatialState, resolveEffectiveSpatialState } =
+      await importEngine<{
+        materializeAssistantSpatialState(
+          db: unknown,
+          input: {
+            chatId: string;
+            messageId: string;
+            swipeIndex: number;
+            regenerate: boolean;
+            continuation: boolean;
+          },
+        ): Promise<{ currentLocationId: string } | null>;
+        resolveEffectiveSpatialState(
+          db: unknown,
+          chatId: string,
+          options?: { exactAnchor?: { messageId: string; swipeIndex: number } },
+        ): Promise<{
+          currentLocationId: string | null;
+          snapshot: { currentLocationId: string } | null;
+        }>;
+      }>("packages/server/src/services/spatial-context/state-resolution.ts");
 
     const installed105 =
       await capabilityPackageManager.install("hierarchical-maps");
@@ -316,11 +341,35 @@ async function main() {
       [{ version: "1.1.0", status: "active", readiness: "ready", ready: true }],
     );
 
+    const locationLorebook = (await expectJson(app, {
+      method: "POST",
+      url: "/api/lorebooks",
+      headers: csrfHeaders,
+      payload: {
+        name: "Hierarchical Maps location-lore fixture",
+        description:
+          "Proves exact-location lore reaches every prompt preview path.",
+        category: "world",
+        enabled: true,
+      },
+    })) as { id: string };
+    const locationLoreEntry = (await expectJson(app, {
+      method: "POST",
+      url: `/api/lorebooks/${locationLorebook.id}/entries`,
+      headers: csrfHeaders,
+      payload: {
+        name: "Lifecycle Harbor location truth",
+        content:
+          "LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar.",
+      },
+    })) as { id: string };
+
     const existingGameMap = {
       id: "existing-campaign-map",
       type: "node",
       name: "Existing World",
-      description: "A legacy world map that must remain intact during reconciliation.",
+      description:
+        "A legacy world map that must remain intact during reconciliation.",
       nodes: [
         {
           id: "existing-harbor",
@@ -376,7 +425,7 @@ async function main() {
     const existingGameDefinition = {
       ...definition,
       ownerMode: "game",
-      startingLocationId: "existing_world",
+      startingLocationId: "existing_harbor",
       locations: [
         {
           ...definition.locations[0],
@@ -388,6 +437,7 @@ async function main() {
           id: "existing_harbor",
           parentId: "existing_world",
           name: "Existing Harbor",
+          lorebookEntryIds: [locationLoreEntry.id],
         },
         {
           ...definition.locations[1],
@@ -413,7 +463,7 @@ async function main() {
         definition: existingGameDefinition,
       },
     })) as { currentLocationId: string; definition: { revision: number } };
-    assert.equal(existingGameSpatial.currentLocationId, "existing_world");
+    assert.equal(existingGameSpatial.currentLocationId, "existing_harbor");
     assert.equal(existingGameSpatial.definition.revision, 1);
 
     const beforeReconciliation = (await expectJson(app, {
@@ -421,18 +471,43 @@ async function main() {
       url: `/api/chats/${existingGame.id}`,
     })) as { metadata: unknown };
     const beforeMetadata = metadata(beforeReconciliation.metadata) as {
-      gameMap: { spatialLocationId?: string; nodes: Array<{ spatialLocationId?: string }> };
+      gameMap: {
+        spatialLocationId?: string;
+        nodes: Array<{ spatialLocationId?: string }>;
+      };
     };
     assert.equal(beforeMetadata.gameMap.spatialLocationId, undefined);
-    assert.ok(beforeMetadata.gameMap.nodes.every((node) => !node.spatialLocationId));
+    assert.ok(
+      beforeMetadata.gameMap.nodes.every((node) => !node.spatialLocationId),
+    );
 
     type ReconciliationTarget =
       | { target: "map"; mapId: string; mapName: string; targetName: string }
-      | { target: "node"; mapId: string; nodeId: string; mapName: string; targetName: string }
-      | { target: "cell"; mapId: string; x: number; y: number; mapName: string; targetName: string };
+      | {
+          target: "node";
+          mapId: string;
+          nodeId: string;
+          mapName: string;
+          targetName: string;
+        }
+      | {
+          target: "cell";
+          mapId: string;
+          x: number;
+          y: number;
+          mapName: string;
+          targetName: string;
+        };
     type ReconciliationPreview = {
-      suggestions: Array<{ target: ReconciliationTarget; sourceName: string; spatialLocationId: string }>;
-      conflicts: Array<{ sourceName: string; candidateLocations: Array<{ id: string }> }>;
+      suggestions: Array<{
+        target: ReconciliationTarget;
+        sourceName: string;
+        spatialLocationId: string;
+      }>;
+      conflicts: Array<{
+        sourceName: string;
+        candidateLocations: Array<{ id: string }>;
+      }>;
       unmatched: Array<{ sourceName: string }>;
       bindingCount?: number;
     };
@@ -441,30 +516,48 @@ async function main() {
       url: `/api/chats/${existingGame.id}/spatial-context/game-map-bindings/reconciliation`,
     })) as ReconciliationPreview;
     assert.deepEqual(
-      preview.suggestions.map((suggestion) => [suggestion.sourceName, suggestion.spatialLocationId]),
+      preview.suggestions.map((suggestion) => [
+        suggestion.sourceName,
+        suggestion.spatialLocationId,
+      ]),
       [
         ["Existing World", "existing_world"],
         ["Existing Harbor", "existing_harbor"],
       ],
     );
-    assert.deepEqual(preview.conflicts.map((conflict) => conflict.sourceName), ["Crossroads"]);
+    assert.deepEqual(
+      preview.conflicts.map((conflict) => conflict.sourceName),
+      ["Crossroads"],
+    );
     assert.deepEqual(
       preview.conflicts[0]?.candidateLocations.map((location) => location.id),
       ["east_crossroads", "west_crossroads"],
     );
-    assert.deepEqual(preview.unmatched.map((target) => target.sourceName), ["Unknown Ruin"]);
+    assert.deepEqual(
+      preview.unmatched.map((target) => target.sourceName),
+      ["Unknown Ruin"],
+    );
 
     const reviewedBindings = preview.suggestions.map((suggestion) => {
       const target = suggestion.target;
       if (target.target === "node") {
         return {
-          target: { target: "node" as const, mapId: target.mapId, nodeId: target.nodeId },
+          target: {
+            target: "node" as const,
+            mapId: target.mapId,
+            nodeId: target.nodeId,
+          },
           spatialLocationId: suggestion.spatialLocationId,
         };
       }
       if (target.target === "cell") {
         return {
-          target: { target: "cell" as const, mapId: target.mapId, x: target.x, y: target.y },
+          target: {
+            target: "cell" as const,
+            mapId: target.mapId,
+            x: target.x,
+            y: target.y,
+          },
           spatialLocationId: suggestion.spatialLocationId,
         };
       }
@@ -495,10 +588,15 @@ async function main() {
       url: `/api/chats/${existingGame.id}`,
     })) as { metadata: unknown };
     const rejectedMetadata = metadata(afterRejectedReconciliation.metadata) as {
-      gameMap: { spatialLocationId?: string; nodes: Array<{ spatialLocationId?: string }> };
+      gameMap: {
+        spatialLocationId?: string;
+        nodes: Array<{ spatialLocationId?: string }>;
+      };
     };
     assert.equal(rejectedMetadata.gameMap.spatialLocationId, undefined);
-    assert.ok(rejectedMetadata.gameMap.nodes.every((node) => !node.spatialLocationId));
+    assert.ok(
+      rejectedMetadata.gameMap.nodes.every((node) => !node.spatialLocationId),
+    );
 
     const applied = (await expectJson(app, {
       method: "POST",
@@ -535,11 +633,20 @@ async function main() {
         nodes: Array<{ id: string; spatialLocationId?: string }>;
       }>;
     };
-    assert.equal(reconciledMetadata.gameMap.spatialLocationId, "existing_world");
-    assert.equal(reconciledMetadata.gameMaps[0]?.spatialLocationId, "existing_world");
+    assert.equal(
+      reconciledMetadata.gameMap.spatialLocationId,
+      "existing_world",
+    );
+    assert.equal(
+      reconciledMetadata.gameMaps[0]?.spatialLocationId,
+      "existing_world",
+    );
     assert.deepEqual(
       Object.fromEntries(
-        reconciledMetadata.gameMap.nodes.map((node) => [node.id, node.spatialLocationId]),
+        reconciledMetadata.gameMap.nodes.map((node) => [
+          node.id,
+          node.spatialLocationId,
+        ]),
       ),
       {
         "existing-harbor": "existing_harbor",
@@ -547,6 +654,67 @@ async function main() {
         "unknown-ruin": undefined,
       },
     );
+    const gamePeek = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/peek-prompt`,
+      headers: csrfHeaders,
+      payload: {},
+    })) as {
+      source: string;
+      exact: boolean;
+      messages: Array<{ content: string }>;
+    };
+    assert.equal(gamePeek.source, "live_preview");
+    assert.equal(gamePeek.exact, false);
+    const gamePeekText = gamePeek.messages
+      .map((message) => message.content)
+      .join("\n");
+    assert.match(
+      gamePeekText,
+      /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u,
+    );
+    assert.match(gamePeekText, /Existing Harbor/u);
+    const checkpointGameState = (await expectJson(app, {
+      method: "PATCH",
+      url: `/api/chats/${existingGame.id}/game-state`,
+      headers: csrfHeaders,
+      payload: { manual: true, weather: "Harbor calm" },
+    })) as { weather: string; location: string };
+    assert.equal(checkpointGameState.weather, "Harbor calm");
+    assert.match(checkpointGameState.location, /Existing Harbor/u);
+    const checkpoint = (await expectJson(app, {
+      method: "POST",
+      url: "/api/game/checkpoint",
+      headers: csrfHeaders,
+      payload: {
+        chatId: existingGame.id,
+        label: "Existing Harbor checkpoint",
+        triggerType: "manual",
+      },
+    })) as { id: string };
+    await expectJson(app, {
+      method: "PATCH",
+      url: `/api/chats/${existingGame.id}/game-state`,
+      headers: csrfHeaders,
+      payload: { manual: true, weather: "Harbor storm" },
+    });
+    await expectJson(app, {
+      method: "POST",
+      url: "/api/game/checkpoint/load",
+      headers: csrfHeaders,
+      payload: { chatId: existingGame.id, checkpointId: checkpoint.id },
+    });
+    const restoredCheckpointState = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}/game-state`,
+    })) as { weather: string; location: string };
+    assert.equal(restoredCheckpointState.weather, "Harbor calm");
+    assert.match(restoredCheckpointState.location, /Existing Harbor/u);
+    const restoredCheckpointSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(restoredCheckpointSpatial.currentLocationId, "existing_harbor");
     await expectJson(
       app,
       {
@@ -568,6 +736,21 @@ async function main() {
       },
     })) as { id: string };
     const chatId = created.id;
+
+    const definitionWithLocationLore = {
+      ...definition,
+      locations: definition.locations.map((location) =>
+        location.id === "lifecycle_harbor"
+          ? {
+              ...location,
+              lorebookEntryIds: [
+                ...(location.lorebookEntryIds ?? []),
+                locationLoreEntry.id,
+              ],
+            }
+          : location,
+      ),
+    };
 
     await expectJson(app, {
       method: "PATCH",
@@ -606,7 +789,7 @@ async function main() {
       payload: {
         expectedRevision: 0,
         expectedCurrentLocationId: null,
-        definition,
+        definition: definitionWithLocationLore,
       },
     })) as {
       currentLocationId: string;
@@ -619,7 +802,8 @@ async function main() {
     assert.ok(
       saved.warnings.some(
         (warning) =>
-          warning.code === "lorebook_entry_missing" && warning.locationId === "lifecycle_harbor",
+          warning.code === "lorebook_entry_missing" &&
+          warning.locationId === "lifecycle_harbor",
       ),
       "Definition reads must report missing lore links through the host persistence facade",
     );
@@ -643,8 +827,31 @@ async function main() {
     };
     assert.equal(ownerTurn.message.chatId, chatId);
     assert.equal(ownerTurn.message.role, "user");
-    assert.equal(ownerTurn.message.content, "I follow the road into Lifecycle Harbor.");
+    assert.equal(
+      ownerTurn.message.content,
+      "I follow the road into Lifecycle Harbor.",
+    );
     assert.equal(ownerTurn.spatial.currentLocationId, "lifecycle_harbor");
+    const roleplayPeek = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${chatId}/peek-prompt`,
+      headers: csrfHeaders,
+      payload: {},
+    })) as {
+      source: string;
+      exact: boolean;
+      messages: Array<{ content: string }>;
+    };
+    assert.equal(roleplayPeek.source, "live_preview");
+    assert.equal(roleplayPeek.exact, false);
+    const roleplayPeekText = roleplayPeek.messages
+      .map((message) => message.content)
+      .join("\n");
+    assert.match(
+      roleplayPeekText,
+      /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u,
+    );
+    assert.match(roleplayPeekText, /Lifecycle Harbor/u);
     const duplicateOwnerTurn = (await expectJson(
       app,
       {
@@ -664,6 +871,188 @@ async function main() {
       409,
     )) as { code: string };
     assert.equal(duplicateOwnerTurn.code, "spatial_transition_already_applied");
+
+    const assistantAtHarbor = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${chatId}/messages`,
+      headers: csrfHeaders,
+      payload: {
+        role: "assistant",
+        content: "The harbor bells answer across the water.",
+      },
+    })) as { id: string; activeSwipeIndex: number };
+    const normalAssistantSnapshot = await materializeAssistantSpatialState(
+      app.db,
+      {
+        chatId,
+        messageId: assistantAtHarbor.id,
+        swipeIndex: 0,
+        regenerate: false,
+        continuation: false,
+      },
+    );
+    assert.equal(normalAssistantSnapshot?.currentLocationId, "lifecycle_harbor");
+
+    const worldTurn = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${chatId}/spatial-context/turn`,
+      headers: csrfHeaders,
+      payload: {
+        content: "I return to Lifecycle World.",
+        transition: {
+          destinationId: "lifecycle_world",
+          expectedDefinitionRevision: saved.definition.revision,
+          expectedCurrentLocationId: "lifecycle_harbor",
+          commandId: "lifecycle-return-to-world",
+        },
+      },
+    })) as { message: { id: string } };
+    const assistantAtWorld = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${chatId}/messages`,
+      headers: csrfHeaders,
+      payload: {
+        role: "assistant",
+        content: "The wider world opens beyond the harbor road.",
+      },
+    })) as { id: string };
+    const continuationSnapshot = await materializeAssistantSpatialState(
+      app.db,
+      {
+        chatId,
+        messageId: assistantAtWorld.id,
+        swipeIndex: 0,
+        regenerate: false,
+        continuation: true,
+      },
+    );
+    assert.equal(continuationSnapshot?.currentLocationId, "lifecycle_world");
+
+    const regeneratedSwipe = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${chatId}/messages/${assistantAtHarbor.id}/swipes`,
+      headers: csrfHeaders,
+      payload: { content: "A second harbor answer rolls in with the tide." },
+    })) as { index: number };
+    assert.equal(regeneratedSwipe.index, 1);
+    const regeneratedSnapshot = await materializeAssistantSpatialState(
+      app.db,
+      {
+        chatId,
+        messageId: assistantAtHarbor.id,
+        swipeIndex: regeneratedSwipe.index,
+        regenerate: true,
+        continuation: false,
+      },
+    );
+    assert.equal(regeneratedSnapshot?.currentLocationId, "lifecycle_harbor");
+    const exactRegeneratedState = await resolveEffectiveSpatialState(app.db, chatId, {
+      exactAnchor: { messageId: assistantAtHarbor.id, swipeIndex: 1 },
+    });
+    assert.equal(exactRegeneratedState.currentLocationId, "lifecycle_harbor");
+
+    await expectJson(app, {
+      method: "DELETE",
+      url: `/api/chats/${chatId}/messages/${assistantAtHarbor.id}/swipes/0`,
+      headers: csrfHeaders,
+    });
+    const shiftedSwipeState = await resolveEffectiveSpatialState(app.db, chatId, {
+      exactAnchor: { messageId: assistantAtHarbor.id, swipeIndex: 0 },
+    });
+    assert.equal(shiftedSwipeState.currentLocationId, "lifecycle_harbor");
+    const removedSwipeState = await resolveEffectiveSpatialState(app.db, chatId, {
+      exactAnchor: { messageId: assistantAtHarbor.id, swipeIndex: 1 },
+    });
+    assert.equal(removedSwipeState.snapshot, null);
+
+    const branch = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${chatId}/branch`,
+      headers: csrfHeaders,
+      payload: { upToMessageId: assistantAtWorld.id },
+    })) as { id: string };
+    const branchSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(branchSpatial.currentLocationId, "lifecycle_world");
+
+    const exportedBranch = await app.inject({
+      method: "GET",
+      url: `/api/chats/${branch.id}/export?format=jsonl`,
+    });
+    assert.equal(exportedBranch.statusCode, 200, exportedBranch.body);
+    const exportHeader = JSON.parse(exportedBranch.body.split("\n")[0]!) as {
+      chat_metadata: {
+        marinara_metadata: {
+          spatialContextHistory: Array<{ currentLocationId: string }>;
+        };
+      };
+    };
+    assert.ok(
+      exportHeader.chat_metadata.marinara_metadata.spatialContextHistory.some(
+        (snapshot) => snapshot.currentLocationId === "lifecycle_world",
+      ),
+    );
+
+    const importBoundary = `marinara-maps-history-${Date.now()}`;
+    const importBody = Buffer.concat([
+      Buffer.from(
+        `--${importBoundary}\r\nContent-Disposition: form-data; name="file"; filename="maps-history.jsonl"\r\nContent-Type: application/jsonl\r\n\r\n`,
+      ),
+      Buffer.from(exportedBranch.body, "utf8"),
+      Buffer.from(`\r\n--${importBoundary}--\r\n`),
+    ]);
+    const importedResponse = await app.inject({
+      method: "POST",
+      url: "/api/import/st-chat",
+      headers: {
+        ...csrfHeaders,
+        "content-type": `multipart/form-data; boundary=${importBoundary}`,
+        "content-length": String(importBody.byteLength),
+      },
+      payload: importBody,
+    });
+    assert.equal(importedResponse.statusCode, 200, importedResponse.body);
+    const imported = JSON.parse(importedResponse.body) as { success: boolean; chatId: string };
+    assert.equal(imported.success, true);
+    const importedSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${imported.chatId}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(importedSpatial.currentLocationId, "lifecycle_world");
+
+    await expectJson(
+      app,
+      {
+        method: "POST",
+        url: `/api/chats/${chatId}/messages/bulk-delete`,
+        headers: csrfHeaders,
+        payload: { messageIds: [worldTurn.message.id, assistantAtWorld.id] },
+      },
+      204,
+    );
+    const rewoundSource = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${chatId}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(rewoundSource.currentLocationId, "lifecycle_harbor");
+    const unchangedBranch = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
+    for (const disposableChatId of [branch.id, imported.chatId]) {
+      await expectJson(
+        app,
+        {
+          method: "DELETE",
+          url: `/api/chats/${disposableChatId}?force=true`,
+          headers: csrfHeaders,
+        },
+        204,
+      );
+    }
 
     await app.close();
     app = null;
@@ -824,7 +1213,7 @@ async function main() {
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, owner-turn persistence, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, owner-turn persistence, live prompt parity, swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);
