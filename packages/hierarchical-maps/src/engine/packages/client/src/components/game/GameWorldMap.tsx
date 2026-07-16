@@ -7,6 +7,7 @@ import {
   List,
   LocateFixed,
   Map as MapIcon,
+  PencilLine,
   Route,
 } from "lucide-react";
 import {
@@ -28,6 +29,7 @@ interface GameWorldMapProps {
   disabled?: boolean;
   compact?: boolean;
   onDestinationQueued?: () => void;
+  onOpenEditor?: () => void;
 }
 
 function sortLocations(locations: SpatialLocation[]): SpatialLocation[] {
@@ -61,6 +63,7 @@ export function GameWorldMap({
   disabled = false,
   compact = false,
   onDestinationQueued,
+  onOpenEditor,
 }: GameWorldMapProps) {
   const definition = spatial.definition;
   const centeredViewLocationId = defaultViewLocationId(spatial);
@@ -119,6 +122,25 @@ export function GameWorldMap({
     );
   }, [visibleLocationIds, visibleLocations]);
   const selected = selectedId ? (locationById.get(selectedId) ?? null) : null;
+  const selectedLinkedPlaces = useMemo(() => {
+    if (!selected) return [];
+    const linked = new Map<string, { location: SpatialLocation; label: string | null }>();
+    for (const link of selected.links) {
+      if (link.state !== "available") continue;
+      const location = locationById.get(link.targetId);
+      if (location) linked.set(location.id, { location, label: link.label?.trim() || null });
+    }
+    for (const location of activeLocations) {
+      if (location.id === selected.id) continue;
+      const reverse = location.links.find(
+        (link) => link.targetId === selected.id && link.bidirectional && link.state === "available",
+      );
+      if (reverse && !linked.has(location.id)) {
+        linked.set(location.id, { location, label: reverse.label?.trim() || null });
+      }
+    }
+    return [...linked.values()].sort((left, right) => compareSpatialLocations(left.location, right.location));
+  }, [activeLocations, locationById, selected]);
   const selectedDestination = spatial.destinations.find((destination) => destination.id === selected?.id);
   const selectedHasChildren = selected
     ? activeLocations.some((location) => location.parentId === selected.id)
@@ -131,6 +153,11 @@ export function GameWorldMap({
   const browseTo = (locationId: string | null) => {
     setViewLocationId(locationId);
     setSelectedId(locationId);
+  };
+
+  const revealLocation = (location: SpatialLocation) => {
+    setViewLocationId(location.parentId);
+    setSelectedId(location.id);
   };
 
   const centerCurrent = () => {
@@ -214,15 +241,28 @@ export function GameWorldMap({
               Story location: {currentBreadcrumb || "Unavailable"}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={centerCurrent}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
-            aria-label="Center current story location"
-            title="Center current story location"
-          >
-            <LocateFixed size="1rem" />
-          </button>
+          <div className="flex shrink-0 items-center">
+            <button
+              type="button"
+              onClick={centerCurrent}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
+              aria-label="Center current story location"
+              title="Center current story location"
+            >
+              <LocateFixed size="1rem" />
+            </button>
+            {onOpenEditor && (
+              <button
+                type="button"
+                onClick={onOpenEditor}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
+                aria-label="Edit hierarchical map"
+                title="Edit hierarchical map"
+              >
+                <PencilLine size="1rem" />
+              </button>
+            )}
+          </div>
         </div>
         {viewBreadcrumb.length > 0 && (
           <div className="flex min-w-0 items-center justify-center gap-0.5 overflow-hidden" aria-label="Viewed location breadcrumb">
@@ -305,6 +345,7 @@ export function GameWorldMap({
                 const from = placementById.get(link.from);
                 const to = placementById.get(link.to);
                 if (!from || !to) return null;
+                const selectedRoute = selectedId === link.from || selectedId === link.to;
                 return (
                   <line
                     key={link.key}
@@ -312,10 +353,10 @@ export function GameWorldMap({
                     y1={`${displayCoordinate(from.y)}%`}
                     x2={`${displayCoordinate(to.x)}%`}
                     y2={`${displayCoordinate(to.y)}%`}
-                    stroke="var(--marinara-chat-chrome-panel-muted)"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 4"
-                    opacity="0.55"
+                    stroke={selectedRoute ? "var(--marinara-chat-chrome-accent)" : "var(--marinara-chat-chrome-panel-muted)"}
+                    strokeWidth={selectedRoute ? "2.5" : "1.5"}
+                    strokeDasharray={selectedRoute ? undefined : "4 4"}
+                    opacity={selectedRoute ? "0.9" : "0.45"}
                   />
                 );
               })}
@@ -375,6 +416,7 @@ export function GameWorldMap({
 
       {selected && (
         <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] px-1 pt-2">
+          <div className="rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] p-2.5">
           <div className="flex items-start gap-2">
             <span className="text-lg" aria-hidden="true">{selected.icon || "📍"}</span>
             <div className="min-w-0 flex-1">
@@ -384,6 +426,30 @@ export function GameWorldMap({
               </p>
             </div>
           </div>
+          {selectedLinkedPlaces.length > 0 && (
+            <div className="mt-2">
+              <p className="px-1 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-panel-muted)]">
+                Linked places
+              </p>
+              <div className="mt-1 flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1" aria-label={`Linked places from ${selected.name}`}>
+                {selectedLinkedPlaces.map(({ location, label }) => (
+                  <button
+                    key={location.id}
+                    type="button"
+                    onClick={() => revealLocation(location)}
+                    className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2.5 text-left text-[0.6875rem] text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
+                    aria-label={`Show linked place ${location.name}`}
+                  >
+                    <span className="text-sm" aria-hidden="true">{location.icon || "⌖"}</span>
+                    <span>
+                      <span className="block max-w-32 truncate font-semibold">{location.name}</span>
+                      {label && <span className="block max-w-32 truncate text-[0.5625rem] opacity-70">{label}</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap justify-end gap-1.5">
             {selectedHasChildren && selected.id !== viewLocation?.id && (
               <button
@@ -417,6 +483,7 @@ export function GameWorldMap({
                 Browse only from here
               </span>
             )}
+          </div>
           </div>
         </div>
       )}

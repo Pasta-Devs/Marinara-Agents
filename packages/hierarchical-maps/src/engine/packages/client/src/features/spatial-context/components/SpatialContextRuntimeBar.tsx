@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, MapPin, RefreshCw, Route, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Map as MapIcon, MapPin, RefreshCw, Route, X } from "lucide-react";
 import type { SpatialDestination, SpatialDestinationRelation } from "@marinara-engine/shared";
+import { GameWorldMap } from "../../../components/game/GameWorldMap";
 import { useSpatialContext } from "../../../hooks/use-spatial-context";
 import { cn, generateClientId } from "../package-utils";
 import {
@@ -14,6 +15,7 @@ interface SpatialContextRuntimeBarProps {
   chatId: string | null;
   disabled?: boolean;
   onPendingSelected?: () => void;
+  onOpenEditor?: () => void;
 }
 
 const GROUPS: Array<{
@@ -37,8 +39,10 @@ export function SpatialContextRuntimeBar({
   chatId,
   disabled = false,
   onPendingSelected,
+  onOpenEditor,
 }: SpatialContextRuntimeBarProps) {
   const [open, setOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const [selectedDestinationId, setSelectedDestinationId] = useState<string | null>(null);
   const spatial = useSpatialContext(chatId);
   const pending = usePendingSpatialTransition(chatId);
@@ -88,6 +92,14 @@ export function SpatialContextRuntimeBar({
   }, [data?.destinations, selectedDestinationId]);
 
   const enabled = Boolean(data?.definition?.enabled && data.currentLocationId);
+  const mapAvailable = Boolean(
+    data?.definition?.enabled && data.definition.locations.some((location) => location.status === "active"),
+  );
+
+  useEffect(() => {
+    setOpen(false);
+    setMapOpen(false);
+  }, [chatId]);
 
   const queueDestination = (destination: SpatialDestination) => {
     if (!chatId || !data?.definition || !data.currentLocationId || disabled) return;
@@ -147,25 +159,57 @@ export function SpatialContextRuntimeBar({
   return (
     <section
       aria-label="Story location"
-      className="mb-2 overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-panel-text)] shadow-sm"
+      className={cn(
+        "mb-2 overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-panel-text)] shadow-sm",
+        open || mapOpen || pending || !enabled ? "w-full" : "w-full max-sm:ml-auto max-sm:w-fit",
+      )}
     >
       <div className="flex min-h-11 items-center gap-1.5 px-2">
-        <MapPin size="0.9375rem" className="shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
         <button
           type="button"
-          onClick={() => enabled && setOpen((value) => !value)}
+          onClick={() => {
+            if (!enabled) return;
+            setMapOpen(false);
+            setOpen((value) => !value);
+          }}
           disabled={!enabled || disabled}
           aria-expanded={open}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:cursor-default"
+          aria-label={`Story location: ${breadcrumbLabel}`}
+          className={cn(
+            "flex min-h-11 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:cursor-default max-sm:w-11 max-sm:flex-none max-sm:justify-center max-sm:px-0",
+            open && "bg-[var(--marinara-chat-chrome-button-bg-active)] text-[var(--marinara-chat-chrome-button-text-active)]",
+          )}
           title={breadcrumbLabel}
         >
-          <span className="shrink-0 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-[var(--marinara-chat-chrome-panel-muted)]">
+          <MapPin size="0.9375rem" className="shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+          <span className="shrink-0 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-[var(--marinara-chat-chrome-panel-muted)] max-sm:hidden">
             Story location
           </span>
-          <span className="min-w-0 flex-1 truncate text-xs font-medium">{breadcrumbLabel}</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-medium max-sm:hidden">{breadcrumbLabel}</span>
           {enabled &&
-            (open ? <ChevronDown size="0.875rem" className="shrink-0" /> : <ChevronRight size="0.875rem" className="shrink-0" />)}
+            (open ? <ChevronDown size="0.875rem" className="shrink-0 max-sm:hidden" /> : <ChevronRight size="0.875rem" className="shrink-0 max-sm:hidden" />)}
         </button>
+        {mapAvailable && (
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              setMapOpen((value) => !value);
+            }}
+            disabled={disabled}
+            aria-expanded={mapOpen}
+            aria-label={mapOpen ? "Close story map" : "Open story map"}
+            title={mapOpen ? "Close story map" : "Open story map"}
+            className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:opacity-50",
+              mapOpen
+                ? "bg-[var(--marinara-chat-chrome-button-bg-active)] text-[var(--marinara-chat-chrome-button-text-active)]"
+                : "text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)]",
+            )}
+          >
+            <MapIcon size="1rem" />
+          </button>
+        )}
       </div>
 
       {pending && (
@@ -207,6 +251,19 @@ export function SpatialContextRuntimeBar({
             : !data.definition.enabled
               ? "Map disabled. Its saved hierarchy and history are preserved until you enable it again."
               : "The saved map does not have an available current location. Open Hierarchical Maps to review it."}
+        </div>
+      )}
+
+      {mapOpen && mapAvailable && data?.definition && chatId && (
+        <div className="max-h-[50dvh] overflow-y-auto overscroll-contain border-t border-[var(--marinara-chat-chrome-panel-divider)] p-2">
+          <GameWorldMap
+            chatId={chatId}
+            spatial={data}
+            disabled={disabled}
+            compact
+            onDestinationQueued={onPendingSelected}
+            onOpenEditor={onOpenEditor}
+          />
         </div>
       )}
 

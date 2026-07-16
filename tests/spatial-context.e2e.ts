@@ -836,7 +836,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
-    await expect(home.getByText("v1.1.0", { exact: true })).toBeVisible();
+    await expect(home.getByText("v1.1.2", { exact: true })).toBeVisible();
     await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
     await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
@@ -1659,7 +1659,42 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     enabled: true,
     revision: 0,
     startingLocationId: "ai_world",
-    locations: generatedDefinition.locations.slice(0, 2),
+    locations: [
+      generatedDefinition.locations[0],
+      {
+        ...generatedDefinition.locations[1],
+        links: [{ targetId: "ai_lighthouse", label: "Cliff road", bidirectional: true, state: "available" as const }],
+      },
+      { ...generatedDefinition.locations[2], childPresentation: "layers" as const, links: [] },
+      {
+        id: "ai_lighthouse_ground",
+        parentId: "ai_lighthouse",
+        name: "Ground Level",
+        kind: "floor",
+        description: "The lighthouse entrance and keeper's stores.",
+        modelMemory: "A spiral stair begins behind the oil racks.",
+        icon: "1️⃣",
+        childPresentation: "map" as const,
+        layerOrder: 0,
+        links: [],
+        status: "active" as const,
+        sortOrder: 0,
+      },
+      {
+        id: "ai_lighthouse_upper",
+        parentId: "ai_lighthouse",
+        name: "Upper Level",
+        kind: "floor",
+        description: "The lantern gallery above the cliffs.",
+        modelMemory: "The blackglass lens reveals marked ships.",
+        icon: "2️⃣",
+        childPresentation: "map" as const,
+        layerOrder: 1,
+        links: [],
+        status: "active" as const,
+        sortOrder: 1,
+      },
+    ],
   };
   const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
     data: {
@@ -1668,7 +1703,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       definition: runtimeDefinition,
     },
   });
-  expect(saveResponse.ok()).toBeTruthy();
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
   const saved = (await saveResponse.json()) as { definition: { revision: number }; currentLocationId: string };
   let generationRequestCount = 0;
 
@@ -1748,14 +1783,32 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
 
     const storyLocation = page.getByRole("region", { name: "Story location" });
     await expect(storyLocation).toContainText("Shrouded Coast");
-    await storyLocation.getByRole("button", { name: /Story location.*Shrouded Coast/ }).click();
-    const inspectHarbor = storyLocation.getByRole("button", { name: "Inspect Gloam Harbor" });
-    await expectMinimumInteractiveSize(inspectHarbor, "Roleplay destination inspect control");
+    const openStoryMap = storyLocation.getByRole("button", { name: "Open story map" });
+    await expectMinimumInteractiveSize(openStoryMap, "Roleplay story-map control");
+    await openStoryMap.click();
+    let roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+    await expect(roleplayMap).toBeVisible();
+    const editMap = roleplayMap.getByRole("button", { name: "Edit hierarchical map" });
+    await expectMinimumInteractiveSize(editMap, "Roleplay minimap edit control");
+    await editMap.click();
+    await expect(page.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Back to chat" }).click();
+    await storyLocation.getByRole("button", { name: "Open story map" }).click();
+    roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+    await roleplayMap.getByRole("button", { name: /Inspect Blackglass Lighthouse/ }).click();
+    await roleplayMap.getByRole("button", { name: "Explore inside" }).click();
+    await expect(roleplayMap.getByRole("list", { name: "Location layers" })).toBeVisible();
+    await expect(roleplayMap.getByText("Ground Level", { exact: true })).toBeVisible();
+    await expect(roleplayMap.getByText("Upper Level", { exact: true })).toBeVisible();
+    await roleplayMap.getByRole("button", { name: "Browse up one location" }).click();
+    const inspectHarbor = roleplayMap.getByRole("button", { name: /Inspect Gloam Harbor/ });
+    await expectMinimumInteractiveSize(inspectHarbor, "Roleplay map destination control");
     await inspectHarbor.focus();
     await page.keyboard.press("Enter");
-    await expect(storyLocation.getByText("A busy harbor of black piers.", { exact: true })).toBeVisible();
-    const setHarborDestination = storyLocation.getByRole("button", { name: "Set destination: Gloam Harbor" });
-    await expectMinimumInteractiveSize(setHarborDestination, "Roleplay set-destination control");
+    await expect(roleplayMap.getByText("A busy harbor of black piers.", { exact: true })).toBeVisible();
+    await expect(roleplayMap.getByRole("button", { name: "Show linked place Blackglass Lighthouse" })).toBeVisible();
+    const setHarborDestination = roleplayMap.getByRole("button", { name: "Set destination: Gloam Harbor" });
+    await expectMinimumInteractiveSize(setHarborDestination, "Roleplay map set-destination control");
     await setHarborDestination.click();
     await expect(storyLocation.getByText("Moves with your next turn")).toBeVisible();
 

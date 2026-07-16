@@ -79,9 +79,10 @@ const fixtures = new Map(
     artifactFixture("1.0.6"),
     artifactFixture("1.1.0"),
     artifactFixture("1.1.1"),
+    artifactFixture("1.1.2"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
-let catalogVersion = "1.1.1";
+let catalogVersion = "1.1.2";
 let catalogOnline = true;
 let generationProviderRequestCount = 0;
 const generationProviderRequests: Array<{
@@ -89,7 +90,7 @@ const generationProviderRequests: Array<{
 }> = [];
 let mapExpansionExistingTargetId: string | null = null;
 
-const candidateFixture = fixtures.get("1.1.1");
+const candidateFixture = fixtures.get("1.1.2");
 assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, {
@@ -468,16 +469,16 @@ async function main() {
       };
     }>("packages/server/src/services/storage/game-state.storage.ts");
 
-    seedInstalledProfile("1.1.0");
+    seedInstalledProfile("1.1.1");
     const installedProfile = await capabilityPackageManager.installed();
     assert.equal(installedProfile.length, 1);
-    assert.equal(installedProfile[0]?.version, "1.1.0");
+    assert.equal(installedProfile[0]?.version, "1.1.1");
     assert.equal(installedProfile[0]?.status, "active");
 
-    const installed111 =
+    const installed112 =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(installed111.version, "1.1.1");
-    assert.equal(installed111.previousVersion, "1.1.0");
+    assert.equal(installed112.version, "1.1.2");
+    assert.equal(installed112.previousVersion, "1.1.1");
     assert.ok(
       existsSync(
         join(
@@ -485,7 +486,7 @@ async function main() {
           "capability-packages",
           "versions",
           "hierarchical-maps",
-          "1.1.1",
+          "1.1.2",
         ),
       ),
     );
@@ -496,7 +497,7 @@ async function main() {
           "capability-packages",
           "versions",
           "hierarchical-maps",
-          "1.1.0",
+          "1.1.1",
         ),
       ),
     );
@@ -528,7 +529,7 @@ async function main() {
           readiness: entry.readiness,
           ready: entry.ready,
         })),
-      [{ version: "1.1.1", status: "active", readiness: "ready", ready: true }],
+      [{ version: "1.1.2", status: "active", readiness: "ready", ready: true }],
     );
 
     const locationLorebook = (await expectJson(app, {
@@ -1842,7 +1843,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.1.1");
+    assert.equal(reinstalled.version, "1.1.2");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -1920,7 +1921,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.1.1", status: "active", readiness: "ready" }],
+      [{ version: "1.1.2", status: "active", readiness: "ready" }],
     );
 
     console.info(
