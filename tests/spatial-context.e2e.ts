@@ -533,9 +533,9 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
   await expect(page.getByText(/Your game world is ready/)).toBeVisible();
   await expect(page.getByText("Validated", { exact: true })).toBeVisible();
-  await expect(page.getByText("4 new locations", { exact: true })).toBeVisible();
+  await expect(page.getByText("4 locations · 2 levels · not saved", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Skip map" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Use this draft" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue to editor" })).toBeVisible();
   await expectAiBuilderLayout(page, testInfo.project.name.includes("mobile"));
 
   return { chat };
@@ -622,13 +622,40 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
     await page.getByRole("button", { name: "Generate draft" }).click();
     await expect(page.getByText("Validated", { exact: true })).toBeVisible();
-    await expect(page.getByText("4 new locations", { exact: true })).toBeVisible();
-    await expect(page.getByText("Shrouded Coast", { exact: true })).toBeVisible();
+    await expect(page.getByText("4 locations · 2 levels · not saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Proposed start:").getByText("Shrouded Coast", { exact: true })).toBeVisible();
+
+    const draftHierarchy = page.getByRole("region", {
+      name: "Generated location hierarchy",
+    });
+    await expect(draftHierarchy.getByRole("button", { name: /^Gloam Harbor/ })).toBeVisible();
+    await expect(draftHierarchy.getByRole("button", { name: /^Blackglass Lighthouse/ })).toBeVisible();
+    await draftHierarchy.getByRole("button", { name: /^Blackglass Lighthouse/ }).click();
+
+    const draftDetails = page.getByRole("region", {
+      name: "Selected generated location details",
+    });
+    await expect(draftDetails.getByRole("heading", { name: "Blackglass Lighthouse" })).toBeVisible();
+    await expect(
+      draftDetails.getByText("A dark lighthouse on the cliffs.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      draftDetails.getByText("Its lamp reveals hidden ink at midnight.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+
+    await page.getByLabel("Search generated locations").fill("sewers");
+    await expect(draftHierarchy.getByRole("button", { name: /^Old Sewers/ })).toBeVisible();
+    await expect(draftHierarchy.getByRole("button", { name: /^Gloam Harbor/ })).toHaveCount(0);
+    await page.getByLabel("Search generated locations").clear();
 
     const beforeApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(((await beforeApply.json()) as { definition: unknown }).definition).toBeNull();
 
-    await page.getByRole("button", { name: "Use this draft" }).click();
+    await page.getByRole("button", { name: "Continue to editor" }).click();
     await expect(page.getByText("AI map draft applied. Review it, then Save.")).toBeVisible();
     const hierarchy = page.locator('section[aria-label="Location hierarchy"]:visible');
     await expect(hierarchy.getByRole("button", { name: "Shrouded Coast region" })).toBeVisible();
@@ -783,8 +810,10 @@ test("AI map expansion preserves a campaign map and its current location", async
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
     await page.getByRole("button", { name: "Generate expansion" }).click();
     await expect(page.getByText("Validated", { exact: true })).toBeVisible();
-    await expect(page.getByText("2 new locations", { exact: true })).toBeVisible();
-    await expect(page.getByText("Riverside Ward", { exact: true })).toBeVisible();
+    await expect(page.getByText("2 new locations · 2 levels · not applied", { exact: true })).toBeVisible();
+    const expansionHierarchy = page.getByRole("region", { name: "Generated location hierarchy" });
+    await expect(expansionHierarchy.getByRole("button", { name: /^Riverside Ward/ })).toBeVisible();
+    await expect(expansionHierarchy.getByRole("button", { name: /^Silver Minnow Inn/ })).toBeVisible();
 
     const beforeApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(((await beforeApply.json()) as { definition: { locations: unknown[] } }).definition.locations).toHaveLength(4);
@@ -832,7 +861,7 @@ test("Game setup hands an optional map draft into review before Save", async ({ 
     expect(beforeApply.ok()).toBeTruthy();
     expect(((await beforeApply.json()) as { definition: unknown }).definition).toBeNull();
 
-    await page.getByRole("button", { name: "Use this draft" }).click();
+    await page.getByRole("button", { name: "Continue to editor" }).click();
     await expect(page.getByText("AI map draft applied. Review it, then Save.")).toBeVisible();
 
     const mobile = testInfo.project.name.includes("mobile");
