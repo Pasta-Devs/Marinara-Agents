@@ -57,11 +57,11 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   eightball: {
     modes: ["conversation"],
-    activation: "Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
+    activation: "Install to use /8ball manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   chess: {
     modes: ["conversation"],
-    activation: "Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
+    activation: "Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   combat: {
     modes: ["roleplay"],
@@ -101,19 +101,19 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   poker: {
     modes: ["conversation"],
-    activation: "Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
+    activation: "Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   "rock-paper-scissors": {
     modes: ["conversation"],
-    activation: "Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
+    activation: "Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   "tic-tac-toe": {
     modes: ["conversation"],
-    activation: "Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
+    activation: "Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   uno: {
     modes: ["conversation"],
-    activation: "Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
+    activation: "Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
 });
 

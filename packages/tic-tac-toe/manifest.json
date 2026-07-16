@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "tic-tac-toe",
   "name": "Tic-Tac-Toe",
-  "version": "1.0.1",
-  "description": "Play Tic-Tac-Toe with a Conversation character. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
+  "version": "1.0.2",
+  "description": "Play Tic-Tac-Toe with a Conversation character. Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   "engine": {
     "min": "2.3.0",
-    "maxExclusive": "3.0.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent",
@@ -26,7 +26,8 @@
       "aliases": [
         "tic-tac-toe",
         "tic tac toe",
-        "noughts and crosses"
+        "noughts and crosses",
+        "ttt"
       ],
       "playerLabel": "1v1 strategy"
     }
@@ -34,8 +35,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "e4f4bb6ee761090ec7fad7f38bd43f8f1326137b7f138d92834e19c328be710d",
-      "bytes": 520
+      "sha256": "69c089b936a07fced993a3ab29fb279ba41f439ab8e5c66b85b669e6ecaa7219",
+      "bytes": 584
     },
     {
       "path": "server.mjs",
