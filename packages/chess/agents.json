@@ -2,7 +2,7 @@
   {
     "id": "chess",
     "name": "Chess",
-    "description": "Play Chess with a Conversation character. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
+    "description": "Play Chess with a Conversation character. Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

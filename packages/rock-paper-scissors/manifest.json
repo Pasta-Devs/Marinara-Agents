@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "rock-paper-scissors",
   "name": "Rock-Paper-Scissors",
-  "version": "1.0.1",
-  "description": "Play Rock-Paper-Scissors with a Conversation character. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
+  "version": "1.0.2",
+  "description": "Play Rock-Paper-Scissors with a Conversation character. Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   "engine": {
     "min": "2.3.0",
-    "maxExclusive": "3.0.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent",
@@ -34,8 +34,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "c5de3f9482bb21ba62870e1cebdaed45d637912c0bbc78d9cd873e0455799b20",
-      "bytes": 544
+      "sha256": "4cd31bd6023c1c56b04e1bc1384c79a56725cfcecd22b99161a47c7a366470e3",
+      "bytes": 602
     },
     {
       "path": "server.mjs",
