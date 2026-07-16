@@ -6,7 +6,7 @@
   },
   "builtAgainst": {
     "engineVersion": "2.3.1",
-    "engineCommit": "a56e50e1354e3c6518ea08d9591c52d8f7a2bce1"
+    "engineCommit": "8afe4a2857ae5731a494dcc765a20ebfddbfbaef"
   },
   "id": "hierarchical-maps",
   "name": "Hierarchical Maps",
@@ -46,8 +46,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "b1d48abbde07d05deba29dbca081f89e9ef3d79902a4b972c495439b0c84647f",
-      "bytes": 657730
+      "sha256": "4d59407c81befbdafb9f77cbff1a985d1b5f89d39e215cc3cd899680a3f8e21d",
+      "bytes": 657899
     }
   ],
   "permissions": [

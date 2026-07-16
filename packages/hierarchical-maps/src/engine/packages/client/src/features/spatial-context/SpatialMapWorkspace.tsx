@@ -705,7 +705,7 @@ export function SpatialMapWorkspace({
           type="button"
           onClick={() => void handleClose()}
           aria-label="Back to chat"
-          className="mari-editor-action inline-flex"
+          className="mari-editor-action inline-flex min-h-11 min-w-11"
         >
           <ArrowLeft size="1.125rem" />
         </button>

@@ -325,6 +325,13 @@ async function bundleSpecialClient(feature, output) {
   flex: 1 1 0%;
 }
 
+@media (max-width: 47.999rem) {
+  [data-marinara-maps-workspace-overlay] .mari-editor-action {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
+
 @media (min-width: 64rem) {
   .mari-maps-workspace-grid {
     grid-template-columns: minmax(15rem, 18rem) minmax(20rem, 1fr) minmax(18rem, 22rem);
