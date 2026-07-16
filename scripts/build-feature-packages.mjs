@@ -75,8 +75,8 @@ const features = [
   {
     id: "hierarchical-maps",
     version: "1.1.4",
-    minEngineVersion: "3.2.0",
-    maxEngineExclusive: "3.3.0",
+    minEngineVersion: "2.3.2",
+    maxEngineExclusive: "3.0.0",
     name: "Hierarchical Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
     category: "tracker",

@@ -99,8 +99,8 @@ assert.deepEqual(candidateFixture.manifest.capabilityApi, {
   minor: 3,
 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
-  engineVersion: "3.2.2",
-  engineCommit: "7d5c09975abfd28e7e5e6645ff3b0bdeef86e1d7",
+  engineVersion: "2.3.2",
+  engineCommit: "614e62a38fc2d9685f9b4981a9628be9fda0fc03",
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
@@ -401,7 +401,7 @@ async function main() {
   > | null = null;
 
   try {
-    const { capabilityPackageManager } = await importEngine<{
+    const { capabilityPackageManager, findCompatibleCapabilityPackageUpdates } = await importEngine<{
       capabilityPackageManager: {
         install(id: string): Promise<{
           version: string;
@@ -417,6 +417,11 @@ async function main() {
           }>
         >;
       };
+      findCompatibleCapabilityPackageUpdates(
+        installedPackages: unknown[],
+        catalog: ReturnType<typeof catalogFixture>,
+        engineVersion?: string,
+      ): unknown[];
     }>(
       "packages/server/src/services/capability-packages/package-manager.service.ts",
     );
@@ -426,7 +431,6 @@ async function main() {
     const { materializeAssistantSpatialState, resolveEffectiveSpatialState } =
       await importEngine<{
         materializeAssistantSpatialState(
-          db: unknown,
           input: {
             chatId: string;
             messageId: string;
@@ -436,7 +440,6 @@ async function main() {
           },
         ): Promise<{ currentLocationId: string } | null>;
         resolveEffectiveSpatialState(
-          db: unknown,
           chatId: string,
           options?: { exactAnchor?: { messageId: string; swipeIndex: number } },
         ): Promise<{
@@ -470,16 +473,28 @@ async function main() {
       };
     }>("packages/server/src/services/storage/game-state.storage.ts");
 
-    seedInstalledProfile("1.1.3");
+    seedInstalledProfile("1.0.6");
     const installedProfile = await capabilityPackageManager.installed();
     assert.equal(installedProfile.length, 1);
-    assert.equal(installedProfile[0]?.version, "1.1.3");
+    assert.equal(installedProfile[0]?.version, "1.0.6");
     assert.equal(installedProfile[0]?.status, "active");
+    assert.equal(
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.4"), "2.3.1").length,
+      0,
+    );
+    assert.equal(
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.4"), "2.3.2").length,
+      1,
+    );
+    assert.equal(
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.4"), "3.0.0").length,
+      0,
+    );
 
     const installed114 =
       await capabilityPackageManager.install("hierarchical-maps");
     assert.equal(installed114.version, "1.1.4");
-    assert.equal(installed114.previousVersion, "1.1.3");
+    assert.equal(installed114.previousVersion, "1.0.6");
     assert.ok(
       existsSync(
         join(
@@ -498,7 +513,7 @@ async function main() {
           "capability-packages",
           "versions",
           "hierarchical-maps",
-          "1.1.3",
+          "1.0.6",
         ),
       ),
     );
@@ -910,7 +925,6 @@ async function main() {
       },
     })) as { id: string; activeSwipeIndex: number };
     const normalGameAssistantSnapshot = await materializeAssistantSpatialState(
-      app.db,
       {
         chatId: existingGame.id,
         messageId: gameAssistantAtHarbor.id,
@@ -1095,7 +1109,6 @@ async function main() {
     );
 
     const exactRegeneratedGameState = await resolveEffectiveSpatialState(
-      app.db,
       existingGame.id,
       {
         exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 1 },
@@ -1112,7 +1125,6 @@ async function main() {
       headers: csrfHeaders,
     });
     const shiftedGameSwipeState = await resolveEffectiveSpatialState(
-      app.db,
       existingGame.id,
       {
         exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 0 },
@@ -1120,7 +1132,6 @@ async function main() {
     );
     assert.equal(shiftedGameSwipeState.currentLocationId, "existing_harbor");
     const removedGameSwipeState = await resolveEffectiveSpatialState(
-      app.db,
       existingGame.id,
       {
         exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 1 },
@@ -1591,7 +1602,6 @@ async function main() {
       },
     })) as { id: string; activeSwipeIndex: number };
     const normalAssistantSnapshot = await materializeAssistantSpatialState(
-      app.db,
       {
         chatId,
         messageId: assistantAtHarbor.id,
@@ -1630,7 +1640,6 @@ async function main() {
       "Live assistant messages must sort after the owner turn they answer",
     );
     const continuationSnapshot = await materializeAssistantSpatialState(
-      app.db,
       {
         chatId,
         messageId: assistantAtWorld.id,
@@ -1649,7 +1658,6 @@ async function main() {
     })) as { index: number };
     assert.equal(regeneratedSwipe.index, 1);
     const regeneratedSnapshot = await materializeAssistantSpatialState(
-      app.db,
       {
         chatId,
         messageId: assistantAtHarbor.id,
@@ -1659,7 +1667,7 @@ async function main() {
       },
     );
     assert.equal(regeneratedSnapshot?.currentLocationId, "lifecycle_harbor");
-    const exactRegeneratedState = await resolveEffectiveSpatialState(app.db, chatId, {
+    const exactRegeneratedState = await resolveEffectiveSpatialState(chatId, {
       exactAnchor: { messageId: assistantAtHarbor.id, swipeIndex: 1 },
     });
     assert.equal(exactRegeneratedState.currentLocationId, "lifecycle_harbor");
@@ -1669,11 +1677,11 @@ async function main() {
       url: `/api/chats/${chatId}/messages/${assistantAtHarbor.id}/swipes/0`,
       headers: csrfHeaders,
     });
-    const shiftedSwipeState = await resolveEffectiveSpatialState(app.db, chatId, {
+    const shiftedSwipeState = await resolveEffectiveSpatialState(chatId, {
       exactAnchor: { messageId: assistantAtHarbor.id, swipeIndex: 0 },
     });
     assert.equal(shiftedSwipeState.currentLocationId, "lifecycle_harbor");
-    const removedSwipeState = await resolveEffectiveSpatialState(app.db, chatId, {
+    const removedSwipeState = await resolveEffectiveSpatialState(chatId, {
       exactAnchor: { messageId: assistantAtHarbor.id, swipeIndex: 1 },
     });
     assert.equal(removedSwipeState.snapshot, null);
