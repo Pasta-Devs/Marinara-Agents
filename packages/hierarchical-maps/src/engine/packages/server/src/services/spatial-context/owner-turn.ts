@@ -138,7 +138,7 @@ export async function commitSpatialOwnerTurn(
           ? selectBoundGameMapForLocation(parseSpatialMetadata(chat.metadata), definition, validation.destination.id)
           : null;
 
-      const timestamp = now();
+      const requestedTimestamp = now();
       const messageId = newId();
       const swipeId = newId();
       const message = await transaction.createMessageWithSwipe({
@@ -149,8 +149,9 @@ export async function commitSpatialOwnerTurn(
         characterId: null,
         content: input.content,
         extra: messageExtra(input.attachments),
-        createdAt: timestamp,
+        createdAt: requestedTimestamp,
       });
+      const timestamp = message.createdAt;
 
       const snapshot = await storage.create({
         id: newTimeSortableId(),

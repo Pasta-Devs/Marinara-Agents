@@ -88,7 +88,7 @@ assert.deepEqual(candidateFixture.manifest.capabilityApi, {
 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineVersion: "2.3.1",
-  engineCommit: "00cbd04206f4677e9c8cc733806549b01b696994",
+  engineCommit: "ba3063e536c197c59a7c4e7e82d666f64108fae2",
 });
 
 function catalogFixture(version: string) {
@@ -906,7 +906,7 @@ async function main() {
           commandId: "lifecycle-return-to-world",
         },
       },
-    })) as { message: { id: string } };
+    })) as { message: { id: string; createdAt: string } };
     const assistantAtWorld = (await expectJson(app, {
       method: "POST",
       url: `/api/chats/${chatId}/messages`,
@@ -915,7 +915,11 @@ async function main() {
         role: "assistant",
         content: "The wider world opens beyond the harbor road.",
       },
-    })) as { id: string };
+    })) as { id: string; createdAt: string };
+    assert.ok(
+      assistantAtWorld.createdAt > worldTurn.message.createdAt,
+      "Live assistant messages must sort after the owner turn they answer",
+    );
     const continuationSnapshot = await materializeAssistantSpatialState(
       app.db,
       {
