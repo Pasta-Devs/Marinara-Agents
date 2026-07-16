@@ -78,16 +78,18 @@ const fixtures = new Map(
   [
     artifactFixture("1.0.6"),
     artifactFixture("1.1.0"),
+    artifactFixture("1.1.1"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
-let catalogVersion = "1.1.0";
+let catalogVersion = "1.1.1";
 let catalogOnline = true;
 let generationProviderRequestCount = 0;
 const generationProviderRequests: Array<{
   messages?: Array<{ role?: string; content?: unknown }>;
 }> = [];
+let mapExpansionExistingTargetId: string | null = null;
 
-const candidateFixture = fixtures.get("1.1.0");
+const candidateFixture = fixtures.get("1.1.1");
 assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, {
@@ -177,6 +179,70 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
           ? ((await input.clone().json()) as { messages?: Array<{ role?: string; content?: unknown }> })
           : {};
     generationProviderRequests.push(body);
+    const providerPrompt = capturedProviderPrompt(body);
+    const responseContent = providerPrompt.includes("You design practical hierarchical world maps")
+      ? JSON.stringify({
+          worldName: "Route Test World",
+          startingLocationKey: "route_world",
+          locations: [
+            {
+              key: "route_world", parentKey: null, name: "Route Test World", kind: "region",
+              description: "A compact world used to prove generated routes.",
+              modelMemory: "The route graph must stay sparse and connected.",
+              awarenessSummary: "Old Town, Market Square, and Harbor share practical roads.",
+              icon: "🗺️", sourceKeys: [], origin: "added_by_ai", childPresentation: "map",
+              placement: null, layerOrder: null, links: [],
+            },
+            {
+              key: "old_town", parentKey: "route_world", name: "Old Town", kind: "place",
+              description: "A walled neighborhood west of the market.",
+              modelMemory: "The market road is the ordinary eastern exit.",
+              awarenessSummary: "Market Street leads east.",
+              icon: "🏘️", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
+              placement: { x: 20, y: 50 }, layerOrder: null,
+              links: [{ targetKey: "market_square", label: "Market Street", bidirectional: true, state: "available" }],
+            },
+            {
+              key: "market_square", parentKey: "route_world", name: "Market Square", kind: "place",
+              description: "The city market between Old Town and the harbor road.",
+              modelMemory: "Merchants know every public route through the city.",
+              awarenessSummary: "Old Town lies west and the harbor lies east.",
+              icon: "🏪", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
+              placement: { x: 50, y: 50 }, layerOrder: null, links: [],
+            },
+            {
+              key: "harbor", parentKey: "route_world", name: "Harbor", kind: "place",
+              description: "A working harbor east of the market.",
+              modelMemory: "A canal bridge can support future expansion.",
+              awarenessSummary: "The market road returns west.",
+              icon: "⚓", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
+              placement: { x: 80, y: 50 }, layerOrder: null, links: [],
+            },
+          ],
+        })
+      : providerPrompt.includes("You expand an existing hierarchical world map") && mapExpansionExistingTargetId
+        ? JSON.stringify({
+            locations: [
+              {
+                key: "canal_ward", parentKey: null, name: "Canal Ward", kind: "place",
+                description: "A canal district reached from the existing harbor.",
+                modelMemory: "The canal bridge is the ward's main approach.",
+                awarenessSummary: "Canal Bridge returns to Harbor.",
+                icon: "🌉", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
+                placement: { x: 88, y: 72 }, layerOrder: null,
+                links: [{ targetKey: mapExpansionExistingTargetId, label: "Canal Bridge", bidirectional: true, state: "available" }],
+              },
+              {
+                key: "canal_house", parentKey: "canal_ward", name: "Canal House", kind: "building",
+                description: "A ferryman's house beside the canal lock.",
+                modelMemory: "The ferryman maintains the bridge winch.",
+                awarenessSummary: "The front door opens onto Canal Ward.",
+                icon: "🏠", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
+                placement: null, layerOrder: null, links: [],
+              },
+            ],
+          })
+        : "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.";
     return new Response(
       JSON.stringify({
         id: `chatcmpl-maps-lifecycle-${generationProviderRequestCount}`,
@@ -188,8 +254,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
             index: 0,
             message: {
               role: "assistant",
-              content:
-                "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.",
+              content: responseContent,
             },
             finish_reason: "stop",
           },
@@ -257,6 +322,36 @@ function metadata(value: unknown): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+type RouteGraphDefinition = {
+  locations: Array<{
+    id: string;
+    parentId: string | null;
+    name: string;
+    links: Array<{ targetId: string; label?: string; bidirectional: boolean; state: string }>;
+  }>;
+};
+
+function assertSiblingRouteGraphConnected(definition: RouteGraphDefinition, parentId: string, message: string) {
+  const siblings = definition.locations.filter((location) => location.parentId === parentId);
+  assert.ok(siblings.length >= 2, `${message}: expected sibling locations`);
+  const siblingIds = new Set(siblings.map((location) => location.id));
+  const visited = new Set([siblings[0]!.id]);
+  const pending = [siblings[0]!.id];
+  while (pending.length > 0) {
+    const currentId = pending.shift()!;
+    for (const location of siblings) {
+      for (const link of location.links) {
+        if (!siblingIds.has(link.targetId)) continue;
+        const neighborId = location.id === currentId ? link.targetId : link.targetId === currentId ? location.id : null;
+        if (!neighborId || visited.has(neighborId)) continue;
+        visited.add(neighborId);
+        pending.push(neighborId);
+      }
+    }
+  }
+  assert.equal(visited.size, siblings.length, message);
 }
 
 const definition = {
@@ -373,16 +468,16 @@ async function main() {
       };
     }>("packages/server/src/services/storage/game-state.storage.ts");
 
-    seedInstalledProfile("1.0.6");
+    seedInstalledProfile("1.1.0");
     const installedProfile = await capabilityPackageManager.installed();
     assert.equal(installedProfile.length, 1);
-    assert.equal(installedProfile[0]?.version, "1.0.6");
+    assert.equal(installedProfile[0]?.version, "1.1.0");
     assert.equal(installedProfile[0]?.status, "active");
 
-    const installed110 =
+    const installed111 =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(installed110.version, "1.1.0");
-    assert.equal(installed110.previousVersion, "1.0.6");
+    assert.equal(installed111.version, "1.1.1");
+    assert.equal(installed111.previousVersion, "1.1.0");
     assert.ok(
       existsSync(
         join(
@@ -390,7 +485,7 @@ async function main() {
           "capability-packages",
           "versions",
           "hierarchical-maps",
-          "1.1.0",
+          "1.1.1",
         ),
       ),
     );
@@ -401,7 +496,7 @@ async function main() {
           "capability-packages",
           "versions",
           "hierarchical-maps",
-          "1.0.6",
+          "1.1.0",
         ),
       ),
     );
@@ -433,7 +528,7 @@ async function main() {
           readiness: entry.readiness,
           ready: entry.ready,
         })),
-      [{ version: "1.1.0", status: "active", readiness: "ready", ready: true }],
+      [{ version: "1.1.1", status: "active", readiness: "ready", ready: true }],
     );
 
     const locationLorebook = (await expectJson(app, {
@@ -1176,6 +1271,148 @@ async function main() {
       url: `/api/chats/${existingGame.id}/spatial-context`,
     })) as { currentLocationId: string };
     assert.equal(restoredCheckpointSpatial.currentLocationId, "existing_harbor");
+
+    const routeGraphChat = (await expectJson(app, {
+      method: "POST",
+      url: "/api/chats",
+      headers: csrfHeaders,
+      payload: { name: "AI route graph lifecycle fixture", mode: "roleplay", characterIds: [] },
+    })) as { id: string };
+    await expectJson(app, {
+      method: "PATCH",
+      url: `/api/chats/${routeGraphChat.id}/metadata`,
+      headers: csrfHeaders,
+      payload: { enableAgents: true, activeAgentIds: ["hierarchical-maps"] },
+    });
+    await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${routeGraphChat.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "Old Town, Market Square, and Harbor define the test city." },
+    });
+
+    const createRouteRequestIndex = generationProviderRequests.length;
+    const createdRouteDraft = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generate`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+      },
+    })) as {
+      operation: string;
+      definition: RouteGraphDefinition & {
+        schemaVersion: 1;
+        ownerMode: "roleplay";
+        enabled: boolean;
+        startingLocationId: string;
+        revision: number;
+      };
+    };
+    assert.equal(createdRouteDraft.operation, "create");
+    const createRoutePrompt = capturedProviderPrompt(generationProviderRequests[createRouteRequestIndex]);
+    assert.match(createRoutePrompt, /Links express direct travel between sibling locations/u);
+    assert.match(createRoutePrompt, /floors use stairs, lifts, ladders, or ramps/u);
+    assert.match(createRoutePrompt, /sparse connected travel graph/u);
+    assert.match(createRoutePrompt, /Do not create an all-to-all graph/u);
+
+    const routeWorld = createdRouteDraft.definition.locations.find((location) => location.name === "Route Test World");
+    assert.ok(routeWorld);
+    assertSiblingRouteGraphConnected(
+      createdRouteDraft.definition,
+      routeWorld.id,
+      "AI map creation must connect every generated city sibling",
+    );
+    const routeSiblings = createdRouteDraft.definition.locations.filter((location) => location.parentId === routeWorld.id);
+    const routeSiblingIds = new Set(routeSiblings.map((location) => location.id));
+    const routeEdges = new Set(
+      routeSiblings.flatMap((location) =>
+        location.links
+          .filter((link) => routeSiblingIds.has(link.targetId))
+          .map((link) => [location.id, link.targetId].sort().join("::")),
+      ),
+    );
+    assert.equal(
+      routeEdges.size,
+      routeSiblings.length - 1,
+      "The connectivity fallback must remain sparse instead of completing the graph",
+    );
+    assert.ok(
+      routeSiblings.some((location) => location.links.some((link) => link.label === "Market Street")),
+      "Model-authored semantic route labels must be preserved",
+    );
+
+    const savedRouteMap = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: { ...createdRouteDraft.definition, enabled: true },
+      },
+    })) as { definition: typeof createdRouteDraft.definition };
+    const existingHarbor = savedRouteMap.definition.locations.find((location) => location.name === "Harbor");
+    assert.ok(existingHarbor);
+    mapExpansionExistingTargetId = existingHarbor.id;
+
+    const expandRouteRequestIndex = generationProviderRequests.length;
+    const expandedRouteDraft = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generate`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "expand",
+        targetLocationId: routeWorld.id,
+        size: "small",
+        instructions: "Add a canal ward connected to the existing harbor.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+      },
+    })) as { operation: string; definition: RouteGraphDefinition };
+    mapExpansionExistingTargetId = null;
+    assert.equal(expandedRouteDraft.operation, "expand");
+    const expandRoutePrompt = capturedProviderPrompt(generationProviderRequests[expandRouteRequestIndex]);
+    assert.ok(
+      expandRoutePrompt.includes(`"key": "${existingHarbor.id}"`),
+      "Expansion prompts must expose stable existing child keys to the model",
+    );
+    assert.match(expandRoutePrompt, /Connect at least one new direct child to the most plausible existing child/u);
+    assert.deepEqual(
+      expandedRouteDraft.definition.locations.slice(0, savedRouteMap.definition.locations.length),
+      savedRouteMap.definition.locations,
+      "AI expansion must not rewrite existing map locations",
+    );
+    const canalWard = expandedRouteDraft.definition.locations.find((location) => location.name === "Canal Ward");
+    assert.ok(canalWard);
+    assert.ok(
+      canalWard.links.some(
+        (link) =>
+          link.targetId === existingHarbor.id &&
+          link.label === "Canal Bridge" &&
+          link.bidirectional &&
+          link.state === "available",
+      ),
+      "AI expansion must preserve a semantic link into the existing sibling graph",
+    );
+    await expectJson(
+      app,
+      {
+        method: "DELETE",
+        url: `/api/chats/${routeGraphChat.id}?force=true`,
+        headers: csrfHeaders,
+      },
+      204,
+    );
+
     await expectJson(
       app,
       {
@@ -1605,7 +1842,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.1.0");
+    assert.equal(reinstalled.version, "1.1.1");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -1683,11 +1920,11 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.1.0", status: "active", readiness: "ready" }],
+      [{ version: "1.1.1", status: "active", readiness: "ready" }],
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);
