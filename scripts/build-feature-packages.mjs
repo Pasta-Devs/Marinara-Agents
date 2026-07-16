@@ -149,14 +149,14 @@ export async function activate({ app, api }) {
   const cleanupRuntime = configurePackageRuntime(api.runtime);
   try {
     await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
-    readinessStorage = createSpatialContextStorage(app.db);
+    readinessStorage = createSpatialContextStorage();
     const cleanups = [
       cleanupRuntime,
       api.registerService("hierarchical-maps:projection", projection),
       api.registerService("hierarchical-maps:state-resolution", stateResolution),
       api.registerService("hierarchical-maps:owner-turn", ownerTurn),
       api.registerService("hierarchical-maps:game-map-binding", gameMapBinding),
-      api.registerService("hierarchical-maps:storage", { create: createSpatialContextStorage }),
+      api.registerService("hierarchical-maps:storage", { create: () => createSpatialContextStorage() }),
     ];
     return () => { readinessStorage = null; for (const cleanup of cleanups.reverse()) cleanup(); };
   } catch (error) {

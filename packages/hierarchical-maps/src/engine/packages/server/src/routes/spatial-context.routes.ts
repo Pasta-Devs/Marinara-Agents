@@ -348,7 +348,7 @@ function sendServiceError(reply: FastifyReply, error: unknown) {
 }
 
 export async function spatialContextRoutes(app: FastifyInstance) {
-  const service = createSpatialContextService(app.db);
+  const service = createSpatialContextService();
   const chats = createChatsStorage(app.db);
   const connections = createConnectionsStorage(app.db);
   const characters = createCharactersStorage(app.db);

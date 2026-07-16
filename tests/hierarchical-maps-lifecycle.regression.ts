@@ -84,7 +84,7 @@ assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, { major: 1, minor: 2 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineVersion: "2.3.1",
-  engineCommit: "000d0d37ec2fa970a9e53acfe9f02e3b4e0a44fa",
+  engineCommit: "81eb8d94b8cc72277f01e12bb7d4ca358aae38da",
 });
 
 function catalogFixture(version: string) {
@@ -198,6 +198,7 @@ const definition = {
       icon: "⚓",
       childPresentation: "list",
       links: [],
+      lorebookEntryIds: ["missing-lifecycle-lore-entry"],
       status: "active",
       sortOrder: 0,
     },
@@ -596,9 +597,17 @@ async function main() {
       currentLocationId: string;
       hasCommittedSpatialHistory: boolean;
       definition: { revision: number };
+      warnings: Array<{ code: string; locationId?: string }>;
     };
     assert.equal(saved.currentLocationId, "lifecycle_world");
     assert.equal(saved.hasCommittedSpatialHistory, true);
+    assert.ok(
+      saved.warnings.some(
+        (warning) =>
+          warning.code === "lorebook_entry_missing" && warning.locationId === "lifecycle_harbor",
+      ),
+      "Definition reads must report missing lore links through the host persistence facade",
+    );
 
     const ownerTurn = (await expectJson(app, {
       method: "POST",

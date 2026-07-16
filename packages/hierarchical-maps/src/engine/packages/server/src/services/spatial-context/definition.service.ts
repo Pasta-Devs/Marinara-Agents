@@ -3,16 +3,12 @@ import {
   resolveSpatialBreadcrumb,
   resolveSpatialDestinations,
   spatialContextDefinitionSchema,
+  type CapabilityPersistenceSession,
   type SpatialContextDefinition,
   type SpatialContextResponse,
   type UpdateSpatialContextRequestInput,
 } from "@marinara-engine/shared";
-import { eq } from "../../db/file-query.js";
-import type { DB } from "../../db/connection.js";
-import { chats } from "../../db/schema/index.js";
-import { logger, now } from "./package-runtime.js";
-import { createLorebooksStorage } from "../storage/lorebooks.storage.js";
-import { withChatMetadataPatchQueue } from "../storage/chats.storage.js";
+import { getPackagePersistence, logger, now } from "./package-runtime.js";
 import { createSpatialContextStorage } from "../storage/spatial-context.storage.js";
 import { resolveEffectiveSpatialState } from "./state-resolution.js";
 import { parseSpatialMetadata } from "./metadata.js";
@@ -111,19 +107,14 @@ function buildResponse(
 }
 
 async function resolveLoreReferenceWarnings(
-  db: DB,
   definition: SpatialContextDefinition,
+  persistence: Pick<CapabilityPersistenceSession, "listExistingLorebookEntryIds">,
 ): Promise<SpatialContextResponse["warnings"]> {
   const entryIds = Array.from(
     new Set(definition.locations.flatMap((location) => location.lorebookEntryIds ?? [])),
   );
   if (entryIds.length === 0) return [];
-  const storage = createLorebooksStorage(db);
-  const existingIds = new Set(
-    (
-      await Promise.all(entryIds.map(async (entryId) => ((await storage.getEntry(entryId)) ? entryId : null)))
-    ).filter((entryId): entryId is string => Boolean(entryId)),
-  );
+  const existingIds = new Set(await persistence.listExistingLorebookEntryIds(entryIds));
   return definition.locations.flatMap((location, locationIndex) =>
     (location.lorebookEntryIds ?? []).flatMap((entryId, entryIndex) =>
       existingIds.has(entryId)
@@ -140,31 +131,30 @@ async function resolveLoreReferenceWarnings(
   );
 }
 
-export function createSpatialContextService(db: DB) {
+export function createSpatialContextService() {
+  const persistence = getPackagePersistence();
   return {
     async get(chatId: string): Promise<SpatialContextResponse> {
-      const rows = await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
-      const chat = rows[0];
+      const chat = await persistence.getChat(chatId);
       if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
       assertSupportedMode(chat.mode);
 
-      const hasCommittedSpatialHistory = await createSpatialContextStorage(db).hasMessageSnapshots(chatId);
+      const hasCommittedSpatialHistory = await createSpatialContextStorage(persistence).hasMessageSnapshots(chatId);
       const stored = readDefinition(parseSpatialMetadata(chat.metadata));
       if (!stored.definition) return buildResponse(null, null, stored.corrupt, hasCommittedSpatialHistory);
 
-      const state = await resolveEffectiveSpatialState(chatId);
+      const state = await resolveEffectiveSpatialState(chatId, {}, persistence);
       return buildResponse(
         stored.definition,
         state.currentLocationId,
         false,
         hasCommittedSpatialHistory,
-        await resolveLoreReferenceWarnings(db, stored.definition),
+        await resolveLoreReferenceWarnings(stored.definition, persistence),
       );
     },
 
     async getGameMapBindingReconciliation(chatId: string) {
-      const rows = await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
-      const chat = rows[0];
+      const chat = await persistence.getChat(chatId);
       if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
       if (chat.mode !== "game") {
         throw new SpatialContextServiceError(
@@ -192,9 +182,8 @@ export function createSpatialContextService(db: DB) {
         bindings: GameMapBindingReconciliationSelection[];
       },
     ) {
-      return withChatMetadataPatchQueue(chatId, async () => {
-        const rows = await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
-        const chat = rows[0];
+      return persistence.withChatLock(chatId, async () => {
+        const chat = await persistence.getChat(chatId);
         if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
         if (chat.mode !== "game") {
           throw new SpatialContextServiceError(
@@ -230,10 +219,7 @@ export function createSpatialContextService(db: DB) {
           throw error;
         }
         if (applied.bindingCount > 0) {
-          await db
-            .update(chats)
-            .set({ metadata: JSON.stringify(applied.metadata), updatedAt: now() })
-            .where(eq(chats.id, chatId));
+          await persistence.updateChatMetadata({ chatId, metadata: applied.metadata, updatedAt: now() });
           logger.info(
             "[spatial/game-map-binding] Reconciled %d reviewed Game map positions for chat %s",
             applied.bindingCount,
@@ -248,9 +234,8 @@ export function createSpatialContextService(db: DB) {
     },
 
     async update(chatId: string, input: UpdateSpatialContextRequestInput): Promise<SpatialContextResponse> {
-      return withChatMetadataPatchQueue(chatId, async () => {
-        const rows = await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
-        const chat = rows[0];
+      return persistence.withChatLock(chatId, async () => {
+        const chat = await persistence.getChat(chatId);
         if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
         assertSupportedMode(chat.mode);
 
@@ -273,7 +258,7 @@ export function createSpatialContextService(db: DB) {
           );
         }
 
-        const state = await resolveEffectiveSpatialState(chatId);
+        const state = await resolveEffectiveSpatialState(chatId, {}, persistence);
         const currentLocationId = state.currentLocationId;
         if (input.expectedCurrentLocationId !== currentLocationId) {
           throw new SpatialContextServiceError(
@@ -297,7 +282,7 @@ export function createSpatialContextService(db: DB) {
           );
         }
 
-        const spatialStorage = createSpatialContextStorage(db);
+        const spatialStorage = createSpatialContextStorage(persistence);
         const hasCommittedSpatialHistory = await spatialStorage.hasMessageSnapshots(chatId);
         if (hasCommittedSpatialHistory && stored.definition) {
           const nextIds = new Set(definition.locations.map((location) => location.id));
@@ -338,11 +323,8 @@ export function createSpatialContextService(db: DB) {
             ? bindGameMapsToExactSpatialLocations(metadata, definition)
             : { metadata, bindingCount: 0 };
         const nextMetadata = { ...initialGameMapBindings.metadata, [METADATA_KEY]: definition };
-        await db.transaction(async (tx) => {
-          await tx
-            .update(chats)
-            .set({ metadata: JSON.stringify(nextMetadata), updatedAt: now() })
-            .where(eq(chats.id, chatId));
+        await persistence.transaction(async (transaction) => {
+          await transaction.updateChatMetadata({ chatId, metadata: nextMetadata, updatedAt: now() });
 
           if (!state.snapshot || nextCurrentLocationId !== currentLocationId) {
             const visibleSnapshot =
@@ -360,7 +342,7 @@ export function createSpatialContextService(db: DB) {
               transitionCommandId: visibleSnapshot?.transitionCommandId ?? null,
               transitionPayloadHash: visibleSnapshot?.transitionPayloadHash ?? null,
             };
-            const txStorage = createSpatialContextStorage(tx);
+            const txStorage = createSpatialContextStorage(transaction);
             if (state.visibleAnchor) {
               await txStorage.replaceAtAnchor({
                 ...snapshotInput,
@@ -386,7 +368,7 @@ export function createSpatialContextService(db: DB) {
           nextCurrentLocationId ?? definition.startingLocationId,
           false,
           hasCommittedSpatialHistory || Boolean(state.visibleAnchor),
-          await resolveLoreReferenceWarnings(db, definition),
+          await resolveLoreReferenceWarnings(definition, persistence),
         );
       });
     },

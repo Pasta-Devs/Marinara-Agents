@@ -6,7 +6,7 @@
   },
   "builtAgainst": {
     "engineVersion": "2.3.1",
-    "engineCommit": "000d0d37ec2fa970a9e53acfe9f02e3b4e0a44fa"
+    "engineCommit": "81eb8d94b8cc72277f01e12bb7d4ca358aae38da"
   },
   "privateEngineImports": [
     {
@@ -88,38 +88,6 @@
     {
       "source": "packages/server/src/routes/spatial-context.routes.ts",
       "specifier": "../services/storage/lorebooks.storage.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/definition.service.ts",
-      "specifier": "../../db/connection.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/definition.service.ts",
-      "specifier": "../../db/file-query.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/definition.service.ts",
-      "specifier": "../../db/schema/index.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/definition.service.ts",
-      "specifier": "../storage/chats.storage.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/definition.service.ts",
-      "specifier": "../storage/lorebooks.storage.js"
-    },
-    {
-      "source": "packages/server/src/services/storage/spatial-context.storage.ts",
-      "specifier": "../../db/connection.js"
-    },
-    {
-      "source": "packages/server/src/services/storage/spatial-context.storage.ts",
-      "specifier": "../../db/file-query.js"
-    },
-    {
-      "source": "packages/server/src/services/storage/spatial-context.storage.ts",
-      "specifier": "../../db/schema/index.js"
     }
   ]
 }

@@ -1,10 +1,12 @@
-import { and, desc, eq, ne, or } from "../../db/file-query.js";
-import type { SpatialContextSnapshot, SpatialSnapshotSource } from "@marinara-engine/shared";
-import type { DB } from "../../db/connection.js";
-import { spatialContextSnapshots } from "../../db/schema/index.js";
-import { newTimeSortableId, now } from "../spatial-context/package-runtime.js";
+import type {
+  CapabilityPersistenceSession,
+  CapabilitySpatialSnapshotWrite,
+  SpatialContextSnapshot,
+  SpatialSnapshotSource,
+} from "@marinara-engine/shared";
+import { getPackagePersistence, newTimeSortableId, now } from "../spatial-context/package-runtime.js";
 
-type SpatialSnapshotConnection = Pick<DB, "select" | "insert" | "delete" | "update">;
+type SpatialSnapshotPersistence = Pick<CapabilityPersistenceSession, "spatialSnapshots">;
 
 export interface CreateSpatialSnapshotInput {
   chatId: string;
@@ -17,148 +19,73 @@ export interface CreateSpatialSnapshotInput {
   transitionPayloadHash?: string | null;
 }
 
-function mapSnapshot(row: typeof spatialContextSnapshots.$inferSelect): SpatialContextSnapshot {
+function snapshotWrite(input: CreateSpatialSnapshotInput): CapabilitySpatialSnapshotWrite {
   return {
-    id: row.id,
-    chatId: row.chatId,
-    messageId: row.messageId,
-    swipeIndex: row.swipeIndex,
-    currentLocationId: row.currentLocationId,
-    definitionRevision: row.definitionRevision,
-    source: row.source as SpatialSnapshotSource,
-    transitionCommandId: row.transitionCommandId,
-    transitionPayloadHash: row.transitionPayloadHash,
-    createdAt: row.createdAt,
+    id: newTimeSortableId(),
+    chatId: input.chatId,
+    messageId: input.messageId ?? "",
+    swipeIndex: input.swipeIndex ?? 0,
+    currentLocationId: input.currentLocationId,
+    definitionRevision: input.definitionRevision,
+    source: input.source,
+    transitionCommandId: input.transitionCommandId ?? null,
+    transitionPayloadHash: input.transitionPayloadHash ?? null,
+    createdAt: now(),
   };
 }
 
-export function createSpatialContextStorage(db: SpatialSnapshotConnection) {
+export function createSpatialContextStorage(
+  persistence: SpatialSnapshotPersistence = getPackagePersistence(),
+) {
+  const snapshots = persistence.spatialSnapshots;
   return {
-    async getById(id: string): Promise<SpatialContextSnapshot | null> {
-      const rows = await db.select().from(spatialContextSnapshots).where(eq(spatialContextSnapshots.id, id)).limit(1);
-      return rows[0] ? mapSnapshot(rows[0]) : null;
+    getById(id: string): Promise<SpatialContextSnapshot | null> {
+      return snapshots.getById(id);
     },
 
-    async getByAnchor(chatId: string, messageId: string, swipeIndex: number): Promise<SpatialContextSnapshot | null> {
-      const rows = await db
-        .select()
-        .from(spatialContextSnapshots)
-        .where(
-          and(
-            eq(spatialContextSnapshots.chatId, chatId),
-            eq(spatialContextSnapshots.messageId, messageId),
-            eq(spatialContextSnapshots.swipeIndex, swipeIndex),
-          ),
-        )
-        .limit(1);
-      return rows[0] ? mapSnapshot(rows[0]) : null;
+    getByAnchor(chatId: string, messageId: string, swipeIndex: number): Promise<SpatialContextSnapshot | null> {
+      return snapshots.getByAnchor(chatId, messageId, swipeIndex);
     },
 
-    async getByCommand(chatId: string, commandId: string): Promise<SpatialContextSnapshot | null> {
-      const rows = await db
-        .select()
-        .from(spatialContextSnapshots)
-        .where(
-          and(eq(spatialContextSnapshots.chatId, chatId), eq(spatialContextSnapshots.transitionCommandId, commandId)),
-        )
-        .limit(1);
-      return rows[0] ? mapSnapshot(rows[0]) : null;
+    getByCommand(chatId: string, commandId: string): Promise<SpatialContextSnapshot | null> {
+      return snapshots.getByCommand(chatId, commandId);
     },
 
-    async listByAnchors(
+    listByAnchors(
       chatId: string,
       anchors: Array<{ messageId: string; swipeIndex: number }>,
     ): Promise<SpatialContextSnapshot[]> {
-      if (anchors.length === 0) return [];
-      const rows = await db
-        .select()
-        .from(spatialContextSnapshots)
-        .where(
-          and(
-            eq(spatialContextSnapshots.chatId, chatId),
-            or(
-              ...anchors.map((anchor) =>
-                and(
-                  eq(spatialContextSnapshots.messageId, anchor.messageId),
-                  eq(spatialContextSnapshots.swipeIndex, anchor.swipeIndex),
-                ),
-              ),
-            ),
-          ),
-        );
-      return rows.map(mapSnapshot);
+      return snapshots.listByAnchors(chatId, anchors);
     },
 
-    async listForChat(chatId: string): Promise<SpatialContextSnapshot[]> {
-      const rows = await db.select().from(spatialContextSnapshots).where(eq(spatialContextSnapshots.chatId, chatId));
-      return rows.map(mapSnapshot);
+    listForChat(chatId: string): Promise<SpatialContextSnapshot[]> {
+      return snapshots.listForChat(chatId);
     },
 
-    async hasMessageSnapshots(chatId: string): Promise<boolean> {
-      const rows = await db
-        .select({ id: spatialContextSnapshots.id })
-        .from(spatialContextSnapshots)
-        .where(and(eq(spatialContextSnapshots.chatId, chatId), ne(spatialContextSnapshots.messageId, "")))
-        .limit(1);
-      return rows.length > 0;
+    hasMessageSnapshots(chatId: string): Promise<boolean> {
+      return snapshots.hasMessageSnapshots(chatId);
     },
 
-    async getLatest(chatId: string): Promise<SpatialContextSnapshot | null> {
-      const rows = await db
-        .select()
-        .from(spatialContextSnapshots)
-        .where(eq(spatialContextSnapshots.chatId, chatId))
-        .orderBy(desc(spatialContextSnapshots.createdAt), desc(spatialContextSnapshots.id))
-        .limit(1);
-      return rows[0] ? mapSnapshot(rows[0]) : null;
+    getLatest(chatId: string): Promise<SpatialContextSnapshot | null> {
+      return snapshots.getLatest(chatId);
     },
 
-    async getBootstrap(chatId: string): Promise<SpatialContextSnapshot | null> {
-      const rows = await db
-        .select()
-        .from(spatialContextSnapshots)
-        .where(and(eq(spatialContextSnapshots.chatId, chatId), eq(spatialContextSnapshots.messageId, "")))
-        .orderBy(desc(spatialContextSnapshots.createdAt), desc(spatialContextSnapshots.id))
-        .limit(1);
-      return rows[0] ? mapSnapshot(rows[0]) : null;
+    getBootstrap(chatId: string): Promise<SpatialContextSnapshot | null> {
+      return snapshots.getBootstrap(chatId);
     },
 
-    async create(input: CreateSpatialSnapshotInput): Promise<SpatialContextSnapshot> {
-      const row: typeof spatialContextSnapshots.$inferInsert = {
-        id: newTimeSortableId(),
-        chatId: input.chatId,
-        messageId: input.messageId ?? "",
-        swipeIndex: input.swipeIndex ?? 0,
-        currentLocationId: input.currentLocationId,
-        definitionRevision: input.definitionRevision,
-        source: input.source,
-        transitionCommandId: input.transitionCommandId ?? null,
-        transitionPayloadHash: input.transitionPayloadHash ?? null,
-        createdAt: now(),
-      };
-      await db.insert(spatialContextSnapshots).values(row);
-      return mapSnapshot(row as typeof spatialContextSnapshots.$inferSelect);
+    create(input: CreateSpatialSnapshotInput): Promise<SpatialContextSnapshot> {
+      return snapshots.create(snapshotWrite(input));
     },
 
-    async replaceBootstrap(input: Omit<CreateSpatialSnapshotInput, "messageId" | "swipeIndex">) {
-      await db
-        .delete(spatialContextSnapshots)
-        .where(and(eq(spatialContextSnapshots.chatId, input.chatId), eq(spatialContextSnapshots.messageId, "")));
-      return this.create({ ...input, messageId: "", swipeIndex: 0 });
+    replaceBootstrap(
+      input: Omit<CreateSpatialSnapshotInput, "messageId" | "swipeIndex">,
+    ): Promise<SpatialContextSnapshot> {
+      return snapshots.replaceBootstrap(snapshotWrite({ ...input, messageId: "", swipeIndex: 0 }));
     },
-    async replaceAtAnchor(input: CreateSpatialSnapshotInput) {
-      const messageId = input.messageId ?? "";
-      const swipeIndex = input.swipeIndex ?? 0;
-      await db
-        .delete(spatialContextSnapshots)
-        .where(
-          and(
-            eq(spatialContextSnapshots.chatId, input.chatId),
-            eq(spatialContextSnapshots.messageId, messageId),
-            eq(spatialContextSnapshots.swipeIndex, swipeIndex),
-          ),
-        );
-      return this.create({ ...input, messageId, swipeIndex });
+
+    replaceAtAnchor(input: CreateSpatialSnapshotInput): Promise<SpatialContextSnapshot> {
+      return snapshots.replaceAtAnchor(snapshotWrite(input));
     },
   };
 }
