@@ -2,7 +2,7 @@
   {
     "id": "echo-chamber",
     "name": "Echo Chamber",
-    "description": "Simulates a live streaming-style chat reacting to your roleplay in real time.",
+    "description": "Simulates a live streaming-style chat reacting to your roleplay in real time. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
     "phase": "parallel",
     "enabledByDefault": false,
     "category": "misc",

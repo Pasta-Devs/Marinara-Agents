@@ -2,7 +2,7 @@
   {
     "id": "html",
     "name": "Immersive HTML",
-    "description": "Post-processes the latest Roleplay response with diegetic HTML/CSS/JS visual artifacts without changing the story meaning.",
+    "description": "Post-processes the latest Roleplay response with diegetic HTML/CSS/JS visual artifacts without changing the story meaning. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",

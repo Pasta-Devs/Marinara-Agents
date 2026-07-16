@@ -2,7 +2,7 @@
   {
     "id": "tic-tac-toe",
     "name": "Tic-Tac-Toe",
-    "description": "Play Tic-Tac-Toe with a Conversation character.",
+    "description": "Play Tic-Tac-Toe with a Conversation character. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

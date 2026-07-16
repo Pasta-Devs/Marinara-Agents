@@ -39,7 +39,7 @@ The catalog currently contains **29 first-party packages** for **Marinara Engine
 | 8-Ball Pool | [`eightball`](packages/eightball/manifest.json) | Adds a complete Conversation-mode 8-Ball Pool table and `/8ball` command. |
 | Chess | [`chess`](packages/chess/manifest.json) | Adds a Conversation-mode chess board and `/chess` command. |
 | Combat | [`combat`](packages/combat/manifest.json) | Manages combat encounters, initiative, HP tracking, and turn-based actions. |
-| Conversation Calls | [`conversation-calls`](packages/conversation-calls/manifest.json) | Adds live audio/video calls, microphone transcription, and character video presence. |
+| Calls | [`conversation-calls`](packages/conversation-calls/manifest.json) | Adds live audio/video calls, microphone transcription, and character video presence. |
 | CYOA Choices | [`cyoa`](packages/cyoa/manifest.json) | Generates clickable Choose Your Own Adventure choices after Roleplay responses. |
 | Echo Chamber | [`echo-chamber`](packages/echo-chamber/manifest.json) | Simulates a streaming-style audience chat reacting to Roleplay in real time. |
 | Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls connected Intiface devices from analyzed narrative content. |

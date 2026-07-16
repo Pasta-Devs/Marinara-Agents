@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "poker",
   "name": "Poker",
-  "version": "1.0.0",
-  "description": "Play Texas Hold’em Poker with Conversation characters.",
+  "version": "1.0.1",
+  "description": "Play Texas Hold’em Poker with Conversation characters. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -34,8 +34,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "ad483ef6fea9c052296e96054e581c959b3a36fc6641d37de520afd4efb45db7",
-      "bytes": 436
+      "sha256": "3d8fce325cf0f3569716a02078bd046dcf33c6c7d42cd127048e3121e7bb95d5",
+      "bytes": 517
     },
     {
       "path": "server.mjs",

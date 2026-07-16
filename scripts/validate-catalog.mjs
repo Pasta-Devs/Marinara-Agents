@@ -9,6 +9,7 @@ import {
   catalogArtworkRelativePath,
   catalogArtworkUrl,
 } from "./catalog-artwork.mjs";
+import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const catalog = JSON.parse(await readFile(join(repoRoot, "catalog/catalog.json"), "utf8"));
@@ -144,6 +145,12 @@ for (const entry of catalog.packages) {
   if (manifest.engine?.min !== MIN_ENGINE_VERSION) {
     throw new Error(`${manifest.id} must require Marinara Engine ${MIN_ENGINE_VERSION}+`);
   }
+  if (!OFFICIAL_PACKAGE_GUIDANCE[manifest.id]) {
+    throw new Error(`Missing activation guidance and mode metadata for ${manifest.id}`);
+  }
+  if (manifest.description !== withPackageActivationGuidance(manifest.id, manifest.description)) {
+    throw new Error(`Manifest description is missing activation guidance for ${manifest.id}`);
+  }
   if (!["writer", "tracker", "misc"].includes(category)) {
     throw new Error(`Missing or invalid category for ${manifest.id}`);
   }
@@ -245,6 +252,10 @@ for (const entry of catalog.packages) {
   if (!agentDefinitions.some((definition) => definition.id === manifest.id)) {
     throw new Error(`Package ${manifest.id} does not define its matching agent id`);
   }
+  const matchingDefinitions = agentDefinitions.filter((definition) => definition.id === manifest.id);
+  if (matchingDefinitions.some((definition) => definition.description !== manifest.description)) {
+    throw new Error(`Package ${manifest.id} agent description does not match its manifest description`);
+  }
   for (const definition of agentDefinitions) {
     if (!definition?.id || agentDefinitionIds.has(definition.id)) {
       throw new Error(`Duplicate or missing agent definition id: ${definition?.id}`);
@@ -309,6 +320,11 @@ for (const entry of catalog.packages) {
       if (!slots.has(slot)) throw new Error(`${manifest.id} is missing the ${slot} contribution`);
     }
   }
+}
+
+const guidanceIds = Object.keys(OFFICIAL_PACKAGE_GUIDANCE).sort();
+if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
+  throw new Error("Official package activation guidance must cover exactly the downloadable catalog");
 }
 
 const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;

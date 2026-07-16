@@ -2,7 +2,7 @@
   {
     "id": "expression",
     "name": "Expression Engine",
-    "description": "Detects character emotions and selects VN sprites/expressions.",
+    "description": "Detects character emotions and selects VN sprites/expressions. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "tracker",

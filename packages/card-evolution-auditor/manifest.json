@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "card-evolution-auditor",
   "name": "Card Evolution Auditor",
-  "version": "1.0.0",
-  "description": "Audits durable roleplay changes against saved character cards and proposes precise edits for user approval.",
+  "version": "1.0.1",
+  "description": "Audits durable roleplay changes against saved character cards and proposes precise edits for user approval. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "ca425dcda3201d4cc8fe083a48b9faed5a3866ec6096fd9c6b2b405384165da5",
-      "bytes": 1770
+      "sha256": "247fc2292f733ca8d60c7f580eeececb13d4ad593c23cf9b1e64dd77cccaeb85",
+      "bytes": 1849
     }
   ],
   "permissions": [

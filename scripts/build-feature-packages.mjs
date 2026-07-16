@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
+import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
@@ -20,6 +21,10 @@ const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
 const MIN_ENGINE_VERSION = "2.3.0";
 const ARTIFACT_MTIME = new Date("2000-01-01T00:00:00.000Z");
+const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
+const rebuiltFeatureClients = new Set(
+  String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "").split(",").filter(Boolean),
+);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const featureSource = (relativePath) => {
   const packaged = resolve(sourceRoot, relativePath);
@@ -41,7 +46,7 @@ async function captureEngineSources(metafilePath) {
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.0.6",
+    version: "1.0.7",
     maxEngineExclusive: "2.4.0",
     name: "Hierarchical Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
@@ -55,8 +60,8 @@ const features = [
   },
   {
     id: "conversation-calls",
-    name: "Conversation Calls",
-    version: "1.0.2",
+    name: "Calls",
+    version: "1.0.3",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -75,6 +80,7 @@ const features = [
   ].map(([id, name, description, clientName, command, aliases, playerLabel]) => ({
     id,
     name,
+    version: "1.0.1",
     description,
     kind: ["agent", "turn-game"],
     modes: ["conversation"],
@@ -361,7 +367,7 @@ function Settings({ props }) {
     <div className="flex items-start gap-2">
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--secondary)] text-[var(--muted-foreground)]"><Phone size="0.875rem" /></span>
       <span className="min-w-0 flex-1">
-        <span className="block text-xs font-medium text-[var(--foreground)]">Conversation Calls</span>
+        <span className="block text-xs font-medium text-[var(--foreground)]">Calls</span>
         <span className="text-[0.625rem] leading-snug text-[var(--muted-foreground)]">Per-chat call access, microphone handling, camera/screen input, and character video setup.</span>
       </span>
     </div>
@@ -442,12 +448,13 @@ catalog.packages = catalog.packages.filter(
 
 for (const feature of selectedFeatures) {
   const version = feature.version ?? "1.0.0";
+  const description = withPackageActivationGuidance(feature.id, feature.description);
   const sourceDir = join(packagesDir, feature.id);
   await mkdir(sourceDir, { recursive: true });
   const agentDefinition = {
     id: feature.id,
     name: feature.name,
-    description: feature.description,
+    description,
     author: "Pasta Devs",
     phase: "pre_generation",
     enabledByDefault: false,
@@ -462,7 +469,7 @@ for (const feature of selectedFeatures) {
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
   const serverPath = join(sourceDir, "server.mjs");
   const serverSource = resolve(sourceRoot, feature.serverImport || feature.engineImport);
-  if (existsSync(serverSource)) {
+  if (!reuseExistingRuntime && existsSync(serverSource)) {
     await bundleServer(feature, serverPath);
   } else if (!existsSync(serverPath)) {
     throw new Error(`Missing package-owned server source for ${feature.id}`);
@@ -470,9 +477,11 @@ for (const feature of selectedFeatures) {
   const serverBuffer = await readFile(serverPath);
   const hasClient = Boolean(feature.clientName || feature.id === "hierarchical-maps" || feature.id === "conversation-calls");
   const clientPath = hasClient ? join(sourceDir, "client.js") : null;
-  if (clientPath) {
+  if (clientPath && (!reuseExistingRuntime || rebuiltFeatureClients.has(feature.id))) {
     if (feature.clientName) await bundleGameClient(feature, clientPath);
     else await bundleSpecialClient(feature, clientPath);
+  } else if (clientPath && !existsSync(clientPath)) {
+    throw new Error(`Missing package-owned client source for ${feature.id}`);
   }
   const clientBuffer = clientPath ? await readFile(clientPath) : null;
   await writeFile(join(sourceDir, "agents.json"), agentsBuffer);
@@ -481,7 +490,7 @@ for (const feature of selectedFeatures) {
     id: feature.id,
     name: feature.name,
     version,
-    description: feature.description,
+    description,
     engine: { min: MIN_ENGINE_VERSION, maxExclusive: feature.maxEngineExclusive ?? "3.0.0" },
     kind: feature.kind,
     entrypoints: {

@@ -2,7 +2,7 @@
   {
     "id": "poker",
     "name": "Poker",
-    "description": "Play Texas Hold’em Poker with Conversation characters.",
+    "description": "Play Texas Hold’em Poker with Conversation characters. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

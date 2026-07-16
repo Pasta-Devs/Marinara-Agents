@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "prose-guardian",
   "name": "Prose Guardian",
-  "version": "1.0.0",
-  "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning.",
+  "version": "1.0.1",
+  "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "f391ee52c56212577d752206e5cb07ceb10af802f1583111778a25d5b7cce382",
-      "bytes": 1806
+      "sha256": "1949d7e9606125ac705b70db4bf82b42e1b704803b2ce0796203aa50641c142b",
+      "bytes": 1885
     }
   ],
   "permissions": [

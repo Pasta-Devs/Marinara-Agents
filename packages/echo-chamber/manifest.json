@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "echo-chamber",
   "name": "Echo Chamber",
-  "version": "1.0.0",
-  "description": "Simulates a live streaming-style chat reacting to your roleplay in real time.",
+  "version": "1.0.1",
+  "description": "Simulates a live streaming-style chat reacting to your roleplay in real time. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "caa52303444ab0f603107dfe3f16fb231b41d6b64a37d1ab4134dab1fbc16f4f",
-      "bytes": 7146
+      "sha256": "713297a29c6b42a8159f071fb3f451249eea5d476d19740f1e7d51c36b945774",
+      "bytes": 7223
     }
   ],
   "permissions": [

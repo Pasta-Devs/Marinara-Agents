@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "uno",
   "name": "UNO",
-  "version": "1.0.0",
-  "description": "Play UNO with Conversation characters.",
+  "version": "1.0.1",
+  "description": "Play UNO with Conversation characters. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -32,8 +32,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "81e0c8a2da5563fe49672977348ff67e573daeecff401897eefb81fff87c3557",
-      "bytes": 414
+      "sha256": "2112644f367a4cdacd394a23e455eed7c372753c700489d4ff4d77f8a129ea93",
+      "bytes": 495
     },
     {
       "path": "server.mjs",
