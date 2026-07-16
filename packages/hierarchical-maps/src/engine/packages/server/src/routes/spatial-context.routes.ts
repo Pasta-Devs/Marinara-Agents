@@ -61,6 +61,41 @@ const spatialOwnerTurnSchema = z.object({
     .optional(),
 });
 
+const gameMapBindingTargetSchema = z.discriminatedUnion("target", [
+  z.object({ target: z.literal("map"), mapId: z.string().trim().min(1) }).strict(),
+  z
+    .object({
+      target: z.literal("cell"),
+      mapId: z.string().trim().min(1),
+      x: z.number().int().safe(),
+      y: z.number().int().safe(),
+    })
+    .strict(),
+  z
+    .object({
+      target: z.literal("node"),
+      mapId: z.string().trim().min(1),
+      nodeId: z.string().trim().min(1),
+    })
+    .strict(),
+]);
+
+const gameMapBindingReconciliationSchema = z
+  .object({
+    expectedDefinitionRevision: z.number().int().nonnegative().safe(),
+    bindings: z
+      .array(
+        z
+          .object({
+            target: gameMapBindingTargetSchema,
+            spatialLocationId: z.string().trim().min(1),
+          })
+          .strict(),
+      )
+      .max(500),
+  })
+  .strict();
+
 function stringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string");
   if (typeof value !== "string") return [];
@@ -323,6 +358,36 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       return sendServiceError(reply, error);
     }
   });
+
+  app.get<{ Params: ChatSpatialParams }>(
+    "/:chatId/spatial-context/game-map-bindings/reconciliation",
+    async (req, reply) => {
+      try {
+        return await service.getGameMapBindingReconciliation(req.params.chatId);
+      } catch (error) {
+        return sendServiceError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Params: ChatSpatialParams }>(
+    "/:chatId/spatial-context/game-map-bindings/reconciliation",
+    async (req, reply) => {
+      const parsed = gameMapBindingReconciliationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: parsed.error.issues[0]?.message ?? "Invalid Game map reconciliation.",
+          code: "spatial_request_invalid",
+          issues: parsed.error.issues,
+        });
+      }
+      try {
+        return await service.reconcileGameMapBindings(req.params.chatId, parsed.data);
+      } catch (error) {
+        return sendServiceError(reply, error);
+      }
+    },
+  );
 
   app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/turn", async (req, reply) => {
     const parsed = spatialOwnerTurnSchema.safeParse(req.body);

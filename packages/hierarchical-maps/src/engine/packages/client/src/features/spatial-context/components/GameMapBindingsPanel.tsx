@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link2, Map, Unlink } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle2, Link2, Loader2, Map, RefreshCw, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import type { GameMap, SpatialContextDefinition, SpatialLocation } from "@marinara-engine/shared";
 import { useUpdateGameMapBinding, type UpdateGameMapBindingInput } from "../../../hooks/use-game";
+import {
+  spatialContextKeys,
+  useApplyGameMapBindingReconciliation,
+  useGameMapBindingReconciliation,
+  type GameMapBindingReference,
+  type GameMapBindingTarget,
+} from "../../../hooks/use-spatial-context";
 
 interface GameMapBindingsPanelProps {
   chatId: string;
@@ -69,6 +77,177 @@ function buildInput(
   return { target: "map", chatId, mapId: selectedMapId, spatialLocationId };
 }
 
+function reconciliationTarget(reference: GameMapBindingReference): GameMapBindingTarget {
+  if (reference.target === "cell") {
+    return { target: "cell", mapId: reference.mapId, x: reference.x, y: reference.y };
+  }
+  if (reference.target === "node") {
+    return { target: "node", mapId: reference.mapId, nodeId: reference.nodeId };
+  }
+  return { target: "map", mapId: reference.mapId };
+}
+
+function reconciliationTargetKey(reference: GameMapBindingReference): string {
+  if (reference.target === "cell") return `cell:${reference.mapId}:${reference.x}:${reference.y}`;
+  if (reference.target === "node") return `node:${reference.mapId}:${reference.nodeId}`;
+  return `map:${reference.mapId}`;
+}
+
+function GameMapReconciliationReview({
+  chatId,
+  definition,
+  disabled,
+}: {
+  chatId: string;
+  definition: SpatialContextDefinition;
+  disabled: boolean;
+}) {
+  const reconciliation = useGameMapBindingReconciliation(chatId, !disabled);
+  const applyReconciliation = useApplyGameMapBindingReconciliation();
+
+  if (disabled) return null;
+  if (reconciliation.isLoading) {
+    return (
+      <div className="flex min-h-11 items-center gap-2 border-y border-[var(--marinara-chat-chrome-panel-divider)] py-3 text-xs text-[var(--marinara-chat-chrome-panel-muted)]">
+        <Loader2 size="0.75rem" className="animate-spin" /> Checking existing Game map names…
+      </div>
+    );
+  }
+  if (reconciliation.isError) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 border-y border-[var(--marinara-chat-chrome-panel-divider)] py-3 text-xs">
+        <AlertTriangle size="0.8125rem" className="text-amber-400" />
+        <span className="min-w-48 flex-1 text-[var(--marinara-chat-chrome-panel-muted)]">
+          Existing map matches could not be checked.
+        </span>
+        <button
+          type="button"
+          onClick={() => void reconciliation.refetch()}
+          className="mari-chrome-control min-h-11 px-3 text-xs"
+        >
+          <RefreshCw size="0.75rem" /> Retry
+        </button>
+      </div>
+    );
+  }
+
+  const preview = reconciliation.data;
+  if (!preview || preview.totalTargetCount === 0) return null;
+  if (preview.suggestions.length === 0 && preview.conflicts.length === 0 && preview.unmatched.length === 0) {
+    return null;
+  }
+  const reviewedSuggestions = preview.suggestions.slice(0, 500);
+
+  const applyExactMatches = async () => {
+    try {
+      const result = await applyReconciliation.mutateAsync({
+        chatId,
+        expectedDefinitionRevision: definition.revision,
+        bindings: reviewedSuggestions.map((suggestion) => ({
+          target: reconciliationTarget(suggestion.target),
+          spatialLocationId: suggestion.spatialLocationId,
+        })),
+      });
+      toast.success(
+        result.bindingCount
+          ? `Applied ${result.bindingCount} reviewed Game map ${result.bindingCount === 1 ? "match" : "matches"}.`
+          : "Those Game map matches were already applied.",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to reconcile existing Game maps.");
+    }
+  };
+
+  return (
+    <section
+      className="space-y-3 border-y border-[var(--marinara-chat-chrome-panel-divider)] py-3"
+      aria-labelledby="game-map-reconciliation-heading"
+    >
+      <div className="flex items-start gap-2">
+        <CheckCircle2 size="0.875rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+        <div className="min-w-0">
+          <h5 id="game-map-reconciliation-heading" className="text-xs font-semibold">
+            Review existing map matches
+          </h5>
+          <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+            Exact normalized names are suggestions only. Existing bindings stay unchanged until you apply this review.
+          </p>
+        </div>
+      </div>
+
+      {preview.suggestions.length > 0 && (
+        <div className="max-h-48 overflow-y-auto border-y border-[var(--marinara-chat-chrome-panel-divider)]">
+          {preview.suggestions.map((suggestion) => (
+            <div
+              key={reconciliationTargetKey(suggestion.target)}
+              className="flex min-h-11 items-center gap-2 py-2 text-[0.6875rem] [&+&]:border-t [&+&]:border-[var(--marinara-chat-chrome-panel-divider)]"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{suggestion.sourceName}</span>
+                <span className="block truncate text-[var(--marinara-chat-chrome-panel-muted)]">
+                  {suggestion.target.mapName} · {suggestion.target.targetName}
+                </span>
+              </span>
+              <span aria-hidden="true" className="text-[var(--marinara-chat-chrome-panel-muted)]">
+                →
+              </span>
+              <span className="max-w-[45%] truncate font-medium">{suggestion.spatialLocationName}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {preview.conflicts.length > 0 && (
+        <details className="text-[0.6875rem]">
+          <summary className="min-h-11 cursor-pointer py-2 font-medium text-amber-400">
+            {preview.conflicts.length} ambiguous {preview.conflicts.length === 1 ? "name" : "names"} need manual binding
+          </summary>
+          <ul className="max-h-40 space-y-2 overflow-y-auto pb-2 text-[var(--marinara-chat-chrome-panel-muted)]">
+            {preview.conflicts.map((conflict) => (
+              <li key={reconciliationTargetKey(conflict.target)}>
+                <span className="font-medium text-[var(--marinara-chat-chrome-panel-text)]">{conflict.sourceName}</span>
+                {": "}
+                {conflict.candidateLocations.map((candidate) => candidate.name).join(", ")}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {preview.unmatched.length > 0 && (
+        <details className="text-[0.6875rem]">
+          <summary className="min-h-11 cursor-pointer py-2 font-medium text-[var(--marinara-chat-chrome-panel-muted)]">
+            {preview.unmatched.length} unmatched map {preview.unmatched.length === 1 ? "position" : "positions"}
+          </summary>
+          <ul className="max-h-40 space-y-1 overflow-y-auto pb-2 text-[var(--marinara-chat-chrome-panel-muted)]">
+            {preview.unmatched.map((target) => (
+              <li key={reconciliationTargetKey(target.target)}>{target.sourceName}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {preview.suggestions.length > 0 && (
+        <button
+          type="button"
+          disabled={applyReconciliation.isPending}
+          onClick={() => void applyExactMatches()}
+          className="mari-chrome-control min-h-11 w-full justify-center px-3 text-xs"
+          aria-live="polite"
+        >
+          {applyReconciliation.isPending ? (
+            <Loader2 size="0.75rem" className="animate-spin" />
+          ) : (
+            <Link2 size="0.75rem" />
+          )}
+          Apply {preview.suggestions.length > reviewedSuggestions.length ? "next " : ""}
+          {reviewedSuggestions.length} reviewed exact {reviewedSuggestions.length === 1 ? "match" : "matches"}
+        </button>
+      )}
+    </section>
+  );
+}
+
 export function GameMapBindingsPanel({
   chatId,
   location,
@@ -76,6 +255,7 @@ export function GameMapBindingsPanel({
   maps,
   disabled = false,
 }: GameMapBindingsPanelProps) {
+  const queryClient = useQueryClient();
   const updateBinding = useUpdateGameMapBinding();
   const [selectedMapId, setSelectedMapId] = useState(() => (maps[0] ? mapId(maps[0], 0) : ""));
   const [targetValue, setTargetValue] = useState("map");
@@ -119,6 +299,7 @@ export function GameMapBindingsPanel({
     if (!effectiveMapId || disabled || updateBinding.isPending) return;
     try {
       await updateBinding.mutateAsync(buildInput(chatId, effectiveMapId, targetValue, spatialLocationId));
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.gameMapReconciliation(chatId) });
       toast.success(spatialLocationId ? `Bound ${targetLabel} to ${location.name}.` : `Cleared ${targetLabel} binding.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to update the Game map binding.");
@@ -136,6 +317,8 @@ export function GameMapBindingsPanel({
           </p>
         </div>
       </div>
+
+      <GameMapReconciliationReview chatId={chatId} definition={definition} disabled={disabled} />
 
       <label className="block space-y-1.5">
         <span className="text-xs font-medium">Game map</span>

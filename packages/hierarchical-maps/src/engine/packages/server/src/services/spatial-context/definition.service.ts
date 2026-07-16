@@ -17,7 +17,13 @@ import { withChatMetadataPatchQueue } from "../storage/chats.storage.js";
 import { createSpatialContextStorage } from "../storage/spatial-context.storage.js";
 import { resolveEffectiveSpatialState } from "./state-resolution.js";
 import { parseSpatialMetadata } from "./metadata.js";
-import { bindGameMapsToExactSpatialLocations } from "./game-map-binding.js";
+import {
+  applyGameMapBindingReconciliation,
+  bindGameMapsToExactSpatialLocations,
+  buildGameMapBindingReconciliationPreview,
+  GameMapBindingError,
+  type GameMapBindingReconciliationSelection,
+} from "./game-map-binding.js";
 
 const METADATA_KEY = "spatialContext";
 
@@ -29,7 +35,9 @@ export type SpatialContextServiceErrorCode =
   | "spatial_current_location_stale"
   | "spatial_replacement_required"
   | "spatial_replacement_invalid"
-  | "spatial_history_location_removal_forbidden";
+  | "spatial_history_location_removal_forbidden"
+  | "spatial_game_map_reconciliation_unavailable"
+  | "spatial_game_map_reconciliation_stale";
 
 export class SpatialContextServiceError extends Error {
   constructor(
@@ -155,6 +163,91 @@ export function createSpatialContextService(db: DB) {
       );
     },
 
+    async getGameMapBindingReconciliation(chatId: string) {
+      const rows = await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
+      const chat = rows[0];
+      if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
+      if (chat.mode !== "game") {
+        throw new SpatialContextServiceError(
+          "spatial_game_map_reconciliation_unavailable",
+          "Game map reconciliation is available only in Game chats.",
+          400,
+        );
+      }
+      const metadata = parseSpatialMetadata(chat.metadata);
+      const stored = readDefinition(metadata);
+      if (stored.corrupt || !stored.definition) {
+        throw new SpatialContextServiceError(
+          "spatial_game_map_reconciliation_unavailable",
+          "Save the hierarchical map before reviewing existing Game map matches.",
+          409,
+        );
+      }
+      return buildGameMapBindingReconciliationPreview(metadata, stored.definition);
+    },
+
+    async reconcileGameMapBindings(
+      chatId: string,
+      input: {
+        expectedDefinitionRevision: number;
+        bindings: GameMapBindingReconciliationSelection[];
+      },
+    ) {
+      return withChatMetadataPatchQueue(chatId, async () => {
+        const rows = await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
+        const chat = rows[0];
+        if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
+        if (chat.mode !== "game") {
+          throw new SpatialContextServiceError(
+            "spatial_game_map_reconciliation_unavailable",
+            "Game map reconciliation is available only in Game chats.",
+            400,
+          );
+        }
+        const metadata = parseSpatialMetadata(chat.metadata);
+        const stored = readDefinition(metadata);
+        if (stored.corrupt || !stored.definition) {
+          throw new SpatialContextServiceError(
+            "spatial_game_map_reconciliation_unavailable",
+            "Save the hierarchical map before reviewing existing Game map matches.",
+            409,
+          );
+        }
+        if (stored.definition.revision !== input.expectedDefinitionRevision) {
+          throw new SpatialContextServiceError(
+            "spatial_game_map_reconciliation_stale",
+            "The hierarchical map changed. Review existing Game map matches again.",
+            409,
+          );
+        }
+
+        let applied;
+        try {
+          applied = applyGameMapBindingReconciliation(metadata, stored.definition, input.bindings);
+        } catch (error) {
+          if (error instanceof GameMapBindingError) {
+            throw new SpatialContextServiceError("spatial_game_map_reconciliation_stale", error.message, 409);
+          }
+          throw error;
+        }
+        if (applied.bindingCount > 0) {
+          await db
+            .update(chats)
+            .set({ metadata: JSON.stringify(applied.metadata), updatedAt: now() })
+            .where(eq(chats.id, chatId));
+          logger.info(
+            "[spatial/game-map-binding] Reconciled %d reviewed Game map positions for chat %s",
+            applied.bindingCount,
+            chatId,
+          );
+        }
+        return {
+          ...buildGameMapBindingReconciliationPreview(applied.metadata, stored.definition),
+          bindingCount: applied.bindingCount,
+        };
+      });
+    },
+
     async update(chatId: string, input: UpdateSpatialContextRequestInput): Promise<SpatialContextResponse> {
       return withChatMetadataPatchQueue(chatId, async () => {
         const rows = await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
@@ -242,7 +335,7 @@ export function createSpatialContextService(db: DB) {
         }
 
         const initialGameMapBindings =
-          chat.mode === "game" && !stored.definition
+          chat.mode === "game" && !stored.definition && metadata.gameSessionStatus === "ready"
             ? bindGameMapsToExactSpatialLocations(metadata, definition)
             : { metadata, bindingCount: 0 };
         const nextMetadata = { ...initialGameMapBindings.metadata, [METADATA_KEY]: definition };

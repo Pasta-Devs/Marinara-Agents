@@ -16,7 +16,46 @@ import { chatKeys } from "./use-chats";
 export const spatialContextKeys = {
   all: ["spatial-context"] as const,
   detail: (chatId: string) => [...spatialContextKeys.all, chatId] as const,
+  gameMapReconciliation: (chatId: string) =>
+    [...spatialContextKeys.detail(chatId), "game-map-reconciliation"] as const,
 };
+
+export type GameMapBindingTarget =
+  | { target: "map"; mapId: string }
+  | { target: "cell"; mapId: string; x: number; y: number }
+  | { target: "node"; mapId: string; nodeId: string };
+
+export type GameMapBindingReference = GameMapBindingTarget & {
+  mapName: string;
+  targetName: string;
+};
+
+export interface GameMapBindingReconciliationPreview {
+  suggestions: Array<{
+    target: GameMapBindingReference;
+    sourceName: string;
+    spatialLocationId: string;
+    spatialLocationName: string;
+  }>;
+  conflicts: Array<{
+    target: GameMapBindingReference;
+    sourceName: string;
+    candidateLocations: Array<{ id: string; name: string }>;
+  }>;
+  unmatched: Array<{
+    target: GameMapBindingReference;
+    sourceName: string;
+  }>;
+  alreadyBoundCount: number;
+  totalTargetCount: number;
+  bindingCount?: number;
+}
+
+export interface ApplyGameMapBindingReconciliationInput {
+  chatId: string;
+  expectedDefinitionRevision: number;
+  bindings: Array<{ target: GameMapBindingTarget; spatialLocationId: string }>;
+}
 
 export interface UpdateSpatialContextInput {
   chatId: string;
@@ -161,5 +200,42 @@ export function useGenerateSpatialMapDraft() {
   return useMutation({
     mutationFn: ({ chatId, ...request }: GenerateSpatialMapDraftInput) =>
       api.post<GenerateSpatialMapDraftResponse>(`/chats/${chatId}/spatial-context/generate`, request),
+  });
+}
+
+export function useGameMapBindingReconciliation(chatId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: spatialContextKeys.gameMapReconciliation(chatId ?? ""),
+    queryFn: () =>
+      api.get<GameMapBindingReconciliationPreview>(
+        `/chats/${chatId}/spatial-context/game-map-bindings/reconciliation`,
+      ),
+    enabled: enabled && !!chatId,
+    staleTime: 30_000,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+      return failureCount < 3;
+    },
+  });
+}
+
+export function useApplyGameMapBindingReconciliation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, ...request }: ApplyGameMapBindingReconciliationInput) =>
+      api.post<GameMapBindingReconciliationPreview>(
+        `/chats/${chatId}/spatial-context/game-map-bindings/reconciliation`,
+        request,
+      ),
+    onSuccess: (response, variables) => {
+      queryClient.setQueryData(spatialContextKeys.gameMapReconciliation(variables.chatId), response);
+      void queryClient.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
+      void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
+    },
+    onError: (_error, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.gameMapReconciliation(variables.chatId),
+      });
+    },
   });
 }

@@ -14,9 +14,10 @@ The package must be installed in the test data directory before launching the Pl
 ## Exact-artifact lifecycle regression
 
 `hierarchical-maps-lifecycle.regression.ts` installs the immutable Maps 1.0.5
-artifact through an isolated catalog, updates it to the exact 1.0.6 artifact,
-then proves offline restart, uninstall, reinstall, full-backup creation, and
-full-backup restore without deleting the stored definition or spatial snapshot.
+artifact through an isolated catalog, updates through 1.0.6 to the exact 1.1.0 artifact,
+then proves reviewed existing-campaign Game map reconciliation, offline restart,
+uninstall, reinstall, full-backup creation, and full-backup restore without
+deleting the stored definition or spatial snapshot.
 
 Run it with the Engine server toolchain so the package is exercised against the
 real host runtime:

@@ -67,7 +67,7 @@ function artifactFixture(version: string): ArtifactFixture {
 }
 
 const fixtures = new Map(
-  [artifactFixture("1.0.5"), artifactFixture("1.0.6")].map((fixture) => [
+  [artifactFixture("1.0.5"), artifactFixture("1.0.6"), artifactFixture("1.1.0")].map((fixture) => [
     fixture.manifest.version,
     fixture,
   ]),
@@ -244,6 +244,23 @@ async function main() {
         ),
       ),
     );
+
+    catalogVersion = "1.1.0";
+    const installed110 =
+      await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(installed110.version, "1.1.0");
+    assert.equal(installed110.previousVersion, "1.0.6");
+    assert.ok(
+      existsSync(
+        join(
+          dataDir,
+          "capability-packages",
+          "versions",
+          "hierarchical-maps",
+          "1.1.0",
+        ),
+      ),
+    );
     assert.ok(
       existsSync(
         join(
@@ -283,7 +300,248 @@ async function main() {
           readiness: entry.readiness,
           ready: entry.ready,
         })),
-      [{ version: "1.0.6", status: "active", readiness: "ready", ready: true }],
+      [{ version: "1.1.0", status: "active", readiness: "ready", ready: true }],
+    );
+
+    const existingGameMap = {
+      id: "existing-campaign-map",
+      type: "node",
+      name: "Existing World",
+      description: "A legacy world map that must remain intact during reconciliation.",
+      nodes: [
+        {
+          id: "existing-harbor",
+          emoji: "⚓",
+          label: "Existing Harbor",
+          x: 20,
+          y: 30,
+          discovered: true,
+        },
+        {
+          id: "ambiguous-crossroads",
+          emoji: "↔️",
+          label: "Crossroads",
+          x: 50,
+          y: 50,
+          discovered: true,
+        },
+        {
+          id: "unknown-ruin",
+          emoji: "🏚️",
+          label: "Unknown Ruin",
+          x: 80,
+          y: 70,
+          discovered: true,
+        },
+      ],
+      edges: [],
+      partyPosition: "existing-harbor",
+    };
+    const existingGame = (await expectJson(app, {
+      method: "POST",
+      url: "/api/chats",
+      headers: csrfHeaders,
+      payload: {
+        name: "Existing Game reconciliation fixture",
+        mode: "game",
+        characterIds: [],
+      },
+    })) as { id: string };
+    await expectJson(app, {
+      method: "PATCH",
+      url: `/api/chats/${existingGame.id}/metadata`,
+      headers: csrfHeaders,
+      payload: {
+        enableAgents: true,
+        activeAgentIds: ["hierarchical-maps"],
+        gameSessionStatus: "active",
+        gameMaps: [existingGameMap],
+        gameMap: existingGameMap,
+        activeGameMapId: existingGameMap.id,
+      },
+    });
+    const existingGameDefinition = {
+      ...definition,
+      ownerMode: "game",
+      startingLocationId: "existing_world",
+      locations: [
+        {
+          ...definition.locations[0],
+          id: "existing_world",
+          name: "Existing World",
+        },
+        {
+          ...definition.locations[1],
+          id: "existing_harbor",
+          parentId: "existing_world",
+          name: "Existing Harbor",
+        },
+        {
+          ...definition.locations[1],
+          id: "east_crossroads",
+          parentId: "existing_world",
+          name: "Crossroads",
+        },
+        {
+          ...definition.locations[1],
+          id: "west_crossroads",
+          parentId: "existing_world",
+          name: "Crossroads",
+        },
+      ],
+    };
+    const existingGameSpatial = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${existingGame.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: existingGameDefinition,
+      },
+    })) as { currentLocationId: string; definition: { revision: number } };
+    assert.equal(existingGameSpatial.currentLocationId, "existing_world");
+    assert.equal(existingGameSpatial.definition.revision, 1);
+
+    const beforeReconciliation = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}`,
+    })) as { metadata: unknown };
+    const beforeMetadata = metadata(beforeReconciliation.metadata) as {
+      gameMap: { spatialLocationId?: string; nodes: Array<{ spatialLocationId?: string }> };
+    };
+    assert.equal(beforeMetadata.gameMap.spatialLocationId, undefined);
+    assert.ok(beforeMetadata.gameMap.nodes.every((node) => !node.spatialLocationId));
+
+    type ReconciliationTarget =
+      | { target: "map"; mapId: string; mapName: string; targetName: string }
+      | { target: "node"; mapId: string; nodeId: string; mapName: string; targetName: string }
+      | { target: "cell"; mapId: string; x: number; y: number; mapName: string; targetName: string };
+    type ReconciliationPreview = {
+      suggestions: Array<{ target: ReconciliationTarget; sourceName: string; spatialLocationId: string }>;
+      conflicts: Array<{ sourceName: string; candidateLocations: Array<{ id: string }> }>;
+      unmatched: Array<{ sourceName: string }>;
+      bindingCount?: number;
+    };
+    const preview = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}/spatial-context/game-map-bindings/reconciliation`,
+    })) as ReconciliationPreview;
+    assert.deepEqual(
+      preview.suggestions.map((suggestion) => [suggestion.sourceName, suggestion.spatialLocationId]),
+      [
+        ["Existing World", "existing_world"],
+        ["Existing Harbor", "existing_harbor"],
+      ],
+    );
+    assert.deepEqual(preview.conflicts.map((conflict) => conflict.sourceName), ["Crossroads"]);
+    assert.deepEqual(
+      preview.conflicts[0]?.candidateLocations.map((location) => location.id),
+      ["east_crossroads", "west_crossroads"],
+    );
+    assert.deepEqual(preview.unmatched.map((target) => target.sourceName), ["Unknown Ruin"]);
+
+    const reviewedBindings = preview.suggestions.map((suggestion) => {
+      const target = suggestion.target;
+      if (target.target === "node") {
+        return {
+          target: { target: "node" as const, mapId: target.mapId, nodeId: target.nodeId },
+          spatialLocationId: suggestion.spatialLocationId,
+        };
+      }
+      if (target.target === "cell") {
+        return {
+          target: { target: "cell" as const, mapId: target.mapId, x: target.x, y: target.y },
+          spatialLocationId: suggestion.spatialLocationId,
+        };
+      }
+      return {
+        target: { target: "map" as const, mapId: target.mapId },
+        spatialLocationId: suggestion.spatialLocationId,
+      };
+    });
+    assert.equal(reviewedBindings.length, 2);
+    await expectJson(
+      app,
+      {
+        method: "POST",
+        url: `/api/chats/${existingGame.id}/spatial-context/game-map-bindings/reconciliation`,
+        headers: csrfHeaders,
+        payload: {
+          expectedDefinitionRevision: 1,
+          bindings: [
+            reviewedBindings[0]!,
+            { ...reviewedBindings[1]!, spatialLocationId: "east_crossroads" },
+          ],
+        },
+      },
+      409,
+    );
+    const afterRejectedReconciliation = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}`,
+    })) as { metadata: unknown };
+    const rejectedMetadata = metadata(afterRejectedReconciliation.metadata) as {
+      gameMap: { spatialLocationId?: string; nodes: Array<{ spatialLocationId?: string }> };
+    };
+    assert.equal(rejectedMetadata.gameMap.spatialLocationId, undefined);
+    assert.ok(rejectedMetadata.gameMap.nodes.every((node) => !node.spatialLocationId));
+
+    const applied = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/spatial-context/game-map-bindings/reconciliation`,
+      headers: csrfHeaders,
+      payload: {
+        expectedDefinitionRevision: 1,
+        bindings: reviewedBindings,
+      },
+    })) as ReconciliationPreview;
+    assert.equal(applied.bindingCount, 2);
+    const retried = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/spatial-context/game-map-bindings/reconciliation`,
+      headers: csrfHeaders,
+      payload: {
+        expectedDefinitionRevision: 1,
+        bindings: reviewedBindings,
+      },
+    })) as ReconciliationPreview;
+    assert.equal(retried.bindingCount, 0);
+
+    const reconciledGame = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}`,
+    })) as { metadata: unknown };
+    const reconciledMetadata = metadata(reconciledGame.metadata) as {
+      gameMap: {
+        spatialLocationId?: string;
+        nodes: Array<{ id: string; spatialLocationId?: string }>;
+      };
+      gameMaps: Array<{
+        spatialLocationId?: string;
+        nodes: Array<{ id: string; spatialLocationId?: string }>;
+      }>;
+    };
+    assert.equal(reconciledMetadata.gameMap.spatialLocationId, "existing_world");
+    assert.equal(reconciledMetadata.gameMaps[0]?.spatialLocationId, "existing_world");
+    assert.deepEqual(
+      Object.fromEntries(
+        reconciledMetadata.gameMap.nodes.map((node) => [node.id, node.spatialLocationId]),
+      ),
+      {
+        "existing-harbor": "existing_harbor",
+        "ambiguous-crossroads": undefined,
+        "unknown-ruin": undefined,
+      },
+    );
+    await expectJson(
+      app,
+      {
+        method: "DELETE",
+        url: `/api/chats/${existingGame.id}?force=true`,
+        headers: csrfHeaders,
+      },
+      204,
     );
 
     const created = (await expectJson(app, {
@@ -403,7 +661,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.0.6");
+    assert.equal(reinstalled.version, "1.1.0");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -481,11 +739,11 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.0.6", status: "active", readiness: "ready" }],
+      [{ version: "1.1.0", status: "active", readiness: "ready" }],
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);

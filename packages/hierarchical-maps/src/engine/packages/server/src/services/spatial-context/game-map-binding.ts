@@ -19,9 +19,50 @@ export type GameMapBindingTarget =
 
 export type UpdateGameMapBindingInput = GameMapBindingTarget & { spatialLocationId: string | null };
 
+export type GameMapBindingReference = GameMapBindingTarget & {
+  mapName: string;
+  targetName: string;
+};
+
+export interface GameMapBindingSuggestion {
+  target: GameMapBindingReference;
+  sourceName: string;
+  spatialLocationId: string;
+  spatialLocationName: string;
+}
+
+export interface GameMapBindingConflict {
+  target: GameMapBindingReference;
+  sourceName: string;
+  candidateLocations: Array<{ id: string; name: string }>;
+}
+
+export interface GameMapBindingUnmatchedTarget {
+  target: GameMapBindingReference;
+  sourceName: string;
+}
+
+export interface GameMapBindingReconciliationPreview {
+  suggestions: GameMapBindingSuggestion[];
+  conflicts: GameMapBindingConflict[];
+  unmatched: GameMapBindingUnmatchedTarget[];
+  alreadyBoundCount: number;
+  totalTargetCount: number;
+}
+
+export interface GameMapBindingReconciliationSelection {
+  target: GameMapBindingTarget;
+  spatialLocationId: string;
+}
+
 export class GameMapBindingError extends Error {
   constructor(
-    readonly code: "map_missing" | "target_missing" | "target_type_mismatch",
+    readonly code:
+      | "map_missing"
+      | "target_missing"
+      | "target_type_mismatch"
+      | "target_already_bound"
+      | "reconciliation_stale",
     message: string,
   ) {
     super(message);
@@ -156,6 +197,173 @@ function buildUniqueSpatialLocationIndex(definition: SpatialContextDefinition): 
     uniqueLocations.set(name, location.id);
   }
   return uniqueLocations;
+}
+
+interface CollectedGameMapBindingTarget {
+  reference: GameMapBindingReference;
+  sourceName: string;
+  currentSpatialLocationId: string | null;
+}
+
+function bindingTargetKey(target: GameMapBindingTarget): string {
+  if (target.target === "map") return `map:${target.mapId}`;
+  if (target.target === "node") return `node:${target.mapId}:${target.nodeId}`;
+  return `cell:${target.mapId}:${target.x}:${target.y}`;
+}
+
+function collectGameMapBindingTargets(metadata: Record<string, unknown>): CollectedGameMapBindingTarget[] {
+  return getGameMapsFromMeta(metadata).flatMap((map, index) => {
+    const stableMapId = getGameMapId(map, index) ?? `map-${index + 1}`;
+    const mapName = boundedText(map.name, 200) ?? `Map ${index + 1}`;
+    const targets: CollectedGameMapBindingTarget[] = [
+      {
+        reference: { target: "map", mapId: stableMapId, mapName, targetName: "Whole map" },
+        sourceName: mapName,
+        currentSpatialLocationId: map.spatialLocationId?.trim() || null,
+      },
+    ];
+
+    if (map.type === "node") {
+      for (const node of map.nodes ?? []) {
+        const sourceName = boundedText(node.label, 200) ?? node.id;
+        targets.push({
+          reference: {
+            target: "node",
+            mapId: stableMapId,
+            nodeId: node.id,
+            mapName,
+            targetName: sourceName,
+          },
+          sourceName,
+          currentSpatialLocationId: node.spatialLocationId?.trim() || null,
+        });
+      }
+    } else {
+      for (const cell of map.cells ?? []) {
+        const sourceName = boundedText(cell.label, 200) ?? `Cell ${cell.x},${cell.y}`;
+        targets.push({
+          reference: {
+            target: "cell",
+            mapId: stableMapId,
+            x: cell.x,
+            y: cell.y,
+            mapName,
+            targetName: sourceName,
+          },
+          sourceName,
+          currentSpatialLocationId: cell.spatialLocationId?.trim() || null,
+        });
+      }
+    }
+    return targets;
+  });
+}
+
+export function buildGameMapBindingReconciliationPreview(
+  metadata: Record<string, unknown>,
+  definition: SpatialContextDefinition,
+): GameMapBindingReconciliationPreview {
+  const locationsByName = new Map<string, Array<{ id: string; name: string }>>();
+  for (const location of definition.locations) {
+    if (location.status !== "active") continue;
+    const normalizedName = normalizeBindingName(location.name);
+    if (!normalizedName) continue;
+    const matches = locationsByName.get(normalizedName) ?? [];
+    matches.push({ id: location.id, name: location.name });
+    locationsByName.set(normalizedName, matches);
+  }
+
+  const suggestions: GameMapBindingSuggestion[] = [];
+  const conflicts: GameMapBindingConflict[] = [];
+  const unmatched: GameMapBindingUnmatchedTarget[] = [];
+  let alreadyBoundCount = 0;
+  const targets = collectGameMapBindingTargets(metadata);
+  for (const target of targets) {
+    if (target.currentSpatialLocationId) {
+      alreadyBoundCount += 1;
+      continue;
+    }
+    const candidates = locationsByName.get(normalizeBindingName(target.sourceName)) ?? [];
+    if (candidates.length === 1) {
+      suggestions.push({
+        target: target.reference,
+        sourceName: target.sourceName,
+        spatialLocationId: candidates[0]!.id,
+        spatialLocationName: candidates[0]!.name,
+      });
+    } else if (candidates.length > 1) {
+      conflicts.push({
+        target: target.reference,
+        sourceName: target.sourceName,
+        candidateLocations: candidates,
+      });
+    } else {
+      unmatched.push({ target: target.reference, sourceName: target.sourceName });
+    }
+  }
+
+  return {
+    suggestions,
+    conflicts,
+    unmatched,
+    alreadyBoundCount,
+    totalTargetCount: targets.length,
+  };
+}
+
+export function applyGameMapBindingReconciliation(
+  metadata: Record<string, unknown>,
+  definition: SpatialContextDefinition,
+  selections: GameMapBindingReconciliationSelection[],
+): GameMapAutoBindingResult {
+  const targetsByKey = new Map(
+    collectGameMapBindingTargets(metadata).map((target) => [bindingTargetKey(target.reference), target]),
+  );
+  const suggestionsByKey = new Map(
+    buildGameMapBindingReconciliationPreview(metadata, definition).suggestions.map((suggestion) => [
+      bindingTargetKey(suggestion.target),
+      suggestion,
+    ]),
+  );
+  const selectedKeys = new Set<string>();
+
+  for (const selection of selections) {
+    const key = bindingTargetKey(selection.target);
+    if (selectedKeys.has(key)) {
+      throw new GameMapBindingError("reconciliation_stale", "The reconciliation request contains a duplicate target.");
+    }
+    selectedKeys.add(key);
+    const target = targetsByKey.get(key);
+    if (!target) {
+      throw new GameMapBindingError("target_missing", "A selected Game map position no longer exists.");
+    }
+    if (target.currentSpatialLocationId === selection.spatialLocationId) continue;
+    if (target.currentSpatialLocationId) {
+      throw new GameMapBindingError(
+        "target_already_bound",
+        "A selected Game map position was bound elsewhere. Review the latest map before retrying.",
+      );
+    }
+    if (suggestionsByKey.get(key)?.spatialLocationId !== selection.spatialLocationId) {
+      throw new GameMapBindingError(
+        "reconciliation_stale",
+        "An exact-name match changed. Review the latest reconciliation before applying it.",
+      );
+    }
+  }
+
+  let nextMetadata = metadata;
+  let bindingCount = 0;
+  for (const selection of selections) {
+    const target = targetsByKey.get(bindingTargetKey(selection.target));
+    if (target?.currentSpatialLocationId === selection.spatialLocationId) continue;
+    nextMetadata = updateGameMapBinding(nextMetadata, {
+      ...selection.target,
+      spatialLocationId: selection.spatialLocationId,
+    });
+    bindingCount += 1;
+  }
+  return { metadata: nextMetadata, bindingCount };
 }
 
 function bindExactLocation<T extends { spatialLocationId?: string }>(
