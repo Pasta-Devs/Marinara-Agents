@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   BookOpen,
@@ -34,16 +34,33 @@ interface SpatialMapAiBuilderProps {
   open: boolean;
   definition: SpatialContextDefinition;
   currentLocationId: string | null;
+  preferredTargetLocationId?: string | null;
   hasCommittedSpatialHistory: boolean;
   dirty: boolean;
   initialResult?: GenerateSpatialMapDraftResponse | null;
+  initialSession?: SpatialMapAiBuilderSession | null;
+  regenerateRequestId?: number;
+  allowDirtyGeneratedReplacement?: boolean;
   setupReview?: boolean;
   lorebooks?: Lorebook[];
   excludedLorebookIds?: string[];
   debugMode?: boolean;
   onClose: () => void;
-  onApply: (definition: SpatialContextDefinition) => void;
+  onApply: (session: SpatialMapAiBuilderSession) => void;
 }
+
+type SpatialMapAiBuilderRequest = {
+  operation: SpatialMapDraftOperation;
+  targetLocationId: string;
+  size: SpatialMapDraftSize;
+  instructions: string;
+  groundingMode: SpatialMapGroundingMode;
+  sourceLorebookIds: string[];
+};
+
+export type SpatialMapAiBuilderSession = SpatialMapAiBuilderRequest & {
+  result: GenerateSpatialMapDraftResponse;
+};
 
 const SIZE_OPTIONS: Array<{
   value: SpatialMapDraftSize;
@@ -73,9 +90,13 @@ export function SpatialMapAiBuilder({
   open,
   definition,
   currentLocationId,
+  preferredTargetLocationId = null,
   hasCommittedSpatialHistory,
   dirty,
   initialResult = null,
+  initialSession = null,
+  regenerateRequestId = 0,
+  allowDirtyGeneratedReplacement = false,
   setupReview = false,
   lorebooks = [],
   excludedLorebookIds = [],
@@ -91,23 +112,30 @@ export function SpatialMapAiBuilder({
     [definition.locations],
   );
   const defaultTargetLocationId =
-    (currentLocationId && activeLocations.some((location) => location.id === currentLocationId)
-      ? currentLocationId
-      : definition.startingLocationId) ??
+    (preferredTargetLocationId && activeLocations.some((location) => location.id === preferredTargetLocationId)
+      ? preferredTargetLocationId
+      : currentLocationId && activeLocations.some((location) => location.id === currentLocationId)
+        ? currentLocationId
+        : definition.startingLocationId) ??
     activeLocations[0]?.id ??
     "";
-  const [operation, setOperation] = useState<SpatialMapDraftOperation>(initialResult?.operation ?? (hasLocations ? "expand" : "create"));
+  const initialOperation = initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create");
+  const [operation, setOperation] = useState<SpatialMapDraftOperation>(initialOperation);
   const [targetLocationId, setTargetLocationId] = useState(defaultTargetLocationId);
-  const [size, setSize] = useState<SpatialMapDraftSize>(initialResult?.size ?? "medium");
-  const [instructions, setInstructions] = useState("");
-  const [result, setResult] = useState<GenerateSpatialMapDraftResponse | null>(initialResult);
+  const [size, setSize] = useState<SpatialMapDraftSize>(initialSession?.size ?? initialResult?.size ?? "medium");
+  const [instructions, setInstructions] = useState(initialSession?.instructions ?? "");
+  const [result, setResult] = useState<GenerateSpatialMapDraftResponse | null>(initialSession?.result ?? initialResult);
   const [error, setError] = useState<string | null>(null);
-  const [groundingMode, setGroundingMode] = useState<SpatialMapGroundingMode>(initialResult?.grounding?.mode ?? "setup");
-  const [sourceLorebookIds, setSourceLorebookIds] = useState<string[]>([]);
+  const [groundingMode, setGroundingMode] = useState<SpatialMapGroundingMode>(
+    initialSession?.groundingMode ?? initialResult?.grounding?.mode ?? "setup",
+  );
+  const [sourceLorebookIds, setSourceLorebookIds] = useState<string[]>(initialSession?.sourceLorebookIds ?? []);
+  const [advancedOpen, setAdvancedOpen] = useState(initialOperation !== "expand");
   const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
   const [expandedPreviewIds, setExpandedPreviewIds] = useState<Set<string>>(() => new Set());
   const [previewQuery, setPreviewQuery] = useState("");
   const requestInputRef = useRef<HTMLTextAreaElement>(null);
+  const handledRegenerationRef = useRef(0);
   const excludedLorebookIdSet = useMemo(() => new Set(excludedLorebookIds), [excludedLorebookIds]);
   const eligibleLorebooks = useMemo(
     () =>
@@ -191,17 +219,64 @@ export function SpatialMapAiBuilder({
 
   useEffect(() => {
     if (!open) return;
-    setOperation(initialResult?.operation ?? (hasLocations ? "expand" : "create"));
-    setTargetLocationId(initialResult?.targetLocationId ?? defaultTargetLocationId);
-    if (initialResult) setSize(initialResult.size);
-    setResult(initialResult);
+    const nextOperation = initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create");
+    setOperation(nextOperation);
+    setTargetLocationId(initialSession?.targetLocationId ?? initialResult?.targetLocationId ?? defaultTargetLocationId);
+    setSize(initialSession?.size ?? initialResult?.size ?? "medium");
+    setInstructions(initialSession?.instructions ?? "");
+    setResult(initialSession?.result ?? initialResult);
     setError(null);
-    setGroundingMode(initialResult?.grounding?.mode ?? "setup");
-    setSourceLorebookIds([]);
+    setGroundingMode(initialSession?.groundingMode ?? initialResult?.grounding?.mode ?? "setup");
+    setSourceLorebookIds(initialSession?.sourceLorebookIds ?? []);
+    setAdvancedOpen(nextOperation !== "expand");
     setSelectedPreviewId(null);
     setExpandedPreviewIds(new Set());
     setPreviewQuery("");
-  }, [chatId, defaultTargetLocationId, hasLocations, initialResult, open]);
+  }, [chatId, defaultTargetLocationId, hasLocations, initialResult, initialSession, open]);
+
+  const runGeneration = useCallback(
+    async (request: SpatialMapAiBuilderRequest) => {
+      setError(null);
+      try {
+        const generated = await generateDraft.mutateAsync({
+          chatId,
+          operation: request.operation,
+          size: request.size,
+          ...(request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
+          instructions: request.instructions.trim() || undefined,
+          groundingMode: request.groundingMode,
+          sourceLorebookIds: request.groundingMode === "setup" ? [] : request.sourceLorebookIds,
+          debugMode,
+        });
+        setResult(generated);
+      } catch (generationError) {
+        setResult(null);
+        setError(generationError instanceof Error ? generationError.message : "The map draft could not be generated.");
+      }
+    },
+    [chatId, debugMode, generateDraft],
+  );
+
+  useEffect(() => {
+    if (
+      !open ||
+      !initialSession ||
+      regenerateRequestId <= 0 ||
+      handledRegenerationRef.current === regenerateRequestId
+    ) {
+      return;
+    }
+    handledRegenerationRef.current = regenerateRequestId;
+    setResult(null);
+    void runGeneration({
+      operation: initialSession.operation,
+      targetLocationId: initialSession.targetLocationId,
+      size: initialSession.size,
+      instructions: initialSession.instructions,
+      groundingMode: initialSession.groundingMode,
+      sourceLorebookIds: initialSession.sourceLorebookIds,
+    });
+  }, [initialSession, open, regenerateRequestId, runGeneration]);
 
   useEffect(() => {
     if (!open || !result || previewLocations.length === 0) return;
@@ -225,28 +300,10 @@ export function SpatialMapAiBuilder({
     setResult(null);
     setError(null);
   };
-  const generate = async () => {
-    setError(null);
-    try {
-      const generated = await generateDraft.mutateAsync({
-        chatId,
-        operation,
-        size,
-        ...(operation === "expand" ? { targetLocationId } : {}),
-        instructions: instructions.trim() || undefined,
-        groundingMode,
-        sourceLorebookIds: groundingMode === "setup" ? [] : sourceLorebookIds,
-        debugMode,
-      });
-      setResult(generated);
-    } catch (generationError) {
-      setResult(null);
-      setError(generationError instanceof Error ? generationError.message : "The map draft could not be generated.");
-    }
-  };
+  const generate = () => runGeneration({ operation, targetLocationId, size, instructions, groundingMode, sourceLorebookIds });
   const generationDisabled =
     generateDraft.isPending ||
-    dirty ||
+    (dirty && !allowDirtyGeneratedReplacement) ||
     (operation === "expand" && targetLocationId.length === 0) ||
     (groundingMode !== "setup" && sourceLorebookIds.length === 0);
   const selectedPreviewProvenance = selectedPreviewLocation ? result?.provenance?.[selectedPreviewLocation.id] : null;
@@ -355,7 +412,32 @@ export function SpatialMapAiBuilder({
 
       <div className="mari-maps-ai-grid grid min-h-0 gap-px bg-[var(--marinara-editor-divider)]">
         <div className="bg-[var(--marinara-editor-bg)] p-4">
-          {hasLocations && !hasCommittedSpatialHistory && (
+          {hasLocations && operation === "expand" && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-2.5">
+              <div className="min-w-48 flex-1">
+                <p className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-[var(--marinara-editor-muted)]">
+                  Adding beneath
+                </p>
+                <p className="mt-0.5 truncate text-xs font-semibold text-[var(--marinara-editor-title)]">
+                  {activeLocations.find((location) => location.id === targetLocationId)?.name ?? "Choose a location"}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((current) => !current)}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+              >
+                <ChevronDown
+                  size="0.75rem"
+                  className={cn("transition-transform duration-200", advancedOpen && "rotate-180")}
+                />
+                {advancedOpen ? "Hide advanced options" : "Advanced options"}
+              </button>
+            </div>
+          )}
+
+          {advancedOpen && hasLocations && !hasCommittedSpatialHistory && (
             <fieldset className="mb-4">
               <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">AI action</legend>
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -386,7 +468,7 @@ export function SpatialMapAiBuilder({
             </fieldset>
           )}
 
-          {operation === "expand" && (
+          {operation === "expand" && advancedOpen && (
             <div className="mb-4">
               <label className="text-xs font-semibold text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-target">
                 Expand beneath
@@ -410,7 +492,7 @@ export function SpatialMapAiBuilder({
             </div>
           )}
 
-          <fieldset className="mb-4">
+          {(operation !== "expand" || advancedOpen) && <fieldset className="mb-4">
             <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">Build from</legend>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {(
@@ -521,7 +603,7 @@ export function SpatialMapAiBuilder({
                 )}
               </div>
             )}
-          </fieldset>
+          </fieldset>}
 
           <label className="text-xs font-semibold text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-request">
             {operation === "expand" ? "What should be added?" : "What should this world include?"}
@@ -599,7 +681,7 @@ export function SpatialMapAiBuilder({
               Applying this result replaces the current working map. Nothing changes on the server until Save.
             </p>
           )}
-          {dirty && (
+          {dirty && !allowDirtyGeneratedReplacement && (
             <p className="mt-2 flex items-start gap-2 text-xs text-amber-300" role="alert">
               <AlertCircle size="0.75rem" className="mt-0.5 shrink-0" />
               Save or discard the current map edits before using AI.
@@ -798,7 +880,17 @@ export function SpatialMapAiBuilder({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onApply(result.definition)}
+                  onClick={() =>
+                    onApply({
+                      result,
+                      operation,
+                      targetLocationId,
+                      size,
+                      instructions,
+                      groundingMode,
+                      sourceLorebookIds,
+                    })
+                  }
                   className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs"
                 >
                   <Check size="0.8125rem" />{" "}

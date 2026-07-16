@@ -236,6 +236,19 @@ const generatedDefinition = {
   ],
 } as const;
 
+const regeneratedDefinition = {
+  ...generatedDefinition,
+  locations: generatedDefinition.locations.map((location) =>
+    location.id === "ai_world"
+      ? {
+          ...location,
+          name: "Recharted Coast",
+          description: "A coast redrawn around a safer harbor approach.",
+        }
+      : location,
+  ),
+} as const;
+
 const expandedDefinition = {
   ...generatedDefinition,
   enabled: true,
@@ -244,7 +257,7 @@ const expandedDefinition = {
     ...generatedDefinition.locations,
     {
       id: "ai_riverside",
-      parentId: "ai_world",
+      parentId: "ai_harbor",
       name: "Riverside Ward",
       kind: "place",
       description: "A lantern-lit district beside the tidal river.",
@@ -1028,8 +1041,10 @@ test("AI map builder previews a validated local draft before save", async ({ pag
   const chat = (await response.json()) as { id: string };
   await activateHierarchicalMaps(page, chat.id);
   const mobile = testInfo.project.name.includes("mobile");
+  let generationRequestCount = 0;
 
   await page.route(`**/api/chats/${chat.id}/spatial-context/generate`, async (route) => {
+    generationRequestCount += 1;
     const request = route.request().postDataJSON() as {
       operation: string;
       size: string;
@@ -1049,8 +1064,8 @@ test("AI map builder previews a validated local draft before save", async ({ pag
         operation: "create",
         size: "small",
         source: "roleplay_setup",
-        generatedLocationCount: generatedDefinition.locations.length,
-        definition: generatedDefinition,
+        generatedLocationCount: regeneratedDefinition.locations.length,
+        definition: generationRequestCount === 1 ? generatedDefinition : regeneratedDefinition,
       }),
     });
   });
@@ -1140,6 +1155,25 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expect(firstMapSetup.getByRole("list", { name: "First map progress" })).toContainText(
       /Build.*Review.*Start here.*Enable map/u,
     );
+    await expectMinimumInteractiveSize(firstMapSetup.getByRole("button", { name: "Discard draft" }), "Discard draft control");
+    await expectMinimumInteractiveSize(firstMapSetup.getByRole("button", { name: "Regenerate" }), "Regenerate draft control");
+    await firstMapSetup.getByRole("button", { name: "Regenerate" }).click();
+    const regenerateDialog = page.getByRole("dialog", { name: "Regenerate this working draft?" });
+    await expect(regenerateDialog).toBeVisible();
+    const confirmRegeneration = regenerateDialog.getByRole("button", { name: "Regenerate draft", exact: true });
+    await confirmRegeneration.focus();
+    await page.keyboard.press("Enter");
+    await expect(regenerateDialog).toBeHidden();
+    await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
+    await expect(page.getByLabel("What should this world include?")).toHaveValue(
+      "A foggy port with a lighthouse and secret sewers.",
+    );
+    await expect(page.getByRole("button", { name: /Small About 8 places/ })).toHaveAttribute("aria-pressed", "true");
+    const regeneratedHierarchy = page.getByRole("region", { name: "Generated location hierarchy" });
+    await expect(regeneratedHierarchy.getByRole("button", { name: /^Recharted Coast/ })).toBeVisible();
+    expect(generationRequestCount).toBe(2);
+    await page.getByRole("button", { name: "Replace working draft" }).click();
+    await expect(hierarchy.getByRole("button", { name: "Recharted Coast region" })).toBeVisible();
     const startingLocation = firstMapSetup.getByLabel("Starting location");
     await expect(startingLocation).toHaveValue("ai_world");
     await startingLocation.selectOption("ai_harbor");
@@ -1162,7 +1196,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     expect(stored.definition.startingLocationId).toBe("ai_harbor");
     expect(stored.currentLocationId).toBe("ai_harbor");
     expect(stored.definition.locations.map((location) => location.name)).toEqual([
-      "Shrouded Coast",
+      "Recharted Coast",
       "Gloam Harbor",
       "Blackglass Lighthouse",
       "Old Sewers",
@@ -1213,7 +1247,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     };
     expect(request).toMatchObject({
       operation: "expand",
-      targetLocationId: "ai_world",
+      targetLocationId: "ai_harbor",
       size: "small",
       instructions: "Add a riverside ward with an inn for ferrymen.",
       debugMode: false,
@@ -1223,7 +1257,7 @@ test("AI map expansion preserves a campaign map and its current location", async
       contentType: "application/json",
       body: JSON.stringify({
         operation: "expand",
-        targetLocationId: "ai_world",
+        targetLocationId: "ai_harbor",
         size: "small",
         source: "roleplay_setup",
         generatedLocationCount: 2,
@@ -1293,7 +1327,12 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expectAiBuilderLayout(page, mobile);
     await expect(page.getByText(/Campaign history is protected/)).toBeVisible();
     await expect(page.getByRole("button", { name: /Replace draft/ })).toHaveCount(0);
-    await expect(page.getByLabel("Expand beneath")).toHaveValue("ai_world");
+    await expect(page.getByText("Adding beneath", { exact: true })).toBeVisible();
+    await expect(page.getByText("Gloam Harbor", { exact: true })).toBeVisible();
+    const advancedOptions = page.getByRole("button", { name: "Advanced options", exact: true });
+    await expect(advancedOptions).toHaveAttribute("aria-expanded", "false");
+    await expectMinimumInteractiveSize(advancedOptions, "AI expansion advanced options control");
+    await expect(page.getByLabel("Expand beneath")).toHaveCount(0);
     await page.getByLabel("What should be added?").fill("Add a riverside ward with an inn for ferrymen.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
     await page.getByRole("button", { name: "Generate expansion" }).click();

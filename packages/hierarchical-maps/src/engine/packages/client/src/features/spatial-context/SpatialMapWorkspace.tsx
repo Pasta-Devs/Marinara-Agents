@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Save,
   Sparkles,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -34,7 +35,7 @@ import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
 import { LocalMapCanvas } from "./components/LocalMapCanvas";
 import { LocationInspector } from "./components/LocationInspector";
-import { SpatialMapAiBuilder } from "./components/SpatialMapAiBuilder";
+import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
 import {
   addSpatialLocation,
   archiveSpatialLocation,
@@ -139,6 +140,8 @@ export function SpatialMapWorkspace({
   const [reviewConflict, setReviewConflict] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [firstSaveResult, setFirstSaveResult] = useState<FirstSaveResult | null>(null);
+  const [firstMapGenerationSession, setFirstMapGenerationSession] = useState<SpatialMapAiBuilderSession | null>(null);
+  const [regenerateRequestId, setRegenerateRequestId] = useState(0);
   const [archiveRequestId, setArchiveRequestId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [archiveReplacementId, setArchiveReplacementId] = useState("");
@@ -184,6 +187,8 @@ export function SpatialMapWorkspace({
     setConflict(false);
     setAiBuilderOpen(false);
     setFirstSaveResult(null);
+    setFirstMapGenerationSession(null);
+    setRegenerateRequestId(0);
   }, [chatId]);
 
   useEffect(() => {
@@ -384,6 +389,7 @@ export function SpatialMapWorkspace({
           revision: baseDefinition?.revision ?? 0,
         };
         applyDraft(imported);
+        setFirstMapGenerationSession(null);
         setSelectedId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
         setEnteredParentId(null);
         setMobilePane("hierarchy");
@@ -431,6 +437,7 @@ export function SpatialMapWorkspace({
       setServerIssues(response.warnings);
       setReplacementCurrentLocationId(null);
       setSavedFlash(true);
+      setFirstMapGenerationSession(null);
       if (completingFirstMap) {
         const startingLocation = saved.locations.find((location) => location.id === saved.startingLocationId);
         setFirstSaveResult({
@@ -479,11 +486,13 @@ export function SpatialMapWorkspace({
     setServerIssues(result.data.warnings);
     setReplacementCurrentLocationId(null);
     setFirstSaveResult(null);
+    setFirstMapGenerationSession(null);
   }, [ownerMode, spatial]);
 
   const applyGeneratedDraft = useCallback(
-    (generated: SpatialContextDefinition) => {
+    (session: SpatialMapAiBuilderSession) => {
       if (!draft) return;
+      const generated = session.result.definition;
       const parsedGenerated = spatialContextDefinitionSchema.safeParse(generated);
       if (!parsedGenerated.success) {
         toast.error(parsedGenerated.error.issues[0]?.message ?? "The AI draft was not a valid hierarchical map.");
@@ -498,9 +507,7 @@ export function SpatialMapWorkspace({
         revision: baseDefinition?.revision ?? normalizedGenerated.revision,
       };
       const firstAddedLocation = next.locations.find((location) => !previousIds.has(location.id));
-      const expandedExistingMap =
-        draft.locations.length > 0 &&
-        draft.locations.every((location) => next.locations.some((candidate) => candidate.id === location.id));
+      const expandedExistingMap = session.result.operation === "expand";
       applyDraft(next);
       setSelectedId(firstAddedLocation?.id ?? next.startingLocationId ?? next.locations[0]?.id ?? null);
       setEnteredParentId(firstAddedLocation?.parentId ?? null);
@@ -515,6 +522,9 @@ export function SpatialMapWorkspace({
           : null,
       );
       onClearPendingDraftReview?.();
+      if (baseDefinition === null && session.result.operation !== "expand") {
+        setFirstMapGenerationSession(session);
+      }
       setAiBuilderOpen(false);
       toast.success(
         expandedExistingMap
@@ -522,8 +532,41 @@ export function SpatialMapWorkspace({
           : "AI map draft applied. Review it, choose a start, then enable and save.",
       );
     },
-    [applyDraft, baseDefinition?.revision, currentLocationId, draft, onClearPendingDraftReview, ownerMode],
+    [applyDraft, baseDefinition, currentLocationId, draft, onClearPendingDraftReview, ownerMode],
   );
+
+  const regenerateFirstMapDraft = useCallback(async () => {
+    if (!firstMapGenerationSession) return;
+    const confirmed = await confirmAction({
+      title: "Regenerate this working draft?",
+      message:
+        "This replaces the generated working draft and any unsaved edits made after it was applied. Nothing saved on the server changes.",
+      confirmLabel: "Regenerate draft",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    setAiBuilderOpen(true);
+    setRegenerateRequestId((current) => current + 1);
+  }, [confirmAction, firstMapGenerationSession]);
+
+  const discardFirstMapDraft = useCallback(async () => {
+    if (!draft || !firstMapGenerationSession) return;
+    const confirmed = await confirmAction({
+      title: "Discard this working draft?",
+      message: "This clears the unsaved generated map. No saved map or chat history is changed.",
+      confirmLabel: "Discard draft",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    const empty = createEmptySpatialDefinition(ownerMode);
+    applyDraft(empty);
+    setSelectedId(null);
+    setEnteredParentId(null);
+    setMobilePane("hierarchy");
+    setFirstMapGenerationSession(null);
+    setReplacementCurrentLocationId(null);
+    toast.info("Generated map draft discarded.");
+  }, [applyDraft, confirmAction, draft, firstMapGenerationSession, ownerMode]);
 
   const closeAiBuilder = useCallback(() => {
     if (pendingSetupReview) {
@@ -777,7 +820,12 @@ export function SpatialMapWorkspace({
             disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
           >
-            <Sparkles size="0.8125rem" /> {draft.locations.length > 0 ? "Expand with AI" : "Build with AI"}
+            <Sparkles size="0.8125rem" />{" "}
+            {firstMapGenerationSession
+              ? "Regenerate with AI"
+              : draft.locations.length > 0
+                ? "Expand with AI"
+                : "Build with AI"}
           </button>
           <button
             type="button"
@@ -844,9 +892,13 @@ export function SpatialMapWorkspace({
         open={aiBuilderOpen}
         definition={draft}
         currentLocationId={currentLocationId}
+        preferredTargetLocationId={selected?.id ?? null}
         hasCommittedSpatialHistory={spatial.data?.hasCommittedSpatialHistory ?? false}
         dirty={dirty}
         initialResult={pendingSetupReview?.result}
+        initialSession={firstMapGenerationSession}
+        regenerateRequestId={regenerateRequestId}
+        allowDirtyGeneratedReplacement={baseDefinition === null && firstMapGenerationSession !== null}
         setupReview={Boolean(pendingSetupReview)}
         lorebooks={lorebooks}
         excludedLorebookIds={excludedLorebookIds}
@@ -902,6 +954,24 @@ export function SpatialMapWorkspace({
                 ))}
               </select>
             </label>
+            {firstMapGenerationSession && (
+              <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
+                <button
+                  type="button"
+                  onClick={() => void discardFirstMapDraft()}
+                  className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+                >
+                  <Trash2 size="0.75rem" /> Discard draft
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void regenerateFirstMapDraft()}
+                  className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+                >
+                  <RefreshCw size="0.75rem" /> Regenerate
+                </button>
+              </div>
+            )}
           </div>
         </section>
       )}
