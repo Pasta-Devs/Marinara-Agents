@@ -2,7 +2,7 @@
   {
     "id": "illustrator",
     "name": "Illustrator",
-    "description": "Responsible for image and video generations.",
+    "description": "Responsible for image and video generations. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "eightball",
   "name": "8-Ball Pool",
-  "version": "1.0.0",
-  "description": "Play 8-Ball Pool with a Conversation character.",
+  "version": "1.0.1",
+  "description": "Play 8-Ball Pool with a Conversation character. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -36,8 +36,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "6be1eb2b14288c71a2c26b994a6bba162cfc6c2cd2f1eeeee4e809300c5cdc45",
-      "bytes": 437
+      "sha256": "2f5444073396897f82bb0d8b24aea5942200834b875dccdf4eb583e9ec80ac20",
+      "bytes": 518
     },
     {
       "path": "server.mjs",

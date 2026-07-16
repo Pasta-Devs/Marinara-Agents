@@ -2,7 +2,7 @@
   {
     "id": "uno",
     "name": "UNO",
-    "description": "Play UNO with Conversation characters.",
+    "description": "Play UNO with Conversation characters. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

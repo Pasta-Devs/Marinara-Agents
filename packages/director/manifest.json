@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "director",
   "name": "Narrative Director",
-  "version": "1.0.0",
-  "description": "Creates one-shot story directions when you choose to push the next response forward.",
+  "version": "1.0.1",
+  "description": "Creates one-shot story directions when you choose to push the next response forward. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "b885078af3840a1cb108c3372657a5f5326edc337011bd7fa8c8010ba4c1ae84",
-      "bytes": 1502
+      "sha256": "1c439d1f8b090b60769718c113dbdb23a02df77f19764c6574d2c95a64c544b4",
+      "bytes": 1581
     }
   ],
   "permissions": [

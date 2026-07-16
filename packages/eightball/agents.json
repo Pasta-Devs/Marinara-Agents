@@ -2,7 +2,7 @@
   {
     "id": "eightball",
     "name": "8-Ball Pool",
-    "description": "Play 8-Ball Pool with a Conversation character.",
+    "description": "Play 8-Ball Pool with a Conversation character. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

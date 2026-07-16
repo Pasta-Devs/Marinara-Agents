@@ -2,7 +2,7 @@
   {
     "id": "rock-paper-scissors",
     "name": "Rock-Paper-Scissors",
-    "description": "Play Rock-Paper-Scissors with a Conversation character.",
+    "description": "Play Rock-Paper-Scissors with a Conversation character. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

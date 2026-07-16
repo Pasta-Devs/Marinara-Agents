@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "html",
   "name": "Immersive HTML",
-  "version": "1.0.0",
-  "description": "Post-processes the latest Roleplay response with diegetic HTML/CSS/JS visual artifacts without changing the story meaning.",
+  "version": "1.0.1",
+  "description": "Post-processes the latest Roleplay response with diegetic HTML/CSS/JS visual artifacts without changing the story meaning. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "7066a09706b2500c6047a48563492dbe38f824a119206922bd05dac6432742f5",
-      "bytes": 1970
+      "sha256": "dd19ca30d6b1a0d2b9602599bfd4d116b9e6a2848e512d800f4213f463cf3900",
+      "bytes": 2047
     }
   ],
   "permissions": [
