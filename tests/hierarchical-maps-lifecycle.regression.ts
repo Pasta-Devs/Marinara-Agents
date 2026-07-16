@@ -96,7 +96,7 @@ assert.deepEqual(candidateFixture.manifest.capabilityApi, {
 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineVersion: "3.2.2",
-  engineCommit: "f22f4974487c75359a7f6686b9a98fe10516c979",
+  engineCommit: "7d5c09975abfd28e7e5e6645ff3b0bdeef86e1d7",
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
