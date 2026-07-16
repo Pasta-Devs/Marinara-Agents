@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "custom-tracker",
   "name": "Custom Tracker",
-  "version": "1.0.0",
-  "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay.",
+  "version": "1.0.1",
+  "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "1235e960aeb723842b1f2a092f332f06f60503265bdb2c485a0bb00554a811ca",
-      "bytes": 1410
+      "sha256": "e59a4d4ebda0364cced40f4aa056ed49fa44221253a85a140ece86732a028b1b",
+      "bytes": 1490
     }
   ],
   "permissions": [

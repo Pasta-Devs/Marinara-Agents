@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "character-tracker",
   "name": "Character Tracker",
-  "version": "1.0.0",
-  "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.).",
+  "version": "1.0.1",
+  "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.). Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "bba2dfe845675480d48a707e934667e1d6403991930277288ebebe1832af9a01",
-      "bytes": 2446
+      "sha256": "8517d76056388156a1ab25aa49021d201f7df169e030750d95186bf33da6daf9",
+      "bytes": 2526
     }
   ],
   "permissions": [

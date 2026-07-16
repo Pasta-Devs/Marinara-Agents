@@ -1,8 +1,8 @@
 [
   {
     "id": "conversation-calls",
-    "name": "Conversation Calls",
-    "description": "Adds live audio and video calls with Conversation characters.",
+    "name": "Calls",
+    "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

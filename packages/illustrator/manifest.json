@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "illustrator",
   "name": "Illustrator",
-  "version": "1.0.1",
-  "description": "Responsible for image and video generations.",
+  "version": "1.0.2",
+  "description": "Responsible for image and video generations. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "a22a4723672859b8915a112836088ca0e9799c69225015a27f3636b7ea983d52",
-      "bytes": 11101
+      "sha256": "600dcf747b6b3c7c3a0f059f4eeffd281d582b1fa6524b5807072267cc77f3a1",
+      "bytes": 11245
     }
   ],
   "permissions": [

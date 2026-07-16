@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "spotify",
   "name": "Music DJ",
-  "version": "1.0.0",
-  "description": "Analyzes the narrative mood and plays matching music through Spotify, YouTube, or local Game Assets music.",
+  "version": "1.0.1",
+  "description": "Analyzes the narrative mood and plays matching music through Spotify, YouTube, or local Game Assets music. Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "07c1428044f4837a54938ceaf380589e80d6bb85d4543f28d9c997a75ba033e2",
-      "bytes": 7078
+      "sha256": "c0ce6b36f4e0813626b6bc366d9e92494324d6cd46cf6f7e4c27ad48c29fa639",
+      "bytes": 7268
     }
   ],
   "permissions": [

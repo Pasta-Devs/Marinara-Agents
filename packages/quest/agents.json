@@ -2,7 +2,7 @@
   {
     "id": "quest",
     "name": "Quest Tracker",
-    "description": "Manages quest objectives, completion states, and rewards.",
+    "description": "Manages quest objectives, completion states, and rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "defaultInjectAsSection": true,
