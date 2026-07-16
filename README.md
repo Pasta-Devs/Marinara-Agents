@@ -66,7 +66,7 @@ Conversation mode's About Me profile and `update_about_me` tool are built into M
 
 ## Contributing
 
-Agent ideas, bugs, documentation corrections, and package improvements are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before starting: contributions begin with an issue, target the `staging` branch, must be marked ready for review, and require an approving review before merge. CodeRabbit automatically reviews ready pull requests.
+Agent ideas, bugs, documentation corrections, and package improvements are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before starting: contributions begin with an issue, target the `main` branch, must be marked ready for review, and require an approving review before merge. CodeRabbit automatically reviews ready pull requests.
 
 ## Maintainer build
 

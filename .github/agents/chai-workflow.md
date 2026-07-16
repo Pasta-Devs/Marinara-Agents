@@ -33,11 +33,11 @@ Follow instructions in this order:
 ## Issue and Pull Request Lane
 
 - Open or link an issue before implementation and make ownership visible.
-- Base work on `staging`; open a draft PR when implementation begins.
+- Base work on `main`; open a draft PR when implementation begins.
 - Mark the PR ready only when it is ready for human and CodeRabbit review.
 - Leave every PR test checkbox unchecked unless a human actually performed that item.
 - Address actionable review feedback, rerun validation after changes, and obtain one approval before merge.
-- Never push directly to `main` or `staging` without explicit maintainer direction.
+- Never push directly to `main` without explicit maintainer direction.
 
 ## Risky Package Work
 

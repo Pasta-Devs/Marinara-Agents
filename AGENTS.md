@@ -9,7 +9,7 @@ This file is a thin maintainer note for contributors using coding agents. Canoni
 
 ## Preferred Workflow
 
-- Start from `staging` and open an issue before implementation.
+- Start from `main` and open an issue before implementation.
 - Open a draft PR when issue work begins so ownership is visible, then mark it ready only after validation and self-review are complete.
 - Run `node scripts/validate-catalog.mjs` as the baseline validation command.
 - Rebuild the affected package and catalog entry whenever source payloads, manifests, Engine snapshots, or generated bundles change.
@@ -27,4 +27,4 @@ This file is a thin maintainer note for contributors using coding agents. Canoni
 
 - Never auto-check validation or test-plan checkboxes. They are a human verification list, not proof.
 - Explain why the package or repository change is needed, not only which files changed.
-- Link the issue, target `staging`, leave drafts unreviewed by CodeRabbit until they are marked ready, and address actionable review feedback before merge.
+- Link the issue, target `main`, leave drafts unreviewed by CodeRabbit until they are marked ready, and address actionable review feedback before merge.
