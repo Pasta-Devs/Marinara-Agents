@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "capabilityApi": {
     "major": 1,
-    "minor": 0
+    "minor": 1
   },
   "builtAgainst": {
     "engineVersion": "2.3.0",
-    "engineCommit": "0561e00e0b1f46f5426b4a67431c5aee3b375639"
+    "engineCommit": "08fcbf1eaabe47fc3b450c0b4a733a01cde81cd6"
   },
   "privateEngineImports": [
     {
@@ -63,14 +63,6 @@
     },
     {
       "source": "packages/server/src/routes/spatial-context.routes.ts",
-      "specifier": "../config/runtime-config.js"
-    },
-    {
-      "source": "packages/server/src/routes/spatial-context.routes.ts",
-      "specifier": "../lib/logger.js"
-    },
-    {
-      "source": "packages/server/src/routes/spatial-context.routes.ts",
       "specifier": "../services/game/jsonish.js"
     },
     {
@@ -108,10 +100,6 @@
     {
       "source": "packages/server/src/services/spatial-context/definition.service.ts",
       "specifier": "../../db/schema/index.js"
-    },
-    {
-      "source": "packages/server/src/services/spatial-context/definition.service.ts",
-      "specifier": "../../lib/logger.js"
     },
     {
       "source": "packages/server/src/services/spatial-context/definition.service.ts",

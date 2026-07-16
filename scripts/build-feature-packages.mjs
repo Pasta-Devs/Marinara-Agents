@@ -142,19 +142,28 @@ import * as projection from ${JSON.stringify(resolve(prepared.buildRoot, "packag
 import * as stateResolution from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/state-resolution.ts"))};
 import * as ownerTurn from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/owner-turn.ts"))};
 import * as gameMapBinding from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/game-map-binding.ts"))};
+import { configurePackageRuntime } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/package-runtime.ts"))};
 import { createSpatialContextStorage } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/storage/spatial-context.storage.ts"))};
 let readinessStorage = null;
 export async function activate({ app, api }) {
-  await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
-  readinessStorage = createSpatialContextStorage(app.db);
-  const cleanups = [
-    api.registerService("hierarchical-maps:projection", projection),
-    api.registerService("hierarchical-maps:state-resolution", stateResolution),
-    api.registerService("hierarchical-maps:owner-turn", ownerTurn),
-    api.registerService("hierarchical-maps:game-map-binding", gameMapBinding),
-    api.registerService("hierarchical-maps:storage", { create: createSpatialContextStorage }),
-  ];
-  return () => { readinessStorage = null; for (const cleanup of cleanups.reverse()) cleanup(); };
+  const cleanupRuntime = configurePackageRuntime(api.runtime);
+  try {
+    await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
+    readinessStorage = createSpatialContextStorage(app.db);
+    const cleanups = [
+      cleanupRuntime,
+      api.registerService("hierarchical-maps:projection", projection),
+      api.registerService("hierarchical-maps:state-resolution", stateResolution),
+      api.registerService("hierarchical-maps:owner-turn", ownerTurn),
+      api.registerService("hierarchical-maps:game-map-binding", gameMapBinding),
+      api.registerService("hierarchical-maps:storage", { create: createSpatialContextStorage }),
+    ];
+    return () => { readinessStorage = null; for (const cleanup of cleanups.reverse()) cleanup(); };
+  } catch (error) {
+    readinessStorage = null;
+    cleanupRuntime();
+    throw error;
+  }
 }
 export async function selfCheck() {
   if (!readinessStorage) throw new Error("Hierarchical Maps storage did not initialize");

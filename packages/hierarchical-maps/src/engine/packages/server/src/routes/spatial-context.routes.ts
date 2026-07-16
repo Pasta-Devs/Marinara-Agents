@@ -13,8 +13,6 @@ import {
   type SpatialMapLocationProvenance,
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
-import { isDebugAgentsEnabled } from "../config/runtime-config.js";
-import { logger, logDebugOverride } from "../lib/logger.js";
 import { parseGameJsonish } from "../services/game/jsonish.js";
 import { createLLMProvider } from "../services/llm/provider-registry.js";
 import {
@@ -40,6 +38,11 @@ import {
 } from "../services/spatial-context/game-map-binding.js";
 import { resolveLorebookScopeExclusions } from "../services/lorebook/game-lorebook-scope.js";
 import { parseSpatialMetadata } from "../services/spatial-context/metadata.js";
+import {
+  isDebugAgentsEnabled,
+  logger,
+  logDebugOverride,
+} from "../services/spatial-context/package-runtime.js";
 
 interface ChatSpatialParams {
   chatId: string;

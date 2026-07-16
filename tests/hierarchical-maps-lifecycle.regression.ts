@@ -81,10 +81,10 @@ let catalogOnline = true;
 const candidateFixture = fixtures.get("1.1.0");
 assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
-assert.deepEqual(candidateFixture.manifest.capabilityApi, { major: 1, minor: 0 });
+assert.deepEqual(candidateFixture.manifest.capabilityApi, { major: 1, minor: 1 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineVersion: "2.3.0",
-  engineCommit: "0561e00e0b1f46f5426b4a67431c5aee3b375639",
+  engineCommit: "08fcbf1eaabe47fc3b450c0b4a733a01cde81cd6",
 });
 
 function catalogFixture(version: string) {
