@@ -74,7 +74,7 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.1.2",
+    version: "1.1.3",
     minEngineVersion: "3.2.0",
     maxEngineExclusive: "3.3.0",
     name: "Hierarchical Maps",
@@ -359,6 +359,56 @@ async function bundleSpecialClient(feature, output) {
   height: min(14rem, 32dvh);
 }
 `;
+      const runtimeStyles = `
+@media (max-width: 39.999rem) {
+  [data-marinara-maps-runtime-root][data-runtime-layout="compact"] {
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-left: auto;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  [data-marinara-maps-runtime-desktop] {
+    display: none !important;
+  }
+
+  [data-marinara-maps-runtime-mobile] {
+    display: flex !important;
+  }
+
+  [data-marinara-maps-runtime-popover] {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.375rem);
+    z-index: 100;
+    width: min(22rem, calc(100vw - 1.5rem));
+    max-height: min(70dvh, 36rem);
+  }
+
+  [data-marinara-maps-runtime-options] {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.375rem);
+    z-index: 100;
+    width: min(22rem, calc(100vw - 1.5rem));
+    max-height: min(70dvh, 36rem);
+    overflow-y: auto;
+    border: 1px solid var(--marinara-chat-chrome-panel-border);
+    border-radius: 0.75rem;
+    background: var(--marinara-chat-chrome-panel-bg);
+    box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 45%);
+  }
+}
+
+@media (min-width: 40rem) {
+  [data-marinara-maps-runtime-mobile] {
+    display: none !important;
+  }
+}
+`;
       source = `
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -375,6 +425,7 @@ import { packageApi } from ${JSON.stringify(packageApi)};
 import { clearPendingSpatialTransition, setPendingSpatialTransition, setPendingSpatialTransitionStatus, usePendingSpatialTransition } from ${JSON.stringify(pendingTransitions)};
 const workspaceStyles = ${JSON.stringify(workspaceStyles)};
 const worldMapStyles = ${JSON.stringify(worldMapStyles)};
+const runtimeStyles = ${JSON.stringify(runtimeStyles)};
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 class CapabilityClientErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -436,7 +487,7 @@ function Root({ element }) {
   if (workspaceOpen && chatId) return <WorkspaceOverlay chatId={chatId} props={props} onClose={closeWorkspace} />;
   if (view === "detail") return <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenEditor={() => setWorkspaceOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /><Toaster richColors /></>;
   if (!chatId) return null;
-  if (view === "runtime") return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>;
+  if (view === "runtime") return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><style data-marinara-maps-runtime-styles>{runtimeStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>;
   if (view === "world-map") return <WorldMapView props={props} chatId={chatId} onOpenEditor={() => setWorkspaceOpen(true)} />;
   if (view === "workspace") return <WorkspaceOverlay chatId={chatId} props={props} onClose={closeWorkspace} />;
   return <><SpatialContextSettingsSection chatId={chatId} style={props.style} enabledForChat={props.enabledForChat === true} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenEditor={() => setWorkspaceOpen(true)} /><Toaster richColors /></>;

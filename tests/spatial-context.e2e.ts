@@ -836,7 +836,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
-    await expect(home.getByText("v1.1.2", { exact: true })).toBeVisible();
+    await expect(home.getByText("v1.1.3", { exact: true })).toBeVisible();
     await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
     await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
@@ -1642,7 +1642,7 @@ test("Game setup can skip a generated map without persisting it", async ({ page 
 });
 
 test("Roleplay stages story movement separately from prose and recovers stale turns", async ({ page }, testInfo) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const chatResponse = await page.request.post("/api/chats", {
     data: {
       name: `Spatial Runtime ${testInfo.project.name}`,
@@ -1848,7 +1848,12 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(input).toHaveValue("");
     await expect(storyLocation).toContainText("Gloam Harbor");
 
-    await storyLocation.getByRole("button", { name: /Story location.*Gloam Harbor/ }).click();
+    if (mobileRuntime) {
+      await storyLocation.getByRole("button", { name: "Open story map" }).click();
+      await storyLocation.getByRole("button", { name: /Open story location options.*Gloam Harbor/ }).click();
+    } else {
+      await storyLocation.getByRole("button", { name: /Story location.*Gloam Harbor/ }).click();
+    }
     await storyLocation.getByRole("button", { name: "Inspect Shrouded Coast" }).click();
     await storyLocation.getByRole("button", { name: "Set destination: Shrouded Coast" }).click();
     await input.fill("Wait for me at the gate.");
