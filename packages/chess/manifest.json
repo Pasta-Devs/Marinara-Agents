@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "chess",
   "name": "Chess",
-  "version": "1.0.0",
-  "description": "Play Chess with a Conversation character.",
+  "version": "1.0.1",
+  "description": "Play Chess with a Conversation character. Add as a Command in Chat Settings → Agents → Commands for Conversation mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -32,8 +32,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "9a3805fa3ee9a51a2a09dbae4c684efaf4b877f95c3a37fdf45305403597996c",
-      "bytes": 421
+      "sha256": "7660e6edbfc48706bcf1ee7385928a6d674a8b1cc9130c4c1fa17fd5b8671270",
+      "bytes": 502
     },
     {
       "path": "server.mjs",

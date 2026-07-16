@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "cyoa",
   "name": "CYOA Choices",
-  "version": "1.0.0",
-  "description": "Generates interactive Choose Your Own Adventure choices after each assistant message. Click a choice to send it as your response. Available in Roleplay chats.",
+  "version": "1.0.1",
+  "description": "Generates interactive Choose Your Own Adventure choices after each assistant message. Click a choice to send it as your response. Available in Roleplay chats. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "3.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "63066a601fee0c76241bddd40f96aa472c95abfe84bf01c15a80d86e4ff8ec00",
-      "bytes": 1363
+      "sha256": "dccabb14005179ded5a32779e1804b724bfe45f170e890f531400f0cbec56404",
+      "bytes": 1440
     }
   ],
   "permissions": [

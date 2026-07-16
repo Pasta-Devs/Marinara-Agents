@@ -2,7 +2,7 @@
   {
     "id": "combat",
     "name": "Combat",
-    "description": "Manages combat encounters, initiative, HP tracking, and turn-based actions.",
+    "description": "Manages combat encounters, initiative, HP tracking, and turn-based actions. Add as an Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
     "phase": "parallel",
     "enabledByDefault": false,
     "category": "misc",
