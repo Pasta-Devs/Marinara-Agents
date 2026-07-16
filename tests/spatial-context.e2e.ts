@@ -1785,9 +1785,36 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(storyLocation).toContainText("Shrouded Coast");
     const openStoryMap = storyLocation.getByRole("button", { name: "Open story map" });
     await expectMinimumInteractiveSize(openStoryMap, "Roleplay story-map control");
+    const mobileRuntime = testInfo.project.name.includes("mobile");
+    const composerBeforeMap = mobileRuntime
+      ? await page.locator("textarea.mari-chat-input-textarea").boundingBox()
+      : null;
+    if (mobileRuntime) {
+      const collapsedRuntimeBox = await storyLocation.boundingBox();
+      expect(collapsedRuntimeBox?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(52);
+      expect(collapsedRuntimeBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(48);
+    }
     await openStoryMap.click();
     let roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
     await expect(roleplayMap).toBeVisible();
+    if (mobileRuntime) {
+      const composerAfterMap = await page.locator("textarea.mari-chat-input-textarea").boundingBox();
+      expect(Math.abs((composerAfterMap?.y ?? 0) - (composerBeforeMap?.y ?? 0))).toBeLessThanOrEqual(1);
+      const closeMapToggle = storyLocation.getByRole("button", { name: "Close story map", exact: true });
+      await expectMinimumInteractiveSize(closeMapToggle, "Roleplay story-map close toggle");
+      await closeMapToggle.click();
+      await expect(roleplayMap).toHaveCount(0);
+      await storyLocation.getByRole("button", { name: "Open story map" }).click();
+      roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+      await expect(roleplayMap).toBeVisible();
+      const closeMapPanel = storyLocation.getByRole("button", { name: "Close story map panel" });
+      await expectMinimumInteractiveSize(closeMapPanel, "Roleplay story-map panel close control");
+      await closeMapPanel.click();
+      await expect(roleplayMap).toHaveCount(0);
+      await storyLocation.getByRole("button", { name: "Open story map" }).click();
+      roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+      await expect(roleplayMap).toBeVisible();
+    }
     const editMap = roleplayMap.getByRole("button", { name: "Edit hierarchical map" });
     await expectMinimumInteractiveSize(editMap, "Roleplay minimap edit control");
     await editMap.click();
