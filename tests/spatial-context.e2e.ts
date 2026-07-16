@@ -1748,14 +1748,18 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
 
     const storyLocation = page.getByRole("region", { name: "Story location" });
     await expect(storyLocation).toContainText("Shrouded Coast");
-    await storyLocation.getByRole("button", { name: /Story location.*Shrouded Coast/ }).click();
-    const inspectHarbor = storyLocation.getByRole("button", { name: "Inspect Gloam Harbor" });
-    await expectMinimumInteractiveSize(inspectHarbor, "Roleplay destination inspect control");
+    const openStoryMap = storyLocation.getByRole("button", { name: "Open story map" });
+    await expectMinimumInteractiveSize(openStoryMap, "Roleplay story-map control");
+    await openStoryMap.click();
+    const roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+    await expect(roleplayMap).toBeVisible();
+    const inspectHarbor = roleplayMap.getByRole("button", { name: /Inspect Gloam Harbor/ });
+    await expectMinimumInteractiveSize(inspectHarbor, "Roleplay map destination control");
     await inspectHarbor.focus();
     await page.keyboard.press("Enter");
-    await expect(storyLocation.getByText("A busy harbor of black piers.", { exact: true })).toBeVisible();
-    const setHarborDestination = storyLocation.getByRole("button", { name: "Set destination: Gloam Harbor" });
-    await expectMinimumInteractiveSize(setHarborDestination, "Roleplay set-destination control");
+    await expect(roleplayMap.getByText("A busy harbor of black piers.", { exact: true })).toBeVisible();
+    const setHarborDestination = roleplayMap.getByRole("button", { name: "Set destination: Gloam Harbor" });
+    await expectMinimumInteractiveSize(setHarborDestination, "Roleplay map set-destination control");
     await setHarborDestination.click();
     await expect(storyLocation.getByText("Moves with your next turn")).toBeVisible();
 
