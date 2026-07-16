@@ -39,6 +39,7 @@ type Manifest = {
   version: string;
   capabilityApi?: { major: number; minor: number };
   builtAgainst?: { engineVersion: string; engineCommit: string };
+  contributions?: { agentDetail?: { agentIds?: string[] } };
   [key: string]: unknown;
 };
 
@@ -91,12 +92,13 @@ assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, {
   major: 1,
-  minor: 2,
+  minor: 3,
 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineVersion: "3.2.2",
-  engineCommit: "fbfb57605de0c9ebb6cced61fd5b5288db428fad",
+  engineCommit: "f22f4974487c75359a7f6686b9a98fe10516c979",
 });
+assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
 function seedInstalledProfile(version: string) {
   const fixture = fixtures.get(version);

@@ -94,9 +94,9 @@ export async function readHierarchicalMapsBoundary() {
     throw new Error("Unsupported Hierarchical Maps boundary schema");
   if (
     boundary.capabilityApi?.major !== 1 ||
-    boundary.capabilityApi?.minor !== 2
+    boundary.capabilityApi?.minor !== 3
   ) {
-    throw new Error("Hierarchical Maps must target capability API 1.2");
+    throw new Error("Hierarchical Maps must target capability API 1.3");
   }
   if (
     !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(

@@ -2,11 +2,11 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 2
+    "minor": 3
   },
   "builtAgainst": {
     "engineVersion": "3.2.2",
-    "engineCommit": "fbfb57605de0c9ebb6cced61fd5b5288db428fad"
+    "engineCommit": "f22f4974487c75359a7f6686b9a98fe10516c979"
   },
   "id": "hierarchical-maps",
   "name": "Hierarchical Maps",
@@ -26,6 +26,11 @@
     "client": "client.js"
   },
   "contributions": {
+    "agentDetail": {
+      "agentIds": [
+        "hierarchical-maps"
+      ]
+    },
     "slots": [
       "chat-settings",
       "spatial-workspace",
@@ -46,8 +51,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "d840cc06a841fc70dae77c5538a8a998d8f9c10c604962b173dc2517afcd1201",
-      "bytes": 676305
+      "sha256": "d143cf9a2b26cdd367422841399d3321da1b4f0f0b61e9b380d25fe36e4b8c33",
+      "bytes": 686438
     }
   ],
   "permissions": [

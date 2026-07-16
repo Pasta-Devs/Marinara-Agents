@@ -786,6 +786,105 @@ test("Hierarchical Maps activates inside its Tracker Agents entry", async ({ pag
   }
 });
 
+test("global Hierarchical Maps home activates and opens the current chat map", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Maps Global Home Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  const resetMetadata = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+    data: { enableAgents: false, activeAgentIds: [] },
+  });
+  expect(resetMetadata.ok(), await resetMetadata.text()).toBeTruthy();
+  const mobile = testInfo.project.name.includes("mobile");
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator(
+      mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
+    );
+    await expect(agentsPanel).toBeVisible();
+    const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
+    await expect(mapsCard).toBeVisible();
+    await mapsCard.getByText("Hierarchical Maps", { exact: true }).click();
+
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(home).toBeVisible();
+    await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
+    await expect(home.getByText("v1.1.0", { exact: true })).toBeVisible();
+    await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
+    await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
+    await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
+
+    const activation = home.getByRole("switch", { name: /Use in this chat/ });
+    const createMap = home.getByRole("button", { name: "Create map", exact: true });
+    await expect(activation).toHaveAttribute("aria-checked", "false");
+    await expect(createMap).toBeDisabled();
+    await expectMinimumInteractiveSize(activation, "Global Maps activation control");
+    await expectMinimumInteractiveSize(home.getByRole("button", { name: "Manage package" }), "Manage package control");
+    await expectMinimumInteractiveSize(home.getByRole("button", { name: "Back to Agents" }), "Global Maps back control");
+
+    await activation.click();
+    await expect(activation).toHaveAttribute("aria-checked", "true");
+    await expect(home).toContainText("Active in this chat. Saved map context can participate in turns.");
+    await expect(createMap).toBeEnabled();
+
+    await expect
+      .poll(async () => {
+        const chatResponse = await page.request.get(`/api/chats/${chat.id}`);
+        const stored = (await chatResponse.json()) as { metadata?: unknown };
+        const metadata =
+          typeof stored.metadata === "string"
+            ? (JSON.parse(stored.metadata) as { enableAgents?: boolean; activeAgentIds?: string[] })
+            : ((stored.metadata ?? {}) as { enableAgents?: boolean; activeAgentIds?: string[] });
+        return {
+          enableAgents: metadata.enableAgents,
+          activeAgentIds: metadata.activeAgentIds,
+        };
+      })
+      .toEqual({ enableAgents: true, activeAgentIds: ["hierarchical-maps"] });
+
+    await createMap.click();
+    await expect(page.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Back to chat" }).click();
+    const discardDialog = page.getByRole("dialog", { name: "Discard map changes?" });
+    if (await discardDialog.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await discardDialog.getByRole("button", { name: "Discard changes", exact: true }).click();
+    }
+    await expect(home).toBeVisible();
+    await expect(home.getByRole("button", { name: "Create map", exact: true })).toBeEnabled();
+    await home.getByRole("button", { name: "Back to Agents" }).click();
+    await expect(home).toHaveCount(0);
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
 test("Deep maps and long labels remain keyboard and touch operable across themes", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const chatResponse = await page.request.post("/api/chats", {
