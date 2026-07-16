@@ -1,20 +1,17 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  PROVIDERS,
   generateSpatialMapDraftRequestSchema,
-  localAuthProviderBaseUrl,
   pendingSpatialTransitionSchema,
   updateSpatialContextRequestSchema,
+  type CapabilityChatRecord,
+  type CapabilityResourceHost,
   type GenerateSpatialMapDraftResponse,
-  type LorebookEntry,
   type SpatialMapGroundingMode,
   type SpatialMapGroundingSummary,
   type SpatialMapLocationProvenance,
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
-import { parseGameJsonish } from "../services/game/jsonish.js";
-import { createLLMProvider } from "../services/llm/provider-registry.js";
 import {
   buildSpatialMapDraftPrompt,
   buildSpatialMapExpansionPrompt,
@@ -27,18 +24,17 @@ import {
   createSpatialContextService,
   SpatialContextServiceError,
 } from "../services/spatial-context/definition.service.js";
-import { createCharactersStorage } from "../services/storage/characters.storage.js";
-import { createChatsStorage } from "../services/storage/chats.storage.js";
-import { createConnectionsStorage } from "../services/storage/connections.storage.js";
-import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
 import { commitSpatialOwnerTurn, SpatialOwnerTurnError } from "../services/spatial-context/owner-turn.js";
 import {
   buildGameMapDraftReference,
   type GameMapDraftReference,
 } from "../services/spatial-context/game-map-binding.js";
-import { resolveLorebookScopeExclusions } from "../services/lorebook/game-lorebook-scope.js";
 import { parseSpatialMetadata } from "../services/spatial-context/metadata.js";
 import {
+  getPackageJson,
+  getPackageLanguageModels,
+  getPackagePersistence,
+  getPackageResources,
   isDebugAgentsEnabled,
   logger,
   logDebugOverride,
@@ -46,6 +42,29 @@ import {
 
 interface ChatSpatialParams {
   chatId: string;
+}
+
+const GAME_LOREBOOK_KEEPER_SOURCE_ID = "game-lorebook-keeper";
+
+function readTrimmedString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function resolveLorebookScopeExclusions(
+  chatMode: unknown,
+  metadata: Record<string, unknown>,
+): { excludedLorebookIds: string[]; excludedSourceAgentIds: string[] } {
+  const userExcludedLorebookIds = Array.isArray(metadata.excludedLorebookIds)
+    ? metadata.excludedLorebookIds.filter(
+        (value): value is string => typeof value === "string" && value.trim().length > 0,
+      )
+    : [];
+  const hideGameKeeper = chatMode === "game" && metadata.gameLorebookKeeperEnabled !== true;
+  const gameLorebookId = hideGameKeeper ? readTrimmedString(metadata.gameLorebookKeeperLorebookId) : null;
+  return {
+    excludedLorebookIds: [...new Set([...userExcludedLorebookIds, ...(gameLorebookId ? [gameLorebookId] : [])])],
+    excludedSourceAgentIds: hideGameKeeper ? [GAME_LOREBOOK_KEEPER_SOURCE_ID] : [],
+  };
 }
 
 const spatialOwnerTurnSchema = z.object({
@@ -136,11 +155,14 @@ interface BuiltSpatialLoreCatalog {
 }
 
 async function buildSpatialLoreCatalog(
-  storage: ReturnType<typeof createLorebooksStorage>,
+  resources: CapabilityResourceHost,
   mode: SpatialMapGroundingMode,
   sourceLorebookIds: string[],
   sourceEntryIds: string[],
-  exclusions: { excludedLorebookIds: string[]; excludedSourceAgentIds: string[] },
+  exclusions: {
+    excludedLorebookIds: string[];
+    excludedSourceAgentIds: string[];
+  },
 ): Promise<BuiltSpatialLoreCatalog> {
   const selectedLorebookIds = Array.from(new Set(sourceLorebookIds));
   const selectedEntryIds = Array.from(new Set(sourceEntryIds));
@@ -159,21 +181,11 @@ async function buildSpatialLoreCatalog(
     };
   }
 
-  const bookEntries = (await storage.listEntriesByLorebooks(selectedLorebookIds)) as unknown as LorebookEntry[];
-  const directEntries = (
-    await Promise.all(selectedEntryIds.map((entryId) => storage.getEntry(entryId)))
-  ).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)) as unknown as LorebookEntry[];
-  const requestedEntries = Array.from(
-    new Map([...bookEntries, ...directEntries].map((entry) => [entry.id, entry])).values(),
-  );
-  const eligibleEntries = (await storage.listEligibleEntriesByIds(
-    requestedEntries.map((entry) => entry.id),
-    exclusions,
-  )) as unknown as LorebookEntry[];
-  const eligibleById = new Map(eligibleEntries.map((entry) => [entry.id, entry]));
-  const orderedEntries = requestedEntries.flatMap((entry) => eligibleById.get(entry.id) ?? []);
-  const books = (await storage.list()) as unknown as Array<{ id: string; name: string }>;
-  const bookNameById = new Map(books.map((book) => [book.id, book.name]));
+  const orderedEntries = await resources.listEligibleLorebookEntries({
+    lorebookIds: selectedLorebookIds,
+    entryIds: selectedEntryIds,
+    ...exclusions,
+  });
   const items: SpatialLoreCatalogItem[] = [];
   let usedCharacters = 0;
 
@@ -183,7 +195,7 @@ async function buildSpatialLoreCatalog(
       sourceKey: `source_${items.length + 1}`,
       entryId: entry.id,
       lorebookId: entry.lorebookId,
-      lorebookName: bookNameById.get(entry.lorebookId) ?? "Unknown lorebook",
+      lorebookName: entry.lorebookName,
       entryName: entry.name,
       excerpt: (excerpt(entry.content, 1_000) ?? excerpt(entry.description, 1_000) ?? "").trim(),
     };
@@ -246,55 +258,24 @@ function buildSpatialMapProvenance(
           : [];
       });
       const kind =
-        sources.length > 0
-          ? "lore_backed"
-          : planProvenance[index]?.origin === "inferred"
-            ? "inferred"
-            : "added_by_ai";
+        sources.length > 0 ? "lore_backed" : planProvenance[index]?.origin === "inferred" ? "inferred" : "added_by_ai";
       return [location.id, { kind, sources } satisfies SpatialMapLocationProvenance];
     }),
   );
 }
 
-async function resolveDraftConnection(
-  connections: ReturnType<typeof createConnectionsStorage>,
-  requestedConnectionId: string | undefined,
-  chatConnectionId: string | null,
-) {
-  let connectionId = requestedConnectionId ?? chatConnectionId ?? undefined;
-  if (connectionId === "random") {
-    const pool = await connections.listRandomPool();
-    if (pool.length === 0) throw new Error("No language model connection is available in the random pool.");
-    connectionId = pool[Math.floor(Math.random() * pool.length)]!.id;
-  }
-  if (!connectionId) {
-    connectionId = (await connections.getDefault())?.id;
-  }
-  if (!connectionId) throw new Error("Choose a language model connection before generating a map.");
-  const connection = await connections.getWithKey(connectionId);
-  if (!connection) throw new Error("The selected language model connection no longer exists.");
-
-  let baseUrl = connection.baseUrl;
-  if (!baseUrl) {
-    baseUrl = PROVIDERS[connection.provider as keyof typeof PROVIDERS]?.defaultBaseUrl ?? "";
-  }
-  if (!baseUrl) baseUrl = localAuthProviderBaseUrl(connection.provider) ?? "";
-  if (!baseUrl) throw new Error("The selected connection has no base URL.");
-  return { connection, baseUrl };
-}
-
 async function buildDraftSourceContext(
-  chat: NonNullable<Awaited<ReturnType<ReturnType<typeof createChatsStorage>["getById"]>>>,
-  characters: ReturnType<typeof createCharactersStorage>,
+  chat: CapabilityChatRecord,
+  resources: CapabilityResourceHost,
   gameMapReference: GameMapDraftReference | null,
 ): Promise<string> {
   const metadata = parseSpatialMetadata(chat.metadata);
   const setup = parseSpatialMetadata(metadata.gameSetupConfig);
   const characterContext: Array<Record<string, string>> = [];
-  for (const characterId of stringArray(chat.characterIds).slice(0, 8)) {
-    if (characterId.startsWith("npc:")) continue;
-    const character = await characters.getById(characterId);
-    if (!character) continue;
+  const characterIds = stringArray(chat.characterIds)
+    .filter((characterId) => !characterId.startsWith("npc:"))
+    .slice(0, 8);
+  for (const character of await resources.listCharacters(characterIds)) {
     const data = parseSpatialMetadata(character.data);
     characterContext.push({
       name: excerpt(data.name, 200) ?? "Character",
@@ -349,10 +330,10 @@ function sendServiceError(reply: FastifyReply, error: unknown) {
 
 export async function spatialContextRoutes(app: FastifyInstance) {
   const service = createSpatialContextService();
-  const chats = createChatsStorage(app.db);
-  const connections = createConnectionsStorage(app.db);
-  const characters = createCharactersStorage(app.db);
-  const lorebooks = createLorebooksStorage(app.db);
+  const persistence = getPackagePersistence();
+  const resources = getPackageResources();
+  const languageModels = getPackageLanguageModels();
+  const json = getPackageJson();
 
   app.get<{ Params: ChatSpatialParams }>("/:chatId/spatial-context", async (req, reply) => {
     try {
@@ -401,7 +382,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         issues: parsed.error.issues,
       });
     }
-    const chat = await chats.getById(req.params.chatId);
+    const chat = await persistence.getChat(req.params.chatId);
     if (!chat) return reply.status(404).send({ error: "Chat not found.", code: "spatial_chat_missing" });
     if (chat.mode !== "roleplay") {
       return reply.status(400).send({
@@ -416,7 +397,10 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         transition: parsed.data.transition,
         attachments: parsed.data.attachments,
       });
-      return { message: committed.message, spatial: await service.get(req.params.chatId) };
+      return {
+        message: committed.message,
+        spatial: await service.get(req.params.chatId),
+      };
     } catch (error) {
       if (error instanceof SpatialOwnerTurnError) {
         return reply.status(error.statusCode).send({
@@ -462,7 +446,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     } catch (error) {
       return sendServiceError(reply, error);
     }
-    const chat = await chats.getById(req.params.chatId);
+    const chat = await persistence.getChat(req.params.chatId);
     if (!chat) {
       return reply.status(404).send({ error: "Chat not found.", code: "spatial_chat_missing" });
     }
@@ -528,7 +512,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
 
     let resolved;
     try {
-      resolved = await resolveDraftConnection(connections, parsed.data.connectionId, chat.connectionId);
+      resolved = await languageModels.resolve(parsed.data.connectionId ?? chat.connectionId);
     } catch (error) {
       return reply.status(400).send({
         error: error instanceof Error ? error.message : "A language model connection is required.",
@@ -536,11 +520,11 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       });
     }
 
-    const sourceContext = await buildDraftSourceContext(chat, characters, gameMapReference);
+    const sourceContext = await buildDraftSourceContext(chat, resources, gameMapReference);
     const groundingMode = parsed.data.groundingMode;
     const lorebookScopeExclusions = resolveLorebookScopeExclusions(chat.mode, parseSpatialMetadata(chat.metadata));
     const loreCatalog = await buildSpatialLoreCatalog(
-      lorebooks,
+      resources,
       groundingMode,
       parsed.data.sourceLorebookIds,
       parsed.data.sourceEntryIds,
@@ -587,23 +571,12 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       debugOverrideEnabled,
       "[debug/spatial/map-draft] final prompt chatId=%s model=%s:\n%s",
       chat.id,
-      resolved.connection.model ?? "",
+      resolved.model,
       JSON.stringify(prompt.messages, null, 2),
     );
 
     try {
-      const provider = createLLMProvider(
-        resolved.connection.provider,
-        resolved.baseUrl,
-        resolved.connection.apiKey,
-        resolved.connection.maxContext,
-        resolved.connection.openrouterProvider,
-        resolved.connection.maxTokensOverride,
-        resolved.connection.claudeFastMode === "true",
-        resolved.connection.treatAsLocalEndpoint === "true",
-      );
-      const result = await provider.chatComplete(prompt.messages, {
-        model: resolved.connection.model,
+      const result = await resolved.chatComplete(prompt.messages, {
         temperature: 0.55,
         maxTokens: prompt.maxTokens,
         debugMode: debugOverrideEnabled,
@@ -617,7 +590,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         raw.length,
         raw,
       );
-      const parsedPlan = parseGameJsonish(raw);
+      const parsedPlan = json.parseJsonish(raw);
       const definition =
         operation === "expand"
           ? normalizeSpatialMapExpansionPlan(parsedPlan, {
@@ -650,7 +623,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         generatedLocationCount,
         operation,
         chat.id,
-        resolved.connection.model ?? "",
+        resolved.model,
       );
       return {
         definition,

@@ -84,7 +84,7 @@ assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, { major: 1, minor: 2 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineVersion: "2.3.1",
-  engineCommit: "81eb8d94b8cc72277f01e12bb7d4ca358aae38da",
+  engineCommit: "940417c2693fc303365872a38b548a7d2cd344f1",
 });
 
 function catalogFixture(version: string) {
@@ -575,6 +575,21 @@ async function main() {
       headers: csrfHeaders,
       payload: { enableAgents: true, activeAgentIds: ["hierarchical-maps"] },
     });
+    const missingConnectionDraft = (await expectJson(
+      app,
+      {
+        method: "POST",
+        url: `/api/chats/${chatId}/spatial-context/generate`,
+        headers: csrfHeaders,
+        payload: {},
+      },
+      400,
+    )) as { code: string };
+    assert.equal(
+      missingConnectionDraft.code,
+      "spatial_ai_connection_invalid",
+      "The exact artifact must resolve map-draft connections through the host language-model facade",
+    );
     await expectJson(app, {
       method: "POST",
       url: `/api/chats/${chatId}/messages`,

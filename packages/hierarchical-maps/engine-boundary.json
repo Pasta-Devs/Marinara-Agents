@@ -6,7 +6,7 @@
   },
   "builtAgainst": {
     "engineVersion": "2.3.1",
-    "engineCommit": "81eb8d94b8cc72277f01e12bb7d4ca358aae38da"
+    "engineCommit": "940417c2693fc303365872a38b548a7d2cd344f1"
   },
   "privateEngineImports": [
     {
@@ -60,34 +60,6 @@
     {
       "source": "packages/client/src/hooks/use-spatial-context.ts",
       "specifier": "./use-chats"
-    },
-    {
-      "source": "packages/server/src/routes/spatial-context.routes.ts",
-      "specifier": "../services/game/jsonish.js"
-    },
-    {
-      "source": "packages/server/src/routes/spatial-context.routes.ts",
-      "specifier": "../services/llm/provider-registry.js"
-    },
-    {
-      "source": "packages/server/src/routes/spatial-context.routes.ts",
-      "specifier": "../services/lorebook/game-lorebook-scope.js"
-    },
-    {
-      "source": "packages/server/src/routes/spatial-context.routes.ts",
-      "specifier": "../services/storage/characters.storage.js"
-    },
-    {
-      "source": "packages/server/src/routes/spatial-context.routes.ts",
-      "specifier": "../services/storage/chats.storage.js"
-    },
-    {
-      "source": "packages/server/src/routes/spatial-context.routes.ts",
-      "specifier": "../services/storage/connections.storage.js"
-    },
-    {
-      "source": "packages/server/src/routes/spatial-context.routes.ts",
-      "specifier": "../services/storage/lorebooks.storage.js"
     }
   ]
 }

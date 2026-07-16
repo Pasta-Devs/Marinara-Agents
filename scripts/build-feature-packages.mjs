@@ -165,9 +165,17 @@ export async function activate({ app, api }) {
     throw error;
   }
 }
-export async function selfCheck() {
+export async function selfCheck({ api }) {
   if (!readinessStorage) throw new Error("Hierarchical Maps storage did not initialize");
+  if (typeof api.runtime.resources?.listCharacters !== "function") throw new Error("Hierarchical Maps character resources are unavailable");
+  if (typeof api.runtime.resources?.listEligibleLorebookEntries !== "function") throw new Error("Hierarchical Maps lore resources are unavailable");
+  if (typeof api.runtime.languageModels?.resolve !== "function") throw new Error("Hierarchical Maps language model host is unavailable");
+  if (typeof api.runtime.json?.parseJsonish !== "function") throw new Error("Hierarchical Maps JSON parser is unavailable");
   await readinessStorage.listForChat("__marinara_capability_self_check__");
+  await api.runtime.resources.listCharacters([]);
+  await api.runtime.resources.listEligibleLorebookEntries({ lorebookIds: [], entryIds: [] });
+  const parsed = api.runtime.json.parseJsonish('Preface\\n{"ready":true}');
+  if (!parsed || typeof parsed !== "object" || parsed.ready !== true) throw new Error("Hierarchical Maps JSON parser self-check failed");
 }\n`
       : feature.id === "conversation-calls"
       ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
