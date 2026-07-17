@@ -74,7 +74,7 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.1.4",
+    version: "1.1.5",
     minEngineVersion: "2.3.2",
     maxEngineExclusive: "3.0.0",
     name: "Hierarchical Maps",

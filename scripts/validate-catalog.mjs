@@ -57,6 +57,31 @@ for (const relativePath of hierarchicalMapsOwnedSourcePaths) {
   }
 }
 
+const hierarchicalMapsClientSourceRoot = join(
+  repoRoot,
+  "packages/hierarchical-maps/src/engine/packages/client/src",
+);
+const forbiddenHierarchicalMapsPinkText =
+  /text-(?:pink|rose|fuchsia)-|text-\[var\(--(?:primary|muted-foreground)\)\](?:\/\d+)?|#(?:d4acfb|d4adfc|7a64a0)\b/iu;
+async function assertHierarchicalMapsUsesChromaText(path) {
+  const entries = await readdir(path, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = join(path, entry.name);
+    if (entry.isDirectory()) {
+      await assertHierarchicalMapsUsesChromaText(entryPath);
+      continue;
+    }
+    if (!entry.name.endsWith(".tsx")) continue;
+    const contents = await readFile(entryPath, "utf8");
+    if (forbiddenHierarchicalMapsPinkText.test(contents)) {
+      throw new Error(
+        `Hierarchical Maps text must use the configured chroma accent instead of pink theme defaults: ${entryPath}`,
+      );
+    }
+  }
+}
+await assertHierarchicalMapsUsesChromaText(hierarchicalMapsClientSourceRoot);
+
 const forbiddenAboutMeKeeperPaths = [
   "packages/about-me-keeper/manifest.json",
   "packages/about-me-keeper/agents.json",

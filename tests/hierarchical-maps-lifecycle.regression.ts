@@ -81,9 +81,10 @@ const fixtures = new Map(
     artifactFixture("1.1.1"),
     artifactFixture("1.1.3"),
     artifactFixture("1.1.4"),
+    artifactFixture("1.1.5"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
-let catalogVersion = "1.1.4";
+let catalogVersion = "1.1.5";
 let catalogOnline = true;
 let generationProviderRequestCount = 0;
 const generationProviderRequests: Array<{
@@ -91,7 +92,7 @@ const generationProviderRequests: Array<{
 }> = [];
 let mapExpansionExistingTargetId: string | null = null;
 
-const candidateFixture = fixtures.get("1.1.4");
+const candidateFixture = fixtures.get("1.1.5");
 assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, {
@@ -479,22 +480,22 @@ async function main() {
     assert.equal(installedProfile[0]?.version, "1.0.6");
     assert.equal(installedProfile[0]?.status, "active");
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.4"), "2.3.1").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.5"), "2.3.1").length,
       0,
     );
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.4"), "2.3.2").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.5"), "2.3.2").length,
       1,
     );
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.4"), "3.0.0").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.5"), "3.0.0").length,
       0,
     );
 
-    const installed114 =
+    const installed115 =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(installed114.version, "1.1.4");
-    assert.equal(installed114.previousVersion, "1.0.6");
+    assert.equal(installed115.version, "1.1.5");
+    assert.equal(installed115.previousVersion, "1.0.6");
     assert.ok(
       existsSync(
         join(
@@ -502,7 +503,7 @@ async function main() {
           "capability-packages",
           "versions",
           "hierarchical-maps",
-          "1.1.4",
+          "1.1.5",
         ),
       ),
     );
@@ -545,7 +546,7 @@ async function main() {
           readiness: entry.readiness,
           ready: entry.ready,
         })),
-      [{ version: "1.1.4", status: "active", readiness: "ready", ready: true }],
+      [{ version: "1.1.5", status: "active", readiness: "ready", ready: true }],
     );
 
     const locationLorebook = (await expectJson(app, {
@@ -1852,7 +1853,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.1.4");
+    assert.equal(reinstalled.version, "1.1.5");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -1930,7 +1931,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.1.4", status: "active", readiness: "ready" }],
+      [{ version: "1.1.5", status: "active", readiness: "ready" }],
     );
 
     console.info(
