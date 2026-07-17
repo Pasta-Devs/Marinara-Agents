@@ -800,7 +800,7 @@ export function SpatialMapWorkspace({
           <LocalMapCanvas
             locations={localChildren}
             selectedId={selectedId}
-            onSelect={selectLocation}
+            onSelect={(locationId) => selectLocation(locationId, !layoutEditing)}
             onEnter={enterLocation}
             editing={layoutEditing}
             onMove={(locationId, placement) =>
@@ -965,6 +965,7 @@ export function SpatialMapWorkspace({
             <Download size="0.8125rem" /> Import
           </button>
           <input
+            data-marinara-map-import-input
             ref={importInputRef}
             type="file"
             accept="application/json,.json"

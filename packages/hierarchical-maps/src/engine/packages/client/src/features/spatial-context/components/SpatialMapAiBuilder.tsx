@@ -323,13 +323,13 @@ export function SpatialMapAiBuilder({
           ...(request.hierarchyProfile ? { hierarchyProfile: request.hierarchyProfile } : {}),
           debugMode,
         });
-        setResult(generated);
+        setResult(withHierarchyProfile(generated, request.hierarchyProfile ?? workingHierarchyProfile));
       } catch (generationError) {
         setResult(null);
         setError(generationError instanceof Error ? generationError.message : "The map draft could not be generated.");
       }
     },
-    [chatId, debugMode, generateDraft],
+    [chatId, debugMode, generateDraft, workingHierarchyProfile],
   );
 
   useEffect(() => {

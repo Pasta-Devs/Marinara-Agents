@@ -836,7 +836,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
-    await expect(home.getByText("v1.1.4", { exact: true })).toBeVisible();
+    await expect(home.getByText("v1.1.6", { exact: true })).toBeVisible();
     await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
     await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
@@ -866,7 +866,11 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
         };
         return payload.generationPreferences;
       })
-      .toEqual({ mode: "custom", guidance: "Prefer compact nautical districts and clear public routes." });
+      .toEqual({
+        version: 1,
+        mode: "custom",
+        guidance: "Prefer compact nautical districts and clear public routes.",
+      });
     await home.getByRole("button", { name: "Reset to default" }).click();
     await expect(home.getByText("Built-in default", { exact: true })).toBeVisible();
 
@@ -1021,7 +1025,7 @@ test("Deep maps and long labels remain keyboard and touch operable across themes
       await page.reload();
       await dismissOnboardingTutorial(page);
       await expectWorkspaceTheme(page, appearance);
-      await expect(page.getByText(rootName, { exact: true }).first()).toBeVisible();
+      await expect(rootEnter).toBeVisible();
     }
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}`);
@@ -1446,7 +1450,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     const importMap = page.getByRole("button", { name: "Import hierarchical map" });
     await expect(exportMap.locator("svg")).toHaveClass(/lucide-upload/);
     await expect(importMap.locator("svg")).toHaveClass(/lucide-download/);
-    await page.locator('input[type="file"][accept*="json"]').setInputFiles({
+    await page.locator("[data-marinara-map-import-input]").setInputFiles({
       name: "replacement-with-missing-ids.json",
       mimeType: "application/json",
       buffer: Buffer.from(
@@ -1457,7 +1461,7 @@ test("AI map expansion preserves a campaign map and its current location", async
         }),
       ),
     });
-    const importRepair = page.getByRole("region", { name: "Import location ID repair guidance" });
+    const importRepair = page.getByRole("alert", { name: "Import location ID repair guidance" });
     await expect(importRepair).toContainText("Import blocked: 3 saved location IDs are missing");
     await expect(importRepair).toContainText("Blackglass Lighthouse · ai_lighthouse");
     await expect(importRepair).toContainText("Export this map as a baseline");
@@ -1476,16 +1480,16 @@ test("AI map expansion preserves a campaign map and its current location", async
     const arrangeMap = page.getByRole("button", { name: "Arrange map" });
     await expect(arrangeMap).toBeVisible();
     await arrangeMap.click();
-    const arrangedCanvas = page.locator('[data-layout-editing="true"]');
+    const arrangedCanvas = page.locator('[data-layout-editing="true"]:visible').first();
     const lighthouseNode = arrangedCanvas.getByRole("button", { name: /Blackglass Lighthouse/ });
     const [canvasBox, nodeBox] = await Promise.all([arrangedCanvas.boundingBox(), lighthouseNode.boundingBox()]);
     expect(canvasBox).not.toBeNull();
     expect(nodeBox).not.toBeNull();
+    await lighthouseNode.focus();
     await page.mouse.move(nodeBox!.x + nodeBox!.width / 2, nodeBox!.y + nodeBox!.height / 2);
     await page.mouse.down();
     await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.6, canvasBox!.y + canvasBox!.height * 0.4);
     await page.mouse.up();
-    await lighthouseNode.focus();
     await page.keyboard.press("Shift+ArrowRight");
     await expect(page.getByText("Unsaved", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Done arranging" }).click();
@@ -1504,6 +1508,8 @@ test("AI map expansion preserves a campaign map and its current location", async
       })
       .toEqual({ x: 65, labels: expect.arrayContaining(["World Area"]) });
 
+    if (mobile) await page.getByRole("button", { name: "hierarchy", exact: true }).click();
+    await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await page.getByRole("button", { name: "Expand with AI" }).click();
     await expect(page.getByRole("heading", { name: "Expand the map with AI" })).toBeVisible();
     await expectAiBuilderLayout(page, mobile);
