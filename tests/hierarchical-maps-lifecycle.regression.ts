@@ -101,8 +101,8 @@ assert.deepEqual(candidateFixture.manifest.capabilityApi, {
   minor: 3,
 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
-  engineVersion: "2.3.2",
-  engineCommit: "614e62a38fc2d9685f9b4981a9628be9fda0fc03",
+  engineVersion: "2.3.3",
+  engineCommit: "858cfa431e07f6f558aa1e8826a2c9b024269ab7",
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
@@ -495,6 +495,10 @@ async function main() {
     );
     assert.equal(
       findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.2").length,
+      0,
+    );
+    assert.equal(
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.3").length,
       1,
     );
     assert.equal(
