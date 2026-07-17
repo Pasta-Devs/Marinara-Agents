@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "conversation-calls",
   "name": "Calls",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
   "engine": {
     "min": "2.3.0",
@@ -32,13 +32,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "942dc38a1e6c3778e51dfcb1626831fdf3bf886cbdc99a8ab6bcc2a6db903f00",
-      "bytes": 2380552
+      "sha256": "8bdd369450883f33f9b9fd0ba014dfb5c5cbade6da7a8650bd98ca91c4a1dbd8",
+      "bytes": 2375896
     },
     {
       "path": "client.js",
-      "sha256": "5ecc960eb191d84d3296893f32719c96a9cccd1ebb3a2a0998dc0c4a124dcfa1",
-      "bytes": 901472
+      "sha256": "4f1342ccb66d62b35228426cdf429d69d67d0422347e7136afcffa4b5a0df5e4",
+      "bytes": 902321
     }
   ],
   "permissions": [

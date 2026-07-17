@@ -1041,8 +1041,9 @@ function ParticipantTile({
             loop={false}
             preload="auto"
             poster={participant.avatarUrl ?? undefined}
+            data-marinara-call-video-fit="contain"
             className={cn(
-              "absolute inset-0 h-full w-full object-cover transition-opacity duration-75",
+              "absolute inset-0 h-full w-full bg-black object-contain transition-opacity duration-75",
               videoReady ? "opacity-100" : "opacity-0",
             )}
             onLoadedMetadata={(event) => {
@@ -2887,7 +2888,11 @@ export function ConversationCallSurface({
       )}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="relative flex min-h-[18rem] flex-[1_1_0] flex-col overflow-hidden border-b border-[var(--marinara-chat-chrome-panel-divider)] bg-[var(--background)] md:min-h-0 md:basis-1/2">
+        <div
+          data-marinara-call-stage
+          className="relative flex min-h-[18rem] flex-[1_1_0] flex-col overflow-hidden border-b border-[var(--marinara-chat-chrome-panel-divider)] bg-[var(--background)] md:min-h-0 md:basis-1/2"
+          style={mobileCallLayout ? undefined : { flexBasis: "70%" }}
+        >
           <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
             <div className="min-w-0">
               <div className="font-semibold tabular-nums text-[var(--marinara-chat-chrome-panel-title)]">
@@ -3193,7 +3198,11 @@ export function ConversationCallSurface({
           </div>
         </div>
 
-        <div className="hidden min-h-0 flex-1 basis-1/2 flex-col bg-[var(--background)] md:flex">
+        <div
+          data-marinara-call-chat
+          className="hidden min-h-0 flex-1 basis-1/2 flex-col bg-[var(--background)] md:flex"
+          style={mobileCallLayout ? undefined : { flexBasis: "30%" }}
+        >
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{renderCallMessages()}</div>
           {renderCallComposer()}
         </div>
