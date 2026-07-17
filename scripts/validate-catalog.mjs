@@ -412,6 +412,18 @@ for (const entry of catalog.packages) {
         throw new Error(`${manifest.id} server runtime still contains the hardcoded generation fallback`);
       }
     }
+    if (manifest.entrypoints?.client) {
+      const clientSource = await readFile(join(packageRoot, manifest.entrypoints.client), "utf8");
+      for (const marker of [
+        "data-marinara-call-video-fit",
+        "data-marinara-call-stage",
+        "data-marinara-call-chat",
+      ]) {
+        if (!clientSource.includes(marker)) {
+          throw new Error(`${manifest.id} client runtime is missing the ${marker} layout contract`);
+        }
+      }
+    }
   }
 }
 
