@@ -84,6 +84,40 @@ function operationTitle(operation: SpatialMapDraftOperation): string {
   return "Draft the map with AI";
 }
 
+function hierarchyOrderedActiveLocations(
+  definition: SpatialContextDefinition,
+): Array<{ location: SpatialLocation; depth: number }> {
+  const activeLocations = definition.locations.filter((location) => location.status === "active");
+  const activeIds = new Set(activeLocations.map((location) => location.id));
+  const childrenByParent = new Map<string | null, SpatialLocation[]>();
+
+  for (const location of activeLocations) {
+    const parentId = location.parentId && activeIds.has(location.parentId) ? location.parentId : null;
+    const siblings = childrenByParent.get(parentId) ?? [];
+    siblings.push(location);
+    childrenByParent.set(parentId, siblings);
+  }
+  for (const siblings of childrenByParent.values()) siblings.sort(compareSpatialLocations);
+
+  const ordered: Array<{ location: SpatialLocation; depth: number }> = [];
+  const visited = new Set<string>();
+  const visit = (location: SpatialLocation, depth: number) => {
+    if (visited.has(location.id)) return;
+    visited.add(location.id);
+    ordered.push({ location, depth });
+    for (const child of childrenByParent.get(location.id) ?? []) visit(child, depth + 1);
+  };
+
+  for (const root of childrenByParent.get(null) ?? []) visit(root, 0);
+  for (const location of [...activeLocations].sort(compareSpatialLocations)) visit(location, 0);
+  return ordered;
+}
+
+function hierarchyOptionLabel(location: SpatialLocation, depth: number): string {
+  if (depth === 0) return location.name;
+  return `${"\u00a0\u00a0".repeat(depth)}└─ ${location.name}`;
+}
+
 export function SpatialMapAiBuilder({
   chatId,
   ownerMode,
@@ -106,11 +140,8 @@ export function SpatialMapAiBuilder({
 }: SpatialMapAiBuilderProps) {
   const generateDraft = useGenerateSpatialMapDraft();
   const hasLocations = definition.locations.length > 0;
-  const activeLocations = useMemo(
-    () =>
-      definition.locations.filter((location) => location.status === "active").sort((left, right) => left.name.localeCompare(right.name)),
-    [definition.locations],
-  );
+  const activeLocationOptions = useMemo(() => hierarchyOrderedActiveLocations(definition), [definition]);
+  const activeLocations = useMemo(() => activeLocationOptions.map(({ location }) => location), [activeLocationOptions]);
   const defaultTargetLocationId =
     (preferredTargetLocationId && activeLocations.some((location) => location.id === preferredTargetLocationId)
       ? preferredTargetLocationId
@@ -483,9 +514,9 @@ export function SpatialMapAiBuilder({
                 }}
                 className="mt-2 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)] disabled:opacity-60"
               >
-                {activeLocations.map((location) => (
+                {activeLocationOptions.map(({ location, depth }) => (
                   <option key={location.id} value={location.id}>
-                    {location.name}
+                    {hierarchyOptionLabel(location, depth)}
                   </option>
                 ))}
               </select>

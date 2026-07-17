@@ -837,7 +837,7 @@ export function SpatialMapWorkspace({
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
             aria-label="Export hierarchical map"
           >
-            <Download size="0.8125rem" /> Export
+            <Upload size="0.8125rem" /> Export
           </button>
           <button
             type="button"
@@ -846,7 +846,7 @@ export function SpatialMapWorkspace({
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
             aria-label="Import hierarchical map"
           >
-            <Upload size="0.8125rem" /> Import
+            <Download size="0.8125rem" /> Import
           </button>
           <input
             ref={importInputRef}

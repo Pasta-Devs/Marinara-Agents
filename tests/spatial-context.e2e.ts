@@ -1322,6 +1322,14 @@ test("AI map expansion preserves a campaign map and its current location", async
   const chat = (await response.json()) as { id: string };
   await activateHierarchicalMaps(page, chat.id);
   const mobile = testInfo.project.name.includes("mobile");
+  const hierarchyPickerDefinition = {
+    ...generatedDefinition,
+    locations: generatedDefinition.locations.map((location) => {
+      if (location.id === "ai_lighthouse") return { ...location, parentId: "ai_harbor", sortOrder: 0 };
+      if (location.id === "ai_sewers") return { ...location, parentId: "ai_lighthouse", sortOrder: 0 };
+      return location;
+    }),
+  };
 
   const anchorResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
     data: {
@@ -1334,7 +1342,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     data: {
       expectedRevision: 0,
       expectedCurrentLocationId: null,
-      definition: { ...generatedDefinition, enabled: true },
+      definition: { ...hierarchyPickerDefinition, enabled: true },
     },
   });
   expect(initialSave.ok()).toBeTruthy();
@@ -1417,6 +1425,10 @@ test("AI map expansion preserves a campaign map and its current location", async
     }
 
     await expectAuthoringWorkspaceLayout(page, mobile);
+    const exportMap = page.getByRole("button", { name: "Export hierarchical map" });
+    const importMap = page.getByRole("button", { name: "Import hierarchical map" });
+    await expect(exportMap.locator("svg")).toHaveClass(/lucide-upload/);
+    await expect(importMap.locator("svg")).toHaveClass(/lucide-download/);
     await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
     await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
@@ -1436,6 +1448,16 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(advancedOptions).toHaveAttribute("aria-expanded", "false");
     await expectMinimumInteractiveSize(advancedOptions, "AI expansion advanced options control");
     await expect(page.getByLabel("Expand beneath")).toHaveCount(0);
+    await advancedOptions.click();
+    const expandTarget = page.getByLabel("Expand beneath");
+    await expect(expandTarget).toBeVisible();
+    await expect(expandTarget).toHaveValue("ai_harbor");
+    expect(await expandTarget.locator("option").allTextContents()).toEqual([
+      "Shrouded Coast",
+      "\u00a0\u00a0└─ Gloam Harbor",
+      "\u00a0\u00a0\u00a0\u00a0└─ Blackglass Lighthouse",
+      "\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0└─ Old Sewers",
+    ]);
     await page.getByLabel("What should be added?").fill("Add a riverside ward with an inn for ferrymen.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
     await page.getByRole("button", { name: "Generate expansion" }).click();
