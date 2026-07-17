@@ -1,0 +1,419 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-16T23:23:31.164Z",
+  "packages": [
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "eightball",
+        "name": "8-Ball Pool",
+        "version": "1.0.2",
+        "description": "Play 8-Ball Pool with a Conversation character. Install to use /8ball manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+        "engine": {
+          "min": "2.3.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/8ball",
+            "aliases": [
+              "8-ball",
+              "8 ball",
+              "eightball",
+              "pool",
+              "billiards"
+            ],
+            "playerLabel": "1v1 table sport"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "f9d660e0e77d174227b4c9583562e848f9b3847169d58424bed3733fe99bb6f7",
+            "bytes": 578
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "8ad4ad32d97cfb7ae2df9134f3447b5f84969e2fca323b49a34087b513670fc1",
+            "bytes": 90109
+          },
+          {
+            "path": "client.js",
+            "sha256": "74bfd78832713a2f061fdf9aa85043ba94f3ea422de249a742e2a288bd59a771",
+            "bytes": 623166
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/eightball.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.2.zip",
+        "sha256": "c4b3156fb9e32c6e031433b20de87ef8fcd709b074639bc615ca9748013de9d0",
+        "bytes": 199741
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "chess",
+        "name": "Chess",
+        "version": "1.0.2",
+        "description": "Play Chess with a Conversation character. Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+        "engine": {
+          "min": "2.3.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/chess",
+            "aliases": [
+              "chess"
+            ],
+            "playerLabel": "1v1 strategy"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "f58f4b748a584938928985f1aeeaf52e24ccc1d0c93aa75582bf068dac950ccf",
+            "bytes": 562
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "a6716f9b70ee9c9ae7210d2b66089b2f55fe0aa6e261cae9f3aed1dbba1eec07",
+            "bytes": 108043
+          },
+          {
+            "path": "client.js",
+            "sha256": "249aab869ef0d7c528b1387dc9250c4fb2c4ca91f4d0bcc91c1584ca156bc96a",
+            "bytes": 617163
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/chess.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.2.zip",
+        "sha256": "5a401d4129d29b86c118e1ce02ea85322cc894559336d19b702b2d9659b67f75",
+        "bytes": 203547
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "poker",
+        "name": "Poker",
+        "version": "1.0.2",
+        "description": "Play Texas Hold’em Poker with Conversation characters. Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+        "engine": {
+          "min": "2.3.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/poker",
+            "aliases": [
+              "poker",
+              "hold'em",
+              "texas hold'em"
+            ],
+            "playerLabel": "Table game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "b747c803dd3bd6dad070ecf6d1245ffc1102b427046c9f6288991508427c6d0e",
+            "bytes": 577
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "171b58dc63e712968aa5eeb7181ac7f409a4f5207a80fe995e3caf4ca6668c39",
+            "bytes": 83630
+          },
+          {
+            "path": "client.js",
+            "sha256": "e63e04e66e23bae6ff49898b026bdea356bd5b5caf7fc789200354541cd8c494",
+            "bytes": 619569
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/poker.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.2.zip",
+        "sha256": "f799b157ff6e390f90e24dd455594f0938ba15203025f06380e6da20fdb9c3c6",
+        "bytes": 195028
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "rock-paper-scissors",
+        "name": "Rock-Paper-Scissors",
+        "version": "1.0.2",
+        "description": "Play Rock-Paper-Scissors with a Conversation character. Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+        "engine": {
+          "min": "2.3.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/rps",
+            "aliases": [
+              "rock paper scissors",
+              "rock-paper-scissors",
+              "rps"
+            ],
+            "playerLabel": "1v1 quick game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "4cd31bd6023c1c56b04e1bc1384c79a56725cfcecd22b99161a47c7a366470e3",
+            "bytes": 602
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "36b778b8bf2a1f9a0a27e864d54c30af9baef358be4c5f5bcf145c152c27d4f2",
+            "bytes": 66690
+          },
+          {
+            "path": "client.js",
+            "sha256": "087758a02f322fa3729df5c5b62dd0eb48e4a10e224e294cbd6cadfb62e173e8",
+            "bytes": 615625
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/rock-paper-scissors.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.2.zip",
+        "sha256": "477e1a0a8ac4a2035e4e32b0cf1feffada3124d573fdc069ade2aadd47c399e9",
+        "bytes": 188408
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "tic-tac-toe",
+        "name": "Tic-Tac-Toe",
+        "version": "1.0.2",
+        "description": "Play Tic-Tac-Toe with a Conversation character. Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+        "engine": {
+          "min": "2.3.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/tictactoe",
+            "aliases": [
+              "tic-tac-toe",
+              "tic tac toe",
+              "noughts and crosses",
+              "ttt"
+            ],
+            "playerLabel": "1v1 strategy"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "69c089b936a07fced993a3ab29fb279ba41f439ab8e5c66b85b669e6ecaa7219",
+            "bytes": 584
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "e2f41bb683082a62acde86e061e0f62c6a77783510d56becf05cdc28196a7a5b",
+            "bytes": 66598
+          },
+          {
+            "path": "client.js",
+            "sha256": "115b6057314fd5972eba5233ce387368c41ab2450eb54180d7cb9378e1e80ded",
+            "bytes": 611291
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/tic-tac-toe.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.2.zip",
+        "sha256": "a0da2758bb1ee1da8bb11c944f258a490cddb95d21f896afba25decd314d5bce",
+        "bytes": 187604
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "uno",
+        "name": "UNO",
+        "version": "1.0.2",
+        "description": "Play UNO with Conversation characters. Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+        "engine": {
+          "min": "2.3.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/uno",
+            "aliases": [
+              "uno"
+            ],
+            "playerLabel": "Group card game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "f8ebf13638e182e289e4c899d6701be70065b2bae2dbaa39029474476b9a78b1",
+            "bytes": 553
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "c5337752a41a6a4d221708eac51322b2324e63c68a562cabadc70b29eb6c3335",
+            "bytes": 83732
+          },
+          {
+            "path": "client.js",
+            "sha256": "bb071e530d02f944a5f347ab195806535bb0b89cc815a71787b7eee09ee0bae7",
+            "bytes": 617911
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/uno.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.2.zip",
+        "sha256": "aac0e95993593c63dd501439b0018dd1d0cb777c4bc348d18a18a912ff864dfc",
+        "bytes": 194577
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
+    }
+  ]
+}

@@ -27,7 +27,10 @@ jobs:
         with:
           node-version: 24
 
-      - name: Validate catalog, packages, artifacts, and README coverage
+      - name: Test catalog lane routing and build provenance
+        run: node scripts/test-catalog-lanes.mjs
+
+      - name: Validate catalogs, packages, artifacts, and README coverage
         run: node scripts/validate-catalog.mjs
 
       - name: Check whitespace

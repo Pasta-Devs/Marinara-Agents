@@ -9,24 +9,33 @@ import {
   catalogArtworkRelativePath,
   catalogArtworkUrl,
 } from "./catalog-artwork.mjs";
+import {
+  LEGACY_CATALOG_MAJOR,
+  assertManifestBuildProvenance,
+  compareEngineVersions,
+  createCatalogLanes,
+  readCatalogFamily,
+} from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
-const catalog = JSON.parse(await readFile(join(repoRoot, "catalog/catalog.json"), "utf8"));
+const { catalog, catalogsByMajor, legacyCatalog } = await readCatalogFamily(repoRoot);
 const MIN_ENGINE_VERSION = "2.3.0";
-const ENGINE_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)$/u;
-function compareEngineVersions(left, right) {
-  const leftMatch = ENGINE_VERSION_PATTERN.exec(left);
-  const rightMatch = ENGINE_VERSION_PATTERN.exec(right);
-  if (!leftMatch || !rightMatch) throw new Error(`Invalid Engine compatibility version: ${left} / ${right}`);
-  for (let index = 1; index <= 3; index += 1) {
-    const difference = Number(leftMatch[index]) - Number(rightMatch[index]);
-    if (difference !== 0) return difference;
-  }
-  return 0;
-}
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
+const expectedCatalogsByMajor = createCatalogLanes(catalog);
+if (JSON.stringify([...catalogsByMajor.keys()].sort()) !== JSON.stringify([...expectedCatalogsByMajor.keys()].sort())) {
+  throw new Error("Versioned catalog lane set does not match package Engine compatibility ranges");
+}
+for (const [major, expectedCatalog] of expectedCatalogsByMajor) {
+  const actualCatalog = catalogsByMajor.get(major);
+  if (JSON.stringify(actualCatalog) !== JSON.stringify(expectedCatalog)) {
+    throw new Error(`catalog/v${major}/catalog.json does not match package Engine compatibility ranges`);
+  }
+}
+if (JSON.stringify(legacyCatalog) !== JSON.stringify(catalogsByMajor.get(LEGACY_CATALOG_MAJOR))) {
+  throw new Error(`catalog/catalog.json must remain an exact alias of catalog/v${LEGACY_CATALOG_MAJOR}/catalog.json`);
+}
 const hierarchicalMapsBoundary = await assertHierarchicalMapsPrivateImportBoundary();
 
 const hierarchicalMapsOwnedSourcePaths = [
@@ -194,6 +203,7 @@ for (const entry of catalog.packages) {
   if (compareEngineVersions(manifest.engine.maxExclusive, manifest.engine.min) <= 0) {
     throw new Error(`${manifest.id} Engine compatibility range must be increasing`);
   }
+  assertManifestBuildProvenance(manifest);
   if (!OFFICIAL_PACKAGE_GUIDANCE[manifest.id]) {
     throw new Error(`Missing activation guidance and mode metadata for ${manifest.id}`);
   }
@@ -388,3 +398,8 @@ if (catalog.packages.length !== 29 || agentOnly !== 21 || features !== 8) {
   throw new Error(`Expected 21 agents and 8 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
+console.log(
+  `Catalog lanes valid: ${[...catalogsByMajor.entries()]
+    .map(([major, lane]) => `v${major}=${lane.packages.length}`)
+    .join(", ")}; legacy=v${LEGACY_CATALOG_MAJOR}.`,
+);
