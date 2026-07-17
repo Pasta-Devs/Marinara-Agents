@@ -836,7 +836,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
-    await expect(home.getByText("v1.1.2", { exact: true })).toBeVisible();
+    await expect(home.getByText("v1.1.4", { exact: true })).toBeVisible();
     await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
     await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
@@ -1642,7 +1642,7 @@ test("Game setup can skip a generated map without persisting it", async ({ page 
 });
 
 test("Roleplay stages story movement separately from prose and recovers stale turns", async ({ page }, testInfo) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const chatResponse = await page.request.post("/api/chats", {
     data: {
       name: `Spatial Runtime ${testInfo.project.name}`,
@@ -1785,9 +1785,39 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(storyLocation).toContainText("Shrouded Coast");
     const openStoryMap = storyLocation.getByRole("button", { name: "Open story map" });
     await expectMinimumInteractiveSize(openStoryMap, "Roleplay story-map control");
+    const mobileRuntime = testInfo.project.name.includes("mobile");
+    const composerBeforeMap = mobileRuntime
+      ? await page.locator("textarea.mari-chat-input-textarea").boundingBox()
+      : null;
+    if (mobileRuntime) {
+      expect(composerBeforeMap, "Composer must have measurable browser geometry").not.toBeNull();
+      const collapsedRuntimeBox = await storyLocation.boundingBox();
+      expect(collapsedRuntimeBox?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(52);
+      expect(collapsedRuntimeBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(48);
+    }
     await openStoryMap.click();
     let roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
     await expect(roleplayMap).toBeVisible();
+    if (mobileRuntime) {
+      const composerAfterMap = await page.locator("textarea.mari-chat-input-textarea").boundingBox();
+      expect(composerAfterMap, "Composer must remain measurable after opening the map").not.toBeNull();
+      expect(Math.abs(composerAfterMap!.y - composerBeforeMap!.y)).toBeLessThanOrEqual(1);
+      const closeMapToggle = storyLocation.getByRole("button", { name: "Close story map", exact: true });
+      await expectMinimumInteractiveSize(closeMapToggle, "Roleplay story-map close toggle");
+      await closeMapToggle.click();
+      await expect(roleplayMap).toHaveCount(0);
+      await storyLocation.getByRole("button", { name: "Open story map" }).click();
+      roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+      await expect(roleplayMap).toBeVisible();
+      const closeMapPanel = storyLocation.getByRole("button", { name: "Close story map panel" });
+      await expectMinimumInteractiveSize(closeMapPanel, "Roleplay story-map panel close control");
+      await closeMapPanel.click();
+      await expect(roleplayMap).toHaveCount(0);
+      await expect(openStoryMap).toBeFocused();
+      await storyLocation.getByRole("button", { name: "Open story map" }).click();
+      roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+      await expect(roleplayMap).toBeVisible();
+    }
     const editMap = roleplayMap.getByRole("button", { name: "Edit hierarchical map" });
     await expectMinimumInteractiveSize(editMap, "Roleplay minimap edit control");
     await editMap.click();
@@ -1821,7 +1851,12 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(input).toHaveValue("");
     await expect(storyLocation).toContainText("Gloam Harbor");
 
-    await storyLocation.getByRole("button", { name: /Story location.*Gloam Harbor/ }).click();
+    if (mobileRuntime) {
+      await storyLocation.getByRole("button", { name: "Open story map" }).click();
+      await storyLocation.getByRole("button", { name: /Open story location options.*Gloam Harbor/ }).click();
+    } else {
+      await storyLocation.getByRole("button", { name: /Story location.*Gloam Harbor/ }).click();
+    }
     await storyLocation.getByRole("button", { name: "Inspect Shrouded Coast" }).click();
     await storyLocation.getByRole("button", { name: "Set destination: Shrouded Coast" }).click();
     await input.fill("Wait for me at the gate.");
@@ -1974,6 +2009,42 @@ test("Game screen gives the hierarchical World map precedence over the session L
     await dismissOnboardingTutorial(page);
 
     if (testInfo.project.name.includes("mobile")) {
+      const storyLocation = page.getByRole("region", { name: "Story location" });
+      const storyMapToggle = storyLocation.getByRole("button", { name: "Open story map" });
+      const actionButton = page.getByRole("button", { name: "Start combat", exact: true });
+      const gameInput = page.getByPlaceholder("What do you do?");
+      await expect(storyMapToggle).toBeVisible();
+      await expect(actionButton).toBeVisible();
+      await expect(gameInput).toBeVisible();
+      const [storyLocationBox, storyMapToggleBox, actionButtonBox, gameInputBeforeMap] = await Promise.all([
+        storyLocation.boundingBox(),
+        storyMapToggle.boundingBox(),
+        actionButton.boundingBox(),
+        gameInput.boundingBox(),
+      ]);
+      expect(storyLocationBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(
+          (storyMapToggleBox?.y ?? 0) + (storyMapToggleBox?.height ?? 0) / 2 -
+            ((actionButtonBox?.y ?? 0) + (actionButtonBox?.height ?? 0) / 2),
+        ),
+      ).toBeLessThanOrEqual(1);
+
+      await storyMapToggle.click();
+      const runtimeMapPanel = storyLocation.locator("[data-marinara-maps-runtime-popover]");
+      await expect(runtimeMapPanel).toBeVisible();
+      const panelBackground = await runtimeMapPanel.evaluate((panel) => getComputedStyle(panel).backgroundColor);
+      expect(panelBackground).not.toMatch(/^rgba\([^)]*,\s*(?:0|0?\.\d+)\)$/);
+      const gameInputAfterMap = await gameInput.boundingBox();
+      expect(Math.abs((gameInputAfterMap?.y ?? 0) - (gameInputBeforeMap?.y ?? 0))).toBeLessThanOrEqual(1);
+      await storyLocation.getByRole("button", { name: /Open story location options/ }).click();
+      const runtimeOptions = storyLocation.locator("[data-marinara-maps-runtime-options]");
+      await expect(runtimeOptions).toBeVisible();
+      const closeRuntimeOptions = runtimeOptions.getByRole("button", { name: "Close story location options" });
+      await expectMinimumInteractiveSize(closeRuntimeOptions, "Game story-location options close control");
+      await closeRuntimeOptions.click();
+      await expect(runtimeOptions).toHaveCount(0);
+
       await page.getByRole("button", { name: "Open map" }).click();
     }
 
