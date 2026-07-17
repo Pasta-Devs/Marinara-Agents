@@ -185,12 +185,17 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     generationProviderRequests.push(body);
     const providerPrompt = capturedProviderPrompt(body);
     const responseContent = providerPrompt.includes("You design practical hierarchical world maps")
-      ? JSON.stringify({
+        ? JSON.stringify({
           worldName: "Route Test World",
+          hierarchyName: "Harbor city",
+          locationTypes: [
+            { key: "world", label: "World", baseKind: "region" },
+            { key: "city_quarter", label: "City Quarter", baseKind: "place" },
+          ],
           startingLocationKey: "route_world",
           locations: [
             {
-              key: "route_world", parentKey: null, name: "Route Test World", kind: "region",
+              key: "route_world", parentKey: null, name: "Route Test World", typeKey: "world", kind: "region",
               description: "A compact world used to prove generated routes.",
               modelMemory: "The route graph must stay sparse and connected.",
               awarenessSummary: "Old Town, Market Square, and Harbor share practical roads.",
@@ -198,7 +203,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               placement: null, layerOrder: null, links: [],
             },
             {
-              key: "old_town", parentKey: "route_world", name: "Old Town", kind: "place",
+              key: "old_town", parentKey: "route_world", name: "Old Town", typeKey: "city_quarter", kind: "place",
               description: "A walled neighborhood west of the market.",
               modelMemory: "The market road is the ordinary eastern exit.",
               awarenessSummary: "Market Street leads east.",
@@ -207,7 +212,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               links: [{ targetKey: "market_square", label: "Market Street", bidirectional: true, state: "available" }],
             },
             {
-              key: "market_square", parentKey: "route_world", name: "Market Square", kind: "place",
+              key: "market_square", parentKey: "route_world", name: "Market Square", typeKey: "city_quarter", kind: "place",
               description: "The city market between Old Town and the harbor road.",
               modelMemory: "Merchants know every public route through the city.",
               awarenessSummary: "Old Town lies west and the harbor lies east.",
@@ -215,7 +220,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               placement: { x: 50, y: 50 }, layerOrder: null, links: [],
             },
             {
-              key: "harbor", parentKey: "route_world", name: "Harbor", kind: "place",
+              key: "harbor", parentKey: "route_world", name: "Harbor", typeKey: "city_quarter", kind: "place",
               description: "A working harbor east of the market.",
               modelMemory: "A canal bridge can support future expansion.",
               awarenessSummary: "The market road returns west.",
@@ -1333,6 +1338,17 @@ async function main() {
       headers: csrfHeaders,
       payload: { role: "assistant", content: "Old Town, Market Square, and Harbor define the test city." },
     });
+    const savedGenerationPreferences = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-preferences`,
+      headers: csrfHeaders,
+      payload: {
+        version: 1,
+        mode: "custom",
+        guidance: "Prefer concise maritime vocabulary and navigable public streets.",
+      },
+    })) as { mode: string; guidance: string };
+    assert.equal(savedGenerationPreferences.mode, "custom");
 
     const createRouteRequestIndex = generationProviderRequests.length;
     const createdRouteDraft = (await expectJson(app, {
@@ -1347,6 +1363,7 @@ async function main() {
         sourceLorebookIds: [],
         connectionId: gameGenerationConnection.id,
         debugMode: false,
+        hierarchyMode: "auto",
       },
     })) as {
       operation: string;
@@ -1357,6 +1374,13 @@ async function main() {
         startingLocationId: string;
         revision: number;
       };
+      hierarchyProfile: {
+        version: 1;
+        mode: string;
+        name: string;
+        types: Array<{ id: string; label: string; baseKind: string }>;
+        locationTypeIds: Record<string, string>;
+      };
     };
     assert.equal(createdRouteDraft.operation, "create");
     const createRoutePrompt = capturedProviderPrompt(generationProviderRequests[createRouteRequestIndex]);
@@ -1364,6 +1388,18 @@ async function main() {
     assert.match(createRoutePrompt, /floors use stairs, lifts, ladders, or ramps/u);
     assert.match(createRoutePrompt, /sparse connected travel graph/u);
     assert.match(createRoutePrompt, /Do not create an all-to-all graph/u);
+    assert.match(createRoutePrompt, /Infer a concise location-type vocabulary/u);
+    assert.match(createRoutePrompt, /Prefer concise maritime vocabulary and navigable public streets/u);
+    assert.ok(
+      createdRouteDraft.hierarchyProfile.types.some((type) => type.label === "City Quarter" && type.baseKind === "place"),
+      "AI-created hierarchy vocabulary must be returned as stable custom types",
+    );
+    assert.equal(
+      createdRouteDraft.hierarchyProfile.locationTypeIds[
+        createdRouteDraft.definition.locations.find((location) => location.name === "Old Town")!.id
+      ],
+      createdRouteDraft.hierarchyProfile.types.find((type) => type.label === "City Quarter")!.id,
+    );
 
     const routeWorld = createdRouteDraft.definition.locations.find((location) => location.name === "Route Test World");
     assert.ok(routeWorld);
@@ -1399,8 +1435,15 @@ async function main() {
         expectedRevision: 0,
         expectedCurrentLocationId: null,
         definition: { ...createdRouteDraft.definition, enabled: true },
+        hierarchyProfile: createdRouteDraft.hierarchyProfile,
       },
-    })) as { definition: typeof createdRouteDraft.definition };
+    })) as {
+      definition: typeof createdRouteDraft.definition;
+      hierarchyProfile: typeof createdRouteDraft.hierarchyProfile;
+      generationPreferences: { mode: string; guidance: string };
+    };
+    assert.equal(savedRouteMap.hierarchyProfile.name, "Harbor city");
+    assert.equal(savedRouteMap.generationPreferences.mode, "custom");
     const existingHarbor = savedRouteMap.definition.locations.find((location) => location.name === "Harbor");
     assert.ok(existingHarbor);
     mapExpansionExistingTargetId = existingHarbor.id;
@@ -1429,6 +1472,8 @@ async function main() {
       "Expansion prompts must expose stable existing child keys to the model",
     );
     assert.match(expandRoutePrompt, /Connect at least one new direct child to the most plausible existing child/u);
+    assert.match(expandRoutePrompt, /Location-type vocabulary/u);
+    assert.match(expandRoutePrompt, /City Quarter/u);
     assert.deepEqual(
       expandedRouteDraft.definition.locations.slice(0, savedRouteMap.definition.locations.length),
       savedRouteMap.definition.locations,

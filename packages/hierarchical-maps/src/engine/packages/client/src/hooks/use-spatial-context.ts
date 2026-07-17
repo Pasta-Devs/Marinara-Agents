@@ -15,6 +15,11 @@ import {
   setPendingSpatialTransitionStatus,
 } from "../features/spatial-context/pending-spatial-transitions";
 import { spatialResourceKeys } from "../features/spatial-context/use-spatial-resources";
+import type {
+  MapsSpatialContextResponse,
+  SpatialGenerationPreferences,
+  SpatialHierarchyProfile,
+} from "../../../maps-shared/src/maps-model";
 
 export const spatialContextKeys = {
   all: ["spatial-context"] as const,
@@ -66,11 +71,18 @@ export interface UpdateSpatialContextInput {
   expectedCurrentLocationId: string | null;
   replacementCurrentLocationId?: string | null;
   definition: SpatialContextDefinition;
+  hierarchyProfile?: SpatialHierarchyProfile;
 }
 
 export interface GenerateSpatialMapDraftInput extends GenerateSpatialMapDraftRequest {
   chatId: string;
+  hierarchyMode?: SpatialHierarchyProfile["mode"];
+  hierarchyProfile?: SpatialHierarchyProfile;
 }
+
+export type MapsGenerateSpatialMapDraftResponse = GenerateSpatialMapDraftResponse & {
+  hierarchyProfile: SpatialHierarchyProfile;
+};
 
 export interface CommitSpatialOwnerTurnInput {
   chatId: string;
@@ -151,7 +163,7 @@ export function getSpatialContextProblem(error: unknown): SpatialContextProblem 
 export function useSpatialContext(chatId: string | null) {
   return useQuery({
     queryKey: spatialContextKeys.detail(chatId ?? ""),
-    queryFn: () => packageApi.get<SpatialContextResponse>(`/chats/${chatId}/spatial-context`),
+    queryFn: () => packageApi.get<MapsSpatialContextResponse>(`/chats/${chatId}/spatial-context`),
     enabled: !!chatId,
     staleTime: 30_000,
     retry: (failureCount, error) => {
@@ -165,7 +177,7 @@ export function useUpdateSpatialContext() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, ...request }: UpdateSpatialContextInput) =>
-      packageApi.put<SpatialContextResponse>(`/chats/${chatId}/spatial-context`, request),
+      packageApi.put<MapsSpatialContextResponse>(`/chats/${chatId}/spatial-context`, request),
     onSuccess: (response, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), response);
     },
@@ -197,7 +209,24 @@ export function useCommitSpatialOwnerTurn() {
 export function useGenerateSpatialMapDraft() {
   return useMutation({
     mutationFn: ({ chatId, ...request }: GenerateSpatialMapDraftInput) =>
-      packageApi.post<GenerateSpatialMapDraftResponse>(`/chats/${chatId}/spatial-context/generate`, request),
+      packageApi.post<MapsGenerateSpatialMapDraftResponse>(`/chats/${chatId}/spatial-context/generate`, request),
+  });
+}
+
+export function useUpdateSpatialGenerationPreferences() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, preferences }: { chatId: string; preferences: SpatialGenerationPreferences }) =>
+      packageApi.put<SpatialGenerationPreferences>(
+        `/chats/${chatId}/spatial-context/generation-preferences`,
+        preferences,
+      ),
+    onSuccess: (preferences, variables) => {
+      queryClient.setQueryData<MapsSpatialContextResponse>(
+        spatialContextKeys.detail(variables.chatId),
+        (current) => (current ? { ...current, generationPreferences: preferences } : current),
+      );
+    },
   });
 }
 

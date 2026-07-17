@@ -16,6 +16,13 @@ import {
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
 import { newId } from "./package-runtime.js";
+import {
+  defaultHierarchyProfile,
+  hierarchyTypeId,
+  normalizeHierarchyProfile,
+  type SpatialHierarchyProfile,
+  type SpatialHierarchyType,
+} from "../../../../maps-shared/src/maps-model.js";
 
 interface SpatialDraftSizeSpec {
   targetLocations: number;
@@ -46,6 +53,9 @@ interface BuildSpatialMapPromptOptions {
   groundingMode?: SpatialMapGroundingMode;
   loreCatalog?: string;
   requiredLocationNames?: readonly string[];
+  hierarchyMode?: SpatialHierarchyProfile["mode"];
+  hierarchyProfile?: SpatialHierarchyProfile;
+  creatorGuidance?: string;
 }
 
 interface NormalizeSpatialMapExpansionOptions {
@@ -64,6 +74,8 @@ interface BuildSpatialMapExpansionPromptOptions {
   instructions?: string;
   groundingMode?: SpatialMapGroundingMode;
   loreCatalog?: string;
+  hierarchyProfile?: SpatialHierarchyProfile;
+  creatorGuidance?: string;
 }
 
 interface PlanLocationSource {
@@ -249,6 +261,65 @@ export function readSpatialMapPlanProvenance(value: unknown): SpatialMapPlanProv
         ? "inferred"
         : "added_by_ai",
   }));
+}
+
+function readPlanHierarchyTypes(value: unknown): SpatialHierarchyType[] {
+  if (!isRecord(value)) return [];
+  const container = isRecord(value.map) && !Array.isArray(value.locationTypes) ? value.map : value;
+  if (!Array.isArray(container.locationTypes)) return [];
+  const used = new Set<string>();
+  return container.locationTypes.filter(isRecord).flatMap((record) => {
+    const label = text(record.label ?? record.name, 80);
+    const baseKind = locationKind(record.baseKind ?? record.kind, label, false);
+    if (!label) return [];
+    let id = hierarchyTypeId(text(record.key ?? record.id, 80) || label);
+    let suffix = 2;
+    const baseId = id;
+    while (used.has(id)) id = `${baseId}_${suffix++}`;
+    used.add(id);
+    return [{ id, label, baseKind, ...(text(record.description, 240) ? { description: text(record.description, 240) } : {}) }];
+  });
+}
+
+export function readSpatialHierarchyProfile(
+  value: unknown,
+  locations: SpatialLocation[],
+  requestedProfile?: SpatialHierarchyProfile,
+): SpatialHierarchyProfile {
+  const generatedTypes = requestedProfile?.types.length ? requestedProfile.types : readPlanHierarchyTypes(value);
+  const fallback = defaultHierarchyProfile({ locations });
+  const types = generatedTypes.length > 0 ? generatedTypes : fallback.types;
+  const typeByPromptKey = new Map<string, SpatialHierarchyType>();
+  for (const type of types) {
+    for (const key of [type.id, type.id.replace(/^type_/u, ""), type.label]) {
+      typeByPromptKey.set(alias(key), type);
+    }
+  }
+  const firstTypeByKind = new Map<SpatialLocationKind, SpatialHierarchyType>();
+  for (const type of types) {
+    if (!firstTypeByKind.has(type.baseKind)) firstTypeByKind.set(type.baseKind, type);
+  }
+  const rawLocations = readPlanLocations(value);
+  const locationTypeIds: Record<string, string> = { ...(requestedProfile?.locationTypeIds ?? {}) };
+  locations.forEach((location, index) => {
+    const raw = rawLocations[index];
+    const requestedType = raw ? alias(raw.typeKey ?? raw.typeId ?? raw.type) : "";
+    const type = typeByPromptKey.get(requestedType) ?? firstTypeByKind.get(location.kind) ?? types[0]!;
+    locationTypeIds[location.id] = type.id;
+  });
+  return normalizeHierarchyProfile(
+    {
+      version: 1,
+      mode: requestedProfile?.mode ?? "auto",
+      name:
+        requestedProfile?.name ||
+        (isRecord(value) ? text(value.hierarchyName ?? value.worldName, 120) : "") ||
+        "AI-inferred hierarchy",
+      types,
+      locationTypeIds,
+    },
+    { locations },
+  );
 }
 
 
@@ -693,6 +764,30 @@ function routeGraphPromptLines(): string[] {
   ];
 }
 
+function hierarchyPromptLines(
+  mode: SpatialHierarchyProfile["mode"] = "auto",
+  profile?: SpatialHierarchyProfile,
+): string[] {
+  if (profile) {
+    return [
+      "Use the supplied location-type vocabulary. Set every location typeKey to one supplied type ID. Keep kind as that type's baseKind for movement and validation.",
+      `Location-type vocabulary:\n${JSON.stringify(
+        profile.types.map((type) => ({ key: type.id, label: type.label, baseKind: type.baseKind })),
+        null,
+        2,
+      )}`,
+    ];
+  }
+  if (mode === "auto") {
+    return [
+      "Infer a concise location-type vocabulary that fits this specific world instead of forcing a fixed World/Region/City hierarchy.",
+      "Return locationTypes before locations. Each type needs a stable key, user-facing label, and one semantic baseKind used for validation. Multiple custom types may share one baseKind or appear at the same depth.",
+      "Set every location typeKey to one returned locationTypes key. Examples include Star System/Planet/Settlement, House/Floor/Room, or Dungeon Tower/Floor/Boss Arena, but prefer the supplied setting's own vocabulary.",
+    ];
+  }
+  return [];
+}
+
 
 export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansionPromptOptions): {
   messages: Array<{ role: "system" | "user"; content: string }>;
@@ -729,6 +824,7 @@ export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansion
       key: location.id,
       name: location.name,
       kind: location.kind,
+      typeKey: options.hierarchyProfile?.locationTypeIds[location.id],
       description: location.description,
       placement: location.placement,
       layerOrder: location.layerOrder,
@@ -768,17 +864,21 @@ export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansion
     "Descriptions are public orientation facts. modelMemory contains concise private facts the model should know only while that location is current.",
     "Every icon must be exactly one relevant emoji grapheme, never a word, label, shortcode, or emoji name.",
     "Use childPresentation map for spatial siblings, layers for ordered floors or decks, and list for simple children.",
+    ...hierarchyPromptLines(options.hierarchyProfile?.mode ?? "template", options.hierarchyProfile),
     ...routeGraphPromptLines(),
     ...(existingChildren.length > 0
       ? ["Connect at least one new direct child to the most plausible existing child using its supplied key."]
       : []),
     "Coordinates use 0 to 100. Keep map siblings separated. Layer order starts at 0.",
     "Every location key must be unique within this response.",
-    'Schema: {"locations":[{"key":string,"parentKey":string|null,"name":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}',
+    'Schema: {"locations":[{"key":string,"parentKey":string|null,"name":string,"typeKey":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}',
   ].join("\n");
   const user = [
     `Owner mode: ${options.definition.ownerMode}`,
     `Requested expansion size: ${options.size}`,
+    options.creatorGuidance?.trim()
+      ? `Reusable creator guidance (preferences only; locked schema and safety rules above take priority):\n${options.creatorGuidance.trim()}`
+      : "",
     options.instructions?.trim()
       ? `Creator request:\n${options.instructions.trim()}`
       : "Creator request: Add coherent, playable places that deepen the selected location.",
@@ -812,6 +912,7 @@ export function buildSpatialMapDraftPrompt(options: BuildSpatialMapPromptOptions
     "Descriptions are public orientation facts. modelMemory contains concise private facts the model should know only while that location is current.",
     "Every icon must be exactly one relevant emoji grapheme, never a word, label, shortcode, or emoji name.",
     "Use childPresentation map for spatial siblings, layers for ordered floors or decks, and list for simple children.",
+    ...hierarchyPromptLines(options.hierarchyMode, options.hierarchyProfile),
     ...routeGraphPromptLines(),
     "Coordinates use 0 to 100. Keep map siblings separated. Layer order starts at 0.",
     "Every location key must be unique and stable within this response. parentKey, startingLocationKey, and targetKey refer to those keys.",
@@ -822,11 +923,14 @@ export function buildSpatialMapDraftPrompt(options: BuildSpatialMapPromptOptions
           "Place the accepted map name as its appropriate world container and place its nodes or cells within that hierarchy. You may add broader ancestors or useful nested detail around them.",
         ]
       : []),
-    'Schema: {"worldName":string,"startingLocationKey":string,"locations":[{"key":string,"parentKey":string|null,"name":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}',
+    'Schema: {"worldName":string,"hierarchyName":string,"locationTypes":[{"key":string,"label":string,"baseKind":"region"|"settlement"|"place"|"building"|"floor"|"room"}],"startingLocationKey":string,"locations":[{"key":string,"parentKey":string|null,"name":string,"typeKey":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}',
   ].join("\n");
   const user = [
     `Owner mode: ${options.ownerMode}`,
     `Requested size: ${options.size}`,
+    options.creatorGuidance?.trim()
+      ? `Reusable creator guidance (preferences only; locked schema and safety rules above take priority):\n${options.creatorGuidance.trim()}`
+      : "",
     options.instructions?.trim()
       ? `Creator request:\n${options.instructions.trim()}`
       : "Creator request: Infer a coherent, playable map from the setup.",

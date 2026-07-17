@@ -10,6 +10,11 @@ import {
   setPendingSpatialTransitionStatus,
   usePendingSpatialTransition,
 } from "../pending-spatial-transitions";
+import {
+  cancelSpatialRoute,
+  reconcileSpatialRoutePlan,
+  useSpatialRoutePlan,
+} from "../spatial-route-plans";
 
 interface SpatialContextRuntimeBarProps {
   chatId: string | null;
@@ -47,10 +52,16 @@ export function SpatialContextRuntimeBar({
   const mobileMapTriggerRef = useRef<HTMLButtonElement | null>(null);
   const spatial = useSpatialContext(chatId);
   const pending = usePendingSpatialTransition(chatId);
+  const routePlan = useSpatialRoutePlan(chatId);
   const data = spatial.data;
 
   useEffect(() => {
-    if (!chatId || !pending || !data) return;
+    if (!chatId || !data) return;
+    if (routePlan) {
+      reconcileSpatialRoutePlan(chatId, data);
+      return;
+    }
+    if (!pending) return;
     if (data.currentLocationId === pending.transition.destinationId) {
       clearPendingSpatialTransition(chatId, pending.transition.commandId);
       return;
@@ -63,7 +74,7 @@ export function SpatialContextRuntimeBar({
       data.currentLocationId !== pending.transition.expectedCurrentLocationId ||
       !destinationStillAvailable;
     if (isStale) setPendingSpatialTransitionStatus(chatId, "needs_review");
-  }, [chatId, data, pending]);
+  }, [chatId, data, pending, routePlan]);
 
   const destinationsByRelation = useMemo(() => {
     const result = new Map<SpatialDestinationRelation, SpatialDestination[]>();
@@ -105,6 +116,14 @@ export function SpatialContextRuntimeBar({
 
   const queueDestination = (destination: SpatialDestination) => {
     if (!chatId || !data?.definition || !data.currentLocationId || disabled) return;
+    if (
+      routePlan &&
+      routePlan.targetLocationId !== destination.id &&
+      !window.confirm(`Replace the route to ${routePlan.targetLocationName} with a direct move to ${destination.name}?`)
+    ) {
+      return;
+    }
+    if (routePlan) cancelSpatialRoute(chatId);
     setPendingSpatialTransition(chatId, {
       transition: {
         destinationId: destination.id,
@@ -339,16 +358,26 @@ export function SpatialContextRuntimeBar({
             <Route size="0.875rem" className="shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
           )}
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-semibold">{pending.destinationName}</span>
+            <span className="block truncate text-xs font-semibold">
+              {routePlan ? `Route to ${routePlan.targetLocationName}` : pending.destinationName}
+            </span>
             <span className="block truncate text-[0.625rem] opacity-75">
-              {pending.status === "needs_review" ? "Needs review — choose the destination again" : "Moves with your next turn"}
+              {pending.status === "needs_review" || routePlan?.status === "needs_review"
+                ? "Needs review — choose the destination again"
+                : routePlan
+                  ? `Next step ${Math.min(routePlan.currentIndex + 1, routePlan.steps.length)} of ${routePlan.steps.length} · ${pending.destinationName}`
+                  : "Moves with your next turn"}
             </span>
           </span>
           <button
             type="button"
-            onClick={() => chatId && clearPendingSpatialTransition(chatId, pending.transition.commandId)}
+            onClick={() => {
+              if (!chatId) return;
+              if (routePlan) cancelSpatialRoute(chatId);
+              else clearPendingSpatialTransition(chatId, pending.transition.commandId);
+            }}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
-            aria-label={`Cancel move to ${pending.destinationName}`}
+            aria-label={routePlan ? `Cancel route to ${routePlan.targetLocationName}` : `Cancel move to ${pending.destinationName}`}
           >
             <X size="0.875rem" />
           </button>

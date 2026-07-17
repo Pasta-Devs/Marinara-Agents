@@ -9,9 +9,11 @@ import {
   List,
   Loader2,
   Map,
+  Move,
   Plus,
   RefreshCw,
   Save,
+  Settings2,
   Sparkles,
   Trash2,
   Upload,
@@ -27,6 +29,7 @@ import {
   type GenerateSpatialMapDraftResponse,
   type SpatialContextDefinition,
   type SpatialDefinitionIssue,
+  type SpatialLocationKind,
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
 import { getSpatialContextProblem, useSpatialContext, useUpdateSpatialContext } from "../../hooks/use-spatial-context";
@@ -54,12 +57,24 @@ import {
   useSpatialLorebookEntries,
   useSpatialLorebooks,
 } from "./use-spatial-resources";
+import {
+  defaultHierarchyProfile,
+  hierarchyTypeForLocation,
+  hierarchyTypeId,
+  normalizeHierarchyProfile,
+  withLocationHierarchyType,
+  type SpatialHierarchyProfile,
+} from "../../../../maps-shared/src/maps-model";
 
 type MobilePane = "hierarchy" | "local" | "details";
 
 type FirstSaveResult = {
   locationCount: number;
   startingLocationName: string;
+};
+
+type ImportIdReport = {
+  missing: Array<{ id: string; name: string }>;
 };
 
 interface SpatialMapWorkspaceProps {
@@ -131,6 +146,12 @@ export function SpatialMapWorkspace({
   const pendingSetupReview = pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
   const [baseDefinition, setBaseDefinition] = useState<SpatialContextDefinition | null>(null);
   const [draft, setDraft] = useState<SpatialContextDefinition | null>(null);
+  const [baseHierarchyProfile, setBaseHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
+    defaultHierarchyProfile(),
+  );
+  const [draftHierarchyProfile, setDraftHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
+    defaultHierarchyProfile(),
+  );
   const [initialized, setInitialized] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [enteredParentId, setEnteredParentId] = useState<string | null>(null);
@@ -153,6 +174,9 @@ export function SpatialMapWorkspace({
   );
   const [replacementCurrentLocationId, setReplacementCurrentLocationId] = useState<string | null>(null);
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
+  const [layoutEditing, setLayoutEditing] = useState(false);
+  const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
+  const [typesEditorOpen, setTypesEditorOpen] = useState(false);
 
   const ownerMode: SpatialOwnerMode = chat?.mode === "game" ? "game" : "roleplay";
   const gameMaps = useMemo(() => {
@@ -189,6 +213,9 @@ export function SpatialMapWorkspace({
     setFirstSaveResult(null);
     setFirstMapGenerationSession(null);
     setRegenerateRequestId(0);
+    setLayoutEditing(false);
+    setImportIdReport(null);
+    setTypesEditorOpen(false);
   }, [chatId]);
 
   useEffect(() => {
@@ -197,6 +224,9 @@ export function SpatialMapWorkspace({
     const nextDraft = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
     setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
     setDraft(nextDraft);
+    const hierarchyProfile = normalizeHierarchyProfile(spatial.data.hierarchyProfile, nextDraft);
+    setBaseHierarchyProfile(hierarchyProfile);
+    setDraftHierarchyProfile(hierarchyProfile);
     setSelectedId(nextDraft.startingLocationId ?? nextDraft.locations[0]?.id ?? null);
     setEnteredParentId(null);
     setServerIssues(spatial.data.warnings);
@@ -212,7 +242,13 @@ export function SpatialMapWorkspace({
     () => (draft ? [...spatialDefinitionIssues(draft), ...serverIssues] : []),
     [draft, serverIssues],
   );
-  const dirty = useMemo(() => !!draft && isSpatialDefinitionDirty(baseDefinition, draft), [baseDefinition, draft]);
+  const dirty = useMemo(
+    () =>
+      !!draft &&
+      (isSpatialDefinitionDirty(baseDefinition, draft) ||
+        JSON.stringify(baseHierarchyProfile) !== JSON.stringify(normalizeHierarchyProfile(draftHierarchyProfile, draft))),
+    [baseDefinition, baseHierarchyProfile, draft, draftHierarchyProfile],
+  );
   const selected = draft?.locations.find((location) => location.id === selectedId) ?? null;
   const currentLocationId = spatial.data?.currentLocationId ?? null;
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
@@ -258,6 +294,17 @@ export function SpatialMapWorkspace({
     setSavedFlash(false);
     setFirstSaveResult(null);
   }, []);
+
+  const applyHierarchyProfile = useCallback(
+    (next: SpatialHierarchyProfile) => {
+      if (!draft) return;
+      setDraftHierarchyProfile(normalizeHierarchyProfile(next, draft));
+      setServerIssues([]);
+      setSavedFlash(false);
+      setFirstSaveResult(null);
+    },
+    [draft],
+  );
 
   const selectLocation = useCallback((locationId: string, showDetails = true) => {
     setSelectedId(locationId);
@@ -348,7 +395,21 @@ export function SpatialMapWorkspace({
 
   const handleExport = useCallback(() => {
     if (!draft) return;
-    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            format: "marinara-hierarchical-map",
+            formatVersion: 2,
+            definition: draft,
+            hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+          },
+          null,
+          2,
+        ),
+      ],
+      { type: "application/json" },
+    );
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const safeName = (chat?.name ?? "hierarchical-map")
@@ -358,7 +419,7 @@ export function SpatialMapWorkspace({
     link.download = `${safeName}.hierarchical-map.json`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [chat?.name, draft]);
+  }, [chat?.name, draft, draftHierarchyProfile]);
 
   const handleImport = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -367,20 +428,24 @@ export function SpatialMapWorkspace({
       if (!file || !draft) return;
       try {
         const raw = JSON.parse(await file.text()) as unknown;
+        const rawRecord = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
         const candidate =
-          raw && typeof raw === "object" && !Array.isArray(raw) && "definition" in raw
-            ? (raw as { definition: unknown }).definition
+          rawRecord && "definition" in rawRecord
+            ? rawRecord.definition
             : raw;
         const parsed = spatialContextDefinitionSchema.safeParse(candidate);
         if (!parsed.success) {
           throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid hierarchical map.");
         }
         const importedIds = new Set(parsed.data.locations.map((location) => location.id));
-        if (
-          spatial.data?.hasCommittedSpatialHistory &&
-          draft.locations.some((location) => !importedIds.has(location.id))
-        ) {
-          throw new Error("Campaign history uses this map. Imported maps must retain every existing location ID.");
+        const missing = draft.locations
+          .filter((location) => !importedIds.has(location.id))
+          .map((location) => ({ id: location.id, name: location.name }));
+        if (spatial.data?.hasCommittedSpatialHistory && missing.length > 0) {
+          setImportIdReport({ missing });
+          throw new Error(
+            `Campaign history uses ${missing.length} location ID${missing.length === 1 ? "" : "s"} missing from this file. Review the repair steps shown in the editor.`,
+          );
         }
         const imported: SpatialContextDefinition = {
           ...parsed.data,
@@ -388,7 +453,10 @@ export function SpatialMapWorkspace({
           enabled: draft.enabled,
           revision: baseDefinition?.revision ?? 0,
         };
+        const importedProfile = normalizeHierarchyProfile(rawRecord?.hierarchyProfile, imported);
         applyDraft(imported);
+        setDraftHierarchyProfile(importedProfile);
+        setImportIdReport(null);
         setFirstMapGenerationSession(null);
         setSelectedId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
         setEnteredParentId(null);
@@ -429,11 +497,14 @@ export function SpatialMapWorkspace({
         expectedCurrentLocationId: currentLocationId,
         ...(replacementCurrentLocationId ? { replacementCurrentLocationId } : {}),
         definition: { ...definitionToSave, ownerMode, revision: baseDefinition?.revision ?? 0 },
+        hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, definitionToSave),
       });
       const saved = response.definition;
       if (!saved) throw new Error("The server did not return the saved map.");
       setBaseDefinition(cloneSpatialDefinition(saved));
       setDraft(cloneSpatialDefinition(saved));
+      setBaseHierarchyProfile(response.hierarchyProfile);
+      setDraftHierarchyProfile(response.hierarchyProfile);
       setServerIssues(response.warnings);
       setReplacementCurrentLocationId(null);
       setSavedFlash(true);
@@ -464,6 +535,7 @@ export function SpatialMapWorkspace({
     currentLocationId,
     dirty,
     draft,
+    draftHierarchyProfile,
     issues.length,
     ownerMode,
     replacementCurrentLocationId,
@@ -479,6 +551,9 @@ export function SpatialMapWorkspace({
     const next = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
     setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
     setDraft(next);
+    const hierarchyProfile = normalizeHierarchyProfile(result.data.hierarchyProfile, next);
+    setBaseHierarchyProfile(hierarchyProfile);
+    setDraftHierarchyProfile(hierarchyProfile);
     setSelectedId(next.startingLocationId ?? next.locations[0]?.id ?? null);
     setEnteredParentId(null);
     setConflict(false);
@@ -509,6 +584,12 @@ export function SpatialMapWorkspace({
       const firstAddedLocation = next.locations.find((location) => !previousIds.has(location.id));
       const expandedExistingMap = session.result.operation === "expand";
       applyDraft(next);
+      setDraftHierarchyProfile(
+        normalizeHierarchyProfile(
+          "hierarchyProfile" in session.result ? session.result.hierarchyProfile : draftHierarchyProfile,
+          next,
+        ),
+      );
       setSelectedId(firstAddedLocation?.id ?? next.startingLocationId ?? next.locations[0]?.id ?? null);
       setEnteredParentId(firstAddedLocation?.parentId ?? null);
       setMobilePane("hierarchy");
@@ -532,7 +613,7 @@ export function SpatialMapWorkspace({
           : "AI map draft applied. Review it, choose a start, then enable and save.",
       );
     },
-    [applyDraft, baseDefinition, currentLocationId, draft, onClearPendingDraftReview, ownerMode],
+    [applyDraft, baseDefinition, currentLocationId, draft, draftHierarchyProfile, onClearPendingDraftReview, ownerMode],
   );
 
   const regenerateFirstMapDraft = useCallback(async () => {
@@ -560,6 +641,7 @@ export function SpatialMapWorkspace({
     if (!confirmed) return;
     const empty = createEmptySpatialDefinition(ownerMode);
     applyDraft(empty);
+    setDraftHierarchyProfile(defaultHierarchyProfile(empty));
     setSelectedId(null);
     setEnteredParentId(null);
     setMobilePane("hierarchy");
@@ -698,6 +780,19 @@ export function SpatialMapWorkspace({
             {localPresentation === "map" ? <Map size="0.6875rem" /> : <List size="0.6875rem" />}
             {localPresentation}
           </span>
+          {localPresentation === "map" && (
+            <button
+              type="button"
+              aria-pressed={layoutEditing}
+              onClick={() => setLayoutEditing((value) => !value)}
+              className={cn(
+                "mari-chrome-control min-h-11 px-3 text-xs",
+                layoutEditing && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+              )}
+            >
+              <Move size="0.75rem" /> {layoutEditing ? "Done arranging" : "Arrange map"}
+            </button>
+          )}
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -707,6 +802,10 @@ export function SpatialMapWorkspace({
             selectedId={selectedId}
             onSelect={selectLocation}
             onEnter={enterLocation}
+            editing={layoutEditing}
+            onMove={(locationId, placement) =>
+              applyDraft(updateSpatialLocation(draft, locationId, { placement }))
+            }
           />
         ) : localPresentation === "layers" ? (
           <LayerSelector
@@ -746,7 +845,7 @@ export function SpatialMapWorkspace({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{location.name || "Untitled location"}</span>
                     <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
-                      {location.kind}
+                      {hierarchyTypeForLocation(draftHierarchyProfile, location).label}
                       {location.status === "archived" ? " · archived" : ""}
                     </span>
                   </span>
@@ -772,6 +871,14 @@ export function SpatialMapWorkspace({
       location={selected}
       issues={issues.filter((issue) => issue.locationId === selected?.id)}
       currentLocationId={currentLocationId}
+      hierarchyProfile={draftHierarchyProfile}
+      onHierarchyTypeChange={(typeId) => {
+        if (!selected) return;
+        const type = draftHierarchyProfile.types.find((candidate) => candidate.id === typeId);
+        if (!type) return;
+        applyDraft(updateSpatialLocation(draft, selected.id, { kind: type.baseKind }));
+        applyHierarchyProfile(withLocationHierarchyType(draftHierarchyProfile, selected.id, typeId));
+      }}
       onUpdate={(patch) => selected && applyDraft(updateSpatialLocation(draft, selected.id, patch))}
       lorebooks={lorebooks}
       lorebookEntries={lorebookEntriesQuery.entries ?? []}
@@ -830,6 +937,15 @@ export function SpatialMapWorkspace({
               : draft.locations.length > 0
                 ? "Expand with AI"
                 : "Build with AI"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTypesEditorOpen((value) => !value)}
+            disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+            aria-pressed={typesEditorOpen}
+            className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+          >
+            <Settings2 size="0.8125rem" /> Location types
           </button>
           <button
             type="button"
@@ -895,6 +1011,7 @@ export function SpatialMapWorkspace({
         ownerMode={ownerMode}
         open={aiBuilderOpen}
         definition={draft}
+        hierarchyProfile={draftHierarchyProfile}
         currentLocationId={currentLocationId}
         preferredTargetLocationId={selected?.id ?? null}
         hasCommittedSpatialHistory={spatial.data?.hasCommittedSpatialHistory ?? false}
@@ -909,6 +1026,166 @@ export function SpatialMapWorkspace({
         onClose={closeAiBuilder}
         onApply={applyGeneratedDraft}
       />
+
+      {!aiBuilderOpen && typesEditorOpen && (
+        <section className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)] px-4 py-3" aria-label="Edit location types">
+          <div className="mx-auto max-w-4xl">
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-semibold text-[var(--marinara-editor-title)]">Location types</h2>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--marinara-editor-muted)]">
+                  Rename the vocabulary users see while keeping a semantic base kind for movement, layout, and validation. Multiple types can share the same base kind.
+                </p>
+              </div>
+              <button type="button" onClick={() => setTypesEditorOpen(false)} className="mari-editor-action min-h-11 px-3 text-xs">
+                Done
+              </button>
+            </div>
+            <label className="mt-3 block max-w-md text-xs font-medium text-[var(--marinara-editor-title)]">
+              Profile name
+              <input
+                value={draftHierarchyProfile.name}
+                maxLength={120}
+                onChange={(event) =>
+                  applyHierarchyProfile({
+                    ...draftHierarchyProfile,
+                    mode: "custom",
+                    name: event.target.value.trim() ? event.target.value : draftHierarchyProfile.name,
+                  })
+                }
+                className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs"
+              />
+            </label>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {draftHierarchyProfile.types.map((type, index) => (
+                <div key={type.id} className="grid grid-cols-[minmax(0,1fr)_8rem_2.75rem] gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-2">
+                  <input
+                    aria-label={`Location type ${index + 1} label`}
+                    value={type.label}
+                    maxLength={80}
+                    onChange={(event) =>
+                      applyHierarchyProfile({
+                        ...draftHierarchyProfile,
+                        mode: "custom",
+                        types: draftHierarchyProfile.types.map((candidate) =>
+                          candidate.id === type.id
+                            ? { ...candidate, label: event.target.value.trim() ? event.target.value : candidate.label }
+                            : candidate,
+                        ),
+                      })
+                    }
+                    className="min-h-11 min-w-0 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs"
+                  />
+                  <select
+                    aria-label={`${type.label || `Location type ${index + 1}`} semantic base kind`}
+                    value={type.baseKind}
+                    onChange={(event) => {
+                      const baseKind = event.target.value as SpatialLocationKind;
+                      applyDraft({
+                        ...draft,
+                        locations: draft.locations.map((location) =>
+                          draftHierarchyProfile.locationTypeIds[location.id] === type.id
+                            ? { ...location, kind: baseKind }
+                            : location,
+                        ),
+                      });
+                      applyHierarchyProfile({
+                        ...draftHierarchyProfile,
+                        mode: "custom",
+                        types: draftHierarchyProfile.types.map((candidate) =>
+                          candidate.id === type.id ? { ...candidate, baseKind } : candidate,
+                        ),
+                      });
+                    }}
+                    className="min-h-11 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2 text-[0.625rem]"
+                  >
+                    {(["region", "settlement", "place", "building", "floor", "room"] as const).map((kind) => (
+                      <option key={kind} value={kind}>{kind}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={draftHierarchyProfile.types.length === 1}
+                    onClick={() =>
+                      applyHierarchyProfile({
+                        ...draftHierarchyProfile,
+                        mode: "custom",
+                        types: draftHierarchyProfile.types.filter((candidate) => candidate.id !== type.id),
+                      })
+                    }
+                    className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                    aria-label={`Remove ${type.label || "location type"}`}
+                  >
+                    <Trash2 size="0.75rem" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={draftHierarchyProfile.types.length >= 40}
+              onClick={() => {
+                const base = hierarchyTypeId(`custom-${draftHierarchyProfile.types.length + 1}`);
+                let id = base;
+                let suffix = 2;
+                while (draftHierarchyProfile.types.some((type) => type.id === id)) id = `${base}_${suffix++}`;
+                applyHierarchyProfile({
+                  ...draftHierarchyProfile,
+                  mode: "custom",
+                  types: [
+                    ...draftHierarchyProfile.types,
+                    { id, label: `Location type ${draftHierarchyProfile.types.length + 1}`, baseKind: "place" },
+                  ],
+                });
+              }}
+              className="mari-editor-action mt-3 inline-flex min-h-11 px-3 text-xs"
+            >
+              <Plus size="0.75rem" /> Add location type
+            </button>
+          </div>
+        </section>
+      )}
+
+      {!aiBuilderOpen && importIdReport && (
+        <section
+          className="border-b border-amber-500/35 bg-amber-500/10 px-4 py-3 text-xs text-amber-200"
+          role="alert"
+          aria-label="Import location ID repair guidance"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle size="0.875rem" className="mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">
+                Import blocked: {importIdReport.missing.length} saved location ID
+                {importIdReport.missing.length === 1 ? " is" : "s are"} missing
+              </p>
+              <p className="mt-1 leading-relaxed text-amber-200/80">
+                Names are editable labels; campaign history follows the stable IDs. Export this map as a baseline, copy your revised names and details into that file, and keep each matching ID unchanged before importing again.
+              </p>
+              <ul className="mt-2 grid gap-1 sm:grid-cols-2" aria-label="Missing saved location IDs">
+                {importIdReport.missing.slice(0, 12).map((location) => (
+                  <li key={location.id} className="truncate rounded bg-black/10 px-2 py-1 font-mono text-[0.625rem]">
+                    {location.name || "Untitled location"} · {location.id}
+                  </li>
+                ))}
+              </ul>
+              {importIdReport.missing.length > 12 && (
+                <p className="mt-1 text-[0.625rem]">And {importIdReport.missing.length - 12} more missing IDs.</p>
+              )}
+              <p className="mt-2 text-[0.625rem] leading-relaxed text-amber-200/75">
+                Reusing an old ID for a different conceptual place will make historical messages resolve to that new place.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setImportIdReport(null)}
+              className="mari-chrome-control min-h-11 px-3 text-xs"
+            >
+              Dismiss
+            </button>
+          </div>
+        </section>
+      )}
 
       {!aiBuilderOpen && isFirstMapDraft && (
         <section

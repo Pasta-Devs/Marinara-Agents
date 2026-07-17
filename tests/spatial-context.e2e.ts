@@ -853,6 +853,22 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(activation).toHaveAttribute("aria-checked", "true");
     await expect(home).toContainText("Active in this chat. Saved map context can participate in turns.");
     await expect(createMap).toBeEnabled();
+    await expect(home.getByRole("heading", { name: "Generation prompt" })).toBeVisible();
+    await home.getByRole("button", { name: "Customize" }).click();
+    await home.getByLabel("Creator guidance").fill("Prefer compact nautical districts and clear public routes.");
+    await home.getByRole("button", { name: "Save guidance" }).click();
+    await expect(home.getByText("Customized", { exact: true })).toBeVisible();
+    await expect
+      .poll(async () => {
+        const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const payload = (await spatialResponse.json()) as {
+          generationPreferences: { mode: string; guidance: string };
+        };
+        return payload.generationPreferences;
+      })
+      .toEqual({ mode: "custom", guidance: "Prefer compact nautical districts and clear public routes." });
+    await home.getByRole("button", { name: "Reset to default" }).click();
+    await expect(home.getByText("Built-in default", { exact: true })).toBeVisible();
 
     await expect
       .poll(async () => {
@@ -1325,6 +1341,7 @@ test("AI map expansion preserves a campaign map and its current location", async
   const hierarchyPickerDefinition = {
     ...generatedDefinition,
     locations: generatedDefinition.locations.map((location) => {
+      if (location.id === "ai_harbor") return { ...location, childPresentation: "map" as const };
       if (location.id === "ai_lighthouse") return { ...location, parentId: "ai_harbor", sortOrder: 0 };
       if (location.id === "ai_sewers") return { ...location, parentId: "ai_lighthouse", sortOrder: 0 };
       return location;
@@ -1429,6 +1446,25 @@ test("AI map expansion preserves a campaign map and its current location", async
     const importMap = page.getByRole("button", { name: "Import hierarchical map" });
     await expect(exportMap.locator("svg")).toHaveClass(/lucide-upload/);
     await expect(importMap.locator("svg")).toHaveClass(/lucide-download/);
+    await page.locator('input[type="file"][accept*="json"]').setInputFiles({
+      name: "replacement-with-missing-ids.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          format: "marinara-hierarchical-map",
+          formatVersion: 2,
+          definition: { ...generatedDefinition, locations: [generatedDefinition.locations[0]] },
+        }),
+      ),
+    });
+    const importRepair = page.getByRole("region", { name: "Import location ID repair guidance" });
+    await expect(importRepair).toContainText("Import blocked: 3 saved location IDs are missing");
+    await expect(importRepair).toContainText("Blackglass Lighthouse · ai_lighthouse");
+    await expect(importRepair).toContainText("Export this map as a baseline");
+    await importRepair.getByRole("button", { name: "Dismiss" }).click();
+    await page.getByRole("button", { name: "Location types" }).click();
+    await page.getByLabel("Location type 1 label").fill("World Area");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
     await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
@@ -1436,6 +1472,37 @@ test("AI map expansion preserves a campaign map and its current location", async
       await expect(page.getByRole("button", { name: "local", exact: true })).toHaveAttribute("aria-pressed", "true");
     }
     await expectAuthoringWorkspaceLayout(page, mobile);
+
+    const arrangeMap = page.getByRole("button", { name: "Arrange map" });
+    await expect(arrangeMap).toBeVisible();
+    await arrangeMap.click();
+    const arrangedCanvas = page.locator('[data-layout-editing="true"]');
+    const lighthouseNode = arrangedCanvas.getByRole("button", { name: /Blackglass Lighthouse/ });
+    const [canvasBox, nodeBox] = await Promise.all([arrangedCanvas.boundingBox(), lighthouseNode.boundingBox()]);
+    expect(canvasBox).not.toBeNull();
+    expect(nodeBox).not.toBeNull();
+    await page.mouse.move(nodeBox!.x + nodeBox!.width / 2, nodeBox!.y + nodeBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.6, canvasBox!.y + canvasBox!.height * 0.4);
+    await page.mouse.up();
+    await lighthouseNode.focus();
+    await page.keyboard.press("Shift+ArrowRight");
+    await expect(page.getByText("Unsaved", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Done arranging" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const payload = (await response.json()) as {
+          definition: { locations: Array<{ id: string; placement?: { x: number; y: number } }> };
+          hierarchyProfile: { types: Array<{ label: string }> };
+        };
+        return {
+          x: payload.definition.locations.find((location) => location.id === "ai_lighthouse")?.placement?.x,
+          labels: payload.hierarchyProfile.types.map((type) => type.label),
+        };
+      })
+      .toEqual({ x: 65, labels: expect.arrayContaining(["World Area"]) });
 
     await page.getByRole("button", { name: "Expand with AI" }).click();
     await expect(page.getByRole("heading", { name: "Expand the map with AI" })).toBeVisible();
@@ -1772,20 +1839,49 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       });
       return;
     }
+    if (generationRequestCount === 2) {
+      expect(request.pendingSpatialTransition).toMatchObject({
+        destinationId: "ai_world",
+        expectedDefinitionRevision: saved.definition.revision,
+        expectedCurrentLocationId: "ai_harbor",
+      });
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "The hierarchical map changed. Review the available destinations.",
+          code: "spatial_transition_stale_definition",
+          currentRevision: saved.definition.revision + 1,
+          currentLocationId: "ai_harbor",
+        }),
+      });
+      return;
+    }
+    const expectedRouteHop =
+      generationRequestCount === 3
+        ? { destinationId: "ai_lighthouse", expectedCurrentLocationId: "ai_harbor" }
+        : { destinationId: "ai_lighthouse_upper", expectedCurrentLocationId: "ai_lighthouse" };
     expect(request.pendingSpatialTransition).toMatchObject({
-      destinationId: "ai_world",
+      ...expectedRouteHop,
       expectedDefinitionRevision: saved.definition.revision,
-      expectedCurrentLocationId: "ai_harbor",
     });
+    const commitResponse = await page.request.post(`/api/chats/${chat.id}/spatial-context/turn`, {
+      data: { content: request.userMessage, transition: request.pendingSpatialTransition },
+    });
+    expect(commitResponse.ok(), await commitResponse.text()).toBeTruthy();
     await route.fulfill({
-      status: 409,
-      contentType: "application/json",
-      body: JSON.stringify({
-        error: "The hierarchical map changed. Review the available destinations.",
-        code: "spatial_transition_stale_definition",
-        currentRevision: saved.definition.revision + 1,
-        currentLocationId: "ai_harbor",
-      }),
+      status: 200,
+      contentType: "text/event-stream",
+      body:
+        `data: ${JSON.stringify({
+          type: "spatial_transition_committed",
+          data: {
+            chatId: chat.id,
+            commandId: request.pendingSpatialTransition.commandId,
+            currentLocationId: expectedRouteHop.destinationId,
+            definitionRevision: saved.definition.revision,
+          },
+        })}\n\n` + `data: ${JSON.stringify({ type: "done", data: "" })}\n\n`,
     });
   });
 
@@ -1891,6 +1987,25 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     const recoveredStoryLocation = page.getByRole("region", { name: "Story location" });
     await expect(recoveredStoryLocation.getByText(/Needs review/)).toBeVisible();
     await recoveredStoryLocation.getByRole("button", { name: "Cancel move to Shrouded Coast" }).click();
+
+    await recoveredStoryLocation.getByRole("button", { name: "Open story map" }).click();
+    const routeMap = recoveredStoryLocation.getByRole("region", { name: "Hierarchical world map" });
+    await routeMap.getByRole("button", { name: /Inspect Blackglass Lighthouse/ }).click();
+    await routeMap.getByRole("button", { name: "Explore inside" }).click();
+    await routeMap.getByRole("button", { name: /Inspect Upper Level/ }).click();
+    await expect(routeMap.getByText("Shortest route · 2 hops", { exact: true })).toBeVisible();
+    await routeMap.getByRole("button", { name: "Plan route to Upper Level" }).click();
+    await expect(recoveredStoryLocation).toContainText("Route to Upper Level");
+    await expect(recoveredStoryLocation).toContainText("Next step 1 of 2 · Blackglass Lighthouse");
+
+    const routeInput = page.locator("textarea.mari-chat-input-textarea");
+    await routeInput.fill("I take the cliff road to the lighthouse.");
+    await page.locator("button.mari-chat-send-btn").click();
+    await expect(recoveredStoryLocation).toContainText("Next step 2 of 2 · Upper Level");
+    await routeInput.fill("I climb to the lantern gallery.");
+    await page.locator("button.mari-chat-send-btn").click();
+    await expect(recoveredStoryLocation.getByText("Route to Upper Level", { exact: false })).toHaveCount(0);
+    await expect(recoveredStoryLocation).toContainText("Upper Level");
 
     const currentSpatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(currentSpatialResponse.ok(), await currentSpatialResponse.text()).toBeTruthy();

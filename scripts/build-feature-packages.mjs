@@ -30,6 +30,7 @@ const hierarchicalMapsOwnedSourcePaths = [
   "packages/client/src/features/spatial-context",
   "packages/client/src/hooks/use-spatial-context.ts",
   "packages/client/src/components/game/GameWorldMap.tsx",
+  "packages/maps-shared",
 ];
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
@@ -317,6 +318,7 @@ async function bundleSpecialClient(feature, output) {
       const spatialHooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-spatial-context.ts");
       const packageApi = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/package-api.ts");
       const pendingTransitions = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/pending-spatial-transitions.ts");
+      const routePlans = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/spatial-route-plans.ts");
       const workspaceStyles = `
 [data-marinara-maps-workspace-overlay] {
   display: flex;
@@ -454,6 +456,7 @@ import { GameWorldMap } from ${JSON.stringify(worldMap)};
 import { useSpatialContext } from ${JSON.stringify(spatialHooks)};
 import { packageApi } from ${JSON.stringify(packageApi)};
 import { clearPendingSpatialTransition, setPendingSpatialTransition, setPendingSpatialTransitionStatus, usePendingSpatialTransition } from ${JSON.stringify(pendingTransitions)};
+import { getSpatialRoutePlan, reconcileSpatialRoutePlan } from ${JSON.stringify(routePlans)};
 const workspaceStyles = ${JSON.stringify(workspaceStyles)};
 const worldMapStyles = ${JSON.stringify(worldMapStyles)};
 const runtimeStyles = ${JSON.stringify(runtimeStyles)};
@@ -477,7 +480,7 @@ class CapabilityClientErrorBoundary extends React.Component {
   static getDerivedStateFromError(error) { return { error }; }
 }
 window.addEventListener("marinara-capability-server-event", (event) => { if (event.detail?.packageId === "hierarchical-maps") void client.invalidateQueries({ queryKey: ["spatial-context"] }); });
-function PendingBridge({ chatId, onChange, disabled }) { const pending = usePendingSpatialTransition(chatId); const onChangeRef = useRef(onChange); const wasDisabledRef = useRef(disabled === true); useEffect(() => { onChangeRef.current = onChange; }, [onChange]); useEffect(() => { if (typeof onChangeRef.current === "function") onChangeRef.current(pending); }, [pending]); useEffect(() => { const turnFinished = wasDisabledRef.current && disabled !== true; wasDisabledRef.current = disabled === true; if (!turnFinished || !pending) return; let cancelled = false; void packageApi.get("/chats/" + encodeURIComponent(chatId) + "/spatial-context").then((spatial) => { if (cancelled || !spatial) return; client.setQueryData(["spatial-context", chatId], spatial); if (spatial.currentLocationId === pending.transition.destinationId) clearPendingSpatialTransition(chatId, pending.transition.commandId); else setPendingSpatialTransitionStatus(chatId, "needs_review"); }).catch(() => {}); return () => { cancelled = true; }; }, [chatId, disabled, pending]); return null; }
+function PendingBridge({ chatId, onChange, disabled }) { const pending = usePendingSpatialTransition(chatId); const onChangeRef = useRef(onChange); const wasDisabledRef = useRef(disabled === true); useEffect(() => { onChangeRef.current = onChange; }, [onChange]); useEffect(() => { if (typeof onChangeRef.current === "function") onChangeRef.current(pending); }, [pending]); useEffect(() => { const turnFinished = wasDisabledRef.current && disabled !== true; wasDisabledRef.current = disabled === true; if (!turnFinished || !pending) return; let cancelled = false; void packageApi.get("/chats/" + encodeURIComponent(chatId) + "/spatial-context").then((spatial) => { if (cancelled || !spatial) return; client.setQueryData(["spatial-context", chatId], spatial); if (getSpatialRoutePlan(chatId)) reconcileSpatialRoutePlan(chatId, spatial); else if (spatial.currentLocationId === pending.transition.destinationId) clearPendingSpatialTransition(chatId, pending.transition.commandId); else setPendingSpatialTransitionStatus(chatId, "needs_review"); }).catch(() => {}); return () => { cancelled = true; }; }, [chatId, disabled, pending]); return null; }
 function WorldMapView({ props, chatId, onOpenEditor }) {
   const spatial = useSpatialContext(chatId);
   if (spatial.isLoading) return <div className="h-full min-h-32 space-y-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-3" aria-label="Loading hierarchical world map"><span role="status" className="sr-only">Loading hierarchical world map</span><div className="h-3 w-28 animate-pulse rounded bg-[var(--muted)]" /><div className="h-24 animate-pulse rounded-lg bg-[var(--muted)]/55" /></div>;

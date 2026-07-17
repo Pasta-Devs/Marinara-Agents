@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   MapPin,
   Pencil,
+  Plus,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -19,20 +20,33 @@ import type {
   Lorebook,
   SpatialContextDefinition,
   SpatialLocation,
+  SpatialLocationKind,
   SpatialMapGroundingMode,
   SpatialMapDraftOperation,
   SpatialMapDraftSize,
   SpatialOwnerMode,
 } from "@marinara-engine/shared";
 import { compareSpatialLocations } from "@marinara-engine/shared";
-import { useGenerateSpatialMapDraft } from "../../../hooks/use-spatial-context";
+import {
+  useGenerateSpatialMapDraft,
+  type MapsGenerateSpatialMapDraftResponse,
+} from "../../../hooks/use-spatial-context";
 import { cn } from "../package-utils";
+import {
+  HIERARCHY_TEMPLATES,
+  hierarchyTypeForLocation,
+  hierarchyTypeId,
+  normalizeHierarchyProfile,
+  profileFromTemplate,
+  type SpatialHierarchyProfile,
+} from "../../../../../maps-shared/src/maps-model";
 
 interface SpatialMapAiBuilderProps {
   chatId: string;
   ownerMode: SpatialOwnerMode;
   open: boolean;
   definition: SpatialContextDefinition;
+  hierarchyProfile: SpatialHierarchyProfile;
   currentLocationId: string | null;
   preferredTargetLocationId?: string | null;
   hasCommittedSpatialHistory: boolean;
@@ -56,10 +70,12 @@ type SpatialMapAiBuilderRequest = {
   instructions: string;
   groundingMode: SpatialMapGroundingMode;
   sourceLorebookIds: string[];
+  hierarchyMode: SpatialHierarchyProfile["mode"];
+  hierarchyProfile?: SpatialHierarchyProfile;
 };
 
 export type SpatialMapAiBuilderSession = SpatialMapAiBuilderRequest & {
-  result: GenerateSpatialMapDraftResponse;
+  result: MapsGenerateSpatialMapDraftResponse;
 };
 
 const SIZE_OPTIONS: Array<{
@@ -118,11 +134,24 @@ function hierarchyOptionLabel(location: SpatialLocation, depth: number): string 
   return `${"\u00a0\u00a0".repeat(depth)}└─ ${location.name}`;
 }
 
+function withHierarchyProfile(
+  result: GenerateSpatialMapDraftResponse | MapsGenerateSpatialMapDraftResponse | null,
+  fallbackProfile: SpatialHierarchyProfile,
+): MapsGenerateSpatialMapDraftResponse | null {
+  if (!result) return null;
+  const supplied = "hierarchyProfile" in result ? result.hierarchyProfile : fallbackProfile;
+  return {
+    ...result,
+    hierarchyProfile: normalizeHierarchyProfile(supplied, result.definition),
+  };
+}
+
 export function SpatialMapAiBuilder({
   chatId,
   ownerMode,
   open,
   definition,
+  hierarchyProfile,
   currentLocationId,
   preferredTargetLocationId = null,
   hasCommittedSpatialHistory,
@@ -155,12 +184,21 @@ export function SpatialMapAiBuilder({
   const [targetLocationId, setTargetLocationId] = useState(defaultTargetLocationId);
   const [size, setSize] = useState<SpatialMapDraftSize>(initialSession?.size ?? initialResult?.size ?? "medium");
   const [instructions, setInstructions] = useState(initialSession?.instructions ?? "");
-  const [result, setResult] = useState<GenerateSpatialMapDraftResponse | null>(initialSession?.result ?? initialResult);
+  const [result, setResult] = useState<MapsGenerateSpatialMapDraftResponse | null>(() =>
+    withHierarchyProfile(initialSession?.result ?? initialResult, hierarchyProfile),
+  );
   const [error, setError] = useState<string | null>(null);
   const [groundingMode, setGroundingMode] = useState<SpatialMapGroundingMode>(
     initialSession?.groundingMode ?? initialResult?.grounding?.mode ?? "setup",
   );
   const [sourceLorebookIds, setSourceLorebookIds] = useState<string[]>(initialSession?.sourceLorebookIds ?? []);
+  const [hierarchyMode, setHierarchyMode] = useState<SpatialHierarchyProfile["mode"]>(
+    initialSession?.hierarchyMode ?? (hasLocations ? hierarchyProfile.mode : "auto"),
+  );
+  const [hierarchyTemplateId, setHierarchyTemplateId] = useState("world");
+  const [workingHierarchyProfile, setWorkingHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
+    initialSession?.hierarchyProfile ?? normalizeHierarchyProfile(hierarchyProfile, definition),
+  );
   const [advancedOpen, setAdvancedOpen] = useState(initialOperation !== "expand");
   const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
   const [expandedPreviewIds, setExpandedPreviewIds] = useState<Set<string>>(() => new Set());
@@ -255,15 +293,19 @@ export function SpatialMapAiBuilder({
     setTargetLocationId(initialSession?.targetLocationId ?? initialResult?.targetLocationId ?? defaultTargetLocationId);
     setSize(initialSession?.size ?? initialResult?.size ?? "medium");
     setInstructions(initialSession?.instructions ?? "");
-    setResult(initialSession?.result ?? initialResult);
+    setResult(withHierarchyProfile(initialSession?.result ?? initialResult, hierarchyProfile));
     setError(null);
     setGroundingMode(initialSession?.groundingMode ?? initialResult?.grounding?.mode ?? "setup");
     setSourceLorebookIds(initialSession?.sourceLorebookIds ?? []);
+    setHierarchyMode(initialSession?.hierarchyMode ?? (hasLocations ? hierarchyProfile.mode : "auto"));
+    setWorkingHierarchyProfile(
+      initialSession?.hierarchyProfile ?? normalizeHierarchyProfile(hierarchyProfile, definition),
+    );
     setAdvancedOpen(nextOperation !== "expand");
     setSelectedPreviewId(null);
     setExpandedPreviewIds(new Set());
     setPreviewQuery("");
-  }, [chatId, defaultTargetLocationId, hasLocations, initialResult, initialSession, open]);
+  }, [chatId, defaultTargetLocationId, definition, hasLocations, hierarchyProfile, initialResult, initialSession, open]);
 
   const runGeneration = useCallback(
     async (request: SpatialMapAiBuilderRequest) => {
@@ -277,6 +319,8 @@ export function SpatialMapAiBuilder({
           instructions: request.instructions.trim() || undefined,
           groundingMode: request.groundingMode,
           sourceLorebookIds: request.groundingMode === "setup" ? [] : request.sourceLorebookIds,
+          hierarchyMode: request.hierarchyMode,
+          ...(request.hierarchyProfile ? { hierarchyProfile: request.hierarchyProfile } : {}),
           debugMode,
         });
         setResult(generated);
@@ -306,6 +350,8 @@ export function SpatialMapAiBuilder({
       instructions: initialSession.instructions,
       groundingMode: initialSession.groundingMode,
       sourceLorebookIds: initialSession.sourceLorebookIds,
+      hierarchyMode: initialSession.hierarchyMode,
+      hierarchyProfile: initialSession.hierarchyProfile,
     });
   }, [initialSession, open, regenerateRequestId, runGeneration]);
 
@@ -331,11 +377,27 @@ export function SpatialMapAiBuilder({
     setResult(null);
     setError(null);
   };
-  const generate = () => runGeneration({ operation, targetLocationId, size, instructions, groundingMode, sourceLorebookIds });
+  const requestedHierarchyProfile =
+    operation === "expand" || hierarchyMode !== "auto"
+      ? { ...workingHierarchyProfile, mode: operation === "expand" ? hierarchyProfile.mode : hierarchyMode }
+      : undefined;
+  const generate = () =>
+    runGeneration({
+      operation,
+      targetLocationId,
+      size,
+      instructions,
+      groundingMode,
+      sourceLorebookIds,
+      hierarchyMode: operation === "expand" ? hierarchyProfile.mode : hierarchyMode,
+      hierarchyProfile: requestedHierarchyProfile,
+    });
   const generationDisabled =
     generateDraft.isPending ||
     (dirty && !allowDirtyGeneratedReplacement) ||
     (operation === "expand" && targetLocationId.length === 0) ||
+    (operation !== "expand" && hierarchyMode === "custom" &&
+      (!workingHierarchyProfile.name.trim() || workingHierarchyProfile.types.some((type) => !type.label.trim()))) ||
     (groundingMode !== "setup" && sourceLorebookIds.length === 0);
   const selectedPreviewProvenance = selectedPreviewLocation ? result?.provenance?.[selectedPreviewLocation.id] : null;
   const togglePreviewExpanded = (locationId: string) => {
@@ -395,7 +457,7 @@ export function SpatialMapAiBuilder({
                 {location.name || "Untitled location"}
               </span>
               <span className="flex flex-wrap items-center gap-x-1.5 text-[0.625rem] capitalize text-[var(--marinara-editor-muted)]">
-                <span>{location.kind}</span>
+                <span>{result ? hierarchyTypeForLocation(result.hierarchyProfile, location).label : location.kind}</span>
                 {children.length > 0 && <span>{children.length} direct</span>}
                 {isStartingLocation && (
                   <span className="inline-flex items-center gap-0.5 text-[var(--marinara-chat-chrome-button-text-active)]">
@@ -521,6 +583,158 @@ export function SpatialMapAiBuilder({
                 ))}
               </select>
             </div>
+          )}
+
+          {operation !== "expand" && (
+            <fieldset className="mb-4">
+              <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">Hierarchy vocabulary</legend>
+              <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                Choose whether AI names the location types, start from a template, or define your own. Semantic base kinds remain locked underneath for travel and validation.
+              </p>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { value: "auto", label: "Auto", detail: "AI fits this world" },
+                    { value: "template", label: "Template", detail: "Choose a starting path" },
+                    { value: "custom", label: "Custom", detail: "Edit every type" },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={hierarchyMode === option.value}
+                    disabled={generateDraft.isPending}
+                    onClick={() => {
+                      setHierarchyMode(option.value);
+                      if (option.value === "template") {
+                        setWorkingHierarchyProfile(profileFromTemplate(hierarchyTemplateId, definition));
+                      } else if (option.value === "custom") {
+                        setWorkingHierarchyProfile((current) => ({ ...current, mode: "custom", name: current.name || "Custom hierarchy" }));
+                      }
+                      resetResult();
+                    }}
+                    className={cn(
+                      "min-h-14 rounded-lg border px-2 py-2 text-left transition-colors disabled:opacity-50",
+                      hierarchyMode === option.value
+                        ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)]"
+                        : "border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-editor-muted)]",
+                    )}
+                  >
+                    <span className="block text-xs font-semibold">{option.label}</span>
+                    <span className="mt-0.5 block text-[0.625rem]">{option.detail}</span>
+                  </button>
+                ))}
+              </div>
+
+              {hierarchyMode === "template" && (
+                <label className="mt-3 block text-xs font-medium text-[var(--marinara-editor-title)]">
+                  Template
+                  <select
+                    value={hierarchyTemplateId}
+                    onChange={(event) => {
+                      setHierarchyTemplateId(event.target.value);
+                      setWorkingHierarchyProfile(profileFromTemplate(event.target.value, definition));
+                      resetResult();
+                    }}
+                    className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs outline-none focus:ring-2 focus:ring-[var(--marinara-chat-chrome-focus-ring)]"
+                  >
+                    {HIERARCHY_TEMPLATES.map((template) => (
+                      <option key={template.id} value={template.id}>{template.path}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {hierarchyMode === "custom" && (
+                <div className="mt-3 space-y-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
+                  <input
+                    aria-label="Custom hierarchy name"
+                    value={workingHierarchyProfile.name}
+                    maxLength={120}
+                    onChange={(event) => {
+                      setWorkingHierarchyProfile((current) => ({ ...current, mode: "custom", name: event.target.value }));
+                      resetResult();
+                    }}
+                    className="min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs"
+                    placeholder="Custom hierarchy name"
+                  />
+                  {workingHierarchyProfile.types.map((type, index) => (
+                    <div key={type.id} className="grid grid-cols-[minmax(0,1fr)_8rem_2.75rem] gap-2">
+                      <input
+                        aria-label={`Location type ${index + 1} label`}
+                        value={type.label}
+                        maxLength={80}
+                        onChange={(event) => {
+                          setWorkingHierarchyProfile((current) => ({
+                            ...current,
+                            types: current.types.map((candidate) =>
+                              candidate.id === type.id ? { ...candidate, label: event.target.value } : candidate,
+                            ),
+                          }));
+                          resetResult();
+                        }}
+                        className="min-h-11 min-w-0 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs"
+                      />
+                      <select
+                        aria-label={`${type.label || `Location type ${index + 1}`} semantic base kind`}
+                        value={type.baseKind}
+                        onChange={(event) => {
+                          setWorkingHierarchyProfile((current) => ({
+                            ...current,
+                            types: current.types.map((candidate) =>
+                              candidate.id === type.id
+                                ? { ...candidate, baseKind: event.target.value as SpatialLocationKind }
+                                : candidate,
+                            ),
+                          }));
+                          resetResult();
+                        }}
+                        className="min-h-11 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2 text-[0.625rem]"
+                      >
+                        {(["region", "settlement", "place", "building", "floor", "room"] as const).map((kind) => (
+                          <option key={kind} value={kind}>{kind}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={workingHierarchyProfile.types.length === 1}
+                        onClick={() => {
+                          setWorkingHierarchyProfile((current) => ({
+                            ...current,
+                            types: current.types.filter((candidate) => candidate.id !== type.id),
+                          }));
+                          resetResult();
+                        }}
+                        className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                        aria-label={`Remove ${type.label || "location type"}`}
+                      >
+                        <X size="0.75rem" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={workingHierarchyProfile.types.length >= 40}
+                    onClick={() => {
+                      setWorkingHierarchyProfile((current) => {
+                        const base = hierarchyTypeId(`custom-${current.types.length + 1}`);
+                        let id = base;
+                        let suffix = 2;
+                        while (current.types.some((type) => type.id === id)) id = `${base}_${suffix++}`;
+                        return {
+                          ...current,
+                          types: [...current.types, { id, label: `Location type ${current.types.length + 1}`, baseKind: "place" }],
+                        };
+                      });
+                      resetResult();
+                    }}
+                    className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+                  >
+                    <Plus size="0.75rem" /> Add location type
+                  </button>
+                </div>
+              )}
+            </fieldset>
           )}
 
           {(operation !== "expand" || advancedOpen) && <fieldset className="mb-4">
@@ -766,6 +980,45 @@ export function SpatialMapAiBuilder({
                   {maxPreviewDepth === 1 ? "level" : "levels"} · {result.operation === "expand" ? "not applied" : "not saved"}
                 </span>
               </div>
+              <div className="mt-3 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">Location types</h4>
+                  <span className="text-[0.625rem] text-[var(--marinara-editor-muted)]">
+                    {result.hierarchyProfile.mode === "auto" ? "Chosen by AI · edit labels before applying" : result.hierarchyProfile.name}
+                  </span>
+                </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {result.hierarchyProfile.types.map((type) => (
+                    <label key={type.id} className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-2">
+                      <span className="sr-only">Edit {type.label} label</span>
+                      <input
+                        value={type.label}
+                        maxLength={80}
+                        onChange={(event) =>
+                          setResult((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  hierarchyProfile: {
+                                    ...current.hierarchyProfile,
+                                    mode: "custom",
+                                    types: current.hierarchyProfile.types.map((candidate) =>
+                                      candidate.id === type.id ? { ...candidate, label: event.target.value } : candidate,
+                                    ),
+                                  },
+                                }
+                              : current,
+                          )
+                        }
+                        className="min-h-10 min-w-0 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2.5 text-xs"
+                      />
+                      <span className="truncate text-[0.5625rem] capitalize text-[var(--marinara-editor-muted)]" title={`Semantic base kind: ${type.baseKind}`}>
+                        {type.baseKind}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               {result.operation !== "expand" && proposedStartingLocation && (
                 <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-[var(--marinara-editor-title)]">
                   <MapPin size="0.75rem" className="shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
@@ -848,7 +1101,7 @@ export function SpatialMapAiBuilder({
                     <div className="min-w-0 flex-1">
                       <h4 className="text-sm font-semibold text-[var(--marinara-editor-title)]">{selectedPreviewLocation.name}</h4>
                       <p className="mt-0.5 text-[0.625rem] capitalize text-[var(--marinara-editor-muted)]">
-                        {selectedPreviewLocation.kind} · {selectedPreviewLocation.childPresentation} children
+                        {hierarchyTypeForLocation(result.hierarchyProfile, selectedPreviewLocation).label} · {selectedPreviewLocation.childPresentation} children
                       </p>
                     </div>
                   </div>
@@ -920,6 +1173,8 @@ export function SpatialMapAiBuilder({
                       instructions,
                       groundingMode,
                       sourceLorebookIds,
+                      hierarchyMode: result.hierarchyProfile.mode,
+                      hierarchyProfile: result.hierarchyProfile,
                     })
                   }
                   className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs"

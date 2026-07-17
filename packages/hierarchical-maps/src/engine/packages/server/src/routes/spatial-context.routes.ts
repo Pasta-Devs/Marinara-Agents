@@ -17,6 +17,7 @@ import {
   buildSpatialMapExpansionPrompt,
   normalizeSpatialMapExpansionPlan,
   normalizeSpatialMapPlan,
+  readSpatialHierarchyProfile,
   readSpatialMapPlanProvenance,
   SPATIAL_DRAFT_SIZE_SPECS,
 } from "../services/spatial-context/ai-draft.js";
@@ -39,9 +40,24 @@ import {
   logger,
   logDebugOverride,
 } from "../services/spatial-context/package-runtime.js";
+import {
+  normalizeHierarchyProfile,
+  spatialGenerationPreferencesSchema,
+  spatialHierarchyProfileSchema,
+  type SpatialHierarchyProfile,
+} from "../../../maps-shared/src/maps-model.js";
 
 interface ChatSpatialParams {
   chatId: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function withoutKeys(value: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const omitted = new Set(keys);
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !omitted.has(key)));
 }
 
 const GAME_LOREBOOK_KEEPER_SOURCE_ID = "game-lorebook-keeper";
@@ -343,6 +359,25 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
   });
 
+  app.put<{ Params: ChatSpatialParams }>(
+    "/:chatId/spatial-context/generation-preferences",
+    async (req, reply) => {
+      const parsed = spatialGenerationPreferencesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: parsed.error.issues[0]?.message ?? "Invalid generation prompt preference.",
+          code: "spatial_request_invalid",
+          issues: parsed.error.issues,
+        });
+      }
+      try {
+        return await service.updateGenerationPreferences(req.params.chatId, parsed.data);
+      } catch (error) {
+        return sendServiceError(reply, error);
+      }
+    },
+  );
+
   app.get<{ Params: ChatSpatialParams }>(
     "/:chatId/spatial-context/game-map-bindings/reconciliation",
     async (req, reply) => {
@@ -414,7 +449,8 @@ export async function spatialContextRoutes(app: FastifyInstance) {
   });
 
   app.put<{ Params: ChatSpatialParams }>("/:chatId/spatial-context", async (req, reply) => {
-    const parsed = updateSpatialContextRequestSchema.safeParse(req.body);
+    const body = isRecord(req.body) ? req.body : {};
+    const parsed = updateSpatialContextRequestSchema.safeParse(withoutKeys(body, ["hierarchyProfile"]));
     if (!parsed.success) {
       return reply.status(400).send({
         error: parsed.error.issues[0]?.message ?? "Invalid hierarchical map.",
@@ -422,21 +458,56 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         issues: parsed.error.issues,
       });
     }
+    const parsedHierarchyProfile =
+      body.hierarchyProfile === undefined
+        ? null
+        : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
+    if (parsedHierarchyProfile && !parsedHierarchyProfile.success) {
+      return reply.status(400).send({
+        error: parsedHierarchyProfile.error.issues[0]?.message ?? "Invalid hierarchy profile.",
+        code: "spatial_request_invalid",
+        issues: parsedHierarchyProfile.error.issues,
+      });
+    }
 
     try {
-      return await service.update(req.params.chatId, parsed.data);
+      return await service.update(req.params.chatId, {
+        ...parsed.data,
+        ...(parsedHierarchyProfile?.success ? { hierarchyProfile: parsedHierarchyProfile.data } : {}),
+      });
     } catch (error) {
       return sendServiceError(reply, error);
     }
   });
 
   app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generate", async (req, reply) => {
-    const parsed = generateSpatialMapDraftRequestSchema.safeParse(req.body);
+    const body = isRecord(req.body) ? req.body : {};
+    const parsed = generateSpatialMapDraftRequestSchema.safeParse(
+      withoutKeys(body, ["hierarchyMode", "hierarchyProfile"]),
+    );
     if (!parsed.success) {
       return reply.status(400).send({
         error: parsed.error.issues[0]?.message ?? "Invalid map generation request.",
         code: "spatial_ai_request_invalid",
         issues: parsed.error.issues,
+      });
+    }
+    const hierarchyMode = z.enum(["auto", "template", "custom"]).safeParse(body.hierarchyMode ?? "auto");
+    if (!hierarchyMode.success) {
+      return reply.status(400).send({
+        error: "Choose Auto, Template, or Custom hierarchy mode.",
+        code: "spatial_ai_request_invalid",
+      });
+    }
+    const requestedProfileResult =
+      body.hierarchyProfile === undefined
+        ? null
+        : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
+    if (requestedProfileResult && !requestedProfileResult.success) {
+      return reply.status(400).send({
+        error: requestedProfileResult.error.issues[0]?.message ?? "Invalid hierarchy profile.",
+        code: "spatial_ai_request_invalid",
+        issues: requestedProfileResult.error.issues,
       });
     }
 
@@ -453,6 +524,12 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     const ownerMode = chat.mode as SpatialOwnerMode;
     const operation = parsed.data.operation;
     const existingDefinition = spatial.definition;
+    const requestedHierarchyProfile: SpatialHierarchyProfile | undefined =
+      operation === "expand"
+        ? spatial.hierarchyProfile
+        : requestedProfileResult?.success
+          ? requestedProfileResult.data
+          : undefined;
     const hasExistingMap = Boolean(existingDefinition?.locations.length);
     if (operation === "create" && hasExistingMap) {
       return reply.status(409).send({
@@ -550,6 +627,8 @@ export async function spatialContextRoutes(app: FastifyInstance) {
               loreCatalog: loreCatalog.prompt,
               sourceContext,
               instructions: parsed.data.instructions,
+              hierarchyProfile: requestedHierarchyProfile,
+              creatorGuidance: spatial.generationPreferences.guidance,
             })
           : buildSpatialMapDraftPrompt({
               ownerMode,
@@ -559,6 +638,9 @@ export async function spatialContextRoutes(app: FastifyInstance) {
               sourceContext,
               instructions: parsed.data.instructions,
               requiredLocationNames,
+              hierarchyMode: hierarchyMode.data,
+              hierarchyProfile: requestedHierarchyProfile,
+              creatorGuidance: spatial.generationPreferences.guidance,
             });
     } catch (error) {
       return reply.status(409).send({
@@ -617,6 +699,24 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         operation === "expand"
           ? definition.locations.slice(existingDefinition!.locations.length)
           : definition.locations;
+      const generatedHierarchyProfile = readSpatialHierarchyProfile(
+        parsedPlan,
+        generatedLocations,
+        requestedHierarchyProfile,
+      );
+      const hierarchyProfile =
+        operation === "expand"
+          ? normalizeHierarchyProfile(
+              {
+                ...spatial.hierarchyProfile,
+                locationTypeIds: {
+                  ...spatial.hierarchyProfile.locationTypeIds,
+                  ...generatedHierarchyProfile.locationTypeIds,
+                },
+              },
+              definition,
+            )
+          : normalizeHierarchyProfile(generatedHierarchyProfile, definition);
       const provenance = buildSpatialMapProvenance(parsedPlan, generatedLocations, loreCatalog, groundingMode);
       logger.info(
         "[spatial/map-draft] Generated %d %s locations for chat %s with model %s",
@@ -634,7 +734,8 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         ...(operation === "expand" ? { targetLocationId: parsed.data.targetLocationId } : {}),
         ...(provenance ? { provenance } : {}),
         grounding: loreCatalog.grounding,
-      } satisfies GenerateSpatialMapDraftResponse;
+        hierarchyProfile,
+      } satisfies GenerateSpatialMapDraftResponse & { hierarchyProfile: SpatialHierarchyProfile };
     } catch (error) {
       logger.error(error, "[spatial/map-draft] Generation failed for chat %s", chat.id);
       return reply.status(502).send({
