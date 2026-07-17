@@ -373,6 +373,9 @@ for (const entry of catalog.packages) {
       if (!slots.has(slot)) throw new Error(`${manifest.id} is missing the ${slot} contribution`);
     }
     const clientSource = await readFile(join(packageRoot, manifest.entrypoints.client), "utf8");
+    if (forbiddenHierarchicalMapsPinkText.test(clientSource)) {
+      throw new Error(`${manifest.id} generated client still contains pink-default text styling`);
+    }
     if (/\bReact\.createElement\b/u.test(clientSource)) {
       throw new Error(`${manifest.id} client runtime references an undefined classic React JSX global`);
     }
