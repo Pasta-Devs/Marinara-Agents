@@ -43,19 +43,19 @@ function SettingsSection({
         onKeyDown={onKeyDown}
         className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-[var(--accent)]/50"
       >
-        <span className="text-[var(--muted-foreground)]">{icon}</span>
+        <span className="text-[var(--marinara-chat-chrome-accent)]">{icon}</span>
         <span className="flex-1 text-xs font-semibold">{label}</span>
         {count > 0 && (
-          <span className="rounded-full bg-[var(--primary)]/15 px-1.5 py-0.5 text-[0.625rem] font-medium text-[var(--primary)]">
+          <span className="rounded-full bg-[var(--primary)]/15 px-1.5 py-0.5 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
             {count}
           </span>
         )}
-        <span title={help} aria-label={help} className="text-[var(--muted-foreground)]">
+        <span title={help} aria-label={help} className="text-[var(--marinara-chat-chrome-accent)]">
           <CircleHelp size="0.75rem" />
         </span>
         <ChevronDown
           size="0.75rem"
-          className={cn("text-[var(--muted-foreground)] transition-transform", open && "rotate-180")}
+          className={cn("text-[var(--marinara-chat-chrome-accent)] transition-transform", open && "rotate-180")}
         />
       </div>
       {open && <div className="px-4 pb-3 pt-3">{children}</div>}
@@ -113,7 +113,7 @@ export function SpatialContextSettingsSection({
         >
           <span className="min-w-0 flex-1">
             <span className="block text-xs font-medium text-[var(--foreground)]">Use in this chat</span>
-            <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+            <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
               {enabledForChat
                 ? "Hierarchical Maps can provide location context during generation."
                 : "Turn on Maps here before creating or editing this chat's map."}
@@ -133,7 +133,7 @@ export function SpatialContextSettingsSection({
           </span>
         </button>
         {activationPending && (
-          <p role="status" aria-live="polite" className="px-1 text-[0.625rem] text-[var(--muted-foreground)]">
+          <p role="status" aria-live="polite" className="px-1 text-[0.625rem] text-[var(--marinara-chat-chrome-accent)]">
             Updating Hierarchical Maps…
           </p>
         )}
@@ -146,7 +146,7 @@ export function SpatialContextSettingsSection({
       {!enabledForChat ? (
         <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--secondary)]/35 px-3 py-4 text-center">
           <p className="text-xs font-medium text-[var(--foreground)]">Maps is ready to add</p>
-          <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+          <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
             Turn on “Use in this chat” above to create a map or return to an existing one.
           </p>
         </div>
@@ -165,7 +165,7 @@ export function SpatialContextSettingsSection({
       ) : (
         <div className="space-y-3">
           <div className="flex items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/40 p-3">
-            <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-[var(--primary)]" />
+            <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-medium">
@@ -181,10 +181,10 @@ export function SpatialContextSettingsSection({
                   </span>
                 )}
               </div>
-              <p className="mt-1 truncate text-[0.6875rem] text-[var(--muted-foreground)]">
+              <p className="mt-1 truncate text-[0.6875rem] text-[var(--marinara-chat-chrome-accent)]">
                 {breadcrumb || (activeCount > 0 ? "No current location" : "Create a starting location")}
               </p>
-              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+              <p className="mt-1 text-[0.625rem] text-[var(--marinara-chat-chrome-accent)]">
                 {activeCount} active{archivedCount > 0 ? `, ${archivedCount} archived` : ""}
               </p>
             </div>
