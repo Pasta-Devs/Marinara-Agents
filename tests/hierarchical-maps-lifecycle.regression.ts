@@ -82,9 +82,10 @@ const fixtures = new Map(
     artifactFixture("1.1.3"),
     artifactFixture("1.1.4"),
     artifactFixture("1.1.5"),
+    artifactFixture("1.1.6"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
-let catalogVersion = "1.1.5";
+let catalogVersion = "1.1.6";
 let catalogOnline = true;
 let generationProviderRequestCount = 0;
 const generationProviderRequests: Array<{
@@ -92,7 +93,7 @@ const generationProviderRequests: Array<{
 }> = [];
 let mapExpansionExistingTargetId: string | null = null;
 
-const candidateFixture = fixtures.get("1.1.5");
+const candidateFixture = fixtures.get("1.1.6");
 assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, {
@@ -429,25 +430,29 @@ async function main() {
     const { buildApp } = await importEngine<{
       buildApp(): Promise<NonNullable<typeof app>>;
     }>("packages/server/src/app.ts");
-    const { materializeAssistantSpatialState, resolveEffectiveSpatialState } =
-      await importEngine<{
-        materializeAssistantSpatialState(
-          input: {
-            chatId: string;
-            messageId: string;
-            swipeIndex: number;
-            regenerate: boolean;
-            continuation: boolean;
-          },
-        ): Promise<{ currentLocationId: string } | null>;
-        resolveEffectiveSpatialState(
-          chatId: string,
-          options?: { exactAnchor?: { messageId: string; swipeIndex: number } },
-        ): Promise<{
-          currentLocationId: string | null;
-          snapshot: { currentLocationId: string } | null;
-        }>;
-      }>("packages/server/src/services/spatial-context/state-resolution.ts");
+    const {
+      materializeAssistantSpatialState: materializeAssistantSpatialStateHost,
+      resolveEffectiveSpatialState: resolveEffectiveSpatialStateHost,
+    } = await importEngine<{
+      materializeAssistantSpatialState(
+        input: {
+          chatId: string;
+          messageId: string;
+          swipeIndex: number;
+          regenerate: boolean;
+          continuation: boolean;
+        },
+        chatMetadata?: unknown,
+      ): Promise<{ currentLocationId: string } | null>;
+      resolveEffectiveSpatialState(
+        chatId: string,
+        options?: { exactAnchor?: { messageId: string; swipeIndex: number } },
+        chatMetadata?: unknown,
+      ): Promise<{
+        currentLocationId: string | null;
+        snapshot: { currentLocationId: string } | null;
+      }>;
+    }>("packages/server/src/services/spatial-context/state-resolution.ts");
     const { createGameStateStorage } = await importEngine<{
       createGameStateStorage(db: unknown): {
         create(
@@ -480,22 +485,22 @@ async function main() {
     assert.equal(installedProfile[0]?.version, "1.0.6");
     assert.equal(installedProfile[0]?.status, "active");
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.5"), "2.3.1").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.1").length,
       0,
     );
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.5"), "2.3.2").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.2").length,
       1,
     );
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.5"), "3.0.0").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "3.0.0").length,
       0,
     );
 
-    const installed115 =
+    const installed116 =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(installed115.version, "1.1.5");
-    assert.equal(installed115.previousVersion, "1.0.6");
+    assert.equal(installed116.version, "1.1.6");
+    assert.equal(installed116.previousVersion, "1.0.6");
     assert.ok(
       existsSync(
         join(
@@ -503,7 +508,7 @@ async function main() {
           "capability-packages",
           "versions",
           "hierarchical-maps",
-          "1.1.5",
+          "1.1.6",
         ),
       ),
     );
@@ -521,6 +526,30 @@ async function main() {
 
     catalogOnline = false;
     app = await buildApp();
+    const getChatMetadata = async (chatId: string) => {
+      assert.ok(app);
+      const chat = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${chatId}`,
+      })) as { metadata: unknown };
+      return chat.metadata;
+    };
+    const materializeAssistantSpatialState = async (
+      input: Parameters<typeof materializeAssistantSpatialStateHost>[0],
+    ) =>
+      materializeAssistantSpatialStateHost(
+        input,
+        await getChatMetadata(input.chatId),
+      );
+    const resolveEffectiveSpatialState = async (
+      chatId: string,
+      options: { exactAnchor?: { messageId: string; swipeIndex: number } } = {},
+    ) =>
+      resolveEffectiveSpatialStateHost(
+        chatId,
+        options,
+        await getChatMetadata(chatId),
+      );
     const firstHealth = (await expectJson(app, {
       method: "GET",
       url: "/api/health",
@@ -546,7 +575,7 @@ async function main() {
           readiness: entry.readiness,
           ready: entry.ready,
         })),
-      [{ version: "1.1.5", status: "active", readiness: "ready", ready: true }],
+      [{ version: "1.1.6", status: "active", readiness: "ready", ready: true }],
     );
 
     const locationLorebook = (await expectJson(app, {
@@ -1853,7 +1882,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.1.5");
+    assert.equal(reinstalled.version, "1.1.6");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -1931,7 +1960,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.1.5", status: "active", readiness: "ready" }],
+      [{ version: "1.1.6", status: "active", readiness: "ready" }],
     );
 
     console.info(
