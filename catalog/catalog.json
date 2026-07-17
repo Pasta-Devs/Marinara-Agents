@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-17T21:34:54.588Z",
+  "generatedAt": "2026-07-17T22:42:16.127Z",
   "packages": [
     {
       "manifest": {
@@ -673,13 +673,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "f846c2e7029fe17449da7ac26df11e12d47b05fb78ec69ed88ea1f9c2e080f01",
-            "bytes": 296918
+            "sha256": "8589c5568acf7ea4ce24dd6fa3e68d26984b0fea2667b63706a2470d43c60837",
+            "bytes": 304371
           },
           {
             "path": "client.js",
-            "sha256": "116a766153d6893cf8af8f6afc743cb8dd90b7089cd33ddab25333fb94a24d17",
-            "bytes": 705767
+            "sha256": "5ef2ac055a352d53de873f8f4ff05454d9e1e478763715d6cb39ddc53c68e4bb",
+            "bytes": 738163
           }
         ],
         "permissions": [
@@ -698,8 +698,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.1.6.zip",
-        "sha256": "93d0021ffe526f78c0f2b6df71070181854ace5fd9ffe70d00addcf7b1f22b53",
-        "bytes": 271921
+        "sha256": "0c072bf0b71b3c4e3a825f21de5a5a0f958e2de089678bb3c3658a6ad67b15d2",
+        "bytes": 282238
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },
