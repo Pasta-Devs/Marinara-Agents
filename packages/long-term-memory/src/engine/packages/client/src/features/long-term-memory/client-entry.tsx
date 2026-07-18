@@ -5,19 +5,34 @@ import {
   AlertTriangle,
   ArrowLeft,
   BrainCircuit,
+  Check,
+  Edit3,
   CheckCircle2,
   Database,
+  Download,
   Loader2,
+  Plus,
   RefreshCw,
   Save,
   Settings2,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { CSRF_HEADER, CSRF_HEADER_VALUE } from "@marinara-engine/shared";
 import type {
   LtmExtractionSettings,
   LtmGlobalSettings,
   LtmIntegrityResponse,
+  LtmDraftReviewResponse,
+  LtmDebugEvent,
+  LtmIdentityRepairPreviewResponse,
+  LtmInteropPreviewResponse,
+  LtmLastInjectionResponse,
+  LtmNoteTransferPreviewResponse,
+  LtmMode,
+  LtmNote,
+  LtmNoteType,
+  LtmStatus,
   LtmStatusResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
@@ -315,6 +330,248 @@ function Maintenance({ confirmAction }: Pick<CapabilityProps, "confirmAction">) 
   );
 }
 
+const noteTypes: LtmNoteType[] = ["character", "relationship", "scene", "thread", "world", "tone", "timeline_event"];
+const noteModes: LtmMode[] = ["conversation", "roleplay", "game"];
+const notePrefixes: Record<LtmNoteType, string> = {
+  source: "source",
+  timeline_event: "timeline",
+  character: "char",
+  relationship: "rel",
+  scene: "scene",
+  thread: "thread",
+  world: "world",
+  tone: "tone",
+};
+
+function newNoteDraft(): Pick<LtmNote, "id" | "title" | "type" | "status" | "modes" | "sections"> {
+  const now = new Date().toISOString();
+  return {
+    id: `world_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`,
+    title: "Untitled memory",
+    type: "world",
+    status: "active",
+    modes: ["conversation", "roleplay", "game"],
+    sections: { summary: { text: "", updatedAt: now } },
+  };
+}
+
+function Vault() {
+  const client = useQueryClient();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Pick<LtmNote, "id" | "title" | "type" | "status" | "modes" | "sections"> | null>(null);
+  const [message, setMessage] = useState("");
+  const notes = useQuery({ queryKey: ["long-term-memory", "notes"], queryFn: () => request<LtmNote[]>("/notes") });
+  const save = useMutation({
+    mutationFn: async (value: typeof draft) => {
+      if (!value) throw new Error("No note selected");
+      const body = { title: value.title, type: value.type, status: value.status, modes: value.modes, sections: value.sections };
+      return value.id && notes.data?.some((note) => note.id === value.id)
+        ? request<LtmNote>(`/notes/${value.id}`, "PATCH", body)
+        : request<LtmNote>("/notes", "POST", { ...body, id: value.id, scope: {}, tags: [], keywords: [], links: [] });
+    },
+    onSuccess: async (value) => {
+      client.setQueryData<LtmNote[]>(["long-term-memory", "notes"], (current) => {
+        const without = (current ?? []).filter((note) => note.id !== value.id);
+        return [...without, value].sort((a, b) => a.id.localeCompare(b.id));
+      });
+      setSelectedId(value.id);
+      setDraft(value);
+      setMessage("Memory saved");
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const selectNote = (note: LtmNote) => {
+    setSelectedId(note.id);
+    setDraft({ id: note.id, title: note.title, type: note.type, status: note.status, modes: note.modes, sections: note.sections });
+    setMessage("");
+  };
+  const patch = (value: Partial<NonNullable<typeof draft>>) => setDraft((current) => current ? { ...current, ...value } : current);
+  const section = draft ? Object.entries(draft.sections)[0] : null;
+  return (
+    <Panel title="Memory vault" description="Browse and edit durable memories without leaving the package.">
+      <div className="grid gap-4 lg:grid-cols-[minmax(12rem,0.8fr)_minmax(0,1.4fr)]">
+        <div className="space-y-2">
+          <Button primary onClick={() => { const next = newNoteDraft(); setSelectedId(null); setDraft(next); setMessage(""); }}>
+            <Plus size="0.875rem" /> New memory
+          </Button>
+          {notes.isLoading ? <p className="text-xs text-[var(--muted-foreground)]">Loading memories...</p> : null}
+          {notes.isError ? <p role="alert" className="text-xs text-[var(--destructive)]">Memories could not load.</p> : null}
+          <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
+            {(notes.data ?? []).map((note) => (
+              <button key={note.id} type="button" onClick={() => selectNote(note)} className={`flex min-h-11 w-full items-center gap-2 rounded-lg border px-3 text-left text-xs ${selectedId === note.id ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] bg-[var(--secondary)]/45 hover:bg-[var(--accent)]"}`}>
+                <Edit3 size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
+                <span className="min-w-0 flex-1 truncate">{note.title ?? note.id}</span>
+                <span className="text-[var(--muted-foreground)]">{note.type}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {draft ? (
+          <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); save.mutate(draft); }}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]"><span>Title</span><input className={inputClass} value={draft.title ?? ""} onChange={(event) => patch({ title: event.target.value })} /></label>
+              <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]"><span>Type</span><select className={inputClass} value={draft.type} disabled={Boolean(selectedId)} onChange={(event) => { const type = event.target.value as LtmNoteType; patch({ type, id: `${notePrefixes[type]}_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}` }); }}>{noteTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+              <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]"><span>Status</span><select className={inputClass} value={draft.status} onChange={(event) => patch({ status: event.target.value as LtmStatus })}><option value="active">Active</option><option value="resolved">Resolved</option><option value="archived">Archived</option></select></label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {noteModes.map((mode) => <label key={mode} className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs"><input type="checkbox" checked={draft.modes.includes(mode)} onChange={(event) => patch({ modes: event.target.checked ? [...new Set([...draft.modes, mode])] : draft.modes.filter((item) => item !== mode) })} />{mode}</label>)}
+            </div>
+            <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]"><span>Memory text</span><textarea className={`${inputClass} min-h-44 py-3`} value={section?.[1].text ?? ""} onChange={(event) => patch({ sections: { [section?.[0] ?? "summary"]: { text: event.target.value, updatedAt: new Date().toISOString() } } })} /></label>
+            <div className="flex flex-wrap items-center gap-2"><Button primary type="submit" disabled={save.isPending || draft.modes.length === 0 || !(section?.[1].text.trim())}>{save.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : <Save size="0.875rem" />} Save memory</Button>{message ? <span role="status" className="text-xs text-[var(--muted-foreground)]">{message}</span> : null}</div>
+          </form>
+        ) : <p className="text-xs text-[var(--muted-foreground)]">Select a memory to edit.</p>}
+      </div>
+    </Panel>
+  );
+}
+
+function Review() {
+  const client = useQueryClient();
+  const [message, setMessage] = useState("");
+  const review = useQuery({
+    queryKey: ["long-term-memory", "draft-review"],
+    queryFn: () => request<LtmDraftReviewResponse>("/drafts/review?status=pending"),
+  });
+  const action = useMutation({
+    mutationFn: async ({ draftId, mutationId, accept }: { draftId: string; mutationId: string; accept: boolean }) =>
+      request(accept ? `/drafts/${draftId}/accept` : `/drafts/${draftId}/skip`, "POST", { mutationIds: [mutationId] }),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ["long-term-memory", "draft-review"] });
+      await client.invalidateQueries({ queryKey: ["long-term-memory", "notes"] });
+      setMessage("Review updated");
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const rows = review.data?.sources.flatMap((source) => source.targets.flatMap((target) => target.rows)) ?? [];
+  return (
+    <Panel title="Review suggestions" description="Accept or skip pending extracted memory changes.">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
+        {review.isLoading ? <Loader2 size="0.875rem" className="animate-spin" /> : null}
+        <span>{review.data ? `${review.data.counts.mutations} pending suggestions` : review.isError ? "Suggestions could not load" : "Loading suggestions"}</span>
+      </div>
+      {review.isError ? <p role="alert" className="text-xs text-[var(--destructive)]">Review suggestions could not load.</p> : null}
+      <div className="space-y-2">
+        {rows.map((row) => {
+          const mutation = row.mutation;
+          const target = mutation.kind === "create_note" ? mutation.note.title ?? mutation.note.id : mutation.noteId;
+          return (
+            <div key={`${row.draftId}-${mutation.id}`} className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/45 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0"><p className="text-xs font-semibold text-[var(--foreground)]">{mutation.summary}</p><p className="mt-1 truncate text-[11px] text-[var(--muted-foreground)]">{target} · {mutation.risk} risk</p></div>
+                <span className="text-[11px] text-[var(--muted-foreground)]">{row.disposition}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button primary disabled={action.isPending} onClick={() => action.mutate({ draftId: row.draftId, mutationId: mutation.id, accept: true })}><Check size="0.875rem" /> Accept</Button>
+                <Button disabled={action.isPending} onClick={() => action.mutate({ draftId: row.draftId, mutationId: mutation.id, accept: false })}>Skip</Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {!review.isLoading && !review.isError && rows.length === 0 ? <p className="text-xs text-[var(--muted-foreground)]">No pending suggestions.</p> : null}
+      {message ? <p role="status" className="text-xs text-[var(--muted-foreground)]">{message}</p> : null}
+    </Panel>
+  );
+}
+
+function ImportTools() {
+  const client = useQueryClient();
+  const [source, setSource] = useState<"characters" | "lorebooks" | "chats">("characters");
+  const [message, setMessage] = useState("");
+  const preview = useQuery({
+    queryKey: ["long-term-memory", "import-preview", source],
+    queryFn: () => request<LtmInteropPreviewResponse>("/import/preview", "POST", { source, limit: 100 }),
+  });
+  const importSources = useMutation({
+    mutationFn: () => request("/import/source-notes", "POST", { source, sourceIds: (preview.data?.samples ?? []).filter((sample) => sample.status === "pending").map((sample) => sample.sourceId), limit: 100 }),
+    onSuccess: async (result: { imported?: unknown[]; batchStatus?: string }) => {
+      await client.invalidateQueries({ queryKey: ["long-term-memory"] });
+      setMessage(`${result.imported?.length ?? 0} sources imported (${result.batchStatus ?? "complete"})`);
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const pending = (preview.data?.samples ?? []).filter((sample) => sample.status === "pending");
+  return (
+    <Panel title="Import sources" description="Preview package-owned character, lorebook, and chat sources before importing them into the vault.">
+      <div className="flex flex-wrap gap-2">
+        {(["characters", "lorebooks", "chats"] as const).map((value) => <button key={value} type="button" onClick={() => setSource(value)} className={`min-h-10 rounded-lg border px-3 text-xs font-semibold ${source === value ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] bg-[var(--secondary)]"}`}>{value}</button>)}
+      </div>
+      <p className="text-xs text-[var(--muted-foreground)]">{preview.isLoading ? "Scanning sources..." : preview.data ? `${preview.data.draftable} sources ready, ${preview.data.importedCount} already imported` : preview.isError ? "Source preview unavailable" : "Loading source preview"}</p>
+      {preview.data?.samples.length ? <div className="max-h-56 space-y-1 overflow-y-auto">{preview.data.samples.map((sample) => <div key={sample.sourceId} className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-xs"><span className="min-w-0 flex-1 truncate">{sample.title}</span><span className="text-[var(--muted-foreground)]">{sample.status}</span></div>)}</div> : null}
+      <div className="flex flex-wrap items-center gap-2"><Button primary disabled={importSources.isPending || pending.length === 0} onClick={() => importSources.mutate()}>{importSources.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : <Download size="0.875rem" />} Import pending sources</Button>{message ? <span role="status" className="text-xs text-[var(--muted-foreground)]">{message}</span> : null}</div>
+    </Panel>
+  );
+}
+
+function IdentityRepair() {
+  const [message, setMessage] = useState("");
+  const preview = useQuery({ queryKey: ["long-term-memory", "identity-preview"], queryFn: () => request<LtmIdentityRepairPreviewResponse>("/identity-repair/preview", "POST", { scope: {} }) });
+  const apply = useMutation({
+    mutationFn: () => request("/identity-repair/apply", "POST", { scope: {}, repairs: (preview.data?.candidates ?? []).filter((candidate) => candidate.blockingReasons.length === 0).map((candidate) => ({ candidateId: candidate.id, canonicalNoteId: candidate.canonicalNoteId, excludedNoteIds: candidate.duplicateNoteIds, sectionChoices: [] })) }),
+    onSuccess: (result: { repairs?: unknown[] }) => setMessage(`${result.repairs?.length ?? 0} identity groups repaired`),
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const repairable = (preview.data?.candidates ?? []).filter((candidate) => candidate.blockingReasons.length === 0);
+  return (
+    <Panel title="Identity repair" description="Review duplicate character and relationship identities before applying the safe canonical merge.">
+      <p className="text-xs text-[var(--muted-foreground)]">{preview.isLoading ? "Analyzing identities..." : preview.data ? `${preview.data.counts.candidateCount} candidate groups, ${preview.data.counts.unresolvedNotes} unresolved notes` : preview.isError ? "Identity preview unavailable" : "Loading identity preview"}</p>
+      {repairable.length ? <div className="max-h-48 space-y-1 overflow-y-auto">{repairable.map((candidate) => <div key={candidate.id} className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs"><span className="font-semibold">{candidate.subjectNames.join(" / ")}</span><span className="ml-2 text-[var(--muted-foreground)]">{candidate.duplicateNoteIds.length} duplicate(s)</span></div>)}</div> : null}
+      <div className="flex flex-wrap items-center gap-2"><Button destructive disabled={apply.isPending || repairable.length === 0} onClick={() => apply.mutate()}>{apply.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : <ShieldCheck size="0.875rem" />} Apply safe repairs</Button>{message ? <span role="status" className="text-xs text-[var(--muted-foreground)]">{message}</span> : null}</div>
+    </Panel>
+  );
+}
+
+function Transfer({ chatId }: { chatId?: string | null }) {
+  const notes = useQuery({ queryKey: ["long-term-memory", "notes"], queryFn: () => request<LtmNote[]>("/notes") });
+  const [selected, setSelected] = useState<string[]>([]);
+  const [mode, setMode] = useState<"copy" | "move">("copy");
+  const [preview, setPreview] = useState<LtmNoteTransferPreviewResponse | null>(null);
+  const [message, setMessage] = useState("");
+  const transfer = useMutation({
+    mutationFn: (apply: boolean) => request<LtmNoteTransferPreviewResponse>(apply ? "/notes/transfer" : "/notes/transfer-preview", "POST", {
+      noteIds: preview && apply ? preview.items.filter((item) => item.defaultIncluded).map((item) => item.noteId) : selected,
+      mode,
+      destinationChatId: chatId,
+      includeDerived: false,
+    }),
+    onSuccess: (value, apply) => {
+      if (apply) { setPreview(null); setSelected([]); setMessage("Notes transferred"); }
+      else setPreview(value);
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  return (
+    <Panel title="Transfer notes" description="Preview copying or moving selected memories into the current chat scope.">
+      {!chatId ? <p className="text-xs text-[var(--muted-foreground)]">Open this package from a chat to transfer notes.</p> : <>
+        <div className="max-h-48 space-y-1 overflow-y-auto">{(notes.data ?? []).map((note) => <label key={note.id} className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs"><input type="checkbox" checked={selected.includes(note.id)} onChange={() => toggle(note.id)} /><span className="min-w-0 flex-1 truncate">{note.title ?? note.id}</span><span className="text-[var(--muted-foreground)]">{note.type}</span></label>)}</div>
+        <div className="flex flex-wrap gap-2"><select className={`${inputClass} max-w-32`} value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="copy">Copy</option><option value="move">Move</option></select><Button primary disabled={transfer.isPending || selected.length === 0} onClick={() => transfer.mutate(false)}>{transfer.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : null} Preview transfer</Button></div>
+        {preview ? <div className="space-y-2 rounded-lg border border-[var(--border)] p-3 text-xs"><p>{preview.buckets.ready.length} ready, {preview.buckets.conflict.length} conflicts, {preview.buckets.noOp.length} unchanged</p>{preview.items.filter((item) => item.classification === "conflict").map((item) => <p key={item.noteId} className="text-[var(--destructive)]">{item.title}: {item.conflicts[0]?.reason ?? "conflict"}</p>)}<Button primary disabled={transfer.isPending || preview.buckets.ready.length === 0} onClick={() => transfer.mutate(true)}>Apply ready transfer</Button></div> : null}
+      </>}
+      {message ? <p role="status" className="text-xs text-[var(--muted-foreground)]">{message}</p> : null}
+    </Panel>
+  );
+}
+
+function DebugAndContext({ chatId }: { chatId?: string | null }) {
+  const client = useQueryClient();
+  const [message, setMessage] = useState("");
+  const debug = useQuery({ queryKey: ["long-term-memory", "debug-log"], queryFn: () => request<{ events: LtmDebugEvent[] }>("/debug-log?limit=50") });
+  const context = useQuery({ enabled: Boolean(chatId), queryKey: ["long-term-memory", "last-injection", chatId], queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(chatId!)}`) });
+  const clear = useMutation({ mutationFn: () => request("/debug-log", "DELETE"), onSuccess: async () => { await client.invalidateQueries({ queryKey: ["long-term-memory", "debug-log"] }); setMessage("Debug log cleared"); }, onError: (error: Error) => setMessage(error.message) });
+  return <>
+    <Panel title="Active context" description="Inspect the memories most recently contributed to this chat.">
+      {!chatId ? <p className="text-xs text-[var(--muted-foreground)]">Open this package from a chat to inspect active context.</p> : <p className="text-xs text-[var(--muted-foreground)]">{context.isLoading ? "Loading active context..." : context.data ? `${context.data.memoryCount} memories, ${context.data.tokenCount} tokens` : "No memories were injected for this chat."}</p>}
+      {context.data?.memories.length ? <div className="space-y-1">{context.data.memories.map((memory) => <div key={memory.noteId} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-xs"><span className="truncate">{memory.title}</span><span className="text-[var(--muted-foreground)]">{memory.tokenCount} tokens</span></div>)}</div> : null}
+    </Panel>
+    <Panel title="Debug log" description="Inspect recent package operations and export or clear diagnostic events.">
+      <div className="flex flex-wrap gap-2"><Button onClick={() => window.open(`${API_ROOT}/debug-log/export`, "_blank", "noopener,noreferrer")}><Download size="0.875rem" /> Export log</Button><Button destructive disabled={clear.isPending} onClick={() => clear.mutate()}><Trash2 size="0.875rem" /> Clear log</Button></div>
+      <div className="max-h-56 space-y-1 overflow-y-auto">{(debug.data?.events ?? []).map((event) => <div key={event.id} className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs"><div className="flex justify-between gap-2"><span className="font-semibold">{event.phase}: {event.action}</span><span className="text-[var(--muted-foreground)]">{event.status}</span></div>{event.message ? <p className="mt-1 text-[var(--muted-foreground)]">{event.message}</p> : null}</div>)}</div>
+      {message ? <p role="status" className="text-xs text-[var(--muted-foreground)]">{message}</p> : null}
+    </Panel>
+  </>;
+}
+
 function Detail({ props }: { props: CapabilityProps }) {
   const status = useQuery({
     queryKey: ["long-term-memory", "status"],
@@ -375,6 +632,12 @@ function Detail({ props }: { props: CapabilityProps }) {
         <Panel title="Extraction options" description="Set bounded model output and optional enrichment behavior.">
           <ExtractionSettingsForm onDirtyChange={setExtractionDirty} />
         </Panel>
+        <Vault />
+        <Review />
+        <ImportTools />
+        <IdentityRepair />
+        <Transfer chatId={props.chatId} />
+        <DebugAndContext chatId={props.chatId} />
         <Panel title="Maintenance" description="Check durable files and rebuild derived search data.">
           <Maintenance confirmAction={props.confirmAction} />
         </Panel>

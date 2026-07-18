@@ -67,3 +67,12 @@ real host runtime:
 cd ../Marinara-Engine
 pnpm --filter @marinara-engine/server exec tsx ../Marinara-Agents/tests/hierarchical-maps-lifecycle.regression.ts
 ```
+
+`long-term-memory-lifecycle.regression.ts` installs the exact generated LTM
+artifact, proves offline activation and restart, includes the durable vault in
+full backup, and verifies uninstall/reinstall preserves the vault byte-for-byte:
+
+```bash
+cd ../Marinara-Engine
+MARINARA_ENGINE_ROOT=/tmp/opencode/marinara-engine-ltm-host pnpm --filter @marinara-engine/server exec tsx ../Marinara-Agents/tests/long-term-memory-lifecycle.regression.ts
+```
