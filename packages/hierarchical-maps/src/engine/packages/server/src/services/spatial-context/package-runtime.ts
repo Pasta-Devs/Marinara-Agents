@@ -13,18 +13,42 @@ let lastSortableTimestamp = 0;
 let sortableSequence = 0;
 let runtimeHost: CapabilityRuntimeHost | null = null;
 let runtimeRegistration = 0;
+let resolveAgentSettings: ((agentType: string) => Promise<unknown>) | null = null;
 
 function getRuntimeHost(): CapabilityRuntimeHost {
   if (!runtimeHost) throw new Error("Hierarchical Maps runtime is not configured");
   return runtimeHost;
 }
 
-export function configurePackageRuntime(host: CapabilityRuntimeHost): () => void {
+export function configurePackageRuntime(
+  host: CapabilityRuntimeHost,
+  agentSettingsResolver: (agentType: string) => Promise<unknown>,
+): () => void {
   const registration = ++runtimeRegistration;
   runtimeHost = host;
+  resolveAgentSettings = agentSettingsResolver;
   return () => {
-    if (runtimeRegistration === registration) runtimeHost = null;
+    if (runtimeRegistration !== registration) return;
+    runtimeHost = null;
+    resolveAgentSettings = null;
   };
+}
+
+export async function getPackageAgentSettings(agentType: string): Promise<Record<string, unknown>> {
+  if (!resolveAgentSettings) throw new Error("Hierarchical Maps agent settings are unavailable");
+  const value = await resolveAgentSettings(agentType);
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 export const logger: CapabilityRuntimeLogger = {

@@ -75,7 +75,7 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.1.6",
+    version: "1.1.7",
     minEngineVersion: "2.3.3",
     maxEngineExclusive: "3.0.0",
     name: "Hierarchical Maps",
@@ -154,7 +154,17 @@ import { configurePackageRuntime } from ${JSON.stringify(resolve(prepared.buildR
 import { createSpatialContextStorage } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/storage/spatial-context.storage.ts"))};
 let readinessStorage = null;
 export async function activate({ app, api }) {
-  const cleanupRuntime = configurePackageRuntime(api.runtime);
+  const cleanupRuntime = configurePackageRuntime(api.runtime, async (agentType) => {
+    const response = await app.inject({ method: "GET", url: "/api/agents" });
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw new Error("Could not read global agent settings (" + response.statusCode + ")");
+    }
+    const configs = response.json();
+    const config = Array.isArray(configs)
+      ? configs.find((candidate) => candidate && typeof candidate === "object" && candidate.type === agentType)
+      : null;
+    return config?.settings ?? null;
+  });
   try {
     await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
     readinessStorage = createSpatialContextStorage();

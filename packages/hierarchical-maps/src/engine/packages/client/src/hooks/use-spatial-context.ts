@@ -24,10 +24,13 @@ import type {
   SpatialGenerationPromptLibraries,
   SpatialGenerationPromptLibrary,
   SpatialHierarchyProfile,
+  SpatialTurnPromptTemplates,
 } from "../../../maps-shared/src/maps-model";
 import {
   GENERATION_PROMPT_LIBRARIES_VERSION,
   SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY,
+  SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY,
+  normalizeSpatialTurnPromptTemplates,
   parseSpatialGenerationPromptLibraries,
 } from "../../../maps-shared/src/maps-model";
 
@@ -37,6 +40,7 @@ export const spatialContextKeys = {
   gameMapReconciliation: (chatId: string) =>
     [...spatialContextKeys.detail(chatId), "game-map-reconciliation"] as const,
   generationPromptLibraries: ["spatial-context", "generation-prompt-libraries"] as const,
+  turnPromptTemplates: ["spatial-context", "turn-prompt-templates"] as const,
 };
 
 export type GameMapBindingTarget =
@@ -151,10 +155,11 @@ function parseAgentSettings(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
-async function readSpatialGenerationPromptLibraries(): Promise<{
+async function readSpatialAgentSettings(): Promise<{
   config: MapsAgentConfigRecord | null;
   settings: Record<string, unknown>;
   libraries: SpatialGenerationPromptLibraries | null;
+  turnPromptTemplates: SpatialTurnPromptTemplates;
 }> {
   const configs = await packageApi.get<MapsAgentConfigRecord[]>("/agents");
   const config = configs.find((candidate) => candidate.type === "hierarchical-maps") ?? null;
@@ -164,6 +169,9 @@ async function readSpatialGenerationPromptLibraries(): Promise<{
     settings,
     libraries: parseSpatialGenerationPromptLibraries(
       settings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
+    ),
+    turnPromptTemplates: normalizeSpatialTurnPromptTemplates(
+      settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
     ),
   };
 }
@@ -286,7 +294,15 @@ export function usePreviewSpatialMapPrompt() {
 export function useSpatialGenerationPromptLibraries() {
   return useQuery({
     queryKey: spatialContextKeys.generationPromptLibraries,
-    queryFn: async () => (await readSpatialGenerationPromptLibraries()).libraries,
+    queryFn: async () => (await readSpatialAgentSettings()).libraries,
+    staleTime: 30_000,
+  });
+}
+
+export function useSpatialTurnPromptTemplates() {
+  return useQuery({
+    queryKey: spatialContextKeys.turnPromptTemplates,
+    queryFn: async () => (await readSpatialAgentSettings()).turnPromptTemplates,
     staleTime: 30_000,
   });
 }
@@ -301,7 +317,7 @@ export function useUpdateSpatialGenerationPromptLibrary() {
       ownerMode: SpatialOwnerMode;
       library: SpatialGenerationPromptLibrary;
     }) => {
-      const current = await readSpatialGenerationPromptLibraries();
+      const current = await readSpatialAgentSettings();
       const libraries: SpatialGenerationPromptLibraries = {
         version: GENERATION_PROMPT_LIBRARIES_VERSION,
         ...(current.libraries ?? {}),
@@ -338,6 +354,27 @@ export function useUpdateSpatialGenerationPreferences() {
         spatialContextKeys.detail(variables.chatId),
         (current) => (current ? { ...current, generationPreferences: preferences } : current),
       );
+    },
+  });
+}
+
+export function useUpdateSpatialTurnPromptTemplates() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (templates: SpatialTurnPromptTemplates) => {
+      const current = await readSpatialAgentSettings();
+      const updated = await packageApi.patch<MapsAgentConfigRecord>("/agents/type/hierarchical-maps", {
+        settings: {
+          ...current.settings,
+          [SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY]: templates,
+        },
+      });
+      return normalizeSpatialTurnPromptTemplates(
+        parseAgentSettings(updated.settings)[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
+      );
+    },
+    onSuccess: (templates) => {
+      queryClient.setQueryData(spatialContextKeys.turnPromptTemplates, templates);
     },
   });
 }

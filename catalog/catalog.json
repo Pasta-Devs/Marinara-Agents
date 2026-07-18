@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-18T06:47:52.723Z",
+  "generatedAt": "2026-07-18T22:04:59.615Z",
   "packages": [
     {
       "manifest": {
@@ -637,7 +637,7 @@
         },
         "id": "hierarchical-maps",
         "name": "Hierarchical Maps",
-        "version": "1.1.6",
+        "version": "1.1.7",
         "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.3",
@@ -673,13 +673,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "d3fced4e4c6ac92850ef7e6cbce5cf47340c3a70ec11032ad4c2e9a4d12cd75a",
-            "bytes": 312949
+            "sha256": "83626a267e8954537e861633a6718acf3127c1c4f495cafdbae21d67e4ce2506",
+            "bytes": 315566
           },
           {
             "path": "client.js",
-            "sha256": "486d27ae5276c81c5a647743478f7aacdbcd4a25ede3c5f8aae750a3ac311a8d",
-            "bytes": 785803
+            "sha256": "334f639ab578be8a21569fa6f2c38f4a6e04536cec430edeba61a8910824b5ac",
+            "bytes": 797868
           }
         ],
         "permissions": [
@@ -697,9 +697,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.1.6.zip",
-        "sha256": "0c46dcdbac8fe1738ad0243405c87d952a45521dbb7a3552d521a3fa8b498846",
-        "bytes": 294360
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.1.7.zip",
+        "sha256": "2f3f5d55f1c618648200bd87492f216c6130ec70cb480600e99b356f2e7d2337",
+        "bytes": 297805
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },
