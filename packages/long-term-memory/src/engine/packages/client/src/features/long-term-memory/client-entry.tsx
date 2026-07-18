@@ -31,6 +31,7 @@ import type {
   LtmNoteTransferPreviewResponse,
   LtmMode,
   LtmNote,
+  LtmNoteTransferApplyResponse,
   LtmNoteType,
   LtmStatus,
   LtmStatusResponse,
@@ -191,9 +192,12 @@ function GlobalSettingsForm({ onDirtyChange }: { onDirtyChange?: (dirty: boolean
     queryFn: () => request<LtmGlobalSettings>("/settings"),
   });
   const [draft, setDraft] = useState<LtmGlobalSettings | null>(null);
-  useEffect(() => setDraft(settings.data ?? null), [settings.data]);
   const dirty = Boolean(draft && settings.data && JSON.stringify(draft) !== JSON.stringify(settings.data));
+  useEffect(() => {
+    if (!dirty) setDraft(settings.data ?? null);
+  }, [dirty, settings.data]);
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const save = useMutation({
     mutationFn: (value: LtmGlobalSettings) => request<LtmGlobalSettings>("/settings", "PUT", value),
     onSuccess: (value) => {
@@ -250,9 +254,12 @@ function ExtractionSettingsForm({ onDirtyChange }: { onDirtyChange?: (dirty: boo
     },
   });
   const [draft, setDraft] = useState<LtmExtractionSettings | null>(null);
-  useEffect(() => setDraft(settings.data ?? null), [settings.data]);
   const dirty = Boolean(draft && settings.data && JSON.stringify(draft) !== JSON.stringify(settings.data));
+  useEffect(() => {
+    if (!dirty) setDraft(settings.data ?? null);
+  }, [dirty, settings.data]);
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const save = useMutation({
     mutationFn: (value: LtmExtractionSettings) => request<LtmExtractionSettings>("/extraction-settings", "PUT", value),
     onSuccess: (value) => {
@@ -319,7 +326,7 @@ function Maintenance({ confirmAction }: Pick<CapabilityProps, "confirmAction">) 
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
         {integrity.isLoading ? <Loader2 size="0.875rem" className="animate-spin" /> : integrity.data?.ok ? <CheckCircle2 size="0.875rem" className="text-emerald-500" /> : <AlertTriangle size="0.875rem" className="text-[var(--destructive)]" />}
-        <span>{integrity.data ? `${integrity.data.noteCount} memories, ${integrity.data.ok ? "store healthy" : `${integrity.data.issues.length} issues found`}` : "Checking memory store"}</span>
+        <span>{integrity.data ? `${integrity.data.noteCount} memories, ${integrity.data.ok ? "store healthy" : `${integrity.data.issues.length} issues found`}` : integrity.isError ? "Memory store check failed" : "Checking memory store"}</span>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button primary disabled={rebuild.isPending} onClick={() => rebuild.mutate()}>
@@ -361,7 +368,11 @@ function newNoteDraft(): Pick<LtmNote, "id" | "title" | "type" | "status" | "mod
   };
 }
 
-function Vault() {
+function editableNote(note: LtmNote): Pick<LtmNote, "id" | "title" | "type" | "status" | "modes" | "sections"> {
+  return { id: note.id, title: note.title, type: note.type, status: note.status, modes: note.modes, sections: note.sections };
+}
+
+function Vault({ confirmAction, onDirtyChange }: Pick<CapabilityProps, "confirmAction" | "onDirtyChange">) {
   const client = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Pick<LtmNote, "id" | "title" | "type" | "status" | "modes" | "sections"> | null>(null);
@@ -370,10 +381,11 @@ function Vault() {
   const save = useMutation({
     mutationFn: async (value: typeof draft) => {
       if (!value) throw new Error("No note selected");
-      const body = { title: value.title, type: value.type, status: value.status, modes: value.modes, sections: value.sections };
+      const title = value.title?.trim() || undefined;
+      const body = { ...(title ? { title } : {}), status: value.status, modes: value.modes, sections: value.sections };
       return value.id && notes.data?.some((note) => note.id === value.id)
         ? request<LtmNote>(`/notes/${value.id}`, "PATCH", body)
-        : request<LtmNote>("/notes", "POST", { ...body, id: value.id, scope: {}, tags: [], keywords: [], links: [] });
+        : request<LtmNote>("/notes", "POST", { ...body, id: value.id, type: value.type, scope: {}, tags: [], keywords: [], links: [] });
     },
     onSuccess: async (value) => {
       client.setQueryData<LtmNote[]>(["long-term-memory", "notes"], (current) => {
@@ -381,14 +393,27 @@ function Vault() {
         return [...without, value].sort((a, b) => a.id.localeCompare(b.id));
       });
       setSelectedId(value.id);
-      setDraft(value);
+      setDraft(editableNote(value));
       setMessage("Memory saved");
+      await client.invalidateQueries({ queryKey: ["long-term-memory", "status"] });
+      await client.invalidateQueries({ queryKey: ["long-term-memory", "integrity"] });
     },
     onError: (error: Error) => setMessage(error.message),
   });
-  const selectNote = (note: LtmNote) => {
+  const currentNote = selectedId ? notes.data?.find((note) => note.id === selectedId) : null;
+  const dirty = Boolean(draft && (!currentNote || JSON.stringify(draft) !== JSON.stringify(editableNote(currentNote))));
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+  const canDiscardDraft = async () => {
+    if (!dirty) return true;
+    return confirmAction
+      ? confirmAction({ title: "Discard memory changes?", message: "Your unsaved memory edits will be lost.", confirmLabel: "Discard", tone: "destructive" })
+      : window.confirm("Discard your unsaved memory edits?");
+  };
+  const selectNote = async (note: LtmNote) => {
+    if (!await canDiscardDraft()) return;
     setSelectedId(note.id);
-    setDraft({ id: note.id, title: note.title, type: note.type, status: note.status, modes: note.modes, sections: note.sections });
+    setDraft(editableNote(note));
     setMessage("");
   };
   const patch = (value: Partial<NonNullable<typeof draft>>) => setDraft((current) => current ? { ...current, ...value } : current);
@@ -397,14 +422,14 @@ function Vault() {
     <Panel title="Memory vault" description="Browse and edit durable memories without leaving the package.">
       <div className="grid gap-4 lg:grid-cols-[minmax(12rem,0.8fr)_minmax(0,1.4fr)]">
         <div className="space-y-2">
-          <Button primary onClick={() => { const next = newNoteDraft(); setSelectedId(null); setDraft(next); setMessage(""); }}>
+          <Button primary onClick={() => void (async () => { if (!await canDiscardDraft()) return; const next = newNoteDraft(); setSelectedId(null); setDraft(next); setMessage(""); })()}>
             <Plus size="0.875rem" /> New memory
           </Button>
           {notes.isLoading ? <p className="text-xs text-[var(--muted-foreground)]">Loading memories...</p> : null}
           {notes.isError ? <p role="alert" className="text-xs text-[var(--destructive)]">Memories could not load.</p> : null}
           <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
             {(notes.data ?? []).map((note) => (
-              <button key={note.id} type="button" onClick={() => selectNote(note)} className={`flex min-h-11 w-full items-center gap-2 rounded-lg border px-3 text-left text-xs ${selectedId === note.id ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] bg-[var(--secondary)]/45 hover:bg-[var(--accent)]"}`}>
+              <button key={note.id} type="button" onClick={() => void selectNote(note)} className={`flex min-h-11 w-full items-center gap-2 rounded-lg border px-3 text-left text-xs ${selectedId === note.id ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] bg-[var(--secondary)]/45 hover:bg-[var(--accent)]"}`}>
                 <Edit3 size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
                 <span className="min-w-0 flex-1 truncate">{note.title ?? note.id}</span>
                 <span className="text-[var(--muted-foreground)]">{note.type}</span>
@@ -422,7 +447,7 @@ function Vault() {
             <div className="flex flex-wrap gap-2">
               {noteModes.map((mode) => <label key={mode} className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs"><input type="checkbox" checked={draft.modes.includes(mode)} onChange={(event) => patch({ modes: event.target.checked ? [...new Set([...draft.modes, mode])] : draft.modes.filter((item) => item !== mode) })} />{mode}</label>)}
             </div>
-            <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]"><span>Memory text</span><textarea className={`${inputClass} min-h-44 py-3`} value={section?.[1].text ?? ""} onChange={(event) => patch({ sections: { [section?.[0] ?? "summary"]: { text: event.target.value, updatedAt: new Date().toISOString() } } })} /></label>
+            <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]"><span>Memory text</span><textarea className={`${inputClass} min-h-44 py-3`} value={section?.[1].text ?? ""} onChange={(event) => { const key = section?.[0] ?? "summary"; patch({ sections: { ...draft.sections, [key]: { ...draft.sections[key], text: event.target.value, updatedAt: new Date().toISOString() } } }); }} /></label>
             <div className="flex flex-wrap items-center gap-2"><Button primary type="submit" disabled={save.isPending || draft.modes.length === 0 || !(section?.[1].text.trim())}>{save.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : <Save size="0.875rem" />} Save memory</Button>{message ? <span role="status" className="text-xs text-[var(--muted-foreground)]">{message}</span> : null}</div>
           </form>
         ) : <p className="text-xs text-[var(--muted-foreground)]">Select a memory to edit.</p>}
@@ -448,6 +473,7 @@ function Review() {
     },
     onError: (error: Error) => setMessage(error.message),
   });
+  const drafts = new Map(review.data?.sources.flatMap((source) => source.drafts.map((draft) => [draft.draft.id, draft] as const)) ?? []);
   const rows = review.data?.sources.flatMap((source) => source.targets.flatMap((target) => target.rows)) ?? [];
   return (
     <Panel title="Review suggestions" description="Accept or skip pending extracted memory changes.">
@@ -460,6 +486,8 @@ function Review() {
         {rows.map((row) => {
           const mutation = row.mutation;
           const target = mutation.kind === "create_note" ? mutation.note.title ?? mutation.note.id : mutation.noteId;
+          const draft = drafts.get(row.draftId);
+          const blocked = !draft || draft.freshness !== "fresh" || draft.blockReasons.length > 0;
           return (
             <div key={`${row.draftId}-${mutation.id}`} className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/45 p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -467,9 +495,10 @@ function Review() {
                 <span className="text-[11px] text-[var(--muted-foreground)]">{row.disposition}</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button primary disabled={action.isPending} onClick={() => action.mutate({ draftId: row.draftId, mutationId: mutation.id, accept: true })}><Check size="0.875rem" /> Accept</Button>
+                <Button primary disabled={action.isPending || blocked} onClick={() => action.mutate({ draftId: row.draftId, mutationId: mutation.id, accept: true })}><Check size="0.875rem" /> Accept</Button>
                 <Button disabled={action.isPending} onClick={() => action.mutate({ draftId: row.draftId, mutationId: mutation.id, accept: false })}>Skip</Button>
               </div>
+              {blocked ? <p className="text-[11px] text-[var(--destructive)]">{draft?.blockReasons[0]?.message ?? "Refresh this suggestion before accepting it."}</p> : null}
             </div>
           );
         })}
@@ -509,49 +538,64 @@ function ImportTools() {
   );
 }
 
-function IdentityRepair() {
+function IdentityRepair({ confirmAction }: Pick<CapabilityProps, "confirmAction">) {
+  const client = useQueryClient();
   const [message, setMessage] = useState("");
   const preview = useQuery({ queryKey: ["long-term-memory", "identity-preview"], queryFn: () => request<LtmIdentityRepairPreviewResponse>("/identity-repair/preview", "POST", { scope: {} }) });
   const apply = useMutation({
-    mutationFn: () => request("/identity-repair/apply", "POST", { scope: {}, repairs: (preview.data?.candidates ?? []).filter((candidate) => candidate.blockingReasons.length === 0).map((candidate) => ({ candidateId: candidate.id, canonicalNoteId: candidate.canonicalNoteId, excludedNoteIds: candidate.duplicateNoteIds, sectionChoices: [] })) }),
-    onSuccess: (result: { repairs?: unknown[] }) => setMessage(`${result.repairs?.length ?? 0} identity groups repaired`),
+    mutationFn: () => request("/identity-repair/apply", "POST", { scope: {}, repairs: repairable.map((candidate) => ({ candidateId: candidate.id, canonicalNoteId: candidate.canonicalNoteId, excludedNoteIds: [], sectionChoices: [] })) }),
+    onSuccess: async (result: { repairs?: unknown[] }) => {
+      await client.invalidateQueries({ queryKey: ["long-term-memory"] });
+      setMessage(`${result.repairs?.length ?? 0} identity groups repaired`);
+    },
     onError: (error: Error) => setMessage(error.message),
   });
-  const repairable = (preview.data?.candidates ?? []).filter((candidate) => candidate.blockingReasons.length === 0);
+  const repairable = (preview.data?.candidates ?? []).filter((candidate) => candidate.blockingReasons.length === 0 && candidate.supersedingConflicts.length === 0);
+  const runApply = async () => {
+    const confirmed = confirmAction
+      ? await confirmAction({ title: "Merge duplicate identities?", message: "Duplicate notes will be merged into each canonical memory and archived.", confirmLabel: "Merge duplicates", tone: "destructive" })
+      : window.confirm("Merge duplicate identities and archive the duplicate notes?");
+    if (confirmed) apply.mutate();
+  };
   return (
     <Panel title="Identity repair" description="Review duplicate character and relationship identities before applying the safe canonical merge.">
       <p className="text-xs text-[var(--muted-foreground)]">{preview.isLoading ? "Analyzing identities..." : preview.data ? `${preview.data.counts.candidateCount} candidate groups, ${preview.data.counts.unresolvedNotes} unresolved notes` : preview.isError ? "Identity preview unavailable" : "Loading identity preview"}</p>
       {repairable.length ? <div className="max-h-48 space-y-1 overflow-y-auto">{repairable.map((candidate) => <div key={candidate.id} className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs"><span className="font-semibold">{candidate.subjectNames.join(" / ")}</span><span className="ml-2 text-[var(--muted-foreground)]">{candidate.duplicateNoteIds.length} duplicate(s)</span></div>)}</div> : null}
-      <div className="flex flex-wrap items-center gap-2"><Button destructive disabled={apply.isPending || repairable.length === 0} onClick={() => apply.mutate()}>{apply.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : <ShieldCheck size="0.875rem" />} Apply safe repairs</Button>{message ? <span role="status" className="text-xs text-[var(--muted-foreground)]">{message}</span> : null}</div>
+      <div className="flex flex-wrap items-center gap-2"><Button destructive disabled={apply.isPending || repairable.length === 0} onClick={() => void runApply()}>{apply.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : <ShieldCheck size="0.875rem" />} Apply safe repairs</Button>{message ? <span role="status" className="text-xs text-[var(--muted-foreground)]">{message}</span> : null}</div>
     </Panel>
   );
 }
 
 function Transfer({ chatId }: { chatId?: string | null }) {
+  const client = useQueryClient();
   const notes = useQuery({ queryKey: ["long-term-memory", "notes"], queryFn: () => request<LtmNote[]>("/notes") });
   const [selected, setSelected] = useState<string[]>([]);
   const [mode, setMode] = useState<"copy" | "move">("copy");
   const [preview, setPreview] = useState<LtmNoteTransferPreviewResponse | null>(null);
   const [message, setMessage] = useState("");
   const transfer = useMutation({
-    mutationFn: (apply: boolean) => request<LtmNoteTransferPreviewResponse>(apply ? "/notes/transfer" : "/notes/transfer-preview", "POST", {
+    mutationFn: (apply: boolean) => request<LtmNoteTransferPreviewResponse | LtmNoteTransferApplyResponse>(apply ? "/notes/transfer" : "/notes/transfer-preview", "POST", {
       noteIds: preview && apply ? preview.items.filter((item) => item.defaultIncluded).map((item) => item.noteId) : selected,
       mode,
       destinationChatId: chatId,
       includeDerived: false,
     }),
-    onSuccess: (value, apply) => {
-      if (apply) { setPreview(null); setSelected([]); setMessage("Notes transferred"); }
-      else setPreview(value);
+    onSuccess: async (value, apply) => {
+      if (apply) {
+        setPreview(null); setSelected([]); setMessage("Notes transferred");
+        await client.invalidateQueries({ queryKey: ["long-term-memory"] });
+      } else setPreview(value as LtmNoteTransferPreviewResponse);
     },
     onError: (error: Error) => setMessage(error.message),
   });
-  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  const toggle = (id: string) => { setPreview(null); setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]); };
   return (
     <Panel title="Transfer notes" description="Preview copying or moving selected memories into the current chat scope.">
       {!chatId ? <p className="text-xs text-[var(--muted-foreground)]">Open this package from a chat to transfer notes.</p> : <>
+        {notes.isLoading ? <p className="text-xs text-[var(--muted-foreground)]">Loading memories...</p> : null}
+        {notes.isError ? <p role="alert" className="text-xs text-[var(--destructive)]">Memories could not load.</p> : null}
         <div className="max-h-48 space-y-1 overflow-y-auto">{(notes.data ?? []).map((note) => <label key={note.id} className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs"><input type="checkbox" checked={selected.includes(note.id)} onChange={() => toggle(note.id)} /><span className="min-w-0 flex-1 truncate">{note.title ?? note.id}</span><span className="text-[var(--muted-foreground)]">{note.type}</span></label>)}</div>
-        <div className="flex flex-wrap gap-2"><select className={`${inputClass} max-w-32`} value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="copy">Copy</option><option value="move">Move</option></select><Button primary disabled={transfer.isPending || selected.length === 0} onClick={() => transfer.mutate(false)}>{transfer.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : null} Preview transfer</Button></div>
+        <div className="flex flex-wrap gap-2"><select className={`${inputClass} max-w-32`} value={mode} onChange={(event) => { setPreview(null); setMode(event.target.value as typeof mode); }}><option value="copy">Copy</option><option value="move">Move</option></select><Button primary disabled={transfer.isPending || selected.length === 0} onClick={() => transfer.mutate(false)}>{transfer.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : null} Preview transfer</Button></div>
         {preview ? <div className="space-y-2 rounded-lg border border-[var(--border)] p-3 text-xs"><p>{preview.buckets.ready.length} ready, {preview.buckets.conflict.length} conflicts, {preview.buckets.noOp.length} unchanged</p>{preview.items.filter((item) => item.classification === "conflict").map((item) => <p key={item.noteId} className="text-[var(--destructive)]">{item.title}: {item.conflicts[0]?.reason ?? "conflict"}</p>)}<Button primary disabled={transfer.isPending || preview.buckets.ready.length === 0} onClick={() => transfer.mutate(true)}>Apply ready transfer</Button></div> : null}
       </>}
       {message ? <p role="status" className="text-xs text-[var(--muted-foreground)]">{message}</p> : null}
@@ -567,11 +611,12 @@ function DebugAndContext({ chatId }: { chatId?: string | null }) {
   const clear = useMutation({ mutationFn: () => request("/debug-log", "DELETE"), onSuccess: async () => { await client.invalidateQueries({ queryKey: ["long-term-memory", "debug-log"] }); setMessage("Debug log cleared"); }, onError: (error: Error) => setMessage(error.message) });
   return <>
     <Panel title="Active context" description="Inspect the memories most recently contributed to this chat.">
-      {!chatId ? <p className="text-xs text-[var(--muted-foreground)]">Open this package from a chat to inspect active context.</p> : <p className="text-xs text-[var(--muted-foreground)]">{context.isLoading ? "Loading active context..." : context.data ? `${context.data.memoryCount} memories, ${context.data.tokenCount} tokens` : "No memories were injected for this chat."}</p>}
+      {!chatId ? <p className="text-xs text-[var(--muted-foreground)]">Open this package from a chat to inspect active context.</p> : <p className={`text-xs ${context.isError ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]"}`}>{context.isLoading ? "Loading active context..." : context.isError ? "Active context could not load." : context.data ? `${context.data.memoryCount} memories, ${context.data.tokenCount} tokens` : "No memories were injected for this chat."}</p>}
       {context.data?.memories.length ? <div className="space-y-1">{context.data.memories.map((memory) => <div key={memory.noteId} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-xs"><span className="truncate">{memory.title}</span><span className="text-[var(--muted-foreground)]">{memory.tokenCount} tokens</span></div>)}</div> : null}
     </Panel>
     <Panel title="Debug log" description="Inspect recent package operations and export or clear diagnostic events.">
       <div className="flex flex-wrap gap-2"><Button onClick={() => window.open(`${API_ROOT}/debug-log/export`, "_blank", "noopener,noreferrer")}><Download size="0.875rem" /> Export log</Button><Button destructive disabled={clear.isPending} onClick={() => clear.mutate()}><Trash2 size="0.875rem" /> Clear log</Button></div>
+      {debug.isError ? <p role="alert" className="text-xs text-[var(--destructive)]">Debug log could not load.</p> : null}
       <div className="max-h-56 space-y-1 overflow-y-auto">{(debug.data?.events ?? []).map((event) => <div key={event.id} className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs"><div className="flex justify-between gap-2"><span className="font-semibold">{event.phase}: {event.action}</span><span className="text-[var(--muted-foreground)]">{event.status}</span></div>{event.message ? <p className="mt-1 text-[var(--muted-foreground)]">{event.message}</p> : null}</div>)}</div>
       {message ? <p role="status" className="text-xs text-[var(--muted-foreground)]">{message}</p> : null}
     </Panel>
@@ -579,12 +624,25 @@ function DebugAndContext({ chatId }: { chatId?: string | null }) {
 }
 
 function ChatSettings({ props }: { props: CapabilityProps }) {
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState("");
   const lastInjection = useQuery({
     enabled: Boolean(props.chatId && props.enabledForChat),
     queryKey: ["long-term-memory", "last-injection", props.chatId],
     queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(props.chatId!)}`),
   });
-  const update = async (patch: Record<string, unknown>) => await props.onChatSettingsChange?.(patch);
+  const runUpdate = async (operation: () => void | Promise<void>) => {
+    setPending(true);
+    setMessage("");
+    try {
+      await operation();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not update this chat");
+    } finally {
+      setPending(false);
+    }
+  };
+  const update = (patch: Record<string, unknown>) => void runUpdate(() => props.onChatSettingsChange?.(patch));
   const enabled = props.enabledForChat === true;
   const settings = props.chatSettings ?? {};
   return (
@@ -594,20 +652,22 @@ function ChatSettings({ props }: { props: CapabilityProps }) {
           <h3 className="text-xs font-semibold">Long-Term Memory</h3>
           <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--muted-foreground)]">Recall durable facts and events in this chat.</p>
         </div>
-        <Button primary={enabled} onClick={() => void props.onEnabledForChatChange?.(!enabled)}>
+        <Button primary={enabled} disabled={pending} onClick={() => void runUpdate(() => props.onEnabledForChatChange?.(!enabled))}>
+          {pending ? <Loader2 size="0.875rem" className="animate-spin" /> : null}
           {enabled ? "Enabled" : "Enable"}
         </Button>
       </div>
       {enabled ? (
         <>
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]"><span>Recall style</span><select className={inputClass} value={settings.longTermMemoryRecallStyle ?? "balanced"} onChange={(event) => void update({ longTermMemoryRecallStyle: event.target.value })}><option value="balanced">Balanced</option><option value="exact">Exact</option><option value="broad">Broad</option><option value="story">Story</option></select></label>
-            <NumberField label="Recall context budget" value={settings.longTermMemoryBudgetTokens ?? 4096} min={128} max={16384} step={128} onChange={(value) => void update({ longTermMemoryBudgetTokens: value })} />
-            <NumberField label="Maximum memories" value={settings.longTermMemoryMaxChunks ?? 20} min={1} max={100} onChange={(value) => void update({ longTermMemoryMaxChunks: value })} />
+            <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]"><span>Recall style</span><select className={inputClass} disabled={pending} value={settings.longTermMemoryRecallStyle ?? "balanced"} onChange={(event) => update({ longTermMemoryRecallStyle: event.target.value })}><option value="balanced">Balanced</option><option value="exact">Exact</option><option value="broad">Broad</option><option value="story">Story</option></select></label>
+            <NumberField label="Recall context budget" value={settings.longTermMemoryBudgetTokens ?? 4096} min={128} max={16384} step={128} onChange={(value) => update({ longTermMemoryBudgetTokens: value })} />
+            <NumberField label="Maximum memories" value={settings.longTermMemoryMaxChunks ?? 20} min={1} max={100} onChange={(value) => update({ longTermMemoryMaxChunks: value })} />
           </div>
           <p className="text-[0.6875rem] text-[var(--muted-foreground)]">{lastInjection.data ? `${lastInjection.data.memoryCount} memories, ${lastInjection.data.tokenCount.toLocaleString()} tokens in the last recall.` : "No memories have been recalled for this chat yet."}</p>
         </>
       ) : null}
+      {message ? <p role="alert" className="text-xs text-[var(--destructive)]">{message}</p> : null}
     </section>
   );
 }
@@ -621,7 +681,8 @@ function Detail({ props }: { props: CapabilityProps }) {
   const [activationError, setActivationError] = useState("");
   const [recallDirty, setRecallDirty] = useState(false);
   const [extractionDirty, setExtractionDirty] = useState(false);
-  useEffect(() => props.onDirtyChange?.(recallDirty || extractionDirty), [extractionDirty, props.onDirtyChange, recallDirty]);
+  const [vaultDirty, setVaultDirty] = useState(false);
+  useEffect(() => props.onDirtyChange?.(recallDirty || extractionDirty || vaultDirty), [extractionDirty, props.onDirtyChange, recallDirty, vaultDirty]);
   const toggleActivation = async () => {
     if (!props.onEnabledForChatChange) return;
     setActivationPending(true);
@@ -672,10 +733,10 @@ function Detail({ props }: { props: CapabilityProps }) {
         <Panel title="Extraction options" description="Set bounded model output and optional enrichment behavior.">
           <ExtractionSettingsForm onDirtyChange={setExtractionDirty} />
         </Panel>
-        <Vault />
+        <Vault confirmAction={props.confirmAction} onDirtyChange={setVaultDirty} />
         <Review />
         <ImportTools />
-        <IdentityRepair />
+        <IdentityRepair confirmAction={props.confirmAction} />
         <Transfer chatId={props.chatId} />
         <DebugAndContext chatId={props.chatId} />
         <Panel title="Maintenance" description="Check durable files and rebuild derived search data.">
