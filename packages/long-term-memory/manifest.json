@@ -29,7 +29,10 @@
       "agentIds": [
         "long-term-memory"
       ]
-    }
+    },
+    "slots": [
+      "chat-settings"
+    ]
   },
   "files": [
     {
@@ -44,8 +47,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "dda8e2e1edb5499fd09525ca8b3f7be30457dca3e0fac8b43cc572a20a852a21",
-      "bytes": 507838
+      "sha256": "527052ed2608f918780f9c5dfffd0abbfc583099f502eee79cda9cf92f59ad6e",
+      "bytes": 509951
     }
   ],
   "permissions": [

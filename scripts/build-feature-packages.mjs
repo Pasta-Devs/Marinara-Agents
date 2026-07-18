@@ -139,6 +139,7 @@ const features = [
     capabilityApi: { major: 1, minor: 5 },
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"] },
+      slots: ["chat-settings"],
     },
   },
   {
@@ -1140,7 +1141,9 @@ for (const feature of selectedFeatures) {
       category: feature.category ?? "misc",
       iconUrl: catalogArtworkUrl(feature.id),
       artifact: {
-        url: `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${basename(artifactPath)}`,
+        url: `${(feature.id === "long-term-memory"
+          ? (process.env.MARINARA_AGENTS_LTM_CATALOG_BASE_URL ?? "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main")
+          : "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main").replace(/\/$/, "")}/artifacts/${basename(artifactPath)}`,
         sha256: sha256(artifact),
         bytes: artifact.byteLength,
       },

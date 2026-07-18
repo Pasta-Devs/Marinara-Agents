@@ -44,7 +44,13 @@ type CapabilityProps = {
   chatId?: string | null;
   chatName?: string | null;
   enabledForChat?: boolean;
+  chatSettings?: {
+    longTermMemoryRecallStyle?: string;
+    longTermMemoryBudgetTokens?: number;
+    longTermMemoryMaxChunks?: number;
+  };
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
+  onChatSettingsChange?: (patch: Record<string, unknown>) => void | Promise<void>;
   onClose?: () => void;
   onManagePackage?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -572,6 +578,40 @@ function DebugAndContext({ chatId }: { chatId?: string | null }) {
   </>;
 }
 
+function ChatSettings({ props }: { props: CapabilityProps }) {
+  const lastInjection = useQuery({
+    enabled: Boolean(props.chatId && props.enabledForChat),
+    queryKey: ["long-term-memory", "last-injection", props.chatId],
+    queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(props.chatId!)}`),
+  });
+  const update = async (patch: Record<string, unknown>) => await props.onChatSettingsChange?.(patch);
+  const enabled = props.enabledForChat === true;
+  const settings = props.chatSettings ?? {};
+  return (
+    <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--background)]/45 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xs font-semibold">Long-Term Memory</h3>
+          <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--muted-foreground)]">Recall durable facts and events in this chat.</p>
+        </div>
+        <Button primary={enabled} onClick={() => void props.onEnabledForChatChange?.(!enabled)}>
+          {enabled ? "Enabled" : "Enable"}
+        </Button>
+      </div>
+      {enabled ? (
+        <>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]"><span>Recall style</span><select className={inputClass} value={settings.longTermMemoryRecallStyle ?? "balanced"} onChange={(event) => void update({ longTermMemoryRecallStyle: event.target.value })}><option value="balanced">Balanced</option><option value="exact">Exact</option><option value="broad">Broad</option><option value="story">Story</option></select></label>
+            <NumberField label="Recall context budget" value={settings.longTermMemoryBudgetTokens ?? 4096} min={128} max={16384} step={128} onChange={(value) => void update({ longTermMemoryBudgetTokens: value })} />
+            <NumberField label="Maximum memories" value={settings.longTermMemoryMaxChunks ?? 20} min={1} max={100} onChange={(value) => void update({ longTermMemoryMaxChunks: value })} />
+          </div>
+          <p className="text-[0.6875rem] text-[var(--muted-foreground)]">{lastInjection.data ? `${lastInjection.data.memoryCount} memories, ${lastInjection.data.tokenCount.toLocaleString()} tokens in the last recall.` : "No memories have been recalled for this chat yet."}</p>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 function Detail({ props }: { props: CapabilityProps }) {
   const status = useQuery({
     queryKey: ["long-term-memory", "status"],
@@ -668,8 +708,10 @@ function CapabilityRoot({ element }: { element: CapabilityElement }) {
     element.addEventListener("marinara-capability-props", update);
     return () => element.removeEventListener("marinara-capability-props", update);
   }, [element]);
+  const props = element.capabilityProps ?? {};
+  if (element.getAttribute("view") === "settings") return <ChatSettings props={props} />;
   if (element.getAttribute("view") !== "detail") return null;
-  return <Detail props={element.capabilityProps ?? {}} />;
+  return <Detail props={props} />;
 }
 
 class LongTermMemoryElement extends HTMLElement {
