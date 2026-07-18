@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-18T08:02:16.521Z",
+  "generatedAt": "2026-07-18T09:38:50.023Z",
   "packages": [
     {
       "manifest": {
@@ -884,7 +884,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "description": "Captures finalized turns and recalls relevant context from a durable package-owned memory vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
         "engine": {
           "min": "2.3.2",
@@ -937,9 +937,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/feature/long-term-memory-package/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/feature/long-term-memory-package/artifacts/long-term-memory-1.0.0.zip",
-        "sha256": "91b6fe8d586e83acb5999fdc07f493c4c332712acc7da7664120484f9620fd23",
-        "bytes": 243322
+        "url": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/feature/long-term-memory-package/artifacts/long-term-memory-1.0.1.zip",
+        "sha256": "075e58dd0f41d2dc26a8262d4b6f4048a5793cc77ca236d21d54cbc26989d90d",
+        "bytes": 243321
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
