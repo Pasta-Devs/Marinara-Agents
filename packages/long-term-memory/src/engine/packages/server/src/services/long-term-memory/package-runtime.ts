@@ -42,26 +42,33 @@ export type CapabilityRuntimeHost = {
   resources?: {
     listCharacters(characterIds?: string[]): Promise<Array<{ id: string; data: unknown; comment: string }>>;
     listPersonas(personaIds?: string[]): Promise<Array<{ id: string; data: unknown }>>;
+    listLorebooks(lorebookIds?: string[]): Promise<Array<{ id: string; data: unknown; entries: unknown[] }>>;
   };
   persistence?: {
     dataDir?: string;
     getChat(chatId: string): Promise<{
       id: string;
+      name: string;
       mode: string;
       characterIds: string[];
       groupId: string | null;
       personaId: string | null;
       connectionId: string | null;
       metadata: unknown;
+      lastMessageAt: string | null;
+      updatedAt: string;
     } | null>;
     listChats(): Promise<Array<{
       id: string;
+      name: string;
       mode: string;
       characterIds: string[];
       groupId: string | null;
       personaId: string | null;
       connectionId: string | null;
       metadata: unknown;
+      lastMessageAt: string | null;
+      updatedAt: string;
     }>>;
   };
 };

@@ -23,6 +23,10 @@ import {
   ltmNoteTransferPreviewRequestSchema,
   ltmNoteTransferPreviewResponseSchema,
   ltmIntegrityResponseSchema,
+  ltmImportSourceNotesRequestSchema,
+  ltmImportSourceNotesResponseSchema,
+  ltmInteropPreviewRequestSchema,
+  ltmInteropPreviewResponseSchema,
   ltmRepairRequestSchema,
   ltmRepairResponseSchema,
   ltmStatusResponseSchema,
@@ -54,6 +58,7 @@ import { readLongTermMemoryInjectionReceipt } from "./usage.js";
 import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
+import { importPackageInterop, previewPackageInterop } from "./interop.js";
 
 const NOTE_BODY_LIMIT_BYTES=512*1024;
 const DRAFT_BODY_LIMIT_BYTES=512*1024;
@@ -100,27 +105,28 @@ export function createLongTermMemoryRoutes(runtime:{root:string;storage:LongTerm
       const sourceNote=await storage.getNote(id);
       if(!sourceNote)return reply.status(404).send({error:"Long-term memory note not found"});
       if(!isLtmSourceNote(sourceNote))return reply.status(400).send({error:"Long-term memory note is not a source note"});
-      if(sourceNote.tags.includes("imported_game_journal"))return reply.status(400).send({error:"Game journal extraction is not supported by this package route"});
       const chat=body.chatId?await getPackagePersistence().getChat(body.chatId):null;
       if(body.chatId&&!chat)return reply.status(404).send({error:"Chat not found"});
       const operationId=randomUUID();
       try{
-        const resolved=await getPackageLanguageModels().resolveForRequest({connectionId:body.connectionId,chatConnectionId:chat?.connectionId??null,model:body.model});
-        const provider={
+        const resolved=sourceNote.tags.includes("imported_game_journal")?null:await getPackageLanguageModels().resolveForRequest({connectionId:body.connectionId,chatConnectionId:chat?.connectionId??null,model:body.model});
+        const provider=resolved?{
           name:resolved.name,
           maxContext:resolved.maxContext,
           maxOutputTokens:resolved.maxOutputTokens,
           complete:(messages:any,options:any)=>resolved.chatComplete(messages,{temperature:options.temperature,maxTokens:options.maxTokens,debugMode:options.debugMode,reasoningEffort:options.reasoningEffort,verbosity:options.verbosity,signal:options.signal,responseFormat:options.responseFormat}),
           fitContext:(messages:any,options:any)=>resolved.fitContext(messages,{maxTokens:options.maxTokens}),
-        };
-        return ltmExtractSourceNoteResponseSchema.parse(await processLongTermMemorySource({sourceNote,provider,model:resolved.model,scope:chat?resolveChatLtmScope(chat):sourceNote.scope,modes:chat?[ltmModeForChatMode(chat.mode)]:sourceNote.modes,mode:body.mode,instruction:body.instruction,operationId,applyLowRisk:body.applyLowRisk,root,chatId:chat?.id}));
+        }:null;
+        return ltmExtractSourceNoteResponseSchema.parse(await processLongTermMemorySource({sourceNote,provider,model:resolved?.model,scope:chat?resolveChatLtmScope(chat):sourceNote.scope,modes:chat?[ltmModeForChatMode(chat.mode)]:sourceNote.modes,mode:body.mode,instruction:body.instruction,operationId,applyLowRisk:body.applyLowRisk,root,chatId:chat?.id}));
       }catch(error){
         const message=error instanceof Error?error.message:"Failed to extract long-term memory from source note";
         logger.error(error,"[ltm] Source note extraction route failed");
-        const status=extractionErrorStatus(message);
+        const status=sourceNote.tags.includes("imported_game_journal")?502:extractionErrorStatus(message);
         return reply.status(status).send({error:message});
       }
     });
+    app.post<{Body:unknown}>("/import/preview",{bodyLimit:MAINTENANCE_BODY_LIMIT_BYTES},async(request)=>ltmInteropPreviewResponseSchema.parse(await previewPackageInterop(ltmInteropPreviewRequestSchema.parse(request.body??{}),root)));
+    app.post<{Body:unknown}>("/import/source-notes",{bodyLimit:DRAFT_BODY_LIMIT_BYTES},async(request,reply)=>{const controller=new AbortController(),abort=()=>controller.abort();request.raw.once("aborted",abort);request.raw.once("close",()=>{if(request.raw.aborted)abort();});try{return ltmImportSourceNotesResponseSchema.parse(await importPackageInterop(ltmImportSourceNotesRequestSchema.parse(request.body??{}),root,controller.signal));}catch(error){const message=error instanceof Error?error.message:"Failed to import long-term memory sources";return reply.status(extractionErrorStatus(message)).send({error:message});}finally{request.raw.off("aborted",abort);}});
     app.post<{Body:unknown}>("/notes/transfer-preview",{bodyLimit:MAINTENANCE_BODY_LIMIT_BYTES},async(request,reply)=>{const body=ltmNoteTransferPreviewRequestSchema.parse(request.body??{});const chat=await getPackagePersistence().getChat(body.destinationChatId);if(!chat)return reply.status(404).send({error:"Destination chat not found"});try{return ltmNoteTransferPreviewResponseSchema.parse(await previewLtmNoteTransfer(body,chat,{root,storage}));}catch(error){return reply.status(error instanceof LtmNoteTransferError?error.statusCode:500).send({error:error instanceof Error?error.message:"Failed to preview long-term memory transfer"});}});
     app.post<{Body:unknown}>("/notes/transfer",{bodyLimit:MAINTENANCE_BODY_LIMIT_BYTES},async(request,reply)=>{const body=ltmNoteTransferPreviewRequestSchema.parse(request.body??{});const chat=await getPackagePersistence().getChat(body.destinationChatId);if(!chat)return reply.status(404).send({error:"Destination chat not found"});try{return ltmNoteTransferApplyResponseSchema.parse(await applyLtmNoteTransfer(body,chat,{root,storage,rebuild:async()=>{const result=await rebuildAfterMutation();return result?{generatedAt:result.generatedAt,noteCount:result.noteCount,chunkCount:result.chunkCount,sourceChunkCount:result.sourceChunkCount,embeddedChunkCount:result.embeddedChunkCount,embeddingsAvailable:result.embeddingsAvailable}:null;}}));}catch(error){return reply.status(error instanceof LtmNoteTransferError?error.statusCode:500).send({error:error instanceof Error?error.message:"Failed to transfer long-term memory notes"});}});
     app.post<{Body:unknown}>("/notes",{bodyLimit:NOTE_BODY_LIMIT_BYTES},async(request,reply)=>{const body=createNoteBody.parse(request.body);try{const note=await storage.createNote(body);await rebuildAfterMutation();return reply.status(201).send(note);}catch(error){if(error instanceof Error&&error.message.includes("already exists"))return reply.status(409).send({error:error.message});throw error;}});
