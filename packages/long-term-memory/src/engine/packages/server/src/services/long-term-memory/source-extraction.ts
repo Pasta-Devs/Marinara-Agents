@@ -34,8 +34,6 @@ import { stableJsonHash } from "./chunking.js";
 import { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent } from "./source-hash.js";
 import type { LongTermMemoryExtractionModel } from "./model.js";
 
-const LTM_EXTRACTION_EXISTING_NOTE_CANDIDATE_CHUNKS = 100;
-
 export type ExtractLongTermMemoryFromSourceNoteOptions = {
   noteId: string;
   provider: LongTermMemoryExtractionModel;
@@ -354,6 +352,11 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const modes = sourceNote.modes;
   const allowedBuckets = [...DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE[resolvedMode]];
   const extractionConfig = await getLtmExtractionConfig(options.root, resolvedMode);
+  const estimatedSourceTokens = Math.max(1, Math.ceil(sourceText.length / 4));
+  const sourceExceedsTokenLimit = estimatedSourceTokens > extractionConfig.maxSourceTokens;
+  const extractionText = sourceExceedsTokenLimit
+    ? sourceText.slice(0, extractionConfig.maxSourceTokens * 4)
+    : sourceText;
   await recordLtmDebugEvent({
     operationId: options.operationId,
     root: options.root,
@@ -375,9 +378,10 @@ async function extractLongTermMemoryFromSourceNoteInner(
         verbosity: extractionConfig.verbosity,
         maxOutputTokens: extractionConfig.maxOutputTokens,
         temperature: extractionConfig.temperature,
-        sourceTextPolicy: "full",
+        sourceTextPolicy: sourceExceedsTokenLimit ? "truncated" : "full",
+        maxSourceTokens: extractionConfig.maxSourceTokens,
         maxExistingNoteTokens: extractionConfig.maxExistingNoteTokens,
-        existingNoteCandidateChunks: LTM_EXTRACTION_EXISTING_NOTE_CANDIDATE_CHUNKS,
+        existingNoteCandidateChunks: extractionConfig.existingNoteMaxChunks,
         existingNoteMaxTokens: extractionConfig.existingNoteMaxTokens,
         activePromptTemplateId: extractionConfig.activePromptTemplateId,
         usesPromptTemplate: Boolean(extractionConfig.activePromptTemplateId),
@@ -390,10 +394,10 @@ async function extractLongTermMemoryFromSourceNoteInner(
     storage,
     root: options.root,
     sourceNoteId: sourceNote.id,
-    sourceText,
+    sourceText: extractionText,
     scope,
     mode: resolvedMode,
-    maxChunks: LTM_EXTRACTION_EXISTING_NOTE_CANDIDATE_CHUNKS,
+    maxChunks: extractionConfig.existingNoteMaxChunks,
     maxTokens: extractionConfig.existingNoteMaxTokens,
     embeddingSource: options.embeddingSource,
   });
@@ -424,7 +428,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
 
   const baseExtractionOptions = {
     sourceNote,
-    sourceText,
+    sourceText: extractionText,
     existingNotes,
     provider: options.provider,
     model: options.model,

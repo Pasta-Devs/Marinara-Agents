@@ -7,7 +7,7 @@ import { isEnoent } from "./ltm-utils.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { withKeyedLock } from "./package-runtime.js";
 type ChunkUsage = { chunkId: string; noteId: string; sectionKey: string; lastRetrievedAt: string; lastInjectedAt: string; retrievalCount: number; injectionCount: number; totalInjectedTokens: number };
-type Usage = { version: 2; chats: Record<string, { chunks: Record<string, ChunkUsage> }>; acceptedReceipts?: Record<string, true> };
+type Usage = { version: 2; chats: Record<string, { chunks: Record<string, ChunkUsage> }>; acceptedReceipts?: Record<string, string | true> };
 const empty = (): Usage => ({ version: 2, chats: {} });
 function parseUsage(value: unknown): Usage { if (!value || typeof value !== "object" || (value as any).version !== 2 || !(value as any).chats || typeof (value as any).chats !== "object") throw new Error("Malformed long-term memory usage index."); return value as Usage; }
 export const longTermMemoryUsagePath = (root = getLongTermMemoryRoot()) => safeJoin(getLongTermMemoryDirectories(root).indexes, "usage.json");
@@ -47,7 +47,7 @@ export async function recordLongTermMemoryInjection(
     }
     usage.chats[chatId] = chat;
     if (input.accountingId) {
-      usage.acceptedReceipts = { ...(usage.acceptedReceipts ?? {}), [input.accountingId]: true };
+      usage.acceptedReceipts = { ...(usage.acceptedReceipts ?? {}), [input.accountingId]: now };
     }
     await writeJsonAtomic(longTermMemoryUsagePath(root), usage);
     const receipt = {

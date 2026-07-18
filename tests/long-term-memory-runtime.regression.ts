@@ -103,6 +103,7 @@ async function main() {
       "legacy agent preferences must move into the stable package root",
     );
     await storage.createNote(note("world_visible", "chat-a", "The cobalt archive key is beneath the observatory."));
+    await storage.createNote(note("world_visible_second", "chat-a", "The cobalt archive has a brass warding seal."));
     await storage.createNote(note("world_hidden", "chat-b", "The cobalt archive key is hidden in another chat."));
 
     const input = {
@@ -116,6 +117,22 @@ async function main() {
     assert.match(first.text, /beneath the observatory/);
     assert.doesNotMatch(first.text, /another chat/, "recall must enforce chat scope");
     assert.ok(first.receipt, "non-empty recall must return an opaque receipt");
+
+    chats[0].metadata = {
+      ...chats[0].metadata,
+      longTermMemoryMaxChunks: 1,
+    };
+    const limited = await runtime.recall(input);
+    assert.equal(limited.receipt.artifact.chunks.length, 1, "chat max chunks must constrain recall");
+    chats[0].metadata = {
+      ...chats[0].metadata,
+      enableLongTermMemory: false,
+    };
+    assert.equal(await runtime.recall(input), null, "a chat-level disable must override global enablement");
+    chats[0].metadata = {
+      ...chats[0].metadata,
+      enableLongTermMemory: true,
+    };
 
     assert.equal(await runtime.recordPromptAccepted({ chatId: "chat-a", receipt: first.receipt, messages: [{ content: first.text }] }), true);
     assert.equal(await runtime.recordPromptAccepted({ chatId: "chat-a", receipt: first.receipt, messages: [{ content: first.text }] }), false, "the same receipt must account once");

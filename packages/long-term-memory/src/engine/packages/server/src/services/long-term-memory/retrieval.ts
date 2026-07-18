@@ -65,11 +65,11 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   if (metadata.length) {
     lanes.push({ name: "direct", weight: 1, items: metadata.map((hit) => ({ chunkId: hit.chunkId, rawScore: Math.min(1, hit.score), reason: hit.reasons.join(",") })) });
   }
-  const lexical = searchLtmBm25(index.bm25, query).filter((hit) => allowed.has(hit.chunkId));
+  const lexical = searchLtmBm25(index.bm25, query, { allowedChunks: allowed });
   if ((input.lexicalWeight ?? 1) > 0 && lexical.length) {
     lanes.push({ name: "bm25", weight: input.lexicalWeight ?? 1, items: lexical.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: "bm25" })) });
   }
-  const keywords = searchLtmKeywordIndex(index.keywords, query).filter((hit) => allowed.has(hit.chunkId));
+  const keywords = searchLtmKeywordIndex(index.keywords, query, { allowedChunks: allowed });
   if ((input.keywordWeight ?? 1) > 0 && keywords.length) {
     const max = keywords[0]?.score ?? 1;
     lanes.push({ name: "keyword", weight: input.keywordWeight ?? 1, items: keywords.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score / max, reason: hit.reasons.join(",") })) });

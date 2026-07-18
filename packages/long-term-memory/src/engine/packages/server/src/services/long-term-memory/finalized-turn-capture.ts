@@ -13,6 +13,7 @@ export type FinalizedTurnInput = {
   swipeIndex: number;
   content: string;
   characterId: string | null;
+  personaId?: string;
   regenerate: boolean;
   continuation: boolean;
 };
@@ -77,6 +78,7 @@ export async function captureFinalizedLongTermMemoryTurn(
         chatId: input.chatId,
         chatIds: [input.chatId],
         ...(input.characterId ? { characterIds: [input.characterId] } : {}),
+        ...(input.personaId ? { personaId: input.personaId } : {}),
       },
       tags: ["captured_turn"],
       keywords: [],

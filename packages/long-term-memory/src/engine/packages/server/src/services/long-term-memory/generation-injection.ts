@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { LtmMode } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { resolveLongTermMemoryRecallSettings } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { resolveChatLtmScope, ltmModeForChatMode } from "./chat-scope.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import { serializeLongTermMemoryPrompt, isLongTermMemoryPromptPresent, type LtmSerializedPromptArtifact } from "./prompt.js";
@@ -7,7 +8,8 @@ import { getLongTermMemoryDirectories, safeJoin } from "./paths.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
 import { getLtmGlobalSettings } from "./settings.js";
 import { recordLongTermMemoryInjection } from "./usage.js";
-import { withKeyedLock } from "./package-runtime.js";
+import { recordLtmDebugEvent } from "./debug-log.js";
+import { getPackagePersistence, withKeyedLock } from "./package-runtime.js";
 
 export type LongTermMemoryRecallReceipt = {
   version: 1;
@@ -29,6 +31,12 @@ function parseReceipt(value: unknown): LongTermMemoryRecallReceipt | null {
     : null;
 }
 
+function metadataRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 export async function prepareGenerationLongTermMemory(input: {
   root: string;
   chatId: string;
@@ -36,34 +44,57 @@ export async function prepareGenerationLongTermMemory(input: {
   characterIds: string[];
   messages: Array<{ role: string; content: string }>;
   signal?: AbortSignal;
+  debugMode?: boolean;
 }) {
+  const chat = await getPackagePersistence().getChat(input.chatId);
+  if (!chat || input.signal?.aborted) return null;
   const settings = await getLtmGlobalSettings(input.root);
-  if (!settings.enableLongTermMemory || input.signal?.aborted) return null;
-  const recent = input.messages.slice(-settings.longTermMemoryRecallContextMessages);
+  const recall = resolveLongTermMemoryRecallSettings({
+    chatMode: input.chatMode,
+    chatMetadata: metadataRecord(chat.metadata),
+    globalSettings: settings,
+    requestDebug: input.debugMode,
+  });
+  if (!recall.enabled) return null;
+  const recent = input.messages.slice(-recall.contextMessages);
   const queryText = recent.map((message) => message.content).filter(Boolean).join("\n");
   if (!queryText.trim()) return null;
-  const scope = resolveChatLtmScope({ id: input.chatId, characterIds: input.characterIds });
+  const scope = resolveChatLtmScope(chat);
   const retrieval = await retrieveLongTermMemory({
     root: input.root,
-    mode: ltmModeForChatMode(input.chatMode) as LtmMode,
+    mode: ltmModeForChatMode(chat.mode) as LtmMode,
     queryText,
     scope,
-    characterIds: input.characterIds,
-    includeResolved: settings.longTermMemoryIncludeResolved,
-    maxChunks: settings.longTermMemoryMaxChunks,
-    maxTokens: settings.longTermMemoryBudgetTokens,
-    minScore: settings.longTermMemoryScoreThreshold,
-    semanticWeight: settings.longTermMemorySemanticWeight,
-    lexicalWeight: settings.longTermMemoryLexicalWeight,
-    graphWeight: settings.longTermMemoryGraphWeight,
-    keywordWeight: settings.longTermMemoryKeywordWeight,
+    characterIds: chat.characterIds,
+    includeResolved: recall.includeResolved,
+    maxChunks: recall.maxChunks,
+    maxTokens: recall.budgetTokens,
+    minScore: recall.scoreThreshold,
+    semanticWeight: recall.weights.semanticWeight,
+    lexicalWeight: recall.weights.lexicalWeight,
+    graphWeight: recall.weights.graphWeight,
+    keywordWeight: recall.weights.keywordWeight,
     signal: input.signal,
   });
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {
-    preamble: settings.longTermMemoryRecallPreamble,
+    preamble: recall.recallPreamble,
     maxTokens: retrieval.maxTokens,
   });
   if (!artifact) return null;
+  if (recall.debugEnabled) {
+    await recordLtmDebugEvent({
+      root: input.root,
+      phase: "injection",
+      action: "generation_recall_prepared",
+      status: "ok",
+      details: {
+        chatId: input.chatId,
+        chunkCount: artifact.chunks.length,
+        estimatedTokens: artifact.estimatedTokens,
+        embeddingsAvailable: retrieval.embeddingsAvailable,
+      },
+    });
+  }
   const receipt: LongTermMemoryRecallReceipt = { version: 1, id: randomUUID(), chatId: input.chatId, artifact };
   await writeJsonAtomic(pendingPath(input.root, input.chatId), receipt);
   return { text: artifact.content, receipt };

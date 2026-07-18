@@ -2,6 +2,7 @@ export type RuntimeLogArgument = string | number | boolean | null | undefined | 
 
 export type CapabilityRuntimeHost = {
   dataDir?: string;
+  embeddings?: PackageEmbeddingAdapter;
   getAgentConfig?(): Promise<{ connectionId: string | null; settings: Record<string, unknown> } | null>;
   logger: {
     debug(message: string, ...args: RuntimeLogArgument[]): void;
@@ -110,7 +111,7 @@ export function configurePackageEmbeddingAdapter(adapter: PackageEmbeddingAdapte
 }
 
 export function getPackageEmbeddingAdapter() {
-  return embeddingAdapter;
+  return embeddingAdapter ?? host?.embeddings ?? null;
 }
 
 export function getPackageDataDir() {

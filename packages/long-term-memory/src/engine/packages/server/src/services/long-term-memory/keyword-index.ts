@@ -59,6 +59,7 @@ export function searchLtmKeywordIndex(
     maxCandidatesPerKeyword?: number;
     maxKeywordCatalogEntries?: number;
     maxCandidates?: number;
+    allowedChunks?: Set<string>;
   } = {},
 ) {
   const normalizedTerms = normalizeKeywordTerms(queryText);
@@ -71,6 +72,7 @@ export function searchLtmKeywordIndex(
   const hits = new Map<string, { score: number; reasons: string[]; matchedKeywords: Set<string> }>();
 
   const add = (chunkId: string, keyword: string, score: number, reason: string) => {
+    if (options.allowedChunks && !options.allowedChunks.has(chunkId)) return;
     if (!hits.has(chunkId) && hits.size >= maxCandidates) return;
     const existing = hits.get(chunkId) ?? { score: 0, reasons: [], matchedKeywords: new Set<string>() };
     const dedupeKey = `${keyword}\0${reason}`;

@@ -421,6 +421,7 @@ export const ltmScopeSchema = z
     chatIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     groupId: z.string().min(1).max(120).optional(),
     characterIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+    personaId: z.string().min(1).max(120).optional(),
   })
   .strict();
 

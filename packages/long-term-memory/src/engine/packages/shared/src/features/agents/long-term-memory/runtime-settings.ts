@@ -123,15 +123,6 @@ export function resolveLongTermMemoryRecallSettings(input: {
     : modeFallback;
   const recallStyle = chatRecallStyle ?? globalRecallStyle;
   const styleWeights = LTM_RECALL_STYLE_WEIGHTS[recallStyle];
-  const globalWeights: LtmRecallWeights = globalSettings
-    ? {
-        semanticWeight: globalSettings.longTermMemorySemanticWeight,
-        lexicalWeight: globalSettings.longTermMemoryLexicalWeight,
-        graphWeight: globalSettings.longTermMemoryGraphWeight,
-        keywordWeight: globalSettings.longTermMemoryKeywordWeight,
-      }
-    : styleWeights;
-
   return {
     enabled:
       readBoolean(chatMetadata.enableLongTermMemory) ??
@@ -147,10 +138,9 @@ export function resolveLongTermMemoryRecallSettings(input: {
       parseScoreThreshold(chatMetadata.longTermMemoryScoreThreshold) ??
       parseScoreThreshold(globalSettings?.longTermMemoryScoreThreshold),
     recallStyle,
-    weights: resolveWeights(
-      chatMetadata,
-      chatRecallStyle ? styleWeights : globalWeights,
-    ),
+    // A style is the default weight preset. Per-chat weights remain explicit
+    // overrides, but stale persisted global defaults must not mask a new style.
+    weights: resolveWeights(chatMetadata, styleWeights),
     debugEnabled:
       (readBoolean(chatMetadata.longTermMemoryDebug) ??
         globalSettings?.longTermMemoryDebug ??

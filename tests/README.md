@@ -11,20 +11,6 @@ pnpm exec playwright test ../Marinara-Agents/tests/spatial-context.e2e.ts -c pla
 
 The package must be installed in the test data directory before launching the Playwright web server.
 
-## Long-Term Memory source parity
-
-`long-term-memory-source-parity.regression.ts` compares the package-owned
-schema, defaults, recall settings, chunking, indexes, retrieval ranking, and
-budgeting directly against the neighboring Engine source using representative
-fixture notes.
-
-Run it with the Engine server toolchain and dependency roots:
-
-```bash
-cd ../Marinara-Engine
-NODE_PATH="$PWD/.pnpm/node_modules:$PWD/node_modules" pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-source-parity.regression.ts"
-```
-
 `long-term-memory-storage.regression.ts` proves stable-root restart persistence,
 committed transaction recovery, strict malformed-settings self-check failure,
 retention cleanup, and canonical-note preservation:
@@ -68,7 +54,7 @@ cd ../Marinara-Engine
 pnpm --filter @marinara-engine/server exec tsx ../Marinara-Agents/tests/hierarchical-maps-lifecycle.regression.ts
 ```
 
-`long-term-memory-lifecycle.regression.ts` installs the exact generated LTM
+`long-term-memory-lifecycle.regression.ts` installs the current generated LTM
 artifact, proves offline activation and restart, includes the durable vault in
 full backup, and verifies uninstall/reinstall preserves the vault byte-for-byte:
 

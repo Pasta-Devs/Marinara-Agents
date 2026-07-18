@@ -64,7 +64,7 @@ export function buildLtmBm25Index(chunks: LtmMemoryChunk[]): LtmBm25Index {
 export function searchLtmBm25(
   index: LtmBm25Index,
   query: string,
-  options: { topK?: number; maxPostingsPerTerm?: number; maxCandidates?: number } = {},
+  options: { topK?: number; maxPostingsPerTerm?: number; maxCandidates?: number; allowedChunks?: Set<string> } = {},
 ) {
   if (index.chunkCount === 0 || index.avgDocLength === 0) return [];
 
@@ -79,6 +79,7 @@ export function searchLtmBm25(
 
     const idf = Math.log(1 + (index.chunkCount - entry.documentFrequency + 0.5) / (entry.documentFrequency + 0.5));
     for (const posting of entry.postings.slice(0, maxPostingsPerTerm)) {
+      if (options.allowedChunks && !options.allowedChunks.has(posting.chunkId)) continue;
       if (!scores.has(posting.chunkId) && scores.size >= maxCandidates) continue;
       const document = index.documents[posting.chunkId];
       if (!document) continue;

@@ -95,7 +95,6 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
   for (const candidate of ranked) {
     const finalNormalizedScore = topScore > 0 ? candidate.score / topScore : 0;
     candidate.finalNormalizedScore = finalNormalizedScore;
-    candidate.normalizedScore = finalNormalizedScore;
   }
 
   return ranked;

@@ -10,8 +10,8 @@ const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
 const dataDir = mkdtempSync(join(tmpdir(), "marinara-ltm-lifecycle-"));
 const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
-const artifactPath = join(repoRoot, "artifacts/long-term-memory-1.0.0.zip");
-const artifactUrl = "https://1.1.1.1/artifacts/long-term-memory-1.0.0.zip";
+const artifactPath = join(repoRoot, "artifacts/long-term-memory-1.0.1.zip");
+const artifactUrl = "https://1.1.1.1/artifacts/long-term-memory-1.0.1.zip";
 const artifactBytes = readFileSync(artifactPath);
 const artifactManifest = JSON.parse(execFileSync("unzip", ["-p", artifactPath, "manifest.json"], { encoding: "utf8" })) as Record<string, unknown>;
 const originalFetch = globalThis.fetch;
@@ -62,11 +62,11 @@ async function main() {
   let app: { inject: (options: unknown) => Promise<{ statusCode: number; body: string; rawPayload: Buffer }>; close: () => Promise<void> } | null = null;
   try {
     assert.equal(artifactManifest.id, "long-term-memory");
-    assert.equal(artifactManifest.version, "1.0.0");
+    assert.equal(artifactManifest.version, "1.0.1");
     const { capabilityPackageManager } = await importEngine<{ capabilityPackageManager: { install(id: string): Promise<{ version: string; status: string }>; uninstall(id: string): Promise<unknown> } }>("packages/server/src/services/capability-packages/package-manager.service.ts");
     const { buildApp } = await importEngine<{ buildApp(): Promise<typeof app> }>("packages/server/src/app.ts");
     const installed = await capabilityPackageManager.install("long-term-memory");
-    assert.equal(installed.version, "1.0.0");
+    assert.equal(installed.version, artifactManifest.version);
     catalogOnline = false;
     app = await buildApp();
     assert.equal((await app.inject({ method: "GET", url: "/api/long-term-memory/status" })).statusCode, 200);
@@ -91,7 +91,7 @@ async function main() {
     assertSnapshot(durableRoot, beforeRestart);
     catalogOnline = true;
     const reinstalled = await capabilityPackageManager.install("long-term-memory");
-    assert.equal(reinstalled.version, "1.0.0");
+    assert.equal(reinstalled.version, artifactManifest.version);
     catalogOnline = false;
     app = await buildApp();
     assert.equal((await app.inject({ method: "GET", url: "/api/long-term-memory/status" })).statusCode, 200);

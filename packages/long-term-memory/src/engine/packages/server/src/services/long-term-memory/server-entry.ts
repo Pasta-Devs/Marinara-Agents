@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import {
+  configurePackageEmbeddingAdapter,
   configurePackageRuntime,
+  getPackagePersistence,
   type CapabilityRuntimeHost,
 } from "./package-runtime.js";
 import { activateLongTermMemoryStorage } from "./runtime.js";
@@ -29,6 +31,7 @@ type ActivationContext = {
 
 export async function activate({ api, dataDir }: ActivationContext) {
   const releaseHost = configurePackageRuntime({ ...api.runtime, dataDir });
+  configurePackageEmbeddingAdapter(api.runtime.embeddings ?? null);
   try {
     active = await activateLongTermMemoryStorage(
       join(dataDir, "long-term-memory"),
@@ -48,13 +51,14 @@ export async function activate({ api, dataDir }: ActivationContext) {
         characterIds: string[];
         messages: Array<{ role: string; content: string }>;
         signal?: AbortSignal;
+        debugMode?: boolean;
       }) => prepareGenerationLongTermMemory({ ...input, root: active!.root }),
       recordPromptAccepted: (input: {
         chatId: string;
         receipt: unknown;
         messages: Array<{ content: string }>;
       }) => recordGenerationLongTermMemoryDispatch({ ...input, root: active!.root }),
-      onTurnFinalized: (input: {
+      onTurnFinalized: async (input: {
         chatId: string;
         chatMode: string;
         messageId: string;
@@ -63,7 +67,13 @@ export async function activate({ api, dataDir }: ActivationContext) {
         characterId: string | null;
         regenerate: boolean;
         continuation: boolean;
-      }) => captureFinalizedLongTermMemoryTurn(input, active!.storage),
+      }) => {
+        const chat = await getPackagePersistence().getChat(input.chatId);
+        return captureFinalizedLongTermMemoryTurn({
+          ...input,
+          personaId: chat?.personaId ?? undefined,
+        }, active!.storage);
+      },
     });
     return async () => {
       releaseRoutes();
@@ -71,10 +81,12 @@ export async function activate({ api, dataDir }: ActivationContext) {
       releaseStorageService();
       await active?.cleanup();
       active = null;
+      configurePackageEmbeddingAdapter(null);
       releaseHost();
     };
   } catch (error) {
     active = null;
+    configurePackageEmbeddingAdapter(null);
     releaseHost();
     throw error;
   }
