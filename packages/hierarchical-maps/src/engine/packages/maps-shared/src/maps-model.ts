@@ -123,11 +123,17 @@ export interface SpatialGenerationPromptTemplates {
   expansionUser: string;
 }
 
+export interface SpatialGenerationCustomVariable {
+  name: string;
+  value: string;
+}
+
 export interface SpatialGenerationPromptOption {
   id: string;
   name: string;
   description?: string;
   guidance: string;
+  customVariables: SpatialGenerationCustomVariable[];
   prompts: SpatialGenerationPromptTemplates;
 }
 
@@ -231,12 +237,27 @@ const spatialGenerationPromptOptionIdSchema = z
   .max(80)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u, "Use letters, numbers, dots, underscores, colons, or hyphens.");
 
+const spatialGenerationCustomVariableNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u, "Start with a letter or underscore, then use only letters, numbers, or underscores.");
+
+export const spatialGenerationCustomVariableSchema = z
+  .object({
+    name: spatialGenerationCustomVariableNameSchema,
+    value: z.string().max(20_000),
+  })
+  .strict();
+
 export const spatialGenerationPromptOptionSchema = z
   .object({
     id: spatialGenerationPromptOptionIdSchema,
     name: z.string().trim().min(1).max(120),
     description: z.string().trim().max(240).optional(),
-    guidance: z.string().trim().min(1).max(4_000),
+    guidance: z.string().trim().max(4_000),
+    customVariables: z.array(spatialGenerationCustomVariableSchema).max(32).default([]),
     prompts: spatialGenerationPromptTemplatesSchema,
   })
   .strict();
@@ -264,10 +285,28 @@ export const spatialGenerationPreferencesSchema = spatialGenerationPreferencesBa
         });
       }
       optionIds.add(option.id);
+      const customVariableNames = new Set<string>();
+      for (const [variableIndex, variable] of option.customVariables.entries()) {
+        if (PROMPT_VARIABLE_SET.has(variable.name)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Custom variable ${variable.name} cannot replace a built-in variable.`,
+            path: ["options", optionIndex, "customVariables", variableIndex, "name"],
+          });
+        }
+        if (customVariableNames.has(variable.name)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Custom variable ${variable.name} is duplicated.`,
+            path: ["options", optionIndex, "customVariables", variableIndex, "name"],
+          });
+        }
+        customVariableNames.add(variable.name);
+      }
       for (const [field, template] of Object.entries(option.prompts)) {
         for (const match of template.matchAll(PROMPT_VARIABLE_PATTERN)) {
           const name = match[1];
-          if (!name || PROMPT_VARIABLE_SET.has(name)) continue;
+          if (!name || PROMPT_VARIABLE_SET.has(name) || customVariableNames.has(name)) continue;
           context.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Unknown prompt variable \${${name}}.`,
@@ -392,6 +431,7 @@ export function defaultGenerationPreferences(ownerMode: SpatialOwnerMode = "role
         name: "Default",
         description: `Built-in ${ownerMode === "game" ? "Game" : "Roleplay"} map generation prompts.`,
         guidance: BUILT_IN_GENERATION_GUIDANCE,
+        customVariables: [],
         prompts: {
           draftSystem:
             ownerMode === "game" ? GAME_DRAFT_SYSTEM_PROMPT_TEMPLATE : ROLEPLAY_DRAFT_SYSTEM_PROMPT_TEMPLATE,
@@ -455,13 +495,19 @@ export function normalizeGenerationPreferences(
 
 export function renderSpatialGenerationPromptTemplate(
   template: string,
-  variables: Partial<Record<(typeof SPATIAL_GENERATION_PROMPT_VARIABLES)[number], string | number>>,
+  variables: Readonly<Record<string, string | number | null | undefined>>,
 ): string {
   return template.replace(PROMPT_VARIABLE_PATTERN, (raw, name: string) => {
-    if (!PROMPT_VARIABLE_SET.has(name)) return raw;
-    const value = variables[name as (typeof SPATIAL_GENERATION_PROMPT_VARIABLES)[number]];
+    if (!Object.hasOwn(variables, name)) return raw;
+    const value = variables[name];
     return value === undefined || value === null ? "" : String(value);
   });
+}
+
+export function spatialGenerationCustomVariableValues(
+  option: Pick<SpatialGenerationPromptOption, "customVariables">,
+): Record<string, string> {
+  return Object.fromEntries(option.customVariables.map((variable) => [variable.name, variable.value]));
 }
 
 export function defaultHierarchyProfile(

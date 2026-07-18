@@ -43,6 +43,7 @@ import {
 import {
   normalizeHierarchyProfile,
   resolveSpatialGenerationPromptOption,
+  spatialGenerationCustomVariableValues,
   spatialGenerationPreferencesSchema,
   spatialHierarchyProfileSchema,
   type SpatialGenerationPreferences,
@@ -535,6 +536,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
               instructions: parsed.data.instructions,
               hierarchyProfile: requestedHierarchyProfile,
               creatorGuidance: generationPromptOption.guidance,
+              promptVariables: spatialGenerationCustomVariableValues(generationPromptOption),
               promptTemplates: generationPromptOption.prompts,
             })
           : buildSpatialMapDraftPrompt({
@@ -548,6 +550,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
               hierarchyMode: hierarchyMode.data,
               hierarchyProfile: requestedHierarchyProfile,
               creatorGuidance: generationPromptOption.guidance,
+              promptVariables: spatialGenerationCustomVariableValues(generationPromptOption),
               promptTemplates: generationPromptOption.prompts,
             });
     } catch (error) {

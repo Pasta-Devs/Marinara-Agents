@@ -60,6 +60,7 @@ interface BuildSpatialMapPromptOptions {
   hierarchyMode?: SpatialHierarchyProfile["mode"];
   hierarchyProfile?: SpatialHierarchyProfile;
   creatorGuidance?: string;
+  promptVariables?: Readonly<Record<string, string>>;
   promptTemplates?: SpatialGenerationPromptTemplates;
 }
 
@@ -81,6 +82,7 @@ interface BuildSpatialMapExpansionPromptOptions {
   loreCatalog?: string;
   hierarchyProfile?: SpatialHierarchyProfile;
   creatorGuidance?: string;
+  promptVariables?: Readonly<Record<string, string>>;
   promptTemplates?: SpatialGenerationPromptTemplates;
 }
 
@@ -872,6 +874,7 @@ export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansion
   const promptTemplates =
     options.promptTemplates ?? resolveSpatialGenerationPromptOption(defaultGenerationPreferences(options.definition.ownerMode)).prompts;
   const variables = {
+    ...options.promptVariables,
     groundingRules: groundingPromptLines(options.groundingMode).join("\n"),
     targetLocations,
     maxLocations: maxNewLocations,
@@ -920,6 +923,7 @@ export function buildSpatialMapDraftPrompt(options: BuildSpatialMapPromptOptions
   const promptTemplates =
     options.promptTemplates ?? resolveSpatialGenerationPromptOption(defaultGenerationPreferences(options.ownerMode)).prompts;
   const variables = {
+    ...options.promptVariables,
     groundingRules: groundingPromptLines(options.groundingMode).join("\n"),
     targetLocations: size.targetLocations,
     maxLocations: size.maxLocations,

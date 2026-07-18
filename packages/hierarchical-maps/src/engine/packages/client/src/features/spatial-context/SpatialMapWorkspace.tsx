@@ -1029,9 +1029,13 @@ export function SpatialMapWorkspace({
       />
 
       {!aiBuilderOpen && typesEditorOpen && (
-        <section className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)] px-4 py-3" aria-label="Edit location types">
-          <div className="mx-auto max-w-4xl">
-            <div className="flex items-start gap-3">
+        <section
+          className="flex max-h-[min(70dvh,42rem)] shrink-0 flex-col overflow-hidden border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]"
+          aria-label="Edit location types"
+          style={{ maxHeight: "min(70dvh, 42rem)" }}
+        >
+          <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col">
+            <div className="flex shrink-0 items-start gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-sm font-semibold text-[var(--marinara-editor-title)]">Location types</h2>
                 <p className="mt-1 text-xs leading-relaxed text-[var(--marinara-editor-muted)]">
@@ -1042,107 +1046,115 @@ export function SpatialMapWorkspace({
                 Done
               </button>
             </div>
-            <label className="mt-3 block max-w-md text-xs font-medium text-[var(--marinara-editor-title)]">
-              Profile name
-              <input
-                value={draftHierarchyProfile.name}
-                maxLength={120}
-                onChange={(event) =>
+            <div
+              data-marinara-maps-location-types-scroll
+              role="region"
+              aria-label="Location type fields"
+              tabIndex={0}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4"
+            >
+              <label className="block max-w-md text-xs font-medium text-[var(--marinara-editor-title)]">
+                Profile name
+                <input
+                  value={draftHierarchyProfile.name}
+                  maxLength={120}
+                  onChange={(event) =>
+                    applyHierarchyProfile({
+                      ...draftHierarchyProfile,
+                      mode: "custom",
+                      name: event.target.value.trim() ? event.target.value : draftHierarchyProfile.name,
+                    })
+                  }
+                  className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs"
+                />
+              </label>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {draftHierarchyProfile.types.map((type, index) => (
+                  <div key={type.id} className="grid grid-cols-[minmax(0,1fr)_8rem_2.75rem] gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-2">
+                    <input
+                      aria-label={`Location type ${index + 1} label`}
+                      value={type.label}
+                      maxLength={80}
+                      onChange={(event) =>
+                        applyHierarchyProfile({
+                          ...draftHierarchyProfile,
+                          mode: "custom",
+                          types: draftHierarchyProfile.types.map((candidate) =>
+                            candidate.id === type.id
+                              ? { ...candidate, label: event.target.value.trim() ? event.target.value : candidate.label }
+                              : candidate,
+                          ),
+                        })
+                      }
+                      className="min-h-11 min-w-0 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs"
+                    />
+                    <select
+                      aria-label={`${type.label || `Location type ${index + 1}`} semantic base kind`}
+                      value={type.baseKind}
+                      onChange={(event) => {
+                        const baseKind = event.target.value as SpatialLocationKind;
+                        applyDraft({
+                          ...draft,
+                          locations: draft.locations.map((location) =>
+                            draftHierarchyProfile.locationTypeIds[location.id] === type.id
+                              ? { ...location, kind: baseKind }
+                              : location,
+                          ),
+                        });
+                        applyHierarchyProfile({
+                          ...draftHierarchyProfile,
+                          mode: "custom",
+                          types: draftHierarchyProfile.types.map((candidate) =>
+                            candidate.id === type.id ? { ...candidate, baseKind } : candidate,
+                          ),
+                        });
+                      }}
+                      className="min-h-11 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2 text-[0.625rem]"
+                    >
+                      {(["region", "settlement", "place", "building", "floor", "room"] as const).map((kind) => (
+                        <option key={kind} value={kind}>{kind}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={draftHierarchyProfile.types.length === 1}
+                      onClick={() =>
+                        applyHierarchyProfile({
+                          ...draftHierarchyProfile,
+                          mode: "custom",
+                          types: draftHierarchyProfile.types.filter((candidate) => candidate.id !== type.id),
+                        })
+                      }
+                      className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                      aria-label={`Remove ${type.label || "location type"}`}
+                    >
+                      <Trash2 size="0.75rem" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={draftHierarchyProfile.types.length >= 40}
+                onClick={() => {
+                  const base = hierarchyTypeId(`custom-${draftHierarchyProfile.types.length + 1}`);
+                  let id = base;
+                  let suffix = 2;
+                  while (draftHierarchyProfile.types.some((type) => type.id === id)) id = `${base}_${suffix++}`;
                   applyHierarchyProfile({
                     ...draftHierarchyProfile,
                     mode: "custom",
-                    name: event.target.value.trim() ? event.target.value : draftHierarchyProfile.name,
-                  })
-                }
-                className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs"
-              />
-            </label>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {draftHierarchyProfile.types.map((type, index) => (
-                <div key={type.id} className="grid grid-cols-[minmax(0,1fr)_8rem_2.75rem] gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-2">
-                  <input
-                    aria-label={`Location type ${index + 1} label`}
-                    value={type.label}
-                    maxLength={80}
-                    onChange={(event) =>
-                      applyHierarchyProfile({
-                        ...draftHierarchyProfile,
-                        mode: "custom",
-                        types: draftHierarchyProfile.types.map((candidate) =>
-                          candidate.id === type.id
-                            ? { ...candidate, label: event.target.value.trim() ? event.target.value : candidate.label }
-                            : candidate,
-                        ),
-                      })
-                    }
-                    className="min-h-11 min-w-0 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs"
-                  />
-                  <select
-                    aria-label={`${type.label || `Location type ${index + 1}`} semantic base kind`}
-                    value={type.baseKind}
-                    onChange={(event) => {
-                      const baseKind = event.target.value as SpatialLocationKind;
-                      applyDraft({
-                        ...draft,
-                        locations: draft.locations.map((location) =>
-                          draftHierarchyProfile.locationTypeIds[location.id] === type.id
-                            ? { ...location, kind: baseKind }
-                            : location,
-                        ),
-                      });
-                      applyHierarchyProfile({
-                        ...draftHierarchyProfile,
-                        mode: "custom",
-                        types: draftHierarchyProfile.types.map((candidate) =>
-                          candidate.id === type.id ? { ...candidate, baseKind } : candidate,
-                        ),
-                      });
-                    }}
-                    className="min-h-11 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2 text-[0.625rem]"
-                  >
-                    {(["region", "settlement", "place", "building", "floor", "room"] as const).map((kind) => (
-                      <option key={kind} value={kind}>{kind}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    disabled={draftHierarchyProfile.types.length === 1}
-                    onClick={() =>
-                      applyHierarchyProfile({
-                        ...draftHierarchyProfile,
-                        mode: "custom",
-                        types: draftHierarchyProfile.types.filter((candidate) => candidate.id !== type.id),
-                      })
-                    }
-                    className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
-                    aria-label={`Remove ${type.label || "location type"}`}
-                  >
-                    <Trash2 size="0.75rem" />
-                  </button>
-                </div>
-              ))}
+                    types: [
+                      ...draftHierarchyProfile.types,
+                      { id, label: `Location type ${draftHierarchyProfile.types.length + 1}`, baseKind: "place" },
+                    ],
+                  });
+                }}
+                className="mari-editor-action mt-3 inline-flex min-h-11 px-3 text-xs"
+              >
+                <Plus size="0.75rem" /> Add location type
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={draftHierarchyProfile.types.length >= 40}
-              onClick={() => {
-                const base = hierarchyTypeId(`custom-${draftHierarchyProfile.types.length + 1}`);
-                let id = base;
-                let suffix = 2;
-                while (draftHierarchyProfile.types.some((type) => type.id === id)) id = `${base}_${suffix++}`;
-                applyHierarchyProfile({
-                  ...draftHierarchyProfile,
-                  mode: "custom",
-                  types: [
-                    ...draftHierarchyProfile.types,
-                    { id, label: `Location type ${draftHierarchyProfile.types.length + 1}`, baseKind: "place" },
-                  ],
-                });
-              }}
-              className="mari-editor-action mt-3 inline-flex min-h-11 px-3 text-xs"
-            >
-              <Plus size="0.75rem" /> Add location type
-            </button>
           </div>
         </section>
       )}

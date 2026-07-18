@@ -31,6 +31,7 @@ import {
   SPATIAL_GENERATION_PROMPT_VARIABLES,
   spatialGenerationPreferencesSchema,
   type SpatialGenerationPreferences,
+  type SpatialGenerationCustomVariable,
   type SpatialGenerationPromptOption,
 } from "../../../../maps-shared/src/maps-model";
 
@@ -57,6 +58,80 @@ function modeLabel(mode: string | null) {
   if (mode === "conversation") return "Conversation";
   return "Chat";
 }
+
+const SPATIAL_GENERATION_VARIABLE_DETAILS: Record<
+  (typeof SPATIAL_GENERATION_PROMPT_VARIABLES)[number],
+  { source: string; description: string }
+> = {
+  groundingRules: {
+    source: "Generated each run",
+    description: "Grounding requirements for setup-only or selected-lore generation.",
+  },
+  targetLocations: {
+    source: "Generated each run",
+    description: "Suggested location count for the selected draft or expansion size.",
+  },
+  maxLocations: {
+    source: "Generated each run",
+    description: "Hard location limit for the selected size and operation.",
+  },
+  maxDepth: {
+    source: "Generated each run",
+    description: "Maximum hierarchy depth allowed for this request.",
+  },
+  hierarchyRules: {
+    source: "Generated each run",
+    description: "Rules derived from Auto, a built-in hierarchy, or the current custom location types.",
+  },
+  routeRules: {
+    source: "Generated each run",
+    description: "Connectivity and travel-route requirements for the generated map graph.",
+  },
+  gameMapRules: {
+    source: "Game requests",
+    description: "Requirements for preserving accepted Game map locations. Empty in Roleplay.",
+  },
+  existingConnectionRule: {
+    source: "Expansion requests",
+    description: "Requires new places to connect to existing children when appropriate.",
+  },
+  outputSchema: {
+    source: "Required contract",
+    description: "The exact JSON response schema. System templates must retain this variable.",
+  },
+  ownerMode: {
+    source: "Generated each run",
+    description: "The owning chat mode: roleplay or game.",
+  },
+  size: {
+    source: "Generated each run",
+    description: "The selected small, medium, or large generation size.",
+  },
+  creatorGuidanceBlock: {
+    source: "Editable for this option",
+    description: "Reusable instructions stored with the selected named prompt option.",
+  },
+  creatorRequestBlock: {
+    source: "Draft or Expand form",
+    description: "The one-run instructions entered when requesting a map or expansion.",
+  },
+  requiredGameLocationsBlock: {
+    source: "Game requests",
+    description: "Authoritative location names read from accepted Game maps. Empty in Roleplay.",
+  },
+  selectedMapContextBlock: {
+    source: "Expansion requests",
+    description: "The selected location, breadcrumb, and existing child context for an expansion.",
+  },
+  loreCatalogBlock: {
+    source: "Generated each run",
+    description: "The eligible lore entries selected as grounding material, when present.",
+  },
+  sourceContextBlock: {
+    source: "Required private context",
+    description: "Current setup, character, chat, and relevant map context. User templates must retain it.",
+  },
+};
 
 export function SpatialMapsHome({
   chatId,
@@ -145,7 +220,9 @@ export function SpatialMapsHome({
     setPromptEditing(false);
   };
   const updateActivePromptOption = (
-    patch: Partial<Pick<SpatialGenerationPromptOption, "name" | "description" | "guidance" | "prompts">>,
+    patch: Partial<
+      Pick<SpatialGenerationPromptOption, "name" | "description" | "guidance" | "customVariables" | "prompts">
+    >,
   ) => {
     setPromptDraft((current) => ({
       ...current,
@@ -173,6 +250,7 @@ export function SpatialMapsHome({
       id: optionId,
       name: `Copy of ${activePromptOption.name}`.slice(0, 120),
       description: "Custom map generation prompt option.",
+      customVariables: activePromptOption.customVariables.map((variable) => ({ ...variable })),
       prompts: { ...activePromptOption.prompts },
     };
     setPromptDraft((current) => ({
@@ -197,6 +275,30 @@ export function SpatialMapsHome({
         option.id === DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID ? builtInOption : option,
       ),
     }));
+  };
+  const addCustomVariable = () => {
+    const usedNames = new Set(activePromptOption.customVariables.map((variable) => variable.name));
+    let name = "customVariable";
+    let suffix = 2;
+    while (usedNames.has(name)) {
+      name = `customVariable${suffix}`;
+      suffix += 1;
+    }
+    updateActivePromptOption({
+      customVariables: [...activePromptOption.customVariables, { name, value: "" }],
+    });
+  };
+  const updateCustomVariable = (index: number, patch: Partial<SpatialGenerationCustomVariable>) => {
+    updateActivePromptOption({
+      customVariables: activePromptOption.customVariables.map((variable, variableIndex) =>
+        variableIndex === index ? { ...variable, ...patch } : variable,
+      ),
+    });
+  };
+  const removeCustomVariable = (index: number) => {
+    updateActivePromptOption({
+      customVariables: activePromptOption.customVariables.filter((_, variableIndex) => variableIndex !== index),
+    });
   };
   const previewPrompt = async () => {
     if (!chatId || !promptValidation.success || expansionPreviewUnavailable) return;
@@ -497,24 +599,6 @@ export function SpatialMapsHome({
               ) : null}
             </div>
 
-            <div className="mt-3">
-              <label className="text-[0.6875rem] font-semibold" htmlFor="maps-generation-guidance">
-                Reusable creator guidance
-              </label>
-              <textarea
-                id="maps-generation-guidance"
-                rows={3}
-                maxLength={4_000}
-                readOnly={!promptEditing}
-                value={activePromptOption.guidance}
-                onChange={(event) => updateActivePromptOption({ guidance: event.target.value })}
-                className="mt-2 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs leading-relaxed outline-none read-only:cursor-default read-only:opacity-80 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
-              />
-              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                Inserted through <code className="font-mono">${"{creatorGuidanceBlock}"}</code> wherever that variable appears in the selected template.
-              </p>
-            </div>
-
             <div className="mt-3 flex flex-wrap gap-2" aria-label="Prompt template selection">
               <div className="flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]" role="group" aria-label="Map operation">
                 {(["draft", "expansion"] as const).map((value) => (
@@ -585,16 +669,128 @@ export function SpatialMapsHome({
             </div>
 
             <details className="mt-3 rounded-lg border border-[var(--border)] px-3 py-2">
-              <summary className="min-h-8 cursor-pointer text-[0.6875rem] font-semibold">Available template variables</summary>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {SPATIAL_GENERATION_PROMPT_VARIABLES.map((variable) => (
-                  <span key={variable} className="inline-flex items-center gap-1 rounded-md bg-[var(--secondary)] px-2 py-1 font-mono text-[0.6rem] text-[var(--marinara-chat-chrome-accent)] ring-1 ring-[var(--border)]">
-                    <Code2 size="0.625rem" /> ${"{"}{variable}{"}"}
-                  </span>
-                ))}
+              <summary className="min-h-8 cursor-pointer text-[0.6875rem] font-semibold">
+                Available template variables ({SPATIAL_GENERATION_PROMPT_VARIABLES.length} built-in
+                {activePromptOption.customVariables.length > 0
+                  ? ` + ${activePromptOption.customVariables.length} custom`
+                  : ""})
+              </summary>
+              <p className="mt-2 max-w-3xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                Built-in values come from the current request and chat. Their position in a template is editable, but generated context and response contracts cannot be replaced with stored text.
+              </p>
+
+              <div className="mt-3 divide-y divide-[var(--border)] border-y border-[var(--border)]">
+                {SPATIAL_GENERATION_PROMPT_VARIABLES.map((variable) => {
+                  const detail = SPATIAL_GENERATION_VARIABLE_DETAILS[variable];
+                  return (
+                    <div key={variable} className="py-3 first:pt-2 last:pb-2">
+                      <div className="flex flex-wrap items-start gap-2">
+                        <code className="inline-flex items-center gap-1 rounded-md bg-[var(--secondary)] px-2 py-1 font-mono text-[0.625rem] text-[var(--foreground)]">
+                          <Code2 size="0.625rem" /> ${"{"}{variable}{"}"}
+                        </code>
+                        <span className="rounded-full border border-[var(--border)] px-2 py-1 text-[0.5625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
+                          {detail.source}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 max-w-3xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                        {detail.description}
+                      </p>
+                      {variable === "creatorGuidanceBlock" && (
+                        <div className="mt-3">
+                          <label className="text-[0.6875rem] font-semibold" htmlFor="maps-generation-guidance">
+                            Reusable creator guidance
+                          </label>
+                          <textarea
+                            id="maps-generation-guidance"
+                            rows={3}
+                            maxLength={4_000}
+                            readOnly={!promptEditing}
+                            value={activePromptOption.guidance}
+                            onChange={(event) => updateActivePromptOption({ guidance: event.target.value })}
+                            className="mt-2 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs leading-relaxed outline-none read-only:cursor-default read-only:opacity-80 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                Variables are resolved from the current Roleplay or Game chat. Preview below uses the unsaved templates currently shown above.
+
+              <div className="mt-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-[0.6875rem] font-semibold">Custom variables</h3>
+                    <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                      Store reusable text with this prompt option, then insert it in any System or User template using its token.
+                    </p>
+                  </div>
+                  {promptEditing && (
+                    <button
+                      type="button"
+                      onClick={addCustomVariable}
+                      disabled={activePromptOption.customVariables.length >= 32}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-40"
+                    >
+                      <Plus size="0.75rem" /> Add custom variable
+                    </button>
+                  )}
+                </div>
+
+                {activePromptOption.customVariables.length === 0 ? (
+                  <p className="mt-3 text-[0.625rem] text-[var(--marinara-chat-chrome-accent)]">
+                    {promptEditing ? "No custom variables yet." : "Edit this prompt option to add custom variables."}
+                  </p>
+                ) : (
+                  <div className="mt-3 divide-y divide-[var(--border)] border-y border-[var(--border)]">
+                    {activePromptOption.customVariables.map((variable, index) => (
+                      <div key={index} className="py-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <code className="rounded-md bg-[var(--secondary)] px-2 py-1 font-mono text-[0.625rem]">
+                            ${"{"}{variable.name || "variableName"}{"}"}
+                          </code>
+                          {promptEditing && (
+                            <button
+                              type="button"
+                              onClick={() => removeCustomVariable(index)}
+                              aria-label={`Remove custom variable ${index + 1}`}
+                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-accent)] hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
+                            >
+                              <Trash2 size="0.75rem" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-[minmax(10rem,0.4fr)_minmax(0,1fr)]">
+                          <label className="text-[0.625rem] font-medium">
+                            Variable name
+                            <input
+                              aria-label={`Custom variable ${index + 1} name`}
+                              value={variable.name}
+                              maxLength={80}
+                              readOnly={!promptEditing}
+                              onChange={(event) => updateCustomVariable(index, { name: event.target.value })}
+                              className="mt-1.5 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 font-mono text-xs outline-none read-only:cursor-default read-only:opacity-80 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
+                            />
+                          </label>
+                          <label className="text-[0.625rem] font-medium">
+                            Replacement text
+                            <textarea
+                              aria-label={`Custom variable ${index + 1} value`}
+                              value={variable.value}
+                              rows={3}
+                              maxLength={20_000}
+                              readOnly={!promptEditing}
+                              onChange={(event) => updateCustomVariable(index, { value: event.target.value })}
+                              className="mt-1.5 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs leading-relaxed outline-none read-only:cursor-default read-only:opacity-80 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                Preview uses the unsaved template, guidance, and custom-variable values currently shown here.
               </p>
             </details>
 

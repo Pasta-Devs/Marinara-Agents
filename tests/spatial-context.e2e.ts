@@ -864,9 +864,15 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await home.getByRole("button", { name: "Add option" }).click();
     await home.getByLabel("Option name").fill("Nautical districts");
     await home.getByLabel("Short description").fill("Compact port cities with clear public routes.");
+    await home.locator("summary").filter({ hasText: "Available template variables" }).click();
+    await expect(home.getByText("${outputSchema}", { exact: true })).toBeVisible();
+    await expect(home.getByText("Required contract", { exact: true })).toBeVisible();
     await home.getByLabel("Reusable creator guidance").fill("Prefer compact nautical districts and clear public routes.");
+    await home.getByRole("button", { name: "Add custom variable" }).click();
+    await home.getByLabel("Custom variable 1 name").fill("districtStyle");
+    await home.getByLabel("Custom variable 1 value").fill("Favor salt-worn brick, covered arcades, and compact waterfront blocks.");
     await systemTemplate.fill(`${await systemTemplate.inputValue()}\nKeep authored districts easy to scan.`);
-    await userTemplate.fill(`${await userTemplate.inputValue()}\nUnsaved combined-message preview marker.`);
+    await userTemplate.fill(`${await userTemplate.inputValue()}\nUnsaved combined-message preview marker.\n\${districtStyle}`);
     await home.getByRole("button", { name: "Preview resolved prompt" }).click();
     const resolvedPromptMessages = home.getByRole("region", { name: "Resolved prompt messages" });
     await expect(resolvedPromptMessages.getByLabel("Resolved System message")).toContainText(
@@ -881,6 +887,9 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(resolvedPromptMessages.getByLabel("Resolved User message")).toContainText(
       "Unsaved combined-message preview marker.",
     );
+    await expect(resolvedPromptMessages.getByLabel("Resolved User message")).toContainText(
+      "Favor salt-worn brick, covered arcades, and compact waterfront blocks.",
+    );
     await home.getByRole("button", { name: "Save prompt options" }).click();
     await expect(home).toContainText("Roleplay · Nautical districts");
     await expect
@@ -894,6 +903,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
               id: string;
               name: string;
               guidance: string;
+              customVariables: Array<{ name: string; value: string }>;
               prompts: { draftSystem: string; draftUser: string; expansionSystem: string; expansionUser: string };
             }>;
           };
@@ -906,6 +916,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
           optionCount: payload.generationPreferences.options.length,
           name: active.name,
           guidance: active.guidance,
+          customVariable: active.customVariables[0],
           customizedDraft: active.prompts.draftSystem.includes("Keep authored districts easy to scan."),
           customizedUser: active.prompts.draftUser.includes("Unsaved combined-message preview marker."),
           retainsSchema: active.prompts.draftSystem.includes("${outputSchema}"),
@@ -917,6 +928,10 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
         optionCount: 2,
         name: "Nautical districts",
         guidance: "Prefer compact nautical districts and clear public routes.",
+        customVariable: {
+          name: "districtStyle",
+          value: "Favor salt-worn brick, covered arcades, and compact waterfront blocks.",
+        },
         customizedDraft: true,
         customizedUser: true,
         retainsSchema: true,
@@ -1558,6 +1573,18 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(importRepair).toContainText("Export this map as a baseline");
     await importRepair.getByRole("button", { name: "Dismiss" }).click();
     await page.getByRole("button", { name: "Location types" }).click();
+    const locationTypeFields = page.getByRole("region", { name: "Location type fields" });
+    const addLocationType = locationTypeFields.getByRole("button", { name: "Add location type" });
+    for (let index = 0; index < 16; index += 1) await addLocationType.click();
+    expect(
+      await locationTypeFields.evaluate((element) => element.scrollHeight > element.clientHeight),
+      "A long location-type profile should scroll inside the editor",
+    ).toBe(true);
+    await locationTypeFields.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect(addLocationType).toBeInViewport();
+    await expect(page.getByRole("button", { name: "Done", exact: true })).toBeInViewport();
     await page.getByLabel("Location type 1 label").fill("World Area");
     await page.getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
@@ -1880,6 +1907,20 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
         status: "active" as const,
         sortOrder: 1,
       },
+      ...Array.from({ length: 23 }, (_, index) => ({
+        id: `ai_lighthouse_floor_${index + 3}`,
+        parentId: "ai_lighthouse",
+        name: `Floor ${index + 3}`,
+        kind: "floor" as const,
+        description: `Tower floor ${index + 3}.`,
+        modelMemory: `The lighthouse stair reaches floor ${index + 3}.`,
+        icon: "🏰",
+        childPresentation: "map" as const,
+        layerOrder: index + 2,
+        links: [],
+        status: "active" as const,
+        sortOrder: index + 2,
+      })),
     ],
   };
   const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
@@ -2013,6 +2054,23 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await openStoryMap.click();
     let roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
     await expect(roleplayMap).toBeVisible();
+    const visibleMapPopover = storyLocation.locator("[data-marinara-maps-runtime-popover]:visible");
+    await expect(visibleMapPopover).toBeVisible();
+    const mapPopoverBox = await visibleMapPopover.boundingBox();
+    const viewport = page.viewportSize();
+    expect(mapPopoverBox, "Story-map popover must have browser geometry").not.toBeNull();
+    expect(viewport, "Browser viewport must be available").not.toBeNull();
+    expect(mapPopoverBox!.y).toBeGreaterThanOrEqual(0);
+    expect(mapPopoverBox!.y + mapPopoverBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+    expect(
+      await visibleMapPopover.evaluate((element) => {
+        const color = getComputedStyle(element).backgroundColor;
+        if (color === "transparent") return 0;
+        const rgba = color.match(/^rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)$/);
+        return rgba ? Number(rgba[1]) : 1;
+      }),
+      "Story-map popover background should be opaque",
+    ).toBe(1);
     if (mobileRuntime) {
       const composerAfterMap = await page.locator("textarea.mari-chat-input-textarea").boundingBox();
       expect(composerAfterMap, "Composer must remain measurable after opening the map").not.toBeNull();
@@ -2032,6 +2090,15 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       await storyLocation.getByRole("button", { name: "Open story map" }).click();
       roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
       await expect(roleplayMap).toBeVisible();
+    } else {
+      const closeExpandedMap = storyLocation.getByRole("button", { name: "Close expanded story map" });
+      await expectMinimumInteractiveSize(closeExpandedMap, "Desktop story-map panel close control");
+      await closeExpandedMap.click();
+      await expect(roleplayMap).toHaveCount(0);
+      await expect(openStoryMap).toBeFocused();
+      await openStoryMap.click();
+      roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+      await expect(roleplayMap).toBeVisible();
     }
     const editMap = roleplayMap.getByRole("button", { name: "Edit hierarchical map" });
     await expectMinimumInteractiveSize(editMap, "Roleplay minimap edit control");
@@ -2042,9 +2109,22 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
     await roleplayMap.getByRole("button", { name: /Inspect Blackglass Lighthouse/ }).click();
     await roleplayMap.getByRole("button", { name: "Explore inside" }).click();
-    await expect(roleplayMap.getByRole("list", { name: "Location layers" })).toBeVisible();
+    const locationLayers = roleplayMap.getByRole("list", { name: "Location layers" });
+    await expect(locationLayers).toBeVisible();
     await expect(roleplayMap.getByText("Ground Level", { exact: true })).toBeVisible();
     await expect(roleplayMap.getByText("Upper Level", { exact: true })).toBeVisible();
+    await expect(roleplayMap.getByText("Floor 25", { exact: true })).toBeAttached();
+    expect(
+      await storyLocation
+        .locator("[data-marinara-maps-runtime-popover]:visible [data-marinara-maps-runtime-map-scroll]")
+        .evaluate((element) => element.scrollHeight > element.clientHeight),
+      "A 25-floor tower should scroll inside the map instead of expanding the composer",
+    ).toBe(true);
+    if (!mobileRuntime) {
+      const closeExpandedMap = storyLocation.getByRole("button", { name: "Close expanded story map" });
+      await expectMinimumInteractiveSize(closeExpandedMap, "Desktop story-map panel close control");
+      await expect(closeExpandedMap).toBeInViewport();
+    }
     await roleplayMap.getByRole("button", { name: "Browse up one location" }).click();
     const inspectHarbor = roleplayMap.getByRole("button", { name: /Inspect Gloam Harbor/ });
     await expectMinimumInteractiveSize(inspectHarbor, "Roleplay map destination control");

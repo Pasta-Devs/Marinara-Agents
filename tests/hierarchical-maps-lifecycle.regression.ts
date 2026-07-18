@@ -738,6 +738,7 @@ async function main() {
           name: string;
           description?: string;
           guidance: string;
+          customVariables: Array<{ name: string; value: string }>;
           prompts: { draftSystem: string; draftUser: string; expansionSystem: string; expansionUser: string };
         }>;
       };
@@ -1428,6 +1429,7 @@ async function main() {
           name: string;
           description?: string;
           guidance: string;
+          customVariables: Array<{ name: string; value: string }>;
           prompts: { draftSystem: string; draftUser: string; expansionSystem: string; expansionUser: string };
         }>;
       };
@@ -1442,7 +1444,11 @@ async function main() {
       name: "Maritime city",
       description: "Compact port cities with practical travel routes.",
       guidance: "Prefer concise maritime vocabulary and navigable public streets.",
-      prompts: { ...routeDefaultPromptOption.prompts },
+      customVariables: [{ name: "harborMood", value: "Keep public waterfronts active and weather-beaten." }],
+      prompts: {
+        ...routeDefaultPromptOption.prompts,
+        draftUser: `${routeDefaultPromptOption.prompts.draftUser}\n\n\${harborMood}`,
+      },
     };
     const savedGenerationPreferences = (await expectJson(app, {
       method: "PUT",
@@ -1501,6 +1507,7 @@ async function main() {
     assert.match(routePromptPreview.system, /AI roleplay engine/u);
     assert.match(routePromptPreview.system, /UNSAVED_SETTINGS_SYSTEM_PREVIEW/u);
     assert.match(routePromptPreview.user, /Prefer concise maritime vocabulary and navigable public streets/u);
+    assert.match(routePromptPreview.user, /Keep public waterfronts active and weather-beaten/u);
     assert.match(routePromptPreview.user, /Create a compact city with practical streets/u);
     assert.match(routePromptPreview.user, /UNSAVED_SETTINGS_USER_PREVIEW/u);
     const storedPreferencesAfterPreview = (await expectJson(app, {
