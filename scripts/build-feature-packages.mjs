@@ -1,20 +1,31 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
-import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
+import { assertPackagePrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
-const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
+const engineRoot = resolve(
+  process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"),
+);
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
-const hierarchicalMapsSourceRoot = join(packagesDir, "hierarchical-maps/src/engine");
 const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
   ? resolve(process.env.MARINARA_ENGINE_SOURCE_ROOT)
   : existsSync(sourcesRoot)
@@ -31,9 +42,19 @@ const hierarchicalMapsOwnedSourcePaths = [
   "packages/client/src/hooks/use-spatial-context.ts",
   "packages/client/src/components/game/GameWorldMap.tsx",
 ];
+const longTermMemoryOwnedSourcePaths = [
+  "packages/shared/src/features/agents/long-term-memory",
+  "packages/server/src/services/long-term-memory",
+];
+const longTermMemorySourceRoot = join(
+  packagesDir,
+  "long-term-memory/src/engine",
+);
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
-  String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "").split(",").filter(Boolean),
+  String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "")
+    .split(",")
+    .filter(Boolean),
 );
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const featureSource = (relativePath, buildRoot = sourceRoot) => {
@@ -42,28 +63,46 @@ const featureSource = (relativePath, buildRoot = sourceRoot) => {
 };
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id !== "hierarchical-maps") {
+  if (!feature.packageSourceRoot) {
     return { buildRoot: sourceRoot, cleanup: async () => {} };
   }
-  if (!existsSync(hierarchicalMapsSourceRoot)) {
-    throw new Error("Missing package-owned Hierarchical Maps source");
+  if (!existsSync(feature.packageSourceRoot)) {
+    throw new Error(`Missing package-owned ${feature.name} source`);
   }
-  const buildRoot = await mkdtemp(join(tmpdir(), "marinara-hierarchical-maps-source-"));
-  await cp(hierarchicalMapsSourceRoot, buildRoot, { recursive: true, force: true });
+  const buildRoot = await mkdtemp(
+    join(tmpdir(), `marinara-${feature.id}-source-`),
+  );
+  await cp(feature.packageSourceRoot, buildRoot, {
+    recursive: true,
+    force: true,
+  });
   return {
     buildRoot,
     cleanup: () => rm(buildRoot, { recursive: true, force: true }),
   };
 }
 
-async function captureEngineSources(metafilePath, buildRoot = sourceRoot, excludedPaths = []) {
+async function captureEngineSources(
+  metafilePath,
+  buildRoot = sourceRoot,
+  excludedPaths = [],
+) {
   const metafile = JSON.parse(await readFile(metafilePath, "utf8"));
   const normalizedBuildRoot = resolve(buildRoot);
   for (const input of Object.keys(metafile.inputs || {})) {
     const absolute = resolve(engineRoot, input);
-    if (!absolute.startsWith(`${normalizedBuildRoot}/`) || absolute.includes("/node_modules/")) continue;
+    if (
+      !absolute.startsWith(`${normalizedBuildRoot}/`) ||
+      absolute.includes("/node_modules/")
+    )
+      continue;
     const relative = absolute.slice(normalizedBuildRoot.length + 1);
-    if (excludedPaths.some((path) => relative === path || relative.startsWith(`${path}/`))) continue;
+    if (
+      excludedPaths.some(
+        (path) => relative === path || relative.startsWith(`${path}/`),
+      )
+    )
+      continue;
     const destination = join(sourcesRoot, relative);
     if (absolute === destination) continue;
     await mkdir(dirname(destination), { recursive: true });
@@ -73,19 +112,69 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
 
 const features = [
   {
+    id: "long-term-memory",
+    version: "1.0.0",
+    minEngineVersion: "2.3.2",
+    maxEngineExclusive: "2.4.0",
+    name: "Long-Term Memory",
+    description:
+      "Captures finalized turns and recalls relevant context from a durable package-owned memory vault.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "visual_novel", "game"],
+    permissions: ["agent-runtime", "routes", "storage"],
+    serverImport:
+      "packages/server/src/services/long-term-memory/server-entry.ts",
+    serverEntry: true,
+    packageSourceRoot: longTermMemorySourceRoot,
+    ownedSourcePaths: longTermMemoryOwnedSourcePaths,
+    engineBoundaryPath: join(
+      packagesDir,
+      "long-term-memory/engine-boundary.json",
+    ),
+    boundaryDisplayName: "Long-Term Memory",
+  },
+  {
     id: "hierarchical-maps",
     version: "1.1.5",
     minEngineVersion: "2.3.2",
     maxEngineExclusive: "3.0.0",
     name: "Hierarchical Maps",
-    description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
+    description:
+      "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
     category: "tracker",
     kind: ["agent", "maps"],
     modes: ["roleplay", "game"],
-    permissions: ["agent-runtime", "chat-read", "chat-write", "network", "prompt-context", "routes", "storage", "ui"],
+    permissions: [
+      "agent-runtime",
+      "chat-read",
+      "chat-write",
+      "network",
+      "prompt-context",
+      "routes",
+      "storage",
+      "ui",
+    ],
     serverImport: "packages/server/src/routes/spatial-context.routes.ts",
     serverExport: "spatialContextRoutes",
     prefix: "/api/chats",
+    packageSourceRoot: join(packagesDir, "hierarchical-maps/src/engine"),
+    ownedSourcePaths: hierarchicalMapsOwnedSourcePaths,
+    engineBoundaryPath: join(
+      packagesDir,
+      "hierarchical-maps/engine-boundary.json",
+    ),
+    boundaryDisplayName: "Hierarchical Maps",
+    specialClient: true,
+    contributions: {
+      agentDetail: { agentIds: ["hierarchical-maps"] },
+      slots: [
+        "chat-settings",
+        "spatial-workspace",
+        "chat-runtime",
+        "game-world-map",
+      ],
+    },
   },
   {
     id: "conversation-calls",
@@ -94,57 +183,152 @@ const features = [
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
-    permissions: ["agent-runtime", "chat-read", "chat-write", "network", "routes", "storage", "ui"],
+    permissions: [
+      "agent-runtime",
+      "chat-read",
+      "chat-write",
+      "network",
+      "routes",
+      "storage",
+      "ui",
+    ],
     serverImport: "packages/server/src/routes/conversation-calls.routes.ts",
     serverExport: "conversationCallsRoutes",
     prefix: "/api/conversation-calls",
   },
   ...[
-    ["uno", "UNO", "Play UNO with Conversation characters.", "Uno", "/uno", ["uno"], "Group card game"],
-    ["chess", "Chess", "Play Chess with a Conversation character.", "Chess", "/chess", ["chess"], "1v1 strategy"],
-    ["poker", "Poker", "Play Texas Hold’em Poker with Conversation characters.", "Poker", "/poker", ["poker", "hold'em", "texas hold'em"], "Table game"],
-    ["eightball", "8-Ball Pool", "Play 8-Ball Pool with a Conversation character.", "EightBall", "/8ball", ["8-ball", "8 ball", "eightball", "pool", "billiards"], "1v1 table sport"],
-    ["tic-tac-toe", "Tic-Tac-Toe", "Play Tic-Tac-Toe with a Conversation character.", "TicTacToe", "/tictactoe", ["tic-tac-toe", "tic tac toe", "noughts and crosses", "ttt"], "1v1 strategy"],
-    ["rock-paper-scissors", "Rock-Paper-Scissors", "Play Rock-Paper-Scissors with a Conversation character.", "RockPaperScissors", "/rps", ["rock paper scissors", "rock-paper-scissors", "rps"], "1v1 quick game"],
-  ].map(([id, name, description, clientName, command, aliases, playerLabel]) => ({
-    id,
-    name,
-    version: "1.0.2",
-    maxEngineExclusive: "4.0.0",
-    description,
-    kind: ["agent", "turn-game"],
-    modes: ["conversation"],
-    permissions: ["agent-runtime", "chat-read", "chat-write", "storage", "ui"],
-    engineImport: `packages/shared/src/features/turn-games/${id}/engine.ts`,
-    engineExport: id === "eightball" ? "eightBallEngine" : id === "tic-tac-toe" ? "ticTacToeEngine" : id === "rock-paper-scissors" ? "rockPaperScissorsEngine" : `${id}Engine`,
-    clientName,
-    command,
-    aliases,
-    playerLabel,
-    commandType: id.replaceAll("-", "_"),
-  })),
+    [
+      "uno",
+      "UNO",
+      "Play UNO with Conversation characters.",
+      "Uno",
+      "/uno",
+      ["uno"],
+      "Group card game",
+    ],
+    [
+      "chess",
+      "Chess",
+      "Play Chess with a Conversation character.",
+      "Chess",
+      "/chess",
+      ["chess"],
+      "1v1 strategy",
+    ],
+    [
+      "poker",
+      "Poker",
+      "Play Texas Hold’em Poker with Conversation characters.",
+      "Poker",
+      "/poker",
+      ["poker", "hold'em", "texas hold'em"],
+      "Table game",
+    ],
+    [
+      "eightball",
+      "8-Ball Pool",
+      "Play 8-Ball Pool with a Conversation character.",
+      "EightBall",
+      "/8ball",
+      ["8-ball", "8 ball", "eightball", "pool", "billiards"],
+      "1v1 table sport",
+    ],
+    [
+      "tic-tac-toe",
+      "Tic-Tac-Toe",
+      "Play Tic-Tac-Toe with a Conversation character.",
+      "TicTacToe",
+      "/tictactoe",
+      ["tic-tac-toe", "tic tac toe", "noughts and crosses", "ttt"],
+      "1v1 strategy",
+    ],
+    [
+      "rock-paper-scissors",
+      "Rock-Paper-Scissors",
+      "Play Rock-Paper-Scissors with a Conversation character.",
+      "RockPaperScissors",
+      "/rps",
+      ["rock paper scissors", "rock-paper-scissors", "rps"],
+      "1v1 quick game",
+    ],
+  ].map(
+    ([id, name, description, clientName, command, aliases, playerLabel]) => ({
+      id,
+      name,
+      version: "1.0.2",
+      maxEngineExclusive: "4.0.0",
+      description,
+      kind: ["agent", "turn-game"],
+      modes: ["conversation"],
+      permissions: [
+        "agent-runtime",
+        "chat-read",
+        "chat-write",
+        "storage",
+        "ui",
+      ],
+      engineImport: `packages/shared/src/features/turn-games/${id}/engine.ts`,
+      engineExport:
+        id === "eightball"
+          ? "eightBallEngine"
+          : id === "tic-tac-toe"
+            ? "ticTacToeEngine"
+            : id === "rock-paper-scissors"
+              ? "rockPaperScissorsEngine"
+              : `${id}Engine`,
+      clientName,
+      command,
+      aliases,
+      playerLabel,
+      commandType: id.replaceAll("-", "_"),
+    }),
+  ),
 ];
 
 const requestedFeatureIds = new Set(process.argv.slice(2));
-const selectedFeatures = requestedFeatureIds.size > 0
-  ? features.filter((feature) => requestedFeatureIds.has(feature.id))
-  : features;
-if (selectedFeatures.length !== requestedFeatureIds.size && requestedFeatureIds.size > 0) {
+const selectedFeatures =
+  requestedFeatureIds.size > 0
+    ? features.filter((feature) => requestedFeatureIds.has(feature.id))
+    : features;
+if (
+  selectedFeatures.length !== requestedFeatureIds.size &&
+  requestedFeatureIds.size > 0
+) {
   const knownIds = new Set(features.map((feature) => feature.id));
   const unknownIds = [...requestedFeatureIds].filter((id) => !knownIds.has(id));
-  throw new Error(`Unknown feature package${unknownIds.length === 1 ? "" : "s"}: ${unknownIds.join(", ")}`);
+  throw new Error(
+    `Unknown feature package${unknownIds.length === 1 ? "" : "s"}: ${unknownIds.join(", ")}`,
+  );
 }
-const hierarchicalMapsBoundary = selectedFeatures.some((feature) => feature.id === "hierarchical-maps")
-  ? await assertHierarchicalMapsPrivateImportBoundary()
-  : null;
+const featureBoundaries = new Map(
+  await Promise.all(
+    selectedFeatures
+      .filter((feature) => feature.engineBoundaryPath)
+      .map(async (feature) => [
+        feature.id,
+        await assertPackagePrivateImportBoundary({
+          sourceRoot: feature.packageSourceRoot,
+          boundaryPath: feature.engineBoundaryPath,
+          displayName: feature.boundaryDisplayName ?? feature.name,
+        }),
+      ]),
+  ),
+);
 
 async function bundleServer(feature, output) {
-  const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-entry-${feature.id}-`));
+  const temporary = await mkdtemp(
+    join(tmpdir(), `marinara-feature-entry-${feature.id}-`),
+  );
   const prepared = await prepareFeatureBuildRoot(feature);
   try {
-    const target = resolve(prepared.buildRoot, feature.serverImport || feature.engineImport);
-    const source = feature.id === "hierarchical-maps"
-      ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
+    const target = resolve(
+      prepared.buildRoot,
+      feature.serverImport || feature.engineImport,
+    );
+    const source = feature.serverEntry
+      ? `export { activate, selfCheck } from ${JSON.stringify(target)};\n`
+      : feature.id === "hierarchical-maps"
+        ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
 import * as projection from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/projection.ts"))};
 import * as stateResolution from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/state-resolution.ts"))};
 import * as ownerTurn from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/owner-turn.ts"))};
@@ -184,8 +368,8 @@ export async function selfCheck({ api }) {
   const parsed = api.runtime.json.parseJsonish('Preface\\n{"ready":true}');
   if (!parsed || typeof parsed !== "object" || parsed.ready !== true) throw new Error("Hierarchical Maps JSON parser self-check failed");
 }\n`
-      : feature.id === "conversation-calls"
-      ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
+        : feature.id === "conversation-calls"
+          ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
 import * as commandRuntime from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
 import * as characterVideos from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
 import { createConversationCallsStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
@@ -203,33 +387,52 @@ export async function selfCheck() {
   if (!readinessStorage) throw new Error("Conversation Calls storage did not initialize");
   await readinessStorage.getActiveForChat("__marinara_capability_self_check__");
 }\n`
-      : feature.serverImport
-      ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};\nexport async function activate({ app }) { await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} }); }\n`
-      : `import { ${feature.engineExport} as engine } from ${JSON.stringify(target)};\nexport async function activate({ api }) { const cleanups = [api.registerTurnGameEngine(engine), api.registerConversationCommand({ commandType: ${JSON.stringify(feature.commandType)}, tags: [${JSON.stringify(feature.commandType)}] })]; return () => { for (const cleanup of cleanups.reverse()) cleanup(); }; }\n`;
+          : feature.serverImport
+            ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};\nexport async function activate({ app }) { await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} }); }\n`
+            : `import { ${feature.engineExport} as engine } from ${JSON.stringify(target)};\nexport async function activate({ api }) { const cleanups = [api.registerTurnGameEngine(engine), api.registerConversationCommand({ commandType: ${JSON.stringify(feature.commandType)}, tags: [${JSON.stringify(feature.commandType)}] })]; return () => { for (const cleanup of cleanups.reverse()) cleanup(); }; }\n`;
     const entry = join(temporary, "entry.mjs");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync("pnpm", [
-      "exec", "esbuild", entry,
-      "--bundle", "--platform=node", "--format=esm", "--target=node22", "--minify",
-      "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
-      "--external:@huggingface/transformers", "--external:onnxruntime-node", "--external:onnxruntime-web", "--external:sharp",
-      "--external:pino", "--external:pino-pretty",
-      `--alias:@marinara-engine/shared=${packageSharedEntry}`,
-      `--metafile=${metafile}`,
-      `--outfile=${output}`,
-    ], {
-      cwd: engineRoot,
-      encoding: "utf8",
-      env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
-    });
+    const result = spawnSync(
+      "pnpm",
+      [
+        "exec",
+        "esbuild",
+        entry,
+        "--bundle",
+        "--platform=node",
+        "--format=esm",
+        "--target=node22",
+        "--minify",
+        "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
+        "--external:@huggingface/transformers",
+        "--external:onnxruntime-node",
+        "--external:onnxruntime-web",
+        "--external:sharp",
+        "--external:pino",
+        "--external:pino-pretty",
+        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+        `--metafile=${metafile}`,
+        `--outfile=${output}`,
+      ],
+      {
+        cwd: engineRoot,
+        encoding: "utf8",
+        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+      },
+    );
     if (result.status !== 0) {
-      throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
+      throw new Error(
+        result.stderr ||
+          result.stdout ||
+          result.error?.message ||
+          `esbuild failed for ${feature.id}`,
+      );
     }
     await captureEngineSources(
       metafile,
       prepared.buildRoot,
-      feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+      feature.ownedSourcePaths ?? [],
     );
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -238,10 +441,18 @@ export async function selfCheck() {
 }
 
 async function bundleGameClient(feature, output) {
-  const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-client-${feature.id}-`));
+  const temporary = await mkdtemp(
+    join(tmpdir(), `marinara-feature-client-${feature.id}-`),
+  );
   try {
-    const board = resolve(sourceRoot, `packages/client/src/components/chat/${feature.clientName}Board.tsx`);
-    const setup = resolve(sourceRoot, `packages/client/src/components/chat/${feature.clientName}Setup.tsx`);
+    const board = resolve(
+      sourceRoot,
+      `packages/client/src/components/chat/${feature.clientName}Board.tsx`,
+    );
+    const setup = resolve(
+      sourceRoot,
+      `packages/client/src/components/chat/${feature.clientName}Setup.tsx`,
+    );
     const tag = `marinara-capability-${feature.id}`;
     const source = `
 import React, { useEffect, useState } from "react";
@@ -285,17 +496,38 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync("pnpm", [
-      "exec", "esbuild", entry,
-      "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify",
-      "--jsx=automatic",
-      "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false",
-      "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"",
-      `--alias:@marinara-engine/shared=${packageSharedEntry}`,
-      `--metafile=${metafile}`,
-      `--outfile=${output}`,
-    ], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
-    if (result.status !== 0) throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
+    const result = spawnSync(
+      "pnpm",
+      [
+        "exec",
+        "esbuild",
+        entry,
+        "--bundle",
+        "--platform=browser",
+        "--format=esm",
+        "--target=es2020",
+        "--minify",
+        "--jsx=automatic",
+        '--define:process.env.NODE_ENV="production"',
+        "--define:import.meta.env.DEV=false",
+        "--define:import.meta.env.PROD=true",
+        '--define:import.meta.env.MODE="production"',
+        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+        `--metafile=${metafile}`,
+        `--outfile=${output}`,
+      ],
+      {
+        cwd: engineRoot,
+        encoding: "utf8",
+        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+      },
+    );
+    if (result.status !== 0)
+      throw new Error(
+        result.stderr ||
+          result.stdout ||
+          `client esbuild failed for ${feature.id}`,
+      );
     await captureEngineSources(metafile);
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -303,20 +535,46 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
 }
 
 async function bundleSpecialClient(feature, output) {
-  const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-client-${feature.id}-`));
+  const temporary = await mkdtemp(
+    join(tmpdir(), `marinara-feature-client-${feature.id}-`),
+  );
   const prepared = await prepareFeatureBuildRoot(feature);
   try {
     let source = "";
     const tag = `marinara-capability-${feature.id}`;
     if (feature.id === "hierarchical-maps") {
-      const settings = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/SpatialContextSettingsSection.tsx");
-      const home = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/SpatialMapsHome.tsx");
-      const workspace = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx");
-      const runtimeBar = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx");
-      const worldMap = resolve(prepared.buildRoot, "packages/client/src/components/game/GameWorldMap.tsx");
-      const spatialHooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-spatial-context.ts");
-      const packageApi = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/package-api.ts");
-      const pendingTransitions = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/pending-spatial-transitions.ts");
+      const settings = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/SpatialContextSettingsSection.tsx",
+      );
+      const home = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/SpatialMapsHome.tsx",
+      );
+      const workspace = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx",
+      );
+      const runtimeBar = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx",
+      );
+      const worldMap = resolve(
+        prepared.buildRoot,
+        "packages/client/src/components/game/GameWorldMap.tsx",
+      );
+      const spatialHooks = resolve(
+        prepared.buildRoot,
+        "packages/client/src/hooks/use-spatial-context.ts",
+      );
+      const packageApi = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/package-api.ts",
+      );
+      const pendingTransitions = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/pending-spatial-transitions.ts",
+      );
       const workspaceStyles = `
 [data-marinara-maps-workspace-overlay] {
   display: flex;
@@ -526,9 +784,18 @@ function Root({ element }) {
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><CapabilityClientErrorBoundary element={this}><Root element={this} /></CapabilityClientErrorBoundary></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.id === "conversation-calls") {
-      const surface = resolve(prepared.buildRoot, "packages/client/src/components/chat/ConversationCallSurface.tsx");
-      const hooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-conversation-calls.ts");
-      const ttsHooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-tts.ts");
+      const surface = resolve(
+        prepared.buildRoot,
+        "packages/client/src/components/chat/ConversationCallSurface.tsx",
+      );
+      const hooks = resolve(
+        prepared.buildRoot,
+        "packages/client/src/hooks/use-conversation-calls.ts",
+      );
+      const ttsHooks = resolve(
+        prepared.buildRoot,
+        "packages/client/src/hooks/use-tts.ts",
+      );
       source = `
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -638,14 +905,48 @@ function Root({ element }) {
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
+    } else if (feature.clientImport) {
+      source = `import ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
     } else return;
-    const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
-    const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
-    if (result.status !== 0) throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
+    const entry = join(temporary, "entry.tsx");
+    const metafile = join(temporary, "meta.json");
+    await writeFile(entry, source);
+    const result = spawnSync(
+      "pnpm",
+      [
+        "exec",
+        "esbuild",
+        entry,
+        "--bundle",
+        "--platform=browser",
+        "--format=esm",
+        "--target=es2020",
+        "--minify",
+        "--jsx=automatic",
+        '--define:process.env.NODE_ENV="production"',
+        "--define:import.meta.env.DEV=false",
+        "--define:import.meta.env.PROD=true",
+        '--define:import.meta.env.MODE="production"',
+        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+        `--metafile=${metafile}`,
+        `--outfile=${output}`,
+      ],
+      {
+        cwd: engineRoot,
+        encoding: "utf8",
+        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+      },
+    );
+    if (result.status !== 0)
+      throw new Error(
+        result.stderr ||
+          result.stdout ||
+          `client esbuild failed for ${feature.id}`,
+      );
     await captureEngineSources(
       metafile,
       prepared.buildRoot,
-      feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+      feature.ownedSourcePaths ?? [],
     );
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -657,12 +958,17 @@ const { catalog } = await readCatalogFamily(repoRoot);
 const featureIds = new Set(selectedFeatures.map((feature) => feature.id));
 const nonDownloadableCoreFeatures = new Set(["about-me-keeper"]);
 catalog.packages = catalog.packages.filter(
-  (entry) => !featureIds.has(entry.manifest.id) && !nonDownloadableCoreFeatures.has(entry.manifest.id),
+  (entry) =>
+    !featureIds.has(entry.manifest.id) &&
+    !nonDownloadableCoreFeatures.has(entry.manifest.id),
 );
 
 for (const feature of selectedFeatures) {
   const version = feature.version ?? "1.0.0";
-  const description = withPackageActivationGuidance(feature.id, feature.description);
+  const description = withPackageActivationGuidance(
+    feature.id,
+    feature.description,
+  );
   const sourceDir = join(packagesDir, feature.id);
   await mkdir(sourceDir, { recursive: true });
   const agentDefinition = {
@@ -680,19 +986,29 @@ for (const feature of selectedFeatures) {
     defaultPromptTemplate: "",
     execution: "feature",
   };
-  const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
+  const agentsBuffer = Buffer.from(
+    `${JSON.stringify([agentDefinition], null, 2)}\n`,
+  );
   const serverPath = join(sourceDir, "server.mjs");
-  const serverSourceRoot = feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : sourceRoot;
-  const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
+  const serverSourceRoot = feature.packageSourceRoot ?? sourceRoot;
+  const serverSource = resolve(
+    serverSourceRoot,
+    feature.serverImport || feature.engineImport,
+  );
   if (!reuseExistingRuntime && existsSync(serverSource)) {
     await bundleServer(feature, serverPath);
   } else if (!existsSync(serverPath)) {
     throw new Error(`Missing package-owned server source for ${feature.id}`);
   }
   const serverBuffer = await readFile(serverPath);
-  const hasClient = Boolean(feature.clientName || feature.id === "hierarchical-maps" || feature.id === "conversation-calls");
+  const hasClient = Boolean(
+    feature.clientName || feature.specialClient || feature.clientImport,
+  );
   const clientPath = hasClient ? join(sourceDir, "client.js") : null;
-  if (clientPath && (!reuseExistingRuntime || rebuiltFeatureClients.has(feature.id))) {
+  if (
+    clientPath &&
+    (!reuseExistingRuntime || rebuiltFeatureClients.has(feature.id))
+  ) {
     if (feature.clientName) await bundleGameClient(feature, clientPath);
     else await bundleSpecialClient(feature, clientPath);
   } else if (clientPath && !existsSync(clientPath)) {
@@ -700,13 +1016,15 @@ for (const feature of selectedFeatures) {
   }
   const clientBuffer = clientPath ? await readFile(clientPath) : null;
   await writeFile(join(sourceDir, "agents.json"), agentsBuffer);
-  const boundary = feature.id === "hierarchical-maps" ? hierarchicalMapsBoundary : null;
+  const boundary = featureBoundaries.get(feature.id) ?? null;
   const manifest = {
     schemaVersion: boundary ? 2 : 1,
-    ...(boundary ? {
-      capabilityApi: boundary.capabilityApi,
-      builtAgainst: boundary.builtAgainst,
-    } : {}),
+    ...(boundary
+      ? {
+          capabilityApi: boundary.capabilityApi,
+          builtAgainst: boundary.builtAgainst,
+        }
+      : {}),
     id: feature.id,
     name: feature.name,
     version,
@@ -721,40 +1039,79 @@ for (const feature of selectedFeatures) {
       server: "server.mjs",
       ...(clientBuffer ? { client: "client.js" } : {}),
     },
-    ...(feature.clientName ? {
-      contributions: {
-        slots: ["conversation-surface"],
-        conversationGame: {
-          command: feature.command,
-          aliases: feature.aliases,
-          playerLabel: feature.playerLabel,
-        },
-      },
-    } : feature.id === "hierarchical-maps" ? {
-      contributions: {
-        agentDetail: { agentIds: ["hierarchical-maps"] },
-        slots: ["chat-settings", "spatial-workspace", "chat-runtime", "game-world-map"],
-      },
-    } : feature.id === "conversation-calls" ? {
-      contributions: { slots: ["conversation-toolbar", "conversation-surface", "chat-settings"] },
-    } : {}),
+    ...(feature.clientName
+      ? {
+          contributions: {
+            slots: ["conversation-surface"],
+            conversationGame: {
+              command: feature.command,
+              aliases: feature.aliases,
+              playerLabel: feature.playerLabel,
+            },
+          },
+        }
+      : feature.contributions
+        ? {
+            contributions: feature.contributions,
+          }
+        : feature.id === "conversation-calls"
+          ? {
+              contributions: {
+                slots: [
+                  "conversation-toolbar",
+                  "conversation-surface",
+                  "chat-settings",
+                ],
+              },
+            }
+          : {}),
     files: [
-      { path: "agents.json", sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength },
-      { path: "server.mjs", sha256: sha256(serverBuffer), bytes: serverBuffer.byteLength },
-      ...(clientBuffer ? [{ path: "client.js", sha256: sha256(clientBuffer), bytes: clientBuffer.byteLength }] : []),
+      {
+        path: "agents.json",
+        sha256: sha256(agentsBuffer),
+        bytes: agentsBuffer.byteLength,
+      },
+      {
+        path: "server.mjs",
+        sha256: sha256(serverBuffer),
+        bytes: serverBuffer.byteLength,
+      },
+      ...(clientBuffer
+        ? [
+            {
+              path: "client.js",
+              sha256: sha256(clientBuffer),
+              bytes: clientBuffer.byteLength,
+            },
+          ]
+        : []),
     ],
     permissions: feature.permissions,
     restartRequired: true,
   };
-  await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(
+    join(sourceDir, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
 
-  const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-${feature.id}-`));
+  const temporary = await mkdtemp(
+    join(tmpdir(), `marinara-feature-${feature.id}-`),
+  );
   try {
-    await writeFile(join(temporary, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+    await writeFile(
+      join(temporary, "manifest.json"),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
     await writeFile(join(temporary, "agents.json"), agentsBuffer);
     await writeFile(join(temporary, "server.mjs"), serverBuffer);
-    if (clientBuffer) await writeFile(join(temporary, "client.js"), clientBuffer);
-    const artifactFiles = ["manifest.json", "agents.json", "server.mjs", ...(clientBuffer ? ["client.js"] : [])];
+    if (clientBuffer)
+      await writeFile(join(temporary, "client.js"), clientBuffer);
+    const artifactFiles = [
+      "manifest.json",
+      "agents.json",
+      "server.mjs",
+      ...(clientBuffer ? ["client.js"] : []),
+    ];
     for (const artifactFile of artifactFiles) {
       const artifactSource = join(temporary, artifactFile);
       await chmod(artifactSource, 0o644);

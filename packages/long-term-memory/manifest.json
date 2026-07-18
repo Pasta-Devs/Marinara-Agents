@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 3
+  },
+  "builtAgainst": {
+    "engineVersion": "2.3.2",
+    "engineCommit": "a0ca32a1c7407d0913e833dbe1e9c1ceffbb26a1"
+  },
+  "id": "long-term-memory",
+  "name": "Long-Term Memory",
+  "version": "1.0.0",
+  "description": "Captures finalized turns and recalls relevant context from a durable package-owned memory vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
+  "engine": {
+    "min": "2.3.2",
+    "maxExclusive": "2.4.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "806f4b5ed6759f96d96e1b828d1637666d2baa5950c9a8d34c47be5a9fc8aac7",
+      "bytes": 668
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "63534eda66b25400f4e3a9f305719a8e1a7d37203dad6cea519f672bb6f58b22",
+      "bytes": 211524
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "routes",
+    "storage"
+  ],
+  "restartRequired": true
+}

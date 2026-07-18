@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "query": "Where is the cobalt archive key?",
+  "scope": {
+    "chatId": "chat_contract",
+    "chatIds": ["chat_contract"]
+  },
+  "notes": [
+    {
+      "id": "world_cobalt_archive",
+      "title": "Cobalt Archive",
+      "type": "world",
+      "status": "active",
+      "modes": ["roleplay"],
+      "scope": {},
+      "tags": ["archive"],
+      "keywords": ["cobalt key", "archive"],
+      "createdAt": "2026-07-17T00:00:00.000Z",
+      "updatedAt": "2026-07-17T00:00:00.000Z",
+      "links": [{ "target": "thread_find_key", "relation": "involves" }],
+      "sections": {
+        "facts": {
+          "text": "The cobalt key opens the archive beneath the observatory.",
+          "updatedAt": "2026-07-17T00:00:00.000Z",
+          "importance": "critical"
+        }
+      },
+      "version": 1
+    },
+    {
+      "id": "thread_find_key",
+      "title": "Find the key",
+      "type": "thread",
+      "status": "active",
+      "modes": ["roleplay"],
+      "scope": { "chatId": "chat_contract", "chatIds": ["chat_contract"] },
+      "tags": ["quest"],
+      "keywords": ["cobalt key"],
+      "createdAt": "2026-07-17T00:01:00.000Z",
+      "updatedAt": "2026-07-17T00:01:00.000Z",
+      "links": [{ "target": "world_cobalt_archive", "relation": "involves" }],
+      "sections": {
+        "summary": {
+          "text": "Recover the cobalt key before entering the archive.",
+          "updatedAt": "2026-07-17T00:01:00.000Z"
+        }
+      },
+      "version": 1
+    },
+    {
+      "id": "rel_ada_bryn",
+      "title": "Ada and Bryn",
+      "type": "relationship",
+      "status": "active",
+      "modes": ["roleplay"],
+      "scope": { "characterIds": ["char_ada", "char_bryn"] },
+      "tags": [],
+      "keywords": ["archive trust"],
+      "createdAt": "2026-07-17T00:02:00.000Z",
+      "updatedAt": "2026-07-17T00:02:00.000Z",
+      "links": [],
+      "sections": {
+        "state": {
+          "text": "Ada trusts Bryn to guard the archive route.",
+          "updatedAt": "2026-07-17T00:02:00.000Z",
+          "dimensions": { "trust": 74, "tension": 18 },
+          "dimensionChanges": { "trust": 8, "tension": -4 }
+        }
+      },
+      "version": 1
+    },
+    {
+      "id": "thread_old_archive",
+      "title": "Old archive lead",
+      "type": "thread",
+      "status": "resolved",
+      "modes": ["roleplay"],
+      "scope": {},
+      "tags": ["quest"],
+      "keywords": ["archive"],
+      "createdAt": "2026-07-16T00:00:00.000Z",
+      "updatedAt": "2026-07-16T01:00:00.000Z",
+      "links": [],
+      "sections": {
+        "summary": {
+          "text": "The false archive lead was resolved.",
+          "updatedAt": "2026-07-16T01:00:00.000Z"
+        }
+      },
+      "version": 1
+    }
+  ]
+}
