@@ -82,9 +82,10 @@ const fixtures = new Map(
     artifactFixture("1.1.3"),
     artifactFixture("1.1.4"),
     artifactFixture("1.1.5"),
+    artifactFixture("1.1.6"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
-let catalogVersion = "1.1.5";
+let catalogVersion = "1.1.6";
 let catalogOnline = true;
 let generationProviderRequestCount = 0;
 const generationProviderRequests: Array<{
@@ -92,7 +93,7 @@ const generationProviderRequests: Array<{
 }> = [];
 let mapExpansionExistingTargetId: string | null = null;
 
-const candidateFixture = fixtures.get("1.1.5");
+const candidateFixture = fixtures.get("1.1.6");
 assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, {
@@ -100,8 +101,8 @@ assert.deepEqual(candidateFixture.manifest.capabilityApi, {
   minor: 3,
 });
 assert.deepEqual(candidateFixture.manifest.builtAgainst, {
-  engineVersion: "2.3.2",
-  engineCommit: "614e62a38fc2d9685f9b4981a9628be9fda0fc03",
+  engineVersion: "2.3.3",
+  engineCommit: "858cfa431e07f6f558aa1e8826a2c9b024269ab7",
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
@@ -184,12 +185,18 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     generationProviderRequests.push(body);
     const providerPrompt = capturedProviderPrompt(body);
     const responseContent = providerPrompt.includes("You design practical hierarchical world maps")
-      ? JSON.stringify({
+        ? JSON.stringify({
           worldName: "Route Test World",
+          hierarchyName: "Harbor city",
+          locationTypes: [
+            { key: "world", label: "World", baseKind: "region" },
+            { key: "city", label: "City Quarter", baseKind: "place" },
+            { key: "type_city", label: "Typed City", baseKind: "settlement" },
+          ],
           startingLocationKey: "route_world",
           locations: [
             {
-              key: "route_world", parentKey: null, name: "Route Test World", kind: "region",
+              key: "route_world", parentKey: null, name: "Route Test World", typeKey: "world", kind: "region",
               description: "A compact world used to prove generated routes.",
               modelMemory: "The route graph must stay sparse and connected.",
               awarenessSummary: "Old Town, Market Square, and Harbor share practical roads.",
@@ -197,7 +204,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               placement: null, layerOrder: null, links: [],
             },
             {
-              key: "old_town", parentKey: "route_world", name: "Old Town", kind: "place",
+              key: "old_town", parentKey: "route_world", name: "Old Town", typeKey: "type_city", kind: "place",
               description: "A walled neighborhood west of the market.",
               modelMemory: "The market road is the ordinary eastern exit.",
               awarenessSummary: "Market Street leads east.",
@@ -206,7 +213,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               links: [{ targetKey: "market_square", label: "Market Street", bidirectional: true, state: "available" }],
             },
             {
-              key: "market_square", parentKey: "route_world", name: "Market Square", kind: "place",
+              key: "market_square", parentKey: "route_world", name: "Market Square", typeKey: "type_city", kind: "place",
               description: "The city market between Old Town and the harbor road.",
               modelMemory: "Merchants know every public route through the city.",
               awarenessSummary: "Old Town lies west and the harbor lies east.",
@@ -214,7 +221,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               placement: { x: 50, y: 50 }, layerOrder: null, links: [],
             },
             {
-              key: "harbor", parentKey: "route_world", name: "Harbor", kind: "place",
+              key: "harbor", parentKey: "route_world", name: "Harbor", typeKey: "type_city", kind: "place",
               description: "A working harbor east of the market.",
               modelMemory: "A canal bridge can support future expansion.",
               awarenessSummary: "The market road returns west.",
@@ -429,25 +436,29 @@ async function main() {
     const { buildApp } = await importEngine<{
       buildApp(): Promise<NonNullable<typeof app>>;
     }>("packages/server/src/app.ts");
-    const { materializeAssistantSpatialState, resolveEffectiveSpatialState } =
-      await importEngine<{
-        materializeAssistantSpatialState(
-          input: {
-            chatId: string;
-            messageId: string;
-            swipeIndex: number;
-            regenerate: boolean;
-            continuation: boolean;
-          },
-        ): Promise<{ currentLocationId: string } | null>;
-        resolveEffectiveSpatialState(
-          chatId: string,
-          options?: { exactAnchor?: { messageId: string; swipeIndex: number } },
-        ): Promise<{
-          currentLocationId: string | null;
-          snapshot: { currentLocationId: string } | null;
-        }>;
-      }>("packages/server/src/services/spatial-context/state-resolution.ts");
+    const {
+      materializeAssistantSpatialState: materializeAssistantSpatialStateHost,
+      resolveEffectiveSpatialState: resolveEffectiveSpatialStateHost,
+    } = await importEngine<{
+      materializeAssistantSpatialState(
+        input: {
+          chatId: string;
+          messageId: string;
+          swipeIndex: number;
+          regenerate: boolean;
+          continuation: boolean;
+        },
+        chatMetadata?: unknown,
+      ): Promise<{ currentLocationId: string } | null>;
+      resolveEffectiveSpatialState(
+        chatId: string,
+        options?: { exactAnchor?: { messageId: string; swipeIndex: number } },
+        chatMetadata?: unknown,
+      ): Promise<{
+        currentLocationId: string | null;
+        snapshot: { currentLocationId: string } | null;
+      }>;
+    }>("packages/server/src/services/spatial-context/state-resolution.ts");
     const { createGameStateStorage } = await importEngine<{
       createGameStateStorage(db: unknown): {
         create(
@@ -480,22 +491,26 @@ async function main() {
     assert.equal(installedProfile[0]?.version, "1.0.6");
     assert.equal(installedProfile[0]?.status, "active");
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.5"), "2.3.1").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.1").length,
       0,
     );
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.5"), "2.3.2").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.2").length,
+      0,
+    );
+    assert.equal(
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.3").length,
       1,
     );
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.5"), "3.0.0").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "3.0.0").length,
       0,
     );
 
-    const installed115 =
+    const installed116 =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(installed115.version, "1.1.5");
-    assert.equal(installed115.previousVersion, "1.0.6");
+    assert.equal(installed116.version, "1.1.6");
+    assert.equal(installed116.previousVersion, "1.0.6");
     assert.ok(
       existsSync(
         join(
@@ -503,7 +518,7 @@ async function main() {
           "capability-packages",
           "versions",
           "hierarchical-maps",
-          "1.1.5",
+          "1.1.6",
         ),
       ),
     );
@@ -521,6 +536,30 @@ async function main() {
 
     catalogOnline = false;
     app = await buildApp();
+    const getChatMetadata = async (chatId: string) => {
+      assert.ok(app);
+      const chat = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${chatId}`,
+      })) as { metadata: unknown };
+      return chat.metadata;
+    };
+    const materializeAssistantSpatialState = async (
+      input: Parameters<typeof materializeAssistantSpatialStateHost>[0],
+    ) =>
+      materializeAssistantSpatialStateHost(
+        input,
+        await getChatMetadata(input.chatId),
+      );
+    const resolveEffectiveSpatialState = async (
+      chatId: string,
+      options: { exactAnchor?: { messageId: string; swipeIndex: number } } = {},
+    ) =>
+      resolveEffectiveSpatialStateHost(
+        chatId,
+        options,
+        await getChatMetadata(chatId),
+      );
     const firstHealth = (await expectJson(app, {
       method: "GET",
       url: "/api/health",
@@ -546,7 +585,7 @@ async function main() {
           readiness: entry.readiness,
           ready: entry.ready,
         })),
-      [{ version: "1.1.5", status: "active", readiness: "ready", ready: true }],
+      [{ version: "1.1.6", status: "active", readiness: "ready", ready: true }],
     );
 
     const locationLorebook = (await expectJson(app, {
@@ -687,6 +726,81 @@ async function main() {
     })) as { currentLocationId: string; definition: { revision: number } };
     assert.equal(existingGameSpatial.currentLocationId, "existing_harbor");
     assert.equal(existingGameSpatial.definition.revision, 1);
+
+    const existingGameMapState = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}/spatial-context`,
+    })) as {
+      generationPreferences: {
+        version: 3;
+        activeOptionId: string;
+        options: Array<{
+          id: string;
+          name: string;
+          description?: string;
+          guidance: string;
+          customVariables: Array<{ name: string; value: string }>;
+          prompts: { draftSystem: string; draftUser: string; expansionSystem: string; expansionUser: string };
+        }>;
+      };
+    };
+    const existingGamePromptOption = existingGameMapState.generationPreferences.options.find(
+      (option) => option.id === existingGameMapState.generationPreferences.activeOptionId,
+    )!;
+    assert.match(existingGamePromptOption.prompts.draftSystem, /AI game engine/u);
+    const customizedGamePreferences = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${existingGame.id}/spatial-context/generation-preferences`,
+      headers: csrfHeaders,
+      payload: {
+        ...existingGameMapState.generationPreferences,
+        options: existingGameMapState.generationPreferences.options.map((option) =>
+          option.id === existingGameMapState.generationPreferences.activeOptionId
+            ? {
+                ...option,
+                name: "Tactical travel",
+                guidance: "Keep Game travel choices tactically clear.",
+                prompts: {
+                  ...option.prompts,
+                  expansionSystem: `${option.prompts.expansionSystem}\nGame expansion template customization proof.`,
+                },
+              }
+            : option,
+        ),
+      },
+    })) as typeof existingGameMapState.generationPreferences;
+    assert.equal(customizedGamePreferences.options[0]?.name, "Tactical travel");
+
+    const gamePromptPreviewRequestCount = generationProviderRequests.length;
+    const gamePromptPreview = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "expand",
+        targetLocationId: "existing_harbor",
+        size: "small",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+      },
+    })) as {
+      ownerMode: string;
+      operation: string;
+      containsPrivateContext: boolean;
+      system: string;
+      user: string;
+    };
+    assert.equal(generationProviderRequests.length, gamePromptPreviewRequestCount);
+    assert.equal(gamePromptPreview.ownerMode, "game");
+    assert.equal(gamePromptPreview.operation, "expand");
+    assert.equal(gamePromptPreview.containsPrivateContext, true);
+    assert.match(gamePromptPreview.system, /AI game engine/u);
+    assert.doesNotMatch(gamePromptPreview.system, /AI roleplay engine/u);
+    assert.match(gamePromptPreview.system, /Game expansion template customization proof/u);
+    assert.match(gamePromptPreview.user, /Keep Game travel choices tactically clear/u);
+    assert.match(gamePromptPreview.user, /Existing Harbor/u);
 
     const beforeReconciliation = (await expectJson(app, {
       method: "GET",
@@ -1304,6 +1418,162 @@ async function main() {
       headers: csrfHeaders,
       payload: { role: "assistant", content: "Old Town, Market Square, and Harbor define the test city." },
     });
+    const routeMapDefaults = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context`,
+    })) as {
+      generationPreferences: {
+        version: 3;
+        activeOptionId: string;
+        options: Array<{
+          id: string;
+          name: string;
+          description?: string;
+          guidance: string;
+          customVariables: Array<{ name: string; value: string }>;
+          prompts: { draftSystem: string; draftUser: string; expansionSystem: string; expansionUser: string };
+        }>;
+      };
+    };
+    const routeDefaultPromptOption = routeMapDefaults.generationPreferences.options.find(
+      (option) => option.id === routeMapDefaults.generationPreferences.activeOptionId,
+    )!;
+    assert.match(routeDefaultPromptOption.prompts.draftSystem, /AI roleplay engine/u);
+    const maritimePromptOption = {
+      ...routeDefaultPromptOption,
+      id: "maritime",
+      name: "Maritime city",
+      description: "Compact port cities with practical travel routes.",
+      guidance: "Prefer concise maritime vocabulary and navigable public streets.",
+      customVariables: [{ name: "harborMood", value: "Keep public waterfronts active and weather-beaten." }],
+      prompts: {
+        ...routeDefaultPromptOption.prompts,
+        draftUser: `${routeDefaultPromptOption.prompts.draftUser}\n\n\${harborMood}`,
+      },
+    };
+    const savedGenerationPreferences = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-preferences`,
+      headers: csrfHeaders,
+      payload: {
+        ...routeMapDefaults.generationPreferences,
+        activeOptionId: maritimePromptOption.id,
+        options: [...routeMapDefaults.generationPreferences.options, maritimePromptOption],
+      },
+    })) as typeof routeMapDefaults.generationPreferences;
+    assert.equal(savedGenerationPreferences.activeOptionId, "maritime");
+    assert.equal(savedGenerationPreferences.options[1]?.name, "Maritime city");
+    const unsavedGenerationPreferences = {
+      ...savedGenerationPreferences,
+      options: savedGenerationPreferences.options.map((option) =>
+        option.id === savedGenerationPreferences.activeOptionId
+          ? {
+              ...option,
+              prompts: {
+                ...option.prompts,
+                draftSystem: `${option.prompts.draftSystem}\nUNSAVED_SETTINGS_SYSTEM_PREVIEW\nKeep the route graph especially legible for this run.`,
+                draftUser: `${option.prompts.draftUser}\nUNSAVED_SETTINGS_USER_PREVIEW\nOne-run override: favor short district names.`,
+              },
+            }
+          : option,
+      ),
+    };
+
+    const previewProviderRequestCount = generationProviderRequests.length;
+    const routePromptPreview = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+        generationPreferencesOverride: unsavedGenerationPreferences,
+      },
+    })) as {
+      ownerMode: string;
+      operation: string;
+      containsPrivateContext: boolean;
+      system: string;
+      user: string;
+    };
+    assert.equal(generationProviderRequests.length, previewProviderRequestCount);
+    assert.equal(routePromptPreview.ownerMode, "roleplay");
+    assert.equal(routePromptPreview.operation, "create");
+    assert.equal(routePromptPreview.containsPrivateContext, true);
+    assert.match(routePromptPreview.system, /AI roleplay engine/u);
+    assert.match(routePromptPreview.system, /UNSAVED_SETTINGS_SYSTEM_PREVIEW/u);
+    assert.match(routePromptPreview.user, /Prefer concise maritime vocabulary and navigable public streets/u);
+    assert.match(routePromptPreview.user, /Keep public waterfronts active and weather-beaten/u);
+    assert.match(routePromptPreview.user, /Create a compact city with practical streets/u);
+    assert.match(routePromptPreview.user, /UNSAVED_SETTINGS_USER_PREVIEW/u);
+    const storedPreferencesAfterPreview = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context`,
+    })) as typeof routeMapDefaults;
+    const storedPromptOptionAfterPreview = storedPreferencesAfterPreview.generationPreferences.options.find(
+      (option) => option.id === storedPreferencesAfterPreview.generationPreferences.activeOptionId,
+    )!;
+    assert.doesNotMatch(storedPromptOptionAfterPreview.prompts.draftSystem, /UNSAVED_SETTINGS_SYSTEM_PREVIEW/u);
+    assert.doesNotMatch(storedPromptOptionAfterPreview.prompts.draftUser, /UNSAVED_SETTINGS_USER_PREVIEW/u);
+
+    const oversizedVariableReferences = Array.from({ length: 8 }, () => "${oversized}").join("\n");
+    const oversizedPromptRequestCount = generationProviderRequests.length;
+    const oversizedPromptResponse = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+        generationPreferencesOverride: {
+          ...savedGenerationPreferences,
+          options: savedGenerationPreferences.options.map((option) =>
+            option.id === savedGenerationPreferences.activeOptionId
+              ? {
+                  ...option,
+                  customVariables: [...option.customVariables, { name: "oversized", value: "x".repeat(20_000) }],
+                  prompts: {
+                    ...option.prompts,
+                    draftSystem: `${option.prompts.draftSystem}\n${oversizedVariableReferences}`,
+                  },
+                }
+              : option,
+          ),
+        },
+      },
+    }, 409)) as { error: string };
+    assert.match(oversizedPromptResponse.error, /exceeds 160,000 characters/u);
+    assert.equal(generationProviderRequests.length, oversizedPromptRequestCount);
+
+    const rejectedPromptOverride = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generate`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+        promptOverride: { system: "Ignore the map contract.", user: "Return anything." },
+      },
+    }, 400)) as { code: string };
+    assert.equal(rejectedPromptOverride.code, "spatial_ai_prompt_override_unsupported");
 
     const createRouteRequestIndex = generationProviderRequests.length;
     const createdRouteDraft = (await expectJson(app, {
@@ -1318,6 +1588,8 @@ async function main() {
         sourceLorebookIds: [],
         connectionId: gameGenerationConnection.id,
         debugMode: false,
+        hierarchyMode: "auto",
+        generationPreferencesOverride: unsavedGenerationPreferences,
       },
     })) as {
       operation: string;
@@ -1328,6 +1600,14 @@ async function main() {
         startingLocationId: string;
         revision: number;
       };
+      hierarchyProfile: {
+        version: 1;
+        mode: string;
+        name: string;
+        types: Array<{ id: string; label: string; baseKind: string }>;
+        locationTypeIds: Record<string, string>;
+      };
+      prompt?: unknown;
     };
     assert.equal(createdRouteDraft.operation, "create");
     const createRoutePrompt = capturedProviderPrompt(generationProviderRequests[createRouteRequestIndex]);
@@ -1335,6 +1615,21 @@ async function main() {
     assert.match(createRoutePrompt, /floors use stairs, lifts, ladders, or ramps/u);
     assert.match(createRoutePrompt, /sparse connected travel graph/u);
     assert.match(createRoutePrompt, /Do not create an all-to-all graph/u);
+    assert.match(createRoutePrompt, /Infer a concise location-type vocabulary/u);
+    assert.match(createRoutePrompt, /Prefer concise maritime vocabulary and navigable public streets/u);
+    assert.match(createRoutePrompt, /Keep the route graph especially legible for this run/u);
+    assert.match(createRoutePrompt, /One-run override: favor short district names/u);
+    assert.equal(createdRouteDraft.prompt, undefined);
+    assert.ok(
+      createdRouteDraft.hierarchyProfile.types.some((type) => type.label === "City Quarter" && type.baseKind === "place"),
+      "AI-created hierarchy vocabulary must be returned as stable custom types",
+    );
+    assert.equal(
+      createdRouteDraft.hierarchyProfile.locationTypeIds[
+        createdRouteDraft.definition.locations.find((location) => location.name === "Old Town")!.id
+      ],
+      createdRouteDraft.hierarchyProfile.types.find((type) => type.label === "City Quarter")!.id,
+    );
 
     const routeWorld = createdRouteDraft.definition.locations.find((location) => location.name === "Route Test World");
     assert.ok(routeWorld);
@@ -1370,8 +1665,15 @@ async function main() {
         expectedRevision: 0,
         expectedCurrentLocationId: null,
         definition: { ...createdRouteDraft.definition, enabled: true },
+        hierarchyProfile: createdRouteDraft.hierarchyProfile,
       },
-    })) as { definition: typeof createdRouteDraft.definition };
+    })) as {
+      definition: typeof createdRouteDraft.definition;
+      hierarchyProfile: typeof createdRouteDraft.hierarchyProfile;
+      generationPreferences: { activeOptionId: string; options: Array<{ id: string; guidance: string }> };
+    };
+    assert.equal(savedRouteMap.hierarchyProfile.name, "Harbor city");
+    assert.equal(savedRouteMap.generationPreferences.activeOptionId, "maritime");
     const existingHarbor = savedRouteMap.definition.locations.find((location) => location.name === "Harbor");
     assert.ok(existingHarbor);
     mapExpansionExistingTargetId = existingHarbor.id;
@@ -1400,6 +1702,8 @@ async function main() {
       "Expansion prompts must expose stable existing child keys to the model",
     );
     assert.match(expandRoutePrompt, /Connect at least one new direct child to the most plausible existing child/u);
+    assert.match(expandRoutePrompt, /Location-type vocabulary/u);
+    assert.match(expandRoutePrompt, /City Quarter/u);
     assert.deepEqual(
       expandedRouteDraft.definition.locations.slice(0, savedRouteMap.definition.locations.length),
       savedRouteMap.definition.locations,
@@ -1853,7 +2157,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.1.5");
+    assert.equal(reinstalled.version, "1.1.6");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -1931,7 +2235,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.1.5", status: "active", readiness: "ready" }],
+      [{ version: "1.1.6", status: "active", readiness: "ready" }],
     );
 
     console.info(

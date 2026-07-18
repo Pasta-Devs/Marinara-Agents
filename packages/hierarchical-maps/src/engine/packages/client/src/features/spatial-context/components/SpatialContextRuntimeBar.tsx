@@ -10,6 +10,11 @@ import {
   setPendingSpatialTransitionStatus,
   usePendingSpatialTransition,
 } from "../pending-spatial-transitions";
+import {
+  cancelSpatialRoute,
+  reconcileSpatialRoutePlan,
+  useSpatialRoutePlan,
+} from "../spatial-route-plans";
 
 interface SpatialContextRuntimeBarProps {
   chatId: string | null;
@@ -44,13 +49,20 @@ export function SpatialContextRuntimeBar({
   const [open, setOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [selectedDestinationId, setSelectedDestinationId] = useState<string | null>(null);
+  const desktopMapTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mobileMapTriggerRef = useRef<HTMLButtonElement | null>(null);
   const spatial = useSpatialContext(chatId);
   const pending = usePendingSpatialTransition(chatId);
+  const routePlan = useSpatialRoutePlan(chatId);
   const data = spatial.data;
 
   useEffect(() => {
-    if (!chatId || !pending || !data) return;
+    if (!chatId || !data) return;
+    if (routePlan) {
+      reconcileSpatialRoutePlan(chatId, data);
+      return;
+    }
+    if (!pending) return;
     if (data.currentLocationId === pending.transition.destinationId) {
       clearPendingSpatialTransition(chatId, pending.transition.commandId);
       return;
@@ -63,7 +75,7 @@ export function SpatialContextRuntimeBar({
       data.currentLocationId !== pending.transition.expectedCurrentLocationId ||
       !destinationStillAvailable;
     if (isStale) setPendingSpatialTransitionStatus(chatId, "needs_review");
-  }, [chatId, data, pending]);
+  }, [chatId, data, pending, routePlan]);
 
   const destinationsByRelation = useMemo(() => {
     const result = new Map<SpatialDestinationRelation, SpatialDestination[]>();
@@ -105,6 +117,14 @@ export function SpatialContextRuntimeBar({
 
   const queueDestination = (destination: SpatialDestination) => {
     if (!chatId || !data?.definition || !data.currentLocationId || disabled) return;
+    if (
+      routePlan &&
+      routePlan.targetLocationId !== destination.id &&
+      !window.confirm(`Replace the route to ${routePlan.targetLocationName} with a direct move to ${destination.name}?`)
+    ) {
+      return;
+    }
+    if (routePlan) cancelSpatialRoute(chatId);
     setPendingSpatialTransition(chatId, {
       transition: {
         destinationId: destination.id,
@@ -126,6 +146,11 @@ export function SpatialContextRuntimeBar({
     setOpen(false);
     setMapOpen(false);
     requestAnimationFrame(() => mobileMapTriggerRef.current?.focus({ preventScroll: true }));
+  };
+
+  const closeDesktopMap = () => {
+    setMapOpen(false);
+    requestAnimationFrame(() => desktopMapTriggerRef.current?.focus({ preventScroll: true }));
   };
 
   const handleDestinationQueued = () => {
@@ -179,8 +204,11 @@ export function SpatialContextRuntimeBar({
       className={cn(
         "relative mb-2 text-[var(--marinara-chat-chrome-panel-text)]",
         pending || !enabled
-          ? "w-full overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] shadow-sm"
-          : "ml-auto h-11 w-11 overflow-visible sm:ml-0 sm:h-auto sm:w-full sm:overflow-hidden sm:rounded-xl sm:border sm:border-[var(--marinara-chat-chrome-panel-border)] sm:bg-[var(--marinara-chat-chrome-panel-bg)] sm:shadow-sm",
+          ? "w-full overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] shadow-sm"
+          : cn(
+              "ml-auto h-11 w-11 overflow-visible sm:ml-0 sm:h-auto sm:w-full sm:rounded-xl sm:border sm:border-[var(--marinara-chat-chrome-panel-border)] sm:bg-[var(--background)] sm:shadow-sm",
+              mapOpen ? "sm:overflow-visible" : "sm:overflow-hidden",
+            ),
       )}
     >
       <div data-marinara-maps-runtime-desktop className="hidden min-h-11 items-center gap-1.5 px-2 sm:flex">
@@ -210,6 +238,7 @@ export function SpatialContextRuntimeBar({
         </button>
         {mapAvailable && (
           <button
+            ref={desktopMapTriggerRef}
             type="button"
             onClick={() => {
               setOpen(false);
@@ -269,9 +298,10 @@ export function SpatialContextRuntimeBar({
               data-marinara-maps-runtime-popover
               role="dialog"
               aria-label="Story map"
-              className="absolute bottom-[calc(100%+0.375rem)] right-0 z-50 flex w-[min(22rem,calc(100vw-1.5rem))] max-h-[min(70dvh,36rem)] flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-panel-text)] shadow-2xl shadow-black/45"
+              className="absolute bottom-[calc(100%+0.375rem)] right-0 z-50 isolate flex w-[min(22rem,calc(100vw-1.5rem))] max-h-[min(70dvh,36rem)] flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] text-[var(--marinara-chat-chrome-panel-text)] shadow-2xl shadow-black/45"
               style={{
                 bottom: "calc(100% + 0.375rem)",
+                backgroundColor: "var(--background)",
                 right: 0,
                 width: "min(22rem, calc(100vw - 1.5rem))",
                 maxHeight: "min(70dvh, 36rem)",
@@ -308,12 +338,13 @@ export function SpatialContextRuntimeBar({
                   <X size="1rem" />
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+              <div data-marinara-maps-runtime-map-scroll className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-2">
                 <GameWorldMap
                   chatId={chatId}
                   spatial={data}
                   disabled={disabled}
                   compact
+                  useParentScroll
                   onDestinationQueued={handleDestinationQueued}
                   onOpenEditor={onOpenEditor}
                 />
@@ -339,16 +370,26 @@ export function SpatialContextRuntimeBar({
             <Route size="0.875rem" className="shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
           )}
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-semibold">{pending.destinationName}</span>
+            <span className="block truncate text-xs font-semibold">
+              {routePlan ? `Route to ${routePlan.targetLocationName}` : pending.destinationName}
+            </span>
             <span className="block truncate text-[0.625rem] opacity-75">
-              {pending.status === "needs_review" ? "Needs review — choose the destination again" : "Moves with your next turn"}
+              {pending.status === "needs_review" || routePlan?.status === "needs_review"
+                ? "Needs review — choose the destination again"
+                : routePlan
+                  ? `Next step ${Math.min(routePlan.currentIndex + 1, routePlan.steps.length)} of ${routePlan.steps.length} · ${pending.destinationName}`
+                  : "Moves with your next turn"}
             </span>
           </span>
           <button
             type="button"
-            onClick={() => chatId && clearPendingSpatialTransition(chatId, pending.transition.commandId)}
+            onClick={() => {
+              if (!chatId) return;
+              if (routePlan) cancelSpatialRoute(chatId);
+              else clearPendingSpatialTransition(chatId, pending.transition.commandId);
+            }}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
-            aria-label={`Cancel move to ${pending.destinationName}`}
+            aria-label={routePlan ? `Cancel route to ${routePlan.targetLocationName}` : `Cancel move to ${pending.destinationName}`}
           >
             <X size="0.875rem" />
           </button>
@@ -366,20 +407,55 @@ export function SpatialContextRuntimeBar({
       )}
 
       {mapOpen && mapAvailable && data?.definition && chatId && (
-        <div data-marinara-maps-runtime-desktop className="hidden max-h-[50dvh] overflow-y-auto overscroll-contain border-t border-[var(--marinara-chat-chrome-panel-divider)] p-2 sm:block">
-          <GameWorldMap
-            chatId={chatId}
-            spatial={data}
-            disabled={disabled}
-            compact
-            onDestinationQueued={handleDestinationQueued}
-            onOpenEditor={onOpenEditor}
-          />
+        <div
+          data-marinara-maps-runtime-desktop-popover
+          data-marinara-maps-runtime-popover
+          role="dialog"
+          aria-label="Story map"
+          className="absolute bottom-[calc(100%+0.375rem)] right-0 z-[100] hidden w-[min(32rem,calc(100vw-2rem))] max-h-[min(70dvh,42rem)] flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] text-[var(--marinara-chat-chrome-panel-text)] shadow-2xl shadow-black/45 sm:flex"
+          style={{
+            bottom: "calc(100% + 0.375rem)",
+            backgroundColor: "var(--background)",
+            maxHeight: "min(70dvh, 42rem)",
+            right: 0,
+            width: "min(32rem, calc(100vw - 2rem))",
+            zIndex: 100,
+          }}
+        >
+          <div className="flex min-h-11 shrink-0 items-center gap-2 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-2">
+            <MapIcon size="0.875rem" className="shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold text-[var(--marinara-chat-chrome-panel-title)]">Story map</p>
+              <p className="truncate text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]" title={breadcrumbLabel}>
+                {breadcrumbLabel}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={closeDesktopMap}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
+              aria-label="Close expanded story map"
+              title="Close story map"
+            >
+              <X size="1rem" />
+            </button>
+          </div>
+          <div data-marinara-maps-runtime-map-scroll className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-2">
+            <GameWorldMap
+              chatId={chatId}
+              spatial={data}
+              disabled={disabled}
+              compact
+              useParentScroll
+              onDestinationQueued={handleDestinationQueued}
+              onOpenEditor={onOpenEditor}
+            />
+          </div>
         </div>
       )}
 
       {open && enabled && (
-        <div data-marinara-maps-runtime-options className="border-t border-[var(--marinara-chat-chrome-panel-divider)] p-2">
+        <div data-marinara-maps-runtime-options className="border-t border-[var(--marinara-chat-chrome-panel-divider)] bg-[var(--background)] p-2">
           <div className="mb-2 flex min-h-11 items-center gap-2 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-1 pb-2 sm:hidden">
             <MapPin size="0.875rem" className="shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
             <div className="min-w-0 flex-1">

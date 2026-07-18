@@ -7,12 +7,12 @@ import type {
   SpatialContextDefinition,
   SpatialDefinitionIssue,
   SpatialLocation,
-  SpatialLocationKind,
   SpatialLinkState,
 } from "@marinara-engine/shared";
 import { cn } from "../package-utils";
 import { getSpatialDescendantIds } from "@marinara-engine/shared";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
+import type { SpatialHierarchyProfile } from "../../../../../maps-shared/src/maps-model";
 
 const INPUT_CLASS =
   "w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--marinara-chat-chrome-panel-text)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[var(--marinara-chat-chrome-panel-muted)] focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-focus-ring)]";
@@ -47,6 +47,8 @@ interface LocationInspectorProps {
   location: SpatialLocation | null;
   issues: SpatialDefinitionIssue[];
   currentLocationId: string | null;
+  hierarchyProfile: SpatialHierarchyProfile;
+  onHierarchyTypeChange: (typeId: string) => void;
   onUpdate: (patch: Partial<SpatialLocation>) => void;
   lorebooks?: Lorebook[];
   lorebookEntries?: LorebookEntry[];
@@ -68,6 +70,8 @@ export function LocationInspector({
   location,
   issues,
   currentLocationId,
+  hierarchyProfile,
+  onHierarchyTypeChange,
   onUpdate,
   onReparent,
   lorebooks = [],
@@ -194,15 +198,19 @@ export function LocationInspector({
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Kind">
+          <Field label="Location type" hint={`Uses ${location.kind} rules`}>
             <select
               className={INPUT_CLASS}
-              value={location.kind}
-              onChange={(event) => onUpdate({ kind: event.target.value as SpatialLocationKind })}
+              value={
+                hierarchyProfile.locationTypeIds[location.id] ??
+                hierarchyProfile.types.find((type) => type.baseKind === location.kind)?.id ??
+                hierarchyProfile.types[0]?.id
+              }
+              onChange={(event) => onHierarchyTypeChange(event.target.value)}
             >
-              {(["region", "settlement", "place", "building", "floor", "room"] as const).map((kind) => (
-                <option key={kind} value={kind}>
-                  {kind[0].toUpperCase() + kind.slice(1)}
+              {hierarchyProfile.types.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.label}
                 </option>
               ))}
             </select>
@@ -417,7 +425,12 @@ export function LocationInspector({
               </select>
             </Field>
             {location.placement && (
-              <div className="grid grid-cols-2 gap-3">
+              <details className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center px-3 text-xs font-medium text-[var(--marinara-chat-chrome-panel-title)]">
+                  Precision map position
+                  <span className="ml-auto text-[0.625rem] font-normal text-[var(--marinara-chat-chrome-panel-muted)]">Advanced</span>
+                </summary>
+                <div className="grid grid-cols-2 gap-3 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-3">
                 <Field label="Map X" hint="0 to 100" error={issueFor("x")}>
                   <input
                     className={INPUT_CLASS}
@@ -442,7 +455,8 @@ export function LocationInspector({
                     }
                   />
                 </Field>
-              </div>
+                </div>
+              </details>
             )}
             {location.layerOrder !== undefined && (
               <Field label="Layer order" error={issueFor("layerOrder")}>

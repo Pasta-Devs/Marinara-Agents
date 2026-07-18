@@ -9,9 +9,11 @@ import {
   List,
   Loader2,
   Map,
+  Move,
   Plus,
   RefreshCw,
   Save,
+  Settings2,
   Sparkles,
   Trash2,
   Upload,
@@ -21,6 +23,7 @@ import {
   compareSpatialLocations,
   resolveSpatialLocationDepth,
   resolveSpatialBreadcrumb,
+  SPATIAL_CONTEXT_LIMITS,
   spatialContextDefinitionSchema,
   validateSpatialArchive,
   type GameMap,
@@ -36,6 +39,7 @@ import { LayerSelector } from "./components/LayerSelector";
 import { LocalMapCanvas } from "./components/LocalMapCanvas";
 import { LocationInspector } from "./components/LocationInspector";
 import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
+import { SpatialHierarchyProfileFields } from "./components/SpatialHierarchyProfileFields";
 import {
   addSpatialLocation,
   archiveSpatialLocation,
@@ -46,6 +50,7 @@ import {
   isSpatialDefinitionDirty,
   reparentSpatialLocation,
   spatialDefinitionIssues,
+  startNewSpatialMap,
   updateSpatialLocation,
 } from "./editor-state";
 import {
@@ -54,12 +59,32 @@ import {
   useSpatialLorebookEntries,
   useSpatialLorebooks,
 } from "./use-spatial-resources";
+import {
+  defaultGenerationPreferences,
+  defaultHierarchyProfile,
+  hierarchyTypeForLocation,
+  normalizeHierarchyProfile,
+  withLocationHierarchyType,
+  type SpatialHierarchyProfile,
+} from "../../../../maps-shared/src/maps-model";
 
 type MobilePane = "hierarchy" | "local" | "details";
 
 type FirstSaveResult = {
   locationCount: number;
   startingLocationName: string;
+};
+
+type ImportIdReport = {
+  missing: Array<{ id: string; name: string }>;
+};
+
+type MapConfirmationOptions = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: "destructive";
 };
 
 interface SpatialMapWorkspaceProps {
@@ -69,17 +94,7 @@ interface SpatialMapWorkspaceProps {
   onClearPendingDraftReview?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenLorebook?: (lorebookId: string) => void;
-  confirmAction?: (options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    tone?: "destructive";
-  }) => Promise<boolean>;
   onClose: () => void;
-}
-
-async function browserConfirm(options: { message: string }): Promise<boolean> {
-  return window.confirm(options.message);
 }
 
 function sortedChildren(definition: SpatialContextDefinition, parentId: string | null) {
@@ -122,7 +137,6 @@ export function SpatialMapWorkspace({
   onClearPendingDraftReview,
   onDirtyChange,
   onOpenLorebook,
-  confirmAction = browserConfirm,
   onClose,
 }: SpatialMapWorkspaceProps) {
   const spatial = useSpatialContext(chatId);
@@ -131,6 +145,16 @@ export function SpatialMapWorkspace({
   const pendingSetupReview = pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
   const [baseDefinition, setBaseDefinition] = useState<SpatialContextDefinition | null>(null);
   const [draft, setDraft] = useState<SpatialContextDefinition | null>(null);
+  const [baseHierarchyProfile, setBaseHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
+    defaultHierarchyProfile(),
+  );
+  const [draftHierarchyProfile, setDraftHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
+    defaultHierarchyProfile(),
+  );
+  const [pendingConfirmation, setPendingConfirmation] = useState<MapConfirmationOptions | null>(null);
+  const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+  const confirmationDialogRef = useRef<HTMLDivElement>(null);
+  const confirmationCancelRef = useRef<HTMLButtonElement>(null);
   const [initialized, setInitialized] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [enteredParentId, setEnteredParentId] = useState<string | null>(null);
@@ -153,6 +177,67 @@ export function SpatialMapWorkspace({
   );
   const [replacementCurrentLocationId, setReplacementCurrentLocationId] = useState<string | null>(null);
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
+  const [layoutEditing, setLayoutEditing] = useState(false);
+  const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
+  const [typesEditorOpen, setTypesEditorOpen] = useState(false);
+
+  const resolveConfirmation = useCallback((confirmed: boolean) => {
+    const resolve = confirmationResolverRef.current;
+    confirmationResolverRef.current = null;
+    setPendingConfirmation(null);
+    resolve?.(confirmed);
+  }, []);
+
+  const confirmAction = useCallback((options: MapConfirmationOptions) => {
+    confirmationResolverRef.current?.(false);
+    return new Promise<boolean>((resolve) => {
+      confirmationResolverRef.current = resolve;
+      setPendingConfirmation(options);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!pendingConfirmation) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => confirmationCancelRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        resolveConfirmation(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        confirmationDialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && (document.activeElement === first || !confirmationDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !confirmationDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [pendingConfirmation, resolveConfirmation]);
+
+  useEffect(
+    () => () => {
+      confirmationResolverRef.current?.(false);
+      confirmationResolverRef.current = null;
+    },
+    [],
+  );
 
   const ownerMode: SpatialOwnerMode = chat?.mode === "game" ? "game" : "roleplay";
   const gameMaps = useMemo(() => {
@@ -179,6 +264,7 @@ export function SpatialMapWorkspace({
   }, [chat?.metadata, ownerMode]);
 
   useEffect(() => {
+    resolveConfirmation(false);
     setInitialized(false);
     setDraft(null);
     setBaseDefinition(null);
@@ -189,7 +275,10 @@ export function SpatialMapWorkspace({
     setFirstSaveResult(null);
     setFirstMapGenerationSession(null);
     setRegenerateRequestId(0);
-  }, [chatId]);
+    setLayoutEditing(false);
+    setImportIdReport(null);
+    setTypesEditorOpen(false);
+  }, [chatId, resolveConfirmation]);
 
   useEffect(() => {
     if (!spatial.isSuccess || initialized) return;
@@ -197,6 +286,9 @@ export function SpatialMapWorkspace({
     const nextDraft = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
     setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
     setDraft(nextDraft);
+    const hierarchyProfile = normalizeHierarchyProfile(spatial.data.hierarchyProfile, nextDraft);
+    setBaseHierarchyProfile(hierarchyProfile);
+    setDraftHierarchyProfile(hierarchyProfile);
     setSelectedId(nextDraft.startingLocationId ?? nextDraft.locations[0]?.id ?? null);
     setEnteredParentId(null);
     setServerIssues(spatial.data.warnings);
@@ -212,7 +304,13 @@ export function SpatialMapWorkspace({
     () => (draft ? [...spatialDefinitionIssues(draft), ...serverIssues] : []),
     [draft, serverIssues],
   );
-  const dirty = useMemo(() => !!draft && isSpatialDefinitionDirty(baseDefinition, draft), [baseDefinition, draft]);
+  const dirty = useMemo(
+    () =>
+      !!draft &&
+      (isSpatialDefinitionDirty(baseDefinition, draft) ||
+        JSON.stringify(baseHierarchyProfile) !== JSON.stringify(normalizeHierarchyProfile(draftHierarchyProfile, draft))),
+    [baseDefinition, baseHierarchyProfile, draft, draftHierarchyProfile],
+  );
   const selected = draft?.locations.find((location) => location.id === selectedId) ?? null;
   const currentLocationId = spatial.data?.currentLocationId ?? null;
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
@@ -258,6 +356,17 @@ export function SpatialMapWorkspace({
     setSavedFlash(false);
     setFirstSaveResult(null);
   }, []);
+
+  const applyHierarchyProfile = useCallback(
+    (next: SpatialHierarchyProfile) => {
+      if (!draft) return;
+      setDraftHierarchyProfile(normalizeHierarchyProfile(next, draft));
+      setServerIssues([]);
+      setSavedFlash(false);
+      setFirstSaveResult(null);
+    },
+    [draft],
+  );
 
   const selectLocation = useCallback((locationId: string, showDetails = true) => {
     setSelectedId(locationId);
@@ -346,9 +455,76 @@ export function SpatialMapWorkspace({
     [currentLocationId, draft, finishArchive],
   );
 
+  const handleDeleteMap = useCallback(async () => {
+    const savedDefinition = baseDefinition ?? draft;
+    if (!savedDefinition || savedDefinition.locations.length === 0) return;
+    const preserveExistingLocations = spatial.data?.hasCommittedSpatialHistory ?? false;
+    if (
+      preserveExistingLocations &&
+      savedDefinition.locations.length >= SPATIAL_CONTEXT_LIMITS.maxLocations
+    ) {
+      toast.error(
+        "This map is at the location limit, so a history-safe new starting location cannot be added. Export it and start a new chat instead.",
+      );
+      return;
+    }
+
+    const locationCount = savedDefinition.locations.length;
+    const confirmed = await confirmAction({
+      title: preserveExistingLocations ? "Archive this map and start over?" : "Delete this map and start over?",
+      message: preserveExistingLocations
+        ? `Are you sure? This is dangerous.\n\nCampaign history uses this map, so its ${locationCount} saved ${locationCount === 1 ? "location" : "locations"} cannot be erased. Delete will instead archive every existing location and preserve its stable ID for older messages, then create one blank New world starting location. Existing routes and details will remain only in the archived hierarchy. Any unsaved map edits are discarded.\n\nNothing changes until you click Save. Export first if you want a separate backup.`
+        : `Are you sure? This is dangerous.\n\nDeleting replaces ${locationCount} saved ${locationCount === 1 ? "location" : "locations"} with one blank New world starting location. Existing map names, descriptions, routes, lore links, layout, and other map-only edits will be removed. Any unsaved map edits are also discarded.\n\nNothing changes until you click Save. After Save, the deleted map cannot be restored unless you exported a backup.`,
+      confirmLabel: "Delete",
+      cancelLabel: "Go back and backup first",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+
+    const result = startNewSpatialMap(savedDefinition, preserveExistingLocations);
+    applyDraft(result.definition);
+    setDraftHierarchyProfile(normalizeHierarchyProfile(baseHierarchyProfile, result.definition));
+    setSelectedId(result.location.id);
+    setEnteredParentId(null);
+    setMobilePane("hierarchy");
+    setReplacementCurrentLocationId(currentLocationId ? result.location.id : null);
+    setArchiveRequestId(null);
+    setArchiveReplacementId("");
+    setImportIdReport(null);
+    setFirstMapGenerationSession(null);
+    setAiBuilderOpen(false);
+    toast.success(
+      preserveExistingLocations
+        ? "Fresh map started. Previous locations remain archived for campaign history. Review it, then Save."
+        : "Fresh map started in the working copy. Review it, then Save.",
+    );
+  }, [
+    applyDraft,
+    baseDefinition,
+    baseHierarchyProfile,
+    confirmAction,
+    currentLocationId,
+    draft,
+    spatial.data?.hasCommittedSpatialHistory,
+  ]);
+
   const handleExport = useCallback(() => {
     if (!draft) return;
-    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            format: "marinara-hierarchical-map",
+            formatVersion: 2,
+            definition: draft,
+            hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+          },
+          null,
+          2,
+        ),
+      ],
+      { type: "application/json" },
+    );
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const safeName = (chat?.name ?? "hierarchical-map")
@@ -358,7 +534,7 @@ export function SpatialMapWorkspace({
     link.download = `${safeName}.hierarchical-map.json`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [chat?.name, draft]);
+  }, [chat?.name, draft, draftHierarchyProfile]);
 
   const handleImport = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -367,20 +543,24 @@ export function SpatialMapWorkspace({
       if (!file || !draft) return;
       try {
         const raw = JSON.parse(await file.text()) as unknown;
+        const rawRecord = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
         const candidate =
-          raw && typeof raw === "object" && !Array.isArray(raw) && "definition" in raw
-            ? (raw as { definition: unknown }).definition
+          rawRecord && "definition" in rawRecord
+            ? rawRecord.definition
             : raw;
         const parsed = spatialContextDefinitionSchema.safeParse(candidate);
         if (!parsed.success) {
           throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid hierarchical map.");
         }
         const importedIds = new Set(parsed.data.locations.map((location) => location.id));
-        if (
-          spatial.data?.hasCommittedSpatialHistory &&
-          draft.locations.some((location) => !importedIds.has(location.id))
-        ) {
-          throw new Error("Campaign history uses this map. Imported maps must retain every existing location ID.");
+        const missing = (baseDefinition?.locations ?? [])
+          .filter((location) => !importedIds.has(location.id))
+          .map((location) => ({ id: location.id, name: location.name }));
+        if (spatial.data?.hasCommittedSpatialHistory && missing.length > 0) {
+          setImportIdReport({ missing });
+          throw new Error(
+            `Campaign history uses ${missing.length} location ID${missing.length === 1 ? "" : "s"} missing from this file. Review the repair steps shown in the editor.`,
+          );
         }
         const imported: SpatialContextDefinition = {
           ...parsed.data,
@@ -388,7 +568,10 @@ export function SpatialMapWorkspace({
           enabled: draft.enabled,
           revision: baseDefinition?.revision ?? 0,
         };
+        const importedProfile = normalizeHierarchyProfile(rawRecord?.hierarchyProfile, imported);
         applyDraft(imported);
+        setDraftHierarchyProfile(importedProfile);
+        setImportIdReport(null);
         setFirstMapGenerationSession(null);
         setSelectedId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
         setEnteredParentId(null);
@@ -398,7 +581,7 @@ export function SpatialMapWorkspace({
         toast.error(error instanceof Error ? error.message : "The map could not be imported.");
       }
     },
-    [applyDraft, baseDefinition?.revision, draft, ownerMode, spatial.data?.hasCommittedSpatialHistory],
+    [applyDraft, baseDefinition, draft, ownerMode, spatial.data?.hasCommittedSpatialHistory],
   );
 
   const handleClose = useCallback(async () => {
@@ -429,11 +612,14 @@ export function SpatialMapWorkspace({
         expectedCurrentLocationId: currentLocationId,
         ...(replacementCurrentLocationId ? { replacementCurrentLocationId } : {}),
         definition: { ...definitionToSave, ownerMode, revision: baseDefinition?.revision ?? 0 },
+        hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, definitionToSave),
       });
       const saved = response.definition;
       if (!saved) throw new Error("The server did not return the saved map.");
       setBaseDefinition(cloneSpatialDefinition(saved));
       setDraft(cloneSpatialDefinition(saved));
+      setBaseHierarchyProfile(response.hierarchyProfile);
+      setDraftHierarchyProfile(response.hierarchyProfile);
       setServerIssues(response.warnings);
       setReplacementCurrentLocationId(null);
       setSavedFlash(true);
@@ -464,6 +650,7 @@ export function SpatialMapWorkspace({
     currentLocationId,
     dirty,
     draft,
+    draftHierarchyProfile,
     issues.length,
     ownerMode,
     replacementCurrentLocationId,
@@ -479,6 +666,9 @@ export function SpatialMapWorkspace({
     const next = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
     setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
     setDraft(next);
+    const hierarchyProfile = normalizeHierarchyProfile(result.data.hierarchyProfile, next);
+    setBaseHierarchyProfile(hierarchyProfile);
+    setDraftHierarchyProfile(hierarchyProfile);
     setSelectedId(next.startingLocationId ?? next.locations[0]?.id ?? null);
     setEnteredParentId(null);
     setConflict(false);
@@ -509,6 +699,12 @@ export function SpatialMapWorkspace({
       const firstAddedLocation = next.locations.find((location) => !previousIds.has(location.id));
       const expandedExistingMap = session.result.operation === "expand";
       applyDraft(next);
+      setDraftHierarchyProfile(
+        normalizeHierarchyProfile(
+          "hierarchyProfile" in session.result ? session.result.hierarchyProfile : draftHierarchyProfile,
+          next,
+        ),
+      );
       setSelectedId(firstAddedLocation?.id ?? next.startingLocationId ?? next.locations[0]?.id ?? null);
       setEnteredParentId(firstAddedLocation?.parentId ?? null);
       setMobilePane("hierarchy");
@@ -532,7 +728,7 @@ export function SpatialMapWorkspace({
           : "AI map draft applied. Review it, choose a start, then enable and save.",
       );
     },
-    [applyDraft, baseDefinition, currentLocationId, draft, onClearPendingDraftReview, ownerMode],
+    [applyDraft, baseDefinition, currentLocationId, draft, draftHierarchyProfile, onClearPendingDraftReview, ownerMode],
   );
 
   const regenerateFirstMapDraft = useCallback(async () => {
@@ -560,6 +756,7 @@ export function SpatialMapWorkspace({
     if (!confirmed) return;
     const empty = createEmptySpatialDefinition(ownerMode);
     applyDraft(empty);
+    setDraftHierarchyProfile(defaultHierarchyProfile(empty));
     setSelectedId(null);
     setEnteredParentId(null);
     setMobilePane("hierarchy");
@@ -698,6 +895,19 @@ export function SpatialMapWorkspace({
             {localPresentation === "map" ? <Map size="0.6875rem" /> : <List size="0.6875rem" />}
             {localPresentation}
           </span>
+          {localPresentation === "map" && (
+            <button
+              type="button"
+              aria-pressed={layoutEditing}
+              onClick={() => setLayoutEditing((value) => !value)}
+              className={cn(
+                "mari-chrome-control min-h-11 px-3 text-xs",
+                layoutEditing && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+              )}
+            >
+              <Move size="0.75rem" /> {layoutEditing ? "Done arranging" : "Arrange map"}
+            </button>
+          )}
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -705,8 +915,12 @@ export function SpatialMapWorkspace({
           <LocalMapCanvas
             locations={localChildren}
             selectedId={selectedId}
-            onSelect={selectLocation}
+            onSelect={(locationId) => selectLocation(locationId, !layoutEditing)}
             onEnter={enterLocation}
+            editing={layoutEditing}
+            onMove={(locationId, placement) =>
+              applyDraft(updateSpatialLocation(draft, locationId, { placement }))
+            }
           />
         ) : localPresentation === "layers" ? (
           <LayerSelector
@@ -746,7 +960,7 @@ export function SpatialMapWorkspace({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{location.name || "Untitled location"}</span>
                     <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
-                      {location.kind}
+                      {hierarchyTypeForLocation(draftHierarchyProfile, location).label}
                       {location.status === "archived" ? " · archived" : ""}
                     </span>
                   </span>
@@ -772,6 +986,14 @@ export function SpatialMapWorkspace({
       location={selected}
       issues={issues.filter((issue) => issue.locationId === selected?.id)}
       currentLocationId={currentLocationId}
+      hierarchyProfile={draftHierarchyProfile}
+      onHierarchyTypeChange={(typeId) => {
+        if (!selected) return;
+        const type = draftHierarchyProfile.types.find((candidate) => candidate.id === typeId);
+        if (!type) return;
+        applyDraft(updateSpatialLocation(draft, selected.id, { kind: type.baseKind }));
+        applyHierarchyProfile(withLocationHierarchyType(draftHierarchyProfile, selected.id, typeId));
+      }}
       onUpdate={(patch) => selected && applyDraft(updateSpatialLocation(draft, selected.id, patch))}
       lorebooks={lorebooks}
       lorebookEntries={lorebookEntriesQuery.entries ?? []}
@@ -798,6 +1020,57 @@ export function SpatialMapWorkspace({
       data-marinara-maps-workspace-root
       className="mari-editor-shell mari-editor-legacy-bridge relative z-[46] flex flex-1 flex-col overflow-hidden"
     >
+      {pendingConfirmation && (
+        <div
+          ref={confirmationDialogRef}
+          data-chat-floating-panel
+          data-marinara-maps-confirmation="true"
+          role="dialog"
+          aria-modal="true"
+          aria-label={pendingConfirmation.title}
+          aria-describedby="marinara-maps-confirmation-message"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--background)]/85 p-3 sm:p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) resolveConfirmation(false);
+          }}
+        >
+          <div className="max-h-[min(42rem,calc(100dvh-1.5rem))] w-full max-w-md overflow-y-auto rounded-xl border border-[var(--destructive)]/35 bg-[var(--background)] shadow-2xl">
+            <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--destructive)]/15 text-[var(--destructive)]">
+                <AlertCircle size="1.125rem" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold text-[var(--foreground)]">{pendingConfirmation.title}</h2>
+                <p className="mt-1 text-xs font-medium text-[var(--destructive)]">Destructive map action</p>
+              </div>
+            </div>
+            <p
+              id="marinara-maps-confirmation-message"
+              className="whitespace-pre-wrap px-4 py-4 text-sm leading-relaxed text-[var(--foreground)] sm:px-5"
+            >
+              {pendingConfirmation.message}
+            </p>
+            <div className="flex flex-col gap-2 border-t border-[var(--border)] px-4 py-4 sm:flex-row sm:justify-end sm:px-5">
+              <button
+                ref={confirmationCancelRef}
+                type="button"
+                onClick={() => resolveConfirmation(false)}
+                className="mari-chrome-control min-h-11 w-full px-4 text-sm sm:w-auto"
+              >
+                {pendingConfirmation.cancelLabel ?? "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => resolveConfirmation(true)}
+                className="mari-chrome-control mari-chrome-control--danger min-h-11 w-full px-4 text-sm sm:w-auto"
+              >
+                {pendingConfirmation.confirmLabel ?? "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mari-editor-header relative z-50">
         <button
           type="button"
@@ -833,11 +1106,20 @@ export function SpatialMapWorkspace({
           </button>
           <button
             type="button"
+            onClick={() => setTypesEditorOpen((value) => !value)}
+            disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+            aria-pressed={typesEditorOpen}
+            className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+          >
+            <Settings2 size="0.8125rem" /> Location types
+          </button>
+          <button
+            type="button"
             onClick={handleExport}
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
             aria-label="Export hierarchical map"
           >
-            <Download size="0.8125rem" /> Export
+            <Upload size="0.8125rem" /> Export
           </button>
           <button
             type="button"
@@ -846,9 +1128,21 @@ export function SpatialMapWorkspace({
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
             aria-label="Import hierarchical map"
           >
-            <Upload size="0.8125rem" /> Import
+            <Download size="0.8125rem" /> Import
           </button>
+          {baseDefinition && baseDefinition.locations.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleDeleteMap()}
+              disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+              className="mari-editor-action inline-flex min-h-11 px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
+              aria-label="Delete map and start over"
+            >
+              <Trash2 size="0.8125rem" /> Delete map
+            </button>
+          )}
           <input
+            data-marinara-map-import-input
             ref={importInputRef}
             type="file"
             accept="application/json,.json"
@@ -895,6 +1189,10 @@ export function SpatialMapWorkspace({
         ownerMode={ownerMode}
         open={aiBuilderOpen}
         definition={draft}
+        hierarchyProfile={draftHierarchyProfile}
+        generationPreferences={
+          spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode)
+        }
         currentLocationId={currentLocationId}
         preferredTargetLocationId={selected?.id ?? null}
         hasCommittedSpatialHistory={spatial.data?.hasCommittedSpatialHistory ?? false}
@@ -909,6 +1207,86 @@ export function SpatialMapWorkspace({
         onClose={closeAiBuilder}
         onApply={applyGeneratedDraft}
       />
+
+      {!aiBuilderOpen && typesEditorOpen && (
+        <section
+          className="flex max-h-[min(70dvh,42rem)] shrink-0 flex-col overflow-hidden border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]"
+          aria-label="Edit location types"
+          style={{ maxHeight: "min(70dvh, 42rem)" }}
+        >
+          <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col">
+            <div className="flex shrink-0 items-start gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-semibold text-[var(--marinara-editor-title)]">Location types</h2>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--marinara-editor-muted)]">
+                  Rename the vocabulary users see while keeping a semantic base kind for movement, layout, and validation. Multiple types can share the same base kind.
+                </p>
+              </div>
+              <button type="button" onClick={() => setTypesEditorOpen(false)} className="mari-editor-action min-h-11 px-3 text-xs">
+                Done
+              </button>
+            </div>
+            <div
+              data-marinara-maps-location-types-scroll
+              role="region"
+              aria-label="Location type fields"
+              tabIndex={0}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4"
+            >
+              <SpatialHierarchyProfileFields
+                definition={draft}
+                profile={draftHierarchyProfile}
+                disabled={conflict || updateSpatial.isPending}
+                onChange={(next) => {
+                  setDraftHierarchyProfile(next.profile);
+                  applyDraft(next.definition);
+                }}
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!aiBuilderOpen && importIdReport && (
+        <section
+          className="border-b border-amber-500/35 bg-amber-500/10 px-4 py-3 text-xs text-amber-200"
+          role="alert"
+          aria-label="Import location ID repair guidance"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle size="0.875rem" className="mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">
+                Import blocked: {importIdReport.missing.length} saved location ID
+                {importIdReport.missing.length === 1 ? " is" : "s are"} missing
+              </p>
+              <p className="mt-1 leading-relaxed text-amber-200/80">
+                Names are editable labels; campaign history follows the stable IDs. Export this map as a baseline, copy your revised names and details into that file, and keep each matching ID unchanged before importing again.
+              </p>
+              <ul className="mt-2 grid gap-1 sm:grid-cols-2" aria-label="Missing saved location IDs">
+                {importIdReport.missing.slice(0, 12).map((location) => (
+                  <li key={location.id} className="truncate rounded bg-black/10 px-2 py-1 font-mono text-[0.625rem]">
+                    {location.name || "Untitled location"} · {location.id}
+                  </li>
+                ))}
+              </ul>
+              {importIdReport.missing.length > 12 && (
+                <p className="mt-1 text-[0.625rem]">And {importIdReport.missing.length - 12} more missing IDs.</p>
+              )}
+              <p className="mt-2 text-[0.625rem] leading-relaxed text-amber-200/75">
+                Reusing an old ID for a different conceptual place will make historical messages resolve to that new place.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setImportIdReport(null)}
+              className="mari-chrome-control min-h-11 px-3 text-xs"
+            >
+              Dismiss
+            </button>
+          </div>
+        </section>
+      )}
 
       {!aiBuilderOpen && isFirstMapDraft && (
         <section
