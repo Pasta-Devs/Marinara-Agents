@@ -806,6 +806,34 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
   });
   expect(response.ok(), await response.text()).toBeTruthy();
   const chat = (await response.json()) as { id: string };
+  const agentsBeforeResponse = await page.request.get("/api/agents");
+  expect(agentsBeforeResponse.ok(), await agentsBeforeResponse.text()).toBeTruthy();
+  const mapsAgentBefore = ((await agentsBeforeResponse.json()) as Array<{
+    type: string;
+    settings?: unknown;
+  }>).find((agent) => agent.type === "hierarchical-maps");
+  const originalMapsAgentSettings = (() => {
+    if (typeof mapsAgentBefore?.settings === "string") {
+      try {
+        const parsed = JSON.parse(mapsAgentBefore.settings) as unknown;
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {};
+      } catch {
+        return {};
+      }
+    }
+    return mapsAgentBefore?.settings && typeof mapsAgentBefore.settings === "object"
+      ? (mapsAgentBefore.settings as Record<string, unknown>)
+      : {};
+  })();
+  let secondaryChat: { id: string } | null = null;
+  const isolatedMapsAgentSettings = { ...originalMapsAgentSettings };
+  delete isolatedMapsAgentSettings.spatialMapGenerationPromptLibraries;
+  const isolateSettingsResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+    data: { settings: isolatedMapsAgentSettings },
+  });
+  expect(isolateSettingsResponse.ok(), await isolateSettingsResponse.text()).toBeTruthy();
   const resetMetadata = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
     data: { enableAgents: false, activeAgentIds: [] },
   });
@@ -872,6 +900,13 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     const userTemplate = home.getByLabel("New map User template");
     await expect(systemTemplate).toHaveValue(/AI roleplay engine/u);
     await expect(userTemplate).toHaveValue(/\$\{sourceContextBlock\}/u);
+    await home.getByRole("button", { name: "Game", exact: true }).click();
+    await expect(home).toContainText("Game · Default");
+    await expect(systemTemplate).toHaveValue(/AI game engine/u);
+    await expect(home.getByRole("button", { name: "Preview resolved prompt" })).toBeDisabled();
+    await expect(home).toContainText("Open a Game chat to resolve these global templates");
+    await home.getByRole("button", { name: "Roleplay", exact: true }).click();
+    await expect(home).toContainText("Roleplay · Default");
     await home.getByRole("button", { name: "Add option" }).click();
     await home.getByLabel("Option name").fill("Nautical districts");
     await home.getByLabel("Short description").fill("Compact port cities with clear public routes.");
@@ -901,7 +936,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(resolvedPromptMessages.getByLabel("Resolved User message")).toContainText(
       "Favor salt-worn brick, covered arcades, and compact waterfront blocks.",
     );
-    await home.getByRole("button", { name: "Save prompt options" }).click();
+    await home.getByRole("button", { name: "Save global library" }).click();
     await expect(home).toContainText("Roleplay · Nautical districts");
     await expect
       .poll(async () => {
@@ -948,6 +983,130 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
         retainsSchema: true,
         retainsSourceContext: true,
       });
+    await expect
+      .poll(async () => {
+        const agentsResponse = await page.request.get("/api/agents");
+        const mapsAgent = ((await agentsResponse.json()) as Array<{ type: string; settings?: unknown }>).find(
+          (agent) => agent.type === "hierarchical-maps",
+        );
+        const settings =
+          typeof mapsAgent?.settings === "string"
+            ? (JSON.parse(mapsAgent.settings) as Record<string, unknown>)
+            : ((mapsAgent?.settings ?? {}) as Record<string, unknown>);
+        const libraries = settings.spatialMapGenerationPromptLibraries as
+          | {
+              version?: number;
+              roleplay?: { options?: Array<{ name?: string; prompts?: { draftSystem?: string } }> };
+            }
+          | undefined;
+        return {
+          version: libraries?.version,
+          names: libraries?.roleplay?.options?.map((option) => option.name),
+          customized: libraries?.roleplay?.options?.some((option) =>
+            option.prompts?.draftSystem?.includes("Keep authored districts easy to scan."),
+          ),
+        };
+      })
+      .toEqual({ version: 1, names: ["Default", "Nautical districts"], customized: true });
+
+    const secondaryResponse = await page.request.post("/api/chats", {
+      data: {
+        name: `Maps Global Library ${testInfo.project.name}`,
+        mode: "roleplay",
+        characterIds: [],
+      },
+    });
+    expect(secondaryResponse.ok(), await secondaryResponse.text()).toBeTruthy();
+    secondaryChat = (await secondaryResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, secondaryChat.id);
+    const secondaryPage = await page.context().newPage();
+    try {
+      await secondaryPage.addInitScript((chatId) => {
+        localStorage.setItem("marinara-active-chat-id", chatId);
+        localStorage.setItem(
+          "marinara-engine-ui",
+          JSON.stringify({
+            state: {
+              hasCompletedOnboarding: true,
+              rightPanelOpen: false,
+              sidebarOpen: false,
+            },
+            version: 75,
+          }),
+        );
+      }, secondaryChat.id);
+      await secondaryPage.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+        await route.fulfill({ status: 204, body: "" });
+      });
+      await secondaryPage.goto("/");
+      await dismissOnboardingTutorial(secondaryPage);
+      await secondaryPage.locator('[data-tour="panel-agents"]').click();
+      const secondaryAgentsPanel = secondaryPage.locator(
+        mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
+      );
+      await secondaryAgentsPanel
+        .locator('[data-agent-name="Hierarchical Maps"]')
+        .getByText("Hierarchical Maps", { exact: true })
+        .click();
+      const secondaryHome = secondaryPage.locator("[data-marinara-maps-home]");
+      await expect(secondaryHome).toContainText("Maps Global Library");
+      const secondaryPromptOption = secondaryHome.getByLabel("Prompt option");
+      await expect(secondaryPromptOption.locator("option")).toHaveText(["Default", "Nautical districts"]);
+      let generatedRequest: Record<string, unknown> | null = null;
+      const generationRoute = `**/api/chats/${secondaryChat.id}/spatial-context/generate`;
+      await secondaryPage.route(generationRoute, async (route) => {
+        generatedRequest = route.request().postDataJSON() as Record<string, unknown>;
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Captured global prompt request" }),
+        });
+      });
+      await secondaryHome.getByRole("button", { name: "Create map", exact: true }).click();
+      await expect(secondaryPage.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+      await secondaryPage.getByRole("button", { name: "Draft with AI", exact: true }).click();
+      await secondaryPage.getByRole("button", { name: "Generate draft", exact: true }).click();
+      await expect
+        .poll(() => {
+          const preferences = generatedRequest?.generationPreferencesOverride as
+            | { activeOptionId?: string; options?: Array<{ name?: string }> }
+            | undefined;
+          return {
+            activeOptionId: preferences?.activeOptionId,
+            optionNames: preferences?.options?.map((option) => option.name),
+          };
+        })
+        .toEqual({ activeOptionId: "default", optionNames: ["Default", "Nautical districts"] });
+      await secondaryPage.unroute(generationRoute);
+      await secondaryPage.getByRole("button", { name: "Back to chat", exact: true }).click();
+      const secondaryDiscardDialog = secondaryPage.getByRole("dialog", { name: "Discard map changes?" });
+      if (await secondaryDiscardDialog.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await secondaryDiscardDialog.getByRole("button", { name: "Discard changes", exact: true }).click();
+      }
+      await expect(secondaryHome).toBeVisible();
+      await secondaryPromptOption.selectOption({ label: "Nautical districts" });
+      await expect
+        .poll(async () => {
+          const spatialResponse = await secondaryPage.request.get(
+            `/api/chats/${secondaryChat!.id}/spatial-context`,
+          );
+          const payload = (await spatialResponse.json()) as {
+            generationPreferences: { activeOptionId: string; options: Array<{ id: string; name: string }> };
+          };
+          const active = payload.generationPreferences.options.find(
+            (option) => option.id === payload.generationPreferences.activeOptionId,
+          );
+          return {
+            activeName: active?.name,
+            activeOptionId: payload.generationPreferences.activeOptionId,
+            optionCount: payload.generationPreferences.options.length,
+          };
+        })
+        .toMatchObject({ activeName: "Nautical districts", optionCount: 2 });
+    } finally {
+      await secondaryPage.close();
+    }
+    await page.evaluate((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
     await promptOption.selectOption({ label: "Default" });
     await expect(home).toContainText("Roleplay · Default");
     await expect(systemTemplate).toHaveValue(/AI roleplay engine/u);
@@ -961,7 +1120,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(home.getByText("Create a map with an active location before previewing the Expansion templates.")).toBeVisible();
     await home.getByRole("button", { name: "Edit prompt option" }).click();
     await home.getByRole("button", { name: "Delete option" }).click();
-    await home.getByRole("button", { name: "Save prompt options" }).click();
+    await home.getByRole("button", { name: "Save global library" }).click();
     await expect(home).toContainText("Roleplay · Default");
     await expect
       .poll(async () => {
@@ -1016,6 +1175,11 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
       "No map yet. Create one from Agents → Hierarchical Maps; your message draft is unchanged.",
     );
   } finally {
+    const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+      data: { settings: originalMapsAgentSettings },
+    });
+    expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
+    if (secondaryChat) await expectDeleted(page, `/api/chats/${secondaryChat.id}`);
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });

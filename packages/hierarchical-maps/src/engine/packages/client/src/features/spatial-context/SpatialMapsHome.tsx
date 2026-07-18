@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Box,
@@ -23,13 +23,17 @@ import {
   getSpatialContextProblem,
   usePreviewSpatialMapPrompt,
   useSpatialContext,
+  useSpatialGenerationPromptLibraries,
   useUpdateSpatialGenerationPreferences,
+  useUpdateSpatialGenerationPromptLibrary,
   useUpdateSpatialContext,
   type SpatialMapPromptPreview,
 } from "../../hooks/use-spatial-context";
 import {
   defaultGenerationPreferences,
   DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID,
+  GENERATION_PROMPT_LIBRARIES_VERSION,
+  generationPreferencesWithPromptLibrary,
   normalizeHierarchyProfile,
   SPATIAL_GENERATION_PROMPT_VARIABLES,
   spatialGenerationPreferencesSchema,
@@ -156,10 +160,13 @@ export function SpatialMapsHome({
   const [activationError, setActivationError] = useState<string | null>(null);
   const updateSpatial = useUpdateSpatialContext();
   const updateGenerationPreferences = useUpdateSpatialGenerationPreferences();
+  const promptLibraries = useSpatialGenerationPromptLibraries();
+  const updatePromptLibrary = useUpdateSpatialGenerationPromptLibrary();
   const previewGenerationPrompt = usePreviewSpatialMapPrompt();
-  const ownerMode = chatMode === "game" ? "game" : "roleplay";
+  const chatOwnerMode = chatMode === "game" ? "game" : "roleplay";
+  const [promptMode, setPromptMode] = useState<"roleplay" | "game">(chatOwnerMode);
   const [promptDraft, setPromptDraft] = useState<SpatialGenerationPreferences>(() =>
-    defaultGenerationPreferences(ownerMode),
+    defaultGenerationPreferences(chatOwnerMode),
   );
   const [promptEditing, setPromptEditing] = useState(false);
   const [promptOperation, setPromptOperation] = useState<"draft" | "expansion">("draft");
@@ -182,11 +189,13 @@ export function SpatialMapsHome({
   currentChatIdRef.current = chatId;
   const promptPreviewRequestIdRef = useRef(0);
   const resetGenerationPreferences = updateGenerationPreferences.reset;
+  const resetPromptLibraryUpdate = updatePromptLibrary.reset;
   const resetSpatialUpdate = updateSpatial.reset;
   const resetPromptPreviewRequest = previewGenerationPrompt.reset;
   useEffect(() => {
     setPromptEditing(false);
-    setPromptDraft(defaultGenerationPreferences(ownerMode));
+    setPromptMode(chatOwnerMode);
+    setPromptDraft(defaultGenerationPreferences(chatOwnerMode));
     setPromptOperation("draft");
     setPromptPreview(null);
     setPromptCopyStatus("idle");
@@ -194,13 +203,26 @@ export function SpatialMapsHome({
     setHierarchyDraft(null);
     promptPreviewRequestIdRef.current += 1;
     resetGenerationPreferences();
+    resetPromptLibraryUpdate();
     resetPromptPreviewRequest();
     resetSpatialUpdate();
-  }, [chatId, ownerMode, resetGenerationPreferences, resetPromptPreviewRequest, resetSpatialUpdate]);
+  }, [chatId, chatOwnerMode, resetGenerationPreferences, resetPromptLibraryUpdate, resetPromptPreviewRequest, resetSpatialUpdate]);
+  const promptAppliesToCurrentChat = Boolean(chatId && supportedChat && chatOwnerMode === promptMode);
+  const resolvedPromptPreferences = useMemo(
+    () =>
+      generationPreferencesWithPromptLibrary(
+        promptLibraries.data?.[promptMode],
+        promptAppliesToCurrentChat
+          ? spatial.data?.generationPreferences
+          : defaultGenerationPreferences(promptMode),
+        promptMode,
+      ),
+    [promptAppliesToCurrentChat, promptLibraries.data, promptMode, spatial.data?.generationPreferences],
+  );
   useEffect(() => {
-    if (promptEditing || !spatial.data?.generationPreferences) return;
-    setPromptDraft(spatial.data.generationPreferences);
-  }, [promptEditing, spatial.data?.generationPreferences]);
+    if (promptEditing || promptLibraries.isLoading) return;
+    setPromptDraft(resolvedPromptPreferences);
+  }, [promptEditing, promptLibraries.isLoading, resolvedPromptPreferences]);
   useEffect(() => {
     if (hierarchyEditing) return;
     if (!spatial.data?.definition) {
@@ -234,6 +256,7 @@ export function SpatialMapsHome({
     activeLocations.find((location) => location.id === definition?.startingLocationId) ??
     activeLocations[0] ??
     null;
+  const promptPreviewUnavailable = !promptAppliesToCurrentChat;
   const expansionPreviewUnavailable = promptOperation === "expansion" && !expansionPreviewTarget;
   const hierarchySaveError = updateSpatial.isError
     ? getSpatialContextProblem(updateSpatial.error).message
@@ -268,11 +291,23 @@ export function SpatialMapsHome({
     setHierarchyEditing(false);
   };
 
-  const savePrompt = async (preferences: SpatialGenerationPreferences) => {
-    if (!chatId) return;
-    const savingChatId = chatId;
-    await updateGenerationPreferences.mutateAsync({ chatId: savingChatId, preferences });
-    if (currentChatIdRef.current !== savingChatId) return;
+  const savePromptSelectionForCurrentChat = async (preferences: SpatialGenerationPreferences) => {
+    if (!chatId || !promptAppliesToCurrentChat) return;
+    await updateGenerationPreferences.mutateAsync({ chatId, preferences });
+  };
+  const saveGlobalPromptLibrary = async (preferences: SpatialGenerationPreferences) => {
+    const savingChatId = promptAppliesToCurrentChat ? chatId : null;
+    await updatePromptLibrary.mutateAsync({
+      ownerMode: promptMode,
+      library: {
+        version: GENERATION_PROMPT_LIBRARIES_VERSION,
+        options: preferences.options,
+      },
+    });
+    if (savingChatId) {
+      await updateGenerationPreferences.mutateAsync({ chatId: savingChatId, preferences });
+    }
+    if (savingChatId && currentChatIdRef.current !== savingChatId) return;
     setPromptDraft(preferences);
     setPromptEditing(false);
   };
@@ -291,7 +326,7 @@ export function SpatialMapsHome({
   const selectPromptOption = async (optionId: string) => {
     const preferences = { ...promptDraft, activeOptionId: optionId };
     setPromptDraft(preferences);
-    if (!promptEditing) await savePrompt(preferences);
+    if (!promptEditing) await savePromptSelectionForCurrentChat(preferences);
   };
   const addPromptOption = () => {
     const usedIds = new Set(promptDraft.options.map((option) => option.id));
@@ -325,7 +360,7 @@ export function SpatialMapsHome({
     setPromptDraft((current) => ({ ...current, activeOptionId: nextActiveOption.id, options }));
   };
   const restoreBuiltInPromptOption = () => {
-    const builtInOption = defaultGenerationPreferences(ownerMode).options[0]!;
+    const builtInOption = defaultGenerationPreferences(promptMode).options[0]!;
     setPromptDraft((current) => ({
       ...current,
       options: current.options.map((option) =>
@@ -358,7 +393,7 @@ export function SpatialMapsHome({
     });
   };
   const previewPrompt = async () => {
-    if (!chatId || !promptValidation.success || expansionPreviewUnavailable) return;
+    if (!chatId || !promptValidation.success || promptPreviewUnavailable || expansionPreviewUnavailable) return;
     const previewChatId = chatId;
     const requestId = ++promptPreviewRequestIdRef.current;
     try {
@@ -443,7 +478,7 @@ export function SpatialMapsHome({
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-4 sm:p-6">
         <div>
           <p className="max-w-2xl text-sm leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-            Build nested regions, settlements, buildings, and places so Roleplay and Game turns share one authoritative world location.
+            Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.
           </p>
           <div className="mt-3 flex flex-wrap gap-2" aria-label="Supported chat modes">
             {['Roleplay', 'Game'].map((mode) => (
@@ -669,20 +704,53 @@ export function SpatialMapsHome({
           </article>
         )}
 
-        {chatId && supportedChat && (
-          <article className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4" aria-labelledby="maps-generation-prompt-title">
+        <article className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4" aria-labelledby="maps-generation-prompt-title">
             <div className="flex flex-wrap items-start gap-3">
               <FileText size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
               <div className="min-w-52 flex-1">
                 <h2 id="maps-generation-prompt-title" className="text-xs font-semibold">Generation prompt</h2>
                 <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                  Edit the {modeLabel(chatMode)} templates that build the complete System and User messages for new maps and expansions in this chat.
+                  These named templates are global. Edit them once, then select an option independently in each matching chat.
                 </p>
               </div>
               <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
-                {modeLabel(chatMode)} · {activePromptOption.name}
+                {modeLabel(promptMode)} · {activePromptOption.name}
               </span>
             </div>
+
+            <div className="mt-3 flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]" role="group" aria-label="Prompt library mode">
+              {(["roleplay", "game"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={promptMode === mode}
+                  disabled={promptEditing || updatePromptLibrary.isPending || updateGenerationPreferences.isPending}
+                  onClick={() => {
+                    setPromptMode(mode);
+                    setPromptPreview(null);
+                    setPromptCopyStatus("idle");
+                  }}
+                  className={`min-h-11 flex-1 rounded-md px-3 text-[0.6875rem] font-medium disabled:opacity-45 ${
+                    promptMode === mode
+                      ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                      : "text-[var(--marinara-chat-chrome-accent)]"
+                  }`}
+                >
+                  {modeLabel(mode)}
+                </button>
+              ))}
+            </div>
+
+            {promptLibraries.isLoading && (
+              <p className="mt-3 flex min-h-11 items-center gap-2 text-[0.6875rem] text-[var(--marinara-chat-chrome-accent)]" role="status">
+                <LoaderCircle size="0.8125rem" className="animate-spin" /> Loading global prompt library…
+              </p>
+            )}
+            {promptLibraries.isError && (
+              <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
+                The global prompt library could not be loaded. Existing chat templates remain available until this is retried.
+              </p>
+            )}
 
             <div className="mt-3 border-y border-[var(--border)] py-3">
               <div className="flex flex-wrap items-end gap-2">
@@ -691,7 +759,11 @@ export function SpatialMapsHome({
                   <select
                     id="maps-generation-prompt-option"
                     value={promptDraft.activeOptionId}
-                    disabled={updateGenerationPreferences.isPending}
+                    disabled={
+                      promptLibraries.isLoading ||
+                      updatePromptLibrary.isPending ||
+                      updateGenerationPreferences.isPending
+                    }
                     onChange={(event) => void selectPromptOption(event.target.value)}
                     className="mt-2 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-xs font-medium outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-50"
                   >
@@ -703,14 +775,21 @@ export function SpatialMapsHome({
                 <button
                   type="button"
                   onClick={addPromptOption}
-                  disabled={promptDraft.options.length >= 24 || updateGenerationPreferences.isPending}
+                  disabled={
+                    promptDraft.options.length >= 24 ||
+                    promptLibraries.isLoading ||
+                    updatePromptLibrary.isPending ||
+                    updateGenerationPreferences.isPending
+                  }
                   className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-40"
                 >
                   <Plus size="0.75rem" /> Add option
                 </button>
               </div>
               <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                Selecting an option loads and activates its complete New Map and Expansion prompt set for this chat.
+                Options are shared globally. {promptAppliesToCurrentChat
+                  ? `Selecting one activates it for ${chatName ?? "the current chat"}.`
+                  : `Open a ${modeLabel(promptMode)} chat to select its active option or preview resolved context.`}
               </p>
 
               {promptEditing ? (
@@ -951,7 +1030,12 @@ export function SpatialMapsHome({
                 <button
                   type="button"
                   onClick={() => void previewPrompt()}
-                  disabled={previewGenerationPrompt.isPending || !promptValidation.success || expansionPreviewUnavailable}
+                  disabled={
+                    previewGenerationPrompt.isPending ||
+                    !promptValidation.success ||
+                    promptPreviewUnavailable ||
+                    expansionPreviewUnavailable
+                  }
                   className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-3 text-xs font-medium transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {previewGenerationPrompt.isPending ? (
@@ -967,7 +1051,12 @@ export function SpatialMapsHome({
                   {promptValidationMessage}
                 </p>
               )}
-              {expansionPreviewUnavailable && (
+              {promptPreviewUnavailable && (
+                <p className="mt-3 text-[0.6875rem] text-amber-400">
+                  Open a {modeLabel(promptMode)} chat to resolve these global templates with real chat context.
+                </p>
+              )}
+              {!promptPreviewUnavailable && expansionPreviewUnavailable && (
                 <p className="mt-3 text-[0.6875rem] text-amber-400">
                   Create a map with an active location before previewing the Expansion templates.
                 </p>
@@ -1030,6 +1119,13 @@ export function SpatialMapsHome({
                   : "The generation prompt could not be saved."}
               </p>
             )}
+            {updatePromptLibrary.isError && (
+              <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
+                {updatePromptLibrary.error instanceof Error
+                  ? updatePromptLibrary.error.message
+                  : "The global prompt library could not be saved."}
+              </p>
+            )}
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               {promptEditing ? (
@@ -1057,8 +1153,9 @@ export function SpatialMapsHome({
                     <button
                       type="button"
                       onClick={() => {
-                        setPromptDraft(spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode));
+                        setPromptDraft(resolvedPromptPreferences);
                         setPromptEditing(false);
+                        updatePromptLibrary.reset();
                       }}
                       className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)]"
                     >
@@ -1066,11 +1163,22 @@ export function SpatialMapsHome({
                     </button>
                     <button
                       type="button"
-                      disabled={updateGenerationPreferences.isPending || !promptValidation.success}
-                      onClick={() => promptValidation.success && void savePrompt(promptValidation.data)}
+                      disabled={
+                        updatePromptLibrary.isPending ||
+                        updateGenerationPreferences.isPending ||
+                        !promptValidation.success
+                      }
+                      onClick={() =>
+                        promptValidation.success && void saveGlobalPromptLibrary(promptValidation.data)
+                      }
                       className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                     >
-                      <Save size="0.75rem" /> Save prompt options
+                      {updatePromptLibrary.isPending || updateGenerationPreferences.isPending ? (
+                        <LoaderCircle size="0.75rem" className="animate-spin" />
+                      ) : (
+                        <Save size="0.75rem" />
+                      )}
+                      Save global library
                     </button>
                   </div>
                 </>
@@ -1078,14 +1186,14 @@ export function SpatialMapsHome({
                 <button
                   type="button"
                   onClick={() => setPromptEditing(true)}
-                  className="ml-auto inline-flex min-h-11 items-center rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)]"
+                  disabled={promptLibraries.isLoading || updatePromptLibrary.isPending}
+                  className="ml-auto inline-flex min-h-11 items-center rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                 >
                   Edit prompt option
                 </button>
               )}
             </div>
           </article>
-        )}
 
         <article className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--secondary)]/30 p-4">
           <div className="flex items-start gap-3">
@@ -1093,7 +1201,7 @@ export function SpatialMapsHome({
             <div>
               <h2 className="text-xs font-semibold">Map state stays with each chat</h2>
               <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                Hierarchy contents, current location, lore bindings, Game bindings, history, and unsaved drafts are never promoted into global agent settings.
+                Prompt libraries are global. Each chat still keeps its selected prompt option, hierarchy contents, current location, bindings, history, and unsaved drafts.
               </p>
             </div>
           </div>

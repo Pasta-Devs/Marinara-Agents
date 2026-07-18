@@ -21,7 +21,14 @@ import { spatialResourceKeys } from "../features/spatial-context/use-spatial-res
 import type {
   MapsSpatialContextResponse,
   SpatialGenerationPreferences,
+  SpatialGenerationPromptLibraries,
+  SpatialGenerationPromptLibrary,
   SpatialHierarchyProfile,
+} from "../../../maps-shared/src/maps-model";
+import {
+  GENERATION_PROMPT_LIBRARIES_VERSION,
+  SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY,
+  parseSpatialGenerationPromptLibraries,
 } from "../../../maps-shared/src/maps-model";
 
 export const spatialContextKeys = {
@@ -29,6 +36,7 @@ export const spatialContextKeys = {
   detail: (chatId: string) => [...spatialContextKeys.all, chatId] as const,
   gameMapReconciliation: (chatId: string) =>
     [...spatialContextKeys.detail(chatId), "game-map-reconciliation"] as const,
+  generationPromptLibraries: ["spatial-context", "generation-prompt-libraries"] as const,
 };
 
 export type GameMapBindingTarget =
@@ -82,6 +90,7 @@ export interface GenerateSpatialMapDraftInput extends GenerateSpatialMapDraftReq
   hierarchyMode?: SpatialHierarchyProfile["mode"];
   hierarchyProfile?: SpatialHierarchyProfile;
   promptOverride?: Pick<SpatialMapPromptPreview, "system" | "user">;
+  generationPreferencesOverride?: SpatialGenerationPreferences;
 }
 
 export type PreviewSpatialMapPromptInput = Omit<GenerateSpatialMapDraftInput, "promptOverride"> & {
@@ -125,6 +134,40 @@ export interface SpatialContextProblem {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+interface MapsAgentConfigRecord {
+  type: string;
+  settings: unknown;
+}
+
+function parseAgentSettings(value: unknown): Record<string, unknown> {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return isRecord(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return isRecord(value) ? value : {};
+}
+
+async function readSpatialGenerationPromptLibraries(): Promise<{
+  config: MapsAgentConfigRecord | null;
+  settings: Record<string, unknown>;
+  libraries: SpatialGenerationPromptLibraries | null;
+}> {
+  const configs = await packageApi.get<MapsAgentConfigRecord[]>("/agents");
+  const config = configs.find((candidate) => candidate.type === "hierarchical-maps") ?? null;
+  const settings = parseAgentSettings(config?.settings);
+  return {
+    config,
+    settings,
+    libraries: parseSpatialGenerationPromptLibraries(
+      settings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
+    ),
+  };
 }
 
 function readIssues(value: unknown): SpatialDefinitionIssue[] {
@@ -239,6 +282,48 @@ export function usePreviewSpatialMapPrompt() {
         `/chats/${chatId}/spatial-context/generation-prompt/preview`,
         request,
       ),
+  });
+}
+
+export function useSpatialGenerationPromptLibraries() {
+  return useQuery({
+    queryKey: spatialContextKeys.generationPromptLibraries,
+    queryFn: async () => (await readSpatialGenerationPromptLibraries()).libraries,
+    staleTime: 30_000,
+  });
+}
+
+export function useUpdateSpatialGenerationPromptLibrary() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      ownerMode,
+      library,
+    }: {
+      ownerMode: SpatialOwnerMode;
+      library: SpatialGenerationPromptLibrary;
+    }) => {
+      const current = await readSpatialGenerationPromptLibraries();
+      const libraries: SpatialGenerationPromptLibraries = {
+        version: GENERATION_PROMPT_LIBRARIES_VERSION,
+        ...(current.libraries ?? {}),
+        [ownerMode]: library,
+      };
+      const updated = await packageApi.patch<MapsAgentConfigRecord>("/agents/type/hierarchical-maps", {
+        settings: {
+          ...current.settings,
+          [SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY]: libraries,
+        },
+      });
+      return (
+        parseSpatialGenerationPromptLibraries(
+          parseAgentSettings(updated.settings)[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
+        ) ?? libraries
+      );
+    },
+    onSuccess: (libraries) => {
+      queryClient.setQueryData(spatialContextKeys.generationPromptLibraries, libraries);
+    },
   });
 }
 

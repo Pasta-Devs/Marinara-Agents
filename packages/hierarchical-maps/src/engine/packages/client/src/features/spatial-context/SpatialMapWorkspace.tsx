@@ -58,6 +58,7 @@ import {
   useSpatialLorebooks,
 } from "./use-spatial-resources";
 import {
+  defaultGenerationPreferences,
   defaultHierarchyProfile,
   hierarchyTypeForLocation,
   normalizeHierarchyProfile,
@@ -1012,6 +1013,9 @@ export function SpatialMapWorkspace({
         open={aiBuilderOpen}
         definition={draft}
         hierarchyProfile={draftHierarchyProfile}
+        generationPreferences={
+          spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode)
+        }
         currentLocationId={currentLocationId}
         preferredTargetLocationId={selected?.id ?? null}
         hasCommittedSpatialHistory={spatial.data?.hasCommittedSpatialHistory ?? false}

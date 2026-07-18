@@ -9,7 +9,9 @@ import type {
 
 export const HIERARCHY_PROFILE_VERSION = 1 as const;
 export const GENERATION_PREFERENCES_VERSION = 3 as const;
+export const GENERATION_PROMPT_LIBRARIES_VERSION = 1 as const;
 export const DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID = "default";
+export const SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY = "spatialMapGenerationPromptLibraries";
 
 export const BUILT_IN_GENERATION_GUIDANCE =
   "Build a practical, easy-to-browse location hierarchy that matches this setting. Use the world's own vocabulary, include only useful playable places, and connect ordinary travel routes without overfilling the map.";
@@ -167,6 +169,17 @@ export interface SpatialGenerationPreferences {
   options: SpatialGenerationPromptOption[];
 }
 
+export interface SpatialGenerationPromptLibrary {
+  version: typeof GENERATION_PROMPT_LIBRARIES_VERSION;
+  options: SpatialGenerationPromptOption[];
+}
+
+export interface SpatialGenerationPromptLibraries {
+  version: typeof GENERATION_PROMPT_LIBRARIES_VERSION;
+  roleplay?: SpatialGenerationPromptLibrary;
+  game?: SpatialGenerationPromptLibrary;
+}
+
 export interface MapsSpatialContextResponse extends SpatialContextResponse {
   hierarchyProfile: SpatialHierarchyProfile;
   generationPreferences: SpatialGenerationPreferences;
@@ -259,6 +272,21 @@ export const spatialGenerationPromptOptionSchema = z
     guidance: z.string().trim().max(4_000),
     customVariables: z.array(spatialGenerationCustomVariableSchema).max(32).default([]),
     prompts: spatialGenerationPromptTemplatesSchema,
+  })
+  .strict();
+
+export const spatialGenerationPromptLibrarySchema = z
+  .object({
+    version: z.literal(GENERATION_PROMPT_LIBRARIES_VERSION),
+    options: z.array(spatialGenerationPromptOptionSchema).min(1).max(24),
+  })
+  .strict();
+
+export const spatialGenerationPromptLibrariesSchema = z
+  .object({
+    version: z.literal(GENERATION_PROMPT_LIBRARIES_VERSION),
+    roleplay: spatialGenerationPromptLibrarySchema.optional(),
+    game: spatialGenerationPromptLibrarySchema.optional(),
   })
   .strict();
 
@@ -490,6 +518,30 @@ export function normalizeGenerationPreferences(
     ...defaults,
     activeOptionId: customOption.id,
     options: [...defaults.options, customOption],
+  };
+}
+
+export function parseSpatialGenerationPromptLibraries(value: unknown): SpatialGenerationPromptLibraries | null {
+  const parsed = spatialGenerationPromptLibrariesSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+export function generationPreferencesWithPromptLibrary(
+  library: SpatialGenerationPromptLibrary | null | undefined,
+  selection: unknown,
+  ownerMode: SpatialOwnerMode = "roleplay",
+): SpatialGenerationPreferences {
+  const selected = normalizeGenerationPreferences(selection, ownerMode);
+  const options = library?.options ?? selected.options;
+  const activeOptionId = options.some((option) => option.id === selected.activeOptionId)
+    ? selected.activeOptionId
+    : options.some((option) => option.id === DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID)
+      ? DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID
+      : options[0]!.id;
+  return {
+    version: GENERATION_PREFERENCES_VERSION,
+    activeOptionId,
+    options,
   };
 }
 

@@ -29,15 +29,18 @@ import type {
 import { compareSpatialLocations } from "@marinara-engine/shared";
 import {
   useGenerateSpatialMapDraft,
+  useSpatialGenerationPromptLibraries,
   type MapsGenerateSpatialMapDraftResponse,
 } from "../../../hooks/use-spatial-context";
 import { cn } from "../package-utils";
 import {
   HIERARCHY_TEMPLATES,
+  generationPreferencesWithPromptLibrary,
   hierarchyTypeForLocation,
   hierarchyTypeId,
   normalizeHierarchyProfile,
   profileFromTemplate,
+  type SpatialGenerationPreferences,
   type SpatialHierarchyProfile,
 } from "../../../../../maps-shared/src/maps-model";
 
@@ -47,6 +50,7 @@ interface SpatialMapAiBuilderProps {
   open: boolean;
   definition: SpatialContextDefinition;
   hierarchyProfile: SpatialHierarchyProfile;
+  generationPreferences: SpatialGenerationPreferences;
   currentLocationId: string | null;
   preferredTargetLocationId?: string | null;
   hasCommittedSpatialHistory: boolean;
@@ -152,6 +156,7 @@ export function SpatialMapAiBuilder({
   open,
   definition,
   hierarchyProfile,
+  generationPreferences,
   currentLocationId,
   preferredTargetLocationId = null,
   hasCommittedSpatialHistory,
@@ -168,6 +173,16 @@ export function SpatialMapAiBuilder({
   onApply,
 }: SpatialMapAiBuilderProps) {
   const generateDraft = useGenerateSpatialMapDraft();
+  const promptLibraries = useSpatialGenerationPromptLibraries();
+  const generationPreferencesOverride = useMemo(
+    () =>
+      generationPreferencesWithPromptLibrary(
+        promptLibraries.data?.[ownerMode],
+        generationPreferences,
+        ownerMode,
+      ),
+    [generationPreferences, ownerMode, promptLibraries.data],
+  );
   const hasLocations = definition.locations.length > 0;
   const activeLocationOptions = useMemo(() => hierarchyOrderedActiveLocations(definition), [definition]);
   const activeLocations = useMemo(() => activeLocationOptions.map(({ location }) => location), [activeLocationOptions]);
@@ -321,6 +336,7 @@ export function SpatialMapAiBuilder({
           sourceLorebookIds: request.groundingMode === "setup" ? [] : request.sourceLorebookIds,
           hierarchyMode: request.hierarchyMode,
           ...(request.hierarchyProfile ? { hierarchyProfile: request.hierarchyProfile } : {}),
+          generationPreferencesOverride,
           debugMode,
         });
         setResult(withHierarchyProfile(generated, request.hierarchyProfile ?? workingHierarchyProfile));
@@ -329,7 +345,7 @@ export function SpatialMapAiBuilder({
         setError(generationError instanceof Error ? generationError.message : "The map draft could not be generated.");
       }
     },
-    [chatId, debugMode, generateDraft, workingHierarchyProfile],
+    [chatId, debugMode, generateDraft, generationPreferencesOverride, workingHierarchyProfile],
   );
 
   useEffect(() => {
