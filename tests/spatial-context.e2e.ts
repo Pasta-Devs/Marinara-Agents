@@ -1530,7 +1530,7 @@ test("Map loading retry and stale-write recovery preserve the working copy", asy
 });
 
 test("AI map builder previews a validated local draft before save", async ({ page }, testInfo) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   const response = await page.request.post("/api/chats", {
     data: {
       name: "AI Map Builder Smoke",
@@ -1705,13 +1705,63 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       "Blackglass Lighthouse",
       "Old Sewers",
     ]);
+
+    const deleteMap = page.getByRole("button", { name: "Delete map and start over" });
+    await expectMinimumInteractiveSize(deleteMap, "Delete map control");
+    await deleteMap.click();
+    const deleteDialog = page.getByRole("dialog", { name: "Delete this map and start over?" });
+    await expect(deleteDialog).toContainText("Are you sure? This is dangerous.");
+    await expect(deleteDialog).toContainText("Deleting replaces 4 saved locations");
+    await expect(deleteDialog).toContainText("the deleted map cannot be restored unless you exported a backup");
+    await deleteDialog.getByRole("button", { name: "Go back and backup first", exact: true }).click();
+    await expect(hierarchy.getByRole("button", { name: "Recharted Coast region" })).toBeVisible();
+
+    await deleteMap.click();
+    await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.getByText("Fresh map started in the working copy. Review it, then Save.")).toBeVisible();
+    await expect(hierarchy.getByRole("button", { name: "New world region" })).toBeVisible();
+    await expect(hierarchy.getByRole("button", { name: "Recharted Coast region" })).toHaveCount(0);
+
+    const beforeDeleteSave = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(
+      ((await beforeDeleteSave.json()) as { definition: { locations: Array<{ id: string }> } }).definition.locations.map(
+        (location) => location.id,
+      ),
+    ).toContain("ai_world");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const resetResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const reset = (await resetResponse.json()) as {
+          hasCommittedSpatialHistory: boolean;
+          currentLocationId: string | null;
+          definition: {
+            startingLocationId: string | null;
+            locations: Array<{ id: string; name: string; status: string }>;
+          };
+        };
+        return {
+          history: reset.hasCommittedSpatialHistory,
+          names: reset.definition.locations.map((location) => location.name),
+          removedOldIds: reset.definition.locations.every((location) => !location.id.startsWith("ai_")),
+          currentMatchesStart: reset.currentLocationId === reset.definition.startingLocationId,
+          statuses: reset.definition.locations.map((location) => location.status),
+        };
+      })
+      .toEqual({
+        history: false,
+        names: ["New world"],
+        removedOldIds: true,
+        currentMatchesStart: true,
+        statuses: ["active"],
+      });
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });
 
 test("AI map expansion preserves a campaign map and its current location", async ({ page }, testInfo) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   const response = await page.request.post("/api/chats", {
     data: {
       name: "AI Map Expansion Smoke",
@@ -1961,6 +2011,58 @@ test("AI map expansion preserves a campaign map and its current location", async
       "ai_riverside",
       "ai_minnow",
     ]);
+
+    const deleteMap = page.getByRole("button", { name: "Delete map and start over" });
+    await expectMinimumInteractiveSize(deleteMap, "History-safe delete map control");
+    await deleteMap.click();
+    const protectedDeleteDialog = page.getByRole("dialog", { name: "Archive this map and start over?" });
+    await expect(protectedDeleteDialog).toContainText("Are you sure? This is dangerous.");
+    await expect(protectedDeleteDialog).toContainText("Campaign history uses this map");
+    await expect(protectedDeleteDialog).toContainText("6 saved locations cannot be erased");
+    await expect(protectedDeleteDialog).toContainText("preserve its stable ID for older messages");
+    await protectedDeleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(
+      page.getByText("Fresh map started. Previous locations remain archived for campaign history. Review it, then Save."),
+    ).toBeVisible();
+    const hierarchy = page.locator('section[aria-label="Location hierarchy"]:visible');
+    await expect(hierarchy.getByRole("button", { name: "New world region" })).toBeVisible();
+    await expect(hierarchy).toContainText("Shrouded Coast");
+    await expect(hierarchy).toContainText("archived");
+
+    const beforeProtectedSave = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(
+      ((await beforeProtectedSave.json()) as { definition: { locations: Array<{ status: string }> } }).definition.locations
+        .filter((location) => location.status === "archived"),
+    ).toHaveLength(0);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const resetResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const reset = (await resetResponse.json()) as {
+          hasCommittedSpatialHistory: boolean;
+          currentLocationId: string | null;
+          definition: {
+            startingLocationId: string | null;
+            locations: Array<{ id: string; name: string; status: string }>;
+          };
+        };
+        const oldLocations = reset.definition.locations.filter((location) => location.id.startsWith("ai_"));
+        const activeLocations = reset.definition.locations.filter((location) => location.status === "active");
+        return {
+          history: reset.hasCommittedSpatialHistory,
+          oldIds: oldLocations.map((location) => location.id),
+          archivedOldCount: oldLocations.filter((location) => location.status === "archived").length,
+          activeNames: activeLocations.map((location) => location.name),
+          currentMatchesStart: reset.currentLocationId === reset.definition.startingLocationId,
+        };
+      })
+      .toEqual({
+        history: true,
+        oldIds: ["ai_world", "ai_harbor", "ai_lighthouse", "ai_sewers", "ai_riverside", "ai_minnow"],
+        archivedOldCount: 6,
+        activeNames: ["New world"],
+        currentMatchesStart: true,
+      });
 
     if (mobile) {
       await page.getByRole("button", { name: "Back to chat" }).click();

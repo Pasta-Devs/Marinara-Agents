@@ -23,6 +23,7 @@ import {
   compareSpatialLocations,
   resolveSpatialLocationDepth,
   resolveSpatialBreadcrumb,
+  SPATIAL_CONTEXT_LIMITS,
   spatialContextDefinitionSchema,
   validateSpatialArchive,
   type GameMap,
@@ -49,6 +50,7 @@ import {
   isSpatialDefinitionDirty,
   reparentSpatialLocation,
   spatialDefinitionIssues,
+  startNewSpatialMap,
   updateSpatialLocation,
 } from "./editor-state";
 import {
@@ -88,6 +90,7 @@ interface SpatialMapWorkspaceProps {
     title: string;
     message: string;
     confirmLabel?: string;
+    cancelLabel?: string;
     tone?: "destructive";
   }) => Promise<boolean>;
   onClose: () => void;
@@ -392,6 +395,59 @@ export function SpatialMapWorkspace({
     },
     [currentLocationId, draft, finishArchive],
   );
+
+  const handleDeleteMap = useCallback(async () => {
+    const savedDefinition = baseDefinition ?? draft;
+    if (!savedDefinition || savedDefinition.locations.length === 0) return;
+    const preserveExistingLocations = spatial.data?.hasCommittedSpatialHistory ?? false;
+    if (
+      preserveExistingLocations &&
+      savedDefinition.locations.length >= SPATIAL_CONTEXT_LIMITS.maxLocations
+    ) {
+      toast.error(
+        "This map is at the location limit, so a history-safe new starting location cannot be added. Export it and start a new chat instead.",
+      );
+      return;
+    }
+
+    const locationCount = savedDefinition.locations.length;
+    const confirmed = await confirmAction({
+      title: preserveExistingLocations ? "Archive this map and start over?" : "Delete this map and start over?",
+      message: preserveExistingLocations
+        ? `Are you sure? This is dangerous.\n\nCampaign history uses this map, so its ${locationCount} saved ${locationCount === 1 ? "location" : "locations"} cannot be erased. Delete will instead archive every existing location and preserve its stable ID for older messages, then create one blank New world starting location. Existing routes and details will remain only in the archived hierarchy. Any unsaved map edits are discarded.\n\nNothing changes until you click Save. Export first if you want a separate backup.`
+        : `Are you sure? This is dangerous.\n\nDeleting replaces ${locationCount} saved ${locationCount === 1 ? "location" : "locations"} with one blank New world starting location. Existing map names, descriptions, routes, lore links, layout, and other map-only edits will be removed. Any unsaved map edits are also discarded.\n\nNothing changes until you click Save. After Save, the deleted map cannot be restored unless you exported a backup.`,
+      confirmLabel: "Delete",
+      cancelLabel: "Go back and backup first",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+
+    const result = startNewSpatialMap(savedDefinition, preserveExistingLocations);
+    applyDraft(result.definition);
+    setDraftHierarchyProfile(normalizeHierarchyProfile(baseHierarchyProfile, result.definition));
+    setSelectedId(result.location.id);
+    setEnteredParentId(null);
+    setMobilePane("hierarchy");
+    setReplacementCurrentLocationId(currentLocationId ? result.location.id : null);
+    setArchiveRequestId(null);
+    setArchiveReplacementId("");
+    setImportIdReport(null);
+    setFirstMapGenerationSession(null);
+    setAiBuilderOpen(false);
+    toast.success(
+      preserveExistingLocations
+        ? "Fresh map started. Previous locations remain archived for campaign history. Review it, then Save."
+        : "Fresh map started in the working copy. Review it, then Save.",
+    );
+  }, [
+    applyDraft,
+    baseDefinition,
+    baseHierarchyProfile,
+    confirmAction,
+    currentLocationId,
+    draft,
+    spatial.data?.hasCommittedSpatialHistory,
+  ]);
 
   const handleExport = useCallback(() => {
     if (!draft) return;
@@ -964,6 +1020,17 @@ export function SpatialMapWorkspace({
           >
             <Download size="0.8125rem" /> Import
           </button>
+          {baseDefinition && baseDefinition.locations.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleDeleteMap()}
+              disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+              className="mari-editor-action inline-flex min-h-11 px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
+              aria-label="Delete map and start over"
+            >
+              <Trash2 size="0.8125rem" /> Delete map
+            </button>
+          )}
           <input
             data-marinara-map-import-input
             ref={importInputRef}
