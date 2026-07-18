@@ -27,7 +27,6 @@ import type {
   SpatialTurnPromptTemplates,
 } from "../../../maps-shared/src/maps-model";
 import {
-  GENERATION_PROMPT_LIBRARIES_VERSION,
   SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY,
   SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY,
   normalizeSpatialTurnPromptTemplates,
@@ -156,8 +155,6 @@ function parseAgentSettings(value: unknown): Record<string, unknown> {
 }
 
 async function readSpatialAgentSettings(): Promise<{
-  config: MapsAgentConfigRecord | null;
-  settings: Record<string, unknown>;
   libraries: SpatialGenerationPromptLibraries | null;
   turnPromptTemplates: SpatialTurnPromptTemplates;
 }> {
@@ -165,8 +162,6 @@ async function readSpatialAgentSettings(): Promise<{
   const config = configs.find((candidate) => candidate.type === "hierarchical-maps") ?? null;
   const settings = parseAgentSettings(config?.settings);
   return {
-    config,
-    settings,
     libraries: parseSpatialGenerationPromptLibraries(
       settings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
     ),
@@ -310,31 +305,17 @@ export function useSpatialTurnPromptTemplates() {
 export function useUpdateSpatialGenerationPromptLibrary() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
+    mutationFn: ({
       ownerMode,
       library,
     }: {
       ownerMode: SpatialOwnerMode;
       library: SpatialGenerationPromptLibrary;
-    }) => {
-      const current = await readSpatialAgentSettings();
-      const libraries: SpatialGenerationPromptLibraries = {
-        version: GENERATION_PROMPT_LIBRARIES_VERSION,
-        ...(current.libraries ?? {}),
-        [ownerMode]: library,
-      };
-      const updated = await packageApi.patch<MapsAgentConfigRecord>("/agents/type/hierarchical-maps", {
-        settings: {
-          ...current.settings,
-          [SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY]: libraries,
-        },
-      });
-      return (
-        parseSpatialGenerationPromptLibraries(
-          parseAgentSettings(updated.settings)[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
-        ) ?? libraries
-      );
-    },
+    }) =>
+      packageApi.put<SpatialGenerationPromptLibraries>(
+        `/chats/spatial-context/global-generation-prompt-libraries/${ownerMode}`,
+        library,
+      ),
     onSuccess: (libraries) => {
       queryClient.setQueryData(spatialContextKeys.generationPromptLibraries, libraries);
     },
@@ -361,18 +342,11 @@ export function useUpdateSpatialGenerationPreferences() {
 export function useUpdateSpatialTurnPromptTemplates() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (templates: SpatialTurnPromptTemplates) => {
-      const current = await readSpatialAgentSettings();
-      const updated = await packageApi.patch<MapsAgentConfigRecord>("/agents/type/hierarchical-maps", {
-        settings: {
-          ...current.settings,
-          [SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY]: templates,
-        },
-      });
-      return normalizeSpatialTurnPromptTemplates(
-        parseAgentSettings(updated.settings)[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
-      );
-    },
+    mutationFn: (templates: SpatialTurnPromptTemplates) =>
+      packageApi.put<SpatialTurnPromptTemplates>(
+        "/chats/spatial-context/global-turn-prompt-templates",
+        templates,
+      ),
     onSuccess: (templates) => {
       queryClient.setQueryData(spatialContextKeys.turnPromptTemplates, templates);
     },

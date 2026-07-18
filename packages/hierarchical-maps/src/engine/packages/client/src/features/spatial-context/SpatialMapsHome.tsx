@@ -235,10 +235,26 @@ export function SpatialMapsHome({
         : null,
     [chatId, definition, spatial.data?.currentLocationId, turnPromptMode],
   );
-  const turnPromptText = formatOwnerSpatialPrompt(
-    liveTurnPromptProjection ?? exampleTurnPromptProjection(turnPromptMode),
-    turnPromptDraft[turnPromptMode],
-  );
+  const turnPromptPreview = useMemo(() => {
+    try {
+      return {
+        text: formatOwnerSpatialPrompt(
+          liveTurnPromptProjection ?? exampleTurnPromptProjection(turnPromptMode),
+          turnPromptDraft[turnPromptMode],
+        ),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        text: "",
+        error:
+          error instanceof Error
+            ? error.message
+            : "The resolved turn prompt could not be previewed.",
+      };
+    }
+  }, [liveTurnPromptProjection, turnPromptDraft, turnPromptMode]);
+  const turnPromptText = turnPromptPreview.text;
   const turnPromptIsActive = Boolean(liveTurnPromptProjection && enabledForChat);
   const mapState = !definition
     ? "No map yet"
@@ -263,7 +279,6 @@ export function SpatialMapsHome({
     setPromptPreview(null);
     setPromptCopyStatus("idle");
     setTurnPromptMode(chatOwnerMode);
-    setTurnPromptDraft(defaultSpatialTurnPromptTemplates());
     setTurnPromptEditing(false);
     setTurnPromptCopyStatus("idle");
     setHierarchyEditing(false);
@@ -292,9 +307,9 @@ export function SpatialMapsHome({
     setPromptDraft(resolvedPromptPreferences);
   }, [promptEditing, promptLibraries.isLoading, resolvedPromptPreferences]);
   useEffect(() => {
-    if (turnPromptEditing) return;
-    setTurnPromptDraft(globalTurnPromptTemplates.data ?? defaultSpatialTurnPromptTemplates());
-  }, [globalTurnPromptTemplates.data, turnPromptEditing]);
+    if (turnPromptEditing || !globalTurnPromptTemplates.isSuccess) return;
+    setTurnPromptDraft(globalTurnPromptTemplates.data);
+  }, [globalTurnPromptTemplates.data, globalTurnPromptTemplates.isSuccess, turnPromptEditing]);
   useEffect(() => {
     if (hierarchyEditing) return;
     if (!spatial.data?.definition) {
@@ -339,6 +354,9 @@ export function SpatialMapsHome({
     : null;
   const turnPromptSaveError = updateTurnPromptTemplates.isError
     ? getSpatialContextProblem(updateTurnPromptTemplates.error).message
+    : null;
+  const turnPromptLoadError = globalTurnPromptTemplates.isError
+    ? getSpatialContextProblem(globalTurnPromptTemplates.error).message
     : null;
 
   const resetHierarchyDraft = () => {
@@ -513,7 +531,7 @@ export function SpatialMapsHome({
     }
   };
   const resetTurnPromptDraft = () => {
-    setTurnPromptDraft(globalTurnPromptTemplates.data ?? defaultSpatialTurnPromptTemplates());
+    if (globalTurnPromptTemplates.data) setTurnPromptDraft(globalTurnPromptTemplates.data);
     updateTurnPromptTemplates.reset();
   };
   const restoreBuiltInTurnPrompt = () => {
@@ -522,12 +540,13 @@ export function SpatialMapsHome({
     updateTurnPromptTemplates.reset();
   };
   const saveTurnPromptTemplates = async () => {
-    if (!turnPromptValidation.success) return;
+    if (!turnPromptValidation.success || !globalTurnPromptTemplates.isSuccess) return;
     const saved = await updateTurnPromptTemplates.mutateAsync(turnPromptValidation.data);
     setTurnPromptDraft(saved);
     setTurnPromptEditing(false);
   };
   const copyTurnPrompt = async () => {
+    if (!globalTurnPromptTemplates.isSuccess || turnPromptPreview.error) return;
     try {
       await navigator.clipboard.writeText(turnPromptText);
       setTurnPromptCopyStatus("copied");
@@ -1249,7 +1268,11 @@ export function SpatialMapsHome({
               </p>
             </div>
             <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
-              {turnPromptEditing
+              {globalTurnPromptTemplates.isError
+                ? "Templates unavailable"
+                : !globalTurnPromptTemplates.isSuccess
+                  ? "Loading templates"
+                  : turnPromptEditing
                 ? "Unsaved preview"
                 : liveTurnPromptProjection
                   ? turnPromptIsActive
@@ -1269,7 +1292,7 @@ export function SpatialMapsHome({
                 key={mode}
                 type="button"
                 aria-pressed={turnPromptMode === mode}
-                disabled={updateTurnPromptTemplates.isPending || globalTurnPromptTemplates.isLoading}
+                disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
                 onClick={() => {
                   setTurnPromptMode(mode);
                   setTurnPromptCopyStatus("idle");
@@ -1284,6 +1307,30 @@ export function SpatialMapsHome({
               </button>
             ))}
           </div>
+
+          {turnPromptLoadError && (
+            <div
+              className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+              role="alert"
+            >
+              <p>
+                Global turn prompt templates could not load. Editing and copying are disabled to protect saved templates. {turnPromptLoadError}
+              </p>
+              <button
+                type="button"
+                onClick={() => void globalTurnPromptTemplates.refetch()}
+                disabled={globalTurnPromptTemplates.isFetching}
+                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-current px-3 text-xs font-semibold disabled:opacity-45"
+              >
+                {globalTurnPromptTemplates.isFetching ? (
+                  <LoaderCircle size="0.75rem" className="animate-spin" />
+                ) : (
+                  <RotateCcw size="0.75rem" />
+                )}
+                {globalTurnPromptTemplates.isFetching ? "Retrying" : "Retry"}
+              </button>
+            </div>
+          )}
 
           {turnPromptEditing && (
             <div className="mt-4 border-t border-[var(--border)] pt-4">
@@ -1307,7 +1354,7 @@ export function SpatialMapsHome({
                   }));
                   updateTurnPromptTemplates.reset();
                 }}
-                disabled={updateTurnPromptTemplates.isPending}
+                disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
                 spellCheck={false}
                 style={{ minHeight: "32rem" }}
                 className="mt-3 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-45"
@@ -1360,7 +1407,7 @@ export function SpatialMapsHome({
                     <button
                       type="button"
                       onClick={restoreBuiltInTurnPrompt}
-                      disabled={updateTurnPromptTemplates.isPending}
+                      disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
                       className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
                     >
                       <RotateCcw size="0.75rem" /> Restore built-in
@@ -1371,7 +1418,7 @@ export function SpatialMapsHome({
                         resetTurnPromptDraft();
                         setTurnPromptEditing(false);
                       }}
-                      disabled={updateTurnPromptTemplates.isPending}
+                      disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
                       className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
                     >
                       Cancel
@@ -1379,7 +1426,11 @@ export function SpatialMapsHome({
                     <button
                       type="button"
                       onClick={() => void saveTurnPromptTemplates()}
-                      disabled={!turnPromptValidation.success || updateTurnPromptTemplates.isPending}
+                      disabled={
+                        !turnPromptValidation.success ||
+                        updateTurnPromptTemplates.isPending ||
+                        !globalTurnPromptTemplates.isSuccess
+                      }
                       className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                     >
                       {updateTurnPromptTemplates.isPending ? (
@@ -1395,7 +1446,8 @@ export function SpatialMapsHome({
                     <button
                       type="button"
                       onClick={() => void copyTurnPrompt()}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                      disabled={!globalTurnPromptTemplates.isSuccess || Boolean(turnPromptPreview.error)}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-45"
                     >
                       <ClipboardCopy size="0.75rem" />
                       {turnPromptCopyStatus === "copied"
@@ -1410,7 +1462,7 @@ export function SpatialMapsHome({
                         resetTurnPromptDraft();
                         setTurnPromptEditing(true);
                       }}
-                      disabled={globalTurnPromptTemplates.isLoading}
+                      disabled={!globalTurnPromptTemplates.isSuccess}
                       className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                     >
                       <PencilLine size="0.75rem" /> Edit templates
@@ -1429,12 +1481,22 @@ export function SpatialMapsHome({
                 Contains the current map's private model context when one is saved.
               </p>
             )}
-            <pre
-              aria-label={`${modeLabel(turnPromptMode)} turn prompt insert`}
-              className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]"
-            >
-              {turnPromptText}
-            </pre>
+            {turnPromptPreview.error && globalTurnPromptTemplates.isSuccess && (
+              <p
+                className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                role="alert"
+              >
+                Resolved preview unavailable. {turnPromptPreview.error}
+              </p>
+            )}
+            {globalTurnPromptTemplates.isSuccess && !turnPromptPreview.error && (
+              <pre
+                aria-label={`${modeLabel(turnPromptMode)} turn prompt insert`}
+                className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]"
+              >
+                {turnPromptText}
+              </pre>
+            )}
             <p className="mt-3 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
               Lore linked to the exact current location is activated separately through the lorebook pipeline at each entry's configured prompt position. It is not duplicated inside this block.
             </p>

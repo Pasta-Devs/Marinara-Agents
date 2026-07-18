@@ -154,17 +154,32 @@ import { configurePackageRuntime } from ${JSON.stringify(resolve(prepared.buildR
 import { createSpatialContextStorage } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/storage/spatial-context.storage.ts"))};
 let readinessStorage = null;
 export async function activate({ app, api }) {
-  const cleanupRuntime = configurePackageRuntime(api.runtime, async (agentType) => {
-    const response = await app.inject({ method: "GET", url: "/api/agents" });
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw new Error("Could not read global agent settings (" + response.statusCode + ")");
-    }
-    const configs = response.json();
-    const config = Array.isArray(configs)
-      ? configs.find((candidate) => candidate && typeof candidate === "object" && candidate.type === agentType)
-      : null;
-    return config?.settings ?? null;
-  });
+  const cleanupRuntime = configurePackageRuntime(
+    api.runtime,
+    async (agentType) => {
+      const response = await app.inject({ method: "GET", url: "/api/agents" });
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error("Could not read global agent settings (" + response.statusCode + ")");
+      }
+      const configs = response.json();
+      const config = Array.isArray(configs)
+        ? configs.find((candidate) => candidate && typeof candidate === "object" && candidate.type === agentType)
+        : null;
+      return config?.settings ?? null;
+    },
+    async (agentType, settings) => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/agents/type/" + encodeURIComponent(agentType),
+        headers: { "x-marinara-csrf": "1" },
+        payload: { settings },
+      });
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error("Could not update global agent settings (" + response.statusCode + ")");
+      }
+      return response.json().settings ?? null;
+    },
+  );
   try {
     await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
     readinessStorage = createSpatialContextStorage();

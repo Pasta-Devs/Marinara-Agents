@@ -783,34 +783,70 @@ async function main() {
       },
     })) as typeof existingGameMapState.generationPreferences;
     assert.equal(customizedGamePreferences.options[0]?.name, "Tactical travel");
-    const agentsBeforeTurnTemplateUpdate = (await expectJson(app, {
-      method: "GET",
-      url: "/api/agents",
-    })) as Array<{ type: string; settings?: unknown }>;
-    const mapsAgentSettings = metadata(
-      agentsBeforeTurnTemplateUpdate.find((agent) => agent.type === "hierarchical-maps")?.settings,
-    );
     const customizedGlobalTurnTemplates = {
       version: 1 as const,
       roleplay: `ROLEPLAY_CUSTOM_TURN_TEMPLATE\n${defaultTurnPromptTemplate}`,
       game: `GAME_CUSTOM_TURN_TEMPLATE\n${defaultTurnPromptTemplate}`,
     };
-    const updatedMapsAgent = (await expectJson(app, {
-      method: "PATCH",
-      url: "/api/agents/type/hierarchical-maps",
-      headers: csrfHeaders,
-      payload: {
-        settings: {
-          ...mapsAgentSettings,
-          spatialMapTurnPromptTemplates: customizedGlobalTurnTemplates,
-        },
-      },
-    })) as { settings: unknown };
+    const customizedGlobalGameLibrary = {
+      version: 1 as const,
+      options: customizedGamePreferences.options.map((option) => ({
+        ...option,
+        description:
+          option.id === customizedGamePreferences.activeOptionId
+            ? "Concurrent global generation library save proof."
+            : option.description,
+      })),
+    };
+    await Promise.all([
+      expectJson(app, {
+        method: "PUT",
+        url: "/api/chats/spatial-context/global-generation-prompt-libraries/game",
+        headers: csrfHeaders,
+        payload: customizedGlobalGameLibrary,
+      }),
+      expectJson(app, {
+        method: "PUT",
+        url: "/api/chats/spatial-context/global-turn-prompt-templates",
+        headers: csrfHeaders,
+        payload: customizedGlobalTurnTemplates,
+      }),
+    ]);
+    const agentsAfterConcurrentGlobalUpdates = (await expectJson(app, {
+      method: "GET",
+      url: "/api/agents",
+    })) as Array<{ type: string; settings?: unknown }>;
+    const updatedMapsAgentSettings = metadata(
+      agentsAfterConcurrentGlobalUpdates.find((agent) => agent.type === "hierarchical-maps")?.settings,
+    );
     assert.deepEqual(
-      metadata(updatedMapsAgent.settings).spatialMapTurnPromptTemplates,
+      updatedMapsAgentSettings.spatialMapTurnPromptTemplates,
       customizedGlobalTurnTemplates,
       "Turn prompt templates must persist in the global Hierarchical Maps agent settings",
     );
+    assert.deepEqual(
+      metadata(updatedMapsAgentSettings.spatialMapGenerationPromptLibraries).game,
+      customizedGlobalGameLibrary,
+      "Concurrent global prompt saves must preserve both settings keys",
+    );
+
+    for (const malformedVariable of ["${ currentPath }", "${current-Path}"]) {
+      const malformedTurnTemplateResponse = (await expectJson(
+        app,
+        {
+          method: "PUT",
+          url: "/api/chats/spatial-context/global-turn-prompt-templates",
+          headers: csrfHeaders,
+          payload: {
+            ...customizedGlobalTurnTemplates,
+            roleplay: `${customizedGlobalTurnTemplates.roleplay}\n${malformedVariable}`,
+          },
+        },
+        400,
+      )) as { error: string; code: string };
+      assert.equal(malformedTurnTemplateResponse.code, "spatial_global_turn_prompt_templates_invalid");
+      assert.match(malformedTurnTemplateResponse.error, /Invalid turn prompt variable/u);
+    }
 
     const gamePromptPreviewRequestCount = generationProviderRequests.length;
     const gamePromptPreview = (await expectJson(app, {
@@ -1919,6 +1955,41 @@ async function main() {
     );
     assert.match(roleplayPeekText, /Lifecycle Harbor/u);
     assert.match(roleplayPeekText, /ROLEPLAY_CUSTOM_TURN_TEMPLATE/u);
+
+    const oversizedResolvedRoleplayTemplates = {
+      ...customizedGlobalTurnTemplates,
+      roleplay: `${defaultTurnPromptTemplate}\n${Array.from(
+        { length: 500 },
+        () => "${privateModelContextBlock}",
+      ).join("\n")}`,
+    };
+    await expectJson(app, {
+      method: "PUT",
+      url: "/api/chats/spatial-context/global-turn-prompt-templates",
+      headers: csrfHeaders,
+      payload: oversizedResolvedRoleplayTemplates,
+    });
+    const oversizedTemplatePeek = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${chatId}/peek-prompt`,
+      headers: csrfHeaders,
+      payload: {},
+    })) as { messages: Array<{ content: string }> };
+    const oversizedTemplatePeekText = oversizedTemplatePeek.messages
+      .map((message) => message.content)
+      .join("\n");
+    assert.match(oversizedTemplatePeekText, /<spatial_context mode="roleplay" authority="application">/u);
+    assert.equal(
+      oversizedTemplatePeekText.match(/Private model context:/gu)?.length,
+      1,
+      "An oversized resolved custom template must fall back to the bounded built-in turn insert",
+    );
+    await expectJson(app, {
+      method: "PUT",
+      url: "/api/chats/spatial-context/global-turn-prompt-templates",
+      headers: csrfHeaders,
+      payload: customizedGlobalTurnTemplates,
+    });
     const duplicateOwnerTurn = (await expectJson(
       app,
       {

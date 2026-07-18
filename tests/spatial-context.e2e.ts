@@ -906,6 +906,25 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     expect(roleplayTurnTemplateBox?.height ?? 0).toBeGreaterThanOrEqual(500);
     await expect(roleplayTurnTemplate).toHaveValue(/\$\{currentPath\}/u);
     await expect(roleplayTurnTemplate).toHaveValue(/\$\{authorityInstruction\}/u);
+    const builtInRoleplayTurnTemplate = await roleplayTurnTemplate.inputValue();
+    await roleplayTurnTemplate.fill(
+      `${builtInRoleplayTurnTemplate}\n${Array.from(
+        { length: 500 },
+        () => "${privateModelContextBlock}",
+      ).join("\n")}`,
+    );
+    await expect(home.getByRole("alert").filter({ hasText: "Resolved preview unavailable" })).toContainText(
+      "40,000 characters",
+    );
+    await expect(roleplayTurnTemplate).toBeVisible();
+    await expect(home.getByRole("button", { name: "Restore built-in" })).toBeEnabled();
+    await home.getByRole("button", { name: "Restore built-in" }).click();
+    await roleplayTurnTemplate.fill(`${await roleplayTurnTemplate.inputValue()}\n\${ currentPath }`);
+    await expect(home.getByRole("alert").filter({ hasText: "Invalid turn prompt variable" })).toContainText(
+      "without spaces or punctuation",
+    );
+    await expect(home.getByRole("button", { name: "Save templates" })).toBeDisabled();
+    await home.getByRole("button", { name: "Restore built-in" }).click();
     await roleplayTurnTemplate.fill("Invalid template without required variables.");
     await expect(home.getByRole("button", { name: "Save templates" })).toBeDisabled();
     await expect(home.getByRole("alert")).toContainText("${currentPath}");
@@ -1246,6 +1265,68 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     });
     expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
     if (secondaryChat) await expectDeleted(page, `/api/chats/${secondaryChat.id}`);
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("global Hierarchical Maps home protects templates after a settings load failure", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: `Maps Template Load Failure ${testInfo.project.name}`,
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  const mobile = testInfo.project.name.includes("mobile");
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator(
+      mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
+    );
+    const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
+    await expect(mapsCard).toBeVisible();
+    await page.route("**/api/agents", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Settings temporarily unavailable" }),
+      });
+    });
+    await mapsCard.getByText("Hierarchical Maps", { exact: true }).click();
+
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(
+      home.getByRole("alert").filter({ hasText: "Global turn prompt templates could not load" }),
+    ).toContainText("Settings temporarily unavailable", { timeout: 20_000 });
+    await expect(home.getByRole("button", { name: "Edit templates" })).toBeDisabled();
+    await expect(home.getByRole("button", { name: "Copy insert" })).toBeDisabled();
+
+    await page.unroute("**/api/agents");
+    await home.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(home.getByRole("button", { name: "Edit templates" })).toBeEnabled();
+    await expect(home.getByLabel("Roleplay turn prompt insert")).toContainText("Current path:");
+  } finally {
+    await page.unroute("**/api/agents");
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });

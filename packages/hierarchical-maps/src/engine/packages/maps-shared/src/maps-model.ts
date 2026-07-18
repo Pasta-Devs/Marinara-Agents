@@ -330,6 +330,8 @@ const spatialGenerationPreferencesBaseSchema = z
   .strict();
 
 const PROMPT_VARIABLE_PATTERN = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/gu;
+const TURN_PROMPT_TOKEN_PATTERN = /\$\{([^{}]*)\}/gu;
+const TURN_PROMPT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/u;
 const PROMPT_VARIABLE_SET = new Set<string>(SPATIAL_GENERATION_PROMPT_VARIABLES);
 export const MAX_RENDERED_SPATIAL_GENERATION_PROMPT_LENGTH = 160_000;
 export const MAX_RENDERED_SPATIAL_TURN_PROMPT_LENGTH = 40_000;
@@ -355,12 +357,25 @@ const spatialTurnPromptTemplateSchema = z
         message: "The application adds the <spatial_context> wrapper. Remove that tag from the editable template.",
       });
     }
-    for (const match of template.matchAll(PROMPT_VARIABLE_PATTERN)) {
-      const name = match[1];
-      if (!name || TURN_PROMPT_VARIABLE_SET.has(name)) continue;
+    for (const match of template.matchAll(TURN_PROMPT_TOKEN_PATTERN)) {
+      const name = match[1] ?? "";
+      if (!TURN_PROMPT_VARIABLE_NAME_PATTERN.test(name)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Invalid turn prompt variable \${${name}}. Use \${variableName} without spaces or punctuation.`,
+        });
+        continue;
+      }
+      if (TURN_PROMPT_VARIABLE_SET.has(name)) continue;
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: `Unknown turn prompt variable \${${name}}.`,
+      });
+    }
+    if (template.replace(TURN_PROMPT_TOKEN_PATTERN, "").includes("${")) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Malformed turn prompt variable. Use ${variableName} with one matching pair of braces.",
       });
     }
     for (const variable of TURN_PROMPT_REQUIRED_VARIABLES) {

@@ -7,6 +7,7 @@ import {
   formatOwnerSpatialPrompt,
 } from "../../../../maps-shared/src/runtime-prompt.js";
 import {
+  defaultSpatialTurnPromptTemplates,
   normalizeSpatialTurnPromptTemplates,
   SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY,
 } from "../../../../maps-shared/src/maps-model.js";
@@ -76,7 +77,19 @@ export function injectOwnerSpatialPrompt<T extends { role: "system" | "user" | "
           content: scopeLegacyGameMapPrompt(message.content, message.role),
         }))
       : messages.slice();
-  const block = formatOwnerSpatialPrompt(projection);
+  let block: string;
+  try {
+    block = formatOwnerSpatialPrompt(projection);
+  } catch (error) {
+    logger.warn(
+      "Could not render the saved Hierarchical Maps turn prompt template; using the built-in: %s",
+      error instanceof Error ? error.message : String(error),
+    );
+    block = formatOwnerSpatialPrompt(
+      projection,
+      defaultSpatialTurnPromptTemplates()[projection.ownerMode],
+    );
+  }
   const existingIndex = next.findIndex(
     (message) => message.role === "system" && OWNER_SPATIAL_BLOCK_PATTERN.test(message.content),
   );
