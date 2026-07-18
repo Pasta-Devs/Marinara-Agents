@@ -21,7 +21,15 @@
   ],
   "entrypoints": {
     "agents": "agents.json",
-    "server": "server.mjs"
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "agentDetail": {
+      "agentIds": [
+        "long-term-memory"
+      ]
+    }
   },
   "files": [
     {
@@ -33,13 +41,19 @@
       "path": "server.mjs",
       "sha256": "81522959630c52973757da741f9e83c931b2336d03ff9d23349e65e3034f3e71",
       "bytes": 361288
+    },
+    {
+      "path": "client.js",
+      "sha256": "5a4706ab9cacd69e997b90c0bc48dd58a15da2e7e7a9c0fc2c6e94a4feb0a386",
+      "bytes": 490005
     }
   ],
   "permissions": [
     "agent-runtime",
     "chat-read",
     "routes",
-    "storage"
+    "storage",
+    "ui"
   ],
   "restartRequired": true
 }

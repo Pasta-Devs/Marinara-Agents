@@ -56,6 +56,7 @@ const packageOwnedFeatures = [
     ownedSourcePaths: [
       "packages/shared/src/features/agents/long-term-memory",
       "packages/server/src/services/long-term-memory",
+      "packages/client/src/features/long-term-memory",
     ],
   },
 ];

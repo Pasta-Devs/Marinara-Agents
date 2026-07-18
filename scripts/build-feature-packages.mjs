@@ -45,6 +45,7 @@ const hierarchicalMapsOwnedSourcePaths = [
 const longTermMemoryOwnedSourcePaths = [
   "packages/shared/src/features/agents/long-term-memory",
   "packages/server/src/services/long-term-memory",
+  "packages/client/src/features/long-term-memory",
 ];
 const longTermMemorySourceRoot = join(
   packagesDir,
@@ -122,10 +123,12 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "visual_novel", "game"],
-    permissions: ["agent-runtime", "chat-read", "routes", "storage"],
+    permissions: ["agent-runtime", "chat-read", "routes", "storage", "ui"],
     serverImport:
       "packages/server/src/services/long-term-memory/server-entry.ts",
     serverEntry: true,
+    clientImport:
+      "packages/client/src/features/long-term-memory/client-entry.tsx",
     packageSourceRoot: longTermMemorySourceRoot,
     ownedSourcePaths: longTermMemoryOwnedSourcePaths,
     engineBoundaryPath: join(
@@ -134,6 +137,9 @@ const features = [
     ),
     boundaryDisplayName: "Long-Term Memory",
     capabilityApi: { major: 1, minor: 5 },
+    contributions: {
+      agentDetail: { agentIds: ["long-term-memory"] },
+    },
   },
   {
     id: "hierarchical-maps",
