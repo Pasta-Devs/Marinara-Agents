@@ -461,6 +461,15 @@ async function expectMinimumInteractiveSize(locator: Locator, source: string) {
   expect(box!.height, `${source} must be at least 44 CSS pixels tall`).toBeGreaterThanOrEqual(44);
 }
 
+async function computedBackgroundAlpha(locator: Locator): Promise<number> {
+  return locator.evaluate((element) => {
+    const color = getComputedStyle(element).backgroundColor;
+    if (color === "transparent") return 0;
+    const rgba = color.match(/^rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)$/);
+    return rgba ? Number(rgba[1]) : 1;
+  });
+}
+
 async function expectWorkspaceTheme(
   page: Page,
   expected: { theme: "dark" | "light"; visualTheme: "default" | "sillytavern" },
@@ -2050,6 +2059,14 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       const collapsedRuntimeBox = await storyLocation.boundingBox();
       expect(collapsedRuntimeBox?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(52);
       expect(collapsedRuntimeBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(48);
+    } else {
+      expect(await computedBackgroundAlpha(storyLocation), "Collapsed desktop map bar should be opaque").toBe(1);
+      const storyLocationToggle = storyLocation.getByRole("button", { name: /^Story location:/ });
+      await storyLocationToggle.click();
+      const locationOptions = storyLocation.locator("[data-marinara-maps-runtime-options]");
+      await expect(locationOptions).toBeVisible();
+      expect(await computedBackgroundAlpha(locationOptions), "Expanded desktop location controls should be opaque").toBe(1);
+      await storyLocationToggle.click();
     }
     await openStoryMap.click();
     let roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
@@ -2063,12 +2080,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     expect(mapPopoverBox!.y).toBeGreaterThanOrEqual(0);
     expect(mapPopoverBox!.y + mapPopoverBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
     expect(
-      await visibleMapPopover.evaluate((element) => {
-        const color = getComputedStyle(element).backgroundColor;
-        if (color === "transparent") return 0;
-        const rgba = color.match(/^rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)$/);
-        return rgba ? Number(rgba[1]) : 1;
-      }),
+      await computedBackgroundAlpha(visibleMapPopover),
       "Story-map popover background should be opaque",
     ).toBe(1);
     if (mobileRuntime) {
@@ -2120,6 +2132,19 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
         .evaluate((element) => element.scrollHeight > element.clientHeight),
       "A 25-floor tower should scroll inside the map instead of expanding the composer",
     ).toBe(true);
+    expect(
+      await locationLayers.evaluate((element) => getComputedStyle(element.parentElement!).overflowY),
+      "The level list should defer scrolling to the map panel",
+    ).toBe("visible");
+    const mapScroll = storyLocation.locator(
+      "[data-marinara-maps-runtime-popover]:visible [data-marinara-maps-runtime-map-scroll]",
+    );
+    const scrollTopBeforeLevelScroll = await mapScroll.evaluate((element) => element.scrollTop);
+    await locationLayers.hover();
+    await page.mouse.wheel(0, 420);
+    await expect
+      .poll(() => mapScroll.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(scrollTopBeforeLevelScroll);
     if (!mobileRuntime) {
       const closeExpandedMap = storyLocation.getByRole("button", { name: "Close expanded story map" });
       await expectMinimumInteractiveSize(closeExpandedMap, "Desktop story-map panel close control");

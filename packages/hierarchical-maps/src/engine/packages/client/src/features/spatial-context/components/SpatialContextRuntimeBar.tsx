@@ -204,9 +204,9 @@ export function SpatialContextRuntimeBar({
       className={cn(
         "relative mb-2 text-[var(--marinara-chat-chrome-panel-text)]",
         pending || !enabled
-          ? "w-full overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] shadow-sm"
+          ? "w-full overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] shadow-sm"
           : cn(
-              "ml-auto h-11 w-11 overflow-visible sm:ml-0 sm:h-auto sm:w-full sm:rounded-xl sm:border sm:border-[var(--marinara-chat-chrome-panel-border)] sm:bg-[var(--marinara-chat-chrome-panel-bg)] sm:shadow-sm",
+              "ml-auto h-11 w-11 overflow-visible sm:ml-0 sm:h-auto sm:w-full sm:rounded-xl sm:border sm:border-[var(--marinara-chat-chrome-panel-border)] sm:bg-[var(--background)] sm:shadow-sm",
               mapOpen ? "sm:overflow-visible" : "sm:overflow-hidden",
             ),
       )}
@@ -338,12 +338,13 @@ export function SpatialContextRuntimeBar({
                   <X size="1rem" />
                 </button>
               </div>
-              <div data-marinara-maps-runtime-map-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+              <div data-marinara-maps-runtime-map-scroll className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-2">
                 <GameWorldMap
                   chatId={chatId}
                   spatial={data}
                   disabled={disabled}
                   compact
+                  useParentScroll
                   onDestinationQueued={handleDestinationQueued}
                   onOpenEditor={onOpenEditor}
                 />
@@ -439,12 +440,13 @@ export function SpatialContextRuntimeBar({
               <X size="1rem" />
             </button>
           </div>
-          <div data-marinara-maps-runtime-map-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+          <div data-marinara-maps-runtime-map-scroll className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-2">
             <GameWorldMap
               chatId={chatId}
               spatial={data}
               disabled={disabled}
               compact
+              useParentScroll
               onDestinationQueued={handleDestinationQueued}
               onOpenEditor={onOpenEditor}
             />
@@ -453,7 +455,7 @@ export function SpatialContextRuntimeBar({
       )}
 
       {open && enabled && (
-        <div data-marinara-maps-runtime-options className="border-t border-[var(--marinara-chat-chrome-panel-divider)] p-2">
+        <div data-marinara-maps-runtime-options className="border-t border-[var(--marinara-chat-chrome-panel-divider)] bg-[var(--background)] p-2">
           <div className="mb-2 flex min-h-11 items-center gap-2 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-1 pb-2 sm:hidden">
             <MapPin size="0.875rem" className="shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
             <div className="min-w-0 flex-1">

@@ -36,6 +36,7 @@ interface GameWorldMapProps {
   spatial: SpatialContextResponse;
   disabled?: boolean;
   compact?: boolean;
+  useParentScroll?: boolean;
   onDestinationQueued?: () => void;
   onOpenEditor?: () => void;
 }
@@ -70,6 +71,7 @@ export function GameWorldMap({
   spatial,
   disabled = false,
   compact = false,
+  useParentScroll = false,
   onDestinationQueued,
   onOpenEditor,
 }: GameWorldMapProps) {
@@ -399,7 +401,15 @@ export function GameWorldMap({
         </div>
       )}
 
-      <div className={cn("min-h-0 overflow-auto overscroll-contain py-2", compact ? "max-h-[40dvh]" : "max-h-80")}>
+      <div
+        data-marinara-maps-world-scroll={useParentScroll ? "parent" : "self"}
+        className={cn(
+          "min-h-0 py-2",
+          useParentScroll
+            ? "max-h-none overflow-visible"
+            : cn("overflow-auto overscroll-contain", compact ? "max-h-[40dvh]" : "max-h-80"),
+        )}
+      >
         {visibleLocations.length === 0 ? (
           <div className="flex min-h-36 flex-col items-center justify-center px-5 text-center">
             <span className="text-2xl" aria-hidden="true">{viewLocation?.icon || "📍"}</span>
