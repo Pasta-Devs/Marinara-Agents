@@ -862,6 +862,8 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(activation).toHaveAttribute("aria-checked", "true");
     await expect(home).toContainText("Active in this chat. Saved map context can participate in turns.");
     await expect(createMap).toBeEnabled();
+    await expect(home.getByRole("heading", { name: "Location types", exact: true })).toBeVisible();
+    await expect(home).toContainText("Create or import a map first");
     await expect(home.getByRole("heading", { name: "Generation prompt" })).toBeVisible();
     await expect(home).toContainText("Roleplay · Default");
     const promptOption = home.getByLabel("Prompt option");
@@ -1013,6 +1015,95 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(page.getByRole("region", { name: "Story location" })).toContainText(
       "No map yet. Create one from Agents → Hierarchical Maps; your message draft is unchanged.",
     );
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("global Hierarchical Maps home edits the current map location types", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: `Maps Location Types ${testInfo.project.name}`,
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: { ...generatedDefinition, enabled: true },
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+  const mobile = testInfo.project.name.includes("mobile");
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator(
+      mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
+    );
+    await agentsPanel.locator('[data-agent-name="Hierarchical Maps"]').getByText("Hierarchical Maps", { exact: true }).click();
+
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(home.getByRole("heading", { name: "Location types", exact: true })).toBeVisible();
+    await expect(home.getByLabel("Location type 2 label")).toHaveValue("Settlement");
+    await expect(home.getByLabel("Location type 2 label")).toHaveAttribute("readonly", "");
+
+    await home.getByRole("button", { name: "Edit location types" }).click();
+    await home.getByLabel("Profile name").fill("Maritime hierarchy");
+    await home.getByLabel("Location type 2 label").fill("City");
+    await home.getByRole("button", { name: "Add location type" }).click();
+    await home.getByLabel("Location type 7 label").fill("Neighborhood");
+    await home.getByLabel("Neighborhood semantic base kind").selectOption("place");
+    await home.getByRole("button", { name: "Save location types" }).click();
+
+    await expect
+      .poll(async () => {
+        const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const payload = (await spatialResponse.json()) as {
+          hierarchyProfile: { name: string; mode: string; types: Array<{ label: string; baseKind: string }> };
+        };
+        return {
+          name: payload.hierarchyProfile.name,
+          mode: payload.hierarchyProfile.mode,
+          city: payload.hierarchyProfile.types.find((type) => type.label === "City")?.baseKind,
+          neighborhood: payload.hierarchyProfile.types.find((type) => type.label === "Neighborhood")?.baseKind,
+        };
+      })
+      .toEqual({
+        name: "Maritime hierarchy",
+        mode: "custom",
+        city: "settlement",
+        neighborhood: "place",
+      });
+
+    await home.getByRole("button", { name: "Open map", exact: true }).click();
+    const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    await workspace.getByRole("button", { name: "Location types" }).click();
+    await expect(workspace.getByLabel("Profile name")).toHaveValue("Maritime hierarchy");
+    await expect(workspace.getByLabel("Location type 2 label")).toHaveValue("City");
+    await expect(workspace.getByLabel("Location type 7 label")).toHaveValue("Neighborhood");
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }

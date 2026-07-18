@@ -20,20 +20,27 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  getSpatialContextProblem,
   usePreviewSpatialMapPrompt,
   useSpatialContext,
   useUpdateSpatialGenerationPreferences,
+  useUpdateSpatialContext,
   type SpatialMapPromptPreview,
 } from "../../hooks/use-spatial-context";
 import {
   defaultGenerationPreferences,
   DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID,
+  normalizeHierarchyProfile,
   SPATIAL_GENERATION_PROMPT_VARIABLES,
   spatialGenerationPreferencesSchema,
   type SpatialGenerationPreferences,
   type SpatialGenerationCustomVariable,
   type SpatialGenerationPromptOption,
 } from "../../../../maps-shared/src/maps-model";
+import {
+  SpatialHierarchyProfileFields,
+  type SpatialHierarchyProfileDraft,
+} from "./components/SpatialHierarchyProfileFields";
 
 interface SpatialMapsHomeProps {
   chatId: string | null;
@@ -147,6 +154,7 @@ export function SpatialMapsHome({
   const spatial = useSpatialContext(chatId);
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
+  const updateSpatial = useUpdateSpatialContext();
   const updateGenerationPreferences = useUpdateSpatialGenerationPreferences();
   const previewGenerationPrompt = usePreviewSpatialMapPrompt();
   const ownerMode = chatMode === "game" ? "game" : "roleplay";
@@ -157,6 +165,8 @@ export function SpatialMapsHome({
   const [promptOperation, setPromptOperation] = useState<"draft" | "expansion">("draft");
   const [promptPreview, setPromptPreview] = useState<SpatialMapPromptPreview | null>(null);
   const [promptCopyStatus, setPromptCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [hierarchyEditing, setHierarchyEditing] = useState(false);
+  const [hierarchyDraft, setHierarchyDraft] = useState<SpatialHierarchyProfileDraft | null>(null);
   const supportedChat = chatMode === "roleplay" || chatMode === "game";
   const definition = spatial.data?.definition ?? null;
   const activeLocationCount = definition?.locations.filter((location) => location.status === "active").length ?? 0;
@@ -172,6 +182,7 @@ export function SpatialMapsHome({
   currentChatIdRef.current = chatId;
   const promptPreviewRequestIdRef = useRef(0);
   const resetGenerationPreferences = updateGenerationPreferences.reset;
+  const resetSpatialUpdate = updateSpatial.reset;
   const resetPromptPreviewRequest = previewGenerationPrompt.reset;
   useEffect(() => {
     setPromptEditing(false);
@@ -179,14 +190,28 @@ export function SpatialMapsHome({
     setPromptOperation("draft");
     setPromptPreview(null);
     setPromptCopyStatus("idle");
+    setHierarchyEditing(false);
+    setHierarchyDraft(null);
     promptPreviewRequestIdRef.current += 1;
     resetGenerationPreferences();
     resetPromptPreviewRequest();
-  }, [chatId, ownerMode, resetGenerationPreferences, resetPromptPreviewRequest]);
+    resetSpatialUpdate();
+  }, [chatId, ownerMode, resetGenerationPreferences, resetPromptPreviewRequest, resetSpatialUpdate]);
   useEffect(() => {
     if (promptEditing || !spatial.data?.generationPreferences) return;
     setPromptDraft(spatial.data.generationPreferences);
   }, [promptEditing, spatial.data?.generationPreferences]);
+  useEffect(() => {
+    if (hierarchyEditing) return;
+    if (!spatial.data?.definition) {
+      setHierarchyDraft(null);
+      return;
+    }
+    setHierarchyDraft({
+      definition: spatial.data.definition,
+      profile: normalizeHierarchyProfile(spatial.data.hierarchyProfile, spatial.data.definition),
+    });
+  }, [hierarchyEditing, spatial.data?.definition, spatial.data?.hierarchyProfile]);
   useEffect(() => {
     setPromptPreview(null);
     setPromptCopyStatus("idle");
@@ -210,6 +235,38 @@ export function SpatialMapsHome({
     activeLocations[0] ??
     null;
   const expansionPreviewUnavailable = promptOperation === "expansion" && !expansionPreviewTarget;
+  const hierarchySaveError = updateSpatial.isError
+    ? getSpatialContextProblem(updateSpatial.error).message
+    : null;
+
+  const resetHierarchyDraft = () => {
+    if (!spatial.data?.definition) {
+      setHierarchyDraft(null);
+      return;
+    }
+    setHierarchyDraft({
+      definition: spatial.data.definition,
+      profile: normalizeHierarchyProfile(spatial.data.hierarchyProfile, spatial.data.definition),
+    });
+  };
+
+  const saveHierarchyProfile = async () => {
+    if (!chatId || !hierarchyDraft || !spatial.data?.definition) return;
+    const savingChatId = chatId;
+    const response = await updateSpatial.mutateAsync({
+      chatId: savingChatId,
+      expectedRevision: spatial.data.definition.revision,
+      expectedCurrentLocationId: spatial.data.currentLocationId,
+      definition: hierarchyDraft.definition,
+      hierarchyProfile: normalizeHierarchyProfile(hierarchyDraft.profile, hierarchyDraft.definition),
+    });
+    if (currentChatIdRef.current !== savingChatId || !response.definition) return;
+    setHierarchyDraft({
+      definition: response.definition,
+      profile: normalizeHierarchyProfile(response.hierarchyProfile, response.definition),
+    });
+    setHierarchyEditing(false);
+  };
 
   const savePrompt = async (preferences: SpatialGenerationPreferences) => {
     if (!chatId) return;
@@ -523,6 +580,94 @@ export function SpatialMapsHome({
             </div>
           )}
         </article>
+
+        {chatId && supportedChat && (
+          <article
+            className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
+            aria-labelledby="maps-location-types-title"
+          >
+            <div className="flex flex-wrap items-start gap-3">
+              <Settings2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+              <div className="min-w-52 flex-1">
+                <h2 id="maps-location-types-title" className="text-xs font-semibold">Location types</h2>
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                  View and edit the vocabulary saved with this chat’s map. These are the same hierarchy names and semantic base kinds shown in Edit Map and reused by AI expansions.
+                </p>
+              </div>
+              {hierarchyDraft && (
+                <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
+                  {hierarchyDraft.profile.mode === "custom" ? "Custom" : hierarchyDraft.profile.mode === "auto" ? "Chosen by AI" : "Template"}
+                </span>
+              )}
+            </div>
+
+            {spatial.isLoading ? (
+              <div className="mt-4 flex min-h-20 items-center gap-2 text-xs text-[var(--marinara-chat-chrome-accent)]" role="status">
+                <LoaderCircle size="0.875rem" className="animate-spin" /> Loading location types…
+              </div>
+            ) : hierarchyDraft && definition ? (
+              <div className="mt-4 border-t border-[var(--border)] pt-4">
+                <SpatialHierarchyProfileFields
+                  definition={hierarchyDraft.definition}
+                  profile={hierarchyDraft.profile}
+                  editable={hierarchyEditing}
+                  disabled={updateSpatial.isPending}
+                  onChange={setHierarchyDraft}
+                />
+
+                {hierarchySaveError && (
+                  <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
+                    {hierarchySaveError}
+                  </p>
+                )}
+
+                <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-3">
+                  {hierarchyEditing ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetHierarchyDraft();
+                          setHierarchyEditing(false);
+                          updateSpatial.reset();
+                        }}
+                        disabled={updateSpatial.isPending}
+                        className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void saveHierarchyProfile()}
+                        disabled={updateSpatial.isPending}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
+                      >
+                        {updateSpatial.isPending ? <LoaderCircle size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}
+                        Save location types
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetHierarchyDraft();
+                        setHierarchyEditing(true);
+                        updateSpatial.reset();
+                      }}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)]"
+                    >
+                      <Settings2 size="0.75rem" /> Edit location types
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--secondary)]/30 px-3 py-4 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                Create or import a map first. Its generated or imported hierarchy vocabulary will then be editable here.
+              </div>
+            )}
+          </article>
+        )}
 
         {chatId && supportedChat && (
           <article className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4" aria-labelledby="maps-generation-prompt-title">
