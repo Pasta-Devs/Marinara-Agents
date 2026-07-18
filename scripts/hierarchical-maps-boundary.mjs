@@ -90,15 +90,15 @@ export function findHierarchicalMapsPrivateEngineImports(
   return findPackagePrivateEngineImports(sourceRoot);
 }
 
-export async function readPackageEngineBoundary({ boundaryPath, displayName }) {
+export async function readPackageEngineBoundary({ boundaryPath, displayName, capabilityApi = { major: 1, minor: 3 } }) {
   const boundary = JSON.parse(await readFile(boundaryPath, "utf8"));
   if (boundary.schemaVersion !== 1)
     throw new Error(`Unsupported ${displayName} boundary schema`);
   if (
-    boundary.capabilityApi?.major !== 1 ||
-    boundary.capabilityApi?.minor !== 3
+    boundary.capabilityApi?.major !== capabilityApi.major ||
+    boundary.capabilityApi?.minor !== capabilityApi.minor
   ) {
-    throw new Error(`${displayName} must target capability API 1.3`);
+    throw new Error(`${displayName} must target capability API ${capabilityApi.major}.${capabilityApi.minor}`);
   }
   if (
     !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(
@@ -131,9 +131,10 @@ export async function assertPackagePrivateImportBoundary({
   sourceRoot,
   boundaryPath,
   displayName,
+  capabilityApi,
 }) {
   const [boundary, actual] = await Promise.all([
-    readPackageEngineBoundary({ boundaryPath, displayName }),
+    readPackageEngineBoundary({ boundaryPath, displayName, capabilityApi }),
     findPackagePrivateEngineImports(sourceRoot),
   ]);
   const expected = boundary.privateEngineImports;

@@ -2,11 +2,11 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 3
+    "minor": 4
   },
   "builtAgainst": {
     "engineVersion": "2.3.2",
-    "engineCommit": "a0ca32a1c7407d0913e833dbe1e9c1ceffbb26a1"
+    "engineCommit": "a03934562d7d519be1584a85f5de7f1646311894"
   },
   "id": "long-term-memory",
   "name": "Long-Term Memory",
@@ -31,12 +31,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "63534eda66b25400f4e3a9f305719a8e1a7d37203dad6cea519f672bb6f58b22",
-      "bytes": 211524
+      "sha256": "c5d5b3ba6155f5d6377eeb32aeb2af8f46826a0db5902387da1c77eae5196235",
+      "bytes": 320567
     }
   ],
   "permissions": [
     "agent-runtime",
+    "chat-read",
     "routes",
     "storage"
   ],

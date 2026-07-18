@@ -10,6 +10,8 @@ import {
   ltmDebugPhaseSchema,
   ltmDebugStatusSchema,
   ltmExtractionSettingsSchema,
+  ltmExtractSourceNoteRequestSchema,
+  ltmExtractSourceNoteResponseSchema,
   ltmGlobalSettingsSchema,
   ltmIsoTimestampSchema,
   ltmLinkSchema,
@@ -37,7 +39,7 @@ import { getLtmExtractionConfig, updateLtmExtractionConfig } from "./extraction-
 import { countBy, isEnoent } from "./ltm-utils.js";
 import { checkLongTermMemoryIntegrity, repairLongTermMemory } from "./maintenance.js";
 import { applyLtmNoteTransfer, LtmNoteTransferError, previewLtmNoteTransfer } from "./note-transfer.js";
-import { getPackagePersistence, logger } from "./package-runtime.js";
+import { getPackageLanguageModels, getPackagePersistence, logger } from "./package-runtime.js";
 import { getLongTermMemoryDirectories, LTM_DIR_NAME } from "./paths.js";
 import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { readLtmIndexState } from "./index-state.js";
@@ -49,6 +51,9 @@ import { getLtmGlobalSettings, updateLtmGlobalSettings } from "./settings.js";
 import type { LongTermMemoryDraftStore } from "./draft-store.js";
 import type { LongTermMemoryStorage } from "./storage.js";
 import { readLongTermMemoryInjectionReceipt } from "./usage.js";
+import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
+import { isLtmSourceNote } from "./source-extraction.js";
+import { processLongTermMemorySource } from "./source-processing.js";
 
 const NOTE_BODY_LIMIT_BYTES=512*1024;
 const DRAFT_BODY_LIMIT_BYTES=512*1024;
@@ -67,6 +72,12 @@ const draftQuery=z.object({status:ltmDraftStatusSchema.optional(),chatId:z.strin
 const draftReviewQuery=z.object({sourceNoteId:ltmNoteIdSchema.optional(),chatId:z.string().min(1).max(120).optional(),status:ltmDraftStatusSchema.optional()}).strict();
 const acceptDraftBody=z.object({mutationIds:z.array(z.string().uuid()).min(1).optional(),lowRiskOnly:z.boolean().optional(),editedMutations:z.array(ltmDraftMutationSchema).optional()}).strict().default({});
 const debugQuery=z.object({limit:z.coerce.number().int().min(1).max(1000).default(200),operationId:z.string().uuid().optional(),sourceNoteId:ltmNoteIdSchema.optional(),draftId:z.string().uuid().optional(),status:ltmDebugStatusSchema.optional(),phase:ltmDebugPhaseSchema.optional()}).strict();
+function extractionErrorStatus(message:string){
+  if(/(?:language model connection|selected language model|selected connection|no language model|no model|no base URL|random pool|choose a language model|configured)/i.test(message))return 400;
+  if(message.includes("not found"))return 404;
+  if(/mode is not enabled/i.test(message))return 400;
+  return 502;
+}
 
 export function createLongTermMemoryRoutes(runtime:{root:string;storage:LongTermMemoryStorage;draftStore:LongTermMemoryDraftStore}):FastifyPluginAsync{
   return async(app)=>{
@@ -83,6 +94,33 @@ export function createLongTermMemoryRoutes(runtime:{root:string;storage:LongTerm
     app.put<{Body:unknown}>("/extraction-settings",{bodyLimit:MAINTENANCE_BODY_LIMIT_BYTES},async(request)=>updateLtmExtractionConfig(ltmExtractionSettingsSchema.parse(request.body??{}),root));
     app.get<{Querystring:unknown}>("/notes",async(request)=>{const query=listNotesQuery.parse(request.query);const scope=query.scopeChatIds?.length||query.scopeGroupId||query.scopeCharacterIds?.length?{...(query.scopeChatIds?.length?{chatIds:query.scopeChatIds,chatId:query.scopeChatIds[0]}:{}),...(query.scopeGroupId?{groupId:query.scopeGroupId}:{}),...(query.scopeCharacterIds?.length?{characterIds:query.scopeCharacterIds}:{})}:undefined;return storage.listNotes({type:query.type,status:query.status,tag:query.tag,scope,characterIds:query.scopeCharacterIds,includeGlobal:query.includeGlobal});});
     app.get<{Params:{id:string}}>("/notes/:id",async(request,reply)=>{const note=await storage.getNote(ltmNoteIdSchema.parse(request.params.id));return note??reply.status(404).send({error:"Long-term memory note not found"});});
+    app.post<{Params:{id:string};Body:unknown}>("/notes/:id/extract",{bodyLimit:DRAFT_BODY_LIMIT_BYTES},async(request,reply)=>{
+      const id=ltmNoteIdSchema.parse(request.params.id);
+      const body=ltmExtractSourceNoteRequestSchema.parse(request.body??{});
+      const sourceNote=await storage.getNote(id);
+      if(!sourceNote)return reply.status(404).send({error:"Long-term memory note not found"});
+      if(!isLtmSourceNote(sourceNote))return reply.status(400).send({error:"Long-term memory note is not a source note"});
+      if(sourceNote.tags.includes("imported_game_journal"))return reply.status(400).send({error:"Game journal extraction is not supported by this package route"});
+      const chat=body.chatId?await getPackagePersistence().getChat(body.chatId):null;
+      if(body.chatId&&!chat)return reply.status(404).send({error:"Chat not found"});
+      const operationId=randomUUID();
+      try{
+        const resolved=await getPackageLanguageModels().resolveForRequest({connectionId:body.connectionId,chatConnectionId:chat?.connectionId??null,model:body.model});
+        const provider={
+          name:resolved.name,
+          maxContext:resolved.maxContext,
+          maxOutputTokens:resolved.maxOutputTokens,
+          complete:(messages:any,options:any)=>resolved.chatComplete(messages,{temperature:options.temperature,maxTokens:options.maxTokens,debugMode:options.debugMode,reasoningEffort:options.reasoningEffort,verbosity:options.verbosity,signal:options.signal,responseFormat:options.responseFormat}),
+          fitContext:(messages:any,options:any)=>resolved.fitContext(messages,{maxTokens:options.maxTokens}),
+        };
+        return ltmExtractSourceNoteResponseSchema.parse(await processLongTermMemorySource({sourceNote,provider,model:resolved.model,scope:chat?resolveChatLtmScope(chat):sourceNote.scope,modes:chat?[ltmModeForChatMode(chat.mode)]:sourceNote.modes,mode:body.mode,instruction:body.instruction,operationId,applyLowRisk:body.applyLowRisk,root,chatId:chat?.id}));
+      }catch(error){
+        const message=error instanceof Error?error.message:"Failed to extract long-term memory from source note";
+        logger.error(error,"[ltm] Source note extraction route failed");
+        const status=extractionErrorStatus(message);
+        return reply.status(status).send({error:message});
+      }
+    });
     app.post<{Body:unknown}>("/notes/transfer-preview",{bodyLimit:MAINTENANCE_BODY_LIMIT_BYTES},async(request,reply)=>{const body=ltmNoteTransferPreviewRequestSchema.parse(request.body??{});const chat=await getPackagePersistence().getChat(body.destinationChatId);if(!chat)return reply.status(404).send({error:"Destination chat not found"});try{return ltmNoteTransferPreviewResponseSchema.parse(await previewLtmNoteTransfer(body,chat,{root,storage}));}catch(error){return reply.status(error instanceof LtmNoteTransferError?error.statusCode:500).send({error:error instanceof Error?error.message:"Failed to preview long-term memory transfer"});}});
     app.post<{Body:unknown}>("/notes/transfer",{bodyLimit:MAINTENANCE_BODY_LIMIT_BYTES},async(request,reply)=>{const body=ltmNoteTransferPreviewRequestSchema.parse(request.body??{});const chat=await getPackagePersistence().getChat(body.destinationChatId);if(!chat)return reply.status(404).send({error:"Destination chat not found"});try{return ltmNoteTransferApplyResponseSchema.parse(await applyLtmNoteTransfer(body,chat,{root,storage,rebuild:async()=>{const result=await rebuildAfterMutation();return result?{generatedAt:result.generatedAt,noteCount:result.noteCount,chunkCount:result.chunkCount,sourceChunkCount:result.sourceChunkCount,embeddedChunkCount:result.embeddedChunkCount,embeddingsAvailable:result.embeddingsAvailable}:null;}}));}catch(error){return reply.status(error instanceof LtmNoteTransferError?error.statusCode:500).send({error:error instanceof Error?error.message:"Failed to transfer long-term memory notes"});}});
     app.post<{Body:unknown}>("/notes",{bodyLimit:NOTE_BODY_LIMIT_BYTES},async(request,reply)=>{const body=createNoteBody.parse(request.body);try{const note=await storage.createNote(body);await rebuildAfterMutation();return reply.status(201).send(note);}catch(error){if(error instanceof Error&&error.message.includes("already exists"))return reply.status(409).send({error:error.message});throw error;}});

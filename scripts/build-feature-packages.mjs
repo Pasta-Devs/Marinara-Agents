@@ -122,7 +122,7 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "visual_novel", "game"],
-    permissions: ["agent-runtime", "routes", "storage"],
+    permissions: ["agent-runtime", "chat-read", "routes", "storage"],
     serverImport:
       "packages/server/src/services/long-term-memory/server-entry.ts",
     serverEntry: true,
@@ -133,6 +133,7 @@ const features = [
       "long-term-memory/engine-boundary.json",
     ),
     boundaryDisplayName: "Long-Term Memory",
+    capabilityApi: { major: 1, minor: 4 },
   },
   {
     id: "hierarchical-maps",
@@ -310,6 +311,7 @@ const featureBoundaries = new Map(
           sourceRoot: feature.packageSourceRoot,
           boundaryPath: feature.engineBoundaryPath,
           displayName: feature.boundaryDisplayName ?? feature.name,
+          capabilityApi: feature.capabilityApi,
         }),
       ]),
   ),

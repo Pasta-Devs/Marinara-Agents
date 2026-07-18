@@ -10,11 +10,7 @@ import { stableJsonHash } from "./chunking.js";
 
 function normalizedStrings(values: readonly (string | null | undefined)[]) {
   return Array.from(
-    new Set(
-      values
-        .map((value) => value?.trim())
-        .filter((value): value is string => Boolean(value)),
-    ),
+    new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))),
   ).sort((left, right) => left.localeCompare(right));
 }
 
@@ -104,20 +100,13 @@ export function extractionFingerprintsEqual(
   left: LtmExtractionFingerprint | null | undefined,
   right: LtmExtractionFingerprint | null | undefined,
 ) {
-  return Boolean(
-    left && right && stableJsonHash(left) === stableJsonHash(right),
-  );
+  return Boolean(left && right && stableJsonHash(left) === stableJsonHash(right));
 }
 
-export function isLtmSourceExtractionFingerprintCurrent(
-  note: LtmNote,
-  fingerprint: LtmExtractionFingerprint,
-) {
+export function isLtmSourceExtractionFingerprintCurrent(note: LtmNote, fingerprint: LtmExtractionFingerprint) {
   if (!note.modes.includes(fingerprint.extractionMode)) return false;
   return extractionFingerprintsEqual(
-    extractionFingerprintForLtmSourceNote(note, {
-      extractionMode: fingerprint.extractionMode,
-    }),
+    extractionFingerprintForLtmSourceNote(note, { extractionMode: fingerprint.extractionMode }),
     fingerprint,
   );
 }

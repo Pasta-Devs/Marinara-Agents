@@ -52,6 +52,7 @@ const packageOwnedFeatures = [
   {
     id: "long-term-memory",
     name: "Long-Term Memory",
+    capabilityApi: { major: 1, minor: 4 },
     ownedSourcePaths: [
       "packages/shared/src/features/agents/long-term-memory",
       "packages/server/src/services/long-term-memory",
@@ -65,6 +66,7 @@ for (const feature of packageOwnedFeatures) {
     sourceRoot,
     boundaryPath: join(repoRoot, `packages/${feature.id}/engine-boundary.json`),
     displayName: feature.name,
+    capabilityApi: feature.capabilityApi,
   });
   packageBoundaries.set(feature.id, boundary);
   for (const relativePath of feature.ownedSourcePaths) {

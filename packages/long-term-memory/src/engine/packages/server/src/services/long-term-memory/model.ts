@@ -12,6 +12,7 @@ export type LtmModelOptions = {
   verbosity?: "low" | "medium" | "high";
   signal?: AbortSignal;
   responseFormat?: Readonly<{ type: string; [key: string]: unknown }>;
+  debugMode?: boolean;
 };
 
 export type LtmModelResult = {

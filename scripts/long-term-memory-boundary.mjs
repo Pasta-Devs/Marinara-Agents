@@ -18,6 +18,7 @@ export function assertLongTermMemoryPrivateImportBoundary() {
     sourceRoot: longTermMemorySourceRoot,
     boundaryPath: longTermMemoryBoundaryPath,
     displayName: "Long-Term Memory",
+    capabilityApi: { major: 1, minor: 4 },
   });
 }
 

@@ -7,6 +7,41 @@ export type CapabilityRuntimeHost = {
     info(message: string, ...args: RuntimeLogArgument[]): void;
     warn(message: string, ...args: RuntimeLogArgument[]): void;
     error(error: unknown, message: string, ...args: RuntimeLogArgument[]): void;
+    debugOverride?(overrideEnabled: boolean, message: string, ...args: RuntimeLogArgument[]): void;
+  };
+  isDebugAgentsEnabled?(): boolean;
+  languageModels?: {
+    resolveForRequest(request: {
+      connectionId?: string | null;
+      chatConnectionId?: string | null;
+      model?: string;
+    }): Promise<{
+      name: string;
+      connectionId: string;
+      model: string;
+      maxContext: number | null;
+      maxOutputTokens: number | null;
+      chatComplete(messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>, options?: {
+        temperature?: number;
+        maxTokens?: number;
+        debugMode?: boolean;
+        reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+        verbosity?: "low" | "medium" | "high";
+        signal?: AbortSignal;
+        responseFormat?: Readonly<{ type: string; [key: string]: unknown }>;
+      }): Promise<{ content: string | null; finishReason: string; usage?: { promptTokens?: number; completionTokens?: number; completionReasoningTokens?: number; totalTokens?: number } }>;
+      fitContext(messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>, options?: { maxTokens?: number }): {
+        messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>;
+        maxTokens?: number;
+        estimatedTokensBefore: number;
+        estimatedTokensAfter: number;
+        trimmed: boolean;
+      };
+    }>;
+  };
+  resources?: {
+    listCharacters(characterIds?: string[]): Promise<Array<{ id: string; data: unknown; comment: string }>>;
+    listPersonas(personaIds?: string[]): Promise<Array<{ id: string; data: unknown }>>;
   };
   persistence?: {
     dataDir?: string;
@@ -15,8 +50,19 @@ export type CapabilityRuntimeHost = {
       mode: string;
       characterIds: string[];
       groupId: string | null;
+      personaId: string | null;
+      connectionId: string | null;
       metadata: unknown;
     } | null>;
+    listChats(): Promise<Array<{
+      id: string;
+      mode: string;
+      characterIds: string[];
+      groupId: string | null;
+      personaId: string | null;
+      connectionId: string | null;
+      metadata: unknown;
+    }>>;
   };
 };
 
@@ -63,13 +109,36 @@ export function getPackagePersistence() {
   return persistence;
 }
 
+export function getPackageLanguageModels() {
+  const languageModels = currentHost().languageModels;
+  if (!languageModels) throw new Error("Long-Term Memory runtime host did not provide languageModels");
+  return languageModels;
+}
+
+export function getPackageResources() {
+  const resources = currentHost().resources;
+  if (!resources) throw new Error("Long-Term Memory runtime host did not provide resources");
+  return resources;
+}
+
+export function isPackageDebugAgentsEnabled() {
+  return currentHost().isDebugAgentsEnabled?.() === true;
+}
+
 export const logger = {
   debug: (message: string, ...args: RuntimeLogArgument[]) => currentHost().logger.debug(message, ...args),
   info: (message: string, ...args: RuntimeLogArgument[]) => currentHost().logger.info(message, ...args),
-  warn: (error: unknown, message?: string, ...args: RuntimeLogArgument[]) =>
-    currentHost().logger.warn(message ?? "Long-Term Memory warning", error as RuntimeLogArgument, ...args),
+  warn: (first: unknown, second?: RuntimeLogArgument, ...args: RuntimeLogArgument[]) =>
+    typeof first === "string"
+      ? currentHost().logger.warn(first, second, ...args)
+      : currentHost().logger.warn(typeof second === "string" ? second : "Long-Term Memory warning", first as RuntimeLogArgument, ...args),
   error: (error: unknown, message: string, ...args: RuntimeLogArgument[]) =>
     currentHost().logger.error(error, message, ...args),
+  debugOverride: (overrideEnabled: boolean, message: string, ...args: RuntimeLogArgument[]) => {
+    const runtime = currentHost();
+    if (runtime.logger.debugOverride) runtime.logger.debugOverride(overrideEnabled, message, ...args);
+    else if (overrideEnabled) runtime.logger.debug(message, ...args);
+  },
 };
 
 export async function withKeyedLock<T>(
