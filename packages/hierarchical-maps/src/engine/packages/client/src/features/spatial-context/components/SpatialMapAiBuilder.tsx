@@ -5,11 +5,14 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ClipboardCopy,
+  Eye,
   LoaderCircle,
   MapPin,
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldCheck,
   Sparkles,
@@ -29,7 +32,9 @@ import type {
 import { compareSpatialLocations } from "@marinara-engine/shared";
 import {
   useGenerateSpatialMapDraft,
+  usePreviewSpatialMapPrompt,
   type MapsGenerateSpatialMapDraftResponse,
+  type SpatialMapPromptPreview,
 } from "../../../hooks/use-spatial-context";
 import { cn } from "../package-utils";
 import {
@@ -168,6 +173,7 @@ export function SpatialMapAiBuilder({
   onApply,
 }: SpatialMapAiBuilderProps) {
   const generateDraft = useGenerateSpatialMapDraft();
+  const previewPrompt = usePreviewSpatialMapPrompt();
   const hasLocations = definition.locations.length > 0;
   const activeLocationOptions = useMemo(() => hierarchyOrderedActiveLocations(definition), [definition]);
   const activeLocations = useMemo(() => activeLocationOptions.map(({ location }) => location), [activeLocationOptions]);
@@ -203,6 +209,10 @@ export function SpatialMapAiBuilder({
   const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
   const [expandedPreviewIds, setExpandedPreviewIds] = useState<Set<string>>(() => new Set());
   const [previewQuery, setPreviewQuery] = useState("");
+  const [previewPane, setPreviewPane] = useState<"draft" | "prompt">("draft");
+  const [resolvedPrompt, setResolvedPrompt] = useState<SpatialMapPromptPreview | null>(null);
+  const [resolvedPromptBaseline, setResolvedPromptBaseline] = useState<SpatialMapPromptPreview | null>(null);
+  const [promptCopyStatus, setPromptCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const requestInputRef = useRef<HTMLTextAreaElement>(null);
   const handledRegenerationRef = useRef(0);
   const excludedLorebookIdSet = useMemo(() => new Set(excludedLorebookIds), [excludedLorebookIds]);
@@ -305,10 +315,18 @@ export function SpatialMapAiBuilder({
     setSelectedPreviewId(null);
     setExpandedPreviewIds(new Set());
     setPreviewQuery("");
+    const restoredPrompt = withHierarchyProfile(initialSession?.result ?? initialResult, hierarchyProfile)?.prompt ?? null;
+    setResolvedPrompt(restoredPrompt);
+    setResolvedPromptBaseline(restoredPrompt);
+    setPreviewPane("draft");
+    setPromptCopyStatus("idle");
   }, [chatId, defaultTargetLocationId, definition, hasLocations, hierarchyProfile, initialResult, initialSession, open]);
 
   const runGeneration = useCallback(
-    async (request: SpatialMapAiBuilderRequest) => {
+    async (
+      request: SpatialMapAiBuilderRequest,
+      promptOverride?: Pick<SpatialMapPromptPreview, "system" | "user">,
+    ) => {
       setError(null);
       try {
         const generated = await generateDraft.mutateAsync({
@@ -321,9 +339,14 @@ export function SpatialMapAiBuilder({
           sourceLorebookIds: request.groundingMode === "setup" ? [] : request.sourceLorebookIds,
           hierarchyMode: request.hierarchyMode,
           ...(request.hierarchyProfile ? { hierarchyProfile: request.hierarchyProfile } : {}),
+          ...(promptOverride ? { promptOverride } : {}),
           debugMode,
         });
         setResult(withHierarchyProfile(generated, request.hierarchyProfile ?? workingHierarchyProfile));
+        setResolvedPrompt(generated.prompt ?? null);
+        setResolvedPromptBaseline(generated.prompt ?? null);
+        setPreviewPane("draft");
+        setPromptCopyStatus("idle");
       } catch (generationError) {
         setResult(null);
         setError(generationError instanceof Error ? generationError.message : "The map draft could not be generated.");
@@ -376,29 +399,83 @@ export function SpatialMapAiBuilder({
   const resetResult = () => {
     setResult(null);
     setError(null);
+    setResolvedPrompt(null);
+    setResolvedPromptBaseline(null);
+    setPromptCopyStatus("idle");
   };
   const requestedHierarchyProfile =
     operation === "expand" || hierarchyMode !== "auto"
       ? { ...workingHierarchyProfile, mode: operation === "expand" ? hierarchyProfile.mode : hierarchyMode }
       : undefined;
-  const generate = () =>
-    runGeneration({
-      operation,
-      targetLocationId,
-      size,
-      instructions,
-      groundingMode,
-      sourceLorebookIds,
-      hierarchyMode: operation === "expand" ? hierarchyProfile.mode : hierarchyMode,
-      hierarchyProfile: requestedHierarchyProfile,
-    });
-  const generationDisabled =
-    generateDraft.isPending ||
+  const currentRequest: SpatialMapAiBuilderRequest = {
+    operation,
+    targetLocationId,
+    size,
+    instructions,
+    groundingMode,
+    sourceLorebookIds,
+    hierarchyMode: operation === "expand" ? hierarchyProfile.mode : hierarchyMode,
+    hierarchyProfile: requestedHierarchyProfile,
+  };
+  const requestInvalid =
     (dirty && !allowDirtyGeneratedReplacement) ||
     (operation === "expand" && targetLocationId.length === 0) ||
     (operation !== "expand" && hierarchyMode === "custom" &&
       (!workingHierarchyProfile.name.trim() || workingHierarchyProfile.types.some((type) => !type.label.trim()))) ||
     (groundingMode !== "setup" && sourceLorebookIds.length === 0);
+  const promptEdited = Boolean(
+    resolvedPrompt &&
+      resolvedPromptBaseline &&
+      (resolvedPrompt.system !== resolvedPromptBaseline.system || resolvedPrompt.user !== resolvedPromptBaseline.user),
+  );
+  const resultHierarchyValid = Boolean(
+    result && result.hierarchyProfile.types.every((type) => type.label.trim().length > 0),
+  );
+  const generationDisabled = generateDraft.isPending || previewPrompt.isPending || requestInvalid;
+  const previewPromptDisabled = generateDraft.isPending || previewPrompt.isPending || requestInvalid;
+  const generate = () =>
+    runGeneration(
+      currentRequest,
+      promptEdited && resolvedPrompt
+        ? { system: resolvedPrompt.system, user: resolvedPrompt.user }
+        : undefined,
+    );
+  const loadFullPrompt = async () => {
+    if (promptEdited && !window.confirm("Reload the resolved prompt and discard your prompt edits for this run?")) return;
+    setError(null);
+    try {
+      const prompt = await previewPrompt.mutateAsync({
+        chatId,
+        operation: currentRequest.operation,
+        size: currentRequest.size,
+        ...(currentRequest.operation === "expand" ? { targetLocationId: currentRequest.targetLocationId } : {}),
+        instructions: currentRequest.instructions.trim() || undefined,
+        groundingMode: currentRequest.groundingMode,
+        sourceLorebookIds: currentRequest.groundingMode === "setup" ? [] : currentRequest.sourceLorebookIds,
+        hierarchyMode: currentRequest.hierarchyMode,
+        ...(currentRequest.hierarchyProfile ? { hierarchyProfile: currentRequest.hierarchyProfile } : {}),
+        debugMode,
+      });
+      setResolvedPrompt(prompt);
+      setResolvedPromptBaseline(prompt);
+      setPreviewPane("prompt");
+      setPromptCopyStatus("idle");
+    } catch (promptError) {
+      setResolvedPrompt(null);
+      setResolvedPromptBaseline(null);
+      setPreviewPane("prompt");
+      setError(promptError instanceof Error ? promptError.message : "The full prompt could not be resolved.");
+    }
+  };
+  const copyFullPrompt = async () => {
+    if (!resolvedPrompt) return;
+    try {
+      await navigator.clipboard.writeText(`[SYSTEM]\n${resolvedPrompt.system}\n\n[USER]\n${resolvedPrompt.user}`);
+      setPromptCopyStatus("copied");
+    } catch {
+      setPromptCopyStatus("failed");
+    }
+  };
   const selectedPreviewProvenance = selectedPreviewLocation ? result?.provenance?.[selectedPreviewLocation.id] : null;
   const togglePreviewExpanded = (locationId: string) => {
     setExpandedPreviewIds((previous) => {
@@ -699,10 +776,20 @@ export function SpatialMapAiBuilder({
                         type="button"
                         disabled={workingHierarchyProfile.types.length === 1}
                         onClick={() => {
-                          setWorkingHierarchyProfile((current) => ({
-                            ...current,
-                            types: current.types.filter((candidate) => candidate.id !== type.id),
-                          }));
+                          setWorkingHierarchyProfile((current) =>
+                            normalizeHierarchyProfile(
+                              {
+                                ...current,
+                                types: current.types.filter((candidate) => candidate.id !== type.id),
+                                locationTypeIds: Object.fromEntries(
+                                  Object.entries(current.locationTypeIds).filter(
+                                    ([, assignedTypeId]) => assignedTypeId !== type.id,
+                                  ),
+                                ),
+                              },
+                              definition,
+                            ),
+                          );
                           resetResult();
                         }}
                         className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
@@ -932,29 +1019,157 @@ export function SpatialMapAiBuilder({
               Save or discard the current map edits before using AI.
             </p>
           )}
-          {!result && (
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void generate()}
-              disabled={generationDisabled}
-              className="mari-editor-action mari-editor-action--primary mt-4 inline-flex min-h-11 px-4 text-xs disabled:opacity-50"
+              onClick={() => void loadFullPrompt()}
+              disabled={previewPromptDisabled}
+              className="mari-editor-action inline-flex min-h-11 px-4 text-xs disabled:opacity-50"
             >
-              {generateDraft.isPending ? (
-                <>
-                  <LoaderCircle size="0.8125rem" className="animate-spin" /> Building map
-                </>
+              {previewPrompt.isPending ? (
+                <><LoaderCircle size="0.8125rem" className="animate-spin" /> Resolving prompt</>
               ) : (
-                <>
-                  <Sparkles size="0.8125rem" /> {operation === "expand" ? "Generate expansion" : "Generate draft"}
-                </>
+                <><Eye size="0.8125rem" /> {resolvedPrompt ? "Reload full prompt" : "Preview full prompt"}</>
               )}
             </button>
-          )}
+            {!result && (
+              <button
+                type="button"
+                onClick={() => void generate()}
+                disabled={generationDisabled}
+                className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs disabled:opacity-50"
+              >
+                {generateDraft.isPending ? (
+                  <>
+                    <LoaderCircle size="0.8125rem" className="animate-spin" /> Building map
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size="0.8125rem" /> {operation === "expand" ? "Generate expansion" : "Generate draft"}
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex min-h-56 flex-col bg-[var(--marinara-editor-bg)] p-4" aria-live="polite">
-          <h3 className="text-xs font-semibold text-[var(--marinara-editor-title)]">Draft preview</h3>
-          {generateDraft.isPending ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold text-[var(--marinara-editor-title)]">
+              {previewPane === "prompt" ? `Full ${ownerMode === "game" ? "Game" : "Roleplay"} prompt` : "Draft preview"}
+            </h3>
+            <div className="flex rounded-lg bg-[var(--marinara-chat-chrome-panel-bg)] p-1 ring-1 ring-[var(--marinara-chat-chrome-panel-border)]" role="group" aria-label="Preview content">
+              {(["draft", "prompt"] as const).map((pane) => (
+                <button
+                  key={pane}
+                  type="button"
+                  aria-pressed={previewPane === pane}
+                  onClick={() => setPreviewPane(pane)}
+                  className={cn(
+                    "min-h-9 rounded-md px-3 text-[0.6875rem] font-medium",
+                    previewPane === pane
+                      ? "bg-[var(--background)] text-[var(--marinara-editor-title)] shadow-sm"
+                      : "text-[var(--marinara-editor-muted)]",
+                  )}
+                >
+                  {pane === "draft" ? "Map draft" : "Full prompt"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {previewPane === "prompt" ? (
+            previewPrompt.isPending ? (
+              <div className="mt-4 space-y-3" aria-label="Resolving full prompt">
+                <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--marinara-editor-surface)]" />
+                <div className="h-40 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />
+                <div className="h-40 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />
+              </div>
+            ) : resolvedPrompt ? (
+              <div className="mt-3 flex min-h-0 flex-1 flex-col">
+                <div className="flex flex-wrap items-center gap-2 text-[0.625rem] text-[var(--marinara-editor-muted)]">
+                  <span className="rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-2 py-1 font-semibold text-[var(--marinara-chat-chrome-button-text-active)]">
+                    {resolvedPrompt.ownerMode === "game" ? "Game" : "Roleplay"}
+                  </span>
+                  <span className="capitalize">{resolvedPrompt.operation}</span>
+                  <span>· {resolvedPrompt.size}</span>
+                  <span>· max {resolvedPrompt.maxTokens.toLocaleString()} output tokens</span>
+                  {promptEdited && <span className="font-semibold text-amber-300">· Edited for this run</span>}
+                </div>
+                <p className="mt-2 text-[0.625rem] leading-relaxed text-amber-200">
+                  This is the exact text sent by Maps and contains private setup, character, lore, and map context for this chat. Edits here apply to the next generation only.
+                </p>
+                <label className="mt-3 text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]" htmlFor="spatial-full-system-prompt">
+                  System message
+                </label>
+                <textarea
+                  id="spatial-full-system-prompt"
+                  value={resolvedPrompt.system}
+                  onChange={(event) => {
+                    setResolvedPrompt((current) => current ? { ...current, system: event.target.value } : current);
+                    setPromptCopyStatus("idle");
+                  }}
+                  rows={14}
+                  className="mt-1 min-h-56 w-full resize-y rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)]"
+                />
+                <label className="mt-3 text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]" htmlFor="spatial-full-user-prompt">
+                  User message
+                </label>
+                <textarea
+                  id="spatial-full-user-prompt"
+                  value={resolvedPrompt.user}
+                  onChange={(event) => {
+                    setResolvedPrompt((current) => current ? { ...current, user: event.target.value } : current);
+                    setPromptCopyStatus("idle");
+                  }}
+                  rows={14}
+                  className="mt-1 min-h-56 w-full resize-y rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)]"
+                />
+                <div className="mt-3 flex flex-wrap justify-end gap-2">
+                  {promptEdited && resolvedPromptBaseline && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResolvedPrompt(resolvedPromptBaseline);
+                        setPromptCopyStatus("idle");
+                      }}
+                      className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+                    >
+                      <RotateCcw size="0.75rem" /> Undo prompt edits
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void copyFullPrompt()}
+                    className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+                  >
+                    <ClipboardCopy size="0.75rem" /> {promptCopyStatus === "copied" ? "Copied" : promptCopyStatus === "failed" ? "Copy failed" : "Copy full prompt"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void generate()}
+                    disabled={generationDisabled || !resolvedPrompt.system.trim() || !resolvedPrompt.user.trim()}
+                    className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs disabled:opacity-50"
+                  >
+                    <Sparkles size="0.8125rem" /> {result ? "Regenerate with prompt" : operation === "expand" ? "Generate expansion" : "Generate draft"}
+                  </button>
+                </div>
+              </div>
+            ) : error ? (
+              <div className="mt-4 rounded-lg border border-red-500/25 bg-red-500/10 p-3 text-xs text-red-300" role="alert">
+                <p className="flex items-start gap-2"><AlertCircle size="0.8125rem" className="mt-0.5 shrink-0" /><span>{error}</span></p>
+              </div>
+            ) : (
+              <div className="flex flex-1 items-center justify-center px-6 py-10 text-center">
+                <div className="max-w-sm">
+                  <Eye className="mx-auto text-[var(--marinara-editor-muted)]" size="1.25rem" />
+                  <p className="mt-3 text-sm font-medium text-[var(--marinara-editor-title)]">Resolve this run’s exact prompt</p>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--marinara-editor-muted)]">
+                    Choose the map options, then use Preview full prompt. Roleplay and Game resolve different templates and source context.
+                  </p>
+                </div>
+              </div>
+            )
+          ) : generateDraft.isPending ? (
             <div className="mt-4 space-y-3" aria-label="Generating map draft">
               <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--marinara-editor-surface)]" />
               <div className="h-12 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />
@@ -1177,7 +1392,8 @@ export function SpatialMapAiBuilder({
                       hierarchyProfile: result.hierarchyProfile,
                     })
                   }
-                  className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs"
+                  disabled={!resultHierarchyValid}
+                  className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs disabled:opacity-50"
                 >
                   <Check size="0.8125rem" />{" "}
                   {result.operation === "expand" ? "Add to working map" : hasLocations ? "Replace working draft" : "Continue to editor"}

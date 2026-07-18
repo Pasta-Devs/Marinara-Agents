@@ -212,6 +212,13 @@ export function GameWorldMap({
 
   const planRoute = () => {
     if (!definition || !spatial.currentLocationId || !selected || disabled || !selectedRoute) return;
+    const firstStep = selectedRoute.steps[0];
+    if (
+      !firstStep ||
+      !spatial.destinations.some((destination) => destination.id === firstStep.locationId)
+    ) {
+      return;
+    }
     if (
       (routePlan || pending) &&
       !window.confirm(

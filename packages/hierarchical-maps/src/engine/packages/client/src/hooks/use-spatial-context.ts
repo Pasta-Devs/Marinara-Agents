@@ -8,6 +8,9 @@ import type {
   SpatialContextDefinition,
   SpatialContextResponse,
   SpatialDefinitionIssue,
+  SpatialMapDraftOperation,
+  SpatialMapDraftSize,
+  SpatialOwnerMode,
 } from "@marinara-engine/shared";
 import { PackageApiError, packageApi } from "../features/spatial-context/package-api";
 import {
@@ -78,10 +81,22 @@ export interface GenerateSpatialMapDraftInput extends GenerateSpatialMapDraftReq
   chatId: string;
   hierarchyMode?: SpatialHierarchyProfile["mode"];
   hierarchyProfile?: SpatialHierarchyProfile;
+  promptOverride?: Pick<SpatialMapPromptPreview, "system" | "user">;
+}
+
+export interface SpatialMapPromptPreview {
+  ownerMode: SpatialOwnerMode;
+  operation: SpatialMapDraftOperation;
+  size: SpatialMapDraftSize;
+  maxTokens: number;
+  containsPrivateContext: true;
+  system: string;
+  user: string;
 }
 
 export type MapsGenerateSpatialMapDraftResponse = GenerateSpatialMapDraftResponse & {
   hierarchyProfile: SpatialHierarchyProfile;
+  prompt?: SpatialMapPromptPreview;
 };
 
 export interface CommitSpatialOwnerTurnInput {
@@ -210,6 +225,16 @@ export function useGenerateSpatialMapDraft() {
   return useMutation({
     mutationFn: ({ chatId, ...request }: GenerateSpatialMapDraftInput) =>
       packageApi.post<MapsGenerateSpatialMapDraftResponse>(`/chats/${chatId}/spatial-context/generate`, request),
+  });
+}
+
+export function usePreviewSpatialMapPrompt() {
+  return useMutation({
+    mutationFn: ({ chatId, ...request }: GenerateSpatialMapDraftInput) =>
+      packageApi.post<SpatialMapPromptPreview>(
+        `/chats/${chatId}/spatial-context/generation-prompt/preview`,
+        request,
+      ),
   });
 }
 

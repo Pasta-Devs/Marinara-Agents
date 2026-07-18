@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Box,
   CheckCircle2,
   CircleAlert,
+  Code2,
+  FileText,
   Map,
   MapPin,
   MessageSquare,
@@ -14,8 +16,8 @@ import {
 } from "lucide-react";
 import { useSpatialContext, useUpdateSpatialGenerationPreferences } from "../../hooks/use-spatial-context";
 import {
-  BUILT_IN_GENERATION_GUIDANCE,
   defaultGenerationPreferences,
+  SPATIAL_GENERATION_PROMPT_VARIABLES,
   type SpatialGenerationPreferences,
 } from "../../../../maps-shared/src/maps-model";
 
@@ -58,8 +60,13 @@ export function SpatialMapsHome({
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
   const updateGenerationPreferences = useUpdateSpatialGenerationPreferences();
-  const [promptDraft, setPromptDraft] = useState<SpatialGenerationPreferences>(defaultGenerationPreferences);
+  const ownerMode = chatMode === "game" ? "game" : "roleplay";
+  const [promptDraft, setPromptDraft] = useState<SpatialGenerationPreferences>(() =>
+    defaultGenerationPreferences(ownerMode),
+  );
   const [promptEditing, setPromptEditing] = useState(false);
+  const [promptOperation, setPromptOperation] = useState<"draft" | "expansion">("draft");
+  const [promptMessageRole, setPromptMessageRole] = useState<"system" | "user">("system");
   const supportedChat = chatMode === "roleplay" || chatMode === "game";
   const definition = spatial.data?.definition ?? null;
   const activeLocationCount = definition?.locations.filter((location) => location.status === "active").length ?? 0;
@@ -71,14 +78,36 @@ export function SpatialMapsHome({
       : "Saved, map disabled";
   const packageReady =
     packageInfo?.status === "active" && (packageInfo.readiness === "ready" || packageInfo.readiness == null);
+  const currentChatIdRef = useRef(chatId);
+  currentChatIdRef.current = chatId;
+  const resetGenerationPreferences = updateGenerationPreferences.reset;
+  useEffect(() => {
+    setPromptEditing(false);
+    setPromptDraft(defaultGenerationPreferences(ownerMode));
+    setPromptOperation("draft");
+    setPromptMessageRole("system");
+    resetGenerationPreferences();
+  }, [chatId, ownerMode, resetGenerationPreferences]);
   useEffect(() => {
     if (promptEditing || !spatial.data?.generationPreferences) return;
     setPromptDraft(spatial.data.generationPreferences);
   }, [promptEditing, spatial.data?.generationPreferences]);
+  const selectedPromptField: keyof SpatialGenerationPreferences["prompts"] =
+    promptOperation === "draft"
+      ? promptMessageRole === "system"
+        ? "draftSystem"
+        : "draftUser"
+      : promptMessageRole === "system"
+        ? "expansionSystem"
+        : "expansionUser";
+  const selectedPromptTemplate = promptDraft.prompts[selectedPromptField];
+  const promptTemplatesComplete = Object.values(promptDraft.prompts).every((template) => template.trim().length > 0);
 
   const savePrompt = async (preferences: SpatialGenerationPreferences) => {
     if (!chatId) return;
-    await updateGenerationPreferences.mutateAsync({ chatId, preferences });
+    const savingChatId = chatId;
+    await updateGenerationPreferences.mutateAsync({ chatId: savingChatId, preferences });
+    if (currentChatIdRef.current !== savingChatId) return;
     setPromptDraft(preferences);
     setPromptEditing(false);
   };
@@ -274,46 +303,108 @@ export function SpatialMapsHome({
         {chatId && supportedChat && (
           <article className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4" aria-labelledby="maps-generation-prompt-title">
             <div className="flex flex-wrap items-start gap-3">
-              <Settings2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+              <FileText size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
               <div className="min-w-52 flex-1">
                 <h2 id="maps-generation-prompt-title" className="text-xs font-semibold">Generation prompt</h2>
                 <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                  Reusable guidance for this chat’s initial drafts and expansions. Per-run Instructions are added temporarily; locked JSON, stable-ID, validation, and safety requirements always remain in place.
+                  Edit the {modeLabel(chatMode)} templates that build the complete System and User messages for new maps and expansions in this chat.
                 </p>
               </div>
               <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
-                {promptDraft.mode === "custom" ? "Customized" : "Built-in default"}
+                {modeLabel(chatMode)} · {promptDraft.mode === "custom" ? "Customized" : "Built-in default"}
               </span>
             </div>
 
-            <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/35 p-3">
+            <div className="mt-3 border-y border-[var(--border)] py-3">
               <label className="text-[0.6875rem] font-semibold" htmlFor="maps-generation-guidance">
-                Creator guidance
+                Reusable creator guidance
               </label>
               <textarea
                 id="maps-generation-guidance"
-                rows={5}
+                rows={3}
                 maxLength={4_000}
                 readOnly={!promptEditing}
-                value={promptDraft.mode === "default" ? BUILT_IN_GENERATION_GUIDANCE : promptDraft.guidance}
-                onChange={(event) => setPromptDraft({ version: 1, mode: "custom", guidance: event.target.value })}
+                value={promptDraft.guidance}
+                onChange={(event) =>
+                  setPromptDraft((current) => ({ ...current, mode: "custom", guidance: event.target.value }))
+                }
                 className="mt-2 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs leading-relaxed outline-none read-only:cursor-default read-only:opacity-80 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
               />
               <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                Dynamic source placeholders: current chat setup, character cards, selected lore, accepted Game map, target location, and per-run Instructions. Resolved private chat content is never saved in this setting.
+                Inserted through <code className="font-mono">${"{creatorGuidanceBlock}"}</code> wherever that variable appears in the selected template.
               </p>
             </div>
 
+            <div className="mt-3 flex flex-wrap gap-2" aria-label="Prompt template selection">
+              <div className="flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]" role="group" aria-label="Map operation">
+                {(["draft", "expansion"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={promptOperation === value}
+                    onClick={() => setPromptOperation(value)}
+                    className={`min-h-9 rounded-md px-3 text-[0.6875rem] font-medium ${
+                      promptOperation === value ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm" : "text-[var(--marinara-chat-chrome-accent)]"
+                    }`}
+                  >
+                    {value === "draft" ? "New map" : "Expansion"}
+                  </button>
+                ))}
+              </div>
+              <div className="flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]" role="group" aria-label="Prompt message">
+                {(["system", "user"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={promptMessageRole === value}
+                    onClick={() => setPromptMessageRole(value)}
+                    className={`min-h-9 rounded-md px-3 text-[0.6875rem] font-medium capitalize ${
+                      promptMessageRole === value ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm" : "text-[var(--marinara-chat-chrome-accent)]"
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor="maps-generation-template" className="text-[0.6875rem] font-semibold capitalize">
+                  {promptOperation === "draft" ? "New map" : "Expansion"} {promptMessageRole} template
+                </label>
+                <span className="text-[0.5625rem] text-[var(--marinara-chat-chrome-accent)]">
+                  {selectedPromptTemplate.length} chars
+                </span>
+              </div>
+              <textarea
+                id="maps-generation-template"
+                rows={14}
+                maxLength={80_000}
+                readOnly={!promptEditing}
+                value={selectedPromptTemplate}
+                onChange={(event) =>
+                  setPromptDraft((current) => ({
+                    ...current,
+                    mode: "custom",
+                    prompts: { ...current.prompts, [selectedPromptField]: event.target.value },
+                  }))
+                }
+                className="mt-2 min-h-64 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed outline-none read-only:cursor-default read-only:opacity-85 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
+              />
+            </div>
+
             <details className="mt-3 rounded-lg border border-[var(--border)] px-3 py-2">
-              <summary className="min-h-8 cursor-pointer text-[0.6875rem] font-semibold">Preview effective prompt layers</summary>
-              <ol className="mt-2 list-decimal space-y-1 pl-4 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                <li>Locked map task, schema, ID preservation, validation, and safety contract</li>
-                <li>{promptDraft.mode === "custom" ? "Your saved creator guidance" : "Built-in creator guidance"}</li>
-                <li>Temporary per-run Instructions</li>
-                <li>Resolved setup, character, lore, map, and expansion context</li>
-              </ol>
-              <p className="mt-2 text-[0.625rem] text-[var(--marinara-chat-chrome-accent)]">
-                Debug mode continues to log the final resolved provider prompt.
+              <summary className="min-h-8 cursor-pointer text-[0.6875rem] font-semibold">Available template variables</summary>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {SPATIAL_GENERATION_PROMPT_VARIABLES.map((variable) => (
+                  <span key={variable} className="inline-flex items-center gap-1 rounded-md bg-[var(--secondary)] px-2 py-1 font-mono text-[0.6rem] text-[var(--marinara-chat-chrome-accent)] ring-1 ring-[var(--border)]">
+                    <Code2 size="0.625rem" /> ${"{"}{variable}{"}"}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                Variables are resolved from the current Roleplay or Game chat when generation runs. The builder’s Full prompt tab shows and can edit the exact resolved messages before sending.
               </p>
             </details>
 
@@ -331,7 +422,7 @@ export function SpatialMapsHome({
                   <button
                     type="button"
                     onClick={() => {
-                      setPromptDraft(spatial.data?.generationPreferences ?? defaultGenerationPreferences());
+                      setPromptDraft(spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode));
                       setPromptEditing(false);
                     }}
                     className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)]"
@@ -340,11 +431,11 @@ export function SpatialMapsHome({
                   </button>
                   <button
                     type="button"
-                    disabled={updateGenerationPreferences.isPending || !promptDraft.guidance.trim()}
+                    disabled={updateGenerationPreferences.isPending || !promptDraft.guidance.trim() || !promptTemplatesComplete}
                     onClick={() => void savePrompt({ ...promptDraft, mode: "custom" })}
                     className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                   >
-                    <Save size="0.75rem" /> Save guidance
+                    <Save size="0.75rem" /> Save templates
                   </button>
                 </>
               ) : (
@@ -352,7 +443,7 @@ export function SpatialMapsHome({
                   <button
                     type="button"
                     disabled={updateGenerationPreferences.isPending || promptDraft.mode === "default"}
-                    onClick={() => void savePrompt(defaultGenerationPreferences())}
+                    onClick={() => void savePrompt(defaultGenerationPreferences(ownerMode))}
                     className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium disabled:opacity-40"
                   >
                     <RotateCcw size="0.75rem" /> Reset to default
@@ -360,11 +451,7 @@ export function SpatialMapsHome({
                   <button
                     type="button"
                     onClick={() => {
-                      setPromptDraft({
-                        version: 1,
-                        mode: "custom",
-                        guidance: promptDraft.mode === "default" ? BUILT_IN_GENERATION_GUIDANCE : promptDraft.guidance,
-                      });
+                      setPromptDraft((current) => ({ ...current, mode: "custom" }));
                       setPromptEditing(true);
                     }}
                     className="inline-flex min-h-11 items-center rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)]"

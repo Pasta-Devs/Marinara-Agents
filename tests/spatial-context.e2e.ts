@@ -854,25 +854,60 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(home).toContainText("Active in this chat. Saved map context can participate in turns.");
     await expect(createMap).toBeEnabled();
     await expect(home.getByRole("heading", { name: "Generation prompt" })).toBeVisible();
+    await expect(home).toContainText("Roleplay · Built-in default");
+    const promptTemplate = home.getByLabel("New map system template");
+    await expect(promptTemplate).toHaveValue(/AI roleplay engine/u);
     await home.getByRole("button", { name: "Customize" }).click();
-    await home.getByLabel("Creator guidance").fill("Prefer compact nautical districts and clear public routes.");
-    await home.getByRole("button", { name: "Save guidance" }).click();
-    await expect(home.getByText("Customized", { exact: true })).toBeVisible();
+    await home.getByLabel("Reusable creator guidance").fill("Prefer compact nautical districts and clear public routes.");
+    await promptTemplate.fill(`${await promptTemplate.inputValue()}\nKeep authored districts easy to scan.`);
+    await home.getByRole("button", { name: "Save templates" }).click();
+    await expect(home).toContainText("Roleplay · Customized");
     await expect
       .poll(async () => {
         const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
         const payload = (await spatialResponse.json()) as {
-          generationPreferences: { mode: string; guidance: string };
+          generationPreferences: {
+            version: number;
+            mode: string;
+            guidance: string;
+            prompts: { draftSystem: string; draftUser: string; expansionSystem: string; expansionUser: string };
+          };
         };
-        return payload.generationPreferences;
+        return {
+          version: payload.generationPreferences.version,
+          mode: payload.generationPreferences.mode,
+          guidance: payload.generationPreferences.guidance,
+          customizedDraft: payload.generationPreferences.prompts.draftSystem.includes("Keep authored districts easy to scan."),
+          retainsSchema: payload.generationPreferences.prompts.draftSystem.includes("${outputSchema}"),
+          retainsSourceContext: payload.generationPreferences.prompts.draftUser.includes("${sourceContextBlock}"),
+        };
       })
       .toEqual({
-        version: 1,
+        version: 2,
         mode: "custom",
         guidance: "Prefer compact nautical districts and clear public routes.",
+        customizedDraft: true,
+        retainsSchema: true,
+        retainsSourceContext: true,
       });
+    await home.getByRole("button", { name: "Expansion" }).click();
+    await expect(home.getByLabel("Expansion system template")).toHaveValue(/AI roleplay engine/u);
     await home.getByRole("button", { name: "Reset to default" }).click();
-    await expect(home.getByText("Built-in default", { exact: true })).toBeVisible();
+    await expect(home).toContainText("Roleplay · Built-in default");
+    await expect
+      .poll(async () => {
+        const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const payload = (await spatialResponse.json()) as {
+          generationPreferences: { version: number; mode: string; prompts: { draftSystem: string } };
+        };
+        return {
+          version: payload.generationPreferences.version,
+          mode: payload.generationPreferences.mode,
+          roleplayDefault: payload.generationPreferences.prompts.draftSystem.includes("AI roleplay engine"),
+          customTextRemoved: !payload.generationPreferences.prompts.draftSystem.includes("Keep authored districts easy to scan."),
+        };
+      })
+      .toEqual({ version: 2, mode: "default", roleplayDefault: true, customTextRemoved: true });
 
     await expect
       .poll(async () => {
@@ -1173,6 +1208,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       size: string;
       instructions?: string;
       debugMode: boolean;
+      promptOverride?: { system: string; user: string };
     };
     expect(request).toMatchObject({
       operation: "create",
@@ -1180,6 +1216,12 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       instructions: "A foggy port with a lighthouse and secret sewers.",
       debugMode: false,
     });
+    if (generationRequestCount === 1) {
+      expect(request.promptOverride?.system).toContain("One-run browser prompt override.");
+      expect(request.promptOverride?.user).toContain("A foggy port with a lighthouse and secret sewers.");
+    } else {
+      expect(request.promptOverride).toBeUndefined();
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -1231,7 +1273,15 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expectAiBuilderLayout(page, mobile);
     await page.getByLabel("What should this world include?").fill("A foggy port with a lighthouse and secret sewers.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
-    await page.getByRole("button", { name: "Generate draft" }).click();
+    await page.getByRole("button", { name: "Preview full prompt" }).click();
+    await expect(page.getByRole("heading", { name: "Full Roleplay prompt" })).toBeVisible();
+    const fullSystemPrompt = page.getByLabel("System message");
+    const fullUserPrompt = page.getByLabel("User message");
+    await expect(fullSystemPrompt).toHaveValue(/AI roleplay engine/u);
+    await expect(fullUserPrompt).toHaveValue(/A foggy port with a lighthouse and secret sewers\./u);
+    await fullSystemPrompt.fill(`${await fullSystemPrompt.inputValue()}\nOne-run browser prompt override.`);
+    await expect(page.getByText("· Edited for this run", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Generate draft", exact: true }).last().click();
     await expect(page.getByText("Validated", { exact: true })).toBeVisible();
     await expect(page.getByText("4 locations · 2 levels · not saved", { exact: true })).toBeVisible();
     await expect(page.getByText("Proposed start:").getByText("Shrouded Coast", { exact: true })).toBeVisible();
@@ -1463,7 +1513,9 @@ test("AI map expansion preserves a campaign map and its current location", async
     });
     const importRepair = page.getByRole("alert", { name: "Import location ID repair guidance" });
     await expect(importRepair).toContainText("Import blocked: 3 saved location IDs are missing");
+    await expect(importRepair).toContainText("Gloam Harbor · ai_harbor");
     await expect(importRepair).toContainText("Blackglass Lighthouse · ai_lighthouse");
+    await expect(importRepair).toContainText("Old Sewers · ai_sewers");
     await expect(importRepair).toContainText("Export this map as a baseline");
     await importRepair.getByRole("button", { name: "Dismiss" }).click();
     await page.getByRole("button", { name: "Location types" }).click();

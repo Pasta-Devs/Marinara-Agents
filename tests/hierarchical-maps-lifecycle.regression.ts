@@ -726,6 +726,70 @@ async function main() {
     assert.equal(existingGameSpatial.currentLocationId, "existing_harbor");
     assert.equal(existingGameSpatial.definition.revision, 1);
 
+    const existingGameMapState = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${existingGame.id}/spatial-context`,
+    })) as {
+      generationPreferences: {
+        version: 2;
+        mode: "default" | "custom";
+        guidance: string;
+        prompts: {
+          draftSystem: string;
+          draftUser: string;
+          expansionSystem: string;
+          expansionUser: string;
+        };
+      };
+    };
+    assert.match(existingGameMapState.generationPreferences.prompts.draftSystem, /AI game engine/u);
+    const customizedGamePreferences = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${existingGame.id}/spatial-context/generation-preferences`,
+      headers: csrfHeaders,
+      payload: {
+        ...existingGameMapState.generationPreferences,
+        mode: "custom",
+        guidance: "Keep Game travel choices tactically clear.",
+        prompts: {
+          ...existingGameMapState.generationPreferences.prompts,
+          expansionSystem: `${existingGameMapState.generationPreferences.prompts.expansionSystem}\nGame expansion template customization proof.`,
+        },
+      },
+    })) as typeof existingGameMapState.generationPreferences;
+    assert.equal(customizedGamePreferences.mode, "custom");
+
+    const gamePromptPreviewRequestCount = generationProviderRequests.length;
+    const gamePromptPreview = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${existingGame.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "expand",
+        targetLocationId: "existing_harbor",
+        size: "small",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+      },
+    })) as {
+      ownerMode: string;
+      operation: string;
+      containsPrivateContext: boolean;
+      system: string;
+      user: string;
+    };
+    assert.equal(generationProviderRequests.length, gamePromptPreviewRequestCount);
+    assert.equal(gamePromptPreview.ownerMode, "game");
+    assert.equal(gamePromptPreview.operation, "expand");
+    assert.equal(gamePromptPreview.containsPrivateContext, true);
+    assert.match(gamePromptPreview.system, /AI game engine/u);
+    assert.doesNotMatch(gamePromptPreview.system, /AI roleplay engine/u);
+    assert.match(gamePromptPreview.system, /Game expansion template customization proof/u);
+    assert.match(gamePromptPreview.user, /Keep Game travel choices tactically clear/u);
+    assert.match(gamePromptPreview.user, /Existing Harbor/u);
+
     const beforeReconciliation = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${existingGame.id}`,
@@ -1342,17 +1406,68 @@ async function main() {
       headers: csrfHeaders,
       payload: { role: "assistant", content: "Old Town, Market Square, and Harbor define the test city." },
     });
+    const routeMapDefaults = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context`,
+    })) as {
+      generationPreferences: {
+        version: 2;
+        mode: "default" | "custom";
+        guidance: string;
+        prompts: {
+          draftSystem: string;
+          draftUser: string;
+          expansionSystem: string;
+          expansionUser: string;
+        };
+      };
+    };
+    assert.match(routeMapDefaults.generationPreferences.prompts.draftSystem, /AI roleplay engine/u);
     const savedGenerationPreferences = (await expectJson(app, {
       method: "PUT",
       url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-preferences`,
       headers: csrfHeaders,
       payload: {
-        version: 1,
+        ...routeMapDefaults.generationPreferences,
         mode: "custom",
         guidance: "Prefer concise maritime vocabulary and navigable public streets.",
       },
-    })) as { mode: string; guidance: string };
+    })) as typeof routeMapDefaults.generationPreferences;
     assert.equal(savedGenerationPreferences.mode, "custom");
+
+    const previewProviderRequestCount = generationProviderRequests.length;
+    const routePromptPreview = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+      },
+    })) as {
+      ownerMode: string;
+      operation: string;
+      containsPrivateContext: boolean;
+      system: string;
+      user: string;
+    };
+    assert.equal(generationProviderRequests.length, previewProviderRequestCount);
+    assert.equal(routePromptPreview.ownerMode, "roleplay");
+    assert.equal(routePromptPreview.operation, "create");
+    assert.equal(routePromptPreview.containsPrivateContext, true);
+    assert.match(routePromptPreview.system, /AI roleplay engine/u);
+    assert.match(routePromptPreview.user, /Prefer concise maritime vocabulary and navigable public streets/u);
+    assert.match(routePromptPreview.user, /Create a compact city with practical streets/u);
+    const editedRoutePrompt = {
+      system: `${routePromptPreview.system}\nKeep the route graph especially legible for this run.`,
+      user: `${routePromptPreview.user}\nOne-run override: favor short district names.`,
+    };
 
     const createRouteRequestIndex = generationProviderRequests.length;
     const createdRouteDraft = (await expectJson(app, {
@@ -1368,6 +1483,7 @@ async function main() {
         connectionId: gameGenerationConnection.id,
         debugMode: false,
         hierarchyMode: "auto",
+        promptOverride: editedRoutePrompt,
       },
     })) as {
       operation: string;
@@ -1385,6 +1501,7 @@ async function main() {
         types: Array<{ id: string; label: string; baseKind: string }>;
         locationTypeIds: Record<string, string>;
       };
+      prompt: typeof routePromptPreview;
     };
     assert.equal(createdRouteDraft.operation, "create");
     const createRoutePrompt = capturedProviderPrompt(generationProviderRequests[createRouteRequestIndex]);
@@ -1394,6 +1511,10 @@ async function main() {
     assert.match(createRoutePrompt, /Do not create an all-to-all graph/u);
     assert.match(createRoutePrompt, /Infer a concise location-type vocabulary/u);
     assert.match(createRoutePrompt, /Prefer concise maritime vocabulary and navigable public streets/u);
+    assert.match(createRoutePrompt, /Keep the route graph especially legible for this run/u);
+    assert.match(createRoutePrompt, /One-run override: favor short district names/u);
+    assert.equal(createdRouteDraft.prompt.system, editedRoutePrompt.system);
+    assert.equal(createdRouteDraft.prompt.user, editedRoutePrompt.user);
     assert.ok(
       createdRouteDraft.hierarchyProfile.types.some((type) => type.label === "City Quarter" && type.baseKind === "place"),
       "AI-created hierarchy vocabulary must be returned as stable custom types",

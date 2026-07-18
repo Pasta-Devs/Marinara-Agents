@@ -438,7 +438,7 @@ export function SpatialMapWorkspace({
           throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid hierarchical map.");
         }
         const importedIds = new Set(parsed.data.locations.map((location) => location.id));
-        const missing = draft.locations
+        const missing = (baseDefinition?.locations ?? [])
           .filter((location) => !importedIds.has(location.id))
           .map((location) => ({ id: location.id, name: location.name }));
         if (spatial.data?.hasCommittedSpatialHistory && missing.length > 0) {
@@ -466,7 +466,7 @@ export function SpatialMapWorkspace({
         toast.error(error instanceof Error ? error.message : "The map could not be imported.");
       }
     },
-    [applyDraft, baseDefinition?.revision, draft, ownerMode, spatial.data?.hasCommittedSpatialHistory],
+    [applyDraft, baseDefinition, draft, ownerMode, spatial.data?.hasCommittedSpatialHistory],
   );
 
   const handleClose = useCallback(async () => {

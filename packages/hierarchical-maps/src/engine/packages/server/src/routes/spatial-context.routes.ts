@@ -99,6 +99,13 @@ const spatialOwnerTurnSchema = z.object({
     .optional(),
 });
 
+const spatialMapPromptOverrideSchema = z
+  .object({
+    system: z.string().trim().min(1).max(80_000),
+    user: z.string().trim().min(1).max(80_000),
+  })
+  .strict();
+
 const gameMapBindingTargetSchema = z.discriminatedUnion("target", [
   z.object({ target: z.literal("map"), mapId: z.string().trim().min(1) }).strict(),
   z
@@ -168,6 +175,18 @@ interface BuiltSpatialLoreCatalog {
   sourceEntryIdsByKey: Map<string, string>;
   itemsByEntryId: Map<string, SpatialLoreCatalogItem>;
   grounding: SpatialMapGroundingSummary;
+}
+
+class SpatialMapPromptRequestError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    public readonly code: string,
+    message: string,
+    public readonly issues?: unknown,
+  ) {
+    super(message);
+    this.name = "SpatialMapPromptRequestError";
+  }
 }
 
 async function buildSpatialLoreCatalog(
@@ -344,12 +363,204 @@ function sendServiceError(reply: FastifyReply, error: unknown) {
   throw error;
 }
 
+function sendPromptRequestError(reply: FastifyReply, error: unknown) {
+  if (error instanceof SpatialMapPromptRequestError) {
+    return reply.status(error.statusCode).send({
+      error: error.message,
+      code: error.code,
+      ...(error.issues === undefined ? {} : { issues: error.issues }),
+    });
+  }
+  return sendServiceError(reply, error);
+}
+
 export async function spatialContextRoutes(app: FastifyInstance) {
   const service = createSpatialContextService();
   const persistence = getPackagePersistence();
   const resources = getPackageResources();
   const languageModels = getPackageLanguageModels();
   const json = getPackageJson();
+
+  const prepareSpatialMapPrompt = async (chatId: string, requestBody: unknown) => {
+    const body = isRecord(requestBody) ? requestBody : {};
+    const parsed = generateSpatialMapDraftRequestSchema.safeParse(
+      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "promptOverride"]),
+    );
+    if (!parsed.success) {
+      throw new SpatialMapPromptRequestError(
+        400,
+        "spatial_ai_request_invalid",
+        parsed.error.issues[0]?.message ?? "Invalid map generation request.",
+        parsed.error.issues,
+      );
+    }
+    const hierarchyMode = z.enum(["auto", "template", "custom"]).safeParse(body.hierarchyMode ?? "auto");
+    if (!hierarchyMode.success) {
+      throw new SpatialMapPromptRequestError(
+        400,
+        "spatial_ai_request_invalid",
+        "Choose Auto, Template, or Custom hierarchy mode.",
+      );
+    }
+    const requestedProfileResult =
+      body.hierarchyProfile === undefined
+        ? null
+        : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
+    if (requestedProfileResult && !requestedProfileResult.success) {
+      throw new SpatialMapPromptRequestError(
+        400,
+        "spatial_ai_request_invalid",
+        requestedProfileResult.error.issues[0]?.message ?? "Invalid hierarchy profile.",
+        requestedProfileResult.error.issues,
+      );
+    }
+
+    const spatial = await service.get(chatId);
+    const chat = await persistence.getChat(chatId);
+    if (!chat) {
+      throw new SpatialMapPromptRequestError(404, "spatial_chat_missing", "Chat not found.");
+    }
+    const ownerMode = chat.mode as SpatialOwnerMode;
+    const operation = parsed.data.operation;
+    const existingDefinition = spatial.definition;
+    const requestedHierarchyProfile: SpatialHierarchyProfile | undefined =
+      operation === "expand"
+        ? spatial.hierarchyProfile
+        : requestedProfileResult?.success
+          ? requestedProfileResult.data
+          : undefined;
+    const hasExistingMap = Boolean(existingDefinition?.locations.length);
+    if (operation === "create" && hasExistingMap) {
+      throw new SpatialMapPromptRequestError(
+        409,
+        "spatial_ai_map_already_exists",
+        "This chat already has a hierarchical map. Expand it, or replace it before campaign history begins.",
+      );
+    }
+    if (operation === "replace" && !hasExistingMap) {
+      throw new SpatialMapPromptRequestError(
+        409,
+        "spatial_ai_map_missing",
+        "There is no existing map to replace. Create the first map instead.",
+      );
+    }
+    if (operation === "replace" && spatial.hasCommittedSpatialHistory) {
+      throw new SpatialMapPromptRequestError(
+        409,
+        "spatial_ai_replacement_protected",
+        "Campaign history uses this map. Expand it instead of replacing existing location IDs.",
+      );
+    }
+    if (operation === "expand" && !hasExistingMap) {
+      throw new SpatialMapPromptRequestError(
+        409,
+        "spatial_ai_map_missing",
+        "Create the first map before expanding it.",
+      );
+    }
+    if (
+      operation === "expand" &&
+      !existingDefinition?.locations.some(
+        (location) => location.id === parsed.data.targetLocationId && location.status === "active",
+      )
+    ) {
+      throw new SpatialMapPromptRequestError(
+        400,
+        "spatial_ai_target_invalid",
+        "Choose an active location to expand.",
+      );
+    }
+
+    const gameMapReference =
+      ownerMode === "game" && operation !== "expand"
+        ? buildGameMapDraftReference(parseSpatialMetadata(chat.metadata))
+        : null;
+    const requiredLocationNames = gameMapReference?.requiredLocationNames ?? [];
+    const draftSize = SPATIAL_DRAFT_SIZE_SPECS[parsed.data.size];
+    if (gameMapReference?.truncated) {
+      throw new SpatialMapPromptRequestError(
+        409,
+        "spatial_ai_game_map_reference_too_large",
+        "The accepted Game maps are too large to include safely in one hierarchy draft. Reconcile them manually so no locations or connections are silently omitted.",
+      );
+    }
+    if (requiredLocationNames.length > draftSize.maxLocations) {
+      throw new SpatialMapPromptRequestError(
+        409,
+        "spatial_ai_game_map_too_large",
+        `The accepted Game map has ${requiredLocationNames.length} named locations, but the ${parsed.data.size} hierarchy can preserve at most ${draftSize.maxLocations}. Choose a larger draft size or reconcile the maps manually.`,
+      );
+    }
+
+    const sourceContext = await buildDraftSourceContext(chat, resources, gameMapReference);
+    const groundingMode = parsed.data.groundingMode;
+    const lorebookScopeExclusions = resolveLorebookScopeExclusions(chat.mode, parseSpatialMetadata(chat.metadata));
+    const loreCatalog = await buildSpatialLoreCatalog(
+      resources,
+      groundingMode,
+      parsed.data.sourceLorebookIds,
+      parsed.data.sourceEntryIds,
+      lorebookScopeExclusions,
+    );
+    if (groundingMode !== "setup" && loreCatalog.grounding.consideredEntryCount === 0) {
+      throw new SpatialMapPromptRequestError(
+        400,
+        "spatial_ai_lore_sources_unavailable",
+        "None of the selected lore entries are available. Check disabled books, entries, folders, or chat exclusions.",
+      );
+    }
+
+    let prompt;
+    try {
+      prompt =
+        operation === "expand"
+          ? buildSpatialMapExpansionPrompt({
+              definition: existingDefinition!,
+              targetLocationId: parsed.data.targetLocationId!,
+              size: parsed.data.size,
+              groundingMode,
+              loreCatalog: loreCatalog.prompt,
+              sourceContext,
+              instructions: parsed.data.instructions,
+              hierarchyProfile: requestedHierarchyProfile,
+              creatorGuidance: spatial.generationPreferences.guidance,
+              promptTemplates: spatial.generationPreferences.prompts,
+            })
+          : buildSpatialMapDraftPrompt({
+              ownerMode,
+              size: parsed.data.size,
+              groundingMode,
+              loreCatalog: loreCatalog.prompt,
+              sourceContext,
+              instructions: parsed.data.instructions,
+              requiredLocationNames,
+              hierarchyMode: hierarchyMode.data,
+              hierarchyProfile: requestedHierarchyProfile,
+              creatorGuidance: spatial.generationPreferences.guidance,
+              promptTemplates: spatial.generationPreferences.prompts,
+            });
+    } catch (error) {
+      throw new SpatialMapPromptRequestError(
+        409,
+        "spatial_ai_expansion_unavailable",
+        error instanceof Error ? error.message : "This location cannot be expanded.",
+      );
+    }
+
+    return {
+      request: parsed.data,
+      spatial,
+      chat,
+      ownerMode,
+      operation,
+      existingDefinition,
+      requestedHierarchyProfile,
+      requiredLocationNames,
+      groundingMode,
+      loreCatalog,
+      prompt,
+    };
+  };
 
   app.get<{ Params: ChatSpatialParams }>("/:chatId/spatial-context", async (req, reply) => {
     try {
@@ -480,116 +691,68 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
   });
 
+  app.post<{ Params: ChatSpatialParams }>(
+    "/:chatId/spatial-context/generation-prompt/preview",
+    async (req, reply) => {
+      try {
+        const prepared = await prepareSpatialMapPrompt(req.params.chatId, req.body);
+        return {
+          ownerMode: prepared.ownerMode,
+          operation: prepared.operation,
+          size: prepared.request.size,
+          maxTokens: prepared.prompt.maxTokens,
+          containsPrivateContext: true,
+          system: prepared.prompt.messages.find((message) => message.role === "system")?.content ?? "",
+          user: prepared.prompt.messages.find((message) => message.role === "user")?.content ?? "",
+        };
+      } catch (error) {
+        return sendPromptRequestError(reply, error);
+      }
+    },
+  );
+
   app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generate", async (req, reply) => {
-    const body = isRecord(req.body) ? req.body : {};
-    const parsed = generateSpatialMapDraftRequestSchema.safeParse(
-      withoutKeys(body, ["hierarchyMode", "hierarchyProfile"]),
-    );
-    if (!parsed.success) {
-      return reply.status(400).send({
-        error: parsed.error.issues[0]?.message ?? "Invalid map generation request.",
-        code: "spatial_ai_request_invalid",
-        issues: parsed.error.issues,
-      });
-    }
-    const hierarchyMode = z.enum(["auto", "template", "custom"]).safeParse(body.hierarchyMode ?? "auto");
-    if (!hierarchyMode.success) {
-      return reply.status(400).send({
-        error: "Choose Auto, Template, or Custom hierarchy mode.",
-        code: "spatial_ai_request_invalid",
-      });
-    }
-    const requestedProfileResult =
-      body.hierarchyProfile === undefined
-        ? null
-        : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
-    if (requestedProfileResult && !requestedProfileResult.success) {
-      return reply.status(400).send({
-        error: requestedProfileResult.error.issues[0]?.message ?? "Invalid hierarchy profile.",
-        code: "spatial_ai_request_invalid",
-        issues: requestedProfileResult.error.issues,
-      });
-    }
-
-    let spatial;
+    let prepared;
     try {
-      spatial = await service.get(req.params.chatId);
+      prepared = await prepareSpatialMapPrompt(req.params.chatId, req.body);
     } catch (error) {
-      return sendServiceError(reply, error);
+      return sendPromptRequestError(reply, error);
     }
-    const chat = await persistence.getChat(req.params.chatId);
-    if (!chat) {
-      return reply.status(404).send({ error: "Chat not found.", code: "spatial_chat_missing" });
-    }
-    const ownerMode = chat.mode as SpatialOwnerMode;
-    const operation = parsed.data.operation;
-    const existingDefinition = spatial.definition;
-    const requestedHierarchyProfile: SpatialHierarchyProfile | undefined =
-      operation === "expand"
-        ? spatial.hierarchyProfile
-        : requestedProfileResult?.success
-          ? requestedProfileResult.data
-          : undefined;
-    const hasExistingMap = Boolean(existingDefinition?.locations.length);
-    if (operation === "create" && hasExistingMap) {
-      return reply.status(409).send({
-        error: "This chat already has a hierarchical map. Expand it, or replace it before campaign history begins.",
-        code: "spatial_ai_map_already_exists",
-      });
-    }
-    if (operation === "replace" && !hasExistingMap) {
-      return reply.status(409).send({
-        error: "There is no existing map to replace. Create the first map instead.",
-        code: "spatial_ai_map_missing",
-      });
-    }
-    if (operation === "replace" && spatial.hasCommittedSpatialHistory) {
-      return reply.status(409).send({
-        error: "Campaign history uses this map. Expand it instead of replacing existing location IDs.",
-        code: "spatial_ai_replacement_protected",
-      });
-    }
-    if (operation === "expand" && !hasExistingMap) {
-      return reply.status(409).send({
-        error: "Create the first map before expanding it.",
-        code: "spatial_ai_map_missing",
-      });
-    }
-    if (
-      operation === "expand" &&
-      !existingDefinition?.locations.some(
-        (location) => location.id === parsed.data.targetLocationId && location.status === "active",
-      )
-    ) {
-      return reply.status(400).send({
-        error: "Choose an active location to expand.",
-        code: "spatial_ai_target_invalid",
-      });
-    }
-
-    const gameMapReference =
-      ownerMode === "game" && operation !== "expand"
-        ? buildGameMapDraftReference(parseSpatialMetadata(chat.metadata))
-        : null;
-    const requiredLocationNames = gameMapReference?.requiredLocationNames ?? [];
-    const draftSize = SPATIAL_DRAFT_SIZE_SPECS[parsed.data.size];
-    if (gameMapReference?.truncated) {
-      return reply.status(409).send({
-        error:
-          "The accepted Game maps are too large to include safely in one hierarchy draft. Reconcile them manually so no locations or connections are silently omitted.",
-        code: "spatial_ai_game_map_reference_too_large",
-      });
-    }
-    if (requiredLocationNames.length > draftSize.maxLocations) {
-      return reply.status(409).send({
-        error: `The accepted Game map has ${requiredLocationNames.length} named locations, but the ${parsed.data.size} hierarchy can preserve at most ${draftSize.maxLocations}. Choose a larger draft size or reconcile the maps manually.`,
-        code: "spatial_ai_game_map_too_large",
-      });
+    const {
+      request: parsed,
+      spatial,
+      chat,
+      ownerMode,
+      operation,
+      existingDefinition,
+      requestedHierarchyProfile,
+      requiredLocationNames,
+      groundingMode,
+      loreCatalog,
+    } = prepared;
+    let prompt = prepared.prompt;
+    const body = isRecord(req.body) ? req.body : {};
+    if (body.promptOverride !== undefined) {
+      const promptOverride = spatialMapPromptOverrideSchema.safeParse(body.promptOverride);
+      if (!promptOverride.success) {
+        return reply.status(400).send({
+          error: promptOverride.error.issues[0]?.message ?? "The edited generation prompt is invalid.",
+          code: "spatial_ai_prompt_override_invalid",
+          issues: promptOverride.error.issues,
+        });
+      }
+      prompt = {
+        ...prompt,
+        messages: [
+          { role: "system", content: promptOverride.data.system },
+          { role: "user", content: promptOverride.data.user },
+        ],
+      };
     }
 
     let resolved;
     try {
-      resolved = await languageModels.resolve(parsed.data.connectionId ?? chat.connectionId);
+      resolved = await languageModels.resolve(parsed.connectionId ?? chat.connectionId);
     } catch (error) {
       return reply.status(400).send({
         error: error instanceof Error ? error.message : "A language model connection is required.",
@@ -597,58 +760,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       });
     }
 
-    const sourceContext = await buildDraftSourceContext(chat, resources, gameMapReference);
-    const groundingMode = parsed.data.groundingMode;
-    const lorebookScopeExclusions = resolveLorebookScopeExclusions(chat.mode, parseSpatialMetadata(chat.metadata));
-    const loreCatalog = await buildSpatialLoreCatalog(
-      resources,
-      groundingMode,
-      parsed.data.sourceLorebookIds,
-      parsed.data.sourceEntryIds,
-      lorebookScopeExclusions,
-    );
-    if (groundingMode !== "setup" && loreCatalog.grounding.consideredEntryCount === 0) {
-      return reply.status(400).send({
-        error:
-          "None of the selected lore entries are available. Check disabled books, entries, folders, or chat exclusions.",
-        code: "spatial_ai_lore_sources_unavailable",
-      });
-    }
-
-    let prompt;
-    try {
-      prompt =
-        operation === "expand"
-          ? buildSpatialMapExpansionPrompt({
-              definition: existingDefinition!,
-              targetLocationId: parsed.data.targetLocationId!,
-              size: parsed.data.size,
-              groundingMode,
-              loreCatalog: loreCatalog.prompt,
-              sourceContext,
-              instructions: parsed.data.instructions,
-              hierarchyProfile: requestedHierarchyProfile,
-              creatorGuidance: spatial.generationPreferences.guidance,
-            })
-          : buildSpatialMapDraftPrompt({
-              ownerMode,
-              size: parsed.data.size,
-              groundingMode,
-              loreCatalog: loreCatalog.prompt,
-              sourceContext,
-              instructions: parsed.data.instructions,
-              requiredLocationNames,
-              hierarchyMode: hierarchyMode.data,
-              hierarchyProfile: requestedHierarchyProfile,
-              creatorGuidance: spatial.generationPreferences.guidance,
-            });
-    } catch (error) {
-      return reply.status(409).send({
-        error: error instanceof Error ? error.message : "This location cannot be expanded.",
-        code: "spatial_ai_expansion_unavailable",
-      });
-    }
-    const debugOverrideEnabled = parsed.data.debugMode || isDebugAgentsEnabled();
+    const debugOverrideEnabled = parsed.debugMode || isDebugAgentsEnabled();
     logDebugOverride(
       debugOverrideEnabled,
       "[debug/spatial/map-draft] final prompt chatId=%s model=%s:\n%s",
@@ -677,16 +789,16 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         operation === "expand"
           ? normalizeSpatialMapExpansionPlan(parsedPlan, {
               definition: existingDefinition!,
-              targetLocationId: parsed.data.targetLocationId!,
+              targetLocationId: parsed.targetLocationId!,
               sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
               requireLoreSource: groundingMode === "lore_strict",
-              size: parsed.data.size,
+              size: parsed.size,
             })
           : normalizeSpatialMapPlan(parsedPlan, {
               ownerMode,
               revision: existingDefinition?.revision ?? 0,
               enabled: existingDefinition?.enabled ?? false,
-              size: parsed.data.size,
+              size: parsed.size,
               sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
               requireLoreSource: groundingMode === "lore_strict",
               requiredLocationNames,
@@ -728,14 +840,34 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       return {
         definition,
         operation,
-        size: parsed.data.size,
+        size: parsed.size,
         source: ownerMode === "game" ? "game_setup" : "roleplay_setup",
         generatedLocationCount,
-        ...(operation === "expand" ? { targetLocationId: parsed.data.targetLocationId } : {}),
+        ...(operation === "expand" ? { targetLocationId: parsed.targetLocationId } : {}),
         ...(provenance ? { provenance } : {}),
         grounding: loreCatalog.grounding,
         hierarchyProfile,
-      } satisfies GenerateSpatialMapDraftResponse & { hierarchyProfile: SpatialHierarchyProfile };
+        prompt: {
+          ownerMode,
+          operation,
+          size: parsed.size,
+          maxTokens: prompt.maxTokens,
+          containsPrivateContext: true,
+          system: prompt.messages.find((message) => message.role === "system")?.content ?? "",
+          user: prompt.messages.find((message) => message.role === "user")?.content ?? "",
+        },
+      } satisfies GenerateSpatialMapDraftResponse & {
+        hierarchyProfile: SpatialHierarchyProfile;
+        prompt: {
+          ownerMode: SpatialOwnerMode;
+          operation: typeof operation;
+          size: typeof parsed.size;
+          maxTokens: number;
+          containsPrivateContext: true;
+          system: string;
+          user: string;
+        };
+      };
     } catch (error) {
       logger.error(error, "[spatial/map-draft] Generation failed for chat %s", chat.id);
       return reply.status(502).send({

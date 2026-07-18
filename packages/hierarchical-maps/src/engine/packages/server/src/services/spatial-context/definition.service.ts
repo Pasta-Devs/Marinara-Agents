@@ -21,6 +21,7 @@ import {
 } from "./game-map-binding.js";
 import {
   defaultGenerationPreferences,
+  normalizeGenerationPreferences,
   normalizeHierarchyProfile,
   spatialGenerationPreferencesSchema,
   type MapsSpatialContextResponse,
@@ -122,9 +123,11 @@ function buildResponse(
   };
 }
 
-function readGenerationPreferences(metadata: Record<string, unknown>): SpatialGenerationPreferences {
-  const parsed = spatialGenerationPreferencesSchema.safeParse(metadata[GENERATION_PREFERENCES_KEY]);
-  return parsed.success ? parsed.data : defaultGenerationPreferences();
+function readGenerationPreferences(
+  metadata: Record<string, unknown>,
+  ownerMode: "roleplay" | "game",
+): SpatialGenerationPreferences {
+  return normalizeGenerationPreferences(metadata[GENERATION_PREFERENCES_KEY], ownerMode);
 }
 
 async function resolveLoreReferenceWarnings(
@@ -155,7 +158,7 @@ async function resolveLoreReferenceWarnings(
 export function createSpatialContextService() {
   const persistence = getPackagePersistence();
   return {
-    async get(chatId: string): Promise<SpatialContextResponse> {
+    async get(chatId: string): Promise<MapsSpatialContextResponse> {
       const chat = await persistence.getChat(chatId);
       if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
       assertSupportedMode(chat.mode);
@@ -164,7 +167,7 @@ export function createSpatialContextService() {
       const metadata = parseSpatialMetadata(chat.metadata);
       const stored = readDefinition(metadata);
       const hierarchyProfile = normalizeHierarchyProfile(metadata[HIERARCHY_PROFILE_KEY], stored.definition);
-      const generationPreferences = readGenerationPreferences(metadata);
+      const generationPreferences = readGenerationPreferences(metadata, chat.mode);
       if (!stored.definition) {
         return buildResponse(
           null,
@@ -443,7 +446,7 @@ export function createSpatialContextService() {
           hasCommittedSpatialHistory || Boolean(state.visibleAnchor),
           await resolveLoreReferenceWarnings(definition, persistence),
           hierarchyProfile,
-          readGenerationPreferences(metadata),
+          readGenerationPreferences(metadata, chat.mode),
         );
       });
     },

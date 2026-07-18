@@ -47,8 +47,20 @@ function isRoutePlan(value: unknown): value is SpatialRoutePlan {
     Array.isArray(plan.locationIds) &&
     plan.locationIds.every((id) => typeof id === "string") &&
     Array.isArray(plan.steps) &&
-    typeof plan.currentIndex === "number" &&
-    typeof plan.expectedDefinitionRevision === "number" &&
+    plan.steps.every(
+      (step, index) =>
+        step !== null &&
+        typeof step === "object" &&
+        typeof step.locationId === "string" &&
+        typeof step.locationName === "string" &&
+        (step.relation === "enter" || step.relation === "leave" || step.relation === "link") &&
+        plan.locationIds?.[index + 1] === step.locationId,
+    ) &&
+    plan.locationIds.length === plan.steps.length + 1 &&
+    Number.isInteger(plan.currentIndex) &&
+    (plan.currentIndex ?? -1) >= 0 &&
+    (plan.currentIndex ?? Number.POSITIVE_INFINITY) < plan.locationIds.length &&
+    Number.isInteger(plan.expectedDefinitionRevision) &&
     (plan.status === "ready" || plan.status === "needs_review")
   );
 }
@@ -283,7 +295,8 @@ export function reconcileSpatialRoutePlan(chatId: string, spatial: SpatialContex
   if (
     pending?.transition.destinationId === nextDestination.id &&
     pending.transition.expectedCurrentLocationId === spatial.currentLocationId &&
-    pending.status === "ready"
+    pending.transition.expectedDefinitionRevision === advancedPlan.expectedDefinitionRevision &&
+    pending.status === (advancedPlan.status === "needs_review" ? "needs_review" : "ready")
   ) {
     return;
   }
