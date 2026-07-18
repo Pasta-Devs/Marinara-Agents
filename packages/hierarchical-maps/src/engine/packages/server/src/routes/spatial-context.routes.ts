@@ -42,8 +42,10 @@ import {
 } from "../services/spatial-context/package-runtime.js";
 import {
   normalizeHierarchyProfile,
+  resolveSpatialGenerationPromptOption,
   spatialGenerationPreferencesSchema,
   spatialHierarchyProfileSchema,
+  type SpatialGenerationPreferences,
   type SpatialHierarchyProfile,
 } from "../../../maps-shared/src/maps-model.js";
 
@@ -381,10 +383,17 @@ export async function spatialContextRoutes(app: FastifyInstance) {
   const languageModels = getPackageLanguageModels();
   const json = getPackageJson();
 
-  const prepareSpatialMapPrompt = async (chatId: string, requestBody: unknown) => {
+  const prepareSpatialMapPrompt = async (
+    chatId: string,
+    requestBody: unknown,
+    options: {
+      generationPreferencesOverride?: SpatialGenerationPreferences;
+      allowDraftPreviewWithExistingMap?: boolean;
+    } = {},
+  ) => {
     const body = isRecord(requestBody) ? requestBody : {};
     const parsed = generateSpatialMapDraftRequestSchema.safeParse(
-      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "promptOverride"]),
+      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "promptOverride", "generationPreferencesOverride"]),
     );
     if (!parsed.success) {
       throw new SpatialMapPromptRequestError(
@@ -430,7 +439,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
           ? requestedProfileResult.data
           : undefined;
     const hasExistingMap = Boolean(existingDefinition?.locations.length);
-    if (operation === "create" && hasExistingMap) {
+    if (operation === "create" && hasExistingMap && !options.allowDraftPreviewWithExistingMap) {
       throw new SpatialMapPromptRequestError(
         409,
         "spatial_ai_map_already_exists",
@@ -493,6 +502,8 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
 
     const sourceContext = await buildDraftSourceContext(chat, resources, gameMapReference);
+    const generationPreferences = options.generationPreferencesOverride ?? spatial.generationPreferences;
+    const generationPromptOption = resolveSpatialGenerationPromptOption(generationPreferences);
     const groundingMode = parsed.data.groundingMode;
     const lorebookScopeExclusions = resolveLorebookScopeExclusions(chat.mode, parseSpatialMetadata(chat.metadata));
     const loreCatalog = await buildSpatialLoreCatalog(
@@ -523,8 +534,8 @@ export async function spatialContextRoutes(app: FastifyInstance) {
               sourceContext,
               instructions: parsed.data.instructions,
               hierarchyProfile: requestedHierarchyProfile,
-              creatorGuidance: spatial.generationPreferences.guidance,
-              promptTemplates: spatial.generationPreferences.prompts,
+              creatorGuidance: generationPromptOption.guidance,
+              promptTemplates: generationPromptOption.prompts,
             })
           : buildSpatialMapDraftPrompt({
               ownerMode,
@@ -536,8 +547,8 @@ export async function spatialContextRoutes(app: FastifyInstance) {
               requiredLocationNames,
               hierarchyMode: hierarchyMode.data,
               hierarchyProfile: requestedHierarchyProfile,
-              creatorGuidance: spatial.generationPreferences.guidance,
-              promptTemplates: spatial.generationPreferences.prompts,
+              creatorGuidance: generationPromptOption.guidance,
+              promptTemplates: generationPromptOption.prompts,
             });
     } catch (error) {
       throw new SpatialMapPromptRequestError(
@@ -695,7 +706,26 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     "/:chatId/spatial-context/generation-prompt/preview",
     async (req, reply) => {
       try {
-        const prepared = await prepareSpatialMapPrompt(req.params.chatId, req.body);
+        const body = isRecord(req.body) ? req.body : {};
+        const generationPreferencesOverride =
+          body.generationPreferencesOverride === undefined
+            ? null
+            : spatialGenerationPreferencesSchema.safeParse(body.generationPreferencesOverride);
+        if (generationPreferencesOverride && !generationPreferencesOverride.success) {
+          return reply.status(400).send({
+            error:
+              generationPreferencesOverride.error.issues[0]?.message ??
+              "The edited generation prompt preference is invalid.",
+            code: "spatial_ai_prompt_template_override_invalid",
+            issues: generationPreferencesOverride.error.issues,
+          });
+        }
+        const prepared = await prepareSpatialMapPrompt(req.params.chatId, body, {
+          allowDraftPreviewWithExistingMap: true,
+          ...(generationPreferencesOverride?.success
+            ? { generationPreferencesOverride: generationPreferencesOverride.data }
+            : {}),
+        });
         return {
           ownerMode: prepared.ownerMode,
           operation: prepared.operation,

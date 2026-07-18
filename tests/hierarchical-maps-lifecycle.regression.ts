@@ -731,33 +731,43 @@ async function main() {
       url: `/api/chats/${existingGame.id}/spatial-context`,
     })) as {
       generationPreferences: {
-        version: 2;
-        mode: "default" | "custom";
-        guidance: string;
-        prompts: {
-          draftSystem: string;
-          draftUser: string;
-          expansionSystem: string;
-          expansionUser: string;
-        };
+        version: 3;
+        activeOptionId: string;
+        options: Array<{
+          id: string;
+          name: string;
+          description?: string;
+          guidance: string;
+          prompts: { draftSystem: string; draftUser: string; expansionSystem: string; expansionUser: string };
+        }>;
       };
     };
-    assert.match(existingGameMapState.generationPreferences.prompts.draftSystem, /AI game engine/u);
+    const existingGamePromptOption = existingGameMapState.generationPreferences.options.find(
+      (option) => option.id === existingGameMapState.generationPreferences.activeOptionId,
+    )!;
+    assert.match(existingGamePromptOption.prompts.draftSystem, /AI game engine/u);
     const customizedGamePreferences = (await expectJson(app, {
       method: "PUT",
       url: `/api/chats/${existingGame.id}/spatial-context/generation-preferences`,
       headers: csrfHeaders,
       payload: {
         ...existingGameMapState.generationPreferences,
-        mode: "custom",
-        guidance: "Keep Game travel choices tactically clear.",
-        prompts: {
-          ...existingGameMapState.generationPreferences.prompts,
-          expansionSystem: `${existingGameMapState.generationPreferences.prompts.expansionSystem}\nGame expansion template customization proof.`,
-        },
+        options: existingGameMapState.generationPreferences.options.map((option) =>
+          option.id === existingGameMapState.generationPreferences.activeOptionId
+            ? {
+                ...option,
+                name: "Tactical travel",
+                guidance: "Keep Game travel choices tactically clear.",
+                prompts: {
+                  ...option.prompts,
+                  expansionSystem: `${option.prompts.expansionSystem}\nGame expansion template customization proof.`,
+                },
+              }
+            : option,
+        ),
       },
     })) as typeof existingGameMapState.generationPreferences;
-    assert.equal(customizedGamePreferences.mode, "custom");
+    assert.equal(customizedGamePreferences.options[0]?.name, "Tactical travel");
 
     const gamePromptPreviewRequestCount = generationProviderRequests.length;
     const gamePromptPreview = (await expectJson(app, {
@@ -1411,29 +1421,41 @@ async function main() {
       url: `/api/chats/${routeGraphChat.id}/spatial-context`,
     })) as {
       generationPreferences: {
-        version: 2;
-        mode: "default" | "custom";
-        guidance: string;
-        prompts: {
-          draftSystem: string;
-          draftUser: string;
-          expansionSystem: string;
-          expansionUser: string;
-        };
+        version: 3;
+        activeOptionId: string;
+        options: Array<{
+          id: string;
+          name: string;
+          description?: string;
+          guidance: string;
+          prompts: { draftSystem: string; draftUser: string; expansionSystem: string; expansionUser: string };
+        }>;
       };
     };
-    assert.match(routeMapDefaults.generationPreferences.prompts.draftSystem, /AI roleplay engine/u);
+    const routeDefaultPromptOption = routeMapDefaults.generationPreferences.options.find(
+      (option) => option.id === routeMapDefaults.generationPreferences.activeOptionId,
+    )!;
+    assert.match(routeDefaultPromptOption.prompts.draftSystem, /AI roleplay engine/u);
+    const maritimePromptOption = {
+      ...routeDefaultPromptOption,
+      id: "maritime",
+      name: "Maritime city",
+      description: "Compact port cities with practical travel routes.",
+      guidance: "Prefer concise maritime vocabulary and navigable public streets.",
+      prompts: { ...routeDefaultPromptOption.prompts },
+    };
     const savedGenerationPreferences = (await expectJson(app, {
       method: "PUT",
       url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-preferences`,
       headers: csrfHeaders,
       payload: {
         ...routeMapDefaults.generationPreferences,
-        mode: "custom",
-        guidance: "Prefer concise maritime vocabulary and navigable public streets.",
+        activeOptionId: maritimePromptOption.id,
+        options: [...routeMapDefaults.generationPreferences.options, maritimePromptOption],
       },
     })) as typeof routeMapDefaults.generationPreferences;
-    assert.equal(savedGenerationPreferences.mode, "custom");
+    assert.equal(savedGenerationPreferences.activeOptionId, "maritime");
+    assert.equal(savedGenerationPreferences.options[1]?.name, "Maritime city");
 
     const previewProviderRequestCount = generationProviderRequests.length;
     const routePromptPreview = (await expectJson(app, {
@@ -1449,6 +1471,21 @@ async function main() {
         connectionId: gameGenerationConnection.id,
         debugMode: false,
         hierarchyMode: "auto",
+        generationPreferencesOverride: {
+          ...savedGenerationPreferences,
+          options: savedGenerationPreferences.options.map((option) =>
+            option.id === savedGenerationPreferences.activeOptionId
+              ? {
+                  ...option,
+                  prompts: {
+                    ...option.prompts,
+                    draftSystem: `${option.prompts.draftSystem}\nUNSAVED_SETTINGS_SYSTEM_PREVIEW`,
+                    draftUser: `${option.prompts.draftUser}\nUNSAVED_SETTINGS_USER_PREVIEW`,
+                  },
+                }
+              : option,
+          ),
+        },
       },
     })) as {
       ownerMode: string;
@@ -1462,8 +1499,19 @@ async function main() {
     assert.equal(routePromptPreview.operation, "create");
     assert.equal(routePromptPreview.containsPrivateContext, true);
     assert.match(routePromptPreview.system, /AI roleplay engine/u);
+    assert.match(routePromptPreview.system, /UNSAVED_SETTINGS_SYSTEM_PREVIEW/u);
     assert.match(routePromptPreview.user, /Prefer concise maritime vocabulary and navigable public streets/u);
     assert.match(routePromptPreview.user, /Create a compact city with practical streets/u);
+    assert.match(routePromptPreview.user, /UNSAVED_SETTINGS_USER_PREVIEW/u);
+    const storedPreferencesAfterPreview = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context`,
+    })) as typeof routeMapDefaults;
+    const storedPromptOptionAfterPreview = storedPreferencesAfterPreview.generationPreferences.options.find(
+      (option) => option.id === storedPreferencesAfterPreview.generationPreferences.activeOptionId,
+    )!;
+    assert.doesNotMatch(storedPromptOptionAfterPreview.prompts.draftSystem, /UNSAVED_SETTINGS_SYSTEM_PREVIEW/u);
+    assert.doesNotMatch(storedPromptOptionAfterPreview.prompts.draftUser, /UNSAVED_SETTINGS_USER_PREVIEW/u);
     const editedRoutePrompt = {
       system: `${routePromptPreview.system}\nKeep the route graph especially legible for this run.`,
       user: `${routePromptPreview.user}\nOne-run override: favor short district names.`,
@@ -1565,10 +1613,10 @@ async function main() {
     })) as {
       definition: typeof createdRouteDraft.definition;
       hierarchyProfile: typeof createdRouteDraft.hierarchyProfile;
-      generationPreferences: { mode: string; guidance: string };
+      generationPreferences: { activeOptionId: string; options: Array<{ id: string; guidance: string }> };
     };
     assert.equal(savedRouteMap.hierarchyProfile.name, "Harbor city");
-    assert.equal(savedRouteMap.generationPreferences.mode, "custom");
+    assert.equal(savedRouteMap.generationPreferences.activeOptionId, "maritime");
     const existingHarbor = savedRouteMap.definition.locations.find((location) => location.name === "Harbor");
     assert.ok(existingHarbor);
     mapExpansionExistingTargetId = existingHarbor.id;

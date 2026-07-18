@@ -4,21 +4,34 @@ import {
   Box,
   CheckCircle2,
   CircleAlert,
+  ClipboardCopy,
   Code2,
+  Eye,
   FileText,
+  LoaderCircle,
   Map,
   MapPin,
   MessageSquare,
+  Plus,
   RefreshCw,
   RotateCcw,
   Save,
   Settings2,
+  Trash2,
 } from "lucide-react";
-import { useSpatialContext, useUpdateSpatialGenerationPreferences } from "../../hooks/use-spatial-context";
+import {
+  usePreviewSpatialMapPrompt,
+  useSpatialContext,
+  useUpdateSpatialGenerationPreferences,
+  type SpatialMapPromptPreview,
+} from "../../hooks/use-spatial-context";
 import {
   defaultGenerationPreferences,
+  DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID,
   SPATIAL_GENERATION_PROMPT_VARIABLES,
+  spatialGenerationPreferencesSchema,
   type SpatialGenerationPreferences,
+  type SpatialGenerationPromptOption,
 } from "../../../../maps-shared/src/maps-model";
 
 interface SpatialMapsHomeProps {
@@ -60,13 +73,15 @@ export function SpatialMapsHome({
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
   const updateGenerationPreferences = useUpdateSpatialGenerationPreferences();
+  const previewGenerationPrompt = usePreviewSpatialMapPrompt();
   const ownerMode = chatMode === "game" ? "game" : "roleplay";
   const [promptDraft, setPromptDraft] = useState<SpatialGenerationPreferences>(() =>
     defaultGenerationPreferences(ownerMode),
   );
   const [promptEditing, setPromptEditing] = useState(false);
   const [promptOperation, setPromptOperation] = useState<"draft" | "expansion">("draft");
-  const [promptMessageRole, setPromptMessageRole] = useState<"system" | "user">("system");
+  const [promptPreview, setPromptPreview] = useState<SpatialMapPromptPreview | null>(null);
+  const [promptCopyStatus, setPromptCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const supportedChat = chatMode === "roleplay" || chatMode === "game";
   const definition = spatial.data?.definition ?? null;
   const activeLocationCount = definition?.locations.filter((location) => location.status === "active").length ?? 0;
@@ -80,28 +95,46 @@ export function SpatialMapsHome({
     packageInfo?.status === "active" && (packageInfo.readiness === "ready" || packageInfo.readiness == null);
   const currentChatIdRef = useRef(chatId);
   currentChatIdRef.current = chatId;
+  const promptPreviewRequestIdRef = useRef(0);
   const resetGenerationPreferences = updateGenerationPreferences.reset;
+  const resetPromptPreviewRequest = previewGenerationPrompt.reset;
   useEffect(() => {
     setPromptEditing(false);
     setPromptDraft(defaultGenerationPreferences(ownerMode));
     setPromptOperation("draft");
-    setPromptMessageRole("system");
+    setPromptPreview(null);
+    setPromptCopyStatus("idle");
+    promptPreviewRequestIdRef.current += 1;
     resetGenerationPreferences();
-  }, [chatId, ownerMode, resetGenerationPreferences]);
+    resetPromptPreviewRequest();
+  }, [chatId, ownerMode, resetGenerationPreferences, resetPromptPreviewRequest]);
   useEffect(() => {
     if (promptEditing || !spatial.data?.generationPreferences) return;
     setPromptDraft(spatial.data.generationPreferences);
   }, [promptEditing, spatial.data?.generationPreferences]);
-  const selectedPromptField: keyof SpatialGenerationPreferences["prompts"] =
+  useEffect(() => {
+    setPromptPreview(null);
+    setPromptCopyStatus("idle");
+    promptPreviewRequestIdRef.current += 1;
+    resetPromptPreviewRequest();
+  }, [promptDraft, promptOperation, resetPromptPreviewRequest]);
+  const selectedPromptFields =
     promptOperation === "draft"
-      ? promptMessageRole === "system"
-        ? "draftSystem"
-        : "draftUser"
-      : promptMessageRole === "system"
-        ? "expansionSystem"
-        : "expansionUser";
-  const selectedPromptTemplate = promptDraft.prompts[selectedPromptField];
-  const promptTemplatesComplete = Object.values(promptDraft.prompts).every((template) => template.trim().length > 0);
+      ? ({ system: "draftSystem", user: "draftUser" } as const)
+      : ({ system: "expansionSystem", user: "expansionUser" } as const);
+  const activePromptOption =
+    promptDraft.options.find((option) => option.id === promptDraft.activeOptionId) ?? promptDraft.options[0]!;
+  const promptValidation = spatialGenerationPreferencesSchema.safeParse(promptDraft);
+  const promptValidationMessage = promptValidation.success
+    ? null
+    : promptValidation.error.issues[0]?.message ?? "The prompt templates are incomplete.";
+  const activeLocations = definition?.locations.filter((location) => location.status === "active") ?? [];
+  const expansionPreviewTarget =
+    activeLocations.find((location) => location.id === spatial.data?.currentLocationId) ??
+    activeLocations.find((location) => location.id === definition?.startingLocationId) ??
+    activeLocations[0] ??
+    null;
+  const expansionPreviewUnavailable = promptOperation === "expansion" && !expansionPreviewTarget;
 
   const savePrompt = async (preferences: SpatialGenerationPreferences) => {
     if (!chatId) return;
@@ -110,6 +143,95 @@ export function SpatialMapsHome({
     if (currentChatIdRef.current !== savingChatId) return;
     setPromptDraft(preferences);
     setPromptEditing(false);
+  };
+  const updateActivePromptOption = (
+    patch: Partial<Pick<SpatialGenerationPromptOption, "name" | "description" | "guidance" | "prompts">>,
+  ) => {
+    setPromptDraft((current) => ({
+      ...current,
+      options: current.options.map((option) =>
+        option.id === current.activeOptionId ? { ...option, ...patch } : option,
+      ),
+    }));
+  };
+  const selectPromptOption = async (optionId: string) => {
+    const preferences = { ...promptDraft, activeOptionId: optionId };
+    setPromptDraft(preferences);
+    if (!promptEditing) await savePrompt(preferences);
+  };
+  const addPromptOption = () => {
+    const usedIds = new Set(promptDraft.options.map((option) => option.id));
+    const baseId = `option-${Date.now().toString(36)}`;
+    let optionId = baseId;
+    let suffix = 2;
+    while (usedIds.has(optionId)) {
+      optionId = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+    const option: SpatialGenerationPromptOption = {
+      ...activePromptOption,
+      id: optionId,
+      name: `Copy of ${activePromptOption.name}`.slice(0, 120),
+      description: "Custom map generation prompt option.",
+      prompts: { ...activePromptOption.prompts },
+    };
+    setPromptDraft((current) => ({
+      ...current,
+      activeOptionId: optionId,
+      options: [...current.options, option],
+    }));
+    setPromptEditing(true);
+  };
+  const removeActivePromptOption = () => {
+    if (activePromptOption.id === DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID) return;
+    const options = promptDraft.options.filter((option) => option.id !== activePromptOption.id);
+    const nextActiveOption =
+      options.find((option) => option.id === DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID) ?? options[0]!;
+    setPromptDraft((current) => ({ ...current, activeOptionId: nextActiveOption.id, options }));
+  };
+  const restoreBuiltInPromptOption = () => {
+    const builtInOption = defaultGenerationPreferences(ownerMode).options[0]!;
+    setPromptDraft((current) => ({
+      ...current,
+      options: current.options.map((option) =>
+        option.id === DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID ? builtInOption : option,
+      ),
+    }));
+  };
+  const previewPrompt = async () => {
+    if (!chatId || !promptValidation.success || expansionPreviewUnavailable) return;
+    const previewChatId = chatId;
+    const requestId = ++promptPreviewRequestIdRef.current;
+    try {
+      const preview = await previewGenerationPrompt.mutateAsync({
+        chatId,
+        operation: promptOperation === "draft" ? "create" : "expand",
+        size: "medium",
+        ...(promptOperation === "expansion" && expansionPreviewTarget
+          ? { targetLocationId: expansionPreviewTarget.id }
+          : {}),
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        hierarchyMode: promptOperation === "draft" ? "auto" : spatial.data?.hierarchyProfile.mode ?? "auto",
+        generationPreferencesOverride: promptValidation.data,
+        debugMode: false,
+      });
+      if (currentChatIdRef.current !== previewChatId || promptPreviewRequestIdRef.current !== requestId) return;
+      setPromptPreview(preview);
+      setPromptCopyStatus("idle");
+    } catch {
+      if (currentChatIdRef.current !== previewChatId || promptPreviewRequestIdRef.current !== requestId) return;
+      setPromptPreview(null);
+    }
+  };
+  const copyPromptPreview = async () => {
+    if (!promptPreview) return;
+    try {
+      await navigator.clipboard.writeText(`[SYSTEM]\n${promptPreview.system}\n\n[USER]\n${promptPreview.user}`);
+      setPromptCopyStatus("copied");
+    } catch {
+      setPromptCopyStatus("failed");
+    }
   };
   const toggleForChat = async () => {
     if (!onEnabledForChatChange || activationPending || !supportedChat) return;
@@ -311,11 +433,71 @@ export function SpatialMapsHome({
                 </p>
               </div>
               <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
-                {modeLabel(chatMode)} · {promptDraft.mode === "custom" ? "Customized" : "Built-in default"}
+                {modeLabel(chatMode)} · {activePromptOption.name}
               </span>
             </div>
 
             <div className="mt-3 border-y border-[var(--border)] py-3">
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="min-w-52 flex-1 text-[0.6875rem] font-semibold" htmlFor="maps-generation-prompt-option">
+                  Prompt option
+                  <select
+                    id="maps-generation-prompt-option"
+                    value={promptDraft.activeOptionId}
+                    disabled={updateGenerationPreferences.isPending}
+                    onChange={(event) => void selectPromptOption(event.target.value)}
+                    className="mt-2 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-xs font-medium outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-50"
+                  >
+                    {promptDraft.options.map((option) => (
+                      <option key={option.id} value={option.id}>{option.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={addPromptOption}
+                  disabled={promptDraft.options.length >= 24 || updateGenerationPreferences.isPending}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-40"
+                >
+                  <Plus size="0.75rem" /> Add option
+                </button>
+              </div>
+              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                Selecting an option loads and activates its complete New Map and Expansion prompt set for this chat.
+              </p>
+
+              {promptEditing ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="text-[0.6875rem] font-semibold" htmlFor="maps-generation-option-name">
+                    Option name
+                    <input
+                      id="maps-generation-option-name"
+                      value={activePromptOption.name}
+                      maxLength={120}
+                      onChange={(event) => updateActivePromptOption({ name: event.target.value })}
+                      className="mt-2 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-xs outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
+                    />
+                  </label>
+                  <label className="text-[0.6875rem] font-semibold" htmlFor="maps-generation-option-description">
+                    Short description
+                    <input
+                      id="maps-generation-option-description"
+                      value={activePromptOption.description ?? ""}
+                      maxLength={240}
+                      onChange={(event) => updateActivePromptOption({ description: event.target.value })}
+                      placeholder="When should this option be used?"
+                      className="mt-2 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-xs outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
+                    />
+                  </label>
+                </div>
+              ) : activePromptOption.description ? (
+                <p className="mt-3 rounded-lg bg-[var(--secondary)]/50 px-3 py-2 text-[0.6875rem] text-[var(--marinara-chat-chrome-accent)]">
+                  {activePromptOption.description}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="mt-3">
               <label className="text-[0.6875rem] font-semibold" htmlFor="maps-generation-guidance">
                 Reusable creator guidance
               </label>
@@ -324,10 +506,8 @@ export function SpatialMapsHome({
                 rows={3}
                 maxLength={4_000}
                 readOnly={!promptEditing}
-                value={promptDraft.guidance}
-                onChange={(event) =>
-                  setPromptDraft((current) => ({ ...current, mode: "custom", guidance: event.target.value }))
-                }
+                value={activePromptOption.guidance}
+                onChange={(event) => updateActivePromptOption({ guidance: event.target.value })}
                 className="mt-2 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs leading-relaxed outline-none read-only:cursor-default read-only:opacity-80 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
               />
               <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
@@ -351,47 +531,57 @@ export function SpatialMapsHome({
                   </button>
                 ))}
               </div>
-              <div className="flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]" role="group" aria-label="Prompt message">
-                {(["system", "user"] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={promptMessageRole === value}
-                    onClick={() => setPromptMessageRole(value)}
-                    className={`min-h-9 rounded-md px-3 text-[0.6875rem] font-medium capitalize ${
-                      promptMessageRole === value ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm" : "text-[var(--marinara-chat-chrome-accent)]"
-                    }`}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-4">
               <div className="flex items-center justify-between gap-3">
-                <label htmlFor="maps-generation-template" className="text-[0.6875rem] font-semibold capitalize">
-                  {promptOperation === "draft" ? "New map" : "Expansion"} {promptMessageRole} template
+                <label htmlFor="maps-generation-system-template" className="text-[0.6875rem] font-semibold">
+                  {promptOperation === "draft" ? "New map" : "Expansion"} System template
                 </label>
                 <span className="text-[0.5625rem] text-[var(--marinara-chat-chrome-accent)]">
-                  {selectedPromptTemplate.length} chars
+                  {activePromptOption.prompts[selectedPromptFields.system].length} chars
                 </span>
               </div>
               <textarea
-                id="maps-generation-template"
+                id="maps-generation-system-template"
                 rows={14}
                 maxLength={80_000}
                 readOnly={!promptEditing}
-                value={selectedPromptTemplate}
+                value={activePromptOption.prompts[selectedPromptFields.system]}
                 onChange={(event) =>
-                  setPromptDraft((current) => ({
-                    ...current,
-                    mode: "custom",
-                    prompts: { ...current.prompts, [selectedPromptField]: event.target.value },
-                  }))
+                  updateActivePromptOption({
+                    prompts: { ...activePromptOption.prompts, [selectedPromptFields.system]: event.target.value },
+                  })
                 }
                 className="mt-2 min-h-64 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed outline-none read-only:cursor-default read-only:opacity-85 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
               />
+            </div>
+
+            <div className="mt-4 border-t border-[var(--border)] pt-4">
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor="maps-generation-user-template" className="text-[0.6875rem] font-semibold">
+                  {promptOperation === "draft" ? "New map" : "Expansion"} User template
+                </label>
+                <span className="text-[0.5625rem] text-[var(--marinara-chat-chrome-accent)]">
+                  {activePromptOption.prompts[selectedPromptFields.user].length} chars
+                </span>
+              </div>
+              <textarea
+                id="maps-generation-user-template"
+                rows={12}
+                maxLength={80_000}
+                readOnly={!promptEditing}
+                value={activePromptOption.prompts[selectedPromptFields.user]}
+                onChange={(event) =>
+                  updateActivePromptOption({
+                    prompts: { ...activePromptOption.prompts, [selectedPromptFields.user]: event.target.value },
+                  })
+                }
+                className="mt-2 min-h-56 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed outline-none read-only:cursor-default read-only:opacity-85 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                Maps sends these as two messages in order: System first, then User.
+              </p>
             </div>
 
             <details className="mt-3 rounded-lg border border-[var(--border)] px-3 py-2">
@@ -404,9 +594,93 @@ export function SpatialMapsHome({
                 ))}
               </div>
               <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                Variables are resolved from the current Roleplay or Game chat when generation runs. The builder’s Full prompt tab shows and can edit the exact resolved messages before sending.
+                Variables are resolved from the current Roleplay or Game chat. Preview below uses the unsaved templates currently shown above.
               </p>
             </details>
+
+            <section className="mt-4 border-t border-[var(--border)] pt-4" aria-labelledby="maps-resolved-prompt-title">
+              <div className="flex flex-wrap items-start gap-3">
+                <Eye size="0.875rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+                <div className="min-w-52 flex-1">
+                  <h3 id="maps-resolved-prompt-title" className="text-xs font-semibold">Resolved prompt preview</h3>
+                  <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                    Uses Medium size, setup context, and {promptOperation === "draft" ? "Auto hierarchy" : expansionPreviewTarget ? `the existing hierarchy at ${expansionPreviewTarget.name}` : "the existing hierarchy"}. No model request is made.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void previewPrompt()}
+                  disabled={previewGenerationPrompt.isPending || !promptValidation.success || expansionPreviewUnavailable}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-3 text-xs font-medium transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {previewGenerationPrompt.isPending ? (
+                    <><LoaderCircle size="0.8125rem" className="animate-spin" /> Resolving</>
+                  ) : (
+                    <><Eye size="0.8125rem" /> {promptPreview ? "Refresh preview" : "Preview resolved prompt"}</>
+                  )}
+                </button>
+              </div>
+
+              {promptValidationMessage && promptEditing && (
+                <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
+                  {promptValidationMessage}
+                </p>
+              )}
+              {expansionPreviewUnavailable && (
+                <p className="mt-3 text-[0.6875rem] text-amber-400">
+                  Create a map with an active location before previewing the Expansion templates.
+                </p>
+              )}
+              {previewGenerationPrompt.isError && (
+                <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
+                  {previewGenerationPrompt.error instanceof Error
+                    ? previewGenerationPrompt.error.message
+                    : "The resolved prompt could not be previewed."}
+                </p>
+              )}
+              {previewGenerationPrompt.isPending && (
+                <div className="mt-4 space-y-3" aria-label="Resolving prompt preview">
+                  <div className="h-4 w-40 animate-pulse rounded bg-[var(--secondary)]" />
+                  <div className="h-36 animate-pulse rounded-lg bg-[var(--secondary)]" />
+                  <div className="h-4 w-36 animate-pulse rounded bg-[var(--secondary)]" />
+                  <div className="h-36 animate-pulse rounded-lg bg-[var(--secondary)]" />
+                </div>
+              )}
+              {promptPreview && !previewGenerationPrompt.isPending && (
+                <div className="mt-4" role="region" aria-label="Resolved prompt messages">
+                  <p className="text-[0.625rem] leading-relaxed text-amber-500">
+                    Contains private setup, character, lore, and map context from this chat.
+                  </p>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <h4 className="text-[0.6875rem] font-semibold">System message</h4>
+                    <span className="text-[0.5625rem] text-[var(--marinara-chat-chrome-accent)]">
+                      {promptPreview.system.length} chars
+                    </span>
+                  </div>
+                  <pre aria-label="Resolved System message" className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]">
+                    {promptPreview.system}
+                  </pre>
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <h4 className="text-[0.6875rem] font-semibold">User message</h4>
+                    <span className="text-[0.5625rem] text-[var(--marinara-chat-chrome-accent)]">
+                      {promptPreview.user.length} chars
+                    </span>
+                  </div>
+                  <pre aria-label="Resolved User message" className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]">
+                    {promptPreview.user}
+                  </pre>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void copyPromptPreview()}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                    >
+                      <ClipboardCopy size="0.75rem" /> {promptCopyStatus === "copied" ? "Copied" : promptCopyStatus === "failed" ? "Copy failed" : "Copy System + User"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
 
             {updateGenerationPreferences.isError && (
               <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
@@ -416,49 +690,57 @@ export function SpatialMapsHome({
               </p>
             )}
 
-            <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               {promptEditing ? (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPromptDraft(spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode));
-                      setPromptEditing(false);
-                    }}
-                    className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={updateGenerationPreferences.isPending || !promptDraft.guidance.trim() || !promptTemplatesComplete}
-                    onClick={() => void savePrompt({ ...promptDraft, mode: "custom" })}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
-                  >
-                    <Save size="0.75rem" /> Save templates
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    {activePromptOption.id === DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID ? (
+                      <button
+                        type="button"
+                        onClick={restoreBuiltInPromptOption}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)]"
+                      >
+                        <RotateCcw size="0.75rem" /> Restore built-in option
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={removeActivePromptOption}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--destructive)]/40 px-3 text-xs font-medium text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
+                      >
+                        <Trash2 size="0.75rem" /> Delete option
+                      </button>
+                    )}
+                  </div>
+                  <div className="ml-auto flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPromptDraft(spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode));
+                        setPromptEditing(false);
+                      }}
+                      className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={updateGenerationPreferences.isPending || !promptValidation.success}
+                      onClick={() => promptValidation.success && void savePrompt(promptValidation.data)}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
+                    >
+                      <Save size="0.75rem" /> Save prompt options
+                    </button>
+                  </div>
                 </>
               ) : (
-                <>
-                  <button
-                    type="button"
-                    disabled={updateGenerationPreferences.isPending || promptDraft.mode === "default"}
-                    onClick={() => void savePrompt(defaultGenerationPreferences(ownerMode))}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium disabled:opacity-40"
-                  >
-                    <RotateCcw size="0.75rem" /> Reset to default
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPromptDraft((current) => ({ ...current, mode: "custom" }));
-                      setPromptEditing(true);
-                    }}
-                    className="inline-flex min-h-11 items-center rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)]"
-                  >
-                    Customize
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => setPromptEditing(true)}
+                  className="ml-auto inline-flex min-h-11 items-center rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)]"
+                >
+                  Edit prompt option
+                </button>
               )}
             </div>
           </article>

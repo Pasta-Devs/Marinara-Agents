@@ -22,6 +22,7 @@ import {
   hierarchyTypeId,
   normalizeHierarchyProfile,
   renderSpatialGenerationPromptTemplate,
+  resolveSpatialGenerationPromptOption,
   type SpatialHierarchyProfile,
   type SpatialHierarchyType,
   type SpatialGenerationPromptTemplates,
@@ -869,7 +870,7 @@ export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansion
   const outputSchema =
     'Schema: {"locations":[{"key":string,"parentKey":string|null,"name":string,"typeKey":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}';
   const promptTemplates =
-    options.promptTemplates ?? defaultGenerationPreferences(options.definition.ownerMode).prompts;
+    options.promptTemplates ?? resolveSpatialGenerationPromptOption(defaultGenerationPreferences(options.definition.ownerMode)).prompts;
   const variables = {
     groundingRules: groundingPromptLines(options.groundingMode).join("\n"),
     targetLocations,
@@ -916,7 +917,8 @@ export function buildSpatialMapDraftPrompt(options: BuildSpatialMapPromptOptions
   const requiredLocationNames = Array.from(new Set(options.requiredLocationNames ?? []));
   const outputSchema =
     'Schema: {"worldName":string,"hierarchyName":string,"locationTypes":[{"key":string,"label":string,"baseKind":"region"|"settlement"|"place"|"building"|"floor"|"room"}],"startingLocationKey":string,"locations":[{"key":string,"parentKey":string|null,"name":string,"typeKey":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}';
-  const promptTemplates = options.promptTemplates ?? defaultGenerationPreferences(options.ownerMode).prompts;
+  const promptTemplates =
+    options.promptTemplates ?? resolveSpatialGenerationPromptOption(defaultGenerationPreferences(options.ownerMode)).prompts;
   const variables = {
     groundingRules: groundingPromptLines(options.groundingMode).join("\n"),
     targetLocations: size.targetLocations,

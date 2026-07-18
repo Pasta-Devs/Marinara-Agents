@@ -84,6 +84,10 @@ export interface GenerateSpatialMapDraftInput extends GenerateSpatialMapDraftReq
   promptOverride?: Pick<SpatialMapPromptPreview, "system" | "user">;
 }
 
+export type PreviewSpatialMapPromptInput = Omit<GenerateSpatialMapDraftInput, "promptOverride"> & {
+  generationPreferencesOverride?: SpatialGenerationPreferences;
+};
+
 export interface SpatialMapPromptPreview {
   ownerMode: SpatialOwnerMode;
   operation: SpatialMapDraftOperation;
@@ -230,7 +234,7 @@ export function useGenerateSpatialMapDraft() {
 
 export function usePreviewSpatialMapPrompt() {
   return useMutation({
-    mutationFn: ({ chatId, ...request }: GenerateSpatialMapDraftInput) =>
+    mutationFn: ({ chatId, ...request }: PreviewSpatialMapPromptInput) =>
       packageApi.post<SpatialMapPromptPreview>(
         `/chats/${chatId}/spatial-context/generation-prompt/preview`,
         request,

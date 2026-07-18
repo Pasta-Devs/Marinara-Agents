@@ -8,7 +8,8 @@ import type {
 } from "@marinara-engine/shared";
 
 export const HIERARCHY_PROFILE_VERSION = 1 as const;
-export const GENERATION_PREFERENCES_VERSION = 2 as const;
+export const GENERATION_PREFERENCES_VERSION = 3 as const;
+export const DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID = "default";
 
 export const BUILT_IN_GENERATION_GUIDANCE =
   "Build a practical, easy-to-browse location hierarchy that matches this setting. Use the world's own vocabulary, include only useful playable places, and connect ordinary travel routes without overfilling the map.";
@@ -122,6 +123,14 @@ export interface SpatialGenerationPromptTemplates {
   expansionUser: string;
 }
 
+export interface SpatialGenerationPromptOption {
+  id: string;
+  name: string;
+  description?: string;
+  guidance: string;
+  prompts: SpatialGenerationPromptTemplates;
+}
+
 export const SPATIAL_LOCATION_KINDS = [
   "region",
   "settlement",
@@ -148,9 +157,8 @@ export interface SpatialHierarchyProfile {
 
 export interface SpatialGenerationPreferences {
   version: typeof GENERATION_PREFERENCES_VERSION;
-  mode: "default" | "custom";
-  guidance: string;
-  prompts: SpatialGenerationPromptTemplates;
+  activeOptionId: string;
+  options: SpatialGenerationPromptOption[];
 }
 
 export interface MapsSpatialContextResponse extends SpatialContextResponse {
@@ -216,12 +224,28 @@ const spatialGenerationPromptTemplatesSchema = z
   })
   .strict();
 
+const spatialGenerationPromptOptionIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u, "Use letters, numbers, dots, underscores, colons, or hyphens.");
+
+export const spatialGenerationPromptOptionSchema = z
+  .object({
+    id: spatialGenerationPromptOptionIdSchema,
+    name: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(240).optional(),
+    guidance: z.string().trim().min(1).max(4_000),
+    prompts: spatialGenerationPromptTemplatesSchema,
+  })
+  .strict();
+
 const spatialGenerationPreferencesBaseSchema = z
   .object({
     version: z.literal(GENERATION_PREFERENCES_VERSION),
-    mode: z.enum(["default", "custom"]),
-    guidance: z.string().trim().max(4_000),
-    prompts: spatialGenerationPromptTemplatesSchema,
+    activeOptionId: spatialGenerationPromptOptionIdSchema,
+    options: z.array(spatialGenerationPromptOptionSchema).min(1).max(24),
   })
   .strict();
 
@@ -230,56 +254,59 @@ const PROMPT_VARIABLE_SET = new Set<string>(SPATIAL_GENERATION_PROMPT_VARIABLES)
 
 export const spatialGenerationPreferencesSchema = spatialGenerationPreferencesBaseSchema.superRefine(
   (preferences, context) => {
-    if (preferences.mode === "default" && preferences.guidance !== BUILT_IN_GENERATION_GUIDANCE) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Default prompt preferences must retain the built-in creator guidance.",
-        path: ["guidance"],
-      });
-    }
-    if (preferences.mode === "custom" && preferences.guidance.length === 0) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Customized prompt preferences require creator guidance.",
-        path: ["guidance"],
-      });
-    }
-    for (const [field, template] of Object.entries(preferences.prompts)) {
-      for (const match of template.matchAll(PROMPT_VARIABLE_PATTERN)) {
-        const name = match[1];
-        if (name && !PROMPT_VARIABLE_SET.has(name)) {
+    const optionIds = new Set<string>();
+    for (const [optionIndex, option] of preferences.options.entries()) {
+      if (optionIds.has(option.id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Prompt option ID ${option.id} is duplicated.`,
+          path: ["options", optionIndex, "id"],
+        });
+      }
+      optionIds.add(option.id);
+      for (const [field, template] of Object.entries(option.prompts)) {
+        for (const match of template.matchAll(PROMPT_VARIABLE_PATTERN)) {
+          const name = match[1];
+          if (!name || PROMPT_VARIABLE_SET.has(name)) continue;
           context.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Unknown prompt variable \${${name}}.`,
-            path: ["prompts", field],
+            path: ["options", optionIndex, "prompts", field],
+          });
+        }
+      }
+      for (const field of ["draftSystem", "expansionSystem"] as const) {
+        if (!option.prompts[field].includes("${outputSchema}")) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "System prompt templates must retain the ${outputSchema} variable.",
+            path: ["options", optionIndex, "prompts", field],
+          });
+        }
+      }
+      if (!option.prompts.draftUser.includes("${sourceContextBlock}")) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "The draft user template must retain the ${sourceContextBlock} variable.",
+          path: ["options", optionIndex, "prompts", "draftUser"],
+        });
+      }
+      for (const variable of ["${selectedMapContextBlock}", "${sourceContextBlock}"] as const) {
+        if (!option.prompts.expansionUser.includes(variable)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `The expansion user template must retain the ${variable} variable.`,
+            path: ["options", optionIndex, "prompts", "expansionUser"],
           });
         }
       }
     }
-    for (const field of ["draftSystem", "expansionSystem"] as const) {
-      if (!preferences.prompts[field].includes("${outputSchema}")) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "System prompt templates must retain the ${outputSchema} variable.",
-          path: ["prompts", field],
-        });
-      }
-    }
-    if (!preferences.prompts.draftUser.includes("${sourceContextBlock}")) {
+    if (!optionIds.has(preferences.activeOptionId)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "The draft user template must retain the ${sourceContextBlock} variable.",
-        path: ["prompts", "draftUser"],
+        message: "Choose an available prompt option.",
+        path: ["activeOptionId"],
       });
-    }
-    for (const variable of ["${selectedMapContextBlock}", "${sourceContextBlock}"] as const) {
-      if (!preferences.prompts.expansionUser.includes(variable)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `The expansion user template must retain the ${variable} variable.`,
-          path: ["prompts", "expansionUser"],
-        });
-      }
     }
   },
 );
@@ -358,26 +385,48 @@ export function hierarchyTypeId(value: string): string {
 export function defaultGenerationPreferences(ownerMode: SpatialOwnerMode = "roleplay"): SpatialGenerationPreferences {
   return {
     version: GENERATION_PREFERENCES_VERSION,
-    mode: "default",
-    guidance: BUILT_IN_GENERATION_GUIDANCE,
-    prompts: {
-      draftSystem:
-        ownerMode === "game" ? GAME_DRAFT_SYSTEM_PROMPT_TEMPLATE : ROLEPLAY_DRAFT_SYSTEM_PROMPT_TEMPLATE,
-      draftUser: DRAFT_USER_PROMPT_TEMPLATE,
-      expansionSystem:
-        ownerMode === "game" ? GAME_EXPANSION_SYSTEM_PROMPT_TEMPLATE : ROLEPLAY_EXPANSION_SYSTEM_PROMPT_TEMPLATE,
-      expansionUser: EXPANSION_USER_PROMPT_TEMPLATE,
-    },
+    activeOptionId: DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID,
+    options: [
+      {
+        id: DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID,
+        name: "Default",
+        description: `Built-in ${ownerMode === "game" ? "Game" : "Roleplay"} map generation prompts.`,
+        guidance: BUILT_IN_GENERATION_GUIDANCE,
+        prompts: {
+          draftSystem:
+            ownerMode === "game" ? GAME_DRAFT_SYSTEM_PROMPT_TEMPLATE : ROLEPLAY_DRAFT_SYSTEM_PROMPT_TEMPLATE,
+          draftUser: DRAFT_USER_PROMPT_TEMPLATE,
+          expansionSystem:
+            ownerMode === "game" ? GAME_EXPANSION_SYSTEM_PROMPT_TEMPLATE : ROLEPLAY_EXPANSION_SYSTEM_PROMPT_TEMPLATE,
+          expansionUser: EXPANSION_USER_PROMPT_TEMPLATE,
+        },
+      },
+    ],
   };
+}
+
+export function resolveSpatialGenerationPromptOption(
+  preferences: SpatialGenerationPreferences,
+): SpatialGenerationPromptOption {
+  return preferences.options.find((option) => option.id === preferences.activeOptionId) ?? preferences.options[0]!;
 }
 
 export function normalizeGenerationPreferences(
   value: unknown,
   ownerMode: SpatialOwnerMode = "roleplay",
 ): SpatialGenerationPreferences {
-  const parsed = spatialGenerationPreferencesBaseSchema.safeParse(value);
+  const parsed = spatialGenerationPreferencesSchema.safeParse(value);
   if (parsed.success) return parsed.data;
-  const legacy = z
+  const legacyVersionTwo = z
+    .object({
+      version: z.literal(2),
+      mode: z.enum(["default", "custom"]),
+      guidance: z.string().trim().max(4_000),
+      prompts: spatialGenerationPromptTemplatesSchema,
+    })
+    .strict()
+    .safeParse(value);
+  const legacyVersionOne = z
     .object({
       version: z.literal(1),
       mode: z.enum(["default", "custom"]),
@@ -385,9 +434,22 @@ export function normalizeGenerationPreferences(
     })
     .strict()
     .safeParse(value);
+  const defaults = defaultGenerationPreferences(ownerMode);
+  const legacy = legacyVersionTwo.success ? legacyVersionTwo.data : legacyVersionOne.success ? legacyVersionOne.data : null;
+  if (!legacy || legacy.mode === "default") return defaults;
+  const defaultOption = defaults.options[0]!;
+  const customOption: SpatialGenerationPromptOption = {
+    ...defaultOption,
+    id: "custom",
+    name: "Custom",
+    description: "Migrated from the previously saved custom map prompt.",
+    guidance: legacy.guidance,
+    ...(legacyVersionTwo.success ? { prompts: legacyVersionTwo.data.prompts } : {}),
+  };
   return {
-    ...defaultGenerationPreferences(ownerMode),
-    ...(legacy.success ? { mode: legacy.data.mode, guidance: legacy.data.guidance } : {}),
+    ...defaults,
+    activeOptionId: customOption.id,
+    options: [...defaults.options, customOption],
   };
 }
 
