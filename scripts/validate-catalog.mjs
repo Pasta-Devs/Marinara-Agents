@@ -16,7 +16,7 @@ import {
   createCatalogLanes,
   readCatalogFamily,
 } from "./catalog-lanes.mjs";
-import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
+import { assertPackagePrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
@@ -36,24 +36,47 @@ for (const [major, expectedCatalog] of expectedCatalogsByMajor) {
 if (JSON.stringify(legacyCatalog) !== JSON.stringify(catalogsByMajor.get(LEGACY_CATALOG_MAJOR))) {
   throw new Error(`catalog/catalog.json must remain an exact alias of catalog/v${LEGACY_CATALOG_MAJOR}/catalog.json`);
 }
-const hierarchicalMapsBoundary = await assertHierarchicalMapsPrivateImportBoundary();
-
-const hierarchicalMapsOwnedSourcePaths = [
-  "packages/server/src/routes/spatial-context.routes.ts",
-  "packages/server/src/services/spatial-context",
-  "packages/server/src/services/storage/spatial-context.storage.ts",
-  "packages/client/src/features/spatial-context",
-  "packages/client/src/hooks/use-spatial-context.ts",
-  "packages/client/src/components/game/GameWorldMap.tsx",
+const packageOwnedFeatures = [
+  {
+    id: "hierarchical-maps",
+    name: "Hierarchical Maps",
+    ownedSourcePaths: [
+      "packages/server/src/routes/spatial-context.routes.ts",
+      "packages/server/src/services/spatial-context",
+      "packages/server/src/services/storage/spatial-context.storage.ts",
+      "packages/client/src/features/spatial-context",
+      "packages/client/src/hooks/use-spatial-context.ts",
+      "packages/client/src/components/game/GameWorldMap.tsx",
+    ],
+  },
+  {
+    id: "long-term-memory",
+    name: "Long-Term Memory",
+    capabilityApi: { major: 1, minor: 5 },
+    ownedSourcePaths: [
+      "packages/shared/src/features/agents/long-term-memory",
+      "packages/server/src/services/long-term-memory",
+      "packages/client/src/features/long-term-memory",
+    ],
+  },
 ];
-for (const relativePath of hierarchicalMapsOwnedSourcePaths) {
-  const packageOwnedPath = join(repoRoot, "packages/hierarchical-maps/src/engine", relativePath);
-  const capturedEnginePath = join(repoRoot, "sources/engine", relativePath);
-  if (!existsSync(packageOwnedPath)) {
-    throw new Error(`Hierarchical Maps package source is missing: ${relativePath}`);
-  }
-  if (existsSync(capturedEnginePath)) {
-    throw new Error(`Hierarchical Maps source must not be captured as generic Engine material: ${relativePath}`);
+const packageBoundaries = new Map();
+for (const feature of packageOwnedFeatures) {
+  const sourceRoot = join(repoRoot, `packages/${feature.id}/src/engine`);
+  const boundary = await assertPackagePrivateImportBoundary({
+    sourceRoot,
+    boundaryPath: join(repoRoot, `packages/${feature.id}/engine-boundary.json`),
+    displayName: feature.name,
+    capabilityApi: feature.capabilityApi,
+  });
+  packageBoundaries.set(feature.id, boundary);
+  for (const relativePath of feature.ownedSourcePaths) {
+    if (!existsSync(join(sourceRoot, relativePath))) {
+      throw new Error(`${feature.name} package source is missing: ${relativePath}`);
+    }
+    if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
+      throw new Error(`${feature.name} source must not be captured as generic Engine material: ${relativePath}`);
+    }
   }
 }
 
@@ -203,15 +226,16 @@ for (const entry of catalog.packages) {
   if (manifest.id === "about-me-keeper") {
     throw new Error("About Me is a core Conversation feature and must not appear in the agent catalog");
   }
-  if (manifest.id === "hierarchical-maps") {
+  const packageBoundary = packageBoundaries.get(manifest.id);
+  if (packageBoundary) {
     if (manifest.schemaVersion !== 2) {
-      throw new Error("Hierarchical Maps must use capability package manifest v2");
+      throw new Error(`${manifest.name} must use capability package manifest v2`);
     }
-    if (JSON.stringify(manifest.capabilityApi) !== JSON.stringify(hierarchicalMapsBoundary.capabilityApi)) {
-      throw new Error("Hierarchical Maps capability API does not match engine-boundary.json");
+    if (JSON.stringify(manifest.capabilityApi) !== JSON.stringify(packageBoundary.capabilityApi)) {
+      throw new Error(`${manifest.name} capability API does not match engine-boundary.json`);
     }
-    if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(hierarchicalMapsBoundary.builtAgainst)) {
-      throw new Error("Hierarchical Maps build provenance does not match engine-boundary.json");
+    if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(packageBoundary.builtAgainst)) {
+      throw new Error(`${manifest.name} build provenance does not match engine-boundary.json`);
     }
   }
   ids.add(manifest.id);
@@ -434,8 +458,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 
 const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 29 || agentOnly !== 21 || features !== 8) {
-  throw new Error(`Expected 21 agents and 8 features, found ${agentOnly} and ${features}`);
+if (catalog.packages.length !== 30 || agentOnly !== 21 || features !== 9) {
+  throw new Error(`Expected 21 agents and 9 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 console.log(

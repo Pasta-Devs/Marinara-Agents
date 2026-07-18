@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-17T20:37:03.293Z",
+  "generatedAt": "2026-07-18T14:11:53.316Z",
   "packages": [
     {
       "manifest": {
@@ -870,6 +870,78 @@
         "bytes": 1644
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-router"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 5
+        },
+        "builtAgainst": {
+          "engineVersion": "2.3.2",
+          "engineCommit": "b78477cbf265b7486309a7738b626112dcddcda6"
+        },
+        "id": "long-term-memory",
+        "name": "Long-Term Memory",
+        "version": "1.0.1",
+        "description": "Captures finalized turns and recalls relevant context from a durable package-owned memory vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
+        "engine": {
+          "min": "2.3.2",
+          "maxExclusive": "2.4.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "agentDetail": {
+            "agentIds": [
+              "long-term-memory"
+            ]
+          },
+          "slots": [
+            "chat-settings"
+          ]
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "806f4b5ed6759f96d96e1b828d1637666d2baa5950c9a8d34c47be5a9fc8aac7",
+            "bytes": 668
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "22635e80c8d478413fec0273cfe8bfcfb33d2db32aa94bfa9d301442d9bee538",
+            "bytes": 367223
+          },
+          {
+            "path": "client.js",
+            "sha256": "735790e6ab7d1f9be861afdb73e64794543ac5046ed130f0171a1208e72c2fb8",
+            "bytes": 513445
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/main/artifacts/long-term-memory-1.0.1.zip",
+        "sha256": "2777ff5a5b0a795d1dfb5718d02395b0b7cc9bfcd228bb87388f91cd962840ec",
+        "bytes": 245878
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
     {
       "manifest": {
