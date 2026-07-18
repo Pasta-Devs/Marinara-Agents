@@ -179,6 +179,43 @@ async function main() {
     assert.deepEqual(applied.appliedMutationIds, [mutationId]);
     assert.equal((await storage.getNote("world_legacy_target"))?.links[0]?.target, canonicalSourceId);
 
+    const bulkSource = await storage.createNote({
+      ...noteInput,
+      id: "source_bulk_fixture",
+      title: "Bulk source",
+      type: "source",
+      status: "active",
+      links: [],
+      sections: { source: { text: "Bulk source evidence.", updatedAt: timestamp } },
+    });
+    await storage.createNote({
+      ...noteInput,
+      id: "world_bulk_derived",
+      title: "Bulk derived",
+      links: [{ target: bulkSource.id, relation: "extracted_from" }],
+    });
+    const batch = await storage.bulkMutateNotes({
+      noteIds: [bulkSource.id, "world_bulk_missing"],
+      archive: "with_derived",
+      addTags: ["bulk_archived"],
+    });
+    assert.equal(batch.status, "partial");
+    assert.deepEqual(batch.updatedNoteIds, [bulkSource.id]);
+    assert.deepEqual(batch.affectedNoteIds, [bulkSource.id, "world_bulk_derived"]);
+    assert.deepEqual(batch.failedNoteIds, ["world_bulk_missing"]);
+    assert.equal((await storage.getNote(bulkSource.id))?.status, "archived");
+    assert.equal((await storage.getNote(bulkSource.id))?.tags.includes("bulk_archived"), true);
+    assert.equal((await storage.getNote("world_bulk_derived"))?.status, "archived");
+    const bulkEvents = (await readFile(getLongTermMemoryDirectories(root).eventLog, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.type.endsWith(".bulk_updated"));
+    assert.deepEqual(bulkEvents.map((event) => event.target), [bulkSource.id, "world_bulk_derived"]);
+    const noChanges = await storage.bulkMutateNotes({ noteIds: [bulkSource.id], archive: "with_derived" });
+    assert.equal(noChanges.status, "no_changes");
+    assert.deepEqual(noChanges.skippedNoteIds, [bulkSource.id]);
+
     process.stdout.write(
       "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",
     );

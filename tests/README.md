@@ -11,6 +11,15 @@ pnpm exec playwright test ../Marinara-Agents/tests/spatial-context.e2e.ts -c pla
 
 The package must be installed in the test data directory before launching the Playwright web server.
 
+`long-term-memory.e2e.ts` is a package-local browser smoke suite for the
+installed Long-Term Memory UI. It expects a provisioned running Engine and the
+locally rebuilt package to already be installed and active:
+
+```bash
+cd ../Marinara-Engine
+MARINARA_ENGINE_ROOT="$PWD" pnpm exec playwright test -c ../Marinara-Agents/tests/long-term-memory.playwright.config.ts
+```
+
 `long-term-memory-storage.regression.ts` proves stable-root restart persistence,
 committed transaction recovery, strict malformed-settings self-check failure,
 retention cleanup, and canonical-note preservation:

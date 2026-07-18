@@ -1,5 +1,9 @@
 export type {
   LtmConflict,
+  LtmBulkNoteArchiveAction,
+  LtmBulkNoteRequest,
+  LtmBulkNoteResult,
+  LtmBulkNoteResultStatus,
   LtmDebugError,
   LtmDebugEvent,
   LtmDebugPhase,
@@ -15,6 +19,7 @@ export type {
   LtmExtractionDiagnostic,
   LtmExtractionResponse,
   LtmExtractionSettings,
+  LtmExtractionSettingsPatch,
   LtmExtractionVerbosity,
   LtmGlobalSettings,
   LtmIndexMetadata,
