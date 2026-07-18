@@ -329,7 +329,13 @@ export function SpatialMapsHome({
   const selectPromptOption = async (optionId: string) => {
     const preferences = { ...promptDraft, activeOptionId: optionId };
     setPromptDraft(preferences);
-    if (!promptEditing) await savePromptSelectionForCurrentChat(preferences);
+    if (!promptEditing) {
+      try {
+        await savePromptSelectionForCurrentChat(preferences);
+      } catch {
+        setPromptDraft(resolvedPromptPreferences);
+      }
+    }
   };
   const addPromptOption = () => {
     const usedIds = new Set(promptDraft.options.map((option) => option.id));

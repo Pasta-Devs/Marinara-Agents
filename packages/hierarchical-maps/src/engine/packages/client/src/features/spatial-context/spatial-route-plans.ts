@@ -233,6 +233,13 @@ function queueRouteDestination(
   });
 }
 
+function markSpatialRouteNeedsReview(chatId: string, plan: SpatialRoutePlan): void {
+  if (plan.status !== "needs_review") {
+    setSpatialRoutePlan(chatId, { ...plan, status: "needs_review" });
+  }
+  setPendingSpatialTransitionStatus(chatId, "needs_review");
+}
+
 export function startSpatialRoute(
   chatId: string,
   definition: SpatialContextDefinition,
@@ -264,15 +271,13 @@ export function reconcileSpatialRoutePlan(chatId: string, spatial: SpatialContex
   const definition = spatial.definition;
   if (!plan || !definition || !spatial.currentLocationId) return;
   if (definition.revision !== plan.expectedDefinitionRevision) {
-    setSpatialRoutePlan(chatId, { ...plan, status: "needs_review" });
-    setPendingSpatialTransitionStatus(chatId, "needs_review");
+    markSpatialRouteNeedsReview(chatId, plan);
     return;
   }
 
   const currentIndex = plan.locationIds.indexOf(spatial.currentLocationId);
   if (currentIndex < plan.currentIndex || currentIndex > plan.currentIndex + 1 || currentIndex < 0) {
-    setSpatialRoutePlan(chatId, { ...plan, status: "needs_review" });
-    setPendingSpatialTransitionStatus(chatId, "needs_review");
+    markSpatialRouteNeedsReview(chatId, plan);
     return;
   }
   if (spatial.currentLocationId === plan.targetLocationId) {
@@ -285,8 +290,7 @@ export function reconcileSpatialRoutePlan(chatId: string, spatial: SpatialContex
   const nextId = advancedPlan.locationIds[currentIndex + 1];
   const nextDestination = spatial.destinations.find((destination) => destination.id === nextId);
   if (!nextId || !nextDestination) {
-    setSpatialRoutePlan(chatId, { ...advancedPlan, status: "needs_review" });
-    setPendingSpatialTransitionStatus(chatId, "needs_review");
+    markSpatialRouteNeedsReview(chatId, advancedPlan);
     return;
   }
 

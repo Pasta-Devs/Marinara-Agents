@@ -153,6 +153,7 @@ export function SpatialMapWorkspace({
   );
   const [pendingConfirmation, setPendingConfirmation] = useState<MapConfirmationOptions | null>(null);
   const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+  const confirmationDialogRef = useRef<HTMLDivElement>(null);
   const confirmationCancelRef = useRef<HTMLButtonElement>(null);
   const [initialized, setInitialized] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -197,16 +198,36 @@ export function SpatialMapWorkspace({
 
   useEffect(() => {
     if (!pendingConfirmation) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusFrame = window.requestAnimationFrame(() => confirmationCancelRef.current?.focus());
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      resolveConfirmation(false);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        resolveConfirmation(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        confirmationDialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && (document.activeElement === first || !confirmationDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !confirmationDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.cancelAnimationFrame(focusFrame);
       window.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [pendingConfirmation, resolveConfirmation]);
 
@@ -243,6 +264,7 @@ export function SpatialMapWorkspace({
   }, [chat?.metadata, ownerMode]);
 
   useEffect(() => {
+    resolveConfirmation(false);
     setInitialized(false);
     setDraft(null);
     setBaseDefinition(null);
@@ -256,7 +278,7 @@ export function SpatialMapWorkspace({
     setLayoutEditing(false);
     setImportIdReport(null);
     setTypesEditorOpen(false);
-  }, [chatId]);
+  }, [chatId, resolveConfirmation]);
 
   useEffect(() => {
     if (!spatial.isSuccess || initialized) return;
@@ -1000,6 +1022,7 @@ export function SpatialMapWorkspace({
     >
       {pendingConfirmation && (
         <div
+          ref={confirmationDialogRef}
           data-chat-floating-panel
           data-marinara-maps-confirmation="true"
           role="dialog"

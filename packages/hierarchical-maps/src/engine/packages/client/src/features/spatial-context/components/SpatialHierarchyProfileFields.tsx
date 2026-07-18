@@ -24,6 +24,9 @@ export function SpatialHierarchyProfileFields({
   disabled = false,
   onChange,
 }: SpatialHierarchyProfileFieldsProps) {
+  const assignedTypeIds = new Set(
+    definition.locations.map((location) => profile.locationTypeIds[location.id]).filter(Boolean),
+  );
   const applyProfile = (nextProfile: SpatialHierarchyProfile, nextDefinition = definition) => {
     onChange({
       definition: nextDefinition,
@@ -108,7 +111,7 @@ export function SpatialHierarchyProfileFields({
             {editable ? (
               <button
                 type="button"
-                disabled={disabled || profile.types.length === 1}
+                disabled={disabled || profile.types.length === 1 || assignedTypeIds.has(type.id)}
                 onClick={() =>
                   applyProfile({
                     ...profile,
@@ -118,6 +121,7 @@ export function SpatialHierarchyProfileFields({
                 }
                 className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
                 aria-label={`Remove ${type.label || "location type"}`}
+                title={assignedTypeIds.has(type.id) ? "Reassign locations before removing this type." : undefined}
               >
                 <Trash2 size="0.75rem" />
               </button>

@@ -89,11 +89,10 @@ export interface GenerateSpatialMapDraftInput extends GenerateSpatialMapDraftReq
   chatId: string;
   hierarchyMode?: SpatialHierarchyProfile["mode"];
   hierarchyProfile?: SpatialHierarchyProfile;
-  promptOverride?: Pick<SpatialMapPromptPreview, "system" | "user">;
   generationPreferencesOverride?: SpatialGenerationPreferences;
 }
 
-export type PreviewSpatialMapPromptInput = Omit<GenerateSpatialMapDraftInput, "promptOverride"> & {
+export type PreviewSpatialMapPromptInput = GenerateSpatialMapDraftInput & {
   generationPreferencesOverride?: SpatialGenerationPreferences;
 };
 
@@ -109,7 +108,6 @@ export interface SpatialMapPromptPreview {
 
 export type MapsGenerateSpatialMapDraftResponse = GenerateSpatialMapDraftResponse & {
   hierarchyProfile: SpatialHierarchyProfile;
-  prompt?: SpatialMapPromptPreview;
 };
 
 export interface CommitSpatialOwnerTurnInput {

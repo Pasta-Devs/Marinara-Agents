@@ -1107,6 +1107,19 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
       await secondaryPage.close();
     }
     await page.evaluate((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
+    const activePromptOptionBeforeFailedSave = await promptOption.inputValue();
+    const promptSelectionRoute = `**/api/chats/${chat.id}/spatial-context/generation-preferences`;
+    await page.route(promptSelectionRoute, async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Prompt selection persistence failed" }),
+      });
+    });
+    await promptOption.selectOption({ label: "Default" });
+    await expect(promptOption).toHaveValue(activePromptOptionBeforeFailedSave);
+    await expect(home).toContainText("Prompt selection persistence failed");
+    await page.unroute(promptSelectionRoute);
     await promptOption.selectOption({ label: "Default" });
     await expect(home).toContainText("Roleplay · Default");
     await expect(systemTemplate).toHaveValue(/AI roleplay engine/u);
@@ -1242,6 +1255,8 @@ test("global Hierarchical Maps home edits the current map location types", async
     await home.getByRole("button", { name: "Add location type" }).click();
     await home.getByLabel("Location type 7 label").fill("Neighborhood");
     await home.getByLabel("Neighborhood semantic base kind").selectOption("place");
+    await expect(home.getByRole("button", { name: "Remove City" })).toBeDisabled();
+    await expect(home.getByRole("button", { name: "Remove Neighborhood" })).toBeEnabled();
     await home.getByRole("button", { name: "Save location types" }).click();
 
     await expect
@@ -1714,7 +1729,15 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expect(deleteDialog).toContainText("Are you sure? This is dangerous.");
     await expect(deleteDialog).toContainText("Deleting replaces 4 saved locations");
     await expect(deleteDialog).toContainText("the deleted map cannot be restored unless you exported a backup");
-    await deleteDialog.getByRole("button", { name: "Go back and backup first", exact: true }).click();
+    const cancelDelete = deleteDialog.getByRole("button", { name: "Go back and backup first", exact: true });
+    const confirmDelete = deleteDialog.getByRole("button", { name: "Delete", exact: true });
+    await expect(cancelDelete).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(confirmDelete).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(cancelDelete).toBeFocused();
+    await cancelDelete.click();
+    await expect(deleteMap).toBeFocused();
     await expect(hierarchy.getByRole("button", { name: "Recharted Coast region" })).toBeVisible();
 
     await deleteMap.click();

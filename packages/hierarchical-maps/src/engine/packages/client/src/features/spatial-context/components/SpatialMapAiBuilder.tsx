@@ -394,9 +394,11 @@ export function SpatialMapAiBuilder({
     setError(null);
   };
   const requestedHierarchyProfile =
-    operation === "expand" || hierarchyMode !== "auto"
-      ? { ...workingHierarchyProfile, mode: operation === "expand" ? hierarchyProfile.mode : hierarchyMode }
-      : undefined;
+    operation === "expand"
+      ? normalizeHierarchyProfile(hierarchyProfile, definition)
+      : hierarchyMode !== "auto"
+        ? { ...workingHierarchyProfile, mode: hierarchyMode }
+        : undefined;
   const currentRequest: SpatialMapAiBuilderRequest = {
     operation,
     targetLocationId,

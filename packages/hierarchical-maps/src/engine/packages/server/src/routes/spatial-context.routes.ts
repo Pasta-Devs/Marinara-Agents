@@ -46,7 +46,6 @@ import {
   spatialGenerationCustomVariableValues,
   spatialGenerationPreferencesSchema,
   spatialHierarchyProfileSchema,
-  type SpatialGenerationPreferences,
   type SpatialHierarchyProfile,
 } from "../../../maps-shared/src/maps-model.js";
 
@@ -101,13 +100,6 @@ const spatialOwnerTurnSchema = z.object({
     )
     .optional(),
 });
-
-const spatialMapPromptOverrideSchema = z
-  .object({
-    system: z.string().trim().min(1).max(80_000),
-    user: z.string().trim().min(1).max(80_000),
-  })
-  .strict();
 
 const gameMapBindingTargetSchema = z.discriminatedUnion("target", [
   z.object({ target: z.literal("map"), mapId: z.string().trim().min(1) }).strict(),
@@ -388,13 +380,19 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     chatId: string,
     requestBody: unknown,
     options: {
-      generationPreferencesOverride?: SpatialGenerationPreferences;
       allowDraftPreviewWithExistingMap?: boolean;
     } = {},
   ) => {
     const body = isRecord(requestBody) ? requestBody : {};
+    if (body.promptOverride !== undefined) {
+      throw new SpatialMapPromptRequestError(
+        400,
+        "spatial_ai_prompt_override_unsupported",
+        "Per-request prompt replacement is not supported. Use a validated map generation prompt option instead.",
+      );
+    }
     const parsed = generateSpatialMapDraftRequestSchema.safeParse(
-      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "promptOverride", "generationPreferencesOverride"]),
+      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "generationPreferencesOverride"]),
     );
     if (!parsed.success) {
       throw new SpatialMapPromptRequestError(
@@ -402,6 +400,19 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         "spatial_ai_request_invalid",
         parsed.error.issues[0]?.message ?? "Invalid map generation request.",
         parsed.error.issues,
+      );
+    }
+    const generationPreferencesOverride =
+      body.generationPreferencesOverride === undefined
+        ? null
+        : spatialGenerationPreferencesSchema.safeParse(body.generationPreferencesOverride);
+    if (generationPreferencesOverride && !generationPreferencesOverride.success) {
+      throw new SpatialMapPromptRequestError(
+        400,
+        "spatial_ai_prompt_template_override_invalid",
+        generationPreferencesOverride.error.issues[0]?.message ??
+          "The edited generation prompt preference is invalid.",
+        generationPreferencesOverride.error.issues,
       );
     }
     const hierarchyMode = z.enum(["auto", "template", "custom"]).safeParse(body.hierarchyMode ?? "auto");
@@ -503,7 +514,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
 
     const sourceContext = await buildDraftSourceContext(chat, resources, gameMapReference);
-    const generationPreferences = options.generationPreferencesOverride ?? spatial.generationPreferences;
+    const generationPreferences = generationPreferencesOverride?.data ?? spatial.generationPreferences;
     const generationPromptOption = resolveSpatialGenerationPromptOption(generationPreferences);
     const groundingMode = parsed.data.groundingMode;
     const lorebookScopeExclusions = resolveLorebookScopeExclusions(chat.mode, parseSpatialMetadata(chat.metadata));
@@ -709,25 +720,8 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     "/:chatId/spatial-context/generation-prompt/preview",
     async (req, reply) => {
       try {
-        const body = isRecord(req.body) ? req.body : {};
-        const generationPreferencesOverride =
-          body.generationPreferencesOverride === undefined
-            ? null
-            : spatialGenerationPreferencesSchema.safeParse(body.generationPreferencesOverride);
-        if (generationPreferencesOverride && !generationPreferencesOverride.success) {
-          return reply.status(400).send({
-            error:
-              generationPreferencesOverride.error.issues[0]?.message ??
-              "The edited generation prompt preference is invalid.",
-            code: "spatial_ai_prompt_template_override_invalid",
-            issues: generationPreferencesOverride.error.issues,
-          });
-        }
-        const prepared = await prepareSpatialMapPrompt(req.params.chatId, body, {
+        const prepared = await prepareSpatialMapPrompt(req.params.chatId, req.body, {
           allowDraftPreviewWithExistingMap: true,
-          ...(generationPreferencesOverride?.success
-            ? { generationPreferencesOverride: generationPreferencesOverride.data }
-            : {}),
         });
         return {
           ownerMode: prepared.ownerMode,
@@ -763,25 +757,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       groundingMode,
       loreCatalog,
     } = prepared;
-    let prompt = prepared.prompt;
-    const body = isRecord(req.body) ? req.body : {};
-    if (body.promptOverride !== undefined) {
-      const promptOverride = spatialMapPromptOverrideSchema.safeParse(body.promptOverride);
-      if (!promptOverride.success) {
-        return reply.status(400).send({
-          error: promptOverride.error.issues[0]?.message ?? "The edited generation prompt is invalid.",
-          code: "spatial_ai_prompt_override_invalid",
-          issues: promptOverride.error.issues,
-        });
-      }
-      prompt = {
-        ...prompt,
-        messages: [
-          { role: "system", content: promptOverride.data.system },
-          { role: "user", content: promptOverride.data.user },
-        ],
-      };
-    }
+    const prompt = prepared.prompt;
 
     let resolved;
     try {
@@ -880,26 +856,8 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         ...(provenance ? { provenance } : {}),
         grounding: loreCatalog.grounding,
         hierarchyProfile,
-        prompt: {
-          ownerMode,
-          operation,
-          size: parsed.size,
-          maxTokens: prompt.maxTokens,
-          containsPrivateContext: true,
-          system: prompt.messages.find((message) => message.role === "system")?.content ?? "",
-          user: prompt.messages.find((message) => message.role === "user")?.content ?? "",
-        },
       } satisfies GenerateSpatialMapDraftResponse & {
         hierarchyProfile: SpatialHierarchyProfile;
-        prompt: {
-          ownerMode: SpatialOwnerMode;
-          operation: typeof operation;
-          size: typeof parsed.size;
-          maxTokens: number;
-          containsPrivateContext: true;
-          system: string;
-          user: string;
-        };
       };
     } catch (error) {
       logger.error(error, "[spatial/map-draft] Generation failed for chat %s", chat.id);

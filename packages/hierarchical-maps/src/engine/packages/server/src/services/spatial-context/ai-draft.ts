@@ -297,10 +297,17 @@ export function readSpatialHierarchyProfile(
   const generatedTypes = requestedProfile?.types.length ? requestedProfile.types : readPlanHierarchyTypes(value);
   const fallback = defaultHierarchyProfile({ locations });
   const types = generatedTypes.length > 0 ? generatedTypes : fallback.types;
-  const typeByPromptKey = new Map<string, SpatialHierarchyType>();
+  const exactTypeByPromptKey = new Map<string, SpatialHierarchyType>();
   for (const type of types) {
-    for (const key of [type.id, type.id.replace(/^type_/u, ""), type.label]) {
-      typeByPromptKey.set(alias(key), type);
+    exactTypeByPromptKey.set(alias(type.id), type);
+  }
+  const aliasedTypeByPromptKey = new Map<string, SpatialHierarchyType>();
+  for (const type of types) {
+    for (const key of [type.id.replace(/^type_/u, ""), type.label]) {
+      const promptKey = alias(key);
+      if (!exactTypeByPromptKey.has(promptKey) && !aliasedTypeByPromptKey.has(promptKey)) {
+        aliasedTypeByPromptKey.set(promptKey, type);
+      }
     }
   }
   const firstTypeByKind = new Map<SpatialLocationKind, SpatialHierarchyType>();
@@ -321,7 +328,11 @@ export function readSpatialHierarchyProfile(
     if (rawIndex >= 0) claimedRawIndexes.add(rawIndex);
     const raw = rawIndex >= 0 ? rawLocations[rawIndex] : undefined;
     const requestedType = raw ? alias(raw.typeKey ?? raw.typeId ?? raw.type) : "";
-    const type = typeByPromptKey.get(requestedType) ?? firstTypeByKind.get(location.kind) ?? types[0]!;
+    const type =
+      exactTypeByPromptKey.get(requestedType) ??
+      aliasedTypeByPromptKey.get(requestedType) ??
+      firstTypeByKind.get(location.kind) ??
+      types[0]!;
     locationTypeIds[location.id] = type.id;
   });
   return normalizeHierarchyProfile(

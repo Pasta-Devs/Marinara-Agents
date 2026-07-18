@@ -300,6 +300,7 @@ const spatialGenerationPreferencesBaseSchema = z
 
 const PROMPT_VARIABLE_PATTERN = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/gu;
 const PROMPT_VARIABLE_SET = new Set<string>(SPATIAL_GENERATION_PROMPT_VARIABLES);
+export const MAX_RENDERED_SPATIAL_GENERATION_PROMPT_LENGTH = 160_000;
 
 export const spatialGenerationPreferencesSchema = spatialGenerationPreferencesBaseSchema.superRefine(
   (preferences, context) => {
@@ -549,11 +550,30 @@ export function renderSpatialGenerationPromptTemplate(
   template: string,
   variables: Readonly<Record<string, string | number | null | undefined>>,
 ): string {
-  return template.replace(PROMPT_VARIABLE_PATTERN, (raw, name: string) => {
-    if (!Object.hasOwn(variables, name)) return raw;
-    const value = variables[name];
-    return value === undefined || value === null ? "" : String(value);
-  });
+  let rendered = "";
+  let cursor = 0;
+  const append = (value: string) => {
+    if (rendered.length + value.length > MAX_RENDERED_SPATIAL_GENERATION_PROMPT_LENGTH) {
+      throw new Error(
+        `Rendered map generation prompt exceeds ${MAX_RENDERED_SPATIAL_GENERATION_PROMPT_LENGTH.toLocaleString()} characters. Shorten the template or custom variable values.`,
+      );
+    }
+    rendered += value;
+  };
+  for (const match of template.matchAll(PROMPT_VARIABLE_PATTERN)) {
+    const index = match.index ?? cursor;
+    const raw = match[0];
+    const name = match[1]!;
+    append(template.slice(cursor, index));
+    if (!Object.hasOwn(variables, name)) append(raw);
+    else {
+      const value = variables[name];
+      append(value === undefined || value === null ? "" : String(value));
+    }
+    cursor = index + raw.length;
+  }
+  append(template.slice(cursor));
+  return rendered;
 }
 
 export function spatialGenerationCustomVariableValues(

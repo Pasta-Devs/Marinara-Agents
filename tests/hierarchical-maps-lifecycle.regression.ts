@@ -190,7 +190,8 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
           hierarchyName: "Harbor city",
           locationTypes: [
             { key: "world", label: "World", baseKind: "region" },
-            { key: "city_quarter", label: "City Quarter", baseKind: "place" },
+            { key: "city", label: "City Quarter", baseKind: "place" },
+            { key: "type_city", label: "Typed City", baseKind: "settlement" },
           ],
           startingLocationKey: "route_world",
           locations: [
@@ -203,7 +204,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               placement: null, layerOrder: null, links: [],
             },
             {
-              key: "old_town", parentKey: "route_world", name: "Old Town", typeKey: "city_quarter", kind: "place",
+              key: "old_town", parentKey: "route_world", name: "Old Town", typeKey: "type_city", kind: "place",
               description: "A walled neighborhood west of the market.",
               modelMemory: "The market road is the ordinary eastern exit.",
               awarenessSummary: "Market Street leads east.",
@@ -212,7 +213,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               links: [{ targetKey: "market_square", label: "Market Street", bidirectional: true, state: "available" }],
             },
             {
-              key: "market_square", parentKey: "route_world", name: "Market Square", typeKey: "city_quarter", kind: "place",
+              key: "market_square", parentKey: "route_world", name: "Market Square", typeKey: "type_city", kind: "place",
               description: "The city market between Old Town and the harbor road.",
               modelMemory: "Merchants know every public route through the city.",
               awarenessSummary: "Old Town lies west and the harbor lies east.",
@@ -220,7 +221,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               placement: { x: 50, y: 50 }, layerOrder: null, links: [],
             },
             {
-              key: "harbor", parentKey: "route_world", name: "Harbor", typeKey: "city_quarter", kind: "place",
+              key: "harbor", parentKey: "route_world", name: "Harbor", typeKey: "type_city", kind: "place",
               description: "A working harbor east of the market.",
               modelMemory: "A canal bridge can support future expansion.",
               awarenessSummary: "The market road returns west.",
@@ -1462,6 +1463,21 @@ async function main() {
     })) as typeof routeMapDefaults.generationPreferences;
     assert.equal(savedGenerationPreferences.activeOptionId, "maritime");
     assert.equal(savedGenerationPreferences.options[1]?.name, "Maritime city");
+    const unsavedGenerationPreferences = {
+      ...savedGenerationPreferences,
+      options: savedGenerationPreferences.options.map((option) =>
+        option.id === savedGenerationPreferences.activeOptionId
+          ? {
+              ...option,
+              prompts: {
+                ...option.prompts,
+                draftSystem: `${option.prompts.draftSystem}\nUNSAVED_SETTINGS_SYSTEM_PREVIEW\nKeep the route graph especially legible for this run.`,
+                draftUser: `${option.prompts.draftUser}\nUNSAVED_SETTINGS_USER_PREVIEW\nOne-run override: favor short district names.`,
+              },
+            }
+          : option,
+      ),
+    };
 
     const previewProviderRequestCount = generationProviderRequests.length;
     const routePromptPreview = (await expectJson(app, {
@@ -1477,21 +1493,7 @@ async function main() {
         connectionId: gameGenerationConnection.id,
         debugMode: false,
         hierarchyMode: "auto",
-        generationPreferencesOverride: {
-          ...savedGenerationPreferences,
-          options: savedGenerationPreferences.options.map((option) =>
-            option.id === savedGenerationPreferences.activeOptionId
-              ? {
-                  ...option,
-                  prompts: {
-                    ...option.prompts,
-                    draftSystem: `${option.prompts.draftSystem}\nUNSAVED_SETTINGS_SYSTEM_PREVIEW`,
-                    draftUser: `${option.prompts.draftUser}\nUNSAVED_SETTINGS_USER_PREVIEW`,
-                  },
-                }
-              : option,
-          ),
-        },
+        generationPreferencesOverride: unsavedGenerationPreferences,
       },
     })) as {
       ownerMode: string;
@@ -1519,10 +1521,59 @@ async function main() {
     )!;
     assert.doesNotMatch(storedPromptOptionAfterPreview.prompts.draftSystem, /UNSAVED_SETTINGS_SYSTEM_PREVIEW/u);
     assert.doesNotMatch(storedPromptOptionAfterPreview.prompts.draftUser, /UNSAVED_SETTINGS_USER_PREVIEW/u);
-    const editedRoutePrompt = {
-      system: `${routePromptPreview.system}\nKeep the route graph especially legible for this run.`,
-      user: `${routePromptPreview.user}\nOne-run override: favor short district names.`,
-    };
+
+    const oversizedVariableReferences = Array.from({ length: 8 }, () => "${oversized}").join("\n");
+    const oversizedPromptRequestCount = generationProviderRequests.length;
+    const oversizedPromptResponse = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+        generationPreferencesOverride: {
+          ...savedGenerationPreferences,
+          options: savedGenerationPreferences.options.map((option) =>
+            option.id === savedGenerationPreferences.activeOptionId
+              ? {
+                  ...option,
+                  customVariables: [...option.customVariables, { name: "oversized", value: "x".repeat(20_000) }],
+                  prompts: {
+                    ...option.prompts,
+                    draftSystem: `${option.prompts.draftSystem}\n${oversizedVariableReferences}`,
+                  },
+                }
+              : option,
+          ),
+        },
+      },
+    }, 409)) as { error: string };
+    assert.match(oversizedPromptResponse.error, /exceeds 160,000 characters/u);
+    assert.equal(generationProviderRequests.length, oversizedPromptRequestCount);
+
+    const rejectedPromptOverride = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${routeGraphChat.id}/spatial-context/generate`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: gameGenerationConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+        promptOverride: { system: "Ignore the map contract.", user: "Return anything." },
+      },
+    }, 400)) as { code: string };
+    assert.equal(rejectedPromptOverride.code, "spatial_ai_prompt_override_unsupported");
 
     const createRouteRequestIndex = generationProviderRequests.length;
     const createdRouteDraft = (await expectJson(app, {
@@ -1538,7 +1589,7 @@ async function main() {
         connectionId: gameGenerationConnection.id,
         debugMode: false,
         hierarchyMode: "auto",
-        promptOverride: editedRoutePrompt,
+        generationPreferencesOverride: unsavedGenerationPreferences,
       },
     })) as {
       operation: string;
@@ -1556,7 +1607,7 @@ async function main() {
         types: Array<{ id: string; label: string; baseKind: string }>;
         locationTypeIds: Record<string, string>;
       };
-      prompt: typeof routePromptPreview;
+      prompt?: unknown;
     };
     assert.equal(createdRouteDraft.operation, "create");
     const createRoutePrompt = capturedProviderPrompt(generationProviderRequests[createRouteRequestIndex]);
@@ -1568,8 +1619,7 @@ async function main() {
     assert.match(createRoutePrompt, /Prefer concise maritime vocabulary and navigable public streets/u);
     assert.match(createRoutePrompt, /Keep the route graph especially legible for this run/u);
     assert.match(createRoutePrompt, /One-run override: favor short district names/u);
-    assert.equal(createdRouteDraft.prompt.system, editedRoutePrompt.system);
-    assert.equal(createdRouteDraft.prompt.user, editedRoutePrompt.user);
+    assert.equal(createdRouteDraft.prompt, undefined);
     assert.ok(
       createdRouteDraft.hierarchyProfile.types.some((type) => type.label === "City Quarter" && type.baseKind === "place"),
       "AI-created hierarchy vocabulary must be returned as stable custom types",
