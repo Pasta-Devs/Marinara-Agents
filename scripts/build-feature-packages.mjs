@@ -1142,7 +1142,7 @@ for (const feature of selectedFeatures) {
       iconUrl: catalogArtworkUrl(feature.id),
       artifact: {
         url: `${(feature.id === "long-term-memory"
-          ? (process.env.MARINARA_AGENTS_LTM_CATALOG_BASE_URL ?? "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main")
+          ? (process.env.MARINARA_AGENTS_LTM_CATALOG_BASE_URL ?? "https://raw.githubusercontent.com/Promansis/Marinara-Agents/main")
           : "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main").replace(/\/$/, "")}/artifacts/${basename(artifactPath)}`,
         sha256: sha256(artifact),
         bytes: artifact.byteLength,
