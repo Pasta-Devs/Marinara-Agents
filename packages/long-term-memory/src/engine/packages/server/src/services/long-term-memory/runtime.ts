@@ -6,6 +6,9 @@ import {
   validateLongTermMemoryInjectionReceipts,
   validateLongTermMemoryUsage,
 } from "./usage.js";
+import { ltmAgentSettingsSchema } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { readJsonFile } from "./atomic-json.js";
+import { getLongTermMemoryDirectories, safeJoin } from "./paths.js";
 export async function activateLongTermMemoryStorage(root: string) {
   const storage = new LongTermMemoryStorage(root);
   const draftStore = new LongTermMemoryDraftStore(root);
@@ -20,6 +23,9 @@ export async function activateLongTermMemoryStorage(root: string) {
         getLtmExtractionConfig(root),
         validateLongTermMemoryUsage(root),
         validateLongTermMemoryInjectionReceipts(root),
+        readJsonFile<unknown>(safeJoin(getLongTermMemoryDirectories(root).config, "agent-settings.json"), {}).then((value) =>
+          ltmAgentSettingsSchema.parse(value),
+        ),
       ]);
     },
     async cleanup() {

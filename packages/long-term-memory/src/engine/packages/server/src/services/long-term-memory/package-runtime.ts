@@ -2,6 +2,7 @@ export type RuntimeLogArgument = string | number | boolean | null | undefined | 
 
 export type CapabilityRuntimeHost = {
   dataDir?: string;
+  getAgentConfig?(): Promise<{ connectionId: string | null; settings: Record<string, unknown> } | null>;
   logger: {
     debug(message: string, ...args: RuntimeLogArgument[]): void;
     info(message: string, ...args: RuntimeLogArgument[]): void;
@@ -70,6 +71,11 @@ export type CapabilityRuntimeHost = {
       lastMessageAt: string | null;
       updatedAt: string;
     }>>;
+    updateChatMetadata(input: {
+      chatId: string;
+      metadata: Record<string, unknown>;
+      updatedAt: string;
+    }): Promise<void>;
   };
 };
 
@@ -85,6 +91,10 @@ let embeddingAdapter: PackageEmbeddingAdapter | null = null;
 function currentHost() {
   if (!host) throw new Error("Long-Term Memory package runtime is not configured");
   return host;
+}
+
+export function getPackageRuntime() {
+  return currentHost();
 }
 
 export function configurePackageRuntime(next: CapabilityRuntimeHost) {

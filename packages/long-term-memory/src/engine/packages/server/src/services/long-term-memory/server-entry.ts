@@ -10,6 +10,7 @@ import {
 } from "./generation-injection.js";
 import { captureFinalizedLongTermMemoryTurn } from "./finalized-turn-capture.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
+import { adoptLegacyLongTermMemoryAgentConfig, adoptLegacyLongTermMemoryChats } from "./legacy-adoption.js";
 import type { FastifyPluginAsync } from "fastify";
 
 let active: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null =
@@ -32,6 +33,8 @@ export async function activate({ api, dataDir }: ActivationContext) {
     active = await activateLongTermMemoryStorage(
       join(dataDir, "long-term-memory"),
     );
+    await adoptLegacyLongTermMemoryAgentConfig(active.root);
+    await adoptLegacyLongTermMemoryChats();
     const releaseRoutes=await api.registerPrivilegedRoutes(createLongTermMemoryRoutes(active),{prefix:"/api/long-term-memory"});
     const releaseStorageService = api.registerService("long-term-memory:storage", {
       root: active.root,

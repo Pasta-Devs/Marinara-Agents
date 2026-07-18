@@ -133,7 +133,7 @@ const features = [
       "long-term-memory/engine-boundary.json",
     ),
     boundaryDisplayName: "Long-Term Memory",
-    capabilityApi: { major: 1, minor: 4 },
+    capabilityApi: { major: 1, minor: 5 },
   },
   {
     id: "hierarchical-maps",

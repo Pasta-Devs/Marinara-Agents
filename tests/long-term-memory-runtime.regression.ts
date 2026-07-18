@@ -11,18 +11,57 @@ async function main() {
   const services = new Map<string, any>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
-  const cleanup = await activate({
-    dataDir,
-    api: {
-      runtime: { logger },
-      registerService(name: string, service: unknown) {
-        services.set(name, service);
-        return () => services.delete(name);
+  const chats = [{
+    id: "chat-a",
+    name: "Legacy chat",
+    mode: "roleplay",
+    characterIds: [],
+    groupId: null,
+    personaId: null,
+    connectionId: null,
+    metadata: { enableLongTermMemory: true, longTermMemoryBudgetTokens: 2048 },
+    lastMessageAt: null,
+    updatedAt: "2026-07-16T00:00:00.000Z",
+  }];
+  let metadataUpdates = 0;
+  let agentConfigReads = 0;
+  let legacyAgentConfig: { connectionId: string | null; settings: Record<string, unknown> } | null = {
+    connectionId: "legacy-connection",
+    settings: {
+      model: "legacy-model",
+      instruction: "Preserve this instruction",
+      importConcurrency: 4,
+      autoApplyLowRisk: true,
+    },
+  };
+  const api = {
+    runtime: {
+      logger,
+      async getAgentConfig() {
+        agentConfigReads += 1;
+        return legacyAgentConfig;
       },
-      async registerPrivilegedRoutes() {
-        return () => {};
+      persistence: {
+        async getChat(chatId: string) { return chats.find((chat) => chat.id === chatId) ?? null; },
+        async listChats() { return chats; },
+        async updateChatMetadata(input: { chatId: string; metadata: Record<string, unknown> }) {
+          metadataUpdates += 1;
+          const chat = chats.find((candidate) => candidate.id === input.chatId);
+          if (chat) chat.metadata = input.metadata as typeof chat.metadata;
+        },
       },
     },
+    registerService(name: string, service: unknown) {
+      services.set(name, service);
+      return () => services.delete(name);
+    },
+    async registerPrivilegedRoutes() {
+      return () => {};
+    },
+  };
+  let cleanup: Awaited<ReturnType<typeof activate>> | null = await activate({
+    dataDir,
+    api,
   });
   const storage = services.get("long-term-memory:storage").storage;
   const runtime = services.get("long-term-memory:runtime");
@@ -45,6 +84,24 @@ async function main() {
 
   try {
     assert.ok(runtime, "package activation must register the runtime service");
+    assert.deepEqual(chats[0].metadata, {
+      enableLongTermMemory: true,
+      longTermMemoryBudgetTokens: 2048,
+      activeAgentIds: ["long-term-memory"],
+      enableAgents: true,
+      longTermMemoryPackageAdopted: true,
+    }, "legacy chat settings must be preserved while activating the package agent");
+    assert.deepEqual(
+      JSON.parse(await readFile(join(dataDir, "long-term-memory", "config", "agent-settings.json"), "utf8")),
+      {
+        connectionId: "legacy-connection",
+        model: "legacy-model",
+        instruction: "Preserve this instruction",
+        importConcurrency: 4,
+        autoApplyLowRisk: true,
+      },
+      "legacy agent preferences must move into the stable package root",
+    );
     await storage.createNote(note("world_visible", "chat-a", "The cobalt archive key is beneath the observatory."));
     await storage.createNote(note("world_hidden", "chat-b", "The cobalt archive key is hidden in another chat."));
 
@@ -126,8 +183,29 @@ async function main() {
     });
     assert.equal(longTurn.note.sections.source.text.length, 24_000);
     assert.equal(longTurn.note.sections.source_2.text.length, 100, "long turns must be captured without truncation");
-  } finally {
+
+    const vaultBeforeUninstall = await readFile(join(dataDir, "long-term-memory", "vault", "world", "world_visible.json"));
+    const preferencesBeforeUninstall = await readFile(join(dataDir, "long-term-memory", "config", "agent-settings.json"));
     await cleanup();
+    cleanup = null;
+    chats[0].metadata.activeAgentIds = [];
+    legacyAgentConfig = null;
+    cleanup = await activate({ dataDir, api });
+    assert.deepEqual(chats[0].metadata.activeAgentIds, [], "reinstall must not reverse explicit uninstall cleanup");
+    assert.equal(metadataUpdates, 1, "legacy adoption must be idempotent across restarts");
+    assert.equal(agentConfigReads, 1, "persisted preferences must not depend on the deleted Engine config after reinstall");
+    assert.deepEqual(
+      await readFile(join(dataDir, "long-term-memory", "vault", "world", "world_visible.json")),
+      vaultBeforeUninstall,
+      "uninstall and reinstall must preserve exact vault bytes",
+    );
+    assert.deepEqual(
+      await readFile(join(dataDir, "long-term-memory", "config", "agent-settings.json")),
+      preferencesBeforeUninstall,
+      "uninstall and reinstall must preserve exact agent preference bytes",
+    );
+  } finally {
+    await cleanup?.();
     assert.equal(services.has("long-term-memory:runtime"), false, "cleanup must unregister runtime service");
     assert.equal(services.has("long-term-memory:storage"), false, "cleanup must unregister storage service");
     await rm(dataDir, { recursive: true, force: true });
