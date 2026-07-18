@@ -25,6 +25,10 @@ import {
   ltmIntegrityResponseSchema,
   ltmImportSourceNotesRequestSchema,
   ltmImportSourceNotesResponseSchema,
+  ltmIdentityRepairApplyRequestSchema,
+  ltmIdentityRepairApplyResponseSchema,
+  ltmIdentityRepairPreviewRequestSchema,
+  ltmIdentityRepairPreviewResponseSchema,
   ltmInteropPreviewRequestSchema,
   ltmInteropPreviewResponseSchema,
   ltmRepairRequestSchema,
@@ -59,11 +63,14 @@ import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
 import { importPackageInterop, previewPackageInterop } from "./interop.js";
+import { applyLtmIdentityRepairs,LtmIdentityRepairError,previewLtmIdentityRepairs } from "./identity-repair.js";
+import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
 
 const NOTE_BODY_LIMIT_BYTES=512*1024;
 const DRAFT_BODY_LIMIT_BYTES=512*1024;
 const SEARCH_BODY_LIMIT_BYTES=128*1024;
 const MAINTENANCE_BODY_LIMIT_BYTES=32*1024;
+const IDENTITY_REPAIR_BODY_LIMIT_BYTES=512*1024;
 const ltmIdentifierSchema=z.string().min(1).max(120).regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/);
 const scopedIds=z.preprocess((value)=>{const values=Array.isArray(value)?value:typeof value==="string"?value.split(","):[];return values.map(String).map((item)=>item.trim()).filter(Boolean);},z.array(z.string().min(1).max(120)).max(100).optional());
 const queryBoolean=z.preprocess((value)=>value==="true"?true:value==="false"?false:value,z.boolean().optional());
@@ -138,6 +145,8 @@ export function createLongTermMemoryRoutes(runtime:{root:string;storage:LongTerm
     app.post("/rebuild",async()=>rebuildLongTermMemoryIndexes({root}));
     app.get("/integrity",async()=>ltmIntegrityResponseSchema.parse(await checkLongTermMemoryIntegrity(root)));
     app.post<{Body:unknown}>("/repair",{bodyLimit:MAINTENANCE_BODY_LIMIT_BYTES},async(request)=>{const body=ltmRepairRequestSchema.parse(request.body);return ltmRepairResponseSchema.parse(await repairLongTermMemory(body.actions,root));});
+    app.post<{Body:unknown}>("/identity-repair/preview",{bodyLimit:MAINTENANCE_BODY_LIMIT_BYTES},async(request)=>{const body=ltmIdentityRepairPreviewRequestSchema.parse(request.body??{}),catalog=await loadTrustedLtmSubjectCatalog(body.scope,root);return ltmIdentityRepairPreviewResponseSchema.parse(previewLtmIdentityRepairs(catalog,body.scope));});
+    app.post<{Body:unknown}>("/identity-repair/apply",{bodyLimit:IDENTITY_REPAIR_BODY_LIMIT_BYTES},async(request,reply)=>{const body=ltmIdentityRepairApplyRequestSchema.parse(request.body??{});try{return ltmIdentityRepairApplyResponseSchema.parse(await applyLtmIdentityRepairs(body,{root,loadCatalog:()=>loadTrustedLtmSubjectCatalog(body.scope,root)}));}catch(error){return reply.status(error instanceof LtmIdentityRepairError?error.statusCode:500).send({error:error instanceof Error?error.message:"Failed to repair long-term memory identities",code:error instanceof LtmIdentityRepairError?error.code:"identity_repair_failed"});}});
     app.post<{Body:unknown}>("/search",{bodyLimit:SEARCH_BODY_LIMIT_BYTES},async(request)=>retrieveLongTermMemory({...searchBody.parse(request.body),root}));
     app.get<{Querystring:unknown}>("/drafts",async(request)=>draftStore.listDrafts(draftQuery.parse(request.query)));
     app.get<{Querystring:unknown}>("/drafts/pending-count",async(request)=>({count:(await draftStore.listDrafts({...draftQuery.parse(request.query),status:"pending"})).length}));

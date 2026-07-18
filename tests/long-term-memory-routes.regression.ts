@@ -83,6 +83,20 @@ async function main() {
     assert.equal(autoApplied.json().appliedMutationIds.length>0,true);
     assert.equal(autoApplied.json().draft.indexRebuildStatus,"not_requested");
     assert.equal(modelCalls,2);
+    for(const [id,createdAt,text] of [["char_mara_legacy_a","2026-07-15T00:00:00.000Z","Mara guards the eastern gate."],["char_mara_legacy_b","2026-07-16T00:00:00.000Z","Mara seals the western gate."]] as const){const response=await app.inject({method:"POST",url:"/api/long-term-memory/notes",headers,payload:{id,title:"Mara",type:"character",status:"active",modes:["roleplay"],scope:{chatId:"chat-a",chatIds:["chat-a"]},tags:[],keywords:[],createdAt,updatedAt:createdAt,links:[],sections:{facts:{text,updatedAt:createdAt}}}});assert.equal(response.statusCode,201,response.body);}
+    await storageService.storage.updateNote("world_route_fixture",{links:[{target:"char_mara_legacy_b",relation:"affects_character"}]});
+    const identityPreview=await app.inject({method:"POST",url:"/api/long-term-memory/identity-repair/preview",headers,payload:{scope:{chatId:"chat-a",chatIds:["chat-a"]}}});
+    assert.equal(identityPreview.statusCode,200,identityPreview.body);
+    const identityCandidate=identityPreview.json().candidates.find((candidate:any)=>candidate.duplicateNoteIds.includes("char_mara_legacy_b"));
+    assert.equal(identityCandidate.canonicalNoteId,"char_mara_legacy_a");
+    const identityApply=await app.inject({method:"POST",url:"/api/long-term-memory/identity-repair/apply",headers,payload:{scope:{chatId:"chat-a",chatIds:["chat-a"]},repairs:[{candidateId:identityCandidate.id,canonicalNoteId:identityCandidate.canonicalNoteId,excludedNoteIds:["char_mara"],sectionChoices:[]}]}});
+    assert.equal(identityApply.statusCode,200,identityApply.body);
+    assert.deepEqual(identityApply.json().repairs[0].archivedNoteIds,["char_mara_legacy_b"]);
+    assert.deepEqual((await storageService.storage.getNote("char_mara_legacy_a")).subjects,[{key:"character:character-mara",ref:{kind:"character",id:"character-mara"}}]);
+    assert.match((await storageService.storage.getNote("char_mara_legacy_a")).sections.facts.text,/western gate/);
+    assert.equal((await storageService.storage.getNote("char_mara_legacy_b")).status,"archived");
+    assert.equal((await storageService.storage.getNote("world_route_fixture")).links[0].target,"char_mara_legacy_a");
+    assert.equal(identityApply.json().integrity.ok,true);
     const preview=await app.inject({method:"POST",url:"/api/long-term-memory/import/preview",headers,payload:{source:"chats",limit:10}});
     assert.equal(preview.statusCode,200,preview.body);
     assert.equal(preview.json().samples.some((sample:any)=>sample.sourceId==="chat-a:summary-a"&&sample.freshness==="new"),true);
