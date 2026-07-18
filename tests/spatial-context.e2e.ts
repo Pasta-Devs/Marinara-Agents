@@ -1230,6 +1230,8 @@ test("global Hierarchical Maps home edits the current map location types", async
     await agentsPanel.locator('[data-agent-name="Hierarchical Maps"]').getByText("Hierarchical Maps", { exact: true }).click();
 
     const home = page.locator("[data-marinara-maps-home]");
+    const homeHeadings = await home.getByRole("heading", { level: 2 }).allTextContents();
+    expect(homeHeadings.indexOf("Generation prompt")).toBeLessThan(homeHeadings.indexOf("Location types"));
     await expect(home.getByRole("heading", { name: "Location types", exact: true })).toBeVisible();
     await expect(home.getByLabel("Location type 2 label")).toHaveValue("Settlement");
     await expect(home.getByLabel("Location type 2 label")).toHaveAttribute("readonly", "");
@@ -1263,6 +1265,17 @@ test("global Hierarchical Maps home edits the current map location types", async
       });
 
     await home.getByRole("button", { name: "Open map", exact: true }).click();
+    const worldMapOverlay = page.locator("[data-marinara-maps-world-overlay]");
+    await expect(worldMapOverlay.getByRole("heading", { name: "World map", exact: true })).toBeVisible();
+    const worldMap = worldMapOverlay.getByRole("region", { name: "Hierarchical world map" });
+    await expect(worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u })).toBeVisible();
+    await worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u }).click();
+    await expect(worldMap.getByRole("button", { name: "Set destination: Gloam Harbor" })).toBeVisible();
+    await worldMapOverlay.getByRole("button", { name: "Back to Hierarchical Maps" }).click();
+    await expect(home).toBeVisible();
+
+    await home.getByRole("button", { name: "Open map", exact: true }).click();
+    await worldMapOverlay.getByRole("button", { name: "Edit map", exact: true }).click();
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
     await workspace.getByRole("button", { name: "Location types" }).click();
     await expect(workspace.getByLabel("Profile name")).toHaveValue("Maritime hierarchy");
