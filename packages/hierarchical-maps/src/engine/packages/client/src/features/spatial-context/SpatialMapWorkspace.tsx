@@ -79,6 +79,14 @@ type ImportIdReport = {
   missing: Array<{ id: string; name: string }>;
 };
 
+type MapConfirmationOptions = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: "destructive";
+};
+
 interface SpatialMapWorkspaceProps {
   chatId: string;
   debugMode?: boolean;
@@ -86,18 +94,7 @@ interface SpatialMapWorkspaceProps {
   onClearPendingDraftReview?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenLorebook?: (lorebookId: string) => void;
-  confirmAction?: (options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-    tone?: "destructive";
-  }) => Promise<boolean>;
   onClose: () => void;
-}
-
-async function browserConfirm(options: { message: string }): Promise<boolean> {
-  return window.confirm(options.message);
 }
 
 function sortedChildren(definition: SpatialContextDefinition, parentId: string | null) {
@@ -140,7 +137,6 @@ export function SpatialMapWorkspace({
   onClearPendingDraftReview,
   onDirtyChange,
   onOpenLorebook,
-  confirmAction = browserConfirm,
   onClose,
 }: SpatialMapWorkspaceProps) {
   const spatial = useSpatialContext(chatId);
@@ -155,6 +151,9 @@ export function SpatialMapWorkspace({
   const [draftHierarchyProfile, setDraftHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
     defaultHierarchyProfile(),
   );
+  const [pendingConfirmation, setPendingConfirmation] = useState<MapConfirmationOptions | null>(null);
+  const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+  const confirmationCancelRef = useRef<HTMLButtonElement>(null);
   const [initialized, setInitialized] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [enteredParentId, setEnteredParentId] = useState<string | null>(null);
@@ -180,6 +179,44 @@ export function SpatialMapWorkspace({
   const [layoutEditing, setLayoutEditing] = useState(false);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
   const [typesEditorOpen, setTypesEditorOpen] = useState(false);
+
+  const resolveConfirmation = useCallback((confirmed: boolean) => {
+    const resolve = confirmationResolverRef.current;
+    confirmationResolverRef.current = null;
+    setPendingConfirmation(null);
+    resolve?.(confirmed);
+  }, []);
+
+  const confirmAction = useCallback((options: MapConfirmationOptions) => {
+    confirmationResolverRef.current?.(false);
+    return new Promise<boolean>((resolve) => {
+      confirmationResolverRef.current = resolve;
+      setPendingConfirmation(options);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!pendingConfirmation) return;
+    const focusFrame = window.requestAnimationFrame(() => confirmationCancelRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      resolveConfirmation(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [pendingConfirmation, resolveConfirmation]);
+
+  useEffect(
+    () => () => {
+      confirmationResolverRef.current?.(false);
+      confirmationResolverRef.current = null;
+    },
+    [],
+  );
 
   const ownerMode: SpatialOwnerMode = chat?.mode === "game" ? "game" : "roleplay";
   const gameMaps = useMemo(() => {
@@ -961,6 +998,56 @@ export function SpatialMapWorkspace({
       data-marinara-maps-workspace-root
       className="mari-editor-shell mari-editor-legacy-bridge relative z-[46] flex flex-1 flex-col overflow-hidden"
     >
+      {pendingConfirmation && (
+        <div
+          data-chat-floating-panel
+          data-marinara-maps-confirmation="true"
+          role="dialog"
+          aria-modal="true"
+          aria-label={pendingConfirmation.title}
+          aria-describedby="marinara-maps-confirmation-message"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--background)]/85 p-3 sm:p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) resolveConfirmation(false);
+          }}
+        >
+          <div className="max-h-[min(42rem,calc(100dvh-1.5rem))] w-full max-w-md overflow-y-auto rounded-xl border border-[var(--destructive)]/35 bg-[var(--background)] shadow-2xl">
+            <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--destructive)]/15 text-[var(--destructive)]">
+                <AlertCircle size="1.125rem" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold text-[var(--foreground)]">{pendingConfirmation.title}</h2>
+                <p className="mt-1 text-xs font-medium text-[var(--destructive)]">Destructive map action</p>
+              </div>
+            </div>
+            <p
+              id="marinara-maps-confirmation-message"
+              className="whitespace-pre-wrap px-4 py-4 text-sm leading-relaxed text-[var(--foreground)] sm:px-5"
+            >
+              {pendingConfirmation.message}
+            </p>
+            <div className="flex flex-col gap-2 border-t border-[var(--border)] px-4 py-4 sm:flex-row sm:justify-end sm:px-5">
+              <button
+                ref={confirmationCancelRef}
+                type="button"
+                onClick={() => resolveConfirmation(false)}
+                className="mari-chrome-control min-h-11 w-full px-4 text-sm sm:w-auto"
+              >
+                {pendingConfirmation.cancelLabel ?? "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => resolveConfirmation(true)}
+                className="mari-chrome-control mari-chrome-control--danger min-h-11 w-full px-4 text-sm sm:w-auto"
+              >
+                {pendingConfirmation.confirmLabel ?? "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mari-editor-header relative z-50">
         <button
           type="button"

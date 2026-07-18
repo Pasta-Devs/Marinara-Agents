@@ -1710,6 +1710,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expectMinimumInteractiveSize(deleteMap, "Delete map control");
     await deleteMap.click();
     const deleteDialog = page.getByRole("dialog", { name: "Delete this map and start over?" });
+    await expect(deleteDialog).toHaveAttribute("data-marinara-maps-confirmation", "true");
     await expect(deleteDialog).toContainText("Are you sure? This is dangerous.");
     await expect(deleteDialog).toContainText("Deleting replaces 4 saved locations");
     await expect(deleteDialog).toContainText("the deleted map cannot be restored unless you exported a backup");
@@ -1756,7 +1757,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
         statuses: ["active"],
       });
   } finally {
-    await expectDeleted(page, `/api/chats/${chat.id}`);
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
 });
 
@@ -2016,6 +2017,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expectMinimumInteractiveSize(deleteMap, "History-safe delete map control");
     await deleteMap.click();
     const protectedDeleteDialog = page.getByRole("dialog", { name: "Archive this map and start over?" });
+    await expect(protectedDeleteDialog).toHaveAttribute("data-marinara-maps-confirmation", "true");
     await expect(protectedDeleteDialog).toContainText("Are you sure? This is dangerous.");
     await expect(protectedDeleteDialog).toContainText("Campaign history uses this map");
     await expect(protectedDeleteDialog).toContainText("6 saved locations cannot be erased");
@@ -2070,7 +2072,7 @@ test("AI map expansion preserves a campaign map and its current location", async
       await expect(mobileMusicLayer.locator(".fixed")).toBeVisible();
     }
   } finally {
-    await expectDeleted(page, `/api/chats/${chat.id}`);
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
 });
 
