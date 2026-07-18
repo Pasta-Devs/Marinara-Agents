@@ -932,9 +932,9 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
+      "iconUrl": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/feature/long-term-memory-package/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.0.0.zip",
+        "url": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/feature/long-term-memory-package/artifacts/long-term-memory-1.0.0.zip",
         "sha256": "60adada117fd2d52fb81ae12ea180dd5590fcab2f2e8bd876ee6589d69b38455",
         "bytes": 243015
       },
