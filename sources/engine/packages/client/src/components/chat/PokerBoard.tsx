@@ -171,9 +171,9 @@ export function PokerBoard({ chatId }: Props) {
   const move = usePokerMove(chatId);
   const resign = useResignPoker(chatId);
 
-  // Hydrate the table on mount / chat switch (no-op if no active game).
+  // Keep the table query active so package SSE invalidations refetch bot moves.
   const active = !!current && current.chatId === chatId;
-  usePokerState(active ? null : chatId);
+  usePokerState(chatId);
 
   const view = active ? current : null;
   const disabled = isStreaming || move.isPending || resign.isPending;
