@@ -81,7 +81,7 @@ export default function SourcesWorkspace({
   const [transferError, setTransferError] = useState("");
 
   const scopeTargets = useQuery({
-    queryKey: [...queryKeys.root, "scope-targets", props.chatId],
+    queryKey: queryKeys.scopeTargets(props.chatId),
     queryFn: () =>
       request<ScopeTargets>(
         `/scope-targets${props.chatId ? `?chatId=${encodeURIComponent(props.chatId)}` : ""}`,

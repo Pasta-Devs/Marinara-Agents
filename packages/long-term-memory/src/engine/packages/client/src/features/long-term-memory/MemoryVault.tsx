@@ -1030,7 +1030,7 @@ export default function MemoryVault({
                         )
                       }
                     >
-                    {link.relation.replaceAll("_", " ")}
+                      {link.relation.replaceAll("_", " ")}
                       {" -> "}
                       {memoryLabel(allNotes.find((note) => note.id === link.target))}
                     </Pill>

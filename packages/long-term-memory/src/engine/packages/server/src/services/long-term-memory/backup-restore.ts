@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
   DEFAULT_LTM_GLOBAL_SETTINGS,
