@@ -14,10 +14,6 @@ import {
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
-import {
-  computeGameSourceHash,
-  renderGameSourceText,
-} from "./game-journal-mapper.js";
 import { nowIso } from "./ltm-utils.js";
 import {
   getPackageLanguageModels,
@@ -162,10 +158,10 @@ function summaries(metadata: Record<string, unknown>) {
         },
       ];
     }),
-    legacy = text(metadata.summary);
-  return entries.length
-    ? entries
-    : legacy
+    legacy = text(metadata.summary),
+    ordinary = entries.length
+      ? entries
+      : legacy
       ? [
           {
             id: `summary-legacy-${hash(legacy)}`,
@@ -174,15 +170,35 @@ function summaries(metadata: Record<string, unknown>) {
             origin: "legacy",
           },
         ]
+      : [],
+    sessions = Array.isArray(metadata.gamePreviousSessionSummaries)
+      ? metadata.gamePreviousSessionSummaries.map(object).flatMap((session, index) => {
+          const sessionNumber = Number(session.sessionNumber),
+            id = Number.isFinite(sessionNumber)
+              ? `game-session-${sessionNumber}`
+              : `game-session-${hash(JSON.stringify(session))}`,
+            fields: Array<[string, unknown]> = [
+              ["Summary", session.summary],
+              ["Resume point", session.resumePoint],
+              ["Party dynamics", session.partyDynamics],
+              ["Party state", session.partyState],
+              ["Key discoveries", stringArray(session.keyDiscoveries).join("\n")],
+              ["Character moments", stringArray(session.characterMoments).join("\n")],
+              ["Little details", stringArray(session.littleDetails).join("\n")],
+              ["NPC updates", stringArray(session.npcUpdates).join("\n")],
+              ["Next session request", session.nextSessionRequest],
+            ],
+            content = fields.flatMap(([label, value]) => text(value) ? [`${label}:\n${text(value)}`] : []).join("\n\n");
+          return content ? [{ id, content, range: `game session ${Number.isFinite(sessionNumber) ? sessionNumber : index + 1}`, origin: "game_session" }] : [];
+        })
       : [];
+  return [...ordinary, ...sessions];
 }
 function scoped(candidate: Candidate, override?: LtmScope) {
   return withMergedLtmScopeLinks({ ...candidate.scope, ...override }, {});
 }
 function mode(candidate: Candidate, value?: LtmMode) {
-  return !value || candidate.sourceTag === "imported_game_journal"
-    ? candidate
-    : { ...candidate, modes: [value], extractionMode: value };
+  return !value ? candidate : { ...candidate, modes: [value], extractionMode: value };
 }
 function fingerprint(candidate: Candidate, scope: LtmScope) {
   return extractionFingerprintForLtmSourceMaterial({
@@ -340,43 +356,6 @@ async function candidates(
         continue;
       const metadata = object(chat.metadata),
         chatMode = ltmModeForChatMode(chat.mode);
-      if (
-        chatMode === "game" &&
-        (metadata.gameJournal ||
-          (Array.isArray(metadata.gamePreviousSessionSummaries) &&
-            metadata.gamePreviousSessionSummaries.length))
-      ) {
-        const session = Array.isArray(metadata.gamePreviousSessionSummaries)
-            ? metadata.gamePreviousSessionSummaries
-            : [],
-          journal = metadata.gameJournal ?? null,
-          sourceText = renderGameSourceText(journal, session),
-          sourceId = `${chat.id}:game_journal`,
-          provenance = { kind: "game_journal" as const, sourceId: chat.id };
-        result.push({
-          sourceId,
-          title: `Game Journal - ${chat.name || "Game"}`,
-          sourceText,
-          sourceNoteId: sourceNoteIdForProvenance(provenance),
-          legacySourceNoteIds: [
-            `source_import_chat_${identifier(chat.name, "chat")}_${hash(`${chat.id}_game_journal`)}`,
-          ],
-          sourceTag: "imported_game_journal",
-          importTags: [],
-          evidence: [
-            `chat:${chat.id}`,
-            "game_journal",
-            `game_source_hash:${computeGameSourceHash(journal, session)}`,
-          ],
-          provenance,
-          scope: resolveChatLtmScope(chat),
-          modes: ["game"],
-          extractionMode: "game",
-          mutationCount: 0,
-          summary: `Direct-ingest game journal for ${chat.name || "Game"}`,
-        });
-        continue;
-      }
       for (const entry of summaries(metadata)) {
         const sourceId = `${chat.id}:${entry.id}`,
           provenance = {
@@ -517,11 +496,8 @@ export async function importPackageInterop(
     resolvedIds = new Set(rows.map((item) => item.sourceId)),
     missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id));
   throwIfAborted(signal);
-  const needsModel = rows.some(
-      (item) => item.sourceTag !== "imported_game_journal",
-    ),
-    resolved = needsModel
-      ? await getPackageLanguageModels().resolveForRequest({
+  const resolved = rows.length
+       ? await getPackageLanguageModels().resolveForRequest({
           connectionId: request.connectionId,
           model: request.model,
         })

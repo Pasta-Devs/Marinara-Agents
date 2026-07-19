@@ -7,7 +7,7 @@ import {
   type LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { recordLtmDebugEvent, withLtmDebugOperation } from "./debug-log.js";
-import { groupLtmDraftMutationsByNote, LtmDraftProjectionError, projectLtmDraftMutationGroup } from "./draft-projector.js";
+import { groupLtmDraftMutationsByNote, LtmDraftProjectionError, projectLtmDraftMutationGroup, projectLtmDraftOntoNotes } from "./draft-projector.js";
 import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { nowIso, uniqueStrings } from "./ltm-utils.js";
 import { logger } from "./package-runtime.js";
@@ -67,6 +67,25 @@ async function preflight(storage: LongTermMemoryStorage, draft: LtmExtractionDra
     if (!canUpdateLtmScopedTarget(mutation.note.scope, draft.scope)) throw new Error(`Long-term memory draft cannot create ${mutation.note.id} because its scope does not match the draft.`);
     const note = existing.get(mutation.note.id);
     if (note && !canUpdateLtmScopedTarget(note.scope, mutation.note.scope)) throw new Error(`Long-term memory draft cannot merge scoped create ${mutation.note.id} into an existing note from another scope.`);
+  }
+  const baseNotes = new Map(existing);
+  const projected = projectLtmDraftOntoNotes({ notes: baseNotes, mutations, context: { source: draft.source, scope: draft.scope, modes: draft.modes }, timestamp: nowIso() });
+  const eventIds = new Set(
+    [...projected.notes.values()].flatMap((note) =>
+      note.type === "timeline_event" && note.links.some((link) => link.relation === "extracted_from" && link.target === draft.source.sourceNoteId)
+        ? [note.id]
+        : [],
+    ),
+  );
+  const affectedIds = new Set(mutations.map((mutation) => mutation.kind === "create_note" ? mutation.note.id : mutation.noteId));
+  for (const noteId of affectedIds) {
+    const note = projected.notes.get(noteId);
+    if (!note) continue;
+    if (note.type === "timeline_event") {
+      if (!eventIds.has(note.id)) throw new Error(`Timeline event ${note.id} must link to draft source ${draft.source.sourceNoteId}.`);
+    } else if (!note.links.some((link) => eventIds.has(link.target))) {
+      throw new Error(`Long-term memory ${note.id} must link to a timeline event created from the same source.`);
+    }
   }
 }
 
@@ -129,6 +148,35 @@ async function applyInner(id: string, options: ApplyLtmDraftOptions & { operatio
       const existing = await storage.getNotesByIds(dependencies.map((mutation) => mutation.note.id));
       const included = dependencies.filter((mutation) => !existing.has(mutation.note.id));
       autoIncludedMutationIds.push(...included.map((mutation) => mutation.id)); selected = [...included, ...selected];
+      let added = true;
+      while (added) {
+        added = false;
+        const eventCreateByNoteId = new Map(draft.mutations.flatMap((mutation) => mutation.kind === "create_note" && mutation.note.type === "timeline_event" ? [[mutation.note.id, mutation] as const] : []));
+        const selectedNoteIds = new Set(selected.map((mutation) => mutation.kind === "create_note" ? mutation.note.id : mutation.noteId));
+        const selectedEventTargets = new Set(selected.flatMap((mutation) => mutation.kind === "create_note" ? mutation.note.links.filter((link) => eventCreateByNoteId.has(link.target)).map((link) => link.target) : mutation.kind === "add_link" && eventCreateByNoteId.has(mutation.link.target) ? [mutation.link.target] : []));
+        const eventLinks = draft.mutations.filter((mutation): mutation is Extract<LtmDraftMutation, { kind: "add_link" }> => mutation.kind === "add_link" && selectedNoteIds.has(mutation.noteId) && eventCreateByNoteId.has(mutation.link.target));
+        for (const link of eventLinks) {
+          if (!selected.some((mutation) => mutation.id === link.id)) {
+            selected.push(link);
+            autoIncludedMutationIds.push(link.id);
+            added = true;
+          }
+          const create = eventCreateByNoteId.get(link.link.target);
+          if (create && !selected.some((mutation) => mutation.id === create.id)) {
+            selected.unshift(create);
+            autoIncludedMutationIds.push(create.id);
+            added = true;
+          }
+        }
+        for (const target of selectedEventTargets) {
+          const create = eventCreateByNoteId.get(target);
+          if (create && !selected.some((mutation) => mutation.id === create.id)) {
+            selected.unshift(create);
+            autoIncludedMutationIds.push(create.id);
+            added = true;
+          }
+        }
+      }
     }
     selected = selected.filter((mutation) => !previouslyApplied.has(mutation.id));
     const skippedMutationIds = draft.mutations.filter((mutation) => !previouslyApplied.has(mutation.id) && !selected.some((item) => item.id === mutation.id)).map((mutation) => mutation.id);

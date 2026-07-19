@@ -114,12 +114,12 @@ async function captureEngineSources(
 const features = [
   {
     id: "long-term-memory",
-    version: "1.0.8",
+    version: "1.0.9",
     minEngineVersion: "2.3.2",
     maxEngineExclusive: "2.4.0",
     name: "Long-Term Memory",
     description:
-      "Captures finalized turns and recalls relevant context from a durable package-owned memory vault.",
+      "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "visual_novel", "game"],

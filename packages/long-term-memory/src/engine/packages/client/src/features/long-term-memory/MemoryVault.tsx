@@ -32,7 +32,6 @@ import type { LongTermMemoryDestinationProps } from "./types";
 import { memoryLabel, noteTypeLabel, scopeTargetLabel } from "./display-labels";
 
 const noteTypes: readonly LtmNoteType[] = [
-  "source",
   "timeline_event",
   "character",
   "relationship",
@@ -467,8 +466,9 @@ export default function MemoryVault({
               provenance,
               extractionFingerprint,
               extracted,
+              sections,
               ...note
-            }) => note)(draft),
+            }) => (draft.type === "source" ? note : { ...note, sections }))(draft),
           );
       const next = clone(response.note);
       setDraft(next);
@@ -1002,16 +1002,20 @@ export default function MemoryVault({
                   <h4 className="mr-auto text-xs font-medium">
                     Memory sections
                   </h4>
-                  <input
-                    className={`${inputClass} w-40`}
-                    value={sectionKey}
-                    onChange={(event) => setSectionKey(event.target.value)}
-                    placeholder="new_section"
-                    aria-label="New section name"
-                  />
-                  <Button onClick={addSection} disabled={!sectionKey.trim()}>
-                    Add section
-                  </Button>
+                  {draft.type !== "source" ? (
+                    <>
+                      <input
+                        className={`${inputClass} w-40`}
+                        value={sectionKey}
+                        onChange={(event) => setSectionKey(event.target.value)}
+                        placeholder="new_section"
+                        aria-label="New section name"
+                      />
+                      <Button onClick={addSection} disabled={!sectionKey.trim()}>
+                        Add section
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
                 {Object.entries(draft.sections).map(([key, section]) => (
                   <article
@@ -1025,36 +1029,39 @@ export default function MemoryVault({
                       >
                         {title(key)}
                       </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = { ...draft.sections };
-                          delete next[key];
-                          update("sections", next);
-                        }}
-                        aria-label={`Remove ${key} section`}
-                        className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
-                      >
-                        <Trash2 size="0.75rem" />
-                      </button>
+                      {draft.type !== "source" ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = { ...draft.sections };
+                            delete next[key];
+                            update("sections", next);
+                          }}
+                          aria-label={`Remove ${key} section`}
+                          className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
+                        >
+                          <Trash2 size="0.75rem" />
+                        </button>
+                      ) : null}
                     </div>
-                    <textarea
-                      id={`ltm-section-${key}`}
-                      data-ltm-field="section"
-                      className={`${inputClass} min-h-28 py-2`}
-                      value={section.text}
-                      onChange={(event) =>
-                        update("sections", {
-                          ...draft.sections,
-                          [key]: {
-                            ...section,
-                            text: event.target.value,
-                            updatedAt: new Date().toISOString(),
-                          },
-                        })
-                      }
-                    />
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <fieldset disabled={draft.type === "source"} className="space-y-2">
+                      <textarea
+                        id={`ltm-section-${key}`}
+                        data-ltm-field="section"
+                        className={`${inputClass} min-h-28 py-2`}
+                        value={section.text}
+                        onChange={(event) =>
+                          update("sections", {
+                            ...draft.sections,
+                            [key]: {
+                              ...section,
+                              text: event.target.value,
+                              updatedAt: new Date().toISOString(),
+                            },
+                          })
+                        }
+                      />
+                      <div className="grid gap-2 sm:grid-cols-3">
                       <label className="text-xs">
                         Importance
                         <select
@@ -1104,18 +1111,19 @@ export default function MemoryVault({
                           })
                         }
                       />
-                    </div>
-                    <TokenEditor
-                      label="Evidence"
-                      values={section.evidence ?? []}
-                      placeholder="Add evidence"
-                      onChange={(evidence) =>
-                        update("sections", {
-                          ...draft.sections,
-                          [key]: { ...section, evidence },
-                        })
-                      }
-                    />
+                      </div>
+                      <TokenEditor
+                        label="Evidence"
+                        values={section.evidence ?? []}
+                        placeholder="Add evidence"
+                        onChange={(evidence) =>
+                          update("sections", {
+                            ...draft.sections,
+                            [key]: { ...section, evidence },
+                          })
+                        }
+                      />
+                    </fieldset>
                   </article>
                 ))}
               </section>

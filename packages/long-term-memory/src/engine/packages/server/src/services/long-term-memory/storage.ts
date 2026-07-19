@@ -49,6 +49,7 @@ import {
 import { longTermMemoryUsagePath, readLongTermMemoryUsage } from "./usage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { quarantineLegacyCapturedTurnSources } from "./legacy-source-quarantine.js";
 import {
   extractionFingerprintForLtmSourceNote,
   sourceHashForLtmSourceNote,
@@ -116,6 +117,7 @@ export class LongTermMemoryStorage {
         ),
       ]);
       await recoverLtmMutations(this.root);
+      await quarantineLegacyCapturedTurnSources(this.root);
       const configs = [
         [
           safeJoin(dirs.config, "policies.json"),

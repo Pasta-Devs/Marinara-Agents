@@ -212,10 +212,12 @@ export function normalizeStructuredSummaryEvidenceUnits({
 }): StructuredSummaryNormalizationResult {
   const sections = parseStructuredSections(sourceText);
   if (sections.length === 0) {
+    const normalized = normalizeCanonicalTargetLinks(units, units.map(normalizeTargetShapeUnit));
+    const sourceGraph = normalizeSourceEventGraph(normalized, sourceNote, sourceHash);
     return {
-      units: normalizeCanonicalTargetLinks(units, units.map(normalizeTargetShapeUnit)),
+      units: sourceGraph,
       structured: false,
-      addedUnits: 0,
+      addedUnits: sourceGraph.length - normalized.length,
     };
   }
 
@@ -226,10 +228,11 @@ export function normalizeStructuredSummaryEvidenceUnits({
     units.map((unit) => normalizeUnit(unit, hints, relationshipIdentityKey)),
   );
   if (!addStructuredUnits) {
+    const sourceGraph = normalizeSourceEventGraph(normalized, sourceNote, sourceHash);
     return {
-      units: normalized,
+      units: sourceGraph,
       structured: true,
-      addedUnits: 0,
+      addedUnits: sourceGraph.length - normalized.length,
     };
   }
   const withStructuredRelationships = maybeAddStructuredRelationshipUnits({
@@ -260,11 +263,86 @@ export function normalizeStructuredSummaryEvidenceUnits({
     sourceHash,
   });
 
+  const sourceGraph = normalizeSourceEventGraph(withTone, sourceNote, sourceHash);
   return {
-    units: withTone,
+    units: sourceGraph,
     structured: true,
-    addedUnits: withTone.length - normalized.length,
+    addedUnits: sourceGraph.length - normalized.length,
   };
+}
+
+function normalizeSourceEventGraph(
+  units: LtmEvidenceUnit[],
+  sourceNote: LtmNote | undefined,
+  sourceHash: string,
+) {
+  if (!sourceNote?.provenance) return units;
+  const sourceLink = { relation: "extracted_from" as const, target: sourceNote.id };
+
+  if (sourceNote.provenance.kind !== "chat_summary") {
+    const subjectId = `source_assertion_${createHash("sha256").update(sourceNote.id).digest("hex").slice(0, 12)}`;
+    const eventId = noteIdForEvidenceUnit({ bucket: "timeline_event", subjectId, sectionKey: "event" });
+    const label = sourceNote.provenance.kind === "character" ? "Character record" : "Lore established";
+    const assertion: LtmEvidenceUnit = {
+      id: deterministicUuid(`${sourceNote.id}:assertion`),
+      bucket: "timeline_event",
+      subjectId,
+      sectionKey: "event",
+      text: `${label}: ${sourceNote.title ?? sourceNote.provenance.entryId ?? sourceNote.provenance.sourceId}`,
+      importance: "moderate",
+      keywords: [],
+      evidence: sourceEvidence(sourceNote),
+      confidence: 1,
+      salience: 0.5,
+      status: "active",
+      links: [sourceLink],
+      sourceHash,
+      subjectNames: [],
+    };
+    const timelineTargets = new Set(
+      units
+        .filter((unit) => unit.bucket === "timeline_event")
+        .map(noteIdForEvidenceUnit),
+    );
+    const remapLinks = (unit: LtmEvidenceUnit) => ({
+      ...unit,
+      links: uniqueLinks([
+        ...unit.links.map((link) => ({
+          ...link,
+          target: timelineTargets.has(link.target) ? eventId : link.target,
+        })),
+        ...(unit.bucket === "timeline_event"
+          ? []
+          : [{
+              relation: unit.bucket === "relationship_state" ? "caused_by" as const : "evidenced_by" as const,
+              target: eventId,
+            }]),
+      ]),
+    });
+    const normalized = units.map((unit) =>
+      unit.bucket === "timeline_event" ? assertion : remapLinks(unit),
+    );
+    return timelineTargets.size ? normalized : [assertion, ...normalized];
+  }
+
+  const suffix = createHash("sha256").update(sourceNote.id).digest("hex").slice(0, 10);
+  const timelineTargets = new Map<string, string>();
+  const namespaced = units.map((unit) => {
+    if (unit.bucket !== "timeline_event") return unit;
+    const oldId = noteIdForEvidenceUnit(unit);
+    const next = unit.subjectId.endsWith(`_${suffix}`)
+      ? unit
+      : { ...unit, subjectId: `${unit.subjectId}_${suffix}` };
+    timelineTargets.set(oldId, noteIdForEvidenceUnit(next));
+    return next;
+  });
+  return namespaced.map((unit) => ({
+    ...unit,
+    links: uniqueLinks([
+      ...unit.links.map((link) => ({ ...link, target: timelineTargets.get(link.target) ?? link.target })),
+      ...(unit.bucket === "timeline_event" ? [sourceLink] : []),
+    ]),
+  }));
 }
 
 function normalizeTargetShapeUnit(unit: LtmEvidenceUnit): LtmEvidenceUnit {

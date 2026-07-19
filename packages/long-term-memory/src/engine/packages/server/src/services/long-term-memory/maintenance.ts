@@ -129,7 +129,7 @@ async function checkRecallIndex(root: string, notes: LtmNote[], issues: LtmInteg
   }
 
   let health: LtmIndexHealth = "healthy";
-  const sourceHash = stableJsonHash(chunkNotes(notes, { includeSourceNotes: true }));
+  const sourceHash = stableJsonHash(chunkNotes(notes, { includeSourceNotes: false }));
   if (index.sourceHash !== sourceHash) {
     health = "stale";
     issues.push({
@@ -298,7 +298,6 @@ function importedSourceTitleFromNote(note: LtmNote) {
     return messageRange ? `${chatName}, msgs ${messageRange}` : chatName;
   }
   const name = titleCaseFromIdentifier(stripImportPrefix(note.id));
-  if (note.tags.includes("imported_game_journal")) return `Game Journal \u2014 ${name}`;
   if (note.tags.includes("imported_character")) return `Character \u2014 ${name}`;
   if (note.tags.includes("imported_lorebook")) return `Lorebook \u2014 ${name}`;
   return name || "Imported source";

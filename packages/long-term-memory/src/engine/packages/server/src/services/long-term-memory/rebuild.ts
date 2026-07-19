@@ -55,7 +55,7 @@ export async function rebuildLongTermMemoryIndexes(
   const root = options.root ?? getLongTermMemoryRoot();
   return withLtmVaultLock(root,async()=>{
     const notes = await new LongTermMemoryStorage(root).listNotes();
-    const chunks = chunkNotes(notes, { includeSourceNotes: true });
+    const chunks = chunkNotes(notes, { includeSourceNotes: false });
     const vectors = await embedLongTermMemoryTexts(chunks.map((chunk) => chunk.text), options);
     const usableVectors =
       vectors?.length === chunks.length && vectors.every((vector) => vector.length > 0) ? vectors : null;
@@ -92,7 +92,7 @@ export async function loadOrRebuildLongTermMemoryIndexes(root = getLongTermMemor
   try {
     const index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
     const notes = await new LongTermMemoryStorage(root).listNotes();
-    if (index.sourceHash !== stableJsonHash(chunkNotes(notes, { includeSourceNotes: true }))) {
+    if (index.sourceHash !== stableJsonHash(chunkNotes(notes, { includeSourceNotes: false }))) {
       throw new Error("Stale long-term memory recall index.");
     }
     return index;

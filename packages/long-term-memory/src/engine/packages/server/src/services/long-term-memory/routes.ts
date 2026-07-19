@@ -156,7 +156,7 @@ const createNoteBody = z
   .object({
     id: ltmNoteIdSchema,
     title: ltmNoteTitleSchema.optional(),
-    type: ltmNoteTypeSchema,
+    type: ltmNoteTypeSchema.exclude(["source"]),
     status: ltmStatusSchema,
     modes: z.array(ltmModeSchema).min(1).max(8),
     scope: ltmScopeSchema.default({}),
@@ -565,9 +565,7 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply.status(404).send({ error: "Chat not found" });
         const operationId = randomUUID();
         try {
-          const resolved = sourceNote.tags.includes("imported_game_journal")
-            ? null
-            : await getPackageLanguageModels().resolveForRequest({
+          const resolved = await getPackageLanguageModels().resolveForRequest({
                 connectionId: body.connectionId,
                 chatConnectionId: chat?.connectionId ?? null,
                 model: body.model,
@@ -614,9 +612,7 @@ export function createLongTermMemoryRoutes(runtime: {
               ? error.message
               : "Failed to extract long-term memory from source note";
           logger.error(error, "[ltm] Source note extraction route failed");
-          const status = sourceNote.tags.includes("imported_game_journal")
-            ? 502
-            : extractionErrorStatus(message);
+          const status = extractionErrorStatus(message);
           return reply.status(status).send({ error: message });
         }
       },
@@ -765,9 +761,10 @@ export function createLongTermMemoryRoutes(runtime: {
       "/notes",
       { bodyLimit: NOTE_BODY_LIMIT_BYTES },
       async (request, reply) => {
-        const body = createNoteBody.parse(request.body);
+        const parsed = createNoteBody.safeParse(request.body);
+        if (!parsed.success) return reply.status(400).send({ error: parsed.error.message });
         try {
-          const note = await storage.createNote(body);
+          const note = await storage.createNote(parsed.data);
           const rebuild = await rebuildAfterMutation();
           return reply.status(201).send({ note, rebuild });
         } catch (error) {
@@ -785,14 +782,17 @@ export function createLongTermMemoryRoutes(runtime: {
       { bodyLimit: NOTE_BODY_LIMIT_BYTES },
       async (request, reply) => {
         const id = ltmNoteIdSchema.parse(request.params.id);
-        if (!(await storage.getNote(id)))
+        const existing = await storage.getNote(id);
+        if (!existing)
           return reply
             .status(404)
             .send({ error: "Long-term memory note not found" });
-        const note = await storage.updateNote(
-          id,
-          updateNoteBody.parse(request.body),
-        );
+        const patch = updateNoteBody.parse(request.body);
+        if (existing.type === "source" && patch.sections !== undefined)
+          return reply.status(400).send({
+            error: "Imported source content can only be updated by refreshing its source.",
+          });
+        const note = await storage.updateNote(id, patch);
         const rebuild = await rebuildAfterMutation();
         return { note, rebuild };
       },
@@ -1019,7 +1019,7 @@ export function createLongTermMemoryRoutes(runtime: {
         return {
           deleted: true,
           draftId: id,
-          mutationIds: body.mutationIds,
+          mutationIds: result.mutationIds,
           draft: result.draft,
         };
       },

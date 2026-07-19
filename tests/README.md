@@ -31,8 +31,8 @@ pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/lo
 
 `long-term-memory-runtime.regression.ts` proves keyword-only package recall,
 scope filtering, empty recall, malformed-index recovery, receipt idempotence,
-null-receipt regeneration accounting, deterministic finalized-turn capture,
-continuation and regeneration-swipe handling, and service activation cleanup:
+null-receipt regeneration accounting, source-note recall exclusion,
+and service activation cleanup:
 
 ```bash
 cd ../Marinara-Engine

@@ -10,8 +10,8 @@
   },
   "id": "long-term-memory",
   "name": "Long-Term Memory",
-  "version": "1.0.8",
-  "description": "Captures finalized turns and recalls relevant context from a durable package-owned memory vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
+  "version": "1.0.9",
+  "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
   "engine": {
     "min": "2.3.2",
     "maxExclusive": "2.4.0"
@@ -37,18 +37,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "806f4b5ed6759f96d96e1b828d1637666d2baa5950c9a8d34c47be5a9fc8aac7",
-      "bytes": 668
+      "sha256": "0adc78f6b6bae09cdecbff6b266fe5940c2f420410f1fe551d7ec123e2c36987",
+      "bytes": 710
     },
     {
       "path": "server.mjs",
-      "sha256": "ec2f421aeedce46dfa0330e0025fe51c321324343cdef385faf2482082201077",
-      "bytes": 379700
+      "sha256": "d8820ad0ad7f29c78fc4b042ba9f1e119550ab2983639fbc78f910cbb8f81be3",
+      "bytes": 371801
     },
     {
       "path": "client.js",
-      "sha256": "623f50515cc61c5c3ce8b3e2c1b514ff6d9105274ecfb4b16e26c45c2102fda1",
-      "bytes": 580845
+      "sha256": "0188f4072e0267ecf195d313a67b9360ab6b8b41f13ce0eff9f53b81ce96946d",
+      "bytes": 580757
     }
   ],
   "permissions": [

@@ -44,9 +44,6 @@ export function inferSourceProvenance(
 
   const sourceId = evidenceValue(evidence, "chat:");
   if (!sourceId) return null;
-  if (note.tags.includes("imported_game_journal")) {
-    return { kind: "game_journal", sourceId } satisfies LtmSourceProvenance;
-  }
   if (note.tags.includes("imported_chat")) {
     const entryId = evidenceValue(evidence, "summary_entry:");
     return entryId

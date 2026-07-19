@@ -6,7 +6,8 @@ import { join } from "node:path";
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);
-  const { longTermMemoryRecallIndexPath } = await import(`${source}/rebuild.ts`);
+  const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
+  const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const services = new Map<string, any>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
@@ -105,6 +106,21 @@ async function main() {
     await storage.createNote(note("world_visible", "chat-a", "The cobalt archive key is beneath the observatory."));
     await storage.createNote(note("world_visible_second", "chat-a", "The cobalt archive has a brass warding seal."));
     await storage.createNote(note("world_hidden", "chat-b", "The cobalt archive key is hidden in another chat."));
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const thresholded = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "world_visible cobalt archive",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      minScore: 0.75,
+      maxChunks: 10,
+      maxTokens: 4096,
+    });
+    assert.deepEqual(
+      thresholded.chunks.map((chunk: any) => chunk.chunk.noteId),
+      ["world_visible"],
+      "minimum score must apply to fused relevance, not a candidate's strongest lane",
+    );
 
     const input = {
       chatId: "chat-a",
@@ -151,55 +167,21 @@ async function main() {
     assert.match(recovered.text, /beneath the observatory/, "malformed indexes must rebuild from canonical notes");
     assert.equal(JSON.parse(await readFile(longTermMemoryRecallIndexPath(storage.root), "utf8")).version, 1);
 
-    const finalized = {
-      chatId: "chat-a",
-      chatMode: "visual_novel",
-      messageId: "message-1",
-      swipeIndex: 0,
-      content: "The brass observatory door opens.",
-      characterId: "character-1",
-      regenerate: false,
-      continuation: false,
-    };
-    const created = await runtime.onTurnFinalized(finalized);
-    assert.equal(created.created, true, "a finalized assistant turn must create a source note");
-    assert.deepEqual(created.note.modes, ["roleplay"], "visual novel capture must use the roleplay retrieval mode");
-    assert.deepEqual(created.note.scope, {
-      chatId: "chat-a",
-      chatIds: ["chat-a"],
-      characterIds: ["character-1"],
+    await storage.createNote({
+      id: "source_chat_summary_runtime",
+      title: "Hidden source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary", "imported_chat"],
+      keywords: [],
+      links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "runtime" },
+      sections: { source: { text: "A blue flame appears inside.", updatedAt: "2026-07-17T00:00:00.000Z" } },
     });
-    const duplicate = await runtime.onTurnFinalized(finalized);
-    assert.equal(duplicate.changed, false, "duplicate finalized notifications must be no-ops");
-    const continued = await runtime.onTurnFinalized({
-      ...finalized,
-      content: "The brass observatory door opens. A blue flame appears inside.",
-      continuation: true,
-    });
-    assert.equal(continued.created, false, "continuations must update the existing swipe source");
-    assert.equal(continued.note.version, 2);
-    assert.match(continued.note.sections.source.text, /blue flame/);
-    const regeneratedSwipe = await runtime.onTurnFinalized({
-      ...finalized,
-      swipeIndex: 1,
-      content: "The brass observatory door remains sealed.",
-      regenerate: true,
-    });
-    assert.equal(regeneratedSwipe.created, true, "a new regeneration swipe must create a distinct source");
-    assert.notEqual(regeneratedSwipe.note.id, continued.note.id);
-    assert.equal((await storage.listNotes()).filter((candidate: any) => candidate.type === "source").length, 2);
-    const capturedRecall = await runtime.recall({
-      ...input,
-      messages: [{ role: "user", content: "What appeared as a blue flame?" }],
-    });
-    assert.match(capturedRecall.text, /blue flame/, "captured finalized turns must participate in recall");
-    const longTurn = await runtime.onTurnFinalized({
-      ...finalized,
-      messageId: "message-long",
-      content: `${"a".repeat(24_000)}${"b".repeat(100)}`,
-    });
-    assert.equal(longTurn.note.sections.source.text.length, 24_000);
-    assert.equal(longTurn.note.sections.source_2.text.length, 100, "long turns must be captured without truncation");
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
+    assert.equal(await runtime.recall({ ...input, messages: [{ role: "user", content: "What appeared as a blue flame?" }] }), null, "source notes must not participate in recall");
 
     const vaultBeforeUninstall = await readFile(join(dataDir, "long-term-memory", "vault", "world", "world_visible.json"));
     const preferencesBeforeUninstall = await readFile(join(dataDir, "long-term-memory", "config", "agent-settings.json"));
@@ -228,7 +210,7 @@ async function main() {
     await rm(dataDir, { recursive: true, force: true });
   }
 
-  process.stdout.write("Long-Term Memory runtime regression: recall, receipts, finalized capture, activation cleanup ok\n");
+  process.stdout.write("Long-Term Memory runtime regression: recall, receipts, source exclusion, activation cleanup ok\n");
 }
 
 void main().catch((error) => {

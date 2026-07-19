@@ -93,10 +93,11 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     }
   }
   const chunksById = new Map(Object.values(index.metadata.chunks).map((chunk) => [chunk.id, chunk]));
-  const ranked = reciprocalRankFuse(lanes).filter((candidate) => (candidate.normalizedScore ?? 0) >= (input.minScore ?? 0));
+  const ranked = reciprocalRankFuse(lanes);
   const budgeted = applyLtmBudget(ranked, chunksById, {
     maxChunks: input.maxChunks ?? 20,
     maxTokens: input.maxTokens ?? 4096,
+    normalizedScoreThreshold: input.minScore,
     dedupeExactText: true,
   });
   return { ...budgeted, embeddingsAvailable, warnings: [] as string[] };
