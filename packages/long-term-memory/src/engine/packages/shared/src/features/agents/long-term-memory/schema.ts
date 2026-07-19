@@ -167,15 +167,7 @@ export const DEFAULT_LTM_GLOBAL_SETTINGS =
     longTermMemoryDebug: false,
   });
 
-const ltmExtractionPromptTemplateIdSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(64)
-  .regex(
-    /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
-    "Prompt template IDs must be lowercase snake_case.",
-  );
+const ltmExtractionPromptTemplateIdSchema = z.string().trim().min(1).max(64);
 
 export const ltmExtractionPromptTemplateSchema = z
   .object({
