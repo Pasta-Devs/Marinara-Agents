@@ -567,6 +567,32 @@ async function main() {
       provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "route-extract" },
       sections: { source: { text: "Mara seals the observatory gate at dusk.", updatedAt: "2026-07-17T00:00:00.000Z" } },
     });
+    const sourceMetadataUpdate = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/source_route_extract",
+      headers,
+      payload: { title: "Updated observatory report" },
+    });
+    assert.equal(sourceMetadataUpdate.statusCode, 200, sourceMetadataUpdate.body);
+    assert.equal(sourceMetadataUpdate.json().note.title, "Updated observatory report");
+    const sourceContentUpdate = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/source_route_extract",
+      headers,
+      payload: {
+        sections: {
+          source: {
+            text: "Replaced source text.",
+            updatedAt: "2026-07-17T01:00:00.000Z",
+          },
+        },
+      },
+    });
+    assert.equal(sourceContentUpdate.statusCode, 400, sourceContentUpdate.body);
+    assert.equal(
+      (await storageService.storage.getNote("source_route_extract")).sections.source.text,
+      "Mara seals the observatory gate at dusk.",
+    );
     const invalidMode = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/source_route_extract/extract",

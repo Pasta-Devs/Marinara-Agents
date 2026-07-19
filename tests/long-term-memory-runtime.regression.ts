@@ -7,6 +7,7 @@ async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);
   const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
+  const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const services = new Map<string, any>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
@@ -105,6 +106,21 @@ async function main() {
     await storage.createNote(note("world_visible", "chat-a", "The cobalt archive key is beneath the observatory."));
     await storage.createNote(note("world_visible_second", "chat-a", "The cobalt archive has a brass warding seal."));
     await storage.createNote(note("world_hidden", "chat-b", "The cobalt archive key is hidden in another chat."));
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const thresholded = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "world_visible cobalt archive",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      minScore: 0.75,
+      maxChunks: 10,
+      maxTokens: 4096,
+    });
+    assert.deepEqual(
+      thresholded.chunks.map((chunk: any) => chunk.chunk.noteId),
+      ["world_visible"],
+      "minimum score must apply to fused relevance, not a candidate's strongest lane",
+    );
 
     const input = {
       chatId: "chat-a",

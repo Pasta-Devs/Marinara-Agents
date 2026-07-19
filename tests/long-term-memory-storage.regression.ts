@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   stat,
   utimes,
@@ -69,7 +70,57 @@ async function main() {
       root,
       "default root must remain join(dataDir, 'long-term-memory')",
     );
+    const sourceDirectory = join(root, "vault", "sources");
+    await mkdir(sourceDirectory, { recursive: true });
+    await writeFile(
+      join(sourceDirectory, "source_turn_legacy.json"),
+      `${JSON.stringify({
+        id: "source_turn_legacy",
+        title: "Captured turn",
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {},
+        tags: ["captured_turn"],
+        keywords: [],
+        links: [],
+        sections: { source: { text: "Legacy raw turn.", updatedAt: timestamp } },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      })}\n`,
+    );
+    await writeFile(
+      join(sourceDirectory, "source_valid_import.json"),
+      `${JSON.stringify({
+        id: "source_valid_import",
+        title: "Valid imported summary",
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {},
+        tags: ["imported_chat"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-a" },
+        sections: { source: { text: "Valid summary.", updatedAt: timestamp } },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      })}\n`,
+    );
     const first = await activateLongTermMemoryStorage(root);
+    assert.equal(await first.storage.getNote("source_turn_legacy"), null);
+    assert.equal((await first.storage.getNote("source_valid_import"))?.id, "source_valid_import");
+    const quarantineEntries = await readdir(join(root, "quarantine"));
+    const capturedTurnQuarantine = quarantineEntries.find((entry) =>
+      entry.startsWith("legacy-captured-turns-"),
+    );
+    assert.ok(capturedTurnQuarantine);
+    assert.deepEqual(
+      await readdir(join(root, "quarantine", capturedTurnQuarantine)),
+      ["source_turn_legacy.json"],
+    );
     await first.storage.createNote(noteInput);
     await first.cleanup();
     const restarted = await activateLongTermMemoryStorage(root);

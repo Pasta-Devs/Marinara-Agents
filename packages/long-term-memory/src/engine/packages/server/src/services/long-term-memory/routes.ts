@@ -782,14 +782,17 @@ export function createLongTermMemoryRoutes(runtime: {
       { bodyLimit: NOTE_BODY_LIMIT_BYTES },
       async (request, reply) => {
         const id = ltmNoteIdSchema.parse(request.params.id);
-        if (!(await storage.getNote(id)))
+        const existing = await storage.getNote(id);
+        if (!existing)
           return reply
             .status(404)
             .send({ error: "Long-term memory note not found" });
-        const note = await storage.updateNote(
-          id,
-          updateNoteBody.parse(request.body),
-        );
+        const patch = updateNoteBody.parse(request.body);
+        if (existing.type === "source" && patch.sections !== undefined)
+          return reply.status(400).send({
+            error: "Imported source content can only be updated by refreshing its source.",
+          });
+        const note = await storage.updateNote(id, patch);
         const rebuild = await rebuildAfterMutation();
         return { note, rebuild };
       },

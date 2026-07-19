@@ -282,7 +282,6 @@ async function getExistingTypedNotes(options: {
     scope: options.scope,
     mode: options.mode,
     characterIds: options.scope.characterIds,
-    includeSourceNotes: false,
     maxChunks: options.maxChunks,
     maxTokens: options.maxTokens,
     embeddingSource: options.embeddingSource,

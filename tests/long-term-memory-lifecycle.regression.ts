@@ -20,8 +20,11 @@ const engineRoot = resolve(
 );
 const dataDir = mkdtempSync(join(tmpdir(), "marinara-ltm-lifecycle-"));
 const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
-const artifactPath = join(repoRoot, "artifacts/long-term-memory-1.0.3.zip");
-const artifactUrl = "https://1.1.1.1/artifacts/long-term-memory-1.0.3.zip";
+const packageManifest = JSON.parse(
+  readFileSync(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"),
+) as { version: string };
+const artifactPath = join(repoRoot, `artifacts/long-term-memory-${packageManifest.version}.zip`);
+const artifactUrl = `https://1.1.1.1/artifacts/long-term-memory-${packageManifest.version}.zip`;
 const artifactBytes = readFileSync(artifactPath);
 const artifactManifest = JSON.parse(
   execFileSync("unzip", ["-p", artifactPath, "manifest.json"], {
@@ -110,7 +113,7 @@ async function main() {
   } | null = null;
   try {
     assert.equal(artifactManifest.id, "long-term-memory");
-    assert.equal(artifactManifest.version, "1.0.3");
+    assert.equal(artifactManifest.version, packageManifest.version);
     const { capabilityPackageManager } = await importEngine<{
       capabilityPackageManager: {
         install(id: string): Promise<{ version: string; status: string }>;
