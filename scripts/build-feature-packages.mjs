@@ -110,7 +110,7 @@ const features = [
   ].map(([id, name, description, clientName, command, aliases, playerLabel]) => ({
     id,
     name,
-    version: "1.0.2",
+    version: "1.0.3",
     maxEngineExclusive: "4.0.0",
     description,
     kind: ["agent", "turn-game"],
