@@ -32,6 +32,12 @@ async function main() {
     `${source}/mutation-transaction.ts`
   );
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
+  const {
+    exportLongTermMemoryData,
+    replaceLongTermMemoryData,
+    deleteAllLongTermMemoryData,
+    resetLongTermMemorySettings,
+  } = await import(`${source}/backup-restore.ts`);
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
@@ -141,6 +147,33 @@ async function main() {
       noteInput.id,
       "cleanup must preserve canonical notes",
     );
+
+    const exported = await exportLongTermMemoryData(root);
+    assert.equal(exported.format, "marinara-long-term-memory");
+    assert.equal(exported.notes.some((note) => note.id === noteInput.id), true);
+    assert.equal("indexes" in exported, false);
+    const importedNote = exported.notes.find((note) => note.id === noteInput.id)!;
+    await replaceLongTermMemoryData({
+      ...exported,
+      notes: [
+        {
+          ...importedNote,
+          id: "world_imported_backup",
+          title: "Imported backup",
+        },
+      ],
+      drafts: [],
+    }, root);
+    assert.equal(await new LongTermMemoryStorage(root).getNote(noteInput.id), null);
+    assert.equal(
+      (await new LongTermMemoryStorage(root).getNote("world_imported_backup"))?.title,
+      "Imported backup",
+    );
+    await resetLongTermMemorySettings(root);
+    assert.equal((await exportLongTermMemoryData(root)).notes.length, 1);
+    await deleteAllLongTermMemoryData(root);
+    assert.equal((await new LongTermMemoryStorage(root).listNotes()).length, 0);
+    assert.equal((await exportLongTermMemoryData(root)).settings.global.version, 1);
 
     const storage = new LongTermMemoryStorage(root);
     const legacySource = await storage.createNote({

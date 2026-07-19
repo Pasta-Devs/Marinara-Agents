@@ -3,10 +3,13 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 async function main() {
-  const engineRoot = process.env.MARINARA_ENGINE_ROOT ?? process.cwd();
+  const engineRoot =
+    process.env.MARINARA_ENGINE_ROOT ??
+    join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
   const Fastify = (
     await import(
       pathToFileURL(
@@ -1415,6 +1418,45 @@ async function main() {
     });
     assert.equal(integrity.statusCode, 200, integrity.body);
     assert.equal(integrity.json().ok, true);
+    const backup = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/backup/export",
+      headers,
+    });
+    assert.equal(backup.statusCode, 200, backup.body);
+    assert.equal(backup.json().format, "marinara-long-term-memory");
+    const backupPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/backup/preview",
+      headers,
+      payload: backup.json(),
+    });
+    assert.equal(backupPreview.statusCode, 200, backupPreview.body);
+    assert.equal(backupPreview.json().incoming.notes > 0, true);
+    const replacement = backup.json();
+    replacement.notes = replacement.notes.filter((note: any) => note.id === "world_route_fixture");
+    const imported = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/backup/import",
+      headers,
+      payload: replacement,
+    });
+    assert.equal(imported.statusCode, 200, imported.body);
+    assert.equal((await storageService.storage.listNotes()).some((note: any) => note.id === "world_route_fixture"), true);
+    const resetSettings = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/settings/reset",
+      headers,
+    });
+    assert.equal(resetSettings.statusCode, 200, resetSettings.body);
+    assert.equal((await storageService.storage.getNote("world_route_fixture"))?.id, "world_route_fixture");
+    const deletedAll = await app.inject({
+      method: "DELETE",
+      url: "/api/long-term-memory/data",
+      headers,
+    });
+    assert.equal(deletedAll.statusCode, 200, deletedAll.body);
+    assert.equal((await storageService.storage.listNotes()).length, 0);
     await cleanup();
     cleanup = undefined;
     assert.equal(

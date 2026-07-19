@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, RotateCcw, Trash2, Upload } from "lucide-react";
 import type {
   LtmExtractionSettingsPatch,
   LtmGlobalSettings,
@@ -205,6 +206,12 @@ export default function MemorySettings({
   const [selectedActions, setSelectedActions] = useState<RepairAction[]>([]);
   const [identityPreview, setIdentityPreview] =
     useState<LtmIdentityRepairPreviewResponse | null>(null);
+  const [backupPreview, setBackupPreview] = useState<{
+    backup: unknown;
+    incoming: { notes: number; drafts: number };
+    current: { notes: number; drafts: number };
+  } | null>(null);
+  const backupInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!global.data || globalForm) return;
@@ -403,6 +410,121 @@ export default function MemorySettings({
       ]);
     } catch (error) {
       setMessage(errorMessage(error, "Could not apply identity repairs."));
+    } finally {
+      setPending("");
+    }
+  };
+
+  const exportBackup = async () => {
+    setPending("backup-export");
+    setMessage("");
+    try {
+      const response = await fetch("/api/long-term-memory/backup/export", {
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(response.statusText || "Could not export memory data.");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "long-term-memory-backup.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      setMessage("Memory backup exported.");
+    } catch (error) {
+      setMessage(errorMessage(error, "Could not export memory data."));
+    } finally {
+      setPending("");
+    }
+  };
+
+  const previewBackup = async (file: File) => {
+    setPending("backup-preview");
+    setMessage("");
+    try {
+      const backup = JSON.parse(await file.text());
+      const preview = await request<{
+        incoming: { notes: number; drafts: number };
+        current: { notes: number; drafts: number };
+      }>("/backup/preview", "POST", backup);
+      setBackupPreview({ ...preview, backup });
+      setMessage("Backup validated. Review the replacement counts before importing.");
+    } catch (error) {
+      setBackupPreview(null);
+      setMessage(errorMessage(error, "Could not validate this backup."));
+    } finally {
+      setPending("");
+      if (backupInput.current) backupInput.current.value = "";
+    }
+  };
+
+  const importBackup = async () => {
+    if (!backupPreview) return;
+    if (!(await confirm(
+      props,
+      "Replace Long-Term Memory data?",
+      `This replaces ${backupPreview.current.notes} current memories and ${backupPreview.current.drafts} drafts with ${backupPreview.incoming.notes} memories and ${backupPreview.incoming.drafts} drafts.`,
+      "Replace data",
+      true,
+    ))) return;
+    setPending("backup-import");
+    setMessage("");
+    try {
+      await request("/backup/import", "POST", backupPreview.backup);
+      setBackupPreview(null);
+      await invalidateLtmQueries(queryClient, [
+        queryKeys.root,
+        queryKeys.settings,
+        queryKeys.extractionSettings,
+        queryKeys.notes,
+        queryKeys.review,
+        queryKeys.pendingDrafts,
+        queryKeys.integrity,
+        queryKeys.status,
+        queryKeys.activity,
+        ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
+      ]);
+      setMessage("Memory backup imported.");
+      await Promise.all([global.refetch(), extraction.refetch(), integrity.refetch()]);
+    } catch (error) {
+      setMessage(errorMessage(error, "Could not import memory data."));
+    } finally {
+      setPending("");
+    }
+  };
+
+  const resetSettings = async () => {
+    if (!(await confirm(props, "Reset memory settings?", "All Long-Term Memory settings will return to their built-in defaults. Memories will be kept.", "Reset settings", true))) return;
+    setPending("settings-reset");
+    setMessage("");
+    try {
+      await request("/settings/reset", "POST");
+      setGlobalForm(null);
+      setSavedGlobal(null);
+      setExtractionFormState(null);
+      setSavedExtraction(null);
+      await invalidateLtmQueries(queryClient, [queryKeys.settings, queryKeys.extractionSettings, queryKeys.chatDefaults]);
+      await Promise.all([global.refetch(), extraction.refetch()]);
+      setMessage("Memory settings reset to defaults.");
+    } catch (error) {
+      setMessage(errorMessage(error, "Could not reset memory settings."));
+    } finally {
+      setPending("");
+    }
+  };
+
+  const deleteAll = async () => {
+    if (!(await confirm(props, "Delete all memory data?", "This permanently deletes every saved memory, pending draft, activity record, and derived index. Settings will be kept.", "Delete everything", true))) return;
+    setPending("data-delete");
+    setMessage("");
+    try {
+      await request("/data", "DELETE");
+      setBackupPreview(null);
+      await invalidateLtmQueries(queryClient, [queryKeys.root, queryKeys.notes, queryKeys.review, queryKeys.pendingDrafts, queryKeys.integrity, queryKeys.status, queryKeys.activity, ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : [])]);
+      await integrity.refetch();
+      setMessage("All memory data deleted. Settings were kept.");
+    } catch (error) {
+      setMessage(errorMessage(error, "Could not delete memory data."));
     } finally {
       setPending("");
     }
@@ -628,6 +750,50 @@ export default function MemorySettings({
         >
           Save recall settings
         </Button>
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+        <div>
+          <h3 className="text-sm font-semibold">Backup and Reset</h3>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            Export or replace the package-owned memory vault and settings.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={pending !== ""} onClick={() => void exportBackup()}>
+            <Download aria-hidden="true" size="0.875rem" /> Export backup
+          </Button>
+          <Button disabled={pending !== ""} onClick={() => backupInput.current?.click()}>
+            <Upload aria-hidden="true" size="0.875rem" /> Choose backup
+          </Button>
+          <input
+            ref={backupInput}
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void previewBackup(file);
+            }}
+          />
+          <Button disabled={pending !== ""} onClick={() => void resetSettings()}>
+            <RotateCcw aria-hidden="true" size="0.875rem" /> Reset settings
+          </Button>
+          <Button destructive disabled={pending !== ""} onClick={() => void deleteAll()}>
+            <Trash2 aria-hidden="true" size="0.875rem" /> Delete all data
+          </Button>
+        </div>
+        {backupPreview ? (
+          <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3 text-xs">
+            <p className="font-semibold">Validated backup ready to import</p>
+            <p className="text-[var(--muted-foreground)]">
+              Current: {backupPreview.current.notes} memories, {backupPreview.current.drafts} drafts. Incoming: {backupPreview.incoming.notes} memories, {backupPreview.incoming.drafts} drafts.
+            </p>
+            <Button primary disabled={pending !== ""} onClick={() => void importBackup()}>
+              Replace with this backup
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       <section className="space-y-3 rounded-lg border border-[var(--border)] p-3">
