@@ -112,6 +112,10 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     );
     await expect(navigation).toHaveCount(1);
     await expect(detail.locator('[data-ltm-surface="vault"]')).toBeVisible();
+    await detail.getByLabel("Choose memory scope").click();
+    await expect(
+      detail.getByRole("option", { name: "All memories" }),
+    ).toBeVisible();
     await expect(
       navigation.locator('[data-ltm-destination="vault"]'),
     ).toHaveAttribute("aria-current", "page");
@@ -211,7 +215,7 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
     ).toBeVisible();
 
     await bulkActions.getByRole("button", { name: "Set status" }).click();
-    await expect(vault).toContainText("1 memory updated.");
+    await expect(vault).toContainText("1 memory was updated.");
     await bulkActions.getByRole("button", { name: "Clear all" }).click();
     await expect(bulkActions.locator("[data-ltm-selection-count]")).toHaveText(
       "0 selected",
@@ -252,13 +256,19 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
 
     await openLongTermMemory(page, chat.id, testInfo);
     const vault = page.locator('[data-ltm-surface="vault"]');
-    await vault
-      .getByRole("button", { name: "Visible details fixture" })
-      .click();
+    const memory = vault.getByRole("button", {
+      name: "Visible details fixture",
+    });
+    await expect(memory).toContainText("Facts: A scoped fixture.");
+    await expect(vault.locator("[data-ltm-memory-list]")).toHaveCSS(
+      "overflow-y",
+      "visible",
+    );
+    await memory.click();
     await expect(
       vault.getByRole("heading", { name: "Memory details" }),
     ).toBeVisible();
-    await expect(vault.locator("textarea[data-ltm-field]")).toHaveCount(0);
+    await expect(vault.getByLabel("facts")).toHaveValue("A scoped fixture.");
 
     await vault.getByRole("button", { name: "Add memories" }).click();
     await vault.getByRole("menuitem", { name: /Create manually/ }).click();

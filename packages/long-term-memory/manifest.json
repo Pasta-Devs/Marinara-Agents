@@ -10,7 +10,7 @@
   },
   "id": "long-term-memory",
   "name": "Long-Term Memory",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Captures finalized turns and recalls relevant context from a durable package-owned memory vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
   "engine": {
     "min": "2.3.2",
@@ -47,8 +47,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "8e16499d6f4b7111a5da3ffdafe403fdab6f42d90718538bda5f1114429b0895",
-      "bytes": 573450
+      "sha256": "d98c9f0cf3a6d58ba069ac35bc0e0950e99d608fc1dfb2757af650779a6a4088",
+      "bytes": 574610
     }
   ],
   "permissions": [

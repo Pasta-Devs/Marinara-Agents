@@ -29,11 +29,7 @@ import {
   StatusSurface,
 } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
-import {
-  memoryLabel,
-  noteTypeLabel,
-  scopeTargetLabel,
-} from "./display-labels";
+import { memoryLabel, noteTypeLabel, scopeTargetLabel } from "./display-labels";
 
 const noteTypes: readonly LtmNoteType[] = [
   "source",
@@ -83,7 +79,7 @@ type ScopeTargets = {
   groups: Array<{ id: string; label: string; chatIds: string[] }>;
   characters: Array<{ id: string; label: string }>;
 };
-type Target = { id: string; label: string; scope: LtmScope };
+type Target = { id: string; label: string; scope?: LtmScope };
 type NoteResponse = { note: LtmNote };
 
 function clone<T>(value: T): T {
@@ -114,6 +110,25 @@ function searchable(note: LtmNote) {
     .filter(Boolean)
     .join(" ")
     .toLocaleLowerCase();
+}
+function preview(note: LtmNote, search: string) {
+  const sections = Object.entries(note.sections).filter(([, section]) =>
+    section.text.trim(),
+  );
+  const query = search.trim().toLocaleLowerCase();
+  const selected =
+    sections.find(([, candidate]) =>
+      candidate.text.toLocaleLowerCase().includes(query),
+    ) ?? sections[0];
+  if (!selected) return null;
+  const [key, section] = selected;
+  const text = section.text.trim();
+  const match = query ? text.toLocaleLowerCase().indexOf(query) : -1;
+  const start = match > 60 ? match - 60 : 0;
+  return {
+    label: title(key),
+    text: `${start ? "..." : ""}${text.slice(start, start + 180)}${start + 180 < text.length ? "..." : ""}`,
+  };
 }
 function newNote(scope: LtmScope): LtmNote {
   const now = new Date().toISOString();
@@ -279,19 +294,19 @@ export default function MemoryVault({
     queryFn: () =>
       request<LtmNote[]>(
         `/notes?${new URLSearchParams({
-          ...(target?.scope.chatIds?.length
+          ...(target?.scope?.chatIds?.length
             ? { scopeChatIds: target.scope.chatIds.join(",") }
             : {}),
-          ...(target?.scope.groupId
+          ...(target?.scope?.groupId
             ? { scopeGroupId: target.scope.groupId }
             : {}),
-          ...(target?.scope.characterIds?.length
+          ...(target?.scope?.characterIds?.length
             ? { scopeCharacterIds: target.scope.characterIds.join(",") }
             : {}),
-          ...(target?.scope.personaId
+          ...(target?.scope?.personaId
             ? { scopePersonaId: target.scope.personaId }
             : {}),
-          includeGlobal: "false",
+          ...(target?.scope ? { includeGlobal: "false" } : {}),
         })}`,
       ),
   });
@@ -305,8 +320,12 @@ export default function MemoryVault({
       (!search.trim() ||
         searchable(note).includes(search.trim().toLocaleLowerCase())),
   );
+  const hiddenChecked = [...checked].filter(
+    (id) => !visible.some((note) => note.id === id),
+  ).length;
   const dirty = Boolean(draft) && fingerprint(draft) !== saved;
   const targets: Target[] = [
+    { id: "all", label: "All memories" },
     ...(props.chatId
       ? [
           {
@@ -360,6 +379,14 @@ export default function MemoryVault({
     return props.confirmAction
       ? await props.confirmAction(options)
       : window.confirm(`${options.title}\n\n${options.message}`);
+  }
+  async function selectTarget(next: Target) {
+    if (!(await confirm(`opening ${next.label}`))) return;
+    setTarget(next);
+    setTargetSearch("");
+    setTargetsOpen(false);
+    setDraft(null);
+    setChecked(new Set());
   }
   async function openNote(note: LtmNote) {
     if (!(await confirm(`opening ${memoryLabel(note)}`))) return;
@@ -615,9 +642,17 @@ export default function MemoryVault({
             }}
             placeholder="Search linked chats, branches, and characters"
             aria-label="Choose memory scope"
+            role="combobox"
+            aria-expanded={targetsOpen}
+            aria-controls="ltm-scope-targets"
+            aria-autocomplete="list"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setTargetsOpen(false);
+            }}
           />
           {targetsOpen ? (
             <div
+              id="ltm-scope-targets"
               role="listbox"
               className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-1 shadow-lg"
             >
@@ -627,12 +662,7 @@ export default function MemoryVault({
                   role="option"
                   aria-selected={candidate.id === target?.id}
                   type="button"
-                  onClick={() => {
-                    setTarget(candidate);
-                    setTargetSearch("");
-                    setTargetsOpen(false);
-                    setDraft(null);
-                  }}
+                  onClick={() => void selectTarget(candidate)}
                   className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-[var(--accent)]"
                 >
                   {candidate.label}
@@ -690,7 +720,10 @@ export default function MemoryVault({
       </section>
       {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
       {notice ? <StatusSurface tone="success">{notice}</StatusSurface> : null}
-      <section className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3">
+      <section
+        data-ltm-bulk-actions
+        className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3"
+      >
         <label className="flex min-h-11 items-center gap-2 text-xs">
           <input
             type="checkbox"
@@ -708,8 +741,12 @@ export default function MemoryVault({
           />
           Select visible
         </label>
-        <span className="text-xs text-[var(--muted-foreground)]">
+        <span
+          data-ltm-selection-count
+          className="text-xs text-[var(--muted-foreground)]"
+        >
           {checked.size} selected
+          {hiddenChecked ? `, ${hiddenChecked} hidden by filters` : ""}
         </span>
         {checked.size ? (
           <>
@@ -746,13 +783,14 @@ export default function MemoryVault({
               <Trash2 size="0.875rem" />
               Delete
             </Button>
+            <Button onClick={() => setChecked(new Set())}>Clear all</Button>
           </>
         ) : null}
       </section>
-      <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]">
+      <div className="grid min-h-0 items-start gap-4 xl:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]">
         <section
           data-ltm-memory-list
-          className="max-h-[36rem] overflow-y-auto rounded-lg border border-[var(--border)]"
+          className="rounded-lg border border-[var(--border)]"
           aria-label="Memory list"
         >
           <p className="border-b border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
@@ -761,51 +799,62 @@ export default function MemoryVault({
           {notes.isLoading ? (
             <StatusSurface busy>Loading memories...</StatusSurface>
           ) : null}
-          {visible.map((note) => (
-            <div
-              key={note.id}
-              data-ltm-note-type={note.type}
-              data-ltm-note-source={note.type === "source" || undefined}
-              className={`flex gap-2 border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
-            >
-              <label className="flex min-h-11 min-w-8 items-center justify-center">
-                <input
-                  type="checkbox"
-                  checked={checked.has(note.id)}
-                  onChange={() =>
-                    setChecked((current) => {
-                      const next = new Set(current);
-                      next.has(note.id)
-                        ? next.delete(note.id)
-                        : next.add(note.id);
-                      return next;
-                    })
-                  }
-                  aria-label={`Select ${memoryLabel(note)}`}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => void openNote(note)}
-                className="min-h-14 min-w-0 flex-1 rounded-md px-2 text-left hover:bg-[var(--accent)]"
+          {visible.map((note) => {
+            const notePreview = preview(note, search);
+            return (
+              <div
+                key={note.id}
+                data-ltm-note-type={note.type}
+                data-ltm-note-source={note.type === "source" || undefined}
+                className={`flex gap-2 border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
               >
-                <span className="flex items-center gap-2">
-                  <strong className="truncate text-sm">
-                    {memoryLabel(note)}
-                  </strong>
-                  <ChevronRight size="0.875rem" className="shrink-0" />
-                </span>
-                <span className="mt-1 flex gap-1 text-[0.6875rem]">
-                  <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
-                    {title(note.type)}
+                <label className="flex min-h-11 min-w-8 items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={checked.has(note.id)}
+                    onChange={() =>
+                      setChecked((current) => {
+                        const next = new Set(current);
+                        next.has(note.id)
+                          ? next.delete(note.id)
+                          : next.add(note.id);
+                        return next;
+                      })
+                    }
+                    aria-label={`Select ${memoryLabel(note)}`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void openNote(note)}
+                  className="min-h-14 min-w-0 flex-1 rounded-md px-2 text-left hover:bg-[var(--accent)]"
+                >
+                  <span className="flex items-center gap-2">
+                    <strong className="truncate text-sm">
+                      {memoryLabel(note)}
+                    </strong>
+                    <ChevronRight size="0.875rem" className="shrink-0" />
                   </span>
-                  <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
-                    {note.status}
+                  <span className="mt-1 flex gap-1 text-[0.6875rem]">
+                    <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
+                      {title(note.type)}
+                    </span>
+                    <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
+                      {note.status}
+                    </span>
                   </span>
-                </span>
-              </button>
-            </div>
-          ))}
+                  {notePreview ? (
+                    <span className="mt-1 line-clamp-2 block text-xs leading-5 text-[var(--muted-foreground)]">
+                      <span className="font-medium text-[var(--foreground)]">
+                        {notePreview.label}:
+                      </span>{" "}
+                      {notePreview.text}
+                    </span>
+                  ) : null}
+                </button>
+              </div>
+            );
+          })}
           {!notes.isLoading && !visible.length ? (
             <p className="p-5 text-center text-xs text-[var(--muted-foreground)]">
               No memories match these filters.
@@ -846,6 +895,128 @@ export default function MemoryVault({
                   <Button onClick={() => void closeDraft()}>Close</Button>
                 </div>
               </header>
+              <section className="space-y-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <h4 className="mr-auto text-xs font-medium">
+                    Memory sections
+                  </h4>
+                  <input
+                    className={`${inputClass} w-40`}
+                    value={sectionKey}
+                    onChange={(event) => setSectionKey(event.target.value)}
+                    placeholder="new_section"
+                    aria-label="New section name"
+                  />
+                  <Button onClick={addSection} disabled={!sectionKey.trim()}>
+                    Add section
+                  </Button>
+                </div>
+                {Object.entries(draft.sections).map(([key, section]) => (
+                  <article
+                    key={key}
+                    className="space-y-2 rounded-md border border-[var(--border)] p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <label
+                        htmlFor={`ltm-section-${key}`}
+                        className="text-xs font-semibold"
+                      >
+                        {title(key)}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = { ...draft.sections };
+                          delete next[key];
+                          update("sections", next);
+                        }}
+                        aria-label={`Remove ${key} section`}
+                        className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
+                      >
+                        <Trash2 size="0.75rem" />
+                      </button>
+                    </div>
+                    <textarea
+                      id={`ltm-section-${key}`}
+                      data-ltm-field="section"
+                      className={`${inputClass} min-h-28 py-2`}
+                      value={section.text}
+                      onChange={(event) =>
+                        update("sections", {
+                          ...draft.sections,
+                          [key]: {
+                            ...section,
+                            text: event.target.value,
+                            updatedAt: new Date().toISOString(),
+                          },
+                        })
+                      }
+                    />
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <label className="text-xs">
+                        Importance
+                        <select
+                          className={inputClass}
+                          value={section.importance ?? ""}
+                          onChange={(event) =>
+                            update("sections", {
+                              ...draft.sections,
+                              [key]: {
+                                ...section,
+                                importance: event.target.value || undefined,
+                              },
+                            })
+                          }
+                        >
+                          <option value="">Not set</option>
+                          {["critical", "major", "moderate", "minor"].map(
+                            (value) => (
+                              <option key={value}>{value}</option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+                      <NumberField
+                        label="Confidence"
+                        value={section.confidence ?? 0}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        onChange={(value) =>
+                          update("sections", {
+                            ...draft.sections,
+                            [key]: { ...section, confidence: value },
+                          })
+                        }
+                      />
+                      <NumberField
+                        label="Salience"
+                        value={section.salience ?? 0}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        onChange={(value) =>
+                          update("sections", {
+                            ...draft.sections,
+                            [key]: { ...section, salience: value },
+                          })
+                        }
+                      />
+                    </div>
+                    <TokenEditor
+                      label="Evidence"
+                      values={section.evidence ?? []}
+                      placeholder="Add evidence"
+                      onChange={(evidence) =>
+                        update("sections", {
+                          ...draft.sections,
+                          [key]: { ...section, evidence },
+                        })
+                      }
+                    />
+                  </article>
+                ))}
+              </section>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1 text-xs font-medium">
                   Title
@@ -1035,7 +1206,9 @@ export default function MemoryVault({
                     >
                       {link.relation.replaceAll("_", " ")}
                       {" -> "}
-                      {memoryLabel(allNotes.find((note) => note.id === link.target))}
+                      {memoryLabel(
+                        allNotes.find((note) => note.id === link.target),
+                      )}
                     </Pill>
                   ))}
                 </div>
@@ -1103,120 +1276,6 @@ export default function MemoryVault({
                   </div>
                 </section>
               ) : null}
-              <section className="space-y-3 border-t border-[var(--border)] pt-4">
-                <div className="flex flex-wrap items-end gap-2">
-                  <h4 className="mr-auto text-xs font-medium">
-                    Memory sections
-                  </h4>
-                  <input
-                    className={`${inputClass} w-40`}
-                    value={sectionKey}
-                    onChange={(event) => setSectionKey(event.target.value)}
-                    placeholder="new_section"
-                  />
-                  <Button onClick={addSection} disabled={!sectionKey.trim()}>
-                    Add section
-                  </Button>
-                </div>
-                {Object.entries(draft.sections).map(([key, section]) => (
-                  <article
-                    key={key}
-                    className="space-y-2 rounded-md border border-[var(--border)] p-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <strong className="text-xs">{title(key)}</strong>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = { ...draft.sections };
-                          delete next[key];
-                          update("sections", next);
-                        }}
-                        aria-label={`Remove ${key} section`}
-                        className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
-                      >
-                        <Trash2 size="0.75rem" />
-                      </button>
-                    </div>
-                    <textarea
-                      className={`${inputClass} min-h-28 py-2`}
-                      value={section.text}
-                      onChange={(event) =>
-                        update("sections", {
-                          ...draft.sections,
-                          [key]: {
-                            ...section,
-                            text: event.target.value,
-                            updatedAt: new Date().toISOString(),
-                          },
-                        })
-                      }
-                    />
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <label className="text-xs">
-                        Importance
-                        <select
-                          className={inputClass}
-                          value={section.importance ?? ""}
-                          onChange={(event) =>
-                            update("sections", {
-                              ...draft.sections,
-                              [key]: {
-                                ...section,
-                                importance: event.target.value || undefined,
-                              },
-                            })
-                          }
-                        >
-                          <option value="">Not set</option>
-                          {["critical", "major", "moderate", "minor"].map(
-                            (value) => (
-                              <option key={value}>{value}</option>
-                            ),
-                          )}
-                        </select>
-                      </label>
-                      <NumberField
-                        label="Confidence"
-                        value={section.confidence ?? 0}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(value) =>
-                          update("sections", {
-                            ...draft.sections,
-                            [key]: { ...section, confidence: value },
-                          })
-                        }
-                      />
-                      <NumberField
-                        label="Salience"
-                        value={section.salience ?? 0}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(value) =>
-                          update("sections", {
-                            ...draft.sections,
-                            [key]: { ...section, salience: value },
-                          })
-                        }
-                      />
-                    </div>
-                    <TokenEditor
-                      label="Evidence"
-                      values={section.evidence ?? []}
-                      placeholder="Add evidence"
-                      onChange={(evidence) =>
-                        update("sections", {
-                          ...draft.sections,
-                          [key]: { ...section, evidence },
-                        })
-                      }
-                    />
-                  </article>
-                ))}
-              </section>
               {draft.conflicts?.length ? (
                 <section className="space-y-2 border-t border-[var(--border)] pt-4">
                   <h4 className="text-xs font-medium">Conflicts</h4>
