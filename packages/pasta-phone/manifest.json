@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "pasta-phone",
+  "name": "Pasta Phone",
+  "version": "0.1.0",
+  "description": "Adds an in-chat phone UI shell with a Noodle, NoodleR, Chats, and App Store launcher. Preview build: every screen shows placeholder content, no real data is wired up yet. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation mode to show the phone toolbar icon.",
+  "engine": {
+    "min": "2.3.0",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent",
+    "pasta-phone"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "conversation-toolbar"
+    ]
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "3477261bacb10bb17a63b2e6ebb64790e6a76545baf5b24153bf2e6ea613249e",
+      "bytes": 674
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "a5eae1dc5547f663c9cf7f14c5134c71ba51b11caa91bd3209ffb933298ac06f",
+      "bytes": 232
+    },
+    {
+      "path": "client.js",
+      "sha256": "327573685916d0c3f474fae627d47ee02f8207b183e5029af2f654ee2c694c79",
+      "bytes": 209256
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "ui"
+  ],
+  "restartRequired": true
+}

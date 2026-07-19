@@ -4,6 +4,7 @@ import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import zlib from "node:zlib";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
@@ -15,6 +16,7 @@ const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
 const hierarchicalMapsSourceRoot = join(packagesDir, "hierarchical-maps/src/engine");
+const pastaPhoneSourceRoot = join(packagesDir, "pasta-phone/src/engine");
 const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
   ? resolve(process.env.MARINARA_ENGINE_SOURCE_ROOT)
   : existsSync(sourcesRoot)
@@ -32,29 +34,114 @@ const hierarchicalMapsOwnedSourcePaths = [
   "packages/client/src/components/game/GameWorldMap.tsx",
   "packages/maps-shared",
 ];
+const pastaPhoneOwnedSourcePaths = [
+  "packages/server/src/routes/pasta-phone.routes.ts",
+  "packages/client/src/features/pasta-phone",
+];
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
   String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "").split(",").filter(Boolean),
 );
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+// ponytail: pure-Node "store" (uncompressed) ZIP writer used only when the
+// `zip` CLI isn't installed (e.g. this sandbox). Real dev/CI machines have
+// `zip` per CONTRIBUTING.md prerequisites and keep using that path untouched.
+function dosDateTime(date) {
+  const dosTime =
+    ((date.getUTCHours() & 0x1f) << 11) | ((date.getUTCMinutes() & 0x3f) << 5) | ((date.getUTCSeconds() >> 1) & 0x1f);
+  const dosDate =
+    (((date.getUTCFullYear() - 1980) & 0x7f) << 9) | (((date.getUTCMonth() + 1) & 0xf) << 5) | (date.getUTCDate() & 0x1f);
+  return { dosTime, dosDate };
+}
+
+async function writeStoredZip(outputPath, cwd, files, mtime) {
+  const { dosTime, dosDate } = dosDateTime(mtime);
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  for (const name of files) {
+    const data = await readFile(join(cwd, name));
+    const crc = zlib.crc32(data) >>> 0;
+    const nameBuf = Buffer.from(name, "utf8");
+
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(dosTime, 10);
+    localHeader.writeUInt16LE(dosDate, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(data.length, 18);
+    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt16LE(nameBuf.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    localParts.push(localHeader, nameBuf, data);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(dosTime, 12);
+    centralHeader.writeUInt16LE(dosDate, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(data.length, 20);
+    centralHeader.writeUInt32LE(data.length, 24);
+    centralHeader.writeUInt16LE(nameBuf.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE((0o100644 << 16) >>> 0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    centralParts.push(centralHeader, nameBuf);
+
+    offset += localHeader.length + nameBuf.length + data.length;
+  }
+  const centralDirectory = Buffer.concat(centralParts);
+  const endRecord = Buffer.alloc(22);
+  endRecord.writeUInt32LE(0x06054b50, 0);
+  endRecord.writeUInt16LE(0, 4);
+  endRecord.writeUInt16LE(0, 6);
+  endRecord.writeUInt16LE(files.length, 8);
+  endRecord.writeUInt16LE(files.length, 10);
+  endRecord.writeUInt32LE(centralDirectory.length, 12);
+  endRecord.writeUInt32LE(offset, 16);
+  endRecord.writeUInt16LE(0, 20);
+  await writeFile(outputPath, Buffer.concat([...localParts, centralDirectory, endRecord]));
+}
 const featureSource = (relativePath, buildRoot = sourceRoot) => {
   const packaged = resolve(buildRoot, relativePath);
   return existsSync(packaged) ? packaged : resolve(engineRoot, relativePath);
 };
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id !== "hierarchical-maps") {
-    return { buildRoot: sourceRoot, cleanup: async () => {} };
+  if (feature.id === "hierarchical-maps") {
+    if (!existsSync(hierarchicalMapsSourceRoot)) {
+      throw new Error("Missing package-owned Hierarchical Maps source");
+    }
+    const buildRoot = await mkdtemp(join(tmpdir(), "marinara-hierarchical-maps-source-"));
+    await cp(hierarchicalMapsSourceRoot, buildRoot, { recursive: true, force: true });
+    return {
+      buildRoot,
+      cleanup: () => rm(buildRoot, { recursive: true, force: true }),
+    };
   }
-  if (!existsSync(hierarchicalMapsSourceRoot)) {
-    throw new Error("Missing package-owned Hierarchical Maps source");
+  if (feature.id === "pasta-phone") {
+    if (!existsSync(pastaPhoneSourceRoot)) {
+      throw new Error("Missing package-owned Pasta Phone source");
+    }
+    const buildRoot = await mkdtemp(join(tmpdir(), "marinara-pasta-phone-source-"));
+    await cp(pastaPhoneSourceRoot, buildRoot, { recursive: true, force: true });
+    return {
+      buildRoot,
+      cleanup: () => rm(buildRoot, { recursive: true, force: true }),
+    };
   }
-  const buildRoot = await mkdtemp(join(tmpdir(), "marinara-hierarchical-maps-source-"));
-  await cp(hierarchicalMapsSourceRoot, buildRoot, { recursive: true, force: true });
-  return {
-    buildRoot,
-    cleanup: () => rm(buildRoot, { recursive: true, force: true }),
-  };
+  return { buildRoot: sourceRoot, cleanup: async () => {} };
 }
 
 async function captureEngineSources(metafilePath, buildRoot = sourceRoot, excludedPaths = []) {
@@ -99,6 +186,19 @@ const features = [
     serverImport: "packages/server/src/routes/conversation-calls.routes.ts",
     serverExport: "conversationCallsRoutes",
     prefix: "/api/conversation-calls",
+  },
+  {
+    id: "pasta-phone",
+    name: "Pasta Phone",
+    version: "0.1.0",
+    description:
+      "Adds an in-chat phone UI shell with a Noodle, NoodleR, Chats, and App Store launcher. Preview build: every screen shows placeholder content, no real data is wired up yet.",
+    kind: ["agent", "pasta-phone"],
+    modes: ["conversation"],
+    permissions: ["agent-runtime", "chat-read", "ui"],
+    serverImport: "packages/server/src/routes/pasta-phone.routes.ts",
+    serverExport: "pastaPhoneRoutes",
+    prefix: "/api/pasta-phone",
   },
   ...[
     ["uno", "UNO", "Play UNO with Conversation characters.", "Uno", "/uno", ["uno"], "Group card game"],
@@ -255,7 +355,11 @@ export async function selfCheck() {
     await captureEngineSources(
       metafile,
       prepared.buildRoot,
-      feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+      feature.id === "hierarchical-maps"
+        ? hierarchicalMapsOwnedSourcePaths
+        : feature.id === "pasta-phone"
+          ? pastaPhoneOwnedSourcePaths
+          : [],
     );
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -701,6 +805,23 @@ function Root({ element }) {
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
+    } else if (feature.id === "pasta-phone") {
+      const root = resolve(prepared.buildRoot, "packages/client/src/features/pasta-phone/PastaPhoneRoot.tsx");
+      source = `
+import React, { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { PastaPhoneRoot } from ${JSON.stringify(root)};
+function Root({ element }) {
+  const [, redraw] = useState(0);
+  useEffect(() => {
+    const update = () => redraw((value) => value + 1);
+    element.addEventListener("marinara-capability-props", update);
+    return () => element.removeEventListener("marinara-capability-props", update);
+  }, [element]);
+  return <PastaPhoneRoot view={element.getAttribute("view")} />;
+}
+class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<Root element={this} />); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
+if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else return;
     const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
     const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
@@ -708,7 +829,11 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     await captureEngineSources(
       metafile,
       prepared.buildRoot,
-      feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+      feature.id === "hierarchical-maps"
+        ? hierarchicalMapsOwnedSourcePaths
+        : feature.id === "pasta-phone"
+          ? pastaPhoneOwnedSourcePaths
+          : [],
     );
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -745,7 +870,12 @@ for (const feature of selectedFeatures) {
   };
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
   const serverPath = join(sourceDir, "server.mjs");
-  const serverSourceRoot = feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : sourceRoot;
+  const serverSourceRoot =
+    feature.id === "hierarchical-maps"
+      ? hierarchicalMapsSourceRoot
+      : feature.id === "pasta-phone"
+        ? pastaPhoneSourceRoot
+        : sourceRoot;
   const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
   if (!reuseExistingRuntime && existsSync(serverSource)) {
     await bundleServer(feature, serverPath);
@@ -753,7 +883,12 @@ for (const feature of selectedFeatures) {
     throw new Error(`Missing package-owned server source for ${feature.id}`);
   }
   const serverBuffer = await readFile(serverPath);
-  const hasClient = Boolean(feature.clientName || feature.id === "hierarchical-maps" || feature.id === "conversation-calls");
+  const hasClient = Boolean(
+    feature.clientName ||
+      feature.id === "hierarchical-maps" ||
+      feature.id === "conversation-calls" ||
+      feature.id === "pasta-phone",
+  );
   const clientPath = hasClient ? join(sourceDir, "client.js") : null;
   if (clientPath && (!reuseExistingRuntime || rebuiltFeatureClients.has(feature.id))) {
     if (feature.clientName) await bundleGameClient(feature, clientPath);
@@ -800,6 +935,8 @@ for (const feature of selectedFeatures) {
       },
     } : feature.id === "conversation-calls" ? {
       contributions: { slots: ["conversation-toolbar", "conversation-surface", "chat-settings"] },
+    } : feature.id === "pasta-phone" ? {
+      contributions: { slots: ["conversation-toolbar"] },
     } : {}),
     files: [
       { path: "agents.json", sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength },
@@ -831,7 +968,11 @@ for (const feature of selectedFeatures) {
       ["-X", "-q", artifactPath, ...artifactFiles],
       { cwd: temporary, env: { ...process.env, TZ: "UTC" } },
     );
-    if (zipped.status !== 0) throw new Error(`zip failed for ${feature.id}`);
+    if (zipped.error?.code === "ENOENT") {
+      await writeStoredZip(artifactPath, temporary, artifactFiles, ARTIFACT_MTIME);
+    } else if (zipped.status !== 0) {
+      throw new Error(`zip failed for ${feature.id}`);
+    }
     const artifact = await readFile(artifactPath);
     catalog.packages.push({
       manifest,

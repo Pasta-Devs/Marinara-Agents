@@ -99,6 +99,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation", "roleplay", "game"],
     activation: "Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",
   },
+  "pasta-phone": {
+    modes: ["conversation"],
+    activation: "Add the Agent in Chat Settings → Agents → Misc Agents for Conversation mode to show the phone toolbar icon.",
+  },
   poker: {
     modes: ["conversation"],
     activation: "Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
