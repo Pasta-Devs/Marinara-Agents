@@ -10,8 +10,10 @@ import type {
 export const HIERARCHY_PROFILE_VERSION = 1 as const;
 export const GENERATION_PREFERENCES_VERSION = 3 as const;
 export const GENERATION_PROMPT_LIBRARIES_VERSION = 1 as const;
+export const TURN_PROMPT_TEMPLATES_VERSION = 1 as const;
 export const DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID = "default";
 export const SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY = "spatialMapGenerationPromptLibraries";
+export const SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY = "spatialMapTurnPromptTemplates";
 
 export const BUILT_IN_GENERATION_GUIDANCE =
   "Build a practical, easy-to-browse location hierarchy that matches this setting. Use the world's own vocabulary, include only useful playable places, and connect ordinary travel routes without overfilling the map.";
@@ -35,6 +37,29 @@ export const SPATIAL_GENERATION_PROMPT_VARIABLES = [
   "loreCatalogBlock",
   "sourceContextBlock",
 ] as const;
+
+export const SPATIAL_TURN_PROMPT_VARIABLES = [
+  "ownerMode",
+  "currentPath",
+  "currentLocationId",
+  "visibleLocationContext",
+  "privateModelContextBlock",
+  "availableDestinations",
+  "authorityInstruction",
+] as const;
+
+const DEFAULT_SPATIAL_TURN_PROMPT_TEMPLATE = [
+  "Current path: ${currentPath}",
+  "Current location ID: ${currentLocationId}",
+  "",
+  "Visible location context:",
+  "${visibleLocationContext}",
+  "",
+  "${privateModelContextBlock}Available destinations:",
+  "${availableDestinations}",
+  "",
+  "${authorityInstruction}",
+].join("\n");
 
 const ROLEPLAY_DRAFT_SYSTEM_PROMPT_TEMPLATE = [
   "You design practical hierarchical world maps for an AI roleplay engine.",
@@ -180,6 +205,12 @@ export interface SpatialGenerationPromptLibraries {
   game?: SpatialGenerationPromptLibrary;
 }
 
+export interface SpatialTurnPromptTemplates {
+  version: typeof TURN_PROMPT_TEMPLATES_VERSION;
+  roleplay: string;
+  game: string;
+}
+
 export interface MapsSpatialContextResponse extends SpatialContextResponse {
   hierarchyProfile: SpatialHierarchyProfile;
   generationPreferences: SpatialGenerationPreferences;
@@ -299,8 +330,70 @@ const spatialGenerationPreferencesBaseSchema = z
   .strict();
 
 const PROMPT_VARIABLE_PATTERN = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/gu;
+const TURN_PROMPT_TOKEN_PATTERN = /\$\{([^{}]*)\}/gu;
+const TURN_PROMPT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/u;
 const PROMPT_VARIABLE_SET = new Set<string>(SPATIAL_GENERATION_PROMPT_VARIABLES);
 export const MAX_RENDERED_SPATIAL_GENERATION_PROMPT_LENGTH = 160_000;
+export const MAX_RENDERED_SPATIAL_TURN_PROMPT_LENGTH = 40_000;
+
+const TURN_PROMPT_REQUIRED_VARIABLES = [
+  "currentPath",
+  "currentLocationId",
+  "visibleLocationContext",
+  "privateModelContextBlock",
+  "availableDestinations",
+  "authorityInstruction",
+] as const;
+const TURN_PROMPT_VARIABLE_SET = new Set<string>(SPATIAL_TURN_PROMPT_VARIABLES);
+const spatialTurnPromptTemplateSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(20_000)
+  .superRefine((template, context) => {
+    if (/<\/?spatial_context\b/iu.test(template)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "The application adds the <spatial_context> wrapper. Remove that tag from the editable template.",
+      });
+    }
+    for (const match of template.matchAll(TURN_PROMPT_TOKEN_PATTERN)) {
+      const name = match[1] ?? "";
+      if (!TURN_PROMPT_VARIABLE_NAME_PATTERN.test(name)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Invalid turn prompt variable \${${name}}. Use \${variableName} without spaces or punctuation.`,
+        });
+        continue;
+      }
+      if (TURN_PROMPT_VARIABLE_SET.has(name)) continue;
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Unknown turn prompt variable \${${name}}.`,
+      });
+    }
+    if (template.replace(TURN_PROMPT_TOKEN_PATTERN, "").includes("${")) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Malformed turn prompt variable. Use ${variableName} with one matching pair of braces.",
+      });
+    }
+    for (const variable of TURN_PROMPT_REQUIRED_VARIABLES) {
+      if (template.includes(`\${${variable}}`)) continue;
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Turn prompt templates must retain the \${${variable}} variable.`,
+      });
+    }
+  });
+
+export const spatialTurnPromptTemplatesSchema = z
+  .object({
+    version: z.literal(TURN_PROMPT_TEMPLATES_VERSION),
+    roleplay: spatialTurnPromptTemplateSchema,
+    game: spatialTurnPromptTemplateSchema,
+  })
+  .strict();
 
 export const spatialGenerationPreferencesSchema = spatialGenerationPreferencesBaseSchema.superRefine(
   (preferences, context) => {
@@ -525,6 +618,49 @@ export function normalizeGenerationPreferences(
 export function parseSpatialGenerationPromptLibraries(value: unknown): SpatialGenerationPromptLibraries | null {
   const parsed = spatialGenerationPromptLibrariesSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+export function defaultSpatialTurnPromptTemplates(): SpatialTurnPromptTemplates {
+  return {
+    version: TURN_PROMPT_TEMPLATES_VERSION,
+    roleplay: DEFAULT_SPATIAL_TURN_PROMPT_TEMPLATE,
+    game: DEFAULT_SPATIAL_TURN_PROMPT_TEMPLATE,
+  };
+}
+
+export function normalizeSpatialTurnPromptTemplates(value: unknown): SpatialTurnPromptTemplates {
+  const parsed = spatialTurnPromptTemplatesSchema.safeParse(value);
+  return parsed.success ? parsed.data : defaultSpatialTurnPromptTemplates();
+}
+
+export function renderSpatialTurnPromptTemplate(
+  template: string,
+  variables: Readonly<Record<string, string | number | null | undefined>>,
+): string {
+  let rendered = "";
+  let cursor = 0;
+  const append = (value: string) => {
+    if (rendered.length + value.length > MAX_RENDERED_SPATIAL_TURN_PROMPT_LENGTH) {
+      throw new Error(
+        `Rendered map turn prompt exceeds ${MAX_RENDERED_SPATIAL_TURN_PROMPT_LENGTH.toLocaleString()} characters. Shorten the template.`,
+      );
+    }
+    rendered += value;
+  };
+  for (const match of template.matchAll(PROMPT_VARIABLE_PATTERN)) {
+    const index = match.index ?? cursor;
+    const raw = match[0];
+    const name = match[1]!;
+    append(template.slice(cursor, index));
+    if (!Object.hasOwn(variables, name)) append(raw);
+    else {
+      const value = variables[name];
+      append(value === undefined || value === null ? "" : String(value));
+    }
+    cursor = index + raw.length;
+  }
+  append(template.slice(cursor));
+  return rendered;
 }
 
 export function generationPreferencesWithPromptLibrary(

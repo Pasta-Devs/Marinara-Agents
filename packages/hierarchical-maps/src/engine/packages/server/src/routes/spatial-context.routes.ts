@@ -39,13 +39,21 @@ import {
   isDebugAgentsEnabled,
   logger,
   logDebugOverride,
+  updatePackageAgentSettings,
 } from "../services/spatial-context/package-runtime.js";
 import {
+  GENERATION_PROMPT_LIBRARIES_VERSION,
   normalizeHierarchyProfile,
+  parseSpatialGenerationPromptLibraries,
   resolveSpatialGenerationPromptOption,
+  SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY,
+  SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY,
   spatialGenerationCustomVariableValues,
+  spatialGenerationPromptLibrarySchema,
   spatialGenerationPreferencesSchema,
   spatialHierarchyProfileSchema,
+  spatialTurnPromptTemplatesSchema,
+  type SpatialGenerationPromptLibraries,
   type SpatialHierarchyProfile,
 } from "../../../maps-shared/src/maps-model.js";
 
@@ -375,6 +383,60 @@ export async function spatialContextRoutes(app: FastifyInstance) {
   const resources = getPackageResources();
   const languageModels = getPackageLanguageModels();
   const json = getPackageJson();
+
+  app.put("/spatial-context/global-generation-prompt-libraries/:ownerMode", async (request, reply) => {
+    const ownerMode = z.enum(["roleplay", "game"]).safeParse(
+      (request.params as { ownerMode?: unknown }).ownerMode,
+    );
+    const library = spatialGenerationPromptLibrarySchema.safeParse(request.body);
+    if (!ownerMode.success || !library.success) {
+      return reply.status(400).send({
+        error:
+          library.success
+            ? "Choose Roleplay or Game mode."
+            : library.error.issues[0]?.message ?? "The generation prompt library is invalid.",
+        code: "spatial_global_generation_prompt_library_invalid",
+        ...(!library.success ? { issues: library.error.issues } : {}),
+      });
+    }
+
+    const settings = await updatePackageAgentSettings("hierarchical-maps", (current) => {
+      const existing = parseSpatialGenerationPromptLibraries(
+        current[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
+      );
+      const libraries: SpatialGenerationPromptLibraries = {
+        version: GENERATION_PROMPT_LIBRARIES_VERSION,
+        ...(existing ?? {}),
+        [ownerMode.data]: library.data,
+      };
+      return {
+        ...current,
+        [SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY]: libraries,
+      };
+    });
+    return parseSpatialGenerationPromptLibraries(
+      settings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
+    );
+  });
+
+  app.put("/spatial-context/global-turn-prompt-templates", async (request, reply) => {
+    const templates = spatialTurnPromptTemplatesSchema.safeParse(request.body);
+    if (!templates.success) {
+      return reply.status(400).send({
+        error: templates.error.issues[0]?.message ?? "The turn prompt templates are invalid.",
+        code: "spatial_global_turn_prompt_templates_invalid",
+        issues: templates.error.issues,
+      });
+    }
+
+    const settings = await updatePackageAgentSettings("hierarchical-maps", (current) => ({
+      ...current,
+      [SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY]: templates.data,
+    }));
+    return spatialTurnPromptTemplatesSchema.parse(
+      settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
+    );
+  });
 
   const prepareSpatialMapPrompt = async (
     chatId: string,

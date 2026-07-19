@@ -22,6 +22,18 @@ const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
 const generationProviderBaseUrl = "http://127.0.0.1:9/v1";
 const csrfHeaders = { "x-marinara-csrf": "1" };
 const originalFetch = globalThis.fetch;
+const defaultTurnPromptTemplate = [
+  "Current path: ${currentPath}",
+  "Current location ID: ${currentLocationId}",
+  "",
+  "Visible location context:",
+  "${visibleLocationContext}",
+  "",
+  "${privateModelContextBlock}Available destinations:",
+  "${availableDestinations}",
+  "",
+  "${authorityInstruction}",
+].join("\n");
 
 process.env.AUTO_CREATE_DEFAULT_CONNECTION = "false";
 process.env.DATA_DIR = dataDir;
@@ -83,9 +95,10 @@ const fixtures = new Map(
     artifactFixture("1.1.4"),
     artifactFixture("1.1.5"),
     artifactFixture("1.1.6"),
+    artifactFixture("1.1.7"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
-let catalogVersion = "1.1.6";
+let catalogVersion = "1.1.7";
 let catalogOnline = true;
 let generationProviderRequestCount = 0;
 const generationProviderRequests: Array<{
@@ -93,7 +106,7 @@ const generationProviderRequests: Array<{
 }> = [];
 let mapExpansionExistingTargetId: string | null = null;
 
-const candidateFixture = fixtures.get("1.1.6");
+const candidateFixture = fixtures.get("1.1.7");
 assert.ok(candidateFixture);
 assert.equal(candidateFixture.manifest.schemaVersion, 2);
 assert.deepEqual(candidateFixture.manifest.capabilityApi, {
@@ -491,26 +504,26 @@ async function main() {
     assert.equal(installedProfile[0]?.version, "1.0.6");
     assert.equal(installedProfile[0]?.status, "active");
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.1").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.1").length,
       0,
     );
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.2").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.2").length,
       0,
     );
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "2.3.3").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.3").length,
       1,
     );
     assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.6"), "3.0.0").length,
+      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "3.0.0").length,
       0,
     );
 
-    const installed116 =
+    const installed117 =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(installed116.version, "1.1.6");
-    assert.equal(installed116.previousVersion, "1.0.6");
+    assert.equal(installed117.version, "1.1.7");
+    assert.equal(installed117.previousVersion, "1.0.6");
     assert.ok(
       existsSync(
         join(
@@ -518,7 +531,7 @@ async function main() {
           "capability-packages",
           "versions",
           "hierarchical-maps",
-          "1.1.6",
+          "1.1.7",
         ),
       ),
     );
@@ -585,7 +598,7 @@ async function main() {
           readiness: entry.readiness,
           ready: entry.ready,
         })),
-      [{ version: "1.1.6", status: "active", readiness: "ready", ready: true }],
+      [{ version: "1.1.7", status: "active", readiness: "ready", ready: true }],
     );
 
     const locationLorebook = (await expectJson(app, {
@@ -770,6 +783,70 @@ async function main() {
       },
     })) as typeof existingGameMapState.generationPreferences;
     assert.equal(customizedGamePreferences.options[0]?.name, "Tactical travel");
+    const customizedGlobalTurnTemplates = {
+      version: 1 as const,
+      roleplay: `ROLEPLAY_CUSTOM_TURN_TEMPLATE\n${defaultTurnPromptTemplate}`,
+      game: `GAME_CUSTOM_TURN_TEMPLATE\n${defaultTurnPromptTemplate}`,
+    };
+    const customizedGlobalGameLibrary = {
+      version: 1 as const,
+      options: customizedGamePreferences.options.map((option) => ({
+        ...option,
+        description:
+          option.id === customizedGamePreferences.activeOptionId
+            ? "Concurrent global generation library save proof."
+            : option.description,
+      })),
+    };
+    await Promise.all([
+      expectJson(app, {
+        method: "PUT",
+        url: "/api/chats/spatial-context/global-generation-prompt-libraries/game",
+        headers: csrfHeaders,
+        payload: customizedGlobalGameLibrary,
+      }),
+      expectJson(app, {
+        method: "PUT",
+        url: "/api/chats/spatial-context/global-turn-prompt-templates",
+        headers: csrfHeaders,
+        payload: customizedGlobalTurnTemplates,
+      }),
+    ]);
+    const agentsAfterConcurrentGlobalUpdates = (await expectJson(app, {
+      method: "GET",
+      url: "/api/agents",
+    })) as Array<{ type: string; settings?: unknown }>;
+    const updatedMapsAgentSettings = metadata(
+      agentsAfterConcurrentGlobalUpdates.find((agent) => agent.type === "hierarchical-maps")?.settings,
+    );
+    assert.deepEqual(
+      updatedMapsAgentSettings.spatialMapTurnPromptTemplates,
+      customizedGlobalTurnTemplates,
+      "Turn prompt templates must persist in the global Hierarchical Maps agent settings",
+    );
+    assert.deepEqual(
+      metadata(updatedMapsAgentSettings.spatialMapGenerationPromptLibraries).game,
+      customizedGlobalGameLibrary,
+      "Concurrent global prompt saves must preserve both settings keys",
+    );
+
+    for (const malformedVariable of ["${ currentPath }", "${current-Path}"]) {
+      const malformedTurnTemplateResponse = (await expectJson(
+        app,
+        {
+          method: "PUT",
+          url: "/api/chats/spatial-context/global-turn-prompt-templates",
+          headers: csrfHeaders,
+          payload: {
+            ...customizedGlobalTurnTemplates,
+            roleplay: `${customizedGlobalTurnTemplates.roleplay}\n${malformedVariable}`,
+          },
+        },
+        400,
+      )) as { error: string; code: string };
+      assert.equal(malformedTurnTemplateResponse.code, "spatial_global_turn_prompt_templates_invalid");
+      assert.match(malformedTurnTemplateResponse.error, /Invalid turn prompt variable/u);
+    }
 
     const gamePromptPreviewRequestCount = generationProviderRequests.length;
     const gamePromptPreview = (await expectJson(app, {
@@ -1029,6 +1106,7 @@ async function main() {
       /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u,
     );
     assert.match(gamePeekText, /Existing Harbor/u);
+    assert.match(gamePeekText, /GAME_CUSTOM_TURN_TEMPLATE/u);
 
     const gameAssistantAtHarbor = (await expectJson(app, {
       method: "POST",
@@ -1832,7 +1910,6 @@ async function main() {
       ),
       "Definition reads must report missing lore links through the host persistence facade",
     );
-
     const ownerTurn = (await expectJson(app, {
       method: "POST",
       url: `/api/chats/${chatId}/spatial-context/turn`,
@@ -1877,6 +1954,42 @@ async function main() {
       /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u,
     );
     assert.match(roleplayPeekText, /Lifecycle Harbor/u);
+    assert.match(roleplayPeekText, /ROLEPLAY_CUSTOM_TURN_TEMPLATE/u);
+
+    const oversizedResolvedRoleplayTemplates = {
+      ...customizedGlobalTurnTemplates,
+      roleplay: `${defaultTurnPromptTemplate}\n${Array.from(
+        { length: 500 },
+        () => "${privateModelContextBlock}",
+      ).join("\n")}`,
+    };
+    await expectJson(app, {
+      method: "PUT",
+      url: "/api/chats/spatial-context/global-turn-prompt-templates",
+      headers: csrfHeaders,
+      payload: oversizedResolvedRoleplayTemplates,
+    });
+    const oversizedTemplatePeek = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${chatId}/peek-prompt`,
+      headers: csrfHeaders,
+      payload: {},
+    })) as { messages: Array<{ content: string }> };
+    const oversizedTemplatePeekText = oversizedTemplatePeek.messages
+      .map((message) => message.content)
+      .join("\n");
+    assert.match(oversizedTemplatePeekText, /<spatial_context mode="roleplay" authority="application">/u);
+    assert.equal(
+      oversizedTemplatePeekText.match(/Private model context:/gu)?.length,
+      1,
+      "An oversized resolved custom template must fall back to the bounded built-in turn insert",
+    );
+    await expectJson(app, {
+      method: "PUT",
+      url: "/api/chats/spatial-context/global-turn-prompt-templates",
+      headers: csrfHeaders,
+      payload: customizedGlobalTurnTemplates,
+    });
     const duplicateOwnerTurn = (await expectJson(
       app,
       {
@@ -2157,7 +2270,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.1.6");
+    assert.equal(reinstalled.version, "1.1.7");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -2235,7 +2348,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.1.6", status: "active", readiness: "ready" }],
+      [{ version: "1.1.7", status: "active", readiness: "ready" }],
     );
 
     console.info(

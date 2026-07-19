@@ -830,6 +830,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
   let secondaryChat: { id: string } | null = null;
   const isolatedMapsAgentSettings = { ...originalMapsAgentSettings };
   delete isolatedMapsAgentSettings.spatialMapGenerationPromptLibraries;
+  delete isolatedMapsAgentSettings.spatialMapTurnPromptTemplates;
   const isolateSettingsResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
     data: { settings: isolatedMapsAgentSettings },
   });
@@ -873,7 +874,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
-    await expect(home.getByText("v1.1.6", { exact: true })).toBeVisible();
+    await expect(home.getByText("v1.1.7", { exact: true })).toBeVisible();
     await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
     await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
@@ -894,18 +895,86 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(home).toContainText("Create or import a map first");
     await expect(home.getByRole("heading", { name: "Generation prompt" })).toBeVisible();
     await expect(home).toContainText("Roleplay · Default");
+    await expect(home.getByRole("heading", { name: "Turn prompt insert" })).toBeVisible();
+    const turnPromptMode = home.getByRole("group", { name: "Turn prompt mode" });
+    const roleplayTurnInsert = home.getByLabel("Roleplay turn prompt insert");
+    await expect(roleplayTurnInsert).toContainText('<spatial_context mode="roleplay" authority="application">');
+    await expect(roleplayTurnInsert).toContainText("Current path: Parent location > Current location");
+    await home.getByRole("button", { name: "Edit templates" }).click();
+    const roleplayTurnTemplate = home.getByLabel("Roleplay turn prompt template");
+    const roleplayTurnTemplateBox = await roleplayTurnTemplate.boundingBox();
+    expect(roleplayTurnTemplateBox?.height ?? 0).toBeGreaterThanOrEqual(500);
+    await expect(roleplayTurnTemplate).toHaveValue(/\$\{currentPath\}/u);
+    await expect(roleplayTurnTemplate).toHaveValue(/\$\{authorityInstruction\}/u);
+    const builtInRoleplayTurnTemplate = await roleplayTurnTemplate.inputValue();
+    await roleplayTurnTemplate.fill(
+      `${builtInRoleplayTurnTemplate}\n${Array.from(
+        { length: 500 },
+        () => "${privateModelContextBlock}",
+      ).join("\n")}`,
+    );
+    await expect(home.getByRole("alert").filter({ hasText: "Resolved preview unavailable" })).toContainText(
+      "40,000 characters",
+    );
+    await expect(roleplayTurnTemplate).toBeVisible();
+    await expect(home.getByRole("button", { name: "Restore built-in" })).toBeEnabled();
+    await home.getByRole("button", { name: "Restore built-in" }).click();
+    await roleplayTurnTemplate.fill(`${await roleplayTurnTemplate.inputValue()}\n\${ currentPath }`);
+    await expect(home.getByRole("alert").filter({ hasText: "Invalid turn prompt variable" })).toContainText(
+      "without spaces or punctuation",
+    );
+    await expect(home.getByRole("button", { name: "Save templates" })).toBeDisabled();
+    await home.getByRole("button", { name: "Restore built-in" }).click();
+    await roleplayTurnTemplate.fill("Invalid template without required variables.");
+    await expect(home.getByRole("button", { name: "Save templates" })).toBeDisabled();
+    await expect(home.getByRole("alert")).toContainText("${currentPath}");
+    await home.getByRole("button", { name: "Restore built-in" }).click();
+    await roleplayTurnTemplate.fill(`ROLEPLAY_EDITABLE_INSERT\n${await roleplayTurnTemplate.inputValue()}`);
+    await expect(roleplayTurnInsert).toContainText("ROLEPLAY_EDITABLE_INSERT");
+    await turnPromptMode.getByRole("button", { name: "Game", exact: true }).click();
+    const gameTurnInsert = home.getByLabel("Game turn prompt insert");
+    await expect(gameTurnInsert).toContainText('<spatial_context mode="game" authority="application">');
+    await expect(gameTurnInsert).toContainText("authoritative world location for the GM and party");
+    await expect(home).toContainText("Game requests also relabel legacy");
+    const gameTurnTemplate = home.getByLabel("Game turn prompt template");
+    await gameTurnTemplate.fill(`GAME_EDITABLE_INSERT\n${await gameTurnTemplate.inputValue()}`);
+    await expect(gameTurnInsert).toContainText("GAME_EDITABLE_INSERT");
+    await home.getByRole("button", { name: "Save templates" }).click();
+    await expect(home.getByRole("button", { name: "Edit templates" })).toBeVisible();
+    await expect
+      .poll(async () => {
+        const response = await page.request.get("/api/agents");
+        const mapsAgent = ((await response.json()) as Array<{ type: string; settings?: unknown }>).find(
+          (agent) => agent.type === "hierarchical-maps",
+        );
+        const settings =
+          typeof mapsAgent?.settings === "string"
+            ? (JSON.parse(mapsAgent.settings) as Record<string, unknown>)
+            : ((mapsAgent?.settings ?? {}) as Record<string, unknown>);
+        const templates = settings.spatialMapTurnPromptTemplates as
+          | { roleplay?: string; game?: string }
+          | undefined;
+        return {
+          roleplay: templates?.roleplay?.includes("ROLEPLAY_EDITABLE_INSERT") === true,
+          game: templates?.game?.includes("GAME_EDITABLE_INSERT") === true,
+        };
+      })
+      .toEqual({ roleplay: true, game: true });
+    await turnPromptMode.getByRole("button", { name: "Roleplay", exact: true }).click();
+    await expect(roleplayTurnInsert).toContainText("ROLEPLAY_EDITABLE_INSERT");
     const promptOption = home.getByLabel("Prompt option");
     await expect(promptOption).toHaveValue("default");
     const systemTemplate = home.getByLabel("New map System template");
     const userTemplate = home.getByLabel("New map User template");
     await expect(systemTemplate).toHaveValue(/AI roleplay engine/u);
     await expect(userTemplate).toHaveValue(/\$\{sourceContextBlock\}/u);
-    await home.getByRole("button", { name: "Game", exact: true }).click();
+    const promptLibraryMode = home.getByRole("group", { name: "Prompt library mode" });
+    await promptLibraryMode.getByRole("button", { name: "Game", exact: true }).click();
     await expect(home).toContainText("Game · Default");
     await expect(systemTemplate).toHaveValue(/AI game engine/u);
     await expect(home.getByRole("button", { name: "Preview resolved prompt" })).toBeDisabled();
     await expect(home).toContainText("Open a Game chat to resolve these global templates");
-    await home.getByRole("button", { name: "Roleplay", exact: true }).click();
+    await promptLibraryMode.getByRole("button", { name: "Roleplay", exact: true }).click();
     await expect(home).toContainText("Roleplay · Default");
     await home.getByRole("button", { name: "Add option" }).click();
     await home.getByLabel("Option name").fill("Nautical districts");
@@ -1050,6 +1119,9 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
         .click();
       const secondaryHome = secondaryPage.locator("[data-marinara-maps-home]");
       await expect(secondaryHome).toContainText("Maps Global Library");
+      await expect(secondaryHome.getByLabel("Roleplay turn prompt insert")).toContainText(
+        "ROLEPLAY_EDITABLE_INSERT",
+      );
       const secondaryPromptOption = secondaryHome.getByLabel("Prompt option");
       await expect(secondaryPromptOption.locator("option")).toHaveText(["Default", "Nautical districts"]);
       let generatedRequest: Record<string, unknown> | null = null;
@@ -1197,8 +1269,91 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
   }
 });
 
+test("global Hierarchical Maps home protects templates after a settings load failure", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: `Maps Template Load Failure ${testInfo.project.name}`,
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  const mobile = testInfo.project.name.includes("mobile");
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator(
+      mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
+    );
+    const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
+    await expect(mapsCard).toBeVisible();
+    await page.route("**/api/agents", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Settings temporarily unavailable" }),
+      });
+    });
+    await mapsCard.getByText("Hierarchical Maps", { exact: true }).click();
+
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(
+      home.getByRole("alert").filter({ hasText: "Global turn prompt templates could not load" }),
+    ).toContainText("Settings temporarily unavailable", { timeout: 20_000 });
+    await expect(home.getByRole("button", { name: "Edit templates" })).toBeDisabled();
+    await expect(home.getByRole("button", { name: "Copy insert" })).toBeDisabled();
+
+    await page.unroute("**/api/agents");
+    await home.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(home.getByRole("button", { name: "Edit templates" })).toBeEnabled();
+    await expect(home.getByLabel("Roleplay turn prompt insert")).toContainText("Current path:");
+  } finally {
+    await page.unroute("**/api/agents");
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
 test("global Hierarchical Maps home edits the current map location types", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
+  const agentsBeforeResponse = await page.request.get("/api/agents");
+  expect(agentsBeforeResponse.ok(), await agentsBeforeResponse.text()).toBeTruthy();
+  const mapsAgentBefore = ((await agentsBeforeResponse.json()) as Array<{
+    type: string;
+    settings?: unknown;
+  }>).find((agent) => agent.type === "hierarchical-maps");
+  const originalMapsAgentSettings = (() => {
+    if (typeof mapsAgentBefore?.settings === "string") {
+      try {
+        const parsed = JSON.parse(mapsAgentBefore.settings) as unknown;
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {};
+      } catch {
+        return {};
+      }
+    }
+    return mapsAgentBefore?.settings && typeof mapsAgentBefore.settings === "object"
+      ? (mapsAgentBefore.settings as Record<string, unknown>)
+      : {};
+  })();
   const response = await page.request.post("/api/chats", {
     data: {
       name: `Maps Location Types ${testInfo.project.name}`,
@@ -1244,7 +1399,45 @@ test("global Hierarchical Maps home edits the current map location types", async
 
     const home = page.locator("[data-marinara-maps-home]");
     const homeHeadings = await home.getByRole("heading", { level: 2 }).allTextContents();
-    expect(homeHeadings.indexOf("Generation prompt")).toBeLessThan(homeHeadings.indexOf("Location types"));
+    expect(homeHeadings.indexOf("Generation prompt")).toBeLessThan(homeHeadings.indexOf("Turn prompt insert"));
+    expect(homeHeadings.indexOf("Turn prompt insert")).toBeLessThan(homeHeadings.indexOf("Location types"));
+    await expect(home.getByText("Live current chat", { exact: true })).toBeVisible();
+    const liveTurnInsert = home.getByLabel("Roleplay turn prompt insert");
+    await expect(liveTurnInsert).toContainText('<spatial_context mode="roleplay" authority="application">');
+    await expect(liveTurnInsert).toContainText("Current path: Shrouded Coast");
+    await expect(liveTurnInsert).toContainText("A coast hidden beneath sea fog.");
+    await expect(liveTurnInsert).toContainText("Old shipping routes conceal forgotten coves.");
+    await expect(liveTurnInsert).toContainText("- Gloam Harbor [ai_harbor]");
+    await home.getByRole("button", { name: "Edit templates" }).click();
+    const liveRoleplayTemplate = home.getByLabel("Roleplay turn prompt template");
+    await liveRoleplayTemplate.fill(`LIVE_EDITABLE_INSERT\n${await liveRoleplayTemplate.inputValue()}`);
+    await home.getByRole("button", { name: "Save templates" }).click();
+    await expect(liveTurnInsert).toContainText("LIVE_EDITABLE_INSERT");
+    await expect
+      .poll(async () => {
+        const agentsResponse = await page.request.get("/api/agents");
+        const mapsAgent = ((await agentsResponse.json()) as Array<{ type: string; settings?: unknown }>).find(
+          (agent) => agent.type === "hierarchical-maps",
+        );
+        const settings =
+          typeof mapsAgent?.settings === "string"
+            ? (JSON.parse(mapsAgent.settings) as Record<string, unknown>)
+            : ((mapsAgent?.settings ?? {}) as Record<string, unknown>);
+        const templates = settings.spatialMapTurnPromptTemplates as { roleplay?: string } | undefined;
+        return templates?.roleplay?.includes("LIVE_EDITABLE_INSERT") === true;
+      })
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const peekResponse = await page.request.post(`/api/chats/${chat.id}/peek-prompt`, { data: {} });
+        if (!peekResponse.ok()) return false;
+        const peekPayload = (await peekResponse.json()) as { messages: Array<{ content: string }> };
+        return peekPayload.messages
+          .map((message) => message.content)
+          .join("\n")
+          .includes("LIVE_EDITABLE_INSERT");
+      })
+      .toBe(true);
     await expect(home.getByRole("heading", { name: "Location types", exact: true })).toBeVisible();
     await expect(home.getByLabel("Location type 2 label")).toHaveValue("Settlement");
     await expect(home.getByLabel("Location type 2 label")).toHaveAttribute("readonly", "");
@@ -1292,11 +1485,13 @@ test("global Hierarchical Maps home edits the current map location types", async
     await home.getByRole("button", { name: "Open map", exact: true }).click();
     await worldMapOverlay.getByRole("button", { name: "Edit map", exact: true }).click();
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
-    await workspace.getByRole("button", { name: "Location types" }).click();
-    await expect(workspace.getByLabel("Profile name")).toHaveValue("Maritime hierarchy");
-    await expect(workspace.getByLabel("Location type 2 label")).toHaveValue("City");
-    await expect(workspace.getByLabel("Location type 7 label")).toHaveValue("Neighborhood");
+    await expect(workspace.getByRole("button", { name: "Location types" })).toHaveCount(0);
+    await expect(workspace.getByRole("region", { name: "Location type fields" })).toHaveCount(0);
   } finally {
+    const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+      data: { settings: originalMapsAgentSettings },
+    });
+    expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });
@@ -1923,21 +2118,8 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(importRepair).toContainText("Old Sewers · ai_sewers");
     await expect(importRepair).toContainText("Export this map as a baseline");
     await importRepair.getByRole("button", { name: "Dismiss" }).click();
-    await page.getByRole("button", { name: "Location types" }).click();
-    const locationTypeFields = page.getByRole("region", { name: "Location type fields" });
-    const addLocationType = locationTypeFields.getByRole("button", { name: "Add location type" });
-    for (let index = 0; index < 16; index += 1) await addLocationType.click();
-    expect(
-      await locationTypeFields.evaluate((element) => element.scrollHeight > element.clientHeight),
-      "A long location-type profile should scroll inside the editor",
-    ).toBe(true);
-    await locationTypeFields.evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
-    });
-    await expect(addLocationType).toBeInViewport();
-    await expect(page.getByRole("button", { name: "Done", exact: true })).toBeInViewport();
-    await page.getByLabel("Location type 1 label").fill("World Area");
-    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Location types" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Location type fields" })).toHaveCount(0);
     await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
     await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
@@ -1968,14 +2150,10 @@ test("AI map expansion preserves a campaign map and its current location", async
         const response = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
         const payload = (await response.json()) as {
           definition: { locations: Array<{ id: string; placement?: { x: number; y: number } }> };
-          hierarchyProfile: { types: Array<{ label: string }> };
         };
-        return {
-          x: payload.definition.locations.find((location) => location.id === "ai_lighthouse")?.placement?.x,
-          labels: payload.hierarchyProfile.types.map((type) => type.label),
-        };
+        return payload.definition.locations.find((location) => location.id === "ai_lighthouse")?.placement?.x;
       })
-      .toEqual({ x: 65, labels: expect.arrayContaining(["World Area"]) });
+      .toBe(65);
 
     if (mobile) await page.getByRole("button", { name: "hierarchy", exact: true }).click();
     await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();

@@ -20,28 +20,39 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
+import type { ResolvedOwnerSpatialProjection, SpatialOwnerMode } from "@marinara-engine/shared";
 import {
   getSpatialContextProblem,
   usePreviewSpatialMapPrompt,
   useSpatialContext,
   useSpatialGenerationPromptLibraries,
+  useSpatialTurnPromptTemplates,
   useUpdateSpatialGenerationPreferences,
   useUpdateSpatialGenerationPromptLibrary,
+  useUpdateSpatialTurnPromptTemplates,
   useUpdateSpatialContext,
   type SpatialMapPromptPreview,
 } from "../../hooks/use-spatial-context";
 import {
+  defaultSpatialTurnPromptTemplates,
   defaultGenerationPreferences,
   DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID,
   GENERATION_PROMPT_LIBRARIES_VERSION,
   generationPreferencesWithPromptLibrary,
   normalizeHierarchyProfile,
   SPATIAL_GENERATION_PROMPT_VARIABLES,
+  SPATIAL_TURN_PROMPT_VARIABLES,
   spatialGenerationPreferencesSchema,
+  spatialTurnPromptTemplatesSchema,
   type SpatialGenerationPreferences,
   type SpatialGenerationCustomVariable,
   type SpatialGenerationPromptOption,
+  type SpatialTurnPromptTemplates,
 } from "../../../../maps-shared/src/maps-model";
+import {
+  buildOwnerSpatialProjection,
+  formatOwnerSpatialPrompt,
+} from "../../../../maps-shared/src/runtime-prompt";
 import {
   SpatialHierarchyProfileFields,
   type SpatialHierarchyProfileDraft,
@@ -146,6 +157,34 @@ const SPATIAL_GENERATION_VARIABLE_DETAILS: Record<
   },
 };
 
+function exampleTurnPromptProjection(ownerMode: SpatialOwnerMode): ResolvedOwnerSpatialProjection {
+  return {
+    kind: "owner",
+    chatId: "current-chat-id",
+    ownerMode,
+    definitionRevision: 1,
+    currentLocationId: "current-location-id",
+    breadcrumb: [
+      { id: "parent-location-id", name: "Parent location" },
+      { id: "current-location-id", name: "Current location" },
+    ],
+    description: "The exact current location's public description appears here.",
+    modelMemory: "The exact current location's private model memory appears here when it is set.",
+    destinations: [
+      {
+        id: "reachable-location-id",
+        name: "Reachable destination",
+        kind: "place",
+        relation: "enter",
+        label: "Optional route label",
+        sortOrder: 0,
+      },
+    ],
+    lorebookEntryIds: [],
+    omittedDestinationCount: 0,
+  };
+}
+
 export function SpatialMapsHome({
   chatId,
   chatName,
@@ -163,7 +202,9 @@ export function SpatialMapsHome({
   const [activationError, setActivationError] = useState<string | null>(null);
   const updateSpatial = useUpdateSpatialContext();
   const updateGenerationPreferences = useUpdateSpatialGenerationPreferences();
+  const updateTurnPromptTemplates = useUpdateSpatialTurnPromptTemplates();
   const promptLibraries = useSpatialGenerationPromptLibraries();
+  const globalTurnPromptTemplates = useSpatialTurnPromptTemplates();
   const updatePromptLibrary = useUpdateSpatialGenerationPromptLibrary();
   const previewGenerationPrompt = usePreviewSpatialMapPrompt();
   const chatOwnerMode = chatMode === "game" ? "game" : "roleplay";
@@ -175,12 +216,46 @@ export function SpatialMapsHome({
   const [promptOperation, setPromptOperation] = useState<"draft" | "expansion">("draft");
   const [promptPreview, setPromptPreview] = useState<SpatialMapPromptPreview | null>(null);
   const [promptCopyStatus, setPromptCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [turnPromptMode, setTurnPromptMode] = useState<SpatialOwnerMode>(chatOwnerMode);
+  const [turnPromptDraft, setTurnPromptDraft] = useState<SpatialTurnPromptTemplates>(() =>
+    defaultSpatialTurnPromptTemplates(),
+  );
+  const [turnPromptEditing, setTurnPromptEditing] = useState(false);
+  const [turnPromptCopyStatus, setTurnPromptCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [hierarchyEditing, setHierarchyEditing] = useState(false);
   const [hierarchyDraft, setHierarchyDraft] = useState<SpatialHierarchyProfileDraft | null>(null);
   const supportedChat = chatMode === "roleplay" || chatMode === "game";
   const definition = spatial.data?.definition ?? null;
   const activeLocationCount = definition?.locations.filter((location) => location.status === "active").length ?? 0;
   const currentPath = spatial.data?.breadcrumb.map((location) => location.name).join(" / ") ?? "";
+  const liveTurnPromptProjection = useMemo(
+    () =>
+      chatId && definition?.ownerMode === turnPromptMode
+        ? buildOwnerSpatialProjection(chatId, definition, spatial.data?.currentLocationId ?? null)
+        : null,
+    [chatId, definition, spatial.data?.currentLocationId, turnPromptMode],
+  );
+  const turnPromptPreview = useMemo(() => {
+    try {
+      return {
+        text: formatOwnerSpatialPrompt(
+          liveTurnPromptProjection ?? exampleTurnPromptProjection(turnPromptMode),
+          turnPromptDraft[turnPromptMode],
+        ),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        text: "",
+        error:
+          error instanceof Error
+            ? error.message
+            : "The resolved turn prompt could not be previewed.",
+      };
+    }
+  }, [liveTurnPromptProjection, turnPromptDraft, turnPromptMode]);
+  const turnPromptText = turnPromptPreview.text;
+  const turnPromptIsActive = Boolean(liveTurnPromptProjection && enabledForChat);
   const mapState = !definition
     ? "No map yet"
     : definition.enabled
@@ -193,6 +268,7 @@ export function SpatialMapsHome({
   const promptPreviewRequestIdRef = useRef(0);
   const resetGenerationPreferences = updateGenerationPreferences.reset;
   const resetPromptLibraryUpdate = updatePromptLibrary.reset;
+  const resetTurnPromptTemplatesUpdate = updateTurnPromptTemplates.reset;
   const resetSpatialUpdate = updateSpatial.reset;
   const resetPromptPreviewRequest = previewGenerationPrompt.reset;
   useEffect(() => {
@@ -202,14 +278,18 @@ export function SpatialMapsHome({
     setPromptOperation("draft");
     setPromptPreview(null);
     setPromptCopyStatus("idle");
+    setTurnPromptMode(chatOwnerMode);
+    setTurnPromptEditing(false);
+    setTurnPromptCopyStatus("idle");
     setHierarchyEditing(false);
     setHierarchyDraft(null);
     promptPreviewRequestIdRef.current += 1;
     resetGenerationPreferences();
     resetPromptLibraryUpdate();
+    resetTurnPromptTemplatesUpdate();
     resetPromptPreviewRequest();
     resetSpatialUpdate();
-  }, [chatId, chatOwnerMode, resetGenerationPreferences, resetPromptLibraryUpdate, resetPromptPreviewRequest, resetSpatialUpdate]);
+  }, [chatId, chatOwnerMode, resetGenerationPreferences, resetPromptLibraryUpdate, resetPromptPreviewRequest, resetSpatialUpdate, resetTurnPromptTemplatesUpdate]);
   const promptAppliesToCurrentChat = Boolean(chatId && supportedChat && chatOwnerMode === promptMode);
   const resolvedPromptPreferences = useMemo(
     () =>
@@ -226,6 +306,10 @@ export function SpatialMapsHome({
     if (promptEditing || promptLibraries.isLoading) return;
     setPromptDraft(resolvedPromptPreferences);
   }, [promptEditing, promptLibraries.isLoading, resolvedPromptPreferences]);
+  useEffect(() => {
+    if (turnPromptEditing || !globalTurnPromptTemplates.isSuccess) return;
+    setTurnPromptDraft(globalTurnPromptTemplates.data);
+  }, [globalTurnPromptTemplates.data, globalTurnPromptTemplates.isSuccess, turnPromptEditing]);
   useEffect(() => {
     if (hierarchyEditing) return;
     if (!spatial.data?.definition) {
@@ -253,6 +337,10 @@ export function SpatialMapsHome({
   const promptValidationMessage = promptValidation.success
     ? null
     : promptValidation.error.issues[0]?.message ?? "The prompt templates are incomplete.";
+  const turnPromptValidation = spatialTurnPromptTemplatesSchema.safeParse(turnPromptDraft);
+  const turnPromptValidationMessage = turnPromptValidation.success
+    ? null
+    : turnPromptValidation.error.issues[0]?.message ?? "The turn prompt templates are incomplete.";
   const activeLocations = definition?.locations.filter((location) => location.status === "active") ?? [];
   const expansionPreviewTarget =
     activeLocations.find((location) => location.id === spatial.data?.currentLocationId) ??
@@ -263,6 +351,12 @@ export function SpatialMapsHome({
   const expansionPreviewUnavailable = promptOperation === "expansion" && !expansionPreviewTarget;
   const hierarchySaveError = updateSpatial.isError
     ? getSpatialContextProblem(updateSpatial.error).message
+    : null;
+  const turnPromptSaveError = updateTurnPromptTemplates.isError
+    ? getSpatialContextProblem(updateTurnPromptTemplates.error).message
+    : null;
+  const turnPromptLoadError = globalTurnPromptTemplates.isError
+    ? getSpatialContextProblem(globalTurnPromptTemplates.error).message
     : null;
 
   const resetHierarchyDraft = () => {
@@ -434,6 +528,30 @@ export function SpatialMapsHome({
       setPromptCopyStatus("copied");
     } catch {
       setPromptCopyStatus("failed");
+    }
+  };
+  const resetTurnPromptDraft = () => {
+    if (globalTurnPromptTemplates.data) setTurnPromptDraft(globalTurnPromptTemplates.data);
+    updateTurnPromptTemplates.reset();
+  };
+  const restoreBuiltInTurnPrompt = () => {
+    const defaults = defaultSpatialTurnPromptTemplates();
+    setTurnPromptDraft((current) => ({ ...current, [turnPromptMode]: defaults[turnPromptMode] }));
+    updateTurnPromptTemplates.reset();
+  };
+  const saveTurnPromptTemplates = async () => {
+    if (!turnPromptValidation.success || !globalTurnPromptTemplates.isSuccess) return;
+    const saved = await updateTurnPromptTemplates.mutateAsync(turnPromptValidation.data);
+    setTurnPromptDraft(saved);
+    setTurnPromptEditing(false);
+  };
+  const copyTurnPrompt = async () => {
+    if (!globalTurnPromptTemplates.isSuccess || turnPromptPreview.error) return;
+    try {
+      await navigator.clipboard.writeText(turnPromptText);
+      setTurnPromptCopyStatus("copied");
+    } catch {
+      setTurnPromptCopyStatus("failed");
     }
   };
   const toggleForChat = async () => {
@@ -1137,6 +1255,259 @@ export function SpatialMapsHome({
             </div>
           </article>
 
+        <article
+          className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
+          aria-labelledby="maps-turn-prompt-title"
+        >
+          <div className="flex flex-wrap items-start gap-3">
+            <Code2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+            <div className="min-w-52 flex-1">
+              <h2 id="maps-turn-prompt-title" className="text-xs font-semibold">Turn prompt insert</h2>
+              <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                Edit the global system message injected once per model request before visible history. Roleplay and Game templates apply to every matching chat and are not copied into chat messages.
+              </p>
+            </div>
+            <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
+              {globalTurnPromptTemplates.isError
+                ? "Templates unavailable"
+                : !globalTurnPromptTemplates.isSuccess
+                  ? "Loading templates"
+                  : turnPromptEditing
+                ? "Unsaved preview"
+                : liveTurnPromptProjection
+                  ? turnPromptIsActive
+                    ? "Live current chat"
+                    : "Current map, inactive"
+                  : "Format example"}
+            </span>
+          </div>
+
+          <div
+            className="mt-3 flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]"
+            role="group"
+            aria-label="Turn prompt mode"
+          >
+            {(["roleplay", "game"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={turnPromptMode === mode}
+                disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
+                onClick={() => {
+                  setTurnPromptMode(mode);
+                  setTurnPromptCopyStatus("idle");
+                }}
+                className={`min-h-11 flex-1 rounded-md px-3 text-[0.6875rem] font-medium disabled:opacity-45 ${
+                  turnPromptMode === mode
+                    ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                    : "text-[var(--marinara-chat-chrome-accent)]"
+                }`}
+              >
+                {modeLabel(mode)}
+              </button>
+            ))}
+          </div>
+
+          {turnPromptLoadError && (
+            <div
+              className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+              role="alert"
+            >
+              <p>
+                Global turn prompt templates could not load. Editing and copying are disabled to protect saved templates. {turnPromptLoadError}
+              </p>
+              <button
+                type="button"
+                onClick={() => void globalTurnPromptTemplates.refetch()}
+                disabled={globalTurnPromptTemplates.isFetching}
+                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-current px-3 text-xs font-semibold disabled:opacity-45"
+              >
+                {globalTurnPromptTemplates.isFetching ? (
+                  <LoaderCircle size="0.75rem" className="animate-spin" />
+                ) : (
+                  <RotateCcw size="0.75rem" />
+                )}
+                {globalTurnPromptTemplates.isFetching ? "Retrying" : "Retry"}
+              </button>
+            </div>
+          )}
+
+          {turnPromptEditing && (
+            <div className="mt-4 border-t border-[var(--border)] pt-4">
+              <label
+                htmlFor={`maps-turn-prompt-template-${turnPromptMode}`}
+                className="text-[0.6875rem] font-semibold"
+              >
+                {modeLabel(turnPromptMode)} turn prompt template
+              </label>
+              <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                Marinara keeps the application-owned <code className="font-mono">&lt;spatial_context&gt;</code> wrapper around this text. Required variables preserve current location data and the mode's authority rule.
+              </p>
+              <textarea
+                id={`maps-turn-prompt-template-${turnPromptMode}`}
+                aria-label={`${modeLabel(turnPromptMode)} turn prompt template`}
+                value={turnPromptDraft[turnPromptMode]}
+                onChange={(event) => {
+                  setTurnPromptDraft((current) => ({
+                    ...current,
+                    [turnPromptMode]: event.target.value,
+                  }));
+                  updateTurnPromptTemplates.reset();
+                }}
+                disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
+                spellCheck={false}
+                style={{ minHeight: "32rem" }}
+                className="mt-3 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-45"
+              />
+              <div className="mt-3" aria-label="Turn prompt variables">
+                <p className="text-[0.625rem] font-semibold text-[var(--marinara-chat-chrome-accent)]">
+                  Available variables
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {SPATIAL_TURN_PROMPT_VARIABLES.map((variable) => (
+                    <code
+                      key={variable}
+                      className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-[0.625rem] text-[var(--foreground)]"
+                    >
+                      {`\${${variable}}`}
+                    </code>
+                  ))}
+                </div>
+              </div>
+              {(turnPromptValidationMessage || turnPromptSaveError) && (
+                <p
+                  className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                  role="alert"
+                >
+                  {turnPromptValidationMessage ?? turnPromptSaveError}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 border-t border-[var(--border)] pt-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[0.6875rem] font-semibold">
+                  {turnPromptEditing
+                    ? "Resolved preview"
+                    : liveTurnPromptProjection
+                      ? "Resolved system message"
+                      : `${modeLabel(turnPromptMode)} format`}
+                </h3>
+                <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                  {liveTurnPromptProjection
+                    ? `Resolved from ${chatName ?? "the current chat"}'s saved current location.`
+                    : `Open a ${modeLabel(turnPromptMode)} chat with an enabled saved map to replace the example values with its live insert.`}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {turnPromptEditing ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={restoreBuiltInTurnPrompt}
+                      disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
+                    >
+                      <RotateCcw size="0.75rem" /> Restore built-in
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetTurnPromptDraft();
+                        setTurnPromptEditing(false);
+                      }}
+                      disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
+                      className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void saveTurnPromptTemplates()}
+                      disabled={
+                        !turnPromptValidation.success ||
+                        updateTurnPromptTemplates.isPending ||
+                        !globalTurnPromptTemplates.isSuccess
+                      }
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
+                    >
+                      {updateTurnPromptTemplates.isPending ? (
+                        <LoaderCircle size="0.75rem" className="animate-spin" />
+                      ) : (
+                        <Save size="0.75rem" />
+                      )}
+                      Save templates
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void copyTurnPrompt()}
+                      disabled={!globalTurnPromptTemplates.isSuccess || Boolean(turnPromptPreview.error)}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-45"
+                    >
+                      <ClipboardCopy size="0.75rem" />
+                      {turnPromptCopyStatus === "copied"
+                        ? "Copied"
+                        : turnPromptCopyStatus === "failed"
+                          ? "Copy failed"
+                          : "Copy insert"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetTurnPromptDraft();
+                        setTurnPromptEditing(true);
+                      }}
+                      disabled={!globalTurnPromptTemplates.isSuccess}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
+                    >
+                      <PencilLine size="0.75rem" /> Edit templates
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            {!chatId && (
+              <p className="mt-3 text-[0.625rem] leading-relaxed text-amber-500">
+                Open a Roleplay or Game chat to resolve the global template with a live saved location. You can still edit and save the global templates here.
+              </p>
+            )}
+            {liveTurnPromptProjection && (
+              <p className="mt-3 text-[0.625rem] leading-relaxed text-amber-500">
+                Contains the current map's private model context when one is saved.
+              </p>
+            )}
+            {turnPromptPreview.error && globalTurnPromptTemplates.isSuccess && (
+              <p
+                className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                role="alert"
+              >
+                Resolved preview unavailable. {turnPromptPreview.error}
+              </p>
+            )}
+            {globalTurnPromptTemplates.isSuccess && !turnPromptPreview.error && (
+              <pre
+                aria-label={`${modeLabel(turnPromptMode)} turn prompt insert`}
+                className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]"
+              >
+                {turnPromptText}
+              </pre>
+            )}
+            <p className="mt-3 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              Lore linked to the exact current location is activated separately through the lorebook pipeline at each entry's configured prompt position. It is not duplicated inside this block.
+            </p>
+            {turnPromptMode === "game" && (
+              <p className="mt-2 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                Game requests also relabel legacy <code className="font-mono">&lt;map_state&gt;</code> context as local tactical state and restrict <code className="font-mono">[map_update]</code> to movement inside this hierarchical location.
+              </p>
+            )}
+          </div>
+        </article>
+
         {chatId && supportedChat && (
           <article
             className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
@@ -1147,7 +1518,7 @@ export function SpatialMapsHome({
               <div className="min-w-52 flex-1">
                 <h2 id="maps-location-types-title" className="text-xs font-semibold">Location types</h2>
                 <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-                  View and edit the vocabulary saved with this chat’s map. These are the same hierarchy names and semantic base kinds shown in Edit Map and reused by AI expansions.
+                  View and edit the vocabulary saved with this chat’s map. These hierarchy names and semantic base kinds are used throughout the map and reused by AI expansions.
                 </p>
               </div>
               {hierarchyDraft && (

@@ -13,7 +13,6 @@ import {
   Plus,
   RefreshCw,
   Save,
-  Settings2,
   Sparkles,
   Trash2,
   Upload,
@@ -39,7 +38,6 @@ import { LayerSelector } from "./components/LayerSelector";
 import { LocalMapCanvas } from "./components/LocalMapCanvas";
 import { LocationInspector } from "./components/LocationInspector";
 import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
-import { SpatialHierarchyProfileFields } from "./components/SpatialHierarchyProfileFields";
 import {
   addSpatialLocation,
   archiveSpatialLocation,
@@ -179,7 +177,6 @@ export function SpatialMapWorkspace({
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
   const [layoutEditing, setLayoutEditing] = useState(false);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
-  const [typesEditorOpen, setTypesEditorOpen] = useState(false);
 
   const resolveConfirmation = useCallback((confirmed: boolean) => {
     const resolve = confirmationResolverRef.current;
@@ -277,7 +274,6 @@ export function SpatialMapWorkspace({
     setRegenerateRequestId(0);
     setLayoutEditing(false);
     setImportIdReport(null);
-    setTypesEditorOpen(false);
   }, [chatId, resolveConfirmation]);
 
   useEffect(() => {
@@ -1106,15 +1102,6 @@ export function SpatialMapWorkspace({
           </button>
           <button
             type="button"
-            onClick={() => setTypesEditorOpen((value) => !value)}
-            disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
-            aria-pressed={typesEditorOpen}
-            className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-          >
-            <Settings2 size="0.8125rem" /> Location types
-          </button>
-          <button
-            type="button"
             onClick={handleExport}
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
             aria-label="Export hierarchical map"
@@ -1207,45 +1194,6 @@ export function SpatialMapWorkspace({
         onClose={closeAiBuilder}
         onApply={applyGeneratedDraft}
       />
-
-      {!aiBuilderOpen && typesEditorOpen && (
-        <section
-          className="flex max-h-[min(70dvh,42rem)] shrink-0 flex-col overflow-hidden border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]"
-          aria-label="Edit location types"
-          style={{ maxHeight: "min(70dvh, 42rem)" }}
-        >
-          <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col">
-            <div className="flex shrink-0 items-start gap-3 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-semibold text-[var(--marinara-editor-title)]">Location types</h2>
-                <p className="mt-1 text-xs leading-relaxed text-[var(--marinara-editor-muted)]">
-                  Rename the vocabulary users see while keeping a semantic base kind for movement, layout, and validation. Multiple types can share the same base kind.
-                </p>
-              </div>
-              <button type="button" onClick={() => setTypesEditorOpen(false)} className="mari-editor-action min-h-11 px-3 text-xs">
-                Done
-              </button>
-            </div>
-            <div
-              data-marinara-maps-location-types-scroll
-              role="region"
-              aria-label="Location type fields"
-              tabIndex={0}
-              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4"
-            >
-              <SpatialHierarchyProfileFields
-                definition={draft}
-                profile={draftHierarchyProfile}
-                disabled={conflict || updateSpatial.isPending}
-                onChange={(next) => {
-                  setDraftHierarchyProfile(next.profile);
-                  applyDraft(next.definition);
-                }}
-              />
-            </div>
-          </div>
-        </section>
-      )}
 
       {!aiBuilderOpen && importIdReport && (
         <section
