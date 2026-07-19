@@ -4,6 +4,7 @@ import type {
   LtmDraftMutation,
   LtmDraftReviewMutation,
   LtmDraftReviewResponse,
+  LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request } from "./api";
 import { Button, StatusSurface } from "./shared-controls";
@@ -93,6 +94,13 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
     queryFn: () =>
       request<LtmDraftReviewResponse>("/drafts/review?status=pending"),
   });
+  const notes = useQuery({
+    queryKey: queryKeys.notes,
+    queryFn: () => request<LtmNote[]>("/notes?includeGlobal=true"),
+  });
+  const noteTitles = new Map(
+    (notes.data ?? []).map((note) => [note.id, note.title || "Untitled memory"]),
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState<"accept" | "skip" | null>(null);
   const [result, setResult] = useState<BatchResult | null>(null);
@@ -165,11 +173,11 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
           );
           mutationIds.forEach((id) => completedIds.add(id));
           messages.push(
-            `${action === "accept" ? "Accepted" : "Skipped"} ${mutationIds.length} mutation${mutationIds.length === 1 ? "" : "s"} from draft ${draftId}.`,
+            `${action === "accept" ? "Accepted" : "Skipped"} ${mutationIds.length} mutation${mutationIds.length === 1 ? "" : "s"} from a draft.`,
           );
         } catch (error) {
           messages.push(
-            `Draft ${draftId}: ${error instanceof Error ? error.message : "Request failed"}`,
+            `Draft action failed: ${error instanceof Error ? error.message : "Request failed"}`,
           );
         }
       }
@@ -188,6 +196,7 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
         await invalidateLtmQueries(queryClient, [
           queryKeys.review,
           queryKeys.pendingDrafts,
+          queryKeys.scopeTargetsRoot,
           ...(action === "accept"
             ? [
                 queryKeys.notes,
@@ -283,7 +292,7 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
         >
           <header>
             <h3 className="text-sm font-semibold">
-              Source: {source.sourceNoteId}
+              Source memory: {noteTitles.get(source.sourceNoteId) ?? "Untitled memory"}
             </h3>
             <p className="text-xs text-[var(--muted-foreground)]">
               Modes: {source.modes.join(", ")}
@@ -300,7 +309,7 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <h4 className="text-xs font-semibold">
-                      Draft {item.draft.id}
+                      Draft {source.drafts.indexOf(item) + 1}
                     </h4>
                     <p className="text-xs text-[var(--muted-foreground)]">
                       Status: {item.draft.status}. Created:{" "}
@@ -359,7 +368,7 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
                         </div>
                         <p className="text-xs font-medium">
                           {mutationLabel(mutation)} target:{" "}
-                          {row.targetTitle ?? row.targetId}
+                          {row.targetTitle ?? "Target memory"}
                         </p>
                         <p className="text-xs text-[var(--muted-foreground)]">
                           {mutation.summary} Confidence:{" "}

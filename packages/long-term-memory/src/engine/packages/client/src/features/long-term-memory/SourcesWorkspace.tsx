@@ -81,7 +81,7 @@ export default function SourcesWorkspace({
   const [transferError, setTransferError] = useState("");
 
   const scopeTargets = useQuery({
-    queryKey: [...queryKeys.root, "scope-targets", props.chatId],
+    queryKey: queryKeys.scopeTargets(props.chatId),
     queryFn: () =>
       request<ScopeTargets>(
         `/scope-targets${props.chatId ? `?chatId=${encodeURIComponent(props.chatId)}` : ""}`,
@@ -129,6 +129,7 @@ export default function SourcesWorkspace({
   const invalidateAfterMutation = async () => {
     await invalidateLtmQueries(client, [
       queryKeys.notes,
+      queryKeys.scopeTargets(props.chatId),
       queryKeys.status,
       queryKeys.integrity,
       queryKeys.review,
@@ -180,8 +181,9 @@ export default function SourcesWorkspace({
         ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
       });
       setImportResult(result);
-      await invalidateAfterMutation();
-      await preview.refetch();
+      setImporting(false);
+      void invalidateAfterMutation().catch(() => undefined);
+      void preview.refetch().catch(() => undefined);
       if (action === "refresh")
         setReviewMessage(
           "Source memory refreshed. Re-extract it if you need a new draft.",
@@ -552,8 +554,7 @@ export default function SourcesWorkspace({
                     data-ltm-source-existing-note={row.existingNoteId}
                   >
                     <p className="text-xs text-[var(--muted-foreground)]">
-                      Source memory: {row.existingNoteTitle} (
-                      {row.existingNoteId})
+                      Source memory: {row.existingNoteTitle}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -651,7 +652,7 @@ export default function SourcesWorkspace({
           ))}
           {importResult.missingSourceIds.map((id) => (
             <StatusSurface key={id} tone="danger" data-ltm-source-missing={id}>
-              <CircleAlert size="0.875rem" /> Missing source: {id}
+              <CircleAlert size="0.875rem" /> Missing source memory
             </StatusSurface>
           ))}
         </section>

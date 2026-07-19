@@ -2802,3 +2802,25 @@ export const ltmAgentSettingsSchema = z.preprocess((value) => {
 }, ltmAgentSettingsShape);
 
 export type LtmAgentSettings = z.infer<typeof ltmAgentSettingsSchema>;
+
+export const ltmBackupSchema = z
+  .object({
+    format: z.literal("marinara-long-term-memory"),
+    version: z.literal(1),
+    exportedAt: ltmIsoTimestampSchema,
+    notes: z.array(ltmNoteSchema).max(50_000),
+    drafts: z.array(ltmExtractionDraftSchema).max(50_000),
+    settings: z
+      .object({
+        global: ltmGlobalSettingsSchema,
+        extraction: ltmExtractionSettingsSchema,
+        policies: ltmPoliciesConfigSchema,
+        retrieval: ltmRetrievalConfigSchema,
+        retention: ltmRetentionConfigSchema,
+        agent: ltmAgentSettingsSchema,
+      })
+      .strict(),
+  })
+  .strict();
+
+export type LtmBackup = z.infer<typeof ltmBackupSchema>;

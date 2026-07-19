@@ -96,6 +96,14 @@ import {
   previewLtmIdentityRepairs,
 } from "./identity-repair.js";
 import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
+import {
+  deleteAllLongTermMemoryData,
+  exportLongTermMemoryData,
+  parseLongTermMemoryBackup,
+  previewLongTermMemoryBackup,
+  replaceLongTermMemoryData,
+  resetLongTermMemorySettings,
+} from "./backup-restore.js";
 
 const NOTE_BODY_LIMIT_BYTES = 512 * 1024;
 const DRAFT_BODY_LIMIT_BYTES = 512 * 1024;
@@ -103,6 +111,7 @@ const SEARCH_BODY_LIMIT_BYTES = 128 * 1024;
 const MAINTENANCE_BODY_LIMIT_BYTES = 32 * 1024;
 const EXTRACTION_SETTINGS_BODY_LIMIT_BYTES = 1_100_000;
 const IDENTITY_REPAIR_BODY_LIMIT_BYTES = 512 * 1024;
+const BACKUP_BODY_LIMIT_BYTES = 25 * 1024 * 1024;
 const ltmIdentifierSchema = z
   .string()
   .min(1)
@@ -381,6 +390,46 @@ export function createLongTermMemoryRoutes(runtime: {
       },
     );
     app.get("/settings", async () => getLtmGlobalSettings(root));
+    app.get("/backup/export", async (_request, reply) =>
+      reply
+        .header("content-type", "application/json; charset=utf-8")
+        .header(
+          "content-disposition",
+          `attachment; filename=\"long-term-memory-${Date.now()}.json\"`,
+        )
+        .send(await exportLongTermMemoryData(root)),
+    );
+    app.post<{ Body: unknown }>(
+      "/backup/preview",
+      { bodyLimit: BACKUP_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          return await previewLongTermMemoryBackup(request.body, root);
+        } catch (error) {
+          return reply.status(400).send({
+            error: error instanceof Error ? error.message : "Invalid backup.",
+          });
+        }
+      },
+    );
+    app.post<{ Body: unknown }>(
+      "/backup/import",
+      { bodyLimit: BACKUP_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          return await replaceLongTermMemoryData(
+            parseLongTermMemoryBackup(request.body),
+            root,
+          );
+        } catch (error) {
+          return reply.status(400).send({
+            error: error instanceof Error ? error.message : "Could not import backup.",
+          });
+        }
+      },
+    );
+    app.delete("/data", async () => deleteAllLongTermMemoryData(root));
+    app.post("/settings/reset", async () => resetLongTermMemorySettings(root));
     app.put<{ Body: unknown }>(
       "/settings",
       { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
