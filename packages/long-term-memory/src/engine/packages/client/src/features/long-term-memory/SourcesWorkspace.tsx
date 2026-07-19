@@ -31,13 +31,6 @@ const sourceTabs: Array<{ id: Source; label: string }> = [
 
 type ScopeTargets = { currentScope: LtmScope | null };
 
-function isGameJournal(row: Pick<PreviewRow, "sourceId" | "title">) {
-  return (
-    row.sourceId.endsWith(":game_journal") ||
-    row.title.startsWith("Game Journal -")
-  );
-}
-
 function resultTone(status: string) {
   return status === "success" ||
     status === "succeeded" ||
@@ -514,14 +507,6 @@ export default function SourcesWorkspace({
                       >
                         {row.status} {row.freshness}
                       </span>
-                      {isGameJournal(row) ? (
-                        <span
-                          data-ltm-source-kind="game-journal"
-                          className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[0.625rem] font-semibold text-amber-700 dark:text-amber-300"
-                        >
-                          Game journal
-                        </span>
-                      ) : null}
                     </div>
                     <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                       {row.summary}
@@ -608,10 +593,10 @@ export default function SourcesWorkspace({
                   {item.extractionStatus}
                 </span>
                 <span
-                  data-ltm-extraction-outcome={item.outcome}
+                  data-ltm-extraction-outcome={item.outcome.state}
                   className="rounded-full bg-[var(--secondary)] px-2 py-0.5"
                 >
-                  {item.outcome}
+                  {item.outcome.state}
                 </span>
               </div>
               {item.extractionStatus !== "succeeded" ? (

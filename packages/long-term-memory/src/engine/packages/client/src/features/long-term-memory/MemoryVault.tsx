@@ -32,7 +32,6 @@ import type { LongTermMemoryDestinationProps } from "./types";
 import { memoryLabel, noteTypeLabel, scopeTargetLabel } from "./display-labels";
 
 const noteTypes: readonly LtmNoteType[] = [
-  "source",
   "timeline_event",
   "character",
   "relationship",

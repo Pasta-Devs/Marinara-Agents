@@ -56,7 +56,7 @@ export const CORE_LTM_EXTRACTION_RULES = [
   "Every unit must include importance: critical, major, moderate, or minor.",
   "Relationship_state units may include dimensions on a 0-100 scale and dimensionChanges from -100 to 100. Omit dimensions that stay at the neutral baseline.",
   "Use conservative relationship deltas. Small kindness, jokes, routine comfort, or brief warmth should not produce large trust/respect/loyalty/intimacy/protectiveness changes unless the source frames them as emotionally major.",
-  "Relationship_state units describing a change must include a caused_by link to a timeline_event from the same extraction or an existing note.",
+  "Relationship_state units describing a change must include a caused_by link to a timeline_event from the same extraction.",
   "For character_fact and relationship_state, copy source-visible character names into subjectNames; never choose database subject keys.",
   "Do not emit the same fact twice. Near-duplicate units in the same extraction are rejected.",
 ].join("\n");
@@ -124,8 +124,8 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION = [
   "Do not output source summaries, transcript summaries, or final write operations.",
   "Extract only durable, high-confidence facts that would be useful across future conversations.",
   "Emit zero or more units per stream. Prefer a few substantial units that capture the complete fact over many fragmentary observations.",
-  "Scan stream groups explicitly: character preferences or traits (character_fact); general knowledge or stated facts (world_fact); open questions or unresolved topics (thread); conversational style (tone); recurring motifs or inside jokes (anchor).",
-  "Do not extract scene beats, arrivals, departures, relationship conflicts, fight outcomes, or plot-like events. This is a casual conversation, not a story.",
+  "Scan stream groups explicitly: durable conversation events (timeline_event); relationship changes (relationship_state); character preferences or traits (character_fact); general knowledge or stated facts (world_fact); open questions or unresolved topics (thread); conversational style (tone); recurring motifs or inside jokes (anchor).",
+  "Use timeline events and relationship changes conservatively, only when they remain useful beyond the immediate exchange.",
   "Use one best stream per fact. If a detail fits both a character and a world stream, emit the character's fact as character_fact and general facts as world_fact.",
   "Do not duplicate the same fact across streams or sections.",
   "Write durable facts in present tense unless the fact is a past event that has lasting relevance.",
@@ -137,6 +137,8 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION = [
   '- Open questions or unresolved topics → thread with sectionKey "summary".',
   "- Recurring motifs or callbacks → anchor.",
   '- Session or topic register → tone with sectionKey "observations".',
+  '- Durable decisions, commitments, or consequential exchanges → timeline_event with sectionKey "event".',
+  '- Durable relationship changes → relationship_state with sectionKey "state" and a caused_by timeline link.',
   "",
   "SECTION KEY CONVENTIONS:",
   "- character_fact: facts, developments, or voice. Never use it for ordinary conversational turns, transient opinions, or one-off statements.",
@@ -154,7 +156,7 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION = [
   "Use sourceHash exactly as supplied.",
   "Set confidence and salience from 0 to 1.",
   'Only output character_fact with sectionKey "items" when items are durably tied to a speaker (e.g. a pet, a house).',
-  "Do not emit timeline_event, relationship_state, or scene-like units.",
+  "Do not emit transient or scene-like units.",
   '"resolved" status is reserved for thread memories only.',
   "For enum fields, choose exactly one string from the allowed arrays. Do not join multiple values with |.",
 ].join("\n");
@@ -251,7 +253,7 @@ export const DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE: Record<
     "tone",
     "anchor",
   ],
-  conversation: ["character_fact", "world_fact", "thread", "tone", "anchor"],
+  conversation: ["timeline_event", "character_fact", "relationship_state", "world_fact", "thread", "tone", "anchor"],
   game: [
     "timeline_event",
     "character_fact",
@@ -281,8 +283,10 @@ export const DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE: Record<
     anchor: "recurring motif, planted callback, or continuity anchor",
   },
   conversation: {
+    timeline_event: "durable decision, commitment, disclosure, or consequential exchange",
     character_fact:
       "durable user preference, trait, intent, or stated attribute; not a one-off opinion or transient mood",
+    relationship_state: "durable relationship state change backed by a caused_by event link",
     world_fact: "verified factual statement from the conversation",
     thread: "unresolved question, topic, or goal with a clear future resolver",
     tone: "durable conversation register or recurring style only",

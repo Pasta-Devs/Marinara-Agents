@@ -49,16 +49,6 @@ type UnitTarget = {
 
 type LtmCompilerLifecycle = "cumulative" | "superseding" | "rolling_until_resolved";
 
-const LTM_BUCKET_LIFECYCLE: Record<LtmEvidenceUnit["bucket"], LtmCompilerLifecycle> = {
-  timeline_event: "cumulative",
-  character_fact: "superseding",
-  relationship_state: "superseding",
-  world_fact: "superseding",
-  thread: "rolling_until_resolved",
-  tone: "superseding",
-  anchor: "cumulative",
-};
-
 export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions): CompiledLtmEvidenceUnits {
   const timestamp = options.createdAt ?? new Date().toISOString();
   const existingById = new Map(options.existingNotes.map((note) => [note.id, note]));
@@ -94,7 +84,7 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
     if (!existing) {
       const note = {
         id: noteId,
-        ...(target.noteType === "character" && resolvedSubjectNames?.[0] ? { title: resolvedSubjectNames[0] } : {}),
+        title: titleForUnits(units, target.noteType, resolvedSubjectNames),
         type: target.noteType,
         status: target.status,
         modes: options.modes,
@@ -293,7 +283,7 @@ function targetForUnit(unit: LtmEvidenceUnit, mode?: LtmMode): UnitTarget {
 }
 
 function statusForUnit(unit: LtmEvidenceUnit): LtmStatus {
-  if (isResolvedLoopUnit(unit)) return "archived";
+  if (isResolvedLoopUnit(unit)) return "resolved";
   if (unit.bucket !== "thread" && unit.status === "resolved") return "active";
   if (unit.status === "resolved") return "resolved";
   return "active";
@@ -304,7 +294,7 @@ function sectionsForUnits(units: LtmEvidenceUnit[], existing: LtmNote | undefine
   for (const unit of units) {
     const sectionKey = sectionKeyForUnit(unit);
     const existingSection = existing?.sections[sectionKey];
-    const lifecycle = LTM_BUCKET_LIFECYCLE[unit.bucket];
+    const lifecycle = lifecycleForUnit(unit);
     const mergeIncoming = shouldMergeIncomingSectionUnits(unit, units, sectionKey);
     const text = lifecycle === "cumulative" || mergeIncoming ? cumulativeLine(unit) : unit.text.trim();
     if (lifecycle === "cumulative" && isDuplicateCumulativeLine(existingSection?.text, text)) {
@@ -469,7 +459,7 @@ function compactProfileFragment(text: string) {
 function lifecycleForSection(units: LtmEvidenceUnit[], sectionKey: string): LtmCompilerLifecycle {
   const lifecycles = units
     .filter((unit) => sectionKeyForUnit(unit) === sectionKey)
-    .map((unit) => LTM_BUCKET_LIFECYCLE[unit.bucket]);
+    .map(lifecycleForUnit);
   if (lifecycles.includes("cumulative")) return "cumulative";
   if (lifecycles.includes("rolling_until_resolved")) return "rolling_until_resolved";
   return "superseding";
@@ -482,8 +472,25 @@ function shouldAppend(lifecycle: LtmCompilerLifecycle, sectionKey: string, exist
 
 function statusForUnits(units: LtmEvidenceUnit[]) {
   if (units.some((unit) => unit.status === "archived")) return "archived";
-  if (units.some(isResolvedLoopUnit)) return "archived";
+  if (units.some(isResolvedLoopUnit)) return "resolved";
   return "active";
+}
+
+function lifecycleForUnit(unit: LtmEvidenceUnit): LtmCompilerLifecycle {
+  if (unit.bucket === "thread") return "rolling_until_resolved";
+  if (unit.bucket === "relationship_state") return "superseding";
+  if (unit.bucket === "character_fact" && ["items", "progression"].includes(unit.sectionKey)) return "superseding";
+  return "cumulative";
+}
+
+function titleForUnits(units: LtmEvidenceUnit[], noteType: LtmNoteType, subjectNames?: string[]) {
+  if (noteType === "character" && subjectNames?.[0]) return subjectNames[0].slice(0, 240);
+  if (noteType === "relationship" && subjectNames?.length) return subjectNames.join(" and ").slice(0, 240);
+  const unit = units[0]!;
+  if (noteType === "timeline_event") {
+    return unit.text.replace(/\s+/g, " ").split(/[.!?;\n]/, 1)[0]!.trim().slice(0, 240);
+  }
+  return unit.subjectId.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()).slice(0, 240);
 }
 
 function shouldSetStatus(units: LtmEvidenceUnit[], existingStatus: LtmStatus, _nextStatus: LtmStatus) {

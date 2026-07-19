@@ -354,9 +354,10 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const extractionConfig = await getLtmExtractionConfig(options.root, resolvedMode);
   const estimatedSourceTokens = Math.max(1, Math.ceil(sourceText.length / 4));
   const sourceExceedsTokenLimit = estimatedSourceTokens > extractionConfig.maxSourceTokens;
-  const extractionText = sourceExceedsTokenLimit
-    ? sourceText.slice(0, extractionConfig.maxSourceTokens * 4)
-    : sourceText;
+  if (sourceExceedsTokenLimit) {
+    throw new Error(`source_too_large: source requires about ${estimatedSourceTokens} tokens; maximum is ${extractionConfig.maxSourceTokens}`);
+  }
+  const extractionText = sourceText;
   await recordLtmDebugEvent({
     operationId: options.operationId,
     root: options.root,
@@ -378,7 +379,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
         verbosity: extractionConfig.verbosity,
         maxOutputTokens: extractionConfig.maxOutputTokens,
         temperature: extractionConfig.temperature,
-        sourceTextPolicy: sourceExceedsTokenLimit ? "truncated" : "full",
+        sourceTextPolicy: "full",
         maxSourceTokens: extractionConfig.maxSourceTokens,
         maxExistingNoteTokens: extractionConfig.maxExistingNoteTokens,
         existingNoteCandidateChunks: extractionConfig.existingNoteMaxChunks,

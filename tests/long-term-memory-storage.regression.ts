@@ -186,18 +186,23 @@ async function main() {
       tags: ["source_summary", "imported_chat"],
       keywords: [],
       links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "legacy-draft" },
       sections: { source: { text: "Legacy evidence.", updatedAt: timestamp } },
     });
     await storage.createNote({ ...noteInput, id: "world_legacy_target", title: "Legacy target", scope: { chatId: "chat-a", chatIds: ["chat-a"] }, links: [] });
     const draftStore = new LongTermMemoryDraftStore(root);
     const mutationId = randomUUID();
+    const eventMutationId = randomUUID();
     const pending = await draftStore.createDraft({
       source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
       scope: legacySource.scope,
       modes: legacySource.modes,
       response: {
         summary: "Link the target to imported evidence.",
-        mutations: [{ id: mutationId, kind: "add_link", risk: "low", confidence: 0.9, summary: "Link evidence", evidence: ["Legacy evidence."], noteId: "world_legacy_target", link: { target: legacySource.id, relation: "evidenced_by" } }],
+        mutations: [
+          { id: eventMutationId, kind: "create_note", risk: "low", confidence: 0.9, summary: "Create source event", evidence: ["Legacy evidence."], note: { id: "timeline_legacy_evidence", title: "Legacy evidence", type: "timeline_event", status: "active", modes: ["roleplay"], scope: legacySource.scope, tags: ["typed_memory", "timeline_event"], keywords: [], links: [{ target: legacySource.id, relation: "extracted_from" }], sections: { event: { text: "Legacy evidence was recorded.", updatedAt: timestamp } } } },
+          { id: mutationId, kind: "add_link", risk: "low", confidence: 0.9, summary: "Link evidence", evidence: ["Legacy evidence."], noteId: "world_legacy_target", link: { target: "timeline_legacy_evidence", relation: "evidenced_by" } },
+        ],
       },
     });
     const canonicalSourceId = "source_chat_summary_1234567890abcdef";
@@ -205,12 +210,12 @@ async function main() {
     const rewrittenDraft = await draftStore.getDraft(pending.id);
     assert.equal(rewrittenDraft?.source.sourceNoteId, canonicalSourceId);
     assert.equal(rewrittenDraft?.source.extractionFingerprint?.sourceHash, rewrittenDraft?.source.sourceHash);
-    assert.equal((rewrittenDraft?.mutations[0] as any).link.target, canonicalSourceId);
+    assert.equal((rewrittenDraft?.mutations[0] as any).note.links[0].target, canonicalSourceId);
     const review = await projectLongTermMemoryDraftReview({ root, sourceNoteId: canonicalSourceId });
     assert.equal(review.counts.drafts, 1);
     const applied = await applyLongTermMemoryDraft(pending.id, { root, mutationIds: [mutationId] });
-    assert.deepEqual(applied.appliedMutationIds, [mutationId]);
-    assert.equal((await storage.getNote("world_legacy_target"))?.links[0]?.target, canonicalSourceId);
+    assert.deepEqual(new Set(applied.appliedMutationIds), new Set([eventMutationId, mutationId]));
+    assert.equal((await storage.getNote("world_legacy_target"))?.links[0]?.target, "timeline_legacy_evidence");
 
     const bulkSource = await storage.createNote({
       ...noteInput,
@@ -219,6 +224,7 @@ async function main() {
       type: "source",
       status: "active",
       links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "bulk" },
       sections: { source: { text: "Bulk source evidence.", updatedAt: timestamp } },
     });
     await storage.createNote({

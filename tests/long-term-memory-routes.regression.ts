@@ -147,7 +147,17 @@ async function main() {
           npcLog: [],
           inventoryLog: [],
         },
-        gamePreviousSessionSummaries: [],
+        gamePreviousSessionSummaries: [{
+          sessionNumber: 1,
+          summary: "The party discovered the Moon Vault.",
+          resumePoint: "Outside the cobalt seal.",
+          partyDynamics: "Mara trusts the party more.",
+          partyState: "The party holds the cobalt key.",
+          keyDiscoveries: ["The Moon Vault lies beneath the observatory."],
+          characterMoments: [],
+          littleDetails: [],
+          npcUpdates: [],
+        }],
       },
       lastMessageAt: null,
       updatedAt: "2026-07-17T01:00:00.000Z",
@@ -201,6 +211,19 @@ async function main() {
                       summary: "Extracted observatory facts.",
                       units: [
                         {
+                          bucket: "timeline_event",
+                          subjectId: "observatory_gate_sealed",
+                          sectionKey: "event",
+                          text: "Mara sealed the observatory gate at dusk.",
+                          importance: "major",
+                          evidence: ["source_note:source_route_extract"],
+                          confidence: 0.95,
+                          salience: 0.9,
+                          status: "active",
+                          links: [],
+                          sourceHash: "replaced-by-package",
+                        },
+                        {
                           bucket: "world_fact",
                           subjectId: "observatory_gate",
                           sectionKey: "facts",
@@ -210,7 +233,7 @@ async function main() {
                           confidence: 0.95,
                           salience: 0.9,
                           status: "active",
-                          links: [],
+                          links: [{ relation: "evidenced_by", target: "timeline_observatory_gate_sealed" }],
                           sourceHash: "replaced-by-package",
                         },
                         {
@@ -224,7 +247,7 @@ async function main() {
                           confidence: 0.95,
                           salience: 0.9,
                           status: "active",
-                          links: [],
+                          links: [{ relation: "evidenced_by", target: "timeline_observatory_gate_sealed" }],
                           sourceHash: "replaced-by-package",
                         },
                       ],
@@ -530,7 +553,20 @@ async function main() {
         },
       },
     });
-    assert.equal(extractSource.statusCode, 201, extractSource.body);
+    assert.equal(extractSource.statusCode, 400, extractSource.body);
+    await storageService.storage.createNote({
+      id: "source_route_extract",
+      title: "Observatory report",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary", "imported_chat"],
+      keywords: [],
+      links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "route-extract" },
+      sections: { source: { text: "Mara seals the observatory gate at dusk.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
     const invalidMode = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/source_route_extract/extract",
@@ -562,7 +598,7 @@ async function main() {
         .json()
         .draft?.mutations.map((mutation: any) => mutation.note?.id)
         .sort(),
-      ["char_mara", "world_observatory_gate"],
+      ["char_mara", "timeline_observatory_gate_sealed_1bbd9d3c48", "world_observatory_gate"],
     );
     assert.deepEqual(
       extracted
@@ -767,7 +803,7 @@ async function main() {
       preview
         .json()
         .samples.some(
-          (sample: any) => sample.sourceId === "game-a:game_journal",
+          (sample: any) => sample.sourceId === "game-a:game-session-1",
         ),
       true,
     );
@@ -818,7 +854,7 @@ async function main() {
       branchPreview
         .json()
         .samples.some(
-          (sample: any) => sample.sourceId === "game-a:game_journal",
+          (sample: any) => sample.sourceId === "game-a:game-session-1",
         ),
       true,
     );
@@ -832,7 +868,7 @@ async function main() {
       gamePreview
         .json()
         .samples.every((sample: any) =>
-          sample.sourceId.endsWith(":game_journal"),
+          sample.sourceId === "game-a:game-session-1",
         ),
       true,
     );
@@ -917,6 +953,7 @@ async function main() {
       tags: ["source_summary", "imported_chat", "legacy_tag"],
       keywords: ["legacy"],
       links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-legacy" },
       sections: {
         source: { text: "Old text.", updatedAt: "2026-07-17T00:00:00.000Z" },
       },
@@ -941,20 +978,20 @@ async function main() {
       headers,
       payload: {
         source: "chats",
-        sourceIds: ["game-a:game_journal"],
+        sourceIds: ["game-a:game-session-1"],
         applyLowRisk: true,
       },
     });
     assert.equal(importedGame.statusCode, 200, importedGame.body);
     assert.equal(
       importedGame.json().imported[0]?.extractionMethod,
-      "direct_ingest",
+      "llm",
     );
     assert.equal(
       importedGame.json().imported[0]?.extractionStatus,
       "succeeded",
     );
-    assert.equal(modelCalls, gameCalls);
+    assert.equal(modelCalls, gameCalls + 1);
     const { configurePackageRuntime } =
       await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
     releaseRuntimeOverride = configurePackageRuntime({
@@ -1102,13 +1139,13 @@ async function main() {
     const changedGameCalls = modelCalls;
     chats.find(
       (chat) => chat.id === "game-a",
-    ).metadata.gameJournal.entries[0].content =
+    ).metadata.gamePreviousSessionSummaries[0].summary =
       "The party discovered the changed Moon Vault beneath the observatory.";
     const changedGame = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
-      payload: { source: "chats", sourceIds: ["game-a:game_journal"] },
+      payload: { source: "chats", sourceIds: ["game-a:game-session-1"] },
     });
     assert.equal(changedGame.statusCode, 200, changedGame.body);
     assert.match(
@@ -1119,7 +1156,7 @@ async function main() {
       changedGame.json().imported[0].note.extractionFingerprint,
       firstGameFingerprint,
     );
-    assert.equal(modelCalls, changedGameCalls);
+    assert.equal(modelCalls, changedGameCalls + 1);
     const enabledRefine = await app.inject({
       method: "PUT",
       url: "/api/long-term-memory/extraction-settings",
@@ -1181,7 +1218,7 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
-      payload: { source: "chats", sourceIds: ["game-a:game_journal"] },
+      payload: { source: "chats", sourceIds: ["game-a:game-session-1"] },
     });
     assert.equal(refinedGame.statusCode, 200, refinedGame.body);
     assert.equal(
@@ -1201,14 +1238,11 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
-      payload: { source: "chats", sourceIds: ["game-a:game_journal"] },
+      payload: { source: "chats", sourceIds: ["game-a:game-session-1"] },
     });
     assert.equal(fallbackGame.statusCode, 200, fallbackGame.body);
-    assert.equal(fallbackGame.json().imported[0].extractionStatus, "succeeded");
-    assert.match(
-      fallbackGame.json().imported[0].draft.summary,
-      /Direct ingestion/,
-    );
+    assert.equal(fallbackGame.json().imported[0].extractionStatus, "failed");
+    assert.equal(fallbackGame.json().imported[0].retryable, true);
     failGameRefine = false;
     await app.inject({
       method: "PUT",
@@ -1216,72 +1250,6 @@ async function main() {
       headers,
       payload: { version: 1, refinePass: false },
     });
-    const emptyGameSource = await app.inject({
-      method: "POST",
-      url: "/api/long-term-memory/notes",
-      headers,
-      payload: {
-        id: "source_route_empty_game",
-        title: "Empty game",
-        type: "source",
-        status: "active",
-        modes: ["game"],
-        scope: { chatId: "game-empty", chatIds: ["game-empty"] },
-        tags: ["source_summary", "imported_game_journal"],
-        keywords: [],
-        links: [],
-        sections: {
-          source: {
-            text: "Unchanged empty source.",
-            updatedAt: "2026-07-17T00:00:00.000Z",
-          },
-        },
-      },
-    });
-    assert.equal(emptyGameSource.statusCode, 201, emptyGameSource.body);
-    const emptyGameExtract = await app.inject({
-      method: "POST",
-      url: "/api/long-term-memory/notes/source_route_empty_game/extract",
-      headers,
-      payload: {},
-    });
-    assert.equal(emptyGameExtract.statusCode, 200, emptyGameExtract.body);
-    assert.equal(emptyGameExtract.json().draft, null);
-    const unchangedEmpty = await storageService.storage.getNote(
-      "source_route_empty_game",
-    );
-    assert.equal(
-      unchangedEmpty.sections.source.text,
-      "Unchanged empty source.",
-    );
-    assert.equal(unchangedEmpty.extractionFingerprint, undefined);
-    const missingGameSource = await app.inject({
-      method: "POST",
-      url: "/api/long-term-memory/notes",
-      headers,
-      payload: {
-        id: "source_route_missing_game",
-        title: "Missing game",
-        type: "source",
-        status: "active",
-        modes: ["game"],
-        scope: { chatId: "missing-game", chatIds: ["missing-game"] },
-        tags: ["source_summary", "imported_game_journal"],
-        keywords: [],
-        links: [],
-        sections: {
-          source: { text: "Missing.", updatedAt: "2026-07-17T00:00:00.000Z" },
-        },
-      },
-    });
-    assert.equal(missingGameSource.statusCode, 201, missingGameSource.body);
-    const missingGameExtract = await app.inject({
-      method: "POST",
-      url: "/api/long-term-memory/notes/source_route_missing_game/extract",
-      headers,
-      payload: {},
-    });
-    assert.equal(missingGameExtract.statusCode, 502, missingGameExtract.body);
     chats[0].metadata.summaryEntries.push(
       {
         id: "summary-order-a",
@@ -1348,44 +1316,11 @@ async function main() {
         .json()
         .samples.some(
           (sample: any) =>
-            sample.sourceId === "game-a:game_journal" &&
+            sample.sourceId === "game-a:game-session-1" &&
             sample.freshness === "current",
         ),
       true,
     );
-    const gameSource = await app.inject({
-      method: "POST",
-      url: "/api/long-term-memory/notes",
-      headers,
-      payload: {
-        id: "source_route_game",
-        title: "Game journal",
-        type: "source",
-        status: "active",
-        modes: ["game"],
-        scope: { chatId: "game-a", chatIds: ["game-a"] },
-        tags: ["source_summary", "imported_game_journal"],
-        keywords: [],
-        links: [],
-        sections: {
-          source: {
-            text: "A game journal entry.",
-            updatedAt: "2026-07-17T00:00:00.000Z",
-          },
-        },
-      },
-    });
-    assert.equal(gameSource.statusCode, 201, gameSource.body);
-    const singleGameCalls = modelCalls;
-    const gameExtract = await app.inject({
-      method: "POST",
-      url: "/api/long-term-memory/notes/source_route_game/extract",
-      headers,
-      payload: {},
-    });
-    assert.equal(gameExtract.statusCode, 200, gameExtract.body);
-    assert.equal(gameExtract.json().draft?.mutations.length > 0, true);
-    assert.equal(modelCalls, singleGameCalls);
     const source = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",
@@ -1408,13 +1343,47 @@ async function main() {
         },
       },
     });
-    assert.equal(source.statusCode, 201, source.body);
+    assert.equal(source.statusCode, 400, source.body);
+    await storageService.storage.createNote({
+      id: "source_route_review",
+      title: "Draft source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary", "imported_chat"],
+      keywords: [],
+      links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "route-review" },
+      sections: { source: { text: "The eastern gate is sealed at dusk.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
     await writeFile(
       join(storageService.root, "drafts", "malformed.json"),
       "{not-json",
       "utf8",
     );
     const mutationId = "10000000-0000-4000-8000-000000000001";
+    const eventMutationId = "10000000-0000-4000-8000-000000000002";
+    const eventMutation = {
+      id: eventMutationId,
+      kind: "create_note",
+      risk: "low",
+      confidence: 0.9,
+      summary: "Create gate event",
+      evidence: ["The eastern gate is sealed at dusk."],
+      note: {
+        id: "timeline_eastern_gate_sealed",
+        title: "Eastern gate sealed",
+        type: "timeline_event",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: ["typed_memory", "timeline_event"],
+        keywords: ["gate", "dusk"],
+        links: [{ target: "source_route_review", relation: "extracted_from" }],
+        sections: { event: { text: "The eastern gate was sealed at dusk.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+      },
+    };
     const mutation = {
       id: mutationId,
       kind: "create_note",
@@ -1431,7 +1400,7 @@ async function main() {
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
         tags: [],
         keywords: ["gate", "dusk"],
-        links: [],
+        links: [{ target: "timeline_eastern_gate_sealed", relation: "evidenced_by" }],
         sections: {
           facts: {
             text: "The eastern gate is sealed at dusk.",
@@ -1447,7 +1416,7 @@ async function main() {
       summary: "Remember the gate schedule.",
       response: {
         summary: "Remember the gate schedule.",
-        mutations: [mutation],
+        mutations: [eventMutation, mutation],
       },
     });
     const review = await app.inject({
@@ -1459,8 +1428,8 @@ async function main() {
     assert.equal(review.json().counts.drafts, 1);
     assert.equal(review.json().sources[0]?.drafts[0]?.freshness, "fresh");
     assert.equal(
-      review.json().sources[0]?.targets[0]?.noteId,
-      "world_eastern_gate",
+      review.json().sources[0]?.targets.some((target: any) => target.noteId === "world_eastern_gate"),
+      true,
     );
     assert.equal(
       (
@@ -1479,7 +1448,7 @@ async function main() {
       payload: { mutationIds: [mutationId] },
     });
     assert.equal(accepted.statusCode, 200, accepted.body);
-    assert.deepEqual(accepted.json().appliedMutationIds, [mutationId]);
+    assert.deepEqual(new Set(accepted.json().appliedMutationIds), new Set([eventMutationId, mutationId]));
     assert.equal(accepted.json().draft.status, "accepted");
     assert.equal(
       (await storageService.storage.getNote("world_eastern_gate"))?.sections

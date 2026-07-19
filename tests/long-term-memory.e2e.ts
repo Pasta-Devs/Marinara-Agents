@@ -155,6 +155,7 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
         id: sourceId,
         title: sourceTitle,
         type: "source",
+        provenance: { kind: "chat_summary", sourceId: "chat-e2e", entryId: "fixture" },
         sections: {
           source: {
             text: "A durable E2E source fixture.",

@@ -119,7 +119,7 @@ const features = [
     maxEngineExclusive: "2.4.0",
     name: "Long-Term Memory",
     description:
-      "Captures finalized turns and recalls relevant context from a durable package-owned memory vault.",
+      "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "visual_novel", "game"],

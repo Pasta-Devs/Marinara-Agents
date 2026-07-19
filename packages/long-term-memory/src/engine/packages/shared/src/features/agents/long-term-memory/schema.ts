@@ -473,15 +473,8 @@ export const LTM_NOTE_ID_PREFIXES_BY_TYPE = {
   readonly string[]
 >;
 
-const LTM_LEGACY_NOTE_ID_PREFIXES_BY_TYPE = {
-  source: ["scene_summary_"],
-} as const;
-
 function allowedStoredNoteIdPrefixes(type: z.infer<typeof ltmNoteTypeSchema>) {
-  return [
-    ...LTM_NOTE_ID_PREFIXES_BY_TYPE[type],
-    ...(type === "source" ? LTM_LEGACY_NOTE_ID_PREFIXES_BY_TYPE.source : []),
-  ];
+  return LTM_NOTE_ID_PREFIXES_BY_TYPE[type];
 }
 
 const LTM_SOURCE_SUMMARY_SCENE_TAGS = [
@@ -497,10 +490,7 @@ export function isLtmSourceLikeNote(note: {
   type: z.infer<typeof ltmNoteTypeSchema>;
   tags: readonly string[];
 }) {
-  return (
-    note.type === "source" ||
-    (note.type === "scene" && hasLtmSourceSummarySceneTag(note.tags))
-  );
+  return note.type === "source";
 }
 
 export const ltmIsoTimestampSchema = z
@@ -589,7 +579,7 @@ export const ltmSubjectsSchema = z
 
 export const ltmSourceProvenanceSchema = z
   .object({
-    kind: z.enum(["character", "lorebook", "chat_summary", "game_journal"]),
+    kind: z.enum(["character", "lorebook", "chat_summary"]),
     sourceId: z.string().min(1).max(120),
     entryId: z.string().min(1).max(120).optional(),
   })
@@ -861,6 +851,14 @@ export const ltmNoteSchema = z
         code: z.ZodIssueCode.custom,
         path: ["provenance"],
         message: "Only source notes can store import provenance.",
+      });
+    }
+
+    if (note.type === "source" && !note.provenance) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["provenance"],
+        message: "Source notes must store import provenance.",
       });
     }
 
@@ -2354,7 +2352,7 @@ const ltmImportedSourceResultBaseSchema = z.object({
   note: ltmNoteSchema,
   created: z.boolean(),
   sourceWriteStatus: z.enum(["created", "refreshed"]),
-  extractionMethod: z.enum(["llm", "direct_ingest"]),
+  extractionMethod: z.literal("llm"),
   outcome: ltmExtractionOutcomeSchema,
   accounting: ltmExtractionAccountingSchema,
   appliedMutationIds: z.array(z.string().uuid()).max(500),

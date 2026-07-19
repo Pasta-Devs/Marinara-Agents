@@ -76,15 +76,6 @@ const LTM_EXTRACTION_LINK_RELATIONS = [
   "extracted_from",
 ] as const;
 const LTM_EXTRACTION_LINK_RELATION_SET = new Set<string>(LTM_EXTRACTION_LINK_RELATIONS);
-const OPTIONAL_CHARACTER_TIMELINE_LINK_RELATIONS = new Set<LtmEvidenceUnit["links"][number]["relation"]>([
-  "caused_by",
-  "evidenced_by",
-  "occurred_in",
-  "triggered_by",
-  "resolved_in",
-  "planted_in",
-  "paid_off_in",
-]);
 const LTM_EXTRACTION_NOTE_ID_PREFIX_PATTERN = /^(?:timeline|thread|world|tone|rel|char)_/;
 const LTM_EXTRACTION_TIMELINE_LINK_RELATIONS = new Set<string>([
   "occurred_in",
@@ -99,9 +90,10 @@ const LTM_EXTRACTION_TIMELINE_LINK_RELATIONS = new Set<string>([
 function serverEnforcedLinkRules(allowedBuckets: readonly LtmEvidenceUnit["bucket"][]) {
   return [
     "Every link target must resolve to sourceNote.id, an exact existingTypedNotes id, or a target note derived from a unit in the same response.",
+    "Every non-timeline unit must link to a timeline_event from this response. Every timeline_event must link to sourceNote.id with extracted_from.",
     ...(allowedBuckets.includes("relationship_state")
       ? [
-          "A relationship_state that describes a change or includes dimensionChanges must include a caused_by link to a timeline_event in the same response or an exact existingTypedNotes id. Same-response event targets use timeline_<subjectId>.",
+          "A relationship_state that describes a change or includes dimensionChanges must include a caused_by link to a timeline_event in the same response. Same-response event targets use timeline_<subjectId>.",
         ]
       : []),
   ];
@@ -183,94 +175,6 @@ function extractJsonObject(text: string) {
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
   return start >= 0 && end > start ? trimmed.slice(start, end + 1) : trimmed;
-}
-
-function repairTruncatedJson(raw: string): string {
-  let out = "";
-  let inString = false;
-  let escape = false;
-  const depth: Array<"object" | "array"> = [];
-
-  for (let i = 0; i < raw.length; i += 1) {
-    const ch = raw[i];
-    out += ch;
-
-    if (escape) {
-      escape = false;
-      continue;
-    }
-
-    if (ch === "\\" && inString) {
-      escape = true;
-      continue;
-    }
-
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-
-    if (inString) continue;
-
-    if (ch === "{") {
-      depth.push("object");
-    } else if (ch === "[") {
-      depth.push("array");
-    } else if (ch === "}") {
-      if (depth.length > 0 && depth[depth.length - 1] === "object") depth.pop();
-    } else if (ch === "]") {
-      if (depth.length > 0 && depth[depth.length - 1] === "array") depth.pop();
-    }
-  }
-
-  if (inString) out += '"';
-  for (let i = depth.length - 1; i >= 0; i -= 1) {
-    out += depth[i] === "object" ? "}" : "]";
-  }
-  return out;
-}
-
-function extractPartialUnits(raw: string): Array<Record<string, unknown>> {
-  const units: Array<Record<string, unknown>> = [];
-  const objectStarts: number[] = [];
-  let inString = false;
-  let escape = false;
-
-  for (let i = 0; i < raw.length; i += 1) {
-    const ch = raw[i];
-
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (ch === "\\" && inString) {
-      escape = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-
-    if (ch === "{") {
-      objectStarts.push(i);
-    } else if (ch === "}") {
-      const start = objectStarts.pop();
-      if (start !== undefined) {
-        try {
-          const parsed = JSON.parse(raw.slice(start, i + 1));
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            units.push(parsed as Record<string, unknown>);
-          }
-        } catch {
-          // skip unparseable fragments
-        }
-      }
-    }
-  }
-
-  return units;
 }
 
 function isReasoningNoneUnsupportedError(error: unknown) {
@@ -1076,6 +980,9 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
         droppedCandidates: [],
       };
     }
+    if (["length", "max_tokens", "token_limit"].includes(result.finishReason.toLowerCase())) {
+      throw new Error("truncated_output: extraction response reached the model output limit");
+    }
     try {
       const parsed = parseEvidenceUnitPayload(JSON.parse(extractJsonObject(content)), options.sourceHash);
       await recordLtmDebugEvent({
@@ -1094,60 +1001,6 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       });
       return parsed;
     } catch (parseErr) {
-      try {
-        const repaired = repairTruncatedJson(extractJsonObject(content));
-        const parsed = parseEvidenceUnitPayload(JSON.parse(repaired), options.sourceHash);
-        await recordLtmDebugEvent({
-          operationId: options.operationId,
-          root: options.root,
-          phase: "llm",
-          action: "evidence_unit_json_parse",
-          status: "ok",
-          sourceNoteId: options.sourceNote.id,
-          counts: {
-            units: parsed.response.units.length,
-            totalCandidates: parsed.totalCandidates,
-            droppedCandidates: parsed.droppedCandidates.length,
-            responseChars: content.length,
-          },
-          details: { recovered: "repaired" },
-        });
-        return parsed;
-      } catch {
-        // continue to partial extraction
-      }
-
-      const partialObjects = extractPartialUnits(content);
-      const rawUnits = partialObjects.flatMap((obj) => {
-        if (Array.isArray(obj.units)) return obj.units as Array<Record<string, unknown>>;
-        if (typeof obj.bucket === "string") return [obj];
-        return [];
-      });
-      if (rawUnits.length > 0) {
-        const syntheticResponse = normalizeEvidenceUnitResponse({ summary: "", units: rawUnits }, options.sourceHash);
-        try {
-          const parsed = parseEvidenceUnitPayload(syntheticResponse, options.sourceHash);
-          await recordLtmDebugEvent({
-            operationId: options.operationId,
-            root: options.root,
-            phase: "llm",
-            action: "evidence_unit_json_parse",
-            status: "ok",
-            sourceNoteId: options.sourceNote.id,
-            counts: {
-              units: parsed.response.units.length,
-              totalCandidates: parsed.totalCandidates,
-              droppedCandidates: parsed.droppedCandidates.length,
-              responseChars: content.length,
-            },
-            details: { recovered: "partial" },
-          });
-          return parsed;
-        } catch {
-          // fall through to final throw
-        }
-      }
-
       await recordLtmDebugEvent({
         operationId: options.operationId,
         root: options.root,
@@ -1208,11 +1061,7 @@ export function compileEvidenceUnitExtraction(options: {
     modes: options.modes,
     addStructuredUnits: !options.skipStructuredBackfill,
   });
-  const normalizedUnits = stripMissingOptionalCharacterTimelineLinks({
-    units: normalized.units,
-    sourceNote: options.sourceNote,
-    existingNotes: options.existingNotes,
-  });
+  const normalizedUnits = normalized.units;
   const validated = validateLtmEvidenceUnits({
     units: normalizedUnits,
     sourceText: options.sourceText,
@@ -1228,16 +1077,18 @@ export function compileEvidenceUnitExtraction(options: {
     existingNotes: options.existingNotes,
     options: { withinExtraction: true },
   });
+  const closed = closeSourceEventGraph(dedupResult.deduplicated, options.sourceNote);
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];
   const preValidationDroppedCandidates = options.preValidationDroppedCandidates ?? [];
   const droppedCandidates = [
     ...parserDroppedCandidates,
     ...preValidationDroppedCandidates,
     ...validated.droppedCandidates,
+    ...closed.droppedCandidates,
   ];
-  const compiled = dedupResult.deduplicated.length
+  const compiled = closed.units.length
     ? compileLtmEvidenceUnits({
-        units: dedupResult.deduplicated,
+        units: closed.units,
         existingNotes: options.existingNotes,
         scope: options.scope,
         modes: options.modes,
@@ -1250,7 +1101,7 @@ export function compileEvidenceUnitExtraction(options: {
         suggestions: { generated: 0, returned: 0 },
       };
   const { suggestions, ...compiledResponse } = compiled;
-  const diagnostics = [...validated.diagnostics, ...dedupResult.diagnostics];
+  const diagnostics = [...validated.diagnostics, ...dedupResult.diagnostics, ...closed.diagnostics];
   const accounting = ltmExtractionAccountingSchema.parse({
     providerCandidates:
       options.providerCandidates ??
@@ -1258,14 +1109,14 @@ export function compileEvidenceUnitExtraction(options: {
       options.unitResponse.units.length + parserDroppedCandidates.length + preValidationDroppedCandidates.length,
     normalizedAdditions: (options.normalizedAdditions ?? 0) + normalized.addedUnits,
     parserRejections: parserDroppedCandidates.length,
-    validationRejections: preValidationDroppedCandidates.length + validated.droppedCandidates.length,
+    validationRejections: preValidationDroppedCandidates.length + validated.droppedCandidates.length + closed.droppedCandidates.length,
     deduplications: validated.keptUnits.length - dedupResult.deduplicated.length,
-    keptUnits: dedupResult.deduplicated.length,
+    keptUnits: closed.units.length,
   });
   const totalCandidates = accounting.providerCandidates + accounting.normalizedAdditions;
   const outcome = summarizeExtractionOutcome({
     totalCandidates,
-    keptUnits: dedupResult.deduplicated.length,
+    keptUnits: closed.units.length,
     droppedCandidates,
     deduplications: accounting.deduplications,
   });
@@ -1279,28 +1130,29 @@ export function compileEvidenceUnitExtraction(options: {
   };
 }
 
-function stripMissingOptionalCharacterTimelineLinks({
-  units,
-  sourceNote,
-  existingNotes,
-}: {
-  units: LtmEvidenceUnit[];
-  sourceNote: LtmNote;
-  existingNotes: LtmNote[];
-}) {
-  const validTargets = new Set<string>([
-    sourceNote.id,
-    ...existingNotes.map((note) => note.id),
-    ...units.map((unit) => noteIdForEvidenceUnit(unit)),
-  ]);
-
-  return units.map((unit) => {
-    if (unit.bucket !== "character_fact" || unit.links.length === 0) return unit;
-    const links = unit.links.filter(
-      (link) => validTargets.has(link.target) || !OPTIONAL_CHARACTER_TIMELINE_LINK_RELATIONS.has(link.relation),
-    );
-    return links.length === unit.links.length ? unit : { ...unit, links };
-  });
+function closeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote) {
+  let kept = [...units];
+  const droppedCandidates: LtmExtractionDroppedCandidate[] = [];
+  const diagnostics: LtmExtractionDiagnostic[] = [];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const eventIds = new Set(kept.filter((unit) => unit.bucket === "timeline_event" && unit.links.some((link) => link.relation === "extracted_from" && link.target === sourceNote.id)).map(noteIdForEvidenceUnit));
+    kept = kept.filter((unit, index) => {
+      const valid = unit.bucket === "timeline_event"
+        ? eventIds.has(noteIdForEvidenceUnit(unit))
+        : unit.links.some((link) => eventIds.has(link.target));
+      if (valid) return true;
+      changed = true;
+      const message = unit.bucket === "timeline_event"
+        ? "Timeline event must link to its source note."
+        : "Derived memory must link to a timeline event from the same source.";
+      droppedCandidates.push({ index, reason: "unsupported_bucket", message, snippet: safeSnippet(unit.text) });
+      diagnostics.push({ severity: "error", code: "source_event_graph_open", candidateIndex: index, mutationId: unit.id, noteId: noteIdForEvidenceUnit(unit), message });
+      return false;
+    });
+  }
+  return { units: kept, droppedCandidates, diagnostics };
 }
 
 export function summarizeCompiledEvidenceUnitExtraction(result: CompileEvidenceUnitExtractionResult) {

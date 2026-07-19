@@ -2,7 +2,6 @@ import { join } from "node:path";
 import {
   configurePackageEmbeddingAdapter,
   configurePackageRuntime,
-  getPackagePersistence,
   type CapabilityRuntimeHost,
 } from "./package-runtime.js";
 import { activateLongTermMemoryStorage } from "./runtime.js";
@@ -10,7 +9,6 @@ import {
   prepareGenerationLongTermMemory,
   recordGenerationLongTermMemoryDispatch,
 } from "./generation-injection.js";
-import { captureFinalizedLongTermMemoryTurn } from "./finalized-turn-capture.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
 import { adoptLegacyLongTermMemoryAgentConfig, adoptLegacyLongTermMemoryChats } from "./legacy-adoption.js";
 import type { FastifyPluginAsync } from "fastify";
@@ -58,22 +56,6 @@ export async function activate({ api, dataDir }: ActivationContext) {
         receipt: unknown;
         messages: Array<{ content: string }>;
       }) => recordGenerationLongTermMemoryDispatch({ ...input, root: active!.root }),
-      onTurnFinalized: async (input: {
-        chatId: string;
-        chatMode: string;
-        messageId: string;
-        swipeIndex: number;
-        content: string;
-        characterId: string | null;
-        regenerate: boolean;
-        continuation: boolean;
-      }) => {
-        const chat = await getPackagePersistence().getChat(input.chatId);
-        return captureFinalizedLongTermMemoryTurn({
-          ...input,
-          personaId: chat?.personaId ?? undefined,
-        }, active!.storage);
-      },
     });
     return async () => {
       releaseRoutes();

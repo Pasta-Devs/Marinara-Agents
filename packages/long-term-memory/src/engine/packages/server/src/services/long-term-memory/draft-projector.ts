@@ -80,9 +80,9 @@ export function projectLtmDraftOntoNotes(options: { notes: ReadonlyMap<string, L
 
 export function isAdditiveLtmSection(note: Pick<LtmNote, "type" | "tags">, key: string) {
   if (note.type === "timeline_event") return true;
-  if (note.type === "character" && ["facts", "developments", "abilities", "voice"].includes(key)) return true;
+  if (note.type === "character") return !["items", "progression"].includes(key);
   if (note.type === "relationship" && key === "history") return true;
-  if (note.type === "world" && key === "facts") return true;
+  if (note.type === "world") return true;
   if (note.type === "tone" && key === "observations") return true;
   return note.tags.includes("anchor") || key === "anchors";
 }
