@@ -4,6 +4,7 @@ import { Download, RotateCw, Trash2 } from "lucide-react";
 import type {
   LtmDebugEvent,
   LtmLastInjectionResponse,
+  LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { API_ROOT, invalidateLtmQueries, queryKeys, request } from "./api";
 import { Button, StatusSurface } from "./shared-controls";
@@ -16,10 +17,22 @@ function formatTimestamp(timestamp: string) {
   return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
 }
 
-function describeEvent(event: LtmDebugEvent) {
-  if (event.error) return event.error.message;
-  if (event.message) return event.message;
-  if (event.uiSummary) return event.uiSummary;
+function humanizeDebugText(text: string, noteTitles: ReadonlyMap<string, string>) {
+  let result = text;
+  for (const [id, title] of noteTitles) result = result.replaceAll(id, title);
+  return result.replaceAll(
+    /\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi,
+    "an internal record",
+  );
+}
+
+function describeEvent(
+  event: LtmDebugEvent,
+  noteTitles: ReadonlyMap<string, string>,
+) {
+  if (event.error) return humanizeDebugText(event.error.message, noteTitles);
+  if (event.message) return humanizeDebugText(event.message, noteTitles);
+  if (event.uiSummary) return humanizeDebugText(event.uiSummary, noteTitles);
   return "No message recorded.";
 }
 
@@ -50,6 +63,13 @@ export default function ActivityView({
     queryKey: queryKeys.activity,
     queryFn: () => request<DebugLogResponse>("/debug-log?limit=200"),
   });
+  const notes = useQuery({
+    queryKey: queryKeys.notes,
+    queryFn: () => request<LtmNote[]>("/notes?includeGlobal=true"),
+  });
+  const noteTitles = new Map(
+    (notes.data ?? []).map((note) => [note.id, note.title || "Untitled memory"]),
+  );
   const lastInjection = useQuery({
     enabled: Boolean(props.chatId),
     queryKey: queryKeys.lastInjection(props.chatId),
@@ -224,8 +244,13 @@ export default function ActivityView({
                 </span>
               </div>
               <p className="mt-2 text-xs leading-relaxed">
-                {describeEvent(event)}
+                {describeEvent(event, noteTitles)}
               </p>
+              {event.sourceNoteId && noteTitles.has(event.sourceNoteId) ? (
+                <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                  Source memory: {noteTitles.get(event.sourceNoteId)}
+                </p>
+              ) : null}
               <p className="mt-2 text-[0.6875rem] text-[var(--muted-foreground)]">
                 {formatTimestamp(event.ts)}
                 {event.durationMs != null ? ` | ${event.durationMs} ms` : ""}
@@ -236,7 +261,10 @@ export default function ActivityView({
                     Diagnostics ({event.diagnostics.length})
                   </summary>
                   <pre className="mt-2 overflow-x-auto rounded bg-[var(--background)] p-2 text-[0.6875rem]">
-                    {JSON.stringify(event.diagnostics, null, 2)}
+                    {humanizeDebugText(
+                       JSON.stringify(event.diagnostics, null, 2),
+                       noteTitles,
+                     )}
                   </pre>
                 </details>
               ) : null}

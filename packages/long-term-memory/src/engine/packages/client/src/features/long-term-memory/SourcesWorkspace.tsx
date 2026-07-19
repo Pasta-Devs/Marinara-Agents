@@ -554,8 +554,7 @@ export default function SourcesWorkspace({
                     data-ltm-source-existing-note={row.existingNoteId}
                   >
                     <p className="text-xs text-[var(--muted-foreground)]">
-                      Source memory: {row.existingNoteTitle} (
-                      {row.existingNoteId})
+                      Source memory: {row.existingNoteTitle}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -653,7 +652,7 @@ export default function SourcesWorkspace({
           ))}
           {importResult.missingSourceIds.map((id) => (
             <StatusSurface key={id} tone="danger" data-ltm-source-missing={id}>
-              <CircleAlert size="0.875rem" /> Missing source: {id}
+              <CircleAlert size="0.875rem" /> Missing source memory
             </StatusSurface>
           ))}
         </section>

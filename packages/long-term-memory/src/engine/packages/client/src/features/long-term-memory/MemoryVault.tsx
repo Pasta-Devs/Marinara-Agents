@@ -29,6 +29,11 @@ import {
   StatusSurface,
 } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
+import {
+  memoryLabel,
+  noteTypeLabel,
+  scopeTargetLabel,
+} from "./display-labels";
 
 const noteTypes: readonly LtmNoteType[] = [
   "source",
@@ -88,7 +93,7 @@ function fingerprint(note: LtmNote | null) {
   return note ? JSON.stringify(note) : "";
 }
 function title(type: string) {
-  return type.replaceAll("_", " ");
+  return noteTypeLabel(type);
 }
 function list(value: string) {
   return value
@@ -354,7 +359,7 @@ export default function MemoryVault({
       : window.confirm(`${options.title}\n\n${options.message}`);
   }
   async function openNote(note: LtmNote) {
-    if (!(await confirm(`opening ${note.title ?? note.id}`))) return;
+    if (!(await confirm(`opening ${memoryLabel(note)}`))) return;
     const next = clone(note);
     setDraft(next);
     setSaved(fingerprint(next));
@@ -773,7 +778,7 @@ export default function MemoryVault({
                       return next;
                     })
                   }
-                  aria-label={`Select ${note.title ?? note.id}`}
+                  aria-label={`Select ${memoryLabel(note)}`}
                 />
               </label>
               <button
@@ -783,7 +788,7 @@ export default function MemoryVault({
               >
                 <span className="flex items-center gap-2">
                   <strong className="truncate text-sm">
-                    {note.title ?? note.id}
+                    {memoryLabel(note)}
                   </strong>
                   <ChevronRight size="0.875rem" className="shrink-0" />
                 </span>
@@ -889,8 +894,6 @@ export default function MemoryVault({
                   </label>
                 ) : (
                   <p className="text-xs text-[var(--muted-foreground)]">
-                    {draft.id}
-                    <br />
                     {title(draft.type)} memory
                   </p>
                 )}
@@ -947,7 +950,7 @@ export default function MemoryVault({
                       key={`chat-${id}`}
                       onRemove={() => removeScope("chatIds", id)}
                     >
-                      Chat: {id}
+                      {scopeTargetLabel("chat", id, targets)}
                     </Pill>
                   ))}
                   {(draft.scope.characterIds ?? []).map((id) => (
@@ -955,26 +958,26 @@ export default function MemoryVault({
                       key={`character-${id}`}
                       onRemove={() => removeScope("characterIds", id)}
                     >
-                      Character: {id}
+                      {scopeTargetLabel("character", id, targets)}
                     </Pill>
                   ))}
                   {draft.scope.groupId ? (
                     <Pill onRemove={() => mutateScope({ groupId: undefined })}>
-                      Branch group: {draft.scope.groupId}
+                      {scopeTargetLabel("group", draft.scope.groupId, targets)}
                     </Pill>
                   ) : null}
                   {draft.scope.personaId ? (
                     <Pill
                       onRemove={() => mutateScope({ personaId: undefined })}
                     >
-                      Persona: {draft.scope.personaId}
+                      {scopeTargetLabel("persona", draft.scope.personaId, [])}
                     </Pill>
                   ) : null}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <input
                     className={inputClass}
-                    placeholder="Add chat ID"
+                    placeholder="Add another chat"
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -993,7 +996,7 @@ export default function MemoryVault({
                   />
                   <input
                     className={inputClass}
-                    placeholder="Add character ID"
+                    placeholder="Add another character"
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -1027,9 +1030,9 @@ export default function MemoryVault({
                         )
                       }
                     >
-                      {link.relation}
+                    {link.relation.replaceAll("_", " ")}
                       {" -> "}
-                      {link.target}
+                      {memoryLabel(allNotes.find((note) => note.id === link.target))}
                     </Pill>
                   ))}
                 </div>
@@ -1038,7 +1041,7 @@ export default function MemoryVault({
                     className={inputClass}
                     value={linkTarget}
                     onChange={(event) => setLinkTarget(event.target.value)}
-                    placeholder="Memory ID"
+                    placeholder="Search or enter a memory"
                   />
                   <select
                     className={inputClass}

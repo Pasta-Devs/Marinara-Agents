@@ -396,7 +396,7 @@ export default function MemorySettings({
         repairs,
       });
       setMessage(
-        `Applied ${result.repairs.length} identity repair(s). Backup ${result.backup.id} was created.`,
+        `Applied ${result.repairs.length} identity repair(s). A backup was created.`,
       );
       setIdentityPreview(null);
       await invalidateLtmQueries(queryClient, [
@@ -1051,8 +1051,9 @@ export default function MemorySettings({
                     {candidate.subjectNames.join(" and ")}
                   </p>
                   <p className="text-[var(--muted-foreground)]">
-                    Keep {candidate.canonicalNoteId}; archive{" "}
-                    {candidate.duplicateNoteIds.length}.{" "}
+                    Keep the canonical memory; archive{" "}
+                    {candidate.duplicateNoteIds.length} duplicate
+                    {candidate.duplicateNoteIds.length === 1 ? "" : "s"}.{" "}
                     {candidate.blockingReasons.length
                       ? candidate.blockingReasons.join(" ")
                       : "Ready to apply using preview defaults."}
