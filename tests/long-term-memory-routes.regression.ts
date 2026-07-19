@@ -594,6 +594,32 @@ async function main() {
       ),
       true,
     );
+    const extractionActivity = (
+      await app.inject({
+        method: "GET",
+        url: "/api/long-term-memory/debug-log?sourceNoteId=source_route_extract",
+        headers,
+      })
+    ).json().events as any[];
+    const extractionOperationId = extracted.json().operationId;
+    assert.equal(
+      extractionActivity.some(
+        (event) =>
+          event.operationId === extractionOperationId &&
+          event.action === "extract_source_note" &&
+          event.status === "ok",
+      ),
+      true,
+    );
+    const requestActivity = extractionActivity.find(
+      (event) =>
+        event.operationId === extractionOperationId &&
+        event.action === "evidence_unit_request" &&
+        event.status === "started",
+    );
+    assert.equal(requestActivity?.model, "request-model");
+    assert.equal(requestActivity?.counts?.sourceChars, 40);
+    assert.equal(requestActivity?.details?.reasoningEffort, "low");
     const chatDrafts = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/drafts?chatId=chat-a",

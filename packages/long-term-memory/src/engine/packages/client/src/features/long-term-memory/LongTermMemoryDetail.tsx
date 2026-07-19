@@ -30,6 +30,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [activationError, setActivationError] = useState("");
   const [destinationDirty, setDestinationDirty] = useState(false);
   const [openedNoteId, setOpenedNoteId] = useState<string | null>(null);
+  const [reviewSourceNoteId, setReviewSourceNoteId] = useState<string | null>(null);
   const Destination = destinations[destination];
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     if (next === destination) return;
     if (!(await confirmDestinationChange(next))) return;
     setDestinationDirty(false);
+    if (next === "review") setReviewSourceNoteId(null);
     setDestination(next);
   };
   const openMemory = async (noteId: string) => {
@@ -61,9 +63,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestinationDirty(false);
     setDestination("vault");
   };
-  const openReview = async () => {
+  const openReview = async (sourceNoteId?: string) => {
     if (!(await confirmDestinationChange("Review Queue"))) return;
     setDestinationDirty(false);
+    setReviewSourceNoteId(sourceNoteId ?? null);
     setDestination("review");
   };
   const openSources = async () => {
@@ -89,7 +92,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   return (
     <main
       data-ltm-surface="detail"
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--background)] text-[var(--foreground)]"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]"
     >
       <header className="sticky top-0 z-10 flex min-h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--background)] px-4">
         <button
@@ -123,7 +126,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           <Settings2 aria-hidden="true" size="1rem" />
         </button>
       </header>
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 px-4 py-5 sm:px-6 md:flex-row">
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 overflow-y-auto px-4 py-5 sm:px-6 md:flex-row">
         <LongTermMemoryNavigation
           destination={destination}
           onDestinationChange={selectDestination}
@@ -188,10 +191,20 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               onOpenSources={openSources}
               onOpenReview={openReview}
               openedNoteId={openedNoteId}
+              reviewSourceNoteId={reviewSourceNoteId}
             />
           </Suspense>
         </div>
       </div>
+      <LongTermMemoryNavigation
+        mobile
+        destination={destination}
+        onDestinationChange={selectDestination}
+        badges={{
+          memories: status.data?.notes.total,
+          review: pendingDrafts.data?.count,
+        }}
+      />
     </main>
   );
 }

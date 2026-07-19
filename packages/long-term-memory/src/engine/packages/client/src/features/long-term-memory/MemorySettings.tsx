@@ -530,13 +530,6 @@ export default function MemorySettings({
     }
   };
 
-  if (
-    global.isLoading ||
-    extraction.isLoading ||
-    !globalForm ||
-    !extractionFormState
-  )
-    return <StatusSurface busy>Loading memory settings.</StatusSurface>;
   if (global.isError || extraction.isError)
     return (
       <StatusSurface tone="danger">
@@ -553,6 +546,13 @@ export default function MemorySettings({
         </button>
       </StatusSurface>
     );
+  if (
+    global.isLoading ||
+    extraction.isLoading ||
+    !globalForm ||
+    !extractionFormState
+  )
+    return <StatusSurface busy>Loading memory settings.</StatusSurface>;
 
   return (
     <section data-ltm-surface="memory-settings" className="space-y-5">
@@ -573,6 +573,18 @@ export default function MemorySettings({
           </Button>
         ) : null}
       </div>
+      <nav aria-label="Memory settings sections" className="sticky top-0 z-10 flex gap-2 overflow-x-auto bg-[var(--background)] py-2">
+        {[
+          ["settings-recall", "Recall"],
+          ["settings-backup", "Backup"],
+          ["settings-extraction", "Extraction"],
+          ["settings-maintenance", "Maintenance"],
+        ].map(([id, label]) => (
+          <Button key={id} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })}>
+            {label}
+          </Button>
+        ))}
+      </nav>
       {message ? (
         <StatusSurface
           tone={/could not|failed/i.test(message) ? "danger" : "success"}
@@ -581,7 +593,7 @@ export default function MemorySettings({
         </StatusSurface>
       ) : null}
 
-      <section className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+      <section id="settings-recall" className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3">
         <div>
           <h3 className="text-sm font-semibold">Global Recall</h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -752,7 +764,7 @@ export default function MemorySettings({
         </Button>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+      <section id="settings-backup" className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3">
         <div>
           <h3 className="text-sm font-semibold">Backup and Reset</h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -796,7 +808,7 @@ export default function MemorySettings({
         ) : null}
       </section>
 
-      <section className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+      <section id="settings-extraction" className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3">
         <div>
           <h3 className="text-sm font-semibold">Extraction</h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -955,7 +967,7 @@ export default function MemorySettings({
         </Button>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+      <section id="settings-maintenance" className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3">
         <div>
           <h3 className="text-sm font-semibold">Vault Maintenance</h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">

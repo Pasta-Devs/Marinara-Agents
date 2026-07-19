@@ -29,11 +29,7 @@ import {
   StatusSurface,
 } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
-import {
-  memoryLabel,
-  noteTypeLabel,
-  scopeTargetLabel,
-} from "./display-labels";
+import { memoryLabel, noteTypeLabel, scopeTargetLabel } from "./display-labels";
 
 const noteTypes: readonly LtmNoteType[] = [
   "source",
@@ -83,7 +79,7 @@ type ScopeTargets = {
   groups: Array<{ id: string; label: string; chatIds: string[] }>;
   characters: Array<{ id: string; label: string }>;
 };
-type Target = { id: string; label: string; scope: LtmScope };
+type Target = { id: string; label: string; scope?: LtmScope };
 type NoteResponse = { note: LtmNote };
 
 function clone<T>(value: T): T {
@@ -114,6 +110,25 @@ function searchable(note: LtmNote) {
     .filter(Boolean)
     .join(" ")
     .toLocaleLowerCase();
+}
+function preview(note: LtmNote, search: string) {
+  const sections = Object.entries(note.sections).filter(([, section]) =>
+    section.text.trim(),
+  );
+  const query = search.trim().toLocaleLowerCase();
+  const selected =
+    sections.find(([, candidate]) =>
+      candidate.text.toLocaleLowerCase().includes(query),
+    ) ?? sections[0];
+  if (!selected) return null;
+  const [key, section] = selected;
+  const text = section.text.trim();
+  const match = query ? text.toLocaleLowerCase().indexOf(query) : -1;
+  const start = match > 60 ? match - 60 : 0;
+  return {
+    label: title(key),
+    text: `${start ? "..." : ""}${text.slice(start, start + 180)}${start + 180 < text.length ? "..." : ""}`,
+  };
 }
 function newNote(scope: LtmScope): LtmNote {
   const now = new Date().toISOString();
@@ -224,6 +239,10 @@ export default function MemoryVault({
   const [typeFilter, setTypeFilter] = useState<LtmNoteType | "all">("all");
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">("all");
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [mobilePane, setMobilePane] = useState<
+    "memories" | "editor" | "details"
+  >("memories");
   const [draft, setDraft] = useState<LtmNote | null>(null);
   const [saved, setSaved] = useState("");
   const [isNew, setIsNew] = useState(false);
@@ -232,6 +251,7 @@ export default function MemoryVault({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
+  const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
   const [linkTarget, setLinkTarget] = useState("");
   const [linkRelation, setLinkRelation] =
     useState<LtmLink["relation"]>("involves");
@@ -279,19 +299,19 @@ export default function MemoryVault({
     queryFn: () =>
       request<LtmNote[]>(
         `/notes?${new URLSearchParams({
-          ...(target?.scope.chatIds?.length
+          ...(target?.scope?.chatIds?.length
             ? { scopeChatIds: target.scope.chatIds.join(",") }
             : {}),
-          ...(target?.scope.groupId
+          ...(target?.scope?.groupId
             ? { scopeGroupId: target.scope.groupId }
             : {}),
-          ...(target?.scope.characterIds?.length
+          ...(target?.scope?.characterIds?.length
             ? { scopeCharacterIds: target.scope.characterIds.join(",") }
             : {}),
-          ...(target?.scope.personaId
+          ...(target?.scope?.personaId
             ? { scopePersonaId: target.scope.personaId }
             : {}),
-          includeGlobal: "false",
+          ...(target?.scope ? { includeGlobal: "false" } : {}),
         })}`,
       ),
   });
@@ -305,8 +325,12 @@ export default function MemoryVault({
       (!search.trim() ||
         searchable(note).includes(search.trim().toLocaleLowerCase())),
   );
+  const hiddenChecked = [...checked].filter(
+    (id) => !visible.some((note) => note.id === id),
+  ).length;
   const dirty = Boolean(draft) && fingerprint(draft) !== saved;
   const targets: Target[] = [
+    { id: "all", label: "All memories" },
     ...(props.chatId
       ? [
           {
@@ -361,6 +385,15 @@ export default function MemoryVault({
       ? await props.confirmAction(options)
       : window.confirm(`${options.title}\n\n${options.message}`);
   }
+  async function selectTarget(next: Target) {
+    if (!(await confirm(`opening ${next.label}`))) return;
+    setTarget(next);
+    setTargetSearch("");
+    setTargetsOpen(false);
+    setDraft(null);
+    setChecked(new Set());
+    setMobilePane("memories");
+  }
   async function openNote(note: LtmNote) {
     if (!(await confirm(`opening ${memoryLabel(note)}`))) return;
     const next = clone(note);
@@ -369,6 +402,7 @@ export default function MemoryVault({
     setIsNew(false);
     setError("");
     setNotice("");
+    setMobilePane("editor");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -383,6 +417,7 @@ export default function MemoryVault({
     setSaved("");
     setIsNew(true);
     setAddOpen(false);
+    setMobilePane("editor");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -394,6 +429,7 @@ export default function MemoryVault({
     if (!(await confirm("closing this memory"))) return;
     setDraft(null);
     setSaved("");
+    setMobilePane("memories");
   }
   async function invalidate() {
     await invalidateLtmQueries(client, [
@@ -448,7 +484,7 @@ export default function MemoryVault({
       setBusy("");
     }
   }
-  async function batch(action: "status" | "archive" | "delete") {
+  async function batch(action: "status" | "modes" | "archive" | "delete") {
     const ids = [...checked];
     if (!ids.length) return;
     if (
@@ -470,13 +506,13 @@ export default function MemoryVault({
       else
         await request("/notes/batch", "POST", {
           noteIds: ids,
-          ...(action === "archive"
-            ? { archive: "notes_only" }
-            : { status: bulkStatus }),
+          ...(action === "archive" ? { archive: "notes_only" } : {}),
+          ...(action === "status" ? { status: bulkStatus } : {}),
+          ...(action === "modes" ? { modes: bulkModes } : {}),
         });
       setChecked(new Set());
       setNotice(
-        `${ids.length} ${ids.length === 1 ? "memory was" : "memories were"} updated.`,
+        `${ids.length} ${ids.length === 1 ? "memory" : "memories"} updated.`,
       );
       await invalidate();
     } catch (cause) {
@@ -518,6 +554,7 @@ export default function MemoryVault({
     if (
       !draft ||
       !linkTarget.trim() ||
+      linkTarget.trim() === draft.id ||
       draft.links.some(
         (link) =>
           link.target === linkTarget.trim() && link.relation === linkRelation,
@@ -529,6 +566,20 @@ export default function MemoryVault({
       { target: linkTarget.trim(), relation: linkRelation },
     ]);
     setLinkTarget("");
+  };
+  const openLinkedNote = async (noteId: string) => {
+    try {
+      const note =
+        allNotes.find((candidate) => candidate.id === noteId) ??
+        (await request<LtmNote>(`/notes/${encodeURIComponent(noteId)}`));
+      await openNote(note);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Linked memory could not load.",
+      );
+    }
   };
   const addSubject = () => {
     if (
@@ -560,15 +611,27 @@ export default function MemoryVault({
           </p>
         </div>
         <div className="relative">
-          <Button
-            primary
-            onClick={() => setAddOpen((value) => !value)}
-            aria-haspopup="menu"
-            aria-expanded={addOpen}
-          >
-            <FilePlus2 size="0.875rem" />
-            Add memories
-          </Button>
+          <div className="flex gap-2">
+            <span className="md:hidden">
+              <Button
+                onClick={() => {
+                  setSelectionMode((value) => !value);
+                  if (selectionMode) setChecked(new Set());
+                }}
+              >
+                {selectionMode ? "Done" : "Select"}
+              </Button>
+            </span>
+            <Button
+              primary
+              onClick={() => setAddOpen((value) => !value)}
+              aria-haspopup="menu"
+              aria-expanded={addOpen}
+            >
+              <FilePlus2 size="0.875rem" />
+              Add memories
+            </Button>
+          </div>
           {addOpen ? (
             <div
               role="menu"
@@ -603,6 +666,25 @@ export default function MemoryVault({
           ) : null}
         </div>
       </header>
+      <div
+        role="tablist"
+        aria-label="Memory workspace"
+        className="grid grid-cols-3 rounded-lg border border-[var(--border)] p-1 md:hidden"
+      >
+        {(["memories", "editor", "details"] as const).map((pane) => (
+          <button
+            key={pane}
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === pane}
+            disabled={pane !== "memories" && !draft}
+            onClick={() => setMobilePane(pane)}
+            className={`min-h-11 rounded-md px-2 text-xs font-semibold capitalize disabled:opacity-40 ${mobilePane === pane ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
+          >
+            {pane}
+          </button>
+        ))}
+      </div>
       <section className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3 sm:grid-cols-[minmax(0,1fr)_10rem_10rem]">
         <div className="relative sm:col-span-3">
           <input
@@ -615,9 +697,17 @@ export default function MemoryVault({
             }}
             placeholder="Search linked chats, branches, and characters"
             aria-label="Choose memory scope"
+            role="combobox"
+            aria-expanded={targetsOpen}
+            aria-controls="ltm-scope-targets"
+            aria-autocomplete="list"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setTargetsOpen(false);
+            }}
           />
           {targetsOpen ? (
             <div
+              id="ltm-scope-targets"
               role="listbox"
               className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-1 shadow-lg"
             >
@@ -627,12 +717,7 @@ export default function MemoryVault({
                   role="option"
                   aria-selected={candidate.id === target?.id}
                   type="button"
-                  onClick={() => {
-                    setTarget(candidate);
-                    setTargetSearch("");
-                    setTargetsOpen(false);
-                    setDraft(null);
-                  }}
+                  onClick={() => void selectTarget(candidate)}
                   className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-[var(--accent)]"
                 >
                   {candidate.label}
@@ -652,12 +737,22 @@ export default function MemoryVault({
             className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted-foreground)]"
           />
           <input
-            className={`${inputClass} pl-9`}
+            className={`${inputClass} px-9`}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search memories"
             aria-label="Search memories"
           />
+          {search ? (
+            <button
+              type="button"
+              aria-label="Clear memory search"
+              onClick={() => setSearch("")}
+              className="absolute right-1 top-1 grid h-9 w-9 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+            >
+              <X size="0.875rem" />
+            </button>
+          ) : null}
         </label>
         <select
           className={inputClass}
@@ -690,7 +785,10 @@ export default function MemoryVault({
       </section>
       {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
       {notice ? <StatusSurface tone="success">{notice}</StatusSurface> : null}
-      <section className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3">
+      <section
+        data-ltm-bulk-actions
+        className={`${selectionMode ? "flex" : "hidden"} flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3 md:flex`}
+      >
         <label className="flex min-h-11 items-center gap-2 text-xs">
           <input
             type="checkbox"
@@ -708,8 +806,12 @@ export default function MemoryVault({
           />
           Select visible
         </label>
-        <span className="text-xs text-[var(--muted-foreground)]">
+        <span
+          data-ltm-selection-count
+          className="text-xs text-[var(--muted-foreground)]"
+        >
           {checked.size} selected
+          {hiddenChecked ? `, ${hiddenChecked} hidden by filters` : ""}
         </span>
         {checked.size ? (
           <>
@@ -731,6 +833,29 @@ export default function MemoryVault({
             >
               Set status
             </Button>
+            <fieldset className="flex flex-wrap items-center gap-2">
+              <legend className="sr-only">Set retrieval modes</legend>
+              {modes.map((mode) => (
+                <label key={mode} className="flex min-h-8 items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={bulkModes.includes(mode)}
+                    onChange={() => setBulkModes((current) =>
+                      current.includes(mode)
+                        ? current.filter((item) => item !== mode)
+                        : [...current, mode],
+                    )}
+                  />
+                  {mode}
+                </label>
+              ))}
+            </fieldset>
+            <Button
+              disabled={Boolean(busy) || !bulkModes.length}
+              onClick={() => void batch("modes")}
+            >
+              Set modes
+            </Button>
             <Button
               disabled={Boolean(busy)}
               onClick={() => void batch("archive")}
@@ -749,10 +874,10 @@ export default function MemoryVault({
           </>
         ) : null}
       </section>
-      <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]">
+      <div className="grid min-h-0 gap-4 md:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]">
         <section
           data-ltm-memory-list
-          className="max-h-[36rem] overflow-y-auto rounded-lg border border-[var(--border)]"
+          className={`${mobilePane === "memories" ? "block" : "hidden"} rounded-lg border border-[var(--border)] md:block`}
           aria-label="Memory list"
         >
           <p className="border-b border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
@@ -761,52 +886,75 @@ export default function MemoryVault({
           {notes.isLoading ? (
             <StatusSurface busy>Loading memories...</StatusSurface>
           ) : null}
-          {visible.map((note) => (
-            <div
-              key={note.id}
-              data-ltm-note-type={note.type}
-              data-ltm-note-source={note.type === "source" || undefined}
-              className={`flex gap-2 border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
-            >
-              <label className="flex min-h-11 min-w-8 items-center justify-center">
-                <input
-                  type="checkbox"
-                  checked={checked.has(note.id)}
-                  onChange={() =>
-                    setChecked((current) => {
-                      const next = new Set(current);
-                      next.has(note.id)
-                        ? next.delete(note.id)
-                        : next.add(note.id);
-                      return next;
-                    })
-                  }
-                  aria-label={`Select ${memoryLabel(note)}`}
-                />
-              </label>
+          {notes.isError ? (
+            <StatusSurface tone="danger">
+              Memories could not load. {" "}
               <button
                 type="button"
-                onClick={() => void openNote(note)}
-                className="min-h-14 min-w-0 flex-1 rounded-md px-2 text-left hover:bg-[var(--accent)]"
+                className="underline"
+                onClick={() => void notes.refetch()}
               >
-                <span className="flex items-center gap-2">
-                  <strong className="truncate text-sm">
-                    {memoryLabel(note)}
-                  </strong>
-                  <ChevronRight size="0.875rem" className="shrink-0" />
-                </span>
-                <span className="mt-1 flex gap-1 text-[0.6875rem]">
-                  <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
-                    {title(note.type)}
-                  </span>
-                  <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
-                    {note.status}
-                  </span>
-                </span>
+                Retry
               </button>
-            </div>
-          ))}
-          {!notes.isLoading && !visible.length ? (
+            </StatusSurface>
+          ) : null}
+          {visible.map((note) => {
+            const notePreview = preview(note, search);
+            return (
+              <div
+                key={note.id}
+                data-ltm-note-type={note.type}
+                data-ltm-note-source={note.type === "source" || undefined}
+                className={`flex gap-2 border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
+              >
+                <label className={`${selectionMode ? "flex" : "hidden"} min-h-11 min-w-8 items-center justify-center md:flex`}>
+                  <input
+                    type="checkbox"
+                    checked={checked.has(note.id)}
+                    onChange={() =>
+                      setChecked((current) => {
+                        const next = new Set(current);
+                        next.has(note.id)
+                          ? next.delete(note.id)
+                          : next.add(note.id);
+                        return next;
+                      })
+                    }
+                    aria-label={`Select ${memoryLabel(note)}`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void openNote(note)}
+                  className="min-h-14 min-w-0 flex-1 rounded-md px-2 text-left hover:bg-[var(--accent)]"
+                >
+                  <span className="flex items-center gap-2">
+                    <strong className="truncate text-sm">
+                      {memoryLabel(note)}
+                    </strong>
+                    <ChevronRight size="0.875rem" className="shrink-0" />
+                  </span>
+                  <span className="mt-1 flex gap-1 text-[0.6875rem]">
+                    <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
+                      {title(note.type)}
+                    </span>
+                    <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
+                      {note.status}
+                    </span>
+                  </span>
+                  {notePreview ? (
+                    <span className="mt-1 line-clamp-2 block text-xs leading-5 text-[var(--muted-foreground)]">
+                      <span className="font-medium text-[var(--foreground)]">
+                        {notePreview.label}:
+                      </span>{" "}
+                      {notePreview.text}
+                    </span>
+                  ) : null}
+                </button>
+              </div>
+            );
+          })}
+          {!notes.isLoading && !notes.isError && !visible.length ? (
             <p className="p-5 text-center text-xs text-[var(--muted-foreground)]">
               No memories match these filters.
             </p>
@@ -816,7 +964,7 @@ export default function MemoryVault({
           ref={detailRef}
           tabIndex={-1}
           data-ltm-note-workbench
-          className="scroll-mt-20 rounded-lg border border-[var(--border)] p-3"
+          className={`${mobilePane === "memories" ? "hidden" : "block"} scroll-mt-20 rounded-lg border border-[var(--border)] p-3 md:block`}
           aria-label="Memory editor"
         >
           {!draft ? (
@@ -846,6 +994,131 @@ export default function MemoryVault({
                   <Button onClick={() => void closeDraft()}>Close</Button>
                 </div>
               </header>
+              <div
+                className={`${mobilePane === "details" ? "hidden" : "contents"} md:contents`}
+              >
+              <section className="space-y-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <h4 className="mr-auto text-xs font-medium">
+                    Memory sections
+                  </h4>
+                  <input
+                    className={`${inputClass} w-40`}
+                    value={sectionKey}
+                    onChange={(event) => setSectionKey(event.target.value)}
+                    placeholder="new_section"
+                    aria-label="New section name"
+                  />
+                  <Button onClick={addSection} disabled={!sectionKey.trim()}>
+                    Add section
+                  </Button>
+                </div>
+                {Object.entries(draft.sections).map(([key, section]) => (
+                  <article
+                    key={key}
+                    className="space-y-2 rounded-md border border-[var(--border)] p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <label
+                        htmlFor={`ltm-section-${key}`}
+                        className="text-xs font-semibold"
+                      >
+                        {title(key)}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = { ...draft.sections };
+                          delete next[key];
+                          update("sections", next);
+                        }}
+                        aria-label={`Remove ${key} section`}
+                        className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
+                      >
+                        <Trash2 size="0.75rem" />
+                      </button>
+                    </div>
+                    <textarea
+                      id={`ltm-section-${key}`}
+                      data-ltm-field="section"
+                      className={`${inputClass} min-h-28 py-2`}
+                      value={section.text}
+                      onChange={(event) =>
+                        update("sections", {
+                          ...draft.sections,
+                          [key]: {
+                            ...section,
+                            text: event.target.value,
+                            updatedAt: new Date().toISOString(),
+                          },
+                        })
+                      }
+                    />
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <label className="text-xs">
+                        Importance
+                        <select
+                          className={inputClass}
+                          value={section.importance ?? ""}
+                          onChange={(event) =>
+                            update("sections", {
+                              ...draft.sections,
+                              [key]: {
+                                ...section,
+                                importance: event.target.value || undefined,
+                              },
+                            })
+                          }
+                        >
+                          <option value="">Not set</option>
+                          {["critical", "major", "moderate", "minor"].map(
+                            (value) => (
+                              <option key={value}>{value}</option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+                      <NumberField
+                        label="Confidence"
+                        value={section.confidence ?? 0}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        onChange={(value) =>
+                          update("sections", {
+                            ...draft.sections,
+                            [key]: { ...section, confidence: value },
+                          })
+                        }
+                      />
+                      <NumberField
+                        label="Salience"
+                        value={section.salience ?? 0}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        onChange={(value) =>
+                          update("sections", {
+                            ...draft.sections,
+                            [key]: { ...section, salience: value },
+                          })
+                        }
+                      />
+                    </div>
+                    <TokenEditor
+                      label="Evidence"
+                      values={section.evidence ?? []}
+                      placeholder="Add evidence"
+                      onChange={(evidence) =>
+                        update("sections", {
+                          ...draft.sections,
+                          [key]: { ...section, evidence },
+                        })
+                      }
+                    />
+                  </article>
+                ))}
+              </section>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1 text-xs font-medium">
                   Title
@@ -928,6 +1201,10 @@ export default function MemoryVault({
                   </div>
                 </fieldset>
               </div>
+              </div>
+              <div
+                className={`${mobilePane === "editor" ? "hidden" : "contents"} md:contents`}
+              >
               <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2">
                 <TokenEditor
                   label="Tags"
@@ -1035,7 +1312,15 @@ export default function MemoryVault({
                     >
                       {link.relation.replaceAll("_", " ")}
                       {" -> "}
-                      {memoryLabel(allNotes.find((note) => note.id === link.target))}
+                      <button
+                        type="button"
+                        className="underline underline-offset-2"
+                        onClick={() => void openLinkedNote(link.target)}
+                      >
+                        {memoryLabel(
+                          allNotes.find((note) => note.id === link.target),
+                        )}
+                      </button>
                     </Pill>
                   ))}
                 </div>
@@ -1045,7 +1330,21 @@ export default function MemoryVault({
                     value={linkTarget}
                     onChange={(event) => setLinkTarget(event.target.value)}
                     placeholder="Search or enter a memory"
+                    list="ltm-linked-memories"
                   />
+                  <datalist id="ltm-linked-memories">
+                    {allNotes
+                      .filter(
+                        (note) =>
+                          note.id !== draft.id &&
+                          !draft.links.some((link) => link.target === note.id),
+                      )
+                      .map((note) => (
+                        <option key={note.id} value={note.id}>
+                          {memoryLabel(note)}
+                        </option>
+                      ))}
+                  </datalist>
                   <select
                     className={inputClass}
                     value={linkRelation}
@@ -1057,7 +1356,10 @@ export default function MemoryVault({
                       <option key={relation}>{relation}</option>
                     ))}
                   </select>
-                  <Button onClick={addLink} disabled={!linkTarget.trim()}>
+                  <Button
+                    onClick={addLink}
+                    disabled={!linkTarget.trim() || linkTarget.trim() === draft.id}
+                  >
                     <Link2 size="0.75rem" />
                     Link
                   </Button>
@@ -1103,120 +1405,6 @@ export default function MemoryVault({
                   </div>
                 </section>
               ) : null}
-              <section className="space-y-3 border-t border-[var(--border)] pt-4">
-                <div className="flex flex-wrap items-end gap-2">
-                  <h4 className="mr-auto text-xs font-medium">
-                    Memory sections
-                  </h4>
-                  <input
-                    className={`${inputClass} w-40`}
-                    value={sectionKey}
-                    onChange={(event) => setSectionKey(event.target.value)}
-                    placeholder="new_section"
-                  />
-                  <Button onClick={addSection} disabled={!sectionKey.trim()}>
-                    Add section
-                  </Button>
-                </div>
-                {Object.entries(draft.sections).map(([key, section]) => (
-                  <article
-                    key={key}
-                    className="space-y-2 rounded-md border border-[var(--border)] p-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <strong className="text-xs">{title(key)}</strong>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = { ...draft.sections };
-                          delete next[key];
-                          update("sections", next);
-                        }}
-                        aria-label={`Remove ${key} section`}
-                        className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
-                      >
-                        <Trash2 size="0.75rem" />
-                      </button>
-                    </div>
-                    <textarea
-                      className={`${inputClass} min-h-28 py-2`}
-                      value={section.text}
-                      onChange={(event) =>
-                        update("sections", {
-                          ...draft.sections,
-                          [key]: {
-                            ...section,
-                            text: event.target.value,
-                            updatedAt: new Date().toISOString(),
-                          },
-                        })
-                      }
-                    />
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <label className="text-xs">
-                        Importance
-                        <select
-                          className={inputClass}
-                          value={section.importance ?? ""}
-                          onChange={(event) =>
-                            update("sections", {
-                              ...draft.sections,
-                              [key]: {
-                                ...section,
-                                importance: event.target.value || undefined,
-                              },
-                            })
-                          }
-                        >
-                          <option value="">Not set</option>
-                          {["critical", "major", "moderate", "minor"].map(
-                            (value) => (
-                              <option key={value}>{value}</option>
-                            ),
-                          )}
-                        </select>
-                      </label>
-                      <NumberField
-                        label="Confidence"
-                        value={section.confidence ?? 0}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(value) =>
-                          update("sections", {
-                            ...draft.sections,
-                            [key]: { ...section, confidence: value },
-                          })
-                        }
-                      />
-                      <NumberField
-                        label="Salience"
-                        value={section.salience ?? 0}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(value) =>
-                          update("sections", {
-                            ...draft.sections,
-                            [key]: { ...section, salience: value },
-                          })
-                        }
-                      />
-                    </div>
-                    <TokenEditor
-                      label="Evidence"
-                      values={section.evidence ?? []}
-                      placeholder="Add evidence"
-                      onChange={(evidence) =>
-                        update("sections", {
-                          ...draft.sections,
-                          [key]: { ...section, evidence },
-                        })
-                      }
-                    />
-                  </article>
-                ))}
-              </section>
               {draft.conflicts?.length ? (
                 <section className="space-y-2 border-t border-[var(--border)] pt-4">
                   <h4 className="text-xs font-medium">Conflicts</h4>
@@ -1233,6 +1421,26 @@ export default function MemoryVault({
                   ))}
                 </section>
               ) : null}
+              <dl className="grid gap-1 border-t border-[var(--border)] pt-4 text-xs text-[var(--muted-foreground)] sm:grid-cols-2">
+                <div>
+                  <dt className="font-medium text-[var(--foreground)]">Created</dt>
+                  <dd>{new Date(draft.createdAt).toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-[var(--foreground)]">Updated</dt>
+                  <dd>{new Date(draft.updatedAt).toLocaleString()}</dd>
+                </div>
+                {draft.provenance ? (
+                  <div className="sm:col-span-2">
+                    <dt className="font-medium text-[var(--foreground)]">
+                      Provenance
+                    </dt>
+                    <dd>
+                      {draft.provenance.kind.replaceAll("_", " ")}: {draft.provenance.sourceId}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
               {draft.type === "source" && !isNew ? (
                 <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-4">
                   <Button
@@ -1264,6 +1472,7 @@ export default function MemoryVault({
                   </Button>
                 </div>
               ) : null}
+              </div>
             </div>
           )}
         </section>

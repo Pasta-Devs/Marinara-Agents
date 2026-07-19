@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, RotateCw, Trash2 } from "lucide-react";
+import { ChevronRight, Download, RotateCw, Trash2 } from "lucide-react";
 import type {
   LtmDebugEvent,
   LtmLastInjectionResponse,
@@ -11,6 +11,7 @@ import { Button, StatusSurface } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 
 type DebugLogResponse = { events: LtmDebugEvent[] };
+type DebugOperation = { operationId: string; events: LtmDebugEvent[] };
 
 function formatTimestamp(timestamp: string) {
   const date = new Date(timestamp);
@@ -34,6 +35,78 @@ function describeEvent(
   if (event.message) return humanizeDebugText(event.message, noteTitles);
   if (event.uiSummary) return humanizeDebugText(event.uiSummary, noteTitles);
   return "No message recorded.";
+}
+
+function humanizeLabel(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function groupOperations(events: LtmDebugEvent[]): DebugOperation[] {
+  const operations = new Map<string, LtmDebugEvent[]>();
+  for (const event of events) {
+    const operation = operations.get(event.operationId) ?? [];
+    operation.push(event);
+    operations.set(event.operationId, operation);
+  }
+  return [...operations.entries()]
+    .map(([operationId, operationEvents]) => ({
+      operationId,
+      events: operationEvents.sort((left, right) => left.ts.localeCompare(right.ts)),
+    }))
+    .sort((left, right) =>
+      right.events.at(-1)!.ts.localeCompare(left.events.at(-1)!.ts),
+    );
+}
+
+function operationStatus(events: LtmDebugEvent[]) {
+  const started = events.find((event) => event.status === "started");
+  const terminal = started
+    ? events.findLast(
+        (event) =>
+          event.phase === started.phase &&
+          event.action === started.action &&
+          event.status !== "started",
+      )
+    : events.at(-1);
+  const status = terminal?.status ?? (started ? "started" : "warning");
+  if (status === "ok" && events.some((event) => event.status === "warning")) {
+    return { status: "warning", label: "Completed with warnings" } as const;
+  }
+  return {
+    status,
+    label: {
+      started: "Running",
+      ok: "Completed",
+      skipped: "Skipped",
+      warning: "Warning",
+      error: "Failed",
+    }[status],
+  };
+}
+
+function eventMetadata(event: LtmDebugEvent) {
+  const {
+    id: _id,
+    ts: _ts,
+    phase: _phase,
+    action: _action,
+    status: _status,
+    message: _message,
+    uiSummary: _uiSummary,
+    ...metadata
+  } = event;
+  return metadata;
+}
+
+function summarizeCounts(events: LtmDebugEvent[]) {
+  const counts = events.findLast((event) => event.counts)?.counts;
+  if (!counts) return "";
+  return Object.entries(counts)
+    .slice(0, 3)
+    .map(([label, count]) => `${count.toLocaleString()} ${humanizeLabel(label).toLowerCase()}`)
+    .join(" | ");
 }
 
 async function confirm(
@@ -70,6 +143,7 @@ export default function ActivityView({
   const noteTitles = new Map(
     (notes.data ?? []).map((note) => [note.id, note.title || "Untitled memory"]),
   );
+  const operations = groupOperations(activity.data?.events ?? []);
   const lastInjection = useQuery({
     enabled: Boolean(props.chatId),
     queryKey: queryKeys.lastInjection(props.chatId),
@@ -222,54 +296,103 @@ export default function ActivityView({
       {activity.data?.events.length === 0 ? (
         <StatusSurface>No activity has been recorded yet.</StatusSurface>
       ) : null}
-      {activity.data?.events.length ? (
+      {operations.length ? (
         <ol className="space-y-2" aria-label="Long-Term Memory activity log">
-          {activity.data.events.map((event) => (
-            <li
-              key={event.id}
-              className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="font-semibold">
-                  {event.phase} / {event.action}
-                </span>
-                <span
-                  className={
-                    event.status === "error"
-                      ? "text-[var(--destructive)]"
-                      : "text-[var(--muted-foreground)]"
-                  }
-                >
-                  {event.status}
-                </span>
-              </div>
-              <p className="mt-2 text-xs leading-relaxed">
-                {describeEvent(event, noteTitles)}
-              </p>
-              {event.sourceNoteId && noteTitles.has(event.sourceNoteId) ? (
-                <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                  Source memory: {noteTitles.get(event.sourceNoteId)}
-                </p>
-              ) : null}
-              <p className="mt-2 text-[0.6875rem] text-[var(--muted-foreground)]">
-                {formatTimestamp(event.ts)}
-                {event.durationMs != null ? ` | ${event.durationMs} ms` : ""}
-              </p>
-              {event.diagnostics?.length ? (
-                <details className="mt-2 text-xs text-[var(--muted-foreground)]">
-                  <summary className="cursor-pointer">
-                    Diagnostics ({event.diagnostics.length})
+          {operations.map((operation) => {
+            const firstEvent = operation.events[0];
+            const lastEvent = operation.events.at(-1)!;
+            const status = operationStatus(operation.events);
+            const sourceNoteId =
+              operation.events.find((event) => event.sourceNoteId)?.sourceNoteId;
+            const countSummary = summarizeCounts(operation.events);
+            return (
+              <li
+                key={operation.operationId}
+                className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25"
+              >
+                <details className="group">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-start gap-2 p-3 marker:content-none">
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="mt-0.5 shrink-0 transition-transform group-open:rotate-90"
+                      size="1rem"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold">
+                          {humanizeLabel(firstEvent.action)}
+                        </span>
+                        <span
+                          className={
+                            status.status === "error"
+                              ? "text-[var(--destructive)]"
+                              : "text-[var(--muted-foreground)]"
+                          }
+                        >
+                          {status.label}
+                        </span>
+                      </span>
+                      <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
+                        {sourceNoteId && noteTitles.has(sourceNoteId)
+                          ? noteTitles.get(sourceNoteId)
+                          : describeEvent(lastEvent, noteTitles)}
+                      </span>
+                      <span className="mt-1 block text-[0.6875rem] text-[var(--muted-foreground)]">
+                        {formatTimestamp(lastEvent.ts)}
+                        {lastEvent.durationMs != null
+                          ? ` | ${lastEvent.durationMs.toLocaleString()} ms`
+                          : ""}
+                        {countSummary ? ` | ${countSummary}` : ""}
+                      </span>
+                    </span>
                   </summary>
-                  <pre className="mt-2 overflow-x-auto rounded bg-[var(--background)] p-2 text-[0.6875rem]">
-                    {humanizeDebugText(
-                       JSON.stringify(event.diagnostics, null, 2),
-                       noteTitles,
-                     )}
-                  </pre>
+                  <ol className="space-y-2 border-t border-[var(--border)] px-3 py-3">
+                    {operation.events.map((event) => {
+                      const metadata = eventMetadata(event);
+                      return (
+                        <li
+                          key={event.id}
+                          className="border-l-2 border-[var(--border)] pl-3 text-xs"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-medium">
+                              {humanizeLabel(event.phase)} / {humanizeLabel(event.action)}
+                            </span>
+                            <span
+                              className={
+                                event.status === "error"
+                                  ? "text-[var(--destructive)]"
+                                  : "text-[var(--muted-foreground)]"
+                              }
+                            >
+                              {operationStatus([event]).label}
+                            </span>
+                          </div>
+                          <p className="mt-1 leading-relaxed">
+                            {describeEvent(event, noteTitles)}
+                          </p>
+                          <p className="mt-1 text-[0.6875rem] text-[var(--muted-foreground)]">
+                            {formatTimestamp(event.ts)}
+                            {event.durationMs != null
+                              ? ` | ${event.durationMs.toLocaleString()} ms`
+                              : ""}
+                          </p>
+                          {Object.keys(metadata).length ? (
+                            <pre className="mt-2 overflow-x-auto rounded bg-[var(--background)] p-2 text-[0.6875rem] text-[var(--muted-foreground)]">
+                              {humanizeDebugText(
+                                JSON.stringify(metadata, null, 2),
+                                noteTitles,
+                              )}
+                            </pre>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ol>
                 </details>
-              ) : null}
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ol>
       ) : null}
     </section>

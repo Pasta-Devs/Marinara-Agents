@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-19T05:46:07.098Z",
+  "generatedAt": "2026-07-19T07:27:46.278Z",
   "packages": [
     {
       "manifest": {
@@ -884,7 +884,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.0.7",
+        "version": "1.0.8",
         "description": "Captures finalized turns and recalls relevant context from a durable package-owned memory vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
         "engine": {
           "min": "2.3.2",
@@ -916,13 +916,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "34e731aaa97d2cc55b2e8e395701fdbf32d57bdf684fe945848258121db36308",
-            "bytes": 379871
+            "sha256": "ec2f421aeedce46dfa0330e0025fe51c321324343cdef385faf2482082201077",
+            "bytes": 379700
           },
           {
             "path": "client.js",
-            "sha256": "60597ff0d73f0eff5dcea36ee34fbcccb26a7314ab74dafa667b52d8960c0c0e",
-            "bytes": 571466
+            "sha256": "623f50515cc61c5c3ce8b3e2c1b514ff6d9105274ecfb4b16e26c45c2102fda1",
+            "bytes": 580845
           }
         ],
         "permissions": [
@@ -937,9 +937,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/main/artifacts/long-term-memory-1.0.7.zip",
-        "sha256": "a48afbb4b041c0150707e99e616751d64cc2e6bc54d31c3a803b7944212c66aa",
-        "bytes": 265832
+        "url": "https://raw.githubusercontent.com/Promansis/Marinara-Agents/main/artifacts/long-term-memory-1.0.8.zip",
+        "sha256": "0f7cc4b1e258db55512e1c65eb130175c7237e50960d0790b7df64a3e926fbf9",
+        "bytes": 268354
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
