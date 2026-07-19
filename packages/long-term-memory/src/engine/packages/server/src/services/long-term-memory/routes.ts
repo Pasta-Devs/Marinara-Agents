@@ -1016,7 +1016,7 @@ export function createLongTermMemoryRoutes(runtime: {
         return {
           deleted: true,
           draftId: id,
-          mutationIds: body.mutationIds,
+          mutationIds: result.mutationIds,
           draft: result.draft,
         };
       },

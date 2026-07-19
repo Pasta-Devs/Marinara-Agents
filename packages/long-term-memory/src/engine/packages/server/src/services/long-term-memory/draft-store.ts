@@ -282,13 +282,53 @@ export class LongTermMemoryDraftStore {
       }
 
       const mutationIdSet = new Set(uniqueMutationIds);
+      const eventNoteIds = new Set(
+        draft.mutations.flatMap((mutation) =>
+          mutation.kind === "create_note" && mutation.note.type === "timeline_event"
+            ? [mutation.note.id]
+            : [],
+        ),
+      );
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        const removedNoteIds = new Set(
+          draft.mutations.flatMap((mutation) =>
+            mutationIdSet.has(mutation.id) && mutation.kind === "create_note"
+              ? [mutation.note.id]
+              : [],
+          ),
+        );
+        const invalidatedNoteIds = new Set(
+          draft.mutations.flatMap((mutation) =>
+            mutationIdSet.has(mutation.id) &&
+            mutation.kind === "add_link" &&
+            eventNoteIds.has(mutation.link.target)
+              ? [mutation.noteId]
+              : [],
+          ),
+        );
+        for (const mutation of draft.mutations) {
+          if (mutationIdSet.has(mutation.id)) continue;
+          const dependsOnRemoved =
+            mutation.kind === "create_note"
+              ? mutation.note.links.some((link) => removedNoteIds.has(link.target))
+              : mutation.kind === "add_link"
+                ? invalidatedNoteIds.has(mutation.noteId) || removedNoteIds.has(mutation.noteId) || removedNoteIds.has(mutation.link.target)
+                : invalidatedNoteIds.has(mutation.noteId) || removedNoteIds.has(mutation.noteId);
+          if (dependsOnRemoved) {
+            mutationIdSet.add(mutation.id);
+            expanded = true;
+          }
+        }
+      }
       const nextMutations = draft.mutations.filter((mutation) => !mutationIdSet.has(mutation.id));
       if (nextMutations.length === 0) {
         await this.deleteDraft(id);
-        return { draft: null, deleted: true as const };
+        return { draft: null, deleted: true as const, mutationIds: [...mutationIdSet] };
       }
       const next = await this.updateDraft(id, { mutations: nextMutations });
-      return { draft: next, deleted: true as const };
+      return { draft: next, deleted: true as const, mutationIds: [...mutationIdSet] };
     });
   }
 }

@@ -71,9 +71,9 @@ async function preflight(storage: LongTermMemoryStorage, draft: LtmExtractionDra
   const baseNotes = new Map(existing);
   const projected = projectLtmDraftOntoNotes({ notes: baseNotes, mutations, context: { source: draft.source, scope: draft.scope, modes: draft.modes }, timestamp: nowIso() });
   const eventIds = new Set(
-    mutations.flatMap((mutation) =>
-      mutation.kind === "create_note" && mutation.note.type === "timeline_event" && mutation.note.links.some((link) => link.relation === "extracted_from" && link.target === draft.source.sourceNoteId)
-        ? [mutation.note.id]
+    [...projected.notes.values()].flatMap((note) =>
+      note.type === "timeline_event" && note.links.some((link) => link.relation === "extracted_from" && link.target === draft.source.sourceNoteId)
+        ? [note.id]
         : [],
     ),
   );

@@ -212,14 +212,12 @@ export function normalizeStructuredSummaryEvidenceUnits({
 }): StructuredSummaryNormalizationResult {
   const sections = parseStructuredSections(sourceText);
   if (sections.length === 0) {
+    const normalized = normalizeCanonicalTargetLinks(units, units.map(normalizeTargetShapeUnit));
+    const sourceGraph = normalizeSourceEventGraph(normalized, sourceNote, sourceHash);
     return {
-      units: normalizeSourceEventGraph(
-        normalizeCanonicalTargetLinks(units, units.map(normalizeTargetShapeUnit)),
-        sourceNote,
-        sourceHash,
-      ),
+      units: sourceGraph,
       structured: false,
-      addedUnits: 0,
+      addedUnits: sourceGraph.length - normalized.length,
     };
   }
 
@@ -230,10 +228,11 @@ export function normalizeStructuredSummaryEvidenceUnits({
     units.map((unit) => normalizeUnit(unit, hints, relationshipIdentityKey)),
   );
   if (!addStructuredUnits) {
+    const sourceGraph = normalizeSourceEventGraph(normalized, sourceNote, sourceHash);
     return {
-      units: normalizeSourceEventGraph(normalized, sourceNote, sourceHash),
+      units: sourceGraph,
       structured: true,
-      addedUnits: 0,
+      addedUnits: sourceGraph.length - normalized.length,
     };
   }
   const withStructuredRelationships = maybeAddStructuredRelationshipUnits({
@@ -264,10 +263,11 @@ export function normalizeStructuredSummaryEvidenceUnits({
     sourceHash,
   });
 
+  const sourceGraph = normalizeSourceEventGraph(withTone, sourceNote, sourceHash);
   return {
-    units: normalizeSourceEventGraph(withTone, sourceNote, sourceHash),
+    units: sourceGraph,
     structured: true,
-    addedUnits: withTone.length - normalized.length,
+    addedUnits: sourceGraph.length - normalized.length,
   };
 }
 
@@ -299,21 +299,30 @@ function normalizeSourceEventGraph(
       sourceHash,
       subjectNames: [],
     };
-    return [
-      assertion,
-      ...units
-        .filter((unit) => unit.bucket !== "timeline_event")
-        .map((unit) => ({
-          ...unit,
-          links: uniqueLinks([
-            ...unit.links,
-            {
+    const timelineTargets = new Set(
+      units
+        .filter((unit) => unit.bucket === "timeline_event")
+        .map(noteIdForEvidenceUnit),
+    );
+    const remapLinks = (unit: LtmEvidenceUnit) => ({
+      ...unit,
+      links: uniqueLinks([
+        ...unit.links.map((link) => ({
+          ...link,
+          target: timelineTargets.has(link.target) ? eventId : link.target,
+        })),
+        ...(unit.bucket === "timeline_event"
+          ? []
+          : [{
               relation: unit.bucket === "relationship_state" ? "caused_by" as const : "evidenced_by" as const,
               target: eventId,
-            },
-          ]),
-        })),
-    ];
+            }]),
+      ]),
+    });
+    const normalized = units.map((unit) =>
+      unit.bucket === "timeline_event" ? assertion : remapLinks(unit),
+    );
+    return timelineTargets.size ? normalized : [assertion, ...normalized];
   }
 
   const suffix = createHash("sha256").update(sourceNote.id).digest("hex").slice(0, 10);

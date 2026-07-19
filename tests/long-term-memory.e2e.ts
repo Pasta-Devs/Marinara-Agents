@@ -144,21 +144,20 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
   test.setTimeout(90_000);
   const chat = await createChat(page, testInfo);
   const suffix = `${Date.now()}_${testInfo.project.name.replaceAll(/[^a-z0-9]+/giu, "_")}`;
-  const sourceId = `source_e2e_${suffix}`;
+  const timelineId = `timeline_e2e_${suffix}`;
   const worldId = `world_e2e_${suffix}`;
-  const sourceTitle = `E2E source ${suffix}`;
+  const timelineTitle = `E2E timeline ${suffix}`;
   const timestamp = new Date().toISOString();
 
   try {
     for (const note of [
       {
-        id: sourceId,
-        title: sourceTitle,
-        type: "source",
-        provenance: { kind: "chat_summary", sourceId: "chat-e2e", entryId: "fixture" },
+        id: timelineId,
+        title: timelineTitle,
+        type: "timeline_event",
         sections: {
-          source: {
-            text: "A durable E2E source fixture.",
+          event: {
+            text: "A durable E2E timeline fixture.",
             updatedAt: timestamp,
           },
         },
@@ -190,17 +189,17 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
     await openLongTermMemory(page, chat.id, testInfo);
     const vault = page.locator('[data-ltm-surface="vault"]');
     await expect(vault).toBeVisible();
-    await vault.getByLabel("Filter by type").selectOption("source");
+    await vault.getByLabel("Filter by type").selectOption("timeline_event");
 
-    const sourceRow = vault
+    const timelineRow = vault
       .locator("[data-ltm-note-source]")
-      .filter({ hasText: sourceTitle });
-    await expect(sourceRow).toBeVisible();
-    await expect(sourceRow).toHaveAttribute("data-ltm-note-type", "source");
+      .filter({ hasText: timelineTitle });
+    await expect(timelineRow).toBeVisible();
+    await expect(timelineRow).toHaveAttribute("data-ltm-note-type", "timeline_event");
     if (testInfo.project.name.includes("mobile"))
       await vault.getByRole("button", { name: "Select" }).click();
-    await sourceRow
-      .getByRole("checkbox", { name: `Select ${sourceTitle}` })
+    await timelineRow
+      .getByRole("checkbox", { name: `Select ${timelineTitle}` })
       .check();
 
     await vault.getByLabel("Filter by type").selectOption("world");
@@ -223,7 +222,7 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
       "0 selected",
     );
   } finally {
-    await deleteNotes(page, [sourceId, worldId]);
+    await deleteNotes(page, [timelineId, worldId]);
     await deleteChat(page, chat.id);
   }
 });
