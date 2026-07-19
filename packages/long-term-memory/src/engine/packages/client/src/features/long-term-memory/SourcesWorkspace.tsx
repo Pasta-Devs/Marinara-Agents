@@ -57,7 +57,7 @@ export default function SourcesWorkspace({
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<Source>("chats");
-  const [includeOtherChats, setIncludeOtherChats] = useState(false);
+  const [importScope, setImportScope] = useState<"current" | "all">("current");
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
@@ -88,7 +88,7 @@ export default function SourcesWorkspace({
       ),
   });
   const sourceScope =
-    source === "chats" && !includeOtherChats
+    importScope === "current"
       ? (scopeTargets.data?.currentScope ??
         (props.chatId
           ? { chatId: props.chatId, chatIds: [props.chatId] }
@@ -391,19 +391,27 @@ export default function SourcesWorkspace({
         ))}
       </div>
 
-      {source === "chats" ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3">
-          <label className="inline-flex min-h-11 items-center gap-2 text-xs font-medium">
-            <input
-              type="checkbox"
-              checked={includeOtherChats}
-              onChange={(event) => setIncludeOtherChats(event.target.checked)}
-              data-ltm-source-other-chats
-            />
-            Show other chats and branches
-          </label>
-        </div>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3">
+        <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
+          Import scope
+          <select
+            className={`${inputClass} min-w-44`}
+            value={importScope}
+            onChange={(event) =>
+              setImportScope(event.target.value as "current" | "all")
+            }
+            data-ltm-import-scope
+          >
+            <option value="current">Current chat</option>
+            <option value="all">All Available</option>
+          </select>
+        </label>
+        <span className="text-xs text-[var(--muted-foreground)]">
+          {importScope === "all"
+            ? "Search every available character, lorebook, chat, and branch."
+            : "Limit imports to this chat and its related scope."}
+        </span>
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p

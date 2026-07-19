@@ -197,6 +197,27 @@ function fingerprint(candidate: Candidate, scope: LtmScope) {
   });
 }
 
+function matchesScope(candidate: Candidate, scope?: LtmScope) {
+  if (!scope) return true;
+  const scopeIds = new Set(getLtmScopeChatIds(scope));
+  if (candidate.provenance.kind === "character") {
+    return Boolean(
+      candidate.scope.characterIds?.some((id) => scope.characterIds?.includes(id)),
+    );
+  }
+  if (scope.groupId) {
+    if (candidate.scope.groupId !== scope.groupId) return false;
+  } else if (scopeIds.size) {
+    const candidateIds = new Set(getLtmScopeChatIds(candidate.scope));
+    if (![...candidateIds].some((id) => scopeIds.has(id))) return false;
+  }
+  if (scope.characterIds?.length) {
+    const candidateIds = new Set(candidate.scope.characterIds ?? []);
+    if (![...candidateIds].some((id) => scope.characterIds?.includes(id))) return false;
+  }
+  return true;
+}
+
 async function candidates(
   request: {
     source: "characters" | "lorebooks" | "chats";
@@ -400,6 +421,7 @@ async function candidates(
   }
   const filtered = result.filter(
       (item) =>
+        matchesScope(item, request.scope) &&
         (!request.mode || item.modes.includes(request.mode)) &&
         (!selected || selected.has(item.sourceId)),
     ),
