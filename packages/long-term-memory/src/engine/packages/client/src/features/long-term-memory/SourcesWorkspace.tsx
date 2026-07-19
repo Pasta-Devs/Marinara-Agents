@@ -11,8 +11,10 @@ import {
 import type {
   LtmImportSourceNotesResponse,
   LtmInteropPreviewResponse,
+  LtmMode,
   LtmNoteTransferApplyResponse,
   LtmNoteTransferPreviewResponse,
+  LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request } from "./api";
 import { Button, StatusSurface, inputClass } from "./shared-controls";
@@ -22,10 +24,12 @@ type Source = "characters" | "lorebooks" | "chats";
 type PreviewRow = LtmInteropPreviewResponse["samples"][number];
 
 const sourceTabs: Array<{ id: Source; label: string }> = [
+  { id: "chats", label: "Chat Summaries" },
   { id: "characters", label: "Characters" },
   { id: "lorebooks", label: "Lorebooks" },
-  { id: "chats", label: "Chat Summaries" },
 ];
+
+type ScopeTargets = { currentScope: LtmScope | null };
 
 function isGameJournal(row: Pick<PreviewRow, "sourceId" | "title">) {
   return (
@@ -52,7 +56,9 @@ export default function SourcesWorkspace({
 }: LongTermMemoryDestinationProps) {
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
-  const [source, setSource] = useState<Source>("characters");
+  const [source, setSource] = useState<Source>("chats");
+  const [includeOtherChats, setIncludeOtherChats] = useState(false);
+  const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
@@ -74,14 +80,32 @@ export default function SourcesWorkspace({
   );
   const [transferError, setTransferError] = useState("");
 
-  const preview = useQuery({
-    queryKey: [...queryKeys.preview, source],
+  const scopeTargets = useQuery({
+    queryKey: [...queryKeys.root, "scope-targets", props.chatId],
     queryFn: () =>
-      request<LtmInteropPreviewResponse, { source: Source; limit: number }>(
-        "/import/preview",
-        "POST",
-        { source, limit: 100 },
+      request<ScopeTargets>(
+        `/scope-targets${props.chatId ? `?chatId=${encodeURIComponent(props.chatId)}` : ""}`,
       ),
+  });
+  const sourceScope =
+    source === "chats" && !includeOtherChats
+      ? (scopeTargets.data?.currentScope ??
+        (props.chatId
+          ? { chatId: props.chatId, chatIds: [props.chatId] }
+          : undefined))
+      : undefined;
+  const preview = useQuery({
+    queryKey: [...queryKeys.preview, source, sourceScope, modeFilter],
+    queryFn: () =>
+      request<
+        LtmInteropPreviewResponse,
+        { source: Source; limit: number; scope?: LtmScope; mode?: LtmMode }
+      >("/import/preview", "POST", {
+        source,
+        limit: 100,
+        ...(sourceScope ? { scope: sourceScope } : {}),
+        ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+      }),
   });
   const rows = preview.data?.samples ?? [];
   const pendingRows = rows.filter((row) => row.status === "pending");
@@ -141,8 +165,20 @@ export default function SourcesWorkspace({
     try {
       const result = await request<
         LtmImportSourceNotesResponse,
-        { source: Source; sourceIds: string[]; limit: number }
-      >("/import/source-notes", "POST", { source, sourceIds: ids, limit: 100 });
+        {
+          source: Source;
+          sourceIds: string[];
+          limit: number;
+          scope?: LtmScope;
+          mode?: LtmMode;
+        }
+      >("/import/source-notes", "POST", {
+        source,
+        sourceIds: ids,
+        limit: 100,
+        ...(sourceScope ? { scope: sourceScope } : {}),
+        ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+      });
       setImportResult(result);
       await invalidateAfterMutation();
       await preview.refetch();
@@ -353,6 +389,20 @@ export default function SourcesWorkspace({
         ))}
       </div>
 
+      {source === "chats" ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3">
+          <label className="inline-flex min-h-11 items-center gap-2 text-xs font-medium">
+            <input
+              type="checkbox"
+              checked={includeOtherChats}
+              onChange={(event) => setIncludeOtherChats(event.target.checked)}
+              data-ltm-source-other-chats
+            />
+            Show other chats and branches
+          </label>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p
           className="text-xs text-[var(--muted-foreground)]"
@@ -362,18 +412,36 @@ export default function SourcesWorkspace({
             ? `${preview.data.scanned} scanned, ${preview.data.draftable} pending, ${preview.data.importedCount} imported`
             : "Loading source preview..."}
         </p>
-        <Button
-          disabled={preview.isFetching}
-          onClick={() => void preview.refetch()}
-          data-ltm-source-action="refresh-preview"
-        >
-          {preview.isFetching ? (
-            <Loader2 size="0.75rem" className="animate-spin" />
-          ) : (
-            <RefreshCw size="0.75rem" />
-          )}
-          Refresh preview
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
+            Mode
+            <select
+              className={`${inputClass} w-36`}
+              value={modeFilter}
+              onChange={(event) =>
+                setModeFilter(event.target.value as LtmMode | "all")
+              }
+              aria-label="Filter sources by mode"
+            >
+              <option value="all">All</option>
+              <option value="game">Game</option>
+              <option value="conversation">Conversation</option>
+              <option value="roleplay">Roleplay</option>
+            </select>
+          </label>
+          <Button
+            disabled={preview.isFetching}
+            onClick={() => void preview.refetch()}
+            data-ltm-source-action="refresh-preview"
+          >
+            {preview.isFetching ? (
+              <Loader2 size="0.75rem" className="animate-spin" />
+            ) : (
+              <RefreshCw size="0.75rem" />
+            )}
+            Refresh preview
+          </Button>
+        </div>
       </div>
 
       {preview.isError ? (

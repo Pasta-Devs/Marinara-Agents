@@ -1,36 +1,633 @@
 import { createHash, randomUUID } from "node:crypto";
-import { type LtmImportSourceNotesRequest,type LtmImportSourceNotesResponse,type LtmInteropPreviewRequest,type LtmInteropPreviewResponse,type LtmMode,type LtmNote,type LtmScope,type LtmSourceProvenance } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { getLtmScopeChatIds,withMergedLtmScopeLinks } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { ltmModeForChatMode,resolveChatLtmScope } from "./chat-scope.js";
-import { computeGameSourceHash,renderGameSourceText } from "./game-journal-mapper.js";
+import {
+  type LtmImportSourceNotesRequest,
+  type LtmImportSourceNotesResponse,
+  type LtmInteropPreviewRequest,
+  type LtmInteropPreviewResponse,
+  type LtmMode,
+  type LtmNote,
+  type LtmScope,
+  type LtmSourceProvenance,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  getLtmScopeChatIds,
+  withMergedLtmScopeLinks,
+} from "../../../../shared/src/features/agents/long-term-memory/scope.js";
+import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
+import {
+  computeGameSourceHash,
+  renderGameSourceText,
+} from "./game-journal-mapper.js";
 import { nowIso } from "./ltm-utils.js";
-import { getPackageLanguageModels,getPackagePersistence,getPackageResources } from "./package-runtime.js";
+import {
+  getPackageLanguageModels,
+  getPackagePersistence,
+  getPackageResources,
+} from "./package-runtime.js";
 import { processLongTermMemorySourceBatch } from "./source-processing.js";
-import { extractionFingerprintForLtmSourceMaterial,extractionFingerprintsEqual } from "./source-hash.js";
+import {
+  extractionFingerprintForLtmSourceMaterial,
+  extractionFingerprintsEqual,
+} from "./source-hash.js";
 import { sourceNoteIdForProvenance } from "./source-identity.js";
 import { LongTermMemoryStorage } from "./storage.js";
 
-type Candidate={sourceId:string;title:string;sourceText:string;sourceNoteId:string;legacySourceNoteIds:string[];sourceTag:string;importTags:string[];evidence:string[];provenance:LtmSourceProvenance;scope:LtmScope;modes:LtmMode[];extractionMode:LtmMode;mutationCount:number;summary:string};
-function object(value:unknown):Record<string,unknown>{if(value&&typeof value==="object"&&!Array.isArray(value))return value as Record<string,unknown>;if(typeof value==="string")try{return object(JSON.parse(value));}catch{}return{};}
-function throwIfAborted(signal:AbortSignal){if(!signal.aborted)return;const error=new Error("Long-term memory import was cancelled.");error.name="AbortError";throw error;}
-function text(value:unknown){return typeof value==="string"?value.trim():"";}function hash(value:string,length=10){return createHash("sha256").update(value).digest("hex").slice(0,length);}function identifier(value:string,fallback:string){return value.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").replace(/_+/g,"_").slice(0,72)||fallback;}
-function stringArray(value:unknown){if(Array.isArray(value))return value.filter((item):item is string=>typeof item==="string"&&Boolean(item.trim()));if(typeof value==="string")try{return stringArray(JSON.parse(value));}catch{return value.trim()?[value.trim()]:[];}return[];}
-function compact(data:Record<string,unknown>,comment=""){const extensions=object(data.extensions),greetings=stringArray(data.alternate_greetings).join("\n\n");return [["Description",data.description],["Personality",data.personality],["Scenario",data.scenario],["First message",data.first_mes],["Example messages",data.mes_example],["Creator notes",data.creator_notes],["System prompt",data.system_prompt],["Post-history instructions",data.post_history_instructions],["Alternate greetings",greetings],["Backstory",extensions.backstory??data.backstory],["Appearance",extensions.appearance??data.appearance],["Library note",comment]].flatMap(([label,value])=>text(value)?[`${label}:\n${text(value)}`]:[]).join("\n\n");}
-function chunks(value:string){const result:string[]=[];let remaining=value.trim();while(remaining.length>24_000){const window=remaining.slice(0,24_001),boundary=Math.max(window.lastIndexOf("\n\n"),window.lastIndexOf("\n"),window.lastIndexOf(". "),window.lastIndexOf(" ")),end=boundary>12_000?boundary:24_000;result.push(remaining.slice(0,end).trim());remaining=remaining.slice(end).trim();}if(remaining)result.push(remaining);return result;}
-function summaries(metadata:Record<string,unknown>){const raw=Array.isArray(metadata.summaryEntries)?metadata.summaryEntries.map(object):[],entries=raw.flatMap((entry,index)=>{const content=text(entry.content);if(!content||entry.enabled===false)return[];const start=typeof entry.rangeStartIndex==="number"?entry.rangeStartIndex:null,end=typeof entry.rangeEndIndex==="number"?entry.rangeEndIndex:null;return[{id:text(entry.id)||`summary-${hash(`${index}:${content}`)}`,content,range:start&&end?`${start}-${end}`:typeof entry.messageCount==="number"?`last ${entry.messageCount}`:text(entry.sourceMode)==="agent"?"agent summary":"last messages",origin:text(entry.origin)}];}),legacy=text(metadata.summary);return entries.length?entries:legacy?[{id:`summary-legacy-${hash(legacy)}`,content:legacy,range:"last messages",origin:"legacy"}]:[];}
-function scoped(candidate:Candidate,override?:LtmScope){return withMergedLtmScopeLinks({...candidate.scope,...override},{});}function mode(candidate:Candidate,value?:LtmMode){return !value||candidate.sourceTag==="imported_game_journal"?candidate:{...candidate,modes:[value],extractionMode:value};}function fingerprint(candidate:Candidate,scope:LtmScope){return extractionFingerprintForLtmSourceMaterial({noteId:candidate.sourceNoteId,sourceTitle:candidate.title,sourceText:candidate.sourceText,evidence:candidate.evidence,provenance:candidate.provenance,scope,modes:candidate.modes,extractionMode:candidate.extractionMode});}
+type Candidate = {
+  sourceId: string;
+  title: string;
+  sourceText: string;
+  sourceNoteId: string;
+  legacySourceNoteIds: string[];
+  sourceTag: string;
+  importTags: string[];
+  evidence: string[];
+  provenance: LtmSourceProvenance;
+  scope: LtmScope;
+  modes: LtmMode[];
+  extractionMode: LtmMode;
+  mutationCount: number;
+  summary: string;
+};
+function object(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value))
+    return value as Record<string, unknown>;
+  if (typeof value === "string")
+    try {
+      return object(JSON.parse(value));
+    } catch {}
+  return {};
+}
+function throwIfAborted(signal: AbortSignal) {
+  if (!signal.aborted) return;
+  const error = new Error("Long-term memory import was cancelled.");
+  error.name = "AbortError";
+  throw error;
+}
+function text(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+function hash(value: string, length = 10) {
+  return createHash("sha256").update(value).digest("hex").slice(0, length);
+}
+function identifier(value: string, fallback: string) {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .replace(/_+/g, "_")
+      .slice(0, 72) || fallback
+  );
+}
+function stringArray(value: unknown) {
+  if (Array.isArray(value))
+    return value.filter(
+      (item): item is string =>
+        typeof item === "string" && Boolean(item.trim()),
+    );
+  if (typeof value === "string")
+    try {
+      return stringArray(JSON.parse(value));
+    } catch {
+      return value.trim() ? [value.trim()] : [];
+    }
+  return [];
+}
+function compact(data: Record<string, unknown>, comment = "") {
+  const extensions = object(data.extensions),
+    greetings = stringArray(data.alternate_greetings).join("\n\n");
+  return [
+    ["Description", data.description],
+    ["Personality", data.personality],
+    ["Scenario", data.scenario],
+    ["First message", data.first_mes],
+    ["Example messages", data.mes_example],
+    ["Creator notes", data.creator_notes],
+    ["System prompt", data.system_prompt],
+    ["Post-history instructions", data.post_history_instructions],
+    ["Alternate greetings", greetings],
+    ["Backstory", extensions.backstory ?? data.backstory],
+    ["Appearance", extensions.appearance ?? data.appearance],
+    ["Library note", comment],
+  ]
+    .flatMap(([label, value]) =>
+      text(value) ? [`${label}:\n${text(value)}`] : [],
+    )
+    .join("\n\n");
+}
+function chunks(value: string) {
+  const result: string[] = [];
+  let remaining = value.trim();
+  while (remaining.length > 24_000) {
+    const window = remaining.slice(0, 24_001),
+      boundary = Math.max(
+        window.lastIndexOf("\n\n"),
+        window.lastIndexOf("\n"),
+        window.lastIndexOf(". "),
+        window.lastIndexOf(" "),
+      ),
+      end = boundary > 12_000 ? boundary : 24_000;
+    result.push(remaining.slice(0, end).trim());
+    remaining = remaining.slice(end).trim();
+  }
+  if (remaining) result.push(remaining);
+  return result;
+}
+function summaries(metadata: Record<string, unknown>) {
+  const raw = Array.isArray(metadata.summaryEntries)
+      ? metadata.summaryEntries.map(object)
+      : [],
+    entries = raw.flatMap((entry, index) => {
+      const content = text(entry.content);
+      if (!content || entry.enabled === false) return [];
+      const start =
+          typeof entry.rangeStartIndex === "number"
+            ? entry.rangeStartIndex
+            : null,
+        end =
+          typeof entry.rangeEndIndex === "number" ? entry.rangeEndIndex : null;
+      return [
+        {
+          id: text(entry.id) || `summary-${hash(`${index}:${content}`)}`,
+          content,
+          range:
+            start && end
+              ? `${start}-${end}`
+              : typeof entry.messageCount === "number"
+                ? `last ${entry.messageCount}`
+                : text(entry.sourceMode) === "agent"
+                  ? "agent summary"
+                  : "last messages",
+          origin: text(entry.origin),
+        },
+      ];
+    }),
+    legacy = text(metadata.summary);
+  return entries.length
+    ? entries
+    : legacy
+      ? [
+          {
+            id: `summary-legacy-${hash(legacy)}`,
+            content: legacy,
+            range: "last messages",
+            origin: "legacy",
+          },
+        ]
+      : [];
+}
+function scoped(candidate: Candidate, override?: LtmScope) {
+  return withMergedLtmScopeLinks({ ...candidate.scope, ...override }, {});
+}
+function mode(candidate: Candidate, value?: LtmMode) {
+  return !value || candidate.sourceTag === "imported_game_journal"
+    ? candidate
+    : { ...candidate, modes: [value], extractionMode: value };
+}
+function fingerprint(candidate: Candidate, scope: LtmScope) {
+  return extractionFingerprintForLtmSourceMaterial({
+    noteId: candidate.sourceNoteId,
+    sourceTitle: candidate.title,
+    sourceText: candidate.sourceText,
+    evidence: candidate.evidence,
+    provenance: candidate.provenance,
+    scope,
+    modes: candidate.modes,
+    extractionMode: candidate.extractionMode,
+  });
+}
 
-async function candidates(request:{source:"characters"|"lorebooks"|"chats";limit:number;scope?:LtmScope;mode?:LtmMode},selected?:Set<string>){const result:Candidate[]=[];
-  if(request.source==="characters")for(const row of await getPackageResources().listCharacters()){const data=object(row.data),name=text(data.name)||"Character",sourceText=compact(data,row.comment);if(!sourceText)continue;const provenance={kind:"character" as const,sourceId:row.id},suffix=`${identifier(name,"character")}_${hash(row.id)}`;result.push({sourceId:row.id,title:name,sourceText,sourceNoteId:sourceNoteIdForProvenance(provenance),legacySourceNoteIds:[`source_import_character_${suffix}`,`scene_import_character_${suffix}`],sourceTag:"imported_character",importTags:[],evidence:[`character:${row.id}`],provenance,scope:{characterIds:[row.id]},modes:["roleplay","conversation","game"],extractionMode:"roleplay",mutationCount:1,summary:`Import ${name}`});}
-  if(request.source==="lorebooks")for(const book of await getPackageResources().listLorebooks()){const data=object(book.data),name=text(data.name)||"Lorebook",category=identifier(text(data.category),"lore"),tags=stringArray(data.tags).map((tag)=>identifier(tag,"tag")).slice(0,12),scope=withMergedLtmScopeLinks({...(text(data.chatId)?{chatId:text(data.chatId)}:{}),...(stringArray(data.characterIds).length?{characterIds:stringArray(data.characterIds)}:{})},{chatIds:text(data.chatId)?[text(data.chatId)]:[]}),entries=[...(text(data.description)?[{id:"description",name:"Description",content:text(data.description)}]:[]),...book.entries.map(object)];for(const [index,entry]of entries.entries()){const content=text(entry.content);if(!content)continue;const rawBase=text(entry.id)||text(entry.uid)||text(entry.key)||`position_${index+1}`,base=rawBase.length<=120?rawBase:`entry_${hash(`${rawBase}\0${index}`,16)}`;for(const[part,sourceText]of chunks(content).entries()){const rawEntryId=part?`${base}:part:${part+1}`:base,entryId=rawEntryId.length<=120?rawEntryId:`entry_${hash(`${base}\0${part}`,16)}`,sourceId=`lorebook_entry_${hash(`${book.id}\0${entryId}`)}`,title=`Lorebook - ${name}: ${text(entry.name)||"Entry"}${part?` (${part+1})`:""}`,provenance={kind:"lorebook" as const,sourceId:book.id,entryId};result.push({sourceId,title,sourceText:`Category: ${category}\n\n${sourceText}`,sourceNoteId:sourceNoteIdForProvenance(provenance),legacySourceNoteIds:[],sourceTag:"imported_lorebook",importTags:[...tags,`lorebook_${category}`],evidence:[`lorebook:${book.id}`,`lorebook_entry:${entryId}`],provenance,scope,modes:["roleplay","conversation","game"],extractionMode:"roleplay",mutationCount:1,summary:`Import ${title}`});}}}
-  if(request.source==="chats"){const scopeIds=new Set(getLtmScopeChatIds(request.scope));for(const chat of await getPackagePersistence().listChats()){if(scopeIds.size&&!scopeIds.has(chat.id)||!scopeIds.size&&request.scope?.groupId&&chat.groupId!==request.scope.groupId)continue;const metadata=object(chat.metadata),chatMode=ltmModeForChatMode(chat.mode);if(chatMode==="game"&&(metadata.gameJournal||Array.isArray(metadata.gamePreviousSessionSummaries)&&metadata.gamePreviousSessionSummaries.length)){const session=Array.isArray(metadata.gamePreviousSessionSummaries)?metadata.gamePreviousSessionSummaries:[],journal=metadata.gameJournal??null,sourceText=renderGameSourceText(journal,session),sourceId=`${chat.id}:game_journal`,provenance={kind:"game_journal" as const,sourceId:chat.id};result.push({sourceId,title:`Game Journal - ${chat.name||"Game"}`,sourceText,sourceNoteId:sourceNoteIdForProvenance(provenance),legacySourceNoteIds:[`source_import_chat_${identifier(chat.name,"chat")}_${hash(`${chat.id}_game_journal`)}`],sourceTag:"imported_game_journal",importTags:[],evidence:[`chat:${chat.id}`,"game_journal",`game_source_hash:${computeGameSourceHash(journal,session)}`],provenance,scope:resolveChatLtmScope(chat),modes:["game"],extractionMode:"game",mutationCount:0,summary:`Direct-ingest game journal for ${chat.name||"Game"}`});continue;}for(const entry of summaries(metadata)){const sourceId=`${chat.id}:${entry.id}`,provenance={kind:"chat_summary" as const,sourceId:chat.id,entryId:entry.id},title=`${chat.name||"Chat"}, msgs ${entry.range}`,seed=`${chat.id}:${entry.id}`,legacy=entry.origin==="legacy"?[`source_import_chat_${identifier(chat.name,"chat")}_${hash(seed)}`,`scene_import_chat_${identifier(chat.name,"chat")}_${hash(chat.id)}`]:[`source_import_chat_${identifier(chat.name,"chat")}_${hash(seed)}`];result.push({sourceId,title,sourceText:entry.content,sourceNoteId:sourceNoteIdForProvenance(provenance),legacySourceNoteIds:legacy,sourceTag:"imported_chat",importTags:[],evidence:[`chat:${chat.id}`,`chat_name:${chat.name||"Chat"}`,`summary_entry:${entry.id}`,`message_range:${entry.range}`],provenance,scope:resolveChatLtmScope(chat),modes:[chatMode],extractionMode:chatMode,mutationCount:1,summary:`Import ${title}`});}}}
-  const filtered=result.filter((item)=>!selected||selected.has(item.sourceId)),ordered=selected?[...selected].flatMap((id)=>filtered.filter((item)=>item.sourceId===id)):filtered;return ordered.slice(0,Math.max(request.limit,selected?.size??0)).map((item)=>mode(item,request.mode));}
+async function candidates(
+  request: {
+    source: "characters" | "lorebooks" | "chats";
+    limit: number;
+    scope?: LtmScope;
+    mode?: LtmMode;
+  },
+  selected?: Set<string>,
+) {
+  const result: Candidate[] = [];
+  if (request.source === "characters")
+    for (const row of await getPackageResources().listCharacters()) {
+      const data = object(row.data),
+        name = text(data.name) || "Character",
+        sourceText = compact(data, row.comment);
+      if (!sourceText) continue;
+      const provenance = { kind: "character" as const, sourceId: row.id },
+        suffix = `${identifier(name, "character")}_${hash(row.id)}`;
+      result.push({
+        sourceId: row.id,
+        title: name,
+        sourceText,
+        sourceNoteId: sourceNoteIdForProvenance(provenance),
+        legacySourceNoteIds: [
+          `source_import_character_${suffix}`,
+          `scene_import_character_${suffix}`,
+        ],
+        sourceTag: "imported_character",
+        importTags: [],
+        evidence: [`character:${row.id}`],
+        provenance,
+        scope: { characterIds: [row.id] },
+        modes: ["roleplay", "conversation", "game"],
+        extractionMode: "roleplay",
+        mutationCount: 1,
+        summary: `Import ${name}`,
+      });
+    }
+  if (request.source === "lorebooks")
+    for (const book of await getPackageResources().listLorebooks()) {
+      const data = object(book.data),
+        name = text(data.name) || "Lorebook",
+        category = identifier(text(data.category), "lore"),
+        tags = stringArray(data.tags)
+          .map((tag) => identifier(tag, "tag"))
+          .slice(0, 12),
+        scope = withMergedLtmScopeLinks(
+          {
+            ...(text(data.chatId) ? { chatId: text(data.chatId) } : {}),
+            ...(stringArray(data.characterIds).length
+              ? { characterIds: stringArray(data.characterIds) }
+              : {}),
+          },
+          { chatIds: text(data.chatId) ? [text(data.chatId)] : [] },
+        ),
+        entries = [
+          ...(text(data.description)
+            ? [
+                {
+                  id: "description",
+                  name: "Description",
+                  content: text(data.description),
+                },
+              ]
+            : []),
+          ...book.entries.map(object),
+        ];
+      for (const [index, entry] of entries.entries()) {
+        const content = text(entry.content);
+        if (!content) continue;
+        const rawBase =
+            text(entry.id) ||
+            text(entry.uid) ||
+            text(entry.key) ||
+            `position_${index + 1}`,
+          base =
+            rawBase.length <= 120
+              ? rawBase
+              : `entry_${hash(`${rawBase}\0${index}`, 16)}`;
+        for (const [part, sourceText] of chunks(content).entries()) {
+          const rawEntryId = part ? `${base}:part:${part + 1}` : base,
+            entryId =
+              rawEntryId.length <= 120
+                ? rawEntryId
+                : `entry_${hash(`${base}\0${part}`, 16)}`,
+            sourceId = `lorebook_entry_${hash(`${book.id}\0${entryId}`)}`,
+            title = `Lorebook - ${name}: ${text(entry.name) || "Entry"}${part ? ` (${part + 1})` : ""}`,
+            provenance = {
+              kind: "lorebook" as const,
+              sourceId: book.id,
+              entryId,
+            };
+          result.push({
+            sourceId,
+            title,
+            sourceText: `Category: ${category}\n\n${sourceText}`,
+            sourceNoteId: sourceNoteIdForProvenance(provenance),
+            legacySourceNoteIds: [],
+            sourceTag: "imported_lorebook",
+            importTags: [...tags, `lorebook_${category}`],
+            evidence: [`lorebook:${book.id}`, `lorebook_entry:${entryId}`],
+            provenance,
+            scope,
+            modes: ["roleplay", "conversation", "game"],
+            extractionMode: "roleplay",
+            mutationCount: 1,
+            summary: `Import ${title}`,
+          });
+        }
+      }
+    }
+  if (request.source === "chats") {
+    const scopeIds = new Set(getLtmScopeChatIds(request.scope));
+    for (const chat of await getPackagePersistence().listChats()) {
+      if (
+        request.scope?.groupId
+          ? chat.groupId !== request.scope.groupId
+          : scopeIds.size && !scopeIds.has(chat.id)
+      )
+        continue;
+      const metadata = object(chat.metadata),
+        chatMode = ltmModeForChatMode(chat.mode);
+      if (
+        chatMode === "game" &&
+        (metadata.gameJournal ||
+          (Array.isArray(metadata.gamePreviousSessionSummaries) &&
+            metadata.gamePreviousSessionSummaries.length))
+      ) {
+        const session = Array.isArray(metadata.gamePreviousSessionSummaries)
+            ? metadata.gamePreviousSessionSummaries
+            : [],
+          journal = metadata.gameJournal ?? null,
+          sourceText = renderGameSourceText(journal, session),
+          sourceId = `${chat.id}:game_journal`,
+          provenance = { kind: "game_journal" as const, sourceId: chat.id };
+        result.push({
+          sourceId,
+          title: `Game Journal - ${chat.name || "Game"}`,
+          sourceText,
+          sourceNoteId: sourceNoteIdForProvenance(provenance),
+          legacySourceNoteIds: [
+            `source_import_chat_${identifier(chat.name, "chat")}_${hash(`${chat.id}_game_journal`)}`,
+          ],
+          sourceTag: "imported_game_journal",
+          importTags: [],
+          evidence: [
+            `chat:${chat.id}`,
+            "game_journal",
+            `game_source_hash:${computeGameSourceHash(journal, session)}`,
+          ],
+          provenance,
+          scope: resolveChatLtmScope(chat),
+          modes: ["game"],
+          extractionMode: "game",
+          mutationCount: 0,
+          summary: `Direct-ingest game journal for ${chat.name || "Game"}`,
+        });
+        continue;
+      }
+      for (const entry of summaries(metadata)) {
+        const sourceId = `${chat.id}:${entry.id}`,
+          provenance = {
+            kind: "chat_summary" as const,
+            sourceId: chat.id,
+            entryId: entry.id,
+          },
+          title = `${chat.name || "Chat"}, msgs ${entry.range}`,
+          seed = `${chat.id}:${entry.id}`,
+          legacy =
+            entry.origin === "legacy"
+              ? [
+                  `source_import_chat_${identifier(chat.name, "chat")}_${hash(seed)}`,
+                  `scene_import_chat_${identifier(chat.name, "chat")}_${hash(chat.id)}`,
+                ]
+              : [
+                  `source_import_chat_${identifier(chat.name, "chat")}_${hash(seed)}`,
+                ];
+        result.push({
+          sourceId,
+          title,
+          sourceText: entry.content,
+          sourceNoteId: sourceNoteIdForProvenance(provenance),
+          legacySourceNoteIds: legacy,
+          sourceTag: "imported_chat",
+          importTags: [],
+          evidence: [
+            `chat:${chat.id}`,
+            `chat_name:${chat.name || "Chat"}`,
+            `summary_entry:${entry.id}`,
+            `message_range:${entry.range}`,
+          ],
+          provenance,
+          scope: resolveChatLtmScope(chat),
+          modes: [chatMode],
+          extractionMode: chatMode,
+          mutationCount: 1,
+          summary: `Import ${title}`,
+        });
+      }
+    }
+  }
+  const filtered = result.filter(
+      (item) =>
+        (!request.mode || item.modes.includes(request.mode)) &&
+        (!selected || selected.has(item.sourceId)),
+    ),
+    ordered = selected
+      ? [...selected].flatMap((id) =>
+          filtered.filter((item) => item.sourceId === id),
+        )
+      : filtered;
+  return ordered
+    .slice(0, Math.max(request.limit, selected?.size ?? 0))
+    .map((item) => mode(item, request.mode));
+}
 
-async function existingFor(storage:LongTermMemoryStorage,row:Candidate){const notes=await storage.getNotesByIds([row.sourceNoteId,...row.legacySourceNoteIds]);return[row.sourceNoteId,...row.legacySourceNoteIds].map((id)=>notes.get(id)).find((note):note is LtmNote=>Boolean(note));}
-export async function previewPackageInterop(request:LtmInteropPreviewRequest,root:string):Promise<LtmInteropPreviewResponse>{const rows=await candidates(request),storage=new LongTermMemoryStorage(root),samples=[];for(const row of rows){const note=await existingFor(storage,row),base={sourceId:row.sourceId,title:row.title,mutationCount:row.mutationCount,summary:row.summary,snippet:row.sourceText.length>200?`${row.sourceText.slice(0,200)}...`:row.sourceText};samples.push(!note?{...base,status:"pending" as const,freshness:"new" as const}:extractionFingerprintsEqual(note.extractionFingerprint,fingerprint(row,scoped(row,request.scope)))?{...base,status:"imported" as const,freshness:"current" as const,existingNoteId:note.id,existingNoteTitle:note.title||row.title}:{...base,status:"pending" as const,freshness:"stale" as const,existingNoteId:note.id,existingNoteTitle:note.title||row.title});}return{source:request.source,scanned:samples.length,draftable:samples.filter((item)=>item.status==="pending").length,importedCount:samples.filter((item)=>item.status==="imported").length,samples};}
-function provider(resolved:any){return{name:resolved.name,maxContext:resolved.maxContext,maxOutputTokens:resolved.maxOutputTokens,complete:(messages:any,options:any)=>resolved.chatComplete(messages,options),fitContext:(messages:any,options:any)=>resolved.fitContext(messages,options)};}
+async function existingFor(storage: LongTermMemoryStorage, row: Candidate) {
+  const notes = await storage.getNotesByIds([
+    row.sourceNoteId,
+    ...row.legacySourceNoteIds,
+  ]);
+  return [row.sourceNoteId, ...row.legacySourceNoteIds]
+    .map((id) => notes.get(id))
+    .find((note): note is LtmNote => Boolean(note));
+}
+export async function previewPackageInterop(
+  request: LtmInteropPreviewRequest,
+  root: string,
+): Promise<LtmInteropPreviewResponse> {
+  const rows = await candidates(request),
+    storage = new LongTermMemoryStorage(root),
+    samples = [];
+  for (const row of rows) {
+    const note = await existingFor(storage, row),
+      base = {
+        sourceId: row.sourceId,
+        title: row.title,
+        mutationCount: row.mutationCount,
+        summary: row.summary,
+        snippet:
+          row.sourceText.length > 200
+            ? `${row.sourceText.slice(0, 200)}...`
+            : row.sourceText,
+      };
+    samples.push(
+      !note
+        ? { ...base, status: "pending" as const, freshness: "new" as const }
+        : extractionFingerprintsEqual(
+              note.extractionFingerprint,
+              fingerprint(row, scoped(row, request.scope)),
+            )
+          ? {
+              ...base,
+              status: "imported" as const,
+              freshness: "current" as const,
+              existingNoteId: note.id,
+              existingNoteTitle: note.title || row.title,
+            }
+          : {
+              ...base,
+              status: "pending" as const,
+              freshness: "stale" as const,
+              existingNoteId: note.id,
+              existingNoteTitle: note.title || row.title,
+            },
+    );
+  }
+  return {
+    source: request.source,
+    scanned: samples.length,
+    draftable: samples.filter((item) => item.status === "pending").length,
+    importedCount: samples.filter((item) => item.status === "imported").length,
+    samples,
+  };
+}
+function provider(resolved: any) {
+  return {
+    name: resolved.name,
+    maxContext: resolved.maxContext,
+    maxOutputTokens: resolved.maxOutputTokens,
+    complete: (messages: any, options: any) =>
+      resolved.chatComplete(messages, options),
+    fitContext: (messages: any, options: any) =>
+      resolved.fitContext(messages, options),
+  };
+}
 
-export async function importPackageInterop(request:LtmImportSourceNotesRequest,root:string,signal:AbortSignal):Promise<LtmImportSourceNotesResponse>{const operationId=randomUUID(),selected=new Set(request.sourceIds),rows=await candidates(request,selected),resolvedIds=new Set(rows.map((item)=>item.sourceId)),missingSourceIds=request.sourceIds.filter((id)=>!resolvedIds.has(id));throwIfAborted(signal);const needsModel=rows.some((item)=>item.sourceTag!=="imported_game_journal"),resolved=needsModel?await getPackageLanguageModels().resolveForRequest({connectionId:request.connectionId,model:request.model}):null;throwIfAborted(signal);const storage=new LongTermMemoryStorage(root),written:Array<{sourceId:string;title:string;note:LtmNote;created:boolean}>=[],writeFailures:LtmImportSourceNotesResponse["writeFailures"]=[];
-  for(const row of rows){try{const scope=scoped(row,request.scope),input={id:row.sourceNoteId,title:row.title,type:"source" as const,status:"active" as const,modes:row.modes,scope,tags:["source_summary",row.sourceTag,...row.importTags],keywords:[],links:[],provenance:row.provenance,sections:{source:{text:row.sourceText,updatedAt:nowIso(),confidence:0.8,evidence:row.evidence}}},found=await existingFor(storage,row),existing=found&&found.id!==row.sourceNoteId?await storage.renameNoteId(found.id,row.sourceNoteId):found,note=existing?await storage.updateNote(existing.id,{title:row.title,status:"active",modes:row.modes,scope,tags:Array.from(new Set([...existing.tags,...input.tags])),provenance:row.provenance,sections:{...existing.sections,source:input.sections.source}}):await storage.createNote(input);written.push({sourceId:row.sourceId,title:row.title,note,created:!existing});}catch(error){writeFailures.push({sourceId:row.sourceId,title:row.title,sourceWriteStatus:"failed",extractionStatus:"not_started",retryable:true,error:{code:"source_write_failed",message:error instanceof Error?error.message:"Failed to write imported source note"}});}}
-  const results=await processLongTermMemorySourceBatch({items:written,provider:resolved?provider(resolved):null,model:resolved?.model,mode:request.mode,instruction:request.instruction,operationId,signal,applyLowRisk:request.applyLowRisk,concurrency:request.importConcurrency??3,root}),cancelled=results.filter((item)=>item.extractionStatus==="cancelled").length,failed=results.filter((item)=>item.extractionStatus==="failed").length,succeeded=results.filter((item)=>item.extractionStatus==="succeeded").length;
-  const counts={requested:request.sourceIds.length,sourceNotesWritten:written.length,succeeded,failed,cancelled,missing:missingSourceIds.length,sourceWriteFailed:writeFailures.length},incomplete=counts.failed+counts.cancelled+counts.missing+counts.sourceWriteFailed,batchStatus=incomplete===0?"success" as const:counts.succeeded?"partial_success" as const:counts.cancelled&&!counts.failed&&!counts.missing&&!counts.sourceWriteFailed?"cancelled" as const:"failed" as const;return{operationId,batchStatus,source:request.source,imported:results,writeFailures,missingSourceIds,counts};}
+export async function importPackageInterop(
+  request: LtmImportSourceNotesRequest,
+  root: string,
+  signal: AbortSignal,
+): Promise<LtmImportSourceNotesResponse> {
+  const operationId = randomUUID(),
+    selected = new Set(request.sourceIds),
+    rows = await candidates(request, selected),
+    resolvedIds = new Set(rows.map((item) => item.sourceId)),
+    missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id));
+  throwIfAborted(signal);
+  const needsModel = rows.some(
+      (item) => item.sourceTag !== "imported_game_journal",
+    ),
+    resolved = needsModel
+      ? await getPackageLanguageModels().resolveForRequest({
+          connectionId: request.connectionId,
+          model: request.model,
+        })
+      : null;
+  throwIfAborted(signal);
+  const storage = new LongTermMemoryStorage(root),
+    written: Array<{
+      sourceId: string;
+      title: string;
+      note: LtmNote;
+      created: boolean;
+    }> = [],
+    writeFailures: LtmImportSourceNotesResponse["writeFailures"] = [];
+  for (const row of rows) {
+    try {
+      const scope = scoped(row, request.scope),
+        input = {
+          id: row.sourceNoteId,
+          title: row.title,
+          type: "source" as const,
+          status: "active" as const,
+          modes: row.modes,
+          scope,
+          tags: ["source_summary", row.sourceTag, ...row.importTags],
+          keywords: [],
+          links: [],
+          provenance: row.provenance,
+          sections: {
+            source: {
+              text: row.sourceText,
+              updatedAt: nowIso(),
+              confidence: 0.8,
+              evidence: row.evidence,
+            },
+          },
+        },
+        found = await existingFor(storage, row),
+        existing =
+          found && found.id !== row.sourceNoteId
+            ? await storage.renameNoteId(found.id, row.sourceNoteId)
+            : found,
+        note = existing
+          ? await storage.updateNote(existing.id, {
+              title: row.title,
+              status: "active",
+              modes: row.modes,
+              scope,
+              tags: Array.from(new Set([...existing.tags, ...input.tags])),
+              provenance: row.provenance,
+              sections: { ...existing.sections, source: input.sections.source },
+            })
+          : await storage.createNote(input);
+      written.push({
+        sourceId: row.sourceId,
+        title: row.title,
+        note,
+        created: !existing,
+      });
+    } catch (error) {
+      writeFailures.push({
+        sourceId: row.sourceId,
+        title: row.title,
+        sourceWriteStatus: "failed",
+        extractionStatus: "not_started",
+        retryable: true,
+        error: {
+          code: "source_write_failed",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to write imported source note",
+        },
+      });
+    }
+  }
+  const results = await processLongTermMemorySourceBatch({
+      items: written,
+      provider: resolved ? provider(resolved) : null,
+      model: resolved?.model,
+      mode: request.mode,
+      instruction: request.instruction,
+      operationId,
+      signal,
+      applyLowRisk: request.applyLowRisk,
+      concurrency: request.importConcurrency ?? 3,
+      root,
+    }),
+    cancelled = results.filter(
+      (item) => item.extractionStatus === "cancelled",
+    ).length,
+    failed = results.filter(
+      (item) => item.extractionStatus === "failed",
+    ).length,
+    succeeded = results.filter(
+      (item) => item.extractionStatus === "succeeded",
+    ).length;
+  const counts = {
+      requested: request.sourceIds.length,
+      sourceNotesWritten: written.length,
+      succeeded,
+      failed,
+      cancelled,
+      missing: missingSourceIds.length,
+      sourceWriteFailed: writeFailures.length,
+    },
+    incomplete =
+      counts.failed +
+      counts.cancelled +
+      counts.missing +
+      counts.sourceWriteFailed,
+    batchStatus =
+      incomplete === 0
+        ? ("success" as const)
+        : counts.succeeded
+          ? ("partial_success" as const)
+          : counts.cancelled &&
+              !counts.failed &&
+              !counts.missing &&
+              !counts.sourceWriteFailed
+            ? ("cancelled" as const)
+            : ("failed" as const);
+  return {
+    operationId,
+    batchStatus,
+    source: request.source,
+    imported: results,
+    writeFailures,
+    missingSourceIds,
+    counts,
+  };
+}

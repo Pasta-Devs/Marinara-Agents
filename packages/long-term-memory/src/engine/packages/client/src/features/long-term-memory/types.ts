@@ -37,16 +37,13 @@ export type CapabilityElement = HTMLElement & {
 };
 
 export type LongTermMemoryDestination =
-  | "vault"
-  | "review"
-  | "sources"
-  | "activity"
-  | "settings";
+  "vault" | "review" | "sources" | "activity" | "settings";
 
 export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenMemory?: (noteId: string) => void;
+  onOpenSources?: () => void;
   onOpenReview?: (sourceNoteId?: string) => void;
   openedNoteId?: string | null;
 };

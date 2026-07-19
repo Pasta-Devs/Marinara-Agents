@@ -123,6 +123,9 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(sources.locator('[data-ltm-source-tab="chats"]')).toHaveText(
       "Chat Summaries",
     );
+    await expect(
+      sources.locator('[data-ltm-source-tab="chats"]'),
+    ).toHaveAttribute("aria-selected", "true");
 
     await navigation.locator('[data-ltm-destination="vault"]').click();
     await expect(detail.locator('[data-ltm-surface="vault"]')).toBeVisible();
@@ -170,7 +173,7 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
           ...note,
           status: "active",
           modes: ["roleplay"],
-          scope: {},
+          scope: { chatId: chat.id, chatIds: [chat.id] },
           tags: ["e2e_fixture"],
           keywords: ["e2e"],
           links: [],
@@ -208,15 +211,69 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
     ).toBeVisible();
 
     await bulkActions.getByRole("button", { name: "Set status" }).click();
-    await expect(vault).toContainText(
-      "Status update applied to 1 selected memory.",
-    );
+    await expect(vault).toContainText("1 memory updated.");
     await bulkActions.getByRole("button", { name: "Clear all" }).click();
     await expect(bulkActions.locator("[data-ltm-selection-count]")).toHaveText(
       "0 selected",
     );
   } finally {
     await deleteNotes(page, [sourceId, worldId]);
+    await deleteChat(page, chat.id);
+  }
+});
+
+test("Long-Term Memory opens details and offers manual or source creation", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const chat = await createChat(page, testInfo);
+  const id = `world_detail_${Date.now()}`;
+  const timestamp = new Date().toISOString();
+
+  try {
+    const created = await page.request.post("/api/long-term-memory/notes", {
+      headers: csrfHeaders,
+      data: {
+        id,
+        title: "Visible details fixture",
+        type: "world",
+        status: "resolved",
+        modes: ["roleplay"],
+        scope: { chatId: chat.id, chatIds: [chat.id] },
+        tags: ["e2e_fixture"],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: { text: "A scoped fixture.", updatedAt: timestamp },
+        },
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+
+    await openLongTermMemory(page, chat.id, testInfo);
+    const vault = page.locator('[data-ltm-surface="vault"]');
+    await vault
+      .getByRole("button", { name: "Visible details fixture" })
+      .click();
+    await expect(
+      vault.getByRole("heading", { name: "Memory details" }),
+    ).toBeVisible();
+    await expect(vault.locator("textarea[data-ltm-field]")).toHaveCount(0);
+
+    await vault.getByRole("button", { name: "Add memories" }).click();
+    await vault.getByRole("menuitem", { name: /Create manually/ }).click();
+    await expect(
+      vault.getByRole("heading", { name: "New memory" }),
+    ).toBeVisible();
+    await expect(vault).toContainText(`Chat: ${chat.id}`);
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await vault.getByRole("button", { name: "Close" }).click();
+    await vault.getByRole("button", { name: "Add memories" }).click();
+    await vault.getByRole("menuitem", { name: /Import sources/ }).click();
+    await expect(page.locator('[data-ltm-surface="sources"]')).toBeVisible();
+  } finally {
+    await deleteNotes(page, [id]);
     await deleteChat(page, chat.id);
   }
 });

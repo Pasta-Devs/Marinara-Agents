@@ -66,6 +66,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestinationDirty(false);
     setDestination("review");
   };
+  const openSources = async () => {
+    if (!(await confirmDestinationChange("Sources"))) return;
+    setDestinationDirty(false);
+    setDestination("sources");
+  };
   const toggleActivation = async () => {
     if (!props.onEnabledForChatChange) return;
     setActivationPending(true);
@@ -180,6 +185,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               props={props}
               onDirtyChange={setDestinationDirty}
               onOpenMemory={openMemory}
+              onOpenSources={openSources}
               onOpenReview={openReview}
               openedNoteId={openedNoteId}
             />

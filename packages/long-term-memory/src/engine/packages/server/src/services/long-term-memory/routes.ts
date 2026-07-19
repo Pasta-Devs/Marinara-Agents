@@ -89,6 +89,7 @@ import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
 import { importPackageInterop, previewPackageInterop } from "./interop.js";
+import { getLtmScopeChatIds } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
   applyLtmIdentityRepairs,
   LtmIdentityRepairError,
@@ -134,6 +135,11 @@ const listNotesQuery = z
     scopeGroupId: z.string().min(1).max(120).optional(),
     scopeCharacterIds: scopedIds,
     includeGlobal: queryBoolean,
+  })
+  .strict();
+const scopeTargetsQuery = z
+  .object({
+    chatId: z.string().min(1).max(120).optional(),
   })
   .strict();
 const createNoteBody = z
@@ -422,6 +428,54 @@ export function createLongTermMemoryRoutes(runtime: {
         characterIds: query.scopeCharacterIds,
         includeGlobal: query.includeGlobal,
       });
+    });
+    app.get<{ Querystring: unknown }>("/scope-targets", async (request) => {
+      const { chatId } = scopeTargetsQuery.parse(request.query);
+      const [notes, chats] = await Promise.all([
+        storage.listNotes(),
+        getPackagePersistence().listChats(),
+      ]);
+      const chatById = new Map(chats.map((chat) => [chat.id, chat]));
+      const currentChat = chatId ? (chatById.get(chatId) ?? null) : null;
+      const chatIds = new Set<string>();
+      const groupIds = new Set<string>();
+      const characterIds = new Set<string>();
+      for (const note of notes) {
+        for (const id of getLtmScopeChatIds(note.scope)) {
+          chatIds.add(id);
+          const chat = chatById.get(id);
+          if (chat?.groupId) groupIds.add(chat.groupId);
+        }
+        if (note.scope.groupId) groupIds.add(note.scope.groupId);
+        note.scope.characterIds?.forEach((id) => characterIds.add(id));
+      }
+      return {
+        currentScope: currentChat ? resolveChatLtmScope(currentChat) : null,
+        chats: [...chatIds]
+          .map((id) => chatById.get(id))
+          .filter((chat): chat is NonNullable<typeof chat> => Boolean(chat))
+          .map((chat) => ({
+            id: chat.id,
+            label: chat.name || chat.id,
+            mode: ltmModeForChatMode(chat.mode),
+            groupId: chat.groupId,
+          }))
+          .sort((left, right) => left.label.localeCompare(right.label)),
+        groups: [...groupIds]
+          .map((id) => {
+            const members = chats.filter((chat) => chat.groupId === id);
+            return {
+              id,
+              chatIds: members.map((chat) => chat.id),
+              label:
+                members.length > 1
+                  ? `${members[0]?.name || "Chat"} and ${members.length - 1} branch${members.length === 2 ? "" : "es"}`
+                  : members[0]?.name || id,
+            };
+          })
+          .sort((left, right) => left.label.localeCompare(right.label)),
+        characters: [...characterIds].sort().map((id) => ({ id, label: id })),
+      };
     });
     app.get<{ Params: { id: string } }>(
       "/notes/:id",
