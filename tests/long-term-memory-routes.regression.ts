@@ -415,6 +415,55 @@ async function main() {
       listed.json().map((note: any) => note.id),
       ["world_route_fixture"],
     );
+    const personaScoped = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        id: "world_persona_scoped",
+        title: "Persona-scoped fixture",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {
+          chatId: "chat-a",
+          chatIds: ["chat-a"],
+          personaId: "persona-fixture",
+        },
+        tags: ["route_fixture"],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: {
+            text: "Only the matching persona may see this fixture.",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+          },
+        },
+      },
+    });
+    assert.equal(personaScoped.statusCode, 201, personaScoped.body);
+    const missingPersonaScope = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=chat-a&includeGlobal=false",
+      headers,
+    });
+    assert.equal(
+      missingPersonaScope
+        .json()
+        .some((note: any) => note.id === "world_persona_scoped"),
+      false,
+    );
+    const matchingPersonaScope = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=chat-a&scopePersonaId=persona-fixture&includeGlobal=false",
+      headers,
+    });
+    assert.equal(
+      matchingPersonaScope
+        .json()
+        .some((note: any) => note.id === "world_persona_scoped"),
+      true,
+    );
     const scopeTargets = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/scope-targets?chatId=chat-a",

@@ -288,6 +288,9 @@ export default function MemoryVault({
           ...(target?.scope.characterIds?.length
             ? { scopeCharacterIds: target.scope.characterIds.join(",") }
             : {}),
+          ...(target?.scope.personaId
+            ? { scopePersonaId: target.scope.personaId }
+            : {}),
           includeGlobal: "false",
         })}`,
       ),

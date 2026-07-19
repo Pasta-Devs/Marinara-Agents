@@ -143,6 +143,7 @@ const listNotesQuery = z
     scopeChatIds: scopedIds,
     scopeGroupId: z.string().min(1).max(120).optional(),
     scopeCharacterIds: scopedIds,
+    scopePersonaId: z.string().min(1).max(120).optional(),
     includeGlobal: queryBoolean,
   })
   .strict();
@@ -458,7 +459,8 @@ export function createLongTermMemoryRoutes(runtime: {
       const scope =
         query.scopeChatIds?.length ||
         query.scopeGroupId ||
-        query.scopeCharacterIds?.length
+        query.scopeCharacterIds?.length ||
+        query.scopePersonaId
           ? {
               ...(query.scopeChatIds?.length
                 ? { chatIds: query.scopeChatIds, chatId: query.scopeChatIds[0] }
@@ -467,6 +469,7 @@ export function createLongTermMemoryRoutes(runtime: {
               ...(query.scopeCharacterIds?.length
                 ? { characterIds: query.scopeCharacterIds }
                 : {}),
+              ...(query.scopePersonaId ? { personaId: query.scopePersonaId } : {}),
             }
           : undefined;
       return storage.listNotes({
