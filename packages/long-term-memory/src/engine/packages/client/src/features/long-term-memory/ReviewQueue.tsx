@@ -188,6 +188,7 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
         await invalidateLtmQueries(queryClient, [
           queryKeys.review,
           queryKeys.pendingDrafts,
+          queryKeys.scopeTargetsRoot,
           ...(action === "accept"
             ? [
                 queryKeys.notes,

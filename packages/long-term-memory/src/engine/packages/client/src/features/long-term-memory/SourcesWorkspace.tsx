@@ -129,6 +129,7 @@ export default function SourcesWorkspace({
   const invalidateAfterMutation = async () => {
     await invalidateLtmQueries(client, [
       queryKeys.notes,
+      queryKeys.scopeTargets(props.chatId),
       queryKeys.status,
       queryKeys.integrity,
       queryKeys.review,
@@ -180,8 +181,9 @@ export default function SourcesWorkspace({
         ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
       });
       setImportResult(result);
-      await invalidateAfterMutation();
-      await preview.refetch();
+      setImporting(false);
+      void invalidateAfterMutation().catch(() => undefined);
+      void preview.refetch().catch(() => undefined);
       if (action === "refresh")
         setReviewMessage(
           "Source memory refreshed. Re-extract it if you need a new draft.",

@@ -234,7 +234,7 @@ export default function MemoryVault({
   const [sectionKey, setSectionKey] = useState("");
 
   const scopeTargets = useQuery({
-    queryKey: [...queryKeys.root, "scope-targets", props.chatId],
+    queryKey: queryKeys.scopeTargets(props.chatId),
     queryFn: () =>
       request<ScopeTargets>(
         `/scope-targets${props.chatId ? `?chatId=${encodeURIComponent(props.chatId)}` : ""}`,
@@ -256,8 +256,20 @@ export default function MemoryVault({
         scope: scopeTargets.data.currentScope,
       });
   }, [scopeTargets.data, target, props.chatName]);
+  useEffect(() => {
+    if (
+      target?.id === `chat:${props.chatId}` &&
+      scopeTargets.data?.currentScope
+    ) {
+      setTarget((current) =>
+        current
+          ? { ...current, scope: scopeTargets.data!.currentScope! }
+          : current,
+      );
+    }
+  }, [props.chatId, scopeTargets.data, target?.id]);
   const notes = useQuery({
-    queryKey: [...queryKeys.notes, target?.id],
+    queryKey: [...queryKeys.notes, target?.id, target?.scope],
     enabled: Boolean(target),
     queryFn: () =>
       request<LtmNote[]>(
