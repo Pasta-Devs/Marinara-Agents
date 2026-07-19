@@ -239,6 +239,10 @@ export default function MemoryVault({
   const [typeFilter, setTypeFilter] = useState<LtmNoteType | "all">("all");
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">("all");
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [mobilePane, setMobilePane] = useState<
+    "memories" | "editor" | "details"
+  >("memories");
   const [draft, setDraft] = useState<LtmNote | null>(null);
   const [saved, setSaved] = useState("");
   const [isNew, setIsNew] = useState(false);
@@ -247,6 +251,7 @@ export default function MemoryVault({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
+  const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
   const [linkTarget, setLinkTarget] = useState("");
   const [linkRelation, setLinkRelation] =
     useState<LtmLink["relation"]>("involves");
@@ -387,6 +392,7 @@ export default function MemoryVault({
     setTargetsOpen(false);
     setDraft(null);
     setChecked(new Set());
+    setMobilePane("memories");
   }
   async function openNote(note: LtmNote) {
     if (!(await confirm(`opening ${memoryLabel(note)}`))) return;
@@ -396,6 +402,7 @@ export default function MemoryVault({
     setIsNew(false);
     setError("");
     setNotice("");
+    setMobilePane("editor");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -410,6 +417,7 @@ export default function MemoryVault({
     setSaved("");
     setIsNew(true);
     setAddOpen(false);
+    setMobilePane("editor");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -421,6 +429,7 @@ export default function MemoryVault({
     if (!(await confirm("closing this memory"))) return;
     setDraft(null);
     setSaved("");
+    setMobilePane("memories");
   }
   async function invalidate() {
     await invalidateLtmQueries(client, [
@@ -475,7 +484,7 @@ export default function MemoryVault({
       setBusy("");
     }
   }
-  async function batch(action: "status" | "archive" | "delete") {
+  async function batch(action: "status" | "modes" | "archive" | "delete") {
     const ids = [...checked];
     if (!ids.length) return;
     if (
@@ -497,13 +506,13 @@ export default function MemoryVault({
       else
         await request("/notes/batch", "POST", {
           noteIds: ids,
-          ...(action === "archive"
-            ? { archive: "notes_only" }
-            : { status: bulkStatus }),
+          ...(action === "archive" ? { archive: "notes_only" } : {}),
+          ...(action === "status" ? { status: bulkStatus } : {}),
+          ...(action === "modes" ? { modes: bulkModes } : {}),
         });
       setChecked(new Set());
       setNotice(
-        `${ids.length} ${ids.length === 1 ? "memory was" : "memories were"} updated.`,
+        `${ids.length} ${ids.length === 1 ? "memory" : "memories"} updated.`,
       );
       await invalidate();
     } catch (cause) {
@@ -545,6 +554,7 @@ export default function MemoryVault({
     if (
       !draft ||
       !linkTarget.trim() ||
+      linkTarget.trim() === draft.id ||
       draft.links.some(
         (link) =>
           link.target === linkTarget.trim() && link.relation === linkRelation,
@@ -556,6 +566,20 @@ export default function MemoryVault({
       { target: linkTarget.trim(), relation: linkRelation },
     ]);
     setLinkTarget("");
+  };
+  const openLinkedNote = async (noteId: string) => {
+    try {
+      const note =
+        allNotes.find((candidate) => candidate.id === noteId) ??
+        (await request<LtmNote>(`/notes/${encodeURIComponent(noteId)}`));
+      await openNote(note);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Linked memory could not load.",
+      );
+    }
   };
   const addSubject = () => {
     if (
@@ -587,15 +611,27 @@ export default function MemoryVault({
           </p>
         </div>
         <div className="relative">
-          <Button
-            primary
-            onClick={() => setAddOpen((value) => !value)}
-            aria-haspopup="menu"
-            aria-expanded={addOpen}
-          >
-            <FilePlus2 size="0.875rem" />
-            Add memories
-          </Button>
+          <div className="flex gap-2">
+            <span className="md:hidden">
+              <Button
+                onClick={() => {
+                  setSelectionMode((value) => !value);
+                  if (selectionMode) setChecked(new Set());
+                }}
+              >
+                {selectionMode ? "Done" : "Select"}
+              </Button>
+            </span>
+            <Button
+              primary
+              onClick={() => setAddOpen((value) => !value)}
+              aria-haspopup="menu"
+              aria-expanded={addOpen}
+            >
+              <FilePlus2 size="0.875rem" />
+              Add memories
+            </Button>
+          </div>
           {addOpen ? (
             <div
               role="menu"
@@ -630,6 +666,25 @@ export default function MemoryVault({
           ) : null}
         </div>
       </header>
+      <div
+        role="tablist"
+        aria-label="Memory workspace"
+        className="grid grid-cols-3 rounded-lg border border-[var(--border)] p-1 md:hidden"
+      >
+        {(["memories", "editor", "details"] as const).map((pane) => (
+          <button
+            key={pane}
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === pane}
+            disabled={pane !== "memories" && !draft}
+            onClick={() => setMobilePane(pane)}
+            className={`min-h-11 rounded-md px-2 text-xs font-semibold capitalize disabled:opacity-40 ${mobilePane === pane ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
+          >
+            {pane}
+          </button>
+        ))}
+      </div>
       <section className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3 sm:grid-cols-[minmax(0,1fr)_10rem_10rem]">
         <div className="relative sm:col-span-3">
           <input
@@ -682,12 +737,22 @@ export default function MemoryVault({
             className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted-foreground)]"
           />
           <input
-            className={`${inputClass} pl-9`}
+            className={`${inputClass} px-9`}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search memories"
             aria-label="Search memories"
           />
+          {search ? (
+            <button
+              type="button"
+              aria-label="Clear memory search"
+              onClick={() => setSearch("")}
+              className="absolute right-1 top-1 grid h-9 w-9 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+            >
+              <X size="0.875rem" />
+            </button>
+          ) : null}
         </label>
         <select
           className={inputClass}
@@ -722,7 +787,7 @@ export default function MemoryVault({
       {notice ? <StatusSurface tone="success">{notice}</StatusSurface> : null}
       <section
         data-ltm-bulk-actions
-        className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3"
+        className={`${selectionMode ? "flex" : "hidden"} flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3 md:flex`}
       >
         <label className="flex min-h-11 items-center gap-2 text-xs">
           <input
@@ -768,6 +833,29 @@ export default function MemoryVault({
             >
               Set status
             </Button>
+            <fieldset className="flex flex-wrap items-center gap-2">
+              <legend className="sr-only">Set retrieval modes</legend>
+              {modes.map((mode) => (
+                <label key={mode} className="flex min-h-8 items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={bulkModes.includes(mode)}
+                    onChange={() => setBulkModes((current) =>
+                      current.includes(mode)
+                        ? current.filter((item) => item !== mode)
+                        : [...current, mode],
+                    )}
+                  />
+                  {mode}
+                </label>
+              ))}
+            </fieldset>
+            <Button
+              disabled={Boolean(busy) || !bulkModes.length}
+              onClick={() => void batch("modes")}
+            >
+              Set modes
+            </Button>
             <Button
               disabled={Boolean(busy)}
               onClick={() => void batch("archive")}
@@ -783,14 +871,13 @@ export default function MemoryVault({
               <Trash2 size="0.875rem" />
               Delete
             </Button>
-            <Button onClick={() => setChecked(new Set())}>Clear all</Button>
           </>
         ) : null}
       </section>
-      <div className="grid min-h-0 items-start gap-4 xl:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]">
+      <div className="grid min-h-0 gap-4 md:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]">
         <section
           data-ltm-memory-list
-          className="rounded-lg border border-[var(--border)]"
+          className={`${mobilePane === "memories" ? "block" : "hidden"} rounded-lg border border-[var(--border)] md:block`}
           aria-label="Memory list"
         >
           <p className="border-b border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
@@ -798,6 +885,18 @@ export default function MemoryVault({
           </p>
           {notes.isLoading ? (
             <StatusSurface busy>Loading memories...</StatusSurface>
+          ) : null}
+          {notes.isError ? (
+            <StatusSurface tone="danger">
+              Memories could not load. {" "}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => void notes.refetch()}
+              >
+                Retry
+              </button>
+            </StatusSurface>
           ) : null}
           {visible.map((note) => {
             const notePreview = preview(note, search);
@@ -808,7 +907,7 @@ export default function MemoryVault({
                 data-ltm-note-source={note.type === "source" || undefined}
                 className={`flex gap-2 border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
               >
-                <label className="flex min-h-11 min-w-8 items-center justify-center">
+                <label className={`${selectionMode ? "flex" : "hidden"} min-h-11 min-w-8 items-center justify-center md:flex`}>
                   <input
                     type="checkbox"
                     checked={checked.has(note.id)}
@@ -855,7 +954,7 @@ export default function MemoryVault({
               </div>
             );
           })}
-          {!notes.isLoading && !visible.length ? (
+          {!notes.isLoading && !notes.isError && !visible.length ? (
             <p className="p-5 text-center text-xs text-[var(--muted-foreground)]">
               No memories match these filters.
             </p>
@@ -865,7 +964,7 @@ export default function MemoryVault({
           ref={detailRef}
           tabIndex={-1}
           data-ltm-note-workbench
-          className="scroll-mt-20 rounded-lg border border-[var(--border)] p-3"
+          className={`${mobilePane === "memories" ? "hidden" : "block"} scroll-mt-20 rounded-lg border border-[var(--border)] p-3 md:block`}
           aria-label="Memory editor"
         >
           {!draft ? (
@@ -895,6 +994,9 @@ export default function MemoryVault({
                   <Button onClick={() => void closeDraft()}>Close</Button>
                 </div>
               </header>
+              <div
+                className={`${mobilePane === "details" ? "hidden" : "contents"} md:contents`}
+              >
               <section className="space-y-3">
                 <div className="flex flex-wrap items-end gap-2">
                   <h4 className="mr-auto text-xs font-medium">
@@ -1099,6 +1201,10 @@ export default function MemoryVault({
                   </div>
                 </fieldset>
               </div>
+              </div>
+              <div
+                className={`${mobilePane === "editor" ? "hidden" : "contents"} md:contents`}
+              >
               <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2">
                 <TokenEditor
                   label="Tags"
@@ -1206,9 +1312,15 @@ export default function MemoryVault({
                     >
                       {link.relation.replaceAll("_", " ")}
                       {" -> "}
-                      {memoryLabel(
-                        allNotes.find((note) => note.id === link.target),
-                      )}
+                      <button
+                        type="button"
+                        className="underline underline-offset-2"
+                        onClick={() => void openLinkedNote(link.target)}
+                      >
+                        {memoryLabel(
+                          allNotes.find((note) => note.id === link.target),
+                        )}
+                      </button>
                     </Pill>
                   ))}
                 </div>
@@ -1218,7 +1330,21 @@ export default function MemoryVault({
                     value={linkTarget}
                     onChange={(event) => setLinkTarget(event.target.value)}
                     placeholder="Search or enter a memory"
+                    list="ltm-linked-memories"
                   />
+                  <datalist id="ltm-linked-memories">
+                    {allNotes
+                      .filter(
+                        (note) =>
+                          note.id !== draft.id &&
+                          !draft.links.some((link) => link.target === note.id),
+                      )
+                      .map((note) => (
+                        <option key={note.id} value={note.id}>
+                          {memoryLabel(note)}
+                        </option>
+                      ))}
+                  </datalist>
                   <select
                     className={inputClass}
                     value={linkRelation}
@@ -1230,7 +1356,10 @@ export default function MemoryVault({
                       <option key={relation}>{relation}</option>
                     ))}
                   </select>
-                  <Button onClick={addLink} disabled={!linkTarget.trim()}>
+                  <Button
+                    onClick={addLink}
+                    disabled={!linkTarget.trim() || linkTarget.trim() === draft.id}
+                  >
                     <Link2 size="0.75rem" />
                     Link
                   </Button>
@@ -1292,6 +1421,26 @@ export default function MemoryVault({
                   ))}
                 </section>
               ) : null}
+              <dl className="grid gap-1 border-t border-[var(--border)] pt-4 text-xs text-[var(--muted-foreground)] sm:grid-cols-2">
+                <div>
+                  <dt className="font-medium text-[var(--foreground)]">Created</dt>
+                  <dd>{new Date(draft.createdAt).toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-[var(--foreground)]">Updated</dt>
+                  <dd>{new Date(draft.updatedAt).toLocaleString()}</dd>
+                </div>
+                {draft.provenance ? (
+                  <div className="sm:col-span-2">
+                    <dt className="font-medium text-[var(--foreground)]">
+                      Provenance
+                    </dt>
+                    <dd>
+                      {draft.provenance.kind.replaceAll("_", " ")}: {draft.provenance.sourceId}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
               {draft.type === "source" && !isNew ? (
                 <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-4">
                   <Button
@@ -1323,6 +1472,7 @@ export default function MemoryVault({
                   </Button>
                 </div>
               ) : null}
+              </div>
             </div>
           )}
         </section>

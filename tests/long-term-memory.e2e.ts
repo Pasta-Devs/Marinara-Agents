@@ -196,6 +196,8 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
       .filter({ hasText: sourceTitle });
     await expect(sourceRow).toBeVisible();
     await expect(sourceRow).toHaveAttribute("data-ltm-note-type", "source");
+    if (testInfo.project.name.includes("mobile"))
+      await vault.getByRole("button", { name: "Select" }).click();
     await sourceRow
       .getByRole("checkbox", { name: `Select ${sourceTitle}` })
       .check();
@@ -215,8 +217,7 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
     ).toBeVisible();
 
     await bulkActions.getByRole("button", { name: "Set status" }).click();
-    await expect(vault).toContainText("1 memory was updated.");
-    await bulkActions.getByRole("button", { name: "Clear all" }).click();
+    await expect(vault).toContainText("1 memory updated.");
     await expect(bulkActions.locator("[data-ltm-selection-count]")).toHaveText(
       "0 selected",
     );
@@ -265,6 +266,14 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
       "visible",
     );
     await memory.click();
+    if (testInfo.project.name.includes("mobile")) {
+      await expect(
+        vault.getByRole("tab", { name: "Editor" }),
+      ).toHaveAttribute("aria-selected", "true");
+      await vault.getByRole("tab", { name: "Details" }).click();
+      await expect(vault).toContainText("Created");
+      await vault.getByRole("tab", { name: "Editor" }).click();
+    }
     await expect(
       vault.getByRole("heading", { name: "Memory details" }),
     ).toBeVisible();

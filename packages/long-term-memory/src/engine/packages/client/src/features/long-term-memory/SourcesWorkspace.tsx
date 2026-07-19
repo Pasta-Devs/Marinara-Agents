@@ -59,13 +59,12 @@ export default function SourcesWorkspace({
   const [source, setSource] = useState<Source>("chats");
   const [importScope, setImportScope] = useState<"current" | "all">("current");
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] =
     useState<LtmImportSourceNotesResponse | null>(null);
   const [extractingId, setExtractingId] = useState<string | null>(null);
-  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewMessage, setReviewMessage] = useState("");
   const [transferNoteIds, setTransferNoteIds] = useState<Set<string>>(
     new Set(),
@@ -109,6 +108,8 @@ export default function SourcesWorkspace({
   });
   const rows = preview.data?.samples ?? [];
   const pendingRows = rows.filter((row) => row.status === "pending");
+  const selectionKey = `${source}:${importScope}:${modeFilter}`;
+  const selectedIds = new Set(selections[selectionKey] ?? []);
   const selectedPendingIds = pendingRows
     .filter((row) => selectedIds.has(row.sourceId))
     .map((row) => row.sourceId);
@@ -116,8 +117,16 @@ export default function SourcesWorkspace({
     pendingRows.length > 0 && selectedPendingIds.length === pendingRows.length;
 
   useEffect(() => {
-    setSelectedIds(new Set(pendingRows.map((row) => row.sourceId)));
-  }, [preview.dataUpdatedAt, source]);
+    if (!preview.data) return;
+    setSelections((current) =>
+      Object.hasOwn(current, selectionKey)
+        ? current
+        : {
+            ...current,
+            [selectionKey]: pendingRows.map((row) => row.sourceId),
+          },
+    );
+  }, [preview.data, preview.dataUpdatedAt, selectionKey]);
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -146,11 +155,11 @@ export default function SourcesWorkspace({
   };
 
   const toggleSelected = (sourceId: string, checked: boolean) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
+    setSelections((current) => {
+      const next = new Set(current[selectionKey] ?? []);
       if (checked) next.add(sourceId);
       else next.delete(sourceId);
-      return next;
+      return { ...current, [selectionKey]: [...next] };
     });
   };
 
@@ -219,28 +228,6 @@ export default function SourcesWorkspace({
       );
     } finally {
       setExtractingId(null);
-    }
-  };
-
-  const reviewSource = async (noteId: string) => {
-    if (reviewingId) return;
-    setReviewingId(noteId);
-    setImportError("");
-    try {
-      const result = await request<{
-        counts: { drafts: number; mutations: number };
-      }>(`/drafts/review?sourceNoteId=${encodeURIComponent(noteId)}`);
-      setReviewMessage(
-        `Related review: ${result.counts.drafts} draft(s), ${result.counts.mutations} mutation(s).`,
-      );
-    } catch (error) {
-      setImportError(
-        error instanceof Error
-          ? error.message
-          : "Related draft review could not load.",
-      );
-    } finally {
-      setReviewingId(null);
     }
   };
 
@@ -345,16 +332,9 @@ export default function SourcesWorkspace({
         Re-extract
       </Button>
       <Button
-        disabled={reviewingId !== null}
-        onClick={() => {
-          void reviewSource(noteId);
-          onOpenReview?.(noteId);
-        }}
+        onClick={() => onOpenReview?.(noteId)}
         data-ltm-review-query={noteId}
       >
-        {reviewingId === noteId ? (
-          <Loader2 size="0.75rem" className="animate-spin" />
-        ) : null}
         Review related drafts
       </Button>
     </div>
@@ -366,8 +346,6 @@ export default function SourcesWorkspace({
       data-ltm-import-status={importing ? "pending" : "idle"}
       data-ltm-extraction-status={extractingId ? "pending" : "idle"}
       data-ltm-extraction-note-id={extractingId ?? undefined}
-      data-ltm-review-status={reviewingId ? "pending" : "idle"}
-      data-ltm-review-note-id={reviewingId ?? undefined}
       data-ltm-transfer-status={transferBusy ?? "idle"}
       className="space-y-4"
     >
@@ -479,15 +457,12 @@ export default function SourcesWorkspace({
             aria-label="Select all visible pending sources"
             checked={allPendingSelected}
             disabled={pendingRows.length === 0}
-            onChange={(event) =>
-              setSelectedIds(
-                new Set(
-                  event.target.checked
-                    ? pendingRows.map((row) => row.sourceId)
-                    : [],
-                ),
-              )
-            }
+            onChange={(event) => setSelections((current) => ({
+              ...current,
+              [selectionKey]: event.target.checked
+                ? pendingRows.map((row) => row.sourceId)
+                : [],
+            }))}
             data-ltm-source-select-all
           />
           <span>

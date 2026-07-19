@@ -46,4 +46,5 @@ export type LongTermMemoryDestinationProps = {
   onOpenSources?: () => void;
   onOpenReview?: (sourceNoteId?: string) => void;
   openedNoteId?: string | null;
+  reviewSourceNoteId?: string | null;
 };

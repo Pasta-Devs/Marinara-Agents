@@ -87,12 +87,18 @@ function SelectionCheckbox({
   );
 }
 
-export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
+export default function ReviewQueue({
+  reviewSourceNoteId,
+}: LongTermMemoryDestinationProps) {
   const queryClient = useQueryClient();
+  const [sourceNoteId, setSourceNoteId] = useState(reviewSourceNoteId ?? null);
+  useEffect(() => setSourceNoteId(reviewSourceNoteId ?? null), [reviewSourceNoteId]);
   const review = useQuery({
-    queryKey: queryKeys.review,
+    queryKey: [...queryKeys.review, sourceNoteId],
     queryFn: () =>
-      request<LtmDraftReviewResponse>("/drafts/review?status=pending"),
+      request<LtmDraftReviewResponse>(
+        `/drafts/review?status=pending${sourceNoteId ? `&sourceNoteId=${encodeURIComponent(sourceNoteId)}` : ""}`,
+      ),
   });
   const notes = useQuery({
     queryKey: queryKeys.notes,
@@ -155,9 +161,13 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
     });
   };
 
-  const runBatch = async (action: "accept" | "skip") => {
+  const runBatch = async (
+    action: "accept" | "skip",
+    explicitRows?: ReviewRow[],
+  ) => {
     const applicableRows =
-      action === "accept" ? eligibleSelectedRows : selectedRows;
+      explicitRows ??
+      (action === "accept" ? eligibleSelectedRows : selectedRows);
     if (!applicableRows.length) return;
     setRunning(action);
     setResult(null);
@@ -274,6 +284,18 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
           </Button>
         </div>
       </div>
+      {sourceNoteId ? (
+        <StatusSurface>
+          Filtered to this source. {" "}
+          <button
+            type="button"
+            className="underline"
+            onClick={() => setSourceNoteId(null)}
+          >
+            Show all
+          </button>
+        </StatusSurface>
+      ) : null}
       {result ? (
         <StatusSurface tone={result.failed ? "danger" : "success"}>
           {result.action === "accepted" ? "Accepted" : "Skipped"}{" "}
@@ -406,6 +428,24 @@ export default function ReviewQueue(_: LongTermMemoryDestinationProps) {
                             ))}
                           </div>
                         ) : null}
+                        <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-2">
+                          <Button
+                            primary
+                            disabled={
+                              !eligibleIds.has(mutation.id) || running !== null
+                            }
+                            onClick={() => void runBatch("accept", [row])}
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            destructive
+                            disabled={running !== null}
+                            onClick={() => void runBatch("skip", [row])}
+                          >
+                            Skip
+                          </Button>
+                        </div>
                       </article>
                     );
                   })}

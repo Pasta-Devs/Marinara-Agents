@@ -32,7 +32,22 @@ class CapabilityClientErrorBoundary extends React.Component<
   }
 
   render() {
-    return this.state.error ? null : this.props.children;
+    if (!this.state.error) return this.props.children;
+    return (
+      <div role="alert" className="m-4 space-y-3 rounded-lg border border-[var(--destructive)] p-4 text-sm">
+        <p className="font-semibold">Long-Term Memory stopped.</p>
+        <button
+          type="button"
+          className="min-h-11 rounded-lg border border-[var(--border)] px-3 font-semibold"
+          onClick={() => {
+            this.props.element.capabilityRuntimeError = null;
+            this.setState({ error: null });
+          }}
+        >
+          Try again
+        </button>
+      </div>
+    );
   }
 }
 
