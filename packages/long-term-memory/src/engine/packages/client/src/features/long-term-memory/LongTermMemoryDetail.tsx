@@ -5,7 +5,12 @@ import type { LtmStatusResponse } from "../../../../shared/src/features/agents/l
 import { queryKeys, request } from "./api";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
 import { Button, StatusSurface } from "./shared-controls";
-import type { CapabilityProps, LongTermMemoryDestination } from "./types";
+import type {
+  CapabilityProps,
+  LongTermMemoryDestination,
+  LongTermMemoryDestinationProps,
+  LtmRecoveryHandoff,
+} from "./types";
 
 const destinations = {
   vault: lazy(() => import("./MemoryVault")),
@@ -30,7 +35,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [activationError, setActivationError] = useState("");
   const [destinationDirty, setDestinationDirty] = useState(false);
   const [openedNoteId, setOpenedNoteId] = useState<string | null>(null);
-  const [reviewSourceNoteId, setReviewSourceNoteId] = useState<string | null>(null);
+  const [reviewSourceNoteId, setReviewSourceNoteId] = useState<string | null>(
+    null,
+  );
+  const [recoveryHandoff, setRecoveryHandoff] =
+    useState<LtmRecoveryHandoff | null>(null);
   const Destination = destinations[destination];
 
   useEffect(() => {
@@ -55,10 +64,18 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     if (!(await confirmDestinationChange(next))) return;
     setDestinationDirty(false);
     if (next === "review") setReviewSourceNoteId(null);
+    if (next !== "vault") setRecoveryHandoff(null);
     setDestination(next);
+  };
+  const close = async () => {
+    if (!(await confirmDestinationChange("Agents"))) return;
+    setDestinationDirty(false);
+    props.onDirtyChange?.(false);
+    props.onClose?.();
   };
   const openMemory = async (noteId: string) => {
     if (!(await confirmDestinationChange("Memory Vault"))) return;
+    setRecoveryHandoff(null);
     setOpenedNoteId(noteId);
     setDestinationDirty(false);
     setDestination("vault");
@@ -68,6 +85,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestinationDirty(false);
     setReviewSourceNoteId(sourceNoteId ?? null);
     setDestination("review");
+  };
+  const recoverCandidate: NonNullable<
+    LongTermMemoryDestinationProps["onRecoverCandidate"]
+  > = async (candidate, scope, modes) => {
+    if (!(await confirmDestinationChange("Memory Vault"))) return;
+    setOpenedNoteId(null);
+    setRecoveryHandoff({ key: Date.now(), candidate, scope, modes });
+    setDestinationDirty(false);
+    setDestination("vault");
   };
   const openSources = async () => {
     if (!(await confirmDestinationChange("Sources"))) return;
@@ -98,7 +124,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         <button
           type="button"
           data-ltm-control="back"
-          onClick={props.onClose}
+          onClick={() => void close()}
           aria-label="Back to Agents"
           className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
         >
@@ -190,8 +216,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               onOpenMemory={openMemory}
               onOpenSources={openSources}
               onOpenReview={openReview}
+              onRecoverCandidate={recoverCandidate}
               openedNoteId={openedNoteId}
               reviewSourceNoteId={reviewSourceNoteId}
+              recoveryHandoff={recoveryHandoff}
             />
           </Suspense>
         </div>

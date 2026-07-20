@@ -9,6 +9,7 @@ async function main() {
   const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
   const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
+  const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
   const services = new Map<string, any>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
@@ -107,6 +108,20 @@ async function main() {
     await storage.createNote(note("world_visible_second", "chat-a", "The cobalt archive has a brass warding seal."));
     await storage.createNote(note("world_hidden", "chat-b", "The cobalt archive key is hidden in another chat."));
     await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const explained = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "cobalt archive",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      maxChunks: 1,
+      maxTokens: 4096,
+      explain: true,
+      rejectedLimit: 1,
+    });
+    assert.equal(explained.chunks.length, 1);
+    assert.equal(explained.rejected.length, 1);
+    assert.equal(explained.rejected[0].rejectionReason, "lower_rank");
+    assert.equal(explained.chunks[0].lanes.length > 0, true);
     const thresholded = await retrieveLongTermMemory({
       root: storage.root,
       queryText: "world_visible cobalt archive",
@@ -133,6 +148,18 @@ async function main() {
     assert.match(first.text, /beneath the observatory/);
     assert.doesNotMatch(first.text, /another chat/, "recall must enforce chat scope");
     assert.ok(first.receipt, "non-empty recall must return an opaque receipt");
+    await runtime.recall({ ...input, debugMode: true });
+    const recallExplanation = (await readLtmDebugLog(
+      { phase: "retrieval" },
+      storage.root,
+    )).at(-1);
+    assert.equal(recallExplanation?.action, "recall_explanation");
+    assert.equal(
+      recallExplanation?.details?.selected?.[0]?.noteId,
+      "world_visible",
+    );
+    assert.equal(JSON.stringify(recallExplanation).includes(input.messages[0].content), false);
+    assert.equal(JSON.stringify(recallExplanation).includes("beneath the observatory"), false);
 
     chats[0].metadata = {
       ...chats[0].metadata,

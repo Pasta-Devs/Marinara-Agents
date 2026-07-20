@@ -695,6 +695,23 @@ export const ltmNoteTransferPreviewResponseSchema = z
   })
   .strict();
 
+export const ltmSourceDerivedMemorySchema = z
+  .object({
+    id: ltmNoteIdSchema,
+    title: ltmNoteTitleSchema.optional(),
+    type: ltmNoteTypeSchema,
+    status: ltmStatusSchema,
+    scope: ltmScopeSchema,
+  })
+  .strict();
+
+export const ltmSourceDerivedMemoriesResponseSchema = z
+  .object({
+    sourceNoteId: ltmNoteIdSchema,
+    memories: z.array(ltmSourceDerivedMemorySchema),
+  })
+  .strict();
+
 export const ltmLinkSchema = z
   .object({
     target: ltmNoteIdSchema,
@@ -1727,6 +1744,7 @@ export const ltmIdentityRepairUnresolvedSchema = z
 export const ltmIdentityRepairPreviewRequestSchema = z
   .object({
     scope: ltmScopeSchema.default({}),
+    canonicalNoteIds: z.record(ltmNoteIdSchema).optional(),
   })
   .strict();
 
@@ -2582,6 +2600,12 @@ export type LtmNoteTransferPreviewRequest = z.infer<
 >;
 export type LtmNoteTransferPreviewResponse = z.infer<
   typeof ltmNoteTransferPreviewResponseSchema
+>;
+export type LtmSourceDerivedMemory = z.infer<
+  typeof ltmSourceDerivedMemorySchema
+>;
+export type LtmSourceDerivedMemoriesResponse = z.infer<
+  typeof ltmSourceDerivedMemoriesResponseSchema
 >;
 export type LtmLink = z.infer<typeof ltmLinkSchema>;
 export type LtmSection = z.infer<typeof ltmSectionSchema>;

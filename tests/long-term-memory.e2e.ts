@@ -19,16 +19,23 @@ async function dismissOnboardingTutorial(page: any) {
     await skip.click();
 }
 
+async function dismissWhatsNew(page: any) {
+  const gotIt = page.getByRole("button", { name: "Got it" });
+  if (await gotIt.isVisible({ timeout: 3_000 }).catch(() => false))
+    await gotIt.click();
+}
+
 async function createChat(page: any, testInfo: any) {
+  const name = `LTM E2E ${testInfo.project.name} ${Date.now()}`;
   const response = await page.request.post("/api/chats", {
     data: {
-      name: `LTM E2E ${testInfo.project.name} ${Date.now()}`,
+      name,
       mode: "roleplay",
       characterIds: [],
     },
   });
   expect(response.ok(), await response.text()).toBeTruthy();
-  return (await response.json()) as { id: string };
+  return { ...((await response.json()) as { id: string }), name };
 }
 
 async function deleteChat(page: any, chatId: string) {
@@ -67,6 +74,7 @@ async function openLongTermMemory(page: any, chatId: string, testInfo: any) {
   });
   await page.goto("/");
   await dismissOnboardingTutorial(page);
+  await dismissWhatsNew(page);
 
   await page.locator('[data-tour="panel-agents"]').click();
   const agentsPanel = page.locator(
@@ -192,7 +200,7 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
     await vault.getByLabel("Filter by type").selectOption("timeline_event");
 
     const timelineRow = vault
-      .locator("[data-ltm-note-source]")
+      .locator('[data-ltm-note-type="timeline_event"]')
       .filter({ hasText: timelineTitle });
     await expect(timelineRow).toBeVisible();
     await expect(timelineRow).toHaveAttribute("data-ltm-note-type", "timeline_event");
@@ -260,7 +268,7 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
     const memory = vault.getByRole("button", {
       name: "Visible details fixture",
     });
-    await expect(memory).toContainText("Facts: A scoped fixture.");
+    await expect(memory).toContainText(/facts: A scoped fixture\./i);
     await expect(vault.locator("[data-ltm-memory-list]")).toHaveCSS(
       "overflow-y",
       "visible",
@@ -277,17 +285,23 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
     await expect(
       vault.getByRole("heading", { name: "Memory details" }),
     ).toBeVisible();
-    await expect(vault.getByLabel("facts")).toHaveValue("A scoped fixture.");
+    await expect(
+      vault.getByRole("textbox", { name: "facts" }),
+    ).toHaveValue("A scoped fixture.");
 
     await vault.getByRole("button", { name: "Add memories" }).click();
     await vault.getByRole("menuitem", { name: /Create manually/ }).click();
     await expect(
       vault.getByRole("heading", { name: "New memory" }),
     ).toBeVisible();
-    await expect(vault).toContainText(`Chat: ${chat.id}`);
+    await expect(vault).toContainText(chat.name);
 
-    page.once("dialog", (dialog) => dialog.accept());
     await vault.getByRole("button", { name: "Close" }).click();
+    const discardDialog = page.getByRole("dialog", {
+      name: "Discard unsaved memory changes?",
+    });
+    if (await discardDialog.isVisible({ timeout: 1_000 }).catch(() => false))
+      await discardDialog.getByRole("button", { name: "Discard changes" }).click();
     await vault.getByRole("button", { name: "Add memories" }).click();
     await vault.getByRole("menuitem", { name: /Import sources/ }).click();
     await expect(page.locator('[data-ltm-surface="sources"]')).toBeVisible();

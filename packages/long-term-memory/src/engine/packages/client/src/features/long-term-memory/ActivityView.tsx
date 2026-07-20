@@ -12,13 +12,33 @@ import type { LongTermMemoryDestinationProps } from "./types";
 
 type DebugLogResponse = { events: LtmDebugEvent[] };
 type DebugOperation = { operationId: string; events: LtmDebugEvent[] };
+type ActivityFilter = "all" | "errors" | LtmDebugEvent["phase"];
+
+const debugPhases: LtmDebugEvent["phase"][] = [
+  "import",
+  "source_note",
+  "extraction",
+  "llm",
+  "compiler",
+  "draft",
+  "apply",
+  "injection",
+  "retrieval",
+  "rebuild",
+  "repair",
+  "replay",
+  "diagnostic",
+];
 
 function formatTimestamp(timestamp: string) {
   const date = new Date(timestamp);
   return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
 }
 
-function humanizeDebugText(text: string, noteTitles: ReadonlyMap<string, string>) {
+function humanizeDebugText(
+  text: string,
+  noteTitles: ReadonlyMap<string, string>,
+) {
   let result = text;
   for (const [id, title] of noteTitles) result = result.replaceAll(id, title);
   return result.replaceAll(
@@ -37,6 +57,13 @@ function describeEvent(
   return "No message recorded.";
 }
 
+function compactSummary(value: string) {
+  const singleLine = value.replaceAll(/\s+/g, " ").trim();
+  return singleLine.length > 240
+    ? `${singleLine.slice(0, 237)}...`
+    : singleLine;
+}
+
 function humanizeLabel(value: string) {
   return value
     .replaceAll("_", " ")
@@ -53,7 +80,9 @@ function groupOperations(events: LtmDebugEvent[]): DebugOperation[] {
   return [...operations.entries()]
     .map(([operationId, operationEvents]) => ({
       operationId,
-      events: operationEvents.sort((left, right) => left.ts.localeCompare(right.ts)),
+      events: operationEvents.sort((left, right) =>
+        left.ts.localeCompare(right.ts),
+      ),
     }))
     .sort((left, right) =>
       right.events.at(-1)!.ts.localeCompare(left.events.at(-1)!.ts),
@@ -105,7 +134,10 @@ function summarizeCounts(events: LtmDebugEvent[]) {
   if (!counts) return "";
   return Object.entries(counts)
     .slice(0, 3)
-    .map(([label, count]) => `${count.toLocaleString()} ${humanizeLabel(label).toLowerCase()}`)
+    .map(
+      ([label, count]) =>
+        `${count.toLocaleString()} ${humanizeLabel(label).toLowerCase()}`,
+    )
     .join(" | ");
 }
 
@@ -132,16 +164,26 @@ export default function ActivityView({
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<"clear" | "export" | null>(null);
   const [actionError, setActionError] = useState("");
+  const [filter, setFilter] = useState<ActivityFilter>("all");
+  const activityPath = (() => {
+    const parameters = new URLSearchParams({ limit: "200" });
+    if (filter === "errors") parameters.set("status", "error");
+    else if (filter !== "all") parameters.set("phase", filter);
+    return `/debug-log?${parameters.toString()}`;
+  })();
   const activity = useQuery({
-    queryKey: queryKeys.activity,
-    queryFn: () => request<DebugLogResponse>("/debug-log?limit=200"),
+    queryKey: [...queryKeys.activity, filter],
+    queryFn: () => request<DebugLogResponse>(activityPath),
   });
   const notes = useQuery({
     queryKey: queryKeys.notes,
     queryFn: () => request<LtmNote[]>("/notes?includeGlobal=true"),
   });
   const noteTitles = new Map(
-    (notes.data ?? []).map((note) => [note.id, note.title || "Untitled memory"]),
+    (notes.data ?? []).map((note) => [
+      note.id,
+      note.title || "Untitled memory",
+    ]),
   );
   const operations = groupOperations(activity.data?.events ?? []);
   const lastInjection = useQuery({
@@ -206,9 +248,9 @@ export default function ActivityView({
     <section data-ltm-surface="activity" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold">Activity</h2>
+          <h2 className="text-sm font-semibold">Debug</h2>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Recent processing, recall, and maintenance diagnostics.
+            Trace imports, extraction, draft actions, recall, and maintenance.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -230,6 +272,23 @@ export default function ActivityView({
           </Button>
         </div>
       </div>
+
+      <label className="block max-w-xs space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+        <span>Show events</span>
+        <select
+          className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[var(--foreground)]"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value as ActivityFilter)}
+        >
+          <option value="all">All phases</option>
+          <option value="errors">Errors only</option>
+          {debugPhases.map((phase) => (
+            <option key={phase} value={phase}>
+              {humanizeLabel(phase)}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {props.chatId ? (
         <section className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3">
@@ -294,7 +353,11 @@ export default function ActivityView({
         </StatusSurface>
       ) : null}
       {activity.data?.events.length === 0 ? (
-        <StatusSurface>No activity has been recorded yet.</StatusSurface>
+        <StatusSurface>
+          {filter === "all"
+            ? "No activity has been recorded yet."
+            : "No activity matches this filter."}
+        </StatusSurface>
       ) : null}
       {operations.length ? (
         <ol className="space-y-2" aria-label="Long-Term Memory activity log">
@@ -302,8 +365,9 @@ export default function ActivityView({
             const firstEvent = operation.events[0];
             const lastEvent = operation.events.at(-1)!;
             const status = operationStatus(operation.events);
-            const sourceNoteId =
-              operation.events.find((event) => event.sourceNoteId)?.sourceNoteId;
+            const sourceNoteId = operation.events.find(
+              (event) => event.sourceNoteId,
+            )?.sourceNoteId;
             const countSummary = summarizeCounts(operation.events);
             return (
               <li
@@ -335,7 +399,9 @@ export default function ActivityView({
                       <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
                         {sourceNoteId && noteTitles.has(sourceNoteId)
                           ? noteTitles.get(sourceNoteId)
-                          : describeEvent(lastEvent, noteTitles)}
+                          : compactSummary(
+                              describeEvent(lastEvent, noteTitles),
+                            )}
                       </span>
                       <span className="mt-1 block text-[0.6875rem] text-[var(--muted-foreground)]">
                         {formatTimestamp(lastEvent.ts)}
@@ -356,7 +422,8 @@ export default function ActivityView({
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="font-medium">
-                              {humanizeLabel(event.phase)} / {humanizeLabel(event.action)}
+                              {humanizeLabel(event.phase)} /{" "}
+                              {humanizeLabel(event.action)}
                             </span>
                             <span
                               className={

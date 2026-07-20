@@ -105,6 +105,21 @@ async function main() {
       lastMessageAt: null,
       updatedAt: "2026-07-17T00:00:00.000Z",
     }));
+    chats.push(
+      {
+        ...chats[0],
+        id: "chat-persona-a",
+        name: "Persona A",
+        groupId: null,
+        personaId: "persona-a",
+      },
+      {
+        ...chats[1],
+        id: "chat-persona-b",
+        name: "Persona B",
+        personaId: "persona-b",
+      },
+    );
     chats[0].metadata = {
       summaryEntries: [
         {
@@ -147,17 +162,19 @@ async function main() {
           npcLog: [],
           inventoryLog: [],
         },
-        gamePreviousSessionSummaries: [{
-          sessionNumber: 1,
-          summary: "The party discovered the Moon Vault.",
-          resumePoint: "Outside the cobalt seal.",
-          partyDynamics: "Mara trusts the party more.",
-          partyState: "The party holds the cobalt key.",
-          keyDiscoveries: ["The Moon Vault lies beneath the observatory."],
-          characterMoments: [],
-          littleDetails: [],
-          npcUpdates: [],
-        }],
+        gamePreviousSessionSummaries: [
+          {
+            sessionNumber: 1,
+            summary: "The party discovered the Moon Vault.",
+            resumePoint: "Outside the cobalt seal.",
+            partyDynamics: "Mara trusts the party more.",
+            partyState: "The party holds the cobalt key.",
+            keyDiscoveries: ["The Moon Vault lies beneath the observatory."],
+            characterMoments: [],
+            littleDetails: [],
+            npcUpdates: [],
+          },
+        ],
       },
       lastMessageAt: null,
       updatedAt: "2026-07-17T01:00:00.000Z",
@@ -233,7 +250,12 @@ async function main() {
                           confidence: 0.95,
                           salience: 0.9,
                           status: "active",
-                          links: [{ relation: "evidenced_by", target: "timeline_observatory_gate_sealed" }],
+                          links: [
+                            {
+                              relation: "evidenced_by",
+                              target: "timeline_observatory_gate_sealed",
+                            },
+                          ],
                           sourceHash: "replaced-by-package",
                         },
                         {
@@ -247,7 +269,12 @@ async function main() {
                           confidence: 0.95,
                           salience: 0.9,
                           status: "active",
-                          links: [{ relation: "evidenced_by", target: "timeline_observatory_gate_sealed" }],
+                          links: [
+                            {
+                              relation: "evidenced_by",
+                              target: "timeline_observatory_gate_sealed",
+                            },
+                          ],
                           sourceHash: "replaced-by-package",
                         },
                       ],
@@ -465,6 +492,26 @@ async function main() {
       },
     });
     assert.equal(personaScoped.statusCode, 201, personaScoped.body);
+    const globalizePersonaScoped = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/world_persona_scoped",
+      headers,
+      payload: { scope: {} },
+    });
+    assert.equal(
+      globalizePersonaScoped.statusCode,
+      400,
+      globalizePersonaScoped.body,
+    );
+    assert.match(globalizePersonaScoped.json().error, /scope-removal action/);
+    assert.deepEqual(
+      (await storageService.storage.getNote("world_persona_scoped"))?.scope,
+      {
+        chatId: "chat-a",
+        chatIds: ["chat-a"],
+        personaId: "persona-fixture",
+      },
+    );
     const missingPersonaScope = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/notes?scopeChatIds=chat-a&includeGlobal=false",
@@ -486,6 +533,97 @@ async function main() {
         .json()
         .some((note: any) => note.id === "world_persona_scoped"),
       true,
+    );
+    const removePersonaChatScope = await app.inject({
+      method: "DELETE",
+      url: "/api/long-term-memory/notes/world_persona_scoped/scope/current-chat",
+      headers,
+      payload: { chatId: "chat-a" },
+    });
+    assert.equal(
+      removePersonaChatScope.statusCode,
+      200,
+      removePersonaChatScope.body,
+    );
+    assert.equal(removePersonaChatScope.json().deleted, false);
+    assert.deepEqual(
+      (await storageService.storage.getNote("world_persona_scoped"))?.scope,
+      { personaId: "persona-fixture" },
+    );
+    const chatOnly = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        id: "world_chat_only_scope",
+        title: "Chat-only fixture",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: {
+            text: "This fixture has no remaining explicit scope.",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+          },
+        },
+      },
+    });
+    assert.equal(chatOnly.statusCode, 201, chatOnly.body);
+    const removeFinalChatScope = await app.inject({
+      method: "DELETE",
+      url: "/api/long-term-memory/notes/world_chat_only_scope/scope/current-chat",
+      headers,
+      payload: { chatId: "chat-a" },
+    });
+    assert.equal(
+      removeFinalChatScope.statusCode,
+      200,
+      removeFinalChatScope.body,
+    );
+    assert.equal(removeFinalChatScope.json().deleted, true);
+    assert.equal(
+      await storageService.storage.getNote("world_chat_only_scope"),
+      null,
+    );
+    await storageService.storage.createNote({
+      id: "world_concurrent_scope_removal",
+      title: "Concurrent scope removal fixture",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: {
+        chatId: "chat-a",
+        chatIds: ["chat-a", "chat-b"],
+        personaId: "persona-fixture",
+      },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        facts: {
+          text: "Concurrent removals must not restore a removed scope.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    await Promise.all([
+      storageService.storage.removeNoteFromScope(
+        "world_concurrent_scope_removal",
+        { chatIds: ["chat-a"] },
+      ),
+      storageService.storage.removeNoteFromScope(
+        "world_concurrent_scope_removal",
+        { chatIds: ["chat-b"] },
+      ),
+    ]);
+    assert.deepEqual(
+      (await storageService.storage.getNote("world_concurrent_scope_removal"))
+        ?.scope,
+      { personaId: "persona-fixture" },
     );
     const scopeTargets = await app.inject({
       method: "GET",
@@ -519,6 +657,56 @@ async function main() {
       searched.json().chunks[0]?.chunk.noteId,
       "world_route_fixture",
     );
+    const transferPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer-preview",
+      headers,
+      payload: {
+        noteIds: ["world_route_fixture"],
+        mode: "copy",
+        destinationChatId: "chat-b",
+      },
+    });
+    assert.equal(transferPreview.statusCode, 200, transferPreview.body);
+    assert.deepEqual(transferPreview.json().buckets.ready, [
+      "world_route_fixture",
+    ]);
+    await storageService.storage.createNote({
+      id: "world_transfer_destination_conflict",
+      title: "Destination conflict",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        facts: {
+          text: "The cobalt key is beneath the observatory.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const staleTransfer = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer",
+      headers,
+      payload: {
+        noteIds: ["world_route_fixture"],
+        mode: "copy",
+        destinationChatId: "chat-b",
+      },
+    });
+    assert.equal(staleTransfer.statusCode, 409, staleTransfer.body);
+    assert.match(staleTransfer.json().error, /Refresh the preview/);
+    assert.deepEqual(
+      (await storageService.storage.getNote("world_route_fixture")).scope,
+      { chatId: "chat-a", chatIds: ["chat-a"] },
+    );
+    await storageService.storage.deleteNotesPermanently([
+      "world_transfer_destination_conflict",
+    ]);
     const transfer = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/transfer",
@@ -531,6 +719,46 @@ async function main() {
     });
     assert.equal(transfer.statusCode, 200, transfer.body);
     assert.deepEqual(transfer.json().updatedNoteIds, ["world_route_fixture"]);
+    await storageService.storage.createNote({
+      id: "world_persona_transfer",
+      title: "Persona transfer fixture",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: {
+        chatId: "chat-persona-a",
+        chatIds: ["chat-persona-a"],
+        personaId: "persona-a",
+      },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        facts: {
+          text: "This memory belongs to persona A.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const personaTransfer = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer",
+      headers,
+      payload: {
+        noteIds: ["world_persona_transfer"],
+        mode: "copy",
+        destinationChatId: "chat-persona-b",
+      },
+    });
+    assert.equal(personaTransfer.statusCode, 409, personaTransfer.body);
+    assert.deepEqual(
+      (await storageService.storage.getNote("world_persona_transfer")).scope,
+      {
+        chatId: "chat-persona-a",
+        chatIds: ["chat-persona-a"],
+        personaId: "persona-a",
+      },
+    );
     const extractSource = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",
@@ -564,8 +792,17 @@ async function main() {
       tags: ["source_summary", "imported_chat"],
       keywords: [],
       links: [],
-      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "route-extract" },
-      sections: { source: { text: "Mara seals the observatory gate at dusk.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-a",
+        entryId: "route-extract",
+      },
+      sections: {
+        source: {
+          text: "Mara seals the observatory gate at dusk.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
     });
     const sourceMetadataUpdate = await app.inject({
       method: "PATCH",
@@ -573,8 +810,15 @@ async function main() {
       headers,
       payload: { title: "Updated observatory report" },
     });
-    assert.equal(sourceMetadataUpdate.statusCode, 200, sourceMetadataUpdate.body);
-    assert.equal(sourceMetadataUpdate.json().note.title, "Updated observatory report");
+    assert.equal(
+      sourceMetadataUpdate.statusCode,
+      200,
+      sourceMetadataUpdate.body,
+    );
+    assert.equal(
+      sourceMetadataUpdate.json().note.title,
+      "Updated observatory report",
+    );
     const sourceContentUpdate = await app.inject({
       method: "PATCH",
       url: "/api/long-term-memory/notes/source_route_extract",
@@ -590,7 +834,8 @@ async function main() {
     });
     assert.equal(sourceContentUpdate.statusCode, 400, sourceContentUpdate.body);
     assert.equal(
-      (await storageService.storage.getNote("source_route_extract")).sections.source.text,
+      (await storageService.storage.getNote("source_route_extract")).sections
+        .source.text,
       "Mara seals the observatory gate at dusk.",
     );
     const invalidMode = await app.inject({
@@ -624,7 +869,11 @@ async function main() {
         .json()
         .draft?.mutations.map((mutation: any) => mutation.note?.id)
         .sort(),
-      ["char_mara", "timeline_observatory_gate_sealed_1bbd9d3c48", "world_observatory_gate"],
+      [
+        "char_mara",
+        "timeline_observatory_gate_sealed_1bbd9d3c48",
+        "world_observatory_gate",
+      ],
     );
     assert.deepEqual(
       extracted
@@ -656,6 +905,40 @@ async function main() {
       ),
       true,
     );
+    await storageService.storage.createNote({
+      id: "world_cross_scope_derived",
+      title: "Cross-scope derived memory",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      tags: [],
+      keywords: [],
+      links: [{ target: "source_route_extract", relation: "extracted_from" }],
+      sections: {
+        facts: {
+          text: "A memory derived in another chat.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const crossScopeDerived = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes/source_route_extract/derived",
+      headers,
+    });
+    assert.equal(crossScopeDerived.statusCode, 200, crossScopeDerived.body);
+    assert.equal(
+      crossScopeDerived
+        .json()
+        .memories.some(
+          (note: any) =>
+            note.id === "world_cross_scope_derived" &&
+            note.scope.chatId === "chat-b" &&
+            note.sections === undefined,
+        ),
+      true,
+    );
     const extractionActivity = (
       await app.inject({
         method: "GET",
@@ -682,6 +965,44 @@ async function main() {
     assert.equal(requestActivity?.model, "request-model");
     assert.equal(requestActivity?.counts?.sourceChars, 40);
     assert.equal(requestActivity?.details?.reasoningEffort, "low");
+    const extractionPhaseActivity = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/debug-log?phase=extraction",
+      headers,
+    });
+    assert.equal(
+      extractionPhaseActivity.statusCode,
+      200,
+      extractionPhaseActivity.body,
+    );
+    assert.equal(
+      extractionPhaseActivity.json().events.length > 0 &&
+        extractionPhaseActivity
+          .json()
+          .events.every((event: any) => event.phase === "extraction"),
+      true,
+    );
+    const errorActivity = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/debug-log?status=error",
+      headers,
+    });
+    assert.equal(errorActivity.statusCode, 200, errorActivity.body);
+    assert.equal(errorActivity.json().events.length > 0, true);
+    assert.equal(
+      errorActivity
+        .json()
+        .events.every((event: any) => event.status === "error"),
+      true,
+    );
+    for (const query of ["phase=invalid", "status=invalid"]) {
+      const invalidDebugFilter = await app.inject({
+        method: "GET",
+        url: `/api/long-term-memory/debug-log?${query}`,
+        headers,
+      });
+      assert.equal(invalidDebugFilter.statusCode, 400, invalidDebugFilter.body);
+    }
     const chatDrafts = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/drafts?chatId=chat-a",
@@ -764,6 +1085,56 @@ async function main() {
         candidate.duplicateNoteIds.includes("char_mara_legacy_b"),
       );
     assert.equal(identityCandidate.canonicalNoteId, "char_mara_legacy_a");
+    const swappedIdentityPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/identity-repair/preview",
+      headers,
+      payload: {
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        canonicalNoteIds: {
+          [identityCandidate.id]: "char_mara_legacy_b",
+        },
+      },
+    });
+    assert.equal(
+      swappedIdentityPreview.statusCode,
+      200,
+      swappedIdentityPreview.body,
+    );
+    const swappedIdentityCandidate = swappedIdentityPreview
+      .json()
+      .candidates.find(
+        (candidate: any) => candidate.id === identityCandidate.id,
+      );
+    assert.equal(
+      swappedIdentityCandidate.canonicalNoteId,
+      "char_mara_legacy_b",
+    );
+    assert.equal(
+      swappedIdentityCandidate.additiveContent.some((content: any) =>
+        content.addedLines.some((line: string) =>
+          line.includes("eastern gate"),
+        ),
+      ),
+      true,
+    );
+    const staleCanonicalPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/identity-repair/preview",
+      headers,
+      payload: {
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        canonicalNoteIds: {
+          [identityCandidate.id]: "char_missing_canonical",
+        },
+      },
+    });
+    assert.equal(
+      staleCanonicalPreview.statusCode,
+      409,
+      staleCanonicalPreview.body,
+    );
+    assert.equal(staleCanonicalPreview.json().code, "identity_repair_stale");
     const identityApply = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/identity-repair/apply",
@@ -773,7 +1144,7 @@ async function main() {
         repairs: [
           {
             candidateId: identityCandidate.id,
-            canonicalNoteId: identityCandidate.canonicalNoteId,
+            canonicalNoteId: swappedIdentityCandidate.canonicalNoteId,
             excludedNoteIds: ["char_mara"],
             sectionChoices: [],
           },
@@ -782,10 +1153,10 @@ async function main() {
     });
     assert.equal(identityApply.statusCode, 200, identityApply.body);
     assert.deepEqual(identityApply.json().repairs[0].archivedNoteIds, [
-      "char_mara_legacy_b",
+      "char_mara_legacy_a",
     ]);
     assert.deepEqual(
-      (await storageService.storage.getNote("char_mara_legacy_a")).subjects,
+      (await storageService.storage.getNote("char_mara_legacy_b")).subjects,
       [
         {
           key: "character:character-mara",
@@ -794,18 +1165,18 @@ async function main() {
       ],
     );
     assert.match(
-      (await storageService.storage.getNote("char_mara_legacy_a")).sections
+      (await storageService.storage.getNote("char_mara_legacy_b")).sections
         .facts.text,
-      /western gate/,
+      /eastern gate/,
     );
     assert.equal(
-      (await storageService.storage.getNote("char_mara_legacy_b")).status,
+      (await storageService.storage.getNote("char_mara_legacy_a")).status,
       "archived",
     );
     assert.equal(
       (await storageService.storage.getNote("world_route_fixture")).links[0]
         .target,
-      "char_mara_legacy_a",
+      "char_mara_legacy_b",
     );
     assert.equal(identityApply.json().integrity.ok, true);
     const preview = await app.inject({
@@ -893,8 +1264,8 @@ async function main() {
     assert.equal(
       gamePreview
         .json()
-        .samples.every((sample: any) =>
-          sample.sourceId === "game-a:game-session-1",
+        .samples.every(
+          (sample: any) => sample.sourceId === "game-a:game-session-1",
         ),
       true,
     );
@@ -979,7 +1350,11 @@ async function main() {
       tags: ["source_summary", "imported_chat", "legacy_tag"],
       keywords: ["legacy"],
       links: [],
-      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-legacy" },
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-a",
+        entryId: "summary-legacy",
+      },
       sections: {
         source: { text: "Old text.", updatedAt: "2026-07-17T00:00:00.000Z" },
       },
@@ -1009,10 +1384,7 @@ async function main() {
       },
     });
     assert.equal(importedGame.statusCode, 200, importedGame.body);
-    assert.equal(
-      importedGame.json().imported[0]?.extractionMethod,
-      "llm",
-    );
+    assert.equal(importedGame.json().imported[0]?.extractionMethod, "llm");
     assert.equal(
       importedGame.json().imported[0]?.extractionStatus,
       "succeeded",
@@ -1380,8 +1752,17 @@ async function main() {
       tags: ["source_summary", "imported_chat"],
       keywords: [],
       links: [],
-      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "route-review" },
-      sections: { source: { text: "The eastern gate is sealed at dusk.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-a",
+        entryId: "route-review",
+      },
+      sections: {
+        source: {
+          text: "The eastern gate is sealed at dusk.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
     });
     await writeFile(
       join(storageService.root, "drafts", "malformed.json"),
@@ -1407,7 +1788,12 @@ async function main() {
         tags: ["typed_memory", "timeline_event"],
         keywords: ["gate", "dusk"],
         links: [{ target: "source_route_review", relation: "extracted_from" }],
-        sections: { event: { text: "The eastern gate was sealed at dusk.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+        sections: {
+          event: {
+            text: "The eastern gate was sealed at dusk.",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+          },
+        },
       },
     };
     const mutation = {
@@ -1426,7 +1812,9 @@ async function main() {
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
         tags: [],
         keywords: ["gate", "dusk"],
-        links: [{ target: "timeline_eastern_gate_sealed", relation: "evidenced_by" }],
+        links: [
+          { target: "timeline_eastern_gate_sealed", relation: "evidenced_by" },
+        ],
         sections: {
           facts: {
             text: "The eastern gate is sealed at dusk.",
@@ -1454,7 +1842,11 @@ async function main() {
     assert.equal(review.json().counts.drafts, 1);
     assert.equal(review.json().sources[0]?.drafts[0]?.freshness, "fresh");
     assert.equal(
-      review.json().sources[0]?.targets.some((target: any) => target.noteId === "world_eastern_gate"),
+      review
+        .json()
+        .sources[0]?.targets.some(
+          (target: any) => target.noteId === "world_eastern_gate",
+        ),
       true,
     );
     assert.equal(
@@ -1474,7 +1866,10 @@ async function main() {
       payload: { mutationIds: [mutationId] },
     });
     assert.equal(accepted.statusCode, 200, accepted.body);
-    assert.deepEqual(new Set(accepted.json().appliedMutationIds), new Set([eventMutationId, mutationId]));
+    assert.deepEqual(
+      new Set(accepted.json().appliedMutationIds),
+      new Set([eventMutationId, mutationId]),
+    );
     assert.equal(accepted.json().draft.status, "accepted");
     assert.equal(
       (await storageService.storage.getNote("world_eastern_gate"))?.sections
@@ -1504,7 +1899,9 @@ async function main() {
     assert.equal(backupPreview.statusCode, 200, backupPreview.body);
     assert.equal(backupPreview.json().incoming.notes > 0, true);
     const replacement = backup.json();
-    replacement.notes = replacement.notes.filter((note: any) => note.id === "world_route_fixture");
+    replacement.notes = replacement.notes.filter(
+      (note: any) => note.id === "world_route_fixture",
+    );
     const imported = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/backup/import",
@@ -1512,14 +1909,22 @@ async function main() {
       payload: replacement,
     });
     assert.equal(imported.statusCode, 200, imported.body);
-    assert.equal((await storageService.storage.listNotes()).some((note: any) => note.id === "world_route_fixture"), true);
+    assert.equal(
+      (await storageService.storage.listNotes()).some(
+        (note: any) => note.id === "world_route_fixture",
+      ),
+      true,
+    );
     const resetSettings = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/settings/reset",
       headers,
     });
     assert.equal(resetSettings.statusCode, 200, resetSettings.body);
-    assert.equal((await storageService.storage.getNote("world_route_fixture"))?.id, "world_route_fixture");
+    assert.equal(
+      (await storageService.storage.getNote("world_route_fixture"))?.id,
+      "world_route_fixture",
+    );
     const deletedAll = await app.inject({
       method: "DELETE",
       url: "/api/long-term-memory/data",
