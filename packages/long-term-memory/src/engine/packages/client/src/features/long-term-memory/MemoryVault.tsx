@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import type {
+  LtmBulkNoteResult,
   LtmLink,
   LtmMode,
   LtmNote,
@@ -596,17 +597,36 @@ export default function MemoryVault({
     try {
       if (action === "delete")
         await request("/notes/permanent-delete", "POST", { ids });
-      else
-        await request("/notes/batch", "POST", {
+      else {
+        const result = await request<LtmBulkNoteResult>("/notes/batch", "POST", {
           noteIds: ids,
           ...(action === "archive" ? { archive: "notes_only" } : {}),
           ...(action === "status" ? { status: bulkStatus } : {}),
           ...(action === "modes" ? { modes: bulkModes } : {}),
         });
-      setChecked(new Set());
-      setNotice(
-        `${ids.length} ${ids.length === 1 ? "memory" : "memories"} updated.`,
-      );
+        const unresolved = new Set([
+          ...result.skippedNoteIds,
+          ...result.failedNoteIds,
+        ]);
+        setChecked(unresolved);
+        const unresolvedLabel = unresolved.size
+          ? `; ${result.skippedNoteIds.length} skipped, ${result.failedNoteIds.length} failed`
+          : "";
+        const message = `${result.updatedNoteIds.length} ${result.updatedNoteIds.length === 1 ? "memory" : "memories"} updated${unresolvedLabel}.`;
+        if (unresolved.size) {
+          setNotice("");
+          setError(message);
+        } else {
+          setNotice(message);
+          setError("");
+        }
+      }
+      if (action === "delete") {
+        setChecked(new Set());
+        setNotice(
+          `${ids.length} ${ids.length === 1 ? "memory" : "memories"} deleted.`,
+        );
+      }
       await invalidate();
     } catch (cause) {
       setError(
@@ -815,7 +835,7 @@ export default function MemoryVault({
       <div
         role="tablist"
         aria-label="Memory workspace"
-        className="grid grid-cols-3 rounded-lg border border-[var(--border)] p-1 md:hidden"
+        className="grid grid-cols-3 rounded-lg border border-[var(--border)] p-1"
       >
         {(["memories", "editor", "details"] as const).map((pane) => (
           <button
@@ -986,8 +1006,12 @@ export default function MemoryVault({
             onChange={(event) =>
               setChecked(
                 event.target.checked
-                  ? new Set(visible.map((note) => note.id))
-                  : new Set(),
+                  ? new Set([...checked, ...visible.map((note) => note.id)])
+                  : new Set(
+                      [...checked].filter(
+                        (id) => !visible.some((note) => note.id === id),
+                      ),
+                    ),
               )
             }
           />
@@ -1066,10 +1090,10 @@ export default function MemoryVault({
           </>
         ) : null}
       </section>
-      <div className="grid min-h-0 gap-4 md:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]">
+      <div className="grid min-h-0 gap-4">
         <section
           data-ltm-memory-list
-          className={`${mobilePane === "memories" ? "block" : "hidden"} rounded-lg border border-[var(--border)] md:block`}
+          className={`${mobilePane === "memories" ? "block" : "hidden"} rounded-lg border border-[var(--border)]`}
           aria-label="Memory list"
         >
           <p className="border-b border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
@@ -1160,7 +1184,7 @@ export default function MemoryVault({
           ref={detailRef}
           tabIndex={-1}
           data-ltm-note-workbench
-          className={`${mobilePane === "memories" ? "hidden" : "block"} scroll-mt-20 rounded-lg border border-[var(--border)] p-3 md:block`}
+          className={`${mobilePane === "memories" ? "hidden" : "block"} scroll-mt-20 rounded-lg border border-[var(--border)] p-3`}
           aria-label="Memory editor"
         >
           {!draft ? (
@@ -1192,7 +1216,7 @@ export default function MemoryVault({
               </header>
               <>
                 <div
-                  className={`${mobilePane === "details" ? "hidden" : "contents"} md:contents`}
+                  className={mobilePane === "details" ? "hidden" : "contents"}
                 >
                   <section className="space-y-3">
                     <div className="flex flex-wrap items-end gap-2">
@@ -1421,7 +1445,7 @@ export default function MemoryVault({
                   </div>
                 </div>
                 <div
-                  className={`${mobilePane === "editor" ? "hidden" : "contents"} md:contents`}
+                  className={mobilePane === "editor" ? "hidden" : "contents"}
                 >
                   <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2">
                     <TokenEditor

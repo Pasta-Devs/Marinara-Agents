@@ -190,13 +190,27 @@ export default function SourcesWorkspace({
     ]);
   };
 
-  const changeSource = (next: Source) => {
-    setSource(next);
+  const clearImportResult = () => {
     setImportResult(null);
     setImportResultContract(null);
     setCancelledImport(null);
     setImportError("");
     setReviewMessage("");
+  };
+
+  const changeSource = (next: Source) => {
+    setSource(next);
+    clearImportResult();
+  };
+
+  const changeImportScope = (next: "current" | "all") => {
+    setImportScope(next);
+    clearImportResult();
+  };
+
+  const changeModeFilter = (next: LtmMode | "all") => {
+    setModeFilter(next);
+    clearImportResult();
   };
 
   const toggleSelected = (sourceId: string, checked: boolean) => {
@@ -468,7 +482,7 @@ export default function SourcesWorkspace({
             className={`${inputClass} min-w-44`}
             value={effectiveImportScope}
             onChange={(event) =>
-              setImportScope(event.target.value as "current" | "all")
+              changeImportScope(event.target.value as "current" | "all")
             }
             data-ltm-import-scope
           >
@@ -501,7 +515,7 @@ export default function SourcesWorkspace({
               className={`${inputClass} w-36`}
               value={modeFilter}
               onChange={(event) =>
-                setModeFilter(event.target.value as LtmMode | "all")
+                changeModeFilter(event.target.value as LtmMode | "all")
               }
               aria-label="Filter sources by mode"
             >
