@@ -18,6 +18,7 @@ import type {
   LtmNote,
   LtmNoteType,
   LtmScope,
+  LtmSourceDerivedMemoriesResponse,
   LtmStatus,
   LtmSubject,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
@@ -80,12 +81,26 @@ type ScopeTargets = {
 };
 type Target = { id: string; label: string; scope?: LtmScope };
 type NoteResponse = { note: LtmNote };
+type RemoveCurrentChatResponse = {
+  deleted: boolean;
+  unscoped: boolean;
+  note?: LtmNote;
+};
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 function fingerprint(note: LtmNote | null) {
   return note ? JSON.stringify(note) : "";
+}
+function hasExplicitScope(scope: LtmScope) {
+  return Boolean(
+    scope.chatId ||
+    scope.chatIds?.length ||
+    scope.groupId ||
+    scope.characterIds?.length ||
+    scope.personaId,
+  );
 }
 function title(type: string) {
   return noteTypeLabel(type);
@@ -146,6 +161,39 @@ function newNote(scope: LtmScope): LtmNote {
     sections: { facts: { text: "Add durable context here.", updatedAt: now } },
     conflicts: [],
     version: 1,
+  };
+}
+
+function recoveredNote(
+  handoff: NonNullable<LongTermMemoryDestinationProps["recoveryHandoff"]>,
+): LtmNote {
+  const note = newNote(handoff.scope);
+  const recovery = handoff.candidate.recovery;
+  const type =
+    recovery?.noteType && recovery.noteType !== "source"
+      ? recovery.noteType
+      : note.type;
+  const id = `${prefixes[type]}_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const sectionKey = recovery?.sectionKey ?? "facts";
+  const suggestedTitle = (recovery?.noteId ?? id)
+    .replace(new RegExp(`^${prefixes[type]}_?`), "")
+    .replaceAll("_", " ")
+    .replace(/^./, (character) => character.toUpperCase());
+  const now = new Date().toISOString();
+  return {
+    ...note,
+    id,
+    title: suggestedTitle || "Recovered memory",
+    type,
+    status: recovery?.status ?? note.status,
+    modes: handoff.modes,
+    scope: handoff.scope,
+    sections: {
+      [sectionKey]: {
+        text: handoff.candidate.snippet ?? "",
+        updatedAt: now,
+      },
+    },
   };
 }
 
@@ -227,15 +275,21 @@ export default function MemoryVault({
   props,
   onDirtyChange,
   onOpenSources,
+  onOpenReview,
   openedNoteId,
+  recoveryHandoff,
 }: LongTermMemoryDestinationProps) {
   const client = useQueryClient();
   const detailRef = useRef<HTMLElement>(null);
   const [search, setSearch] = useState("");
   const [targetSearch, setTargetSearch] = useState("");
   const [targetsOpen, setTargetsOpen] = useState(false);
+  const [activeTargetIndex, setActiveTargetIndex] = useState(0);
   const [target, setTarget] = useState<Target | null>(null);
   const [typeFilter, setTypeFilter] = useState<LtmNoteType | "all">("all");
+  const [kindFilter, setKindFilter] = useState<"all" | "durable" | "sources">(
+    "all",
+  );
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">("all");
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -319,6 +373,10 @@ export default function MemoryVault({
   );
   const visible = allNotes.filter(
     (note) =>
+      (kindFilter === "all" ||
+        (kindFilter === "sources"
+          ? note.type === "source"
+          : note.type !== "source")) &&
       (typeFilter === "all" || note.type === typeFilter) &&
       (statusFilter === "all" || note.status === statusFilter) &&
       (!search.trim() ||
@@ -328,6 +386,15 @@ export default function MemoryVault({
     (id) => !visible.some((note) => note.id === id),
   ).length;
   const dirty = Boolean(draft) && fingerprint(draft) !== saved;
+  const sourceDerivedQuery = useQuery({
+    queryKey: [...queryKeys.notes, "source-derived", draft?.id],
+    enabled: draft?.type === "source" && !isNew,
+    queryFn: () =>
+      request<LtmSourceDerivedMemoriesResponse>(
+        `/notes/${encodeURIComponent(draft!.id)}/derived`,
+      ),
+  });
+  const sourceDerived = sourceDerivedQuery.data?.memories ?? [];
   const targets: Target[] = [
     { id: "all", label: "All memories" },
     ...(props.chatId
@@ -364,6 +431,8 @@ export default function MemoryVault({
       .includes(targetSearch.toLocaleLowerCase()),
   );
 
+  useEffect(() => setActiveTargetIndex(0), [targetSearch]);
+
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   useEffect(() => {
@@ -372,6 +441,16 @@ export default function MemoryVault({
       .then(openNote)
       .catch(() => setError("The requested memory is no longer available."));
   }, [openedNoteId]);
+  useEffect(() => {
+    if (!recoveryHandoff) return;
+    const next = recoveredNote(recoveryHandoff);
+    setDraft(next);
+    setSaved("");
+    setIsNew(true);
+    setError("");
+    setNotice("Review the recovered suggestion before saving.");
+    setMobilePane("editor");
+  }, [recoveryHandoff?.key]);
   async function confirm(next: string) {
     if (!dirty) return true;
     const options = {
@@ -442,6 +521,18 @@ export default function MemoryVault({
       setError("A memory title is required.");
       return;
     }
+    const savedNote = saved ? (JSON.parse(saved) as LtmNote) : null;
+    if (
+      !isNew &&
+      savedNote &&
+      hasExplicitScope(savedNote.scope) &&
+      !hasExplicitScope(draft.scope)
+    ) {
+      setError(
+        "Clearing every scope would make this memory global. Use Remove from this chat or another scope-removal action so the memory is safely deleted when its final scope is removed.",
+      );
+      return;
+    }
     setBusy("save");
     setError("");
     try {
@@ -468,7 +559,9 @@ export default function MemoryVault({
               extracted,
               sections,
               ...note
-            }) => (draft.type === "source" ? note : { ...note, sections }))(draft),
+            }) => (draft.type === "source" ? note : { ...note, sections }))(
+              draft,
+            ),
           );
       const next = clone(response.note);
       setDraft(next);
@@ -518,6 +611,59 @@ export default function MemoryVault({
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not update memories.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+  async function removeFromCurrentChat() {
+    if (!draft || !props.chatId) return;
+    const unsavedWarning = dirty
+      ? " Your unsaved edits will also be lost."
+      : "";
+    const confirmed = props.confirmAction
+      ? await props.confirmAction({
+          title: dirty
+            ? "Remove memory and discard unsaved edits?"
+            : "Remove memory from this chat?",
+          message: `This removes only the current chat scope. The memory will be deleted if no other explicit scope remains.${unsavedWarning}`,
+          confirmLabel: "Remove from chat",
+          tone: "destructive",
+        })
+      : window.confirm(
+          `Remove this memory from the current chat? It will be deleted if no other explicit scope remains.${unsavedWarning}`,
+        );
+    if (!confirmed) return;
+    setBusy("remove-current-chat");
+    setError("");
+    try {
+      const result = await request<
+        RemoveCurrentChatResponse,
+        { chatId: string }
+      >(`/notes/${encodeURIComponent(draft.id)}/scope/current-chat`, "DELETE", {
+        chatId: props.chatId,
+      });
+      if (result.deleted) {
+        setDraft(null);
+        setSaved("");
+        setMobilePane("memories");
+        setNotice("Memory removed from this chat and deleted.");
+      } else if (result.note) {
+        const next = clone(result.note);
+        setDraft(next);
+        setSaved(fingerprint(next));
+        setNotice(
+          result.unscoped
+            ? "Memory removed from this chat."
+            : "Memory was not linked to this chat.",
+        );
+      }
+      await invalidate();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not remove memory from this chat.",
       );
     } finally {
       setBusy("");
@@ -685,8 +831,8 @@ export default function MemoryVault({
           </button>
         ))}
       </div>
-      <section className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3 sm:grid-cols-[minmax(0,1fr)_10rem_10rem]">
-        <div className="relative sm:col-span-3">
+      <section className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3 sm:grid-cols-[minmax(0,1fr)_10rem_10rem_10rem]">
+        <div className="relative sm:col-span-4">
           <input
             className={inputClass}
             value={targetSearch || target?.label || ""}
@@ -700,9 +846,35 @@ export default function MemoryVault({
             role="combobox"
             aria-expanded={targetsOpen}
             aria-controls="ltm-scope-targets"
+            aria-activedescendant={
+              targetsOpen && matchingTargets[activeTargetIndex]
+                ? `ltm-scope-target-${activeTargetIndex}`
+                : undefined
+            }
             aria-autocomplete="list"
             onKeyDown={(event) => {
-              if (event.key === "Escape") setTargetsOpen(false);
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                setTargetsOpen(true);
+                setActiveTargetIndex((current) => {
+                  if (!matchingTargets.length) return 0;
+                  if (!targetsOpen)
+                    return event.key === "ArrowDown"
+                      ? 0
+                      : matchingTargets.length - 1;
+                  const step = event.key === "ArrowDown" ? 1 : -1;
+                  return (
+                    (current + step + matchingTargets.length) %
+                    matchingTargets.length
+                  );
+                });
+              } else if (event.key === "Enter" && targetsOpen) {
+                const active = matchingTargets[activeTargetIndex];
+                if (active) {
+                  event.preventDefault();
+                  void selectTarget(active);
+                }
+              } else if (event.key === "Escape") setTargetsOpen(false);
             }}
           />
           {targetsOpen ? (
@@ -711,14 +883,16 @@ export default function MemoryVault({
               role="listbox"
               className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-1 shadow-lg"
             >
-              {matchingTargets.map((candidate) => (
+              {matchingTargets.map((candidate, index) => (
                 <button
                   key={candidate.id}
+                  id={`ltm-scope-target-${index}`}
                   role="option"
                   aria-selected={candidate.id === target?.id}
                   type="button"
+                  onMouseEnter={() => setActiveTargetIndex(index)}
                   onClick={() => void selectTarget(candidate)}
-                  className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-[var(--accent)]"
+                  className={`block w-full rounded px-3 py-2 text-left text-sm hover:bg-[var(--accent)] ${index === activeTargetIndex ? "bg-[var(--accent)]" : ""}`}
                 >
                   {candidate.label}
                 </button>
@@ -754,6 +928,19 @@ export default function MemoryVault({
             </button>
           ) : null}
         </label>
+        <select
+          className={inputClass}
+          value={kindFilter}
+          onChange={(event) => {
+            setKindFilter(event.target.value as "all" | "durable" | "sources");
+            setTypeFilter("all");
+          }}
+          aria-label="Filter by memory kind"
+        >
+          <option value="all">All</option>
+          <option value="durable">Durable memories</option>
+          <option value="sources">Sources</option>
+        </select>
         <select
           className={inputClass}
           value={typeFilter}
@@ -836,15 +1023,20 @@ export default function MemoryVault({
             <fieldset className="flex flex-wrap items-center gap-2">
               <legend className="sr-only">Set retrieval modes</legend>
               {modes.map((mode) => (
-                <label key={mode} className="flex min-h-8 items-center gap-1 text-xs">
+                <label
+                  key={mode}
+                  className="flex min-h-8 items-center gap-1 text-xs"
+                >
                   <input
                     type="checkbox"
                     checked={bulkModes.includes(mode)}
-                    onChange={() => setBulkModes((current) =>
-                      current.includes(mode)
-                        ? current.filter((item) => item !== mode)
-                        : [...current, mode],
-                    )}
+                    onChange={() =>
+                      setBulkModes((current) =>
+                        current.includes(mode)
+                          ? current.filter((item) => item !== mode)
+                          : [...current, mode],
+                      )
+                    }
                   />
                   {mode}
                 </label>
@@ -888,7 +1080,7 @@ export default function MemoryVault({
           ) : null}
           {notes.isError ? (
             <StatusSurface tone="danger">
-              Memories could not load. {" "}
+              Memories could not load.{" "}
               <button
                 type="button"
                 className="underline"
@@ -907,7 +1099,9 @@ export default function MemoryVault({
                 data-ltm-note-source={note.type === "source" || undefined}
                 className={`flex gap-2 border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
               >
-                <label className={`${selectionMode ? "flex" : "hidden"} min-h-11 min-w-8 items-center justify-center md:flex`}>
+                <label
+                  className={`${selectionMode ? "flex" : "hidden"} min-h-11 min-w-8 items-center justify-center md:flex`}
+                >
                   <input
                     type="checkbox"
                     checked={checked.has(note.id)}
@@ -930,7 +1124,9 @@ export default function MemoryVault({
                 >
                   <span className="flex items-center gap-2">
                     <strong className="truncate text-sm">
-                      {memoryLabel(note)}
+                      {note.type === "source"
+                        ? `Source: ${memoryLabel(note)}`
+                        : memoryLabel(note)}
                     </strong>
                     <ChevronRight size="0.875rem" className="shrink-0" />
                   </span>
@@ -994,448 +1190,546 @@ export default function MemoryVault({
                   <Button onClick={() => void closeDraft()}>Close</Button>
                 </div>
               </header>
-              <div
-                className={`${mobilePane === "details" ? "hidden" : "contents"} md:contents`}
-              >
-              <section className="space-y-3">
-                <div className="flex flex-wrap items-end gap-2">
-                  <h4 className="mr-auto text-xs font-medium">
-                    Memory sections
-                  </h4>
-                  {draft.type !== "source" ? (
-                    <>
-                      <input
-                        className={`${inputClass} w-40`}
-                        value={sectionKey}
-                        onChange={(event) => setSectionKey(event.target.value)}
-                        placeholder="new_section"
-                        aria-label="New section name"
-                      />
-                      <Button onClick={addSection} disabled={!sectionKey.trim()}>
-                        Add section
-                      </Button>
-                    </>
-                  ) : null}
-                </div>
-                {Object.entries(draft.sections).map(([key, section]) => (
-                  <article
-                    key={key}
-                    className="space-y-2 rounded-md border border-[var(--border)] p-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <label
-                        htmlFor={`ltm-section-${key}`}
-                        className="text-xs font-semibold"
-                      >
-                        {title(key)}
-                      </label>
+              <>
+                <div
+                  className={`${mobilePane === "details" ? "hidden" : "contents"} md:contents`}
+                >
+                  <section className="space-y-3">
+                    <div className="flex flex-wrap items-end gap-2">
+                      <h4 className="mr-auto text-xs font-medium">
+                        Memory sections
+                      </h4>
                       {draft.type !== "source" ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = { ...draft.sections };
-                            delete next[key];
-                            update("sections", next);
-                          }}
-                          aria-label={`Remove ${key} section`}
-                          className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
-                        >
-                          <Trash2 size="0.75rem" />
-                        </button>
+                        <>
+                          <input
+                            className={`${inputClass} w-40`}
+                            value={sectionKey}
+                            onChange={(event) =>
+                              setSectionKey(event.target.value)
+                            }
+                            placeholder="new_section"
+                            aria-label="New section name"
+                          />
+                          <Button
+                            onClick={addSection}
+                            disabled={!sectionKey.trim()}
+                          >
+                            Add section
+                          </Button>
+                        </>
                       ) : null}
                     </div>
-                    <fieldset disabled={draft.type === "source"} className="space-y-2">
-                      <textarea
-                        id={`ltm-section-${key}`}
-                        data-ltm-field="section"
-                        className={`${inputClass} min-h-28 py-2`}
-                        value={section.text}
+                    {Object.entries(draft.sections).map(([key, section]) => (
+                      <article
+                        key={key}
+                        className="space-y-2 rounded-md border border-[var(--border)] p-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <label
+                            htmlFor={`ltm-section-${key}`}
+                            className="text-xs font-semibold"
+                          >
+                            {title(key)}
+                          </label>
+                          {draft.type !== "source" ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = { ...draft.sections };
+                                delete next[key];
+                                update("sections", next);
+                              }}
+                              aria-label={`Remove ${key} section`}
+                              className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
+                            >
+                              <Trash2 size="0.75rem" />
+                            </button>
+                          ) : null}
+                        </div>
+                        <fieldset
+                          disabled={draft.type === "source"}
+                          className="space-y-2"
+                        >
+                          <textarea
+                            id={`ltm-section-${key}`}
+                            data-ltm-field="section"
+                            className={`${inputClass} min-h-28 py-2`}
+                            value={section.text}
+                            onChange={(event) =>
+                              update("sections", {
+                                ...draft.sections,
+                                [key]: {
+                                  ...section,
+                                  text: event.target.value,
+                                  updatedAt: new Date().toISOString(),
+                                },
+                              })
+                            }
+                          />
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <label className="text-xs">
+                              Importance
+                              <select
+                                className={inputClass}
+                                value={section.importance ?? ""}
+                                onChange={(event) =>
+                                  update("sections", {
+                                    ...draft.sections,
+                                    [key]: {
+                                      ...section,
+                                      importance:
+                                        event.target.value || undefined,
+                                    },
+                                  })
+                                }
+                              >
+                                <option value="">Not set</option>
+                                {["critical", "major", "moderate", "minor"].map(
+                                  (value) => (
+                                    <option key={value}>{value}</option>
+                                  ),
+                                )}
+                              </select>
+                            </label>
+                            <NumberField
+                              label="Confidence"
+                              value={section.confidence ?? 0}
+                              min={0}
+                              max={1}
+                              step={0.05}
+                              onChange={(value) =>
+                                update("sections", {
+                                  ...draft.sections,
+                                  [key]: { ...section, confidence: value },
+                                })
+                              }
+                            />
+                            <NumberField
+                              label="Salience"
+                              value={section.salience ?? 0}
+                              min={0}
+                              max={1}
+                              step={0.05}
+                              onChange={(value) =>
+                                update("sections", {
+                                  ...draft.sections,
+                                  [key]: { ...section, salience: value },
+                                })
+                              }
+                            />
+                          </div>
+                          <TokenEditor
+                            label="Evidence"
+                            values={section.evidence ?? []}
+                            placeholder="Add evidence"
+                            onChange={(evidence) =>
+                              update("sections", {
+                                ...draft.sections,
+                                [key]: { ...section, evidence },
+                              })
+                            }
+                          />
+                        </fieldset>
+                      </article>
+                    ))}
+                  </section>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1 text-xs font-medium">
+                      Title
+                      <input
+                        className={inputClass}
+                        value={draft.title ?? ""}
                         onChange={(event) =>
-                          update("sections", {
-                            ...draft.sections,
-                            [key]: {
-                              ...section,
-                              text: event.target.value,
-                              updatedAt: new Date().toISOString(),
-                            },
-                          })
+                          update("title", event.target.value)
                         }
                       />
-                      <div className="grid gap-2 sm:grid-cols-3">
-                      <label className="text-xs">
-                        Importance
+                    </label>
+                    <label className="space-y-1 text-xs font-medium">
+                      Status
+                      <select
+                        className={inputClass}
+                        value={draft.status}
+                        onChange={(event) =>
+                          update("status", event.target.value as LtmStatus)
+                        }
+                      >
+                        {statuses.map((status) => (
+                          <option key={status}>{status}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {isNew ? (
+                      <label className="space-y-1 text-xs font-medium">
+                        Type
                         <select
                           className={inputClass}
-                          value={section.importance ?? ""}
-                          onChange={(event) =>
-                            update("sections", {
-                              ...draft.sections,
-                              [key]: {
-                                ...section,
-                                importance: event.target.value || undefined,
-                              },
-                            })
-                          }
+                          value={draft.type}
+                          onChange={(event) => {
+                            const type = event.target.value as LtmNoteType;
+                            setDraft({
+                              ...draft,
+                              type,
+                              id: `${prefixes[type]}_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`,
+                              subjects:
+                                type === "character" || type === "relationship"
+                                  ? draft.subjects
+                                  : undefined,
+                            });
+                          }}
                         >
-                          <option value="">Not set</option>
-                          {["critical", "major", "moderate", "minor"].map(
-                            (value) => (
-                              <option key={value}>{value}</option>
-                            ),
-                          )}
+                          {noteTypes.map((type) => (
+                            <option key={type} value={type}>
+                              {title(type)}
+                            </option>
+                          ))}
                         </select>
                       </label>
-                      <NumberField
-                        label="Confidence"
-                        value={section.confidence ?? 0}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(value) =>
-                          update("sections", {
-                            ...draft.sections,
-                            [key]: { ...section, confidence: value },
-                          })
-                        }
-                      />
-                      <NumberField
-                        label="Salience"
-                        value={section.salience ?? 0}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(value) =>
-                          update("sections", {
-                            ...draft.sections,
-                            [key]: { ...section, salience: value },
-                          })
-                        }
-                      />
+                    ) : (
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {title(draft.type)} memory
+                      </p>
+                    )}
+                    <fieldset className="sm:col-span-2">
+                      <legend className="text-xs font-medium">
+                        Available modes
+                      </legend>
+                      <div className="mt-1 flex flex-wrap gap-3">
+                        {modes.map((mode) => (
+                          <label
+                            key={mode}
+                            className="flex min-h-8 items-center gap-1 text-xs"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={draft.modes.includes(mode)}
+                              onChange={() =>
+                                update(
+                                  "modes",
+                                  draft.modes.includes(mode)
+                                    ? draft.modes.filter(
+                                        (item) => item !== mode,
+                                      )
+                                    : [...draft.modes, mode],
+                                )
+                              }
+                            />
+                            {mode}
+                          </label>
+                        ))}
                       </div>
-                      <TokenEditor
-                        label="Evidence"
-                        values={section.evidence ?? []}
-                        placeholder="Add evidence"
-                        onChange={(evidence) =>
-                          update("sections", {
-                            ...draft.sections,
-                            [key]: { ...section, evidence },
-                          })
-                        }
-                      />
                     </fieldset>
-                  </article>
-                ))}
-              </section>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1 text-xs font-medium">
-                  Title
-                  <input
-                    className={inputClass}
-                    value={draft.title ?? ""}
-                    onChange={(event) => update("title", event.target.value)}
-                  />
-                </label>
-                <label className="space-y-1 text-xs font-medium">
-                  Status
-                  <select
-                    className={inputClass}
-                    value={draft.status}
-                    onChange={(event) =>
-                      update("status", event.target.value as LtmStatus)
-                    }
-                  >
-                    {statuses.map((status) => (
-                      <option key={status}>{status}</option>
-                    ))}
-                  </select>
-                </label>
-                {isNew ? (
-                  <label className="space-y-1 text-xs font-medium">
-                    Type
-                    <select
-                      className={inputClass}
-                      value={draft.type}
-                      onChange={(event) => {
-                        const type = event.target.value as LtmNoteType;
-                        setDraft({
-                          ...draft,
-                          type,
-                          id: `${prefixes[type]}_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`,
-                          subjects:
-                            type === "character" || type === "relationship"
-                              ? draft.subjects
-                              : undefined,
-                        });
-                      }}
-                    >
-                      {noteTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {title(type)}
-                        </option>
+                  </div>
+                </div>
+                <div
+                  className={`${mobilePane === "editor" ? "hidden" : "contents"} md:contents`}
+                >
+                  <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2">
+                    <TokenEditor
+                      label="Tags"
+                      values={draft.tags}
+                      placeholder="lowercase_tag"
+                      onChange={(values) => update("tags", values)}
+                    />
+                    <TokenEditor
+                      label="Keywords"
+                      values={draft.keywords}
+                      placeholder="Add keyword"
+                      onChange={(values) => update("keywords", values)}
+                    />
+                  </div>
+                  <section className="space-y-2 border-t border-[var(--border)] pt-4">
+                    <h4 className="text-xs font-medium">Scope</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(
+                        draft.scope.chatIds ??
+                        (draft.scope.chatId ? [draft.scope.chatId] : [])
+                      ).map((id) => (
+                        <Pill
+                          key={`chat-${id}`}
+                          onRemove={() => removeScope("chatIds", id)}
+                        >
+                          {scopeTargetLabel("chat", id, targets)}
+                        </Pill>
                       ))}
-                    </select>
-                  </label>
-                ) : (
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    {title(draft.type)} memory
-                  </p>
-                )}
-                <fieldset className="sm:col-span-2">
-                  <legend className="text-xs font-medium">
-                    Available modes
-                  </legend>
-                  <div className="mt-1 flex flex-wrap gap-3">
-                    {modes.map((mode) => (
-                      <label
-                        key={mode}
-                        className="flex min-h-8 items-center gap-1 text-xs"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={draft.modes.includes(mode)}
-                          onChange={() =>
+                      {(draft.scope.characterIds ?? []).map((id) => (
+                        <Pill
+                          key={`character-${id}`}
+                          onRemove={() => removeScope("characterIds", id)}
+                        >
+                          {scopeTargetLabel("character", id, targets)}
+                        </Pill>
+                      ))}
+                      {draft.scope.groupId ? (
+                        <Pill
+                          onRemove={() => mutateScope({ groupId: undefined })}
+                        >
+                          {scopeTargetLabel(
+                            "group",
+                            draft.scope.groupId,
+                            targets,
+                          )}
+                        </Pill>
+                      ) : null}
+                      {draft.scope.personaId ? (
+                        <Pill
+                          onRemove={() => mutateScope({ personaId: undefined })}
+                        >
+                          {scopeTargetLabel(
+                            "persona",
+                            draft.scope.personaId,
+                            [],
+                          )}
+                        </Pill>
+                      ) : null}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <input
+                        className={inputClass}
+                        placeholder="Add another chat"
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            const id = event.currentTarget.value.trim();
+                            if (id) {
+                              mutateScope({
+                                chatIds: [
+                                  ...new Set([
+                                    ...(draft.scope.chatIds ?? []),
+                                    id,
+                                  ]),
+                                ],
+                                chatId: draft.scope.chatId ?? id,
+                              });
+                              event.currentTarget.value = "";
+                            }
+                          }
+                        }}
+                      />
+                      <input
+                        className={inputClass}
+                        placeholder="Add another character"
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            const id = event.currentTarget.value.trim();
+                            if (id) {
+                              mutateScope({
+                                characterIds: [
+                                  ...new Set([
+                                    ...(draft.scope.characterIds ?? []),
+                                    id,
+                                  ]),
+                                ],
+                              });
+                              event.currentTarget.value = "";
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                  </section>
+                  <section className="space-y-2 border-t border-[var(--border)] pt-4">
+                    <h4 className="text-xs font-medium">Linked memories</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {draft.links.map((link, index) => (
+                        <Pill
+                          key={`${link.target}-${link.relation}-${index}`}
+                          onRemove={() =>
                             update(
-                              "modes",
-                              draft.modes.includes(mode)
-                                ? draft.modes.filter((item) => item !== mode)
-                                : [...draft.modes, mode],
+                              "links",
+                              draft.links.filter((_, item) => item !== index),
                             )
                           }
-                        />
-                        {mode}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              </div>
-              </div>
-              <div
-                className={`${mobilePane === "editor" ? "hidden" : "contents"} md:contents`}
-              >
-              <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2">
-                <TokenEditor
-                  label="Tags"
-                  values={draft.tags}
-                  placeholder="lowercase_tag"
-                  onChange={(values) => update("tags", values)}
-                />
-                <TokenEditor
-                  label="Keywords"
-                  values={draft.keywords}
-                  placeholder="Add keyword"
-                  onChange={(values) => update("keywords", values)}
-                />
-              </div>
-              <section className="space-y-2 border-t border-[var(--border)] pt-4">
-                <h4 className="text-xs font-medium">Scope</h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {(
-                    draft.scope.chatIds ??
-                    (draft.scope.chatId ? [draft.scope.chatId] : [])
-                  ).map((id) => (
-                    <Pill
-                      key={`chat-${id}`}
-                      onRemove={() => removeScope("chatIds", id)}
-                    >
-                      {scopeTargetLabel("chat", id, targets)}
-                    </Pill>
-                  ))}
-                  {(draft.scope.characterIds ?? []).map((id) => (
-                    <Pill
-                      key={`character-${id}`}
-                      onRemove={() => removeScope("characterIds", id)}
-                    >
-                      {scopeTargetLabel("character", id, targets)}
-                    </Pill>
-                  ))}
-                  {draft.scope.groupId ? (
-                    <Pill onRemove={() => mutateScope({ groupId: undefined })}>
-                      {scopeTargetLabel("group", draft.scope.groupId, targets)}
-                    </Pill>
-                  ) : null}
-                  {draft.scope.personaId ? (
-                    <Pill
-                      onRemove={() => mutateScope({ personaId: undefined })}
-                    >
-                      {scopeTargetLabel("persona", draft.scope.personaId, [])}
-                    </Pill>
-                  ) : null}
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <input
-                    className={inputClass}
-                    placeholder="Add another chat"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        const id = event.currentTarget.value.trim();
-                        if (id) {
-                          mutateScope({
-                            chatIds: [
-                              ...new Set([...(draft.scope.chatIds ?? []), id]),
-                            ],
-                            chatId: draft.scope.chatId ?? id,
-                          });
-                          event.currentTarget.value = "";
-                        }
-                      }
-                    }}
-                  />
-                  <input
-                    className={inputClass}
-                    placeholder="Add another character"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        const id = event.currentTarget.value.trim();
-                        if (id) {
-                          mutateScope({
-                            characterIds: [
-                              ...new Set([
-                                ...(draft.scope.characterIds ?? []),
-                                id,
-                              ]),
-                            ],
-                          });
-                          event.currentTarget.value = "";
-                        }
-                      }
-                    }}
-                  />
-                </div>
-              </section>
-              <section className="space-y-2 border-t border-[var(--border)] pt-4">
-                <h4 className="text-xs font-medium">Linked memories</h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {draft.links.map((link, index) => (
-                    <Pill
-                      key={`${link.target}-${link.relation}-${index}`}
-                      onRemove={() =>
-                        update(
-                          "links",
-                          draft.links.filter((_, item) => item !== index),
-                        )
-                      }
-                    >
-                      {link.relation.replaceAll("_", " ")}
-                      {" -> "}
-                      <button
-                        type="button"
-                        className="underline underline-offset-2"
-                        onClick={() => void openLinkedNote(link.target)}
-                      >
-                        {memoryLabel(
-                          allNotes.find((note) => note.id === link.target),
-                        )}
-                      </button>
-                    </Pill>
-                  ))}
-                </div>
-                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]">
-                  <input
-                    className={inputClass}
-                    value={linkTarget}
-                    onChange={(event) => setLinkTarget(event.target.value)}
-                    placeholder="Search or enter a memory"
-                    list="ltm-linked-memories"
-                  />
-                  <datalist id="ltm-linked-memories">
-                    {allNotes
-                      .filter(
-                        (note) =>
-                          note.id !== draft.id &&
-                          !draft.links.some((link) => link.target === note.id),
-                      )
-                      .map((note) => (
-                        <option key={note.id} value={note.id}>
-                          {memoryLabel(note)}
-                        </option>
+                        >
+                          {link.relation.replaceAll("_", " ")}
+                          {" -> "}
+                          <button
+                            type="button"
+                            className="underline underline-offset-2"
+                            onClick={() => void openLinkedNote(link.target)}
+                          >
+                            {memoryLabel(
+                              allNotes.find((note) => note.id === link.target),
+                            )}
+                          </button>
+                        </Pill>
                       ))}
-                  </datalist>
-                  <select
-                    className={inputClass}
-                    value={linkRelation}
-                    onChange={(event) =>
-                      setLinkRelation(event.target.value as LtmLink["relation"])
-                    }
-                  >
-                    {relations.map((relation) => (
-                      <option key={relation}>{relation}</option>
-                    ))}
-                  </select>
-                  <Button
-                    onClick={addLink}
-                    disabled={!linkTarget.trim() || linkTarget.trim() === draft.id}
-                  >
-                    <Link2 size="0.75rem" />
-                    Link
-                  </Button>
-                </div>
-              </section>
-              {draft.type === "character" || draft.type === "relationship" ? (
-                <section className="space-y-2 border-t border-[var(--border)] pt-4">
-                  <h4 className="text-xs font-medium">Subjects</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(draft.subjects ?? []).map((subject, index) => (
-                      <Pill
-                        key={subject.key}
-                        onRemove={() =>
-                          update(
-                            "subjects",
-                            draft.subjects?.filter(
-                              (_, item) => item !== index,
-                            ) || [],
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]">
+                      <input
+                        className={inputClass}
+                        value={linkTarget}
+                        onChange={(event) => setLinkTarget(event.target.value)}
+                        placeholder="Search or enter a memory"
+                        list="ltm-linked-memories"
+                      />
+                      <datalist id="ltm-linked-memories">
+                        {allNotes
+                          .filter(
+                            (note) =>
+                              note.id !== draft.id &&
+                              !draft.links.some(
+                                (link) => link.target === note.id,
+                              ),
+                          )
+                          .map((note) => (
+                            <option key={note.id} value={note.id}>
+                              {memoryLabel(note)}
+                            </option>
+                          ))}
+                      </datalist>
+                      <select
+                        className={inputClass}
+                        value={linkRelation}
+                        onChange={(event) =>
+                          setLinkRelation(
+                            event.target.value as LtmLink["relation"],
                           )
                         }
                       >
-                        {subject.key}
-                      </Pill>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      className={inputClass}
-                      value={subjectKey}
-                      onChange={(event) => setSubjectKey(event.target.value)}
-                      placeholder="character:id or persona:id"
-                    />
-                    <Button
-                      onClick={addSubject}
-                      disabled={
-                        !subjectKey.trim() ||
-                        (draft.subjects?.length ?? 0) >=
-                          (draft.type === "character" ? 1 : 2)
-                      }
-                    >
-                      Add
-                    </Button>
-                  </div>
-                </section>
-              ) : null}
-              {draft.conflicts?.length ? (
+                        {relations.map((relation) => (
+                          <option key={relation}>{relation}</option>
+                        ))}
+                      </select>
+                      <Button
+                        onClick={addLink}
+                        disabled={
+                          !linkTarget.trim() || linkTarget.trim() === draft.id
+                        }
+                      >
+                        <Link2 size="0.75rem" />
+                        Link
+                      </Button>
+                    </div>
+                  </section>
+                  {draft.type === "character" ||
+                  draft.type === "relationship" ? (
+                    <section className="space-y-2 border-t border-[var(--border)] pt-4">
+                      <h4 className="text-xs font-medium">Subjects</h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(draft.subjects ?? []).map((subject, index) => (
+                          <Pill
+                            key={subject.key}
+                            onRemove={() =>
+                              update(
+                                "subjects",
+                                draft.subjects?.filter(
+                                  (_, item) => item !== index,
+                                ) || [],
+                              )
+                            }
+                          >
+                            {subject.key}
+                          </Pill>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          className={inputClass}
+                          value={subjectKey}
+                          onChange={(event) =>
+                            setSubjectKey(event.target.value)
+                          }
+                          placeholder="character:id or persona:id"
+                        />
+                        <Button
+                          onClick={addSubject}
+                          disabled={
+                            !subjectKey.trim() ||
+                            (draft.subjects?.length ?? 0) >=
+                              (draft.type === "character" ? 1 : 2)
+                          }
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    </section>
+                  ) : null}
+                  {draft.conflicts?.length ? (
+                    <section className="space-y-2 border-t border-[var(--border)] pt-4">
+                      <h4 className="text-xs font-medium">Conflicts</h4>
+                      {draft.conflicts.map((conflict, index) => (
+                        <article
+                          key={`${conflict.field}-${index}`}
+                          className="rounded-md bg-[var(--secondary)]/45 p-2 text-xs"
+                        >
+                          <strong>
+                            {conflict.field}: {conflict.resolution}
+                          </strong>
+                          <p className="mt-1">{conflict.proposed}</p>
+                        </article>
+                      ))}
+                    </section>
+                  ) : null}
+                </div>
+              </>
+              {draft.type === "source" ? (
                 <section className="space-y-2 border-t border-[var(--border)] pt-4">
-                  <h4 className="text-xs font-medium">Conflicts</h4>
-                  {draft.conflicts.map((conflict, index) => (
-                    <article
-                      key={`${conflict.field}-${index}`}
-                      className="rounded-md bg-[var(--secondary)]/45 p-2 text-xs"
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-medium">
+                      Derived memories across all scopes
+                    </h4>
+                    {sourceDerivedQuery.isSuccess ? (
+                      <span className="text-xs text-[var(--muted-foreground)]">
+                        {sourceDerived.length} linked here
+                      </span>
+                    ) : null}
+                  </div>
+                  {sourceDerivedQuery.isLoading ? (
+                    <StatusSurface busy>
+                      Loading derived memories.
+                    </StatusSurface>
+                  ) : null}
+                  {sourceDerivedQuery.isError ? (
+                    <StatusSurface tone="danger">
+                      <span>
+                        Derived memories could not load.{" "}
+                        <button
+                          type="button"
+                          className="underline"
+                          onClick={() => void sourceDerivedQuery.refetch()}
+                        >
+                          Retry
+                        </button>
+                      </span>
+                    </StatusSurface>
+                  ) : null}
+                  {sourceDerived.map((note) => (
+                    <button
+                      key={note.id}
+                      type="button"
+                      onClick={() => void openLinkedNote(note.id)}
+                      className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md border border-[var(--border)] px-3 text-left hover:bg-[var(--accent)]"
                     >
-                      <strong>
-                        {conflict.field}: {conflict.resolution}
-                      </strong>
-                      <p className="mt-1">{conflict.proposed}</p>
-                    </article>
+                      <span className="min-w-0">
+                        <strong className="block truncate text-sm">
+                          {memoryLabel(note)}
+                        </strong>
+                        <span className="text-xs text-[var(--muted-foreground)]">
+                          {title(note.type)}
+                        </span>
+                      </span>
+                      <ChevronRight size="0.875rem" className="shrink-0" />
+                    </button>
                   ))}
+                  {sourceDerivedQuery.isSuccess && !sourceDerived.length ? (
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      No saved memories link to this source yet.
+                    </p>
+                  ) : null}
                 </section>
               ) : null}
               <dl className="grid gap-1 border-t border-[var(--border)] pt-4 text-xs text-[var(--muted-foreground)] sm:grid-cols-2">
                 <div>
-                  <dt className="font-medium text-[var(--foreground)]">Created</dt>
+                  <dt className="font-medium text-[var(--foreground)]">
+                    Created
+                  </dt>
                   <dd>{new Date(draft.createdAt).toLocaleString()}</dd>
                 </div>
                 <div>
-                  <dt className="font-medium text-[var(--foreground)]">Updated</dt>
+                  <dt className="font-medium text-[var(--foreground)]">
+                    Updated
+                  </dt>
                   <dd>{new Date(draft.updatedAt).toLocaleString()}</dd>
                 </div>
                 {draft.provenance ? (
@@ -1444,7 +1738,8 @@ export default function MemoryVault({
                       Provenance
                     </dt>
                     <dd>
-                      {draft.provenance.kind.replaceAll("_", " ")}: {draft.provenance.sourceId}
+                      {draft.provenance.kind.replaceAll("_", " ")}:{" "}
+                      {draft.provenance.sourceId}
                     </dd>
                   </div>
                 ) : null}
@@ -1478,9 +1773,25 @@ export default function MemoryVault({
                     <RefreshCw size="0.875rem" />
                     Extract to review
                   </Button>
+                  <Button onClick={() => onOpenReview?.(draft.id)}>
+                    Review related drafts
+                  </Button>
                 </div>
               ) : null}
-              </div>
+              {!isNew && props.chatId ? (
+                <div className="border-t border-[var(--border)] pt-4">
+                  <Button
+                    destructive
+                    disabled={Boolean(busy)}
+                    onClick={() => void removeFromCurrentChat()}
+                  >
+                    <Trash2 size="0.875rem" />
+                    {busy === "remove-current-chat"
+                      ? "Removing"
+                      : "Remove from current chat"}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           )}
         </section>

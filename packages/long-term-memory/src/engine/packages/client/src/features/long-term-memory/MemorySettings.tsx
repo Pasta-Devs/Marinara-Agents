@@ -206,6 +206,18 @@ export default function MemorySettings({
   const [selectedActions, setSelectedActions] = useState<RepairAction[]>([]);
   const [identityPreview, setIdentityPreview] =
     useState<LtmIdentityRepairPreviewResponse | null>(null);
+  const [selectedIdentityCandidates, setSelectedIdentityCandidates] = useState<
+    string[]
+  >([]);
+  const [identitySectionChoices, setIdentitySectionChoices] = useState<
+    Record<string, Record<string, string>>
+  >({});
+  const [includedIdentityNoteIds, setIncludedIdentityNoteIds] = useState<
+    Record<string, string[]>
+  >({});
+  const [identityCanonicalNoteIds, setIdentityCanonicalNoteIds] = useState<
+    Record<string, string>
+  >({});
   const [backupPreview, setBackupPreview] = useState<{
     backup: unknown;
     incoming: { notes: number; drafts: number };
@@ -344,13 +356,20 @@ export default function MemorySettings({
     setPending("identity-preview");
     setMessage("");
     try {
-      setIdentityPreview(
-        await request<LtmIdentityRepairPreviewResponse>(
-          "/identity-repair/preview",
-          "POST",
-          {},
-        ),
+      const preview = await request<LtmIdentityRepairPreviewResponse>(
+        "/identity-repair/preview",
+        "POST",
+        {},
       );
+      setIdentityPreview(preview);
+      setSelectedIdentityCandidates(
+        preview.candidates
+          .filter((candidate) => !candidate.blockingReasons.length)
+          .map((candidate) => candidate.id),
+      );
+       setIdentitySectionChoices({});
+       setIncludedIdentityNoteIds({});
+       setIdentityCanonicalNoteIds({});
     } catch (error) {
       setMessage(errorMessage(error, "Could not preview identity repairs."));
     } finally {
@@ -358,47 +377,129 @@ export default function MemorySettings({
     }
   };
 
-  const applyIdentities = async () => {
-    if (!identityPreview?.candidates.length) return;
-    if (
-      !(await confirm(
-        props,
-        "Apply identity repairs?",
-        "Duplicate notes will be archived and references rewritten. A backup is created before changes are applied.",
-        "Apply repairs",
-        true,
-      ))
-    )
-      return;
-    setPending("identity-apply");
+  const selectIdentityCanonical = async (
+    candidateId: string,
+    canonicalNoteId: string,
+  ) => {
+    if (!identityPreview) return;
+    const canonicalNoteIds = {
+      ...identityCanonicalNoteIds,
+      [candidateId]: canonicalNoteId,
+    };
+    setPending(`identity-canonical-${candidateId}`);
     setMessage("");
     try {
-      const repairs = identityPreview.candidates
-        .filter((candidate) => !candidate.blockingReasons.length)
-        .map((candidate) => ({
+      const preview = await request<LtmIdentityRepairPreviewResponse>(
+        "/identity-repair/preview",
+        "POST",
+        { scope: identityPreview.scope, canonicalNoteIds },
+      );
+      setIdentityPreview(preview);
+      setIdentityCanonicalNoteIds(canonicalNoteIds);
+      setIdentitySectionChoices((current) => ({
+        ...current,
+        [candidateId]: {},
+      }));
+    } catch (error) {
+      setMessage(
+        errorMessage(error, "Could not refresh the canonical memory preview."),
+      );
+    } finally {
+      setPending("");
+    }
+  };
+
+  const applyIdentities = async () => {
+    if (!identityPreview || !selectedIdentityCandidates.length) return;
+    const preview = identityPreview;
+    const selectedCandidateIds = [...selectedIdentityCandidates];
+    const sectionChoices = structuredClone(identitySectionChoices);
+    const includedNoteIds = structuredClone(includedIdentityNoteIds);
+    const selected = preview.candidates.filter((candidate) =>
+      selectedCandidateIds.includes(candidate.id),
+    );
+    const repairs = selected.flatMap((candidate) => {
+      if (candidate.blockingReasons.length) return [];
+      const included = new Set([
+        candidate.canonicalNoteId,
+        ...(includedNoteIds[candidate.id] ?? []),
+      ]);
+      const choices = sectionChoices[candidate.id] ?? {};
+      const conflicts = candidate.supersedingConflicts.filter(
+        (conflict) =>
+          conflict.options.filter((option) =>
+            option.noteIds.some((noteId) => included.has(noteId)),
+          ).length > 1,
+      );
+      if (
+        conflicts.some(
+          (conflict) =>
+            !conflict.options.some(
+              (option) =>
+                option.noteIds.includes(choices[conflict.sectionKey] ?? "") &&
+                option.noteIds.some((noteId) => included.has(noteId)),
+            ),
+        )
+      )
+        return [];
+      return [
+        {
           candidateId: candidate.id,
-          canonicalNoteId: candidate.canonicalNoteId,
-          excludedNoteIds: [],
-          sectionChoices: candidate.supersedingConflicts.map((conflict) => ({
+           canonicalNoteId: candidate.canonicalNoteId,
+          excludedNoteIds: candidate.duplicateNoteIds.filter(
+            (noteId) => !included.has(noteId),
+          ),
+          sectionChoices: conflicts.map((conflict) => ({
             sectionKey: conflict.sectionKey,
-            noteId: conflict.options[0]!.noteIds[0]!,
+            noteId: choices[conflict.sectionKey]!,
           })),
-        }));
-      if (!repairs.length) {
-        setMessage("No previewed candidates can be safely applied.");
-        return;
-      }
+        },
+      ];
+    });
+    if (repairs.length !== selected.length) return;
+    const includedDuplicateCount = repairs.reduce(
+      (count, repair) =>
+        count +
+        selected.find((candidate) => candidate.id === repair.candidateId)!
+          .duplicateNoteIds.length -
+        repair.excludedNoteIds.length,
+      0,
+    );
+    setPending("identity-confirm");
+    setMessage("");
+    let confirmed = false;
+    try {
+      confirmed = await confirm(
+        props,
+        "Apply identity repairs?",
+        `${repairs.length} selected identity repair${repairs.length === 1 ? "" : "s"} will be applied. ${includedDuplicateCount} explicitly included duplicate note${includedDuplicateCount === 1 ? "" : "s"} will be archived; excluded duplicates will be preserved. A backup is created first.`,
+        `Apply ${repairs.length} repair${repairs.length === 1 ? "" : "s"}`,
+        true,
+      );
+    } catch (error) {
+      setMessage(errorMessage(error, "Could not confirm identity repairs."));
+    }
+    if (!confirmed) {
+      setPending("");
+      return;
+    }
+    setPending("identity-apply");
+    try {
       const result = await request<{
         repairs: unknown[];
         backup: { id: string };
       }>("/identity-repair/apply", "POST", {
-        scope: identityPreview.scope,
+        scope: preview.scope,
         repairs,
       });
       setMessage(
         `Applied ${result.repairs.length} identity repair(s). A backup was created.`,
       );
       setIdentityPreview(null);
+      setSelectedIdentityCandidates([]);
+      setIdentitySectionChoices({});
+       setIncludedIdentityNoteIds({});
+       setIdentityCanonicalNoteIds({});
       await invalidateLtmQueries(queryClient, [
         queryKeys.integrity,
         queryKeys.status,
@@ -422,7 +523,8 @@ export default function MemorySettings({
       const response = await fetch("/api/long-term-memory/backup/export", {
         cache: "no-store",
       });
-      if (!response.ok) throw new Error(response.statusText || "Could not export memory data.");
+      if (!response.ok)
+        throw new Error(response.statusText || "Could not export memory data.");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -448,7 +550,9 @@ export default function MemorySettings({
         current: { notes: number; drafts: number };
       }>("/backup/preview", "POST", backup);
       setBackupPreview({ ...preview, backup });
-      setMessage("Backup validated. Review the replacement counts before importing.");
+      setMessage(
+        "Backup validated. Review the replacement counts before importing.",
+      );
     } catch (error) {
       setBackupPreview(null);
       setMessage(errorMessage(error, "Could not validate this backup."));
@@ -460,13 +564,16 @@ export default function MemorySettings({
 
   const importBackup = async () => {
     if (!backupPreview) return;
-    if (!(await confirm(
-      props,
-      "Replace Long-Term Memory data?",
-      `This replaces ${backupPreview.current.notes} current memories and ${backupPreview.current.drafts} drafts with ${backupPreview.incoming.notes} memories and ${backupPreview.incoming.drafts} drafts.`,
-      "Replace data",
-      true,
-    ))) return;
+    if (
+      !(await confirm(
+        props,
+        "Replace Long-Term Memory data?",
+        `This replaces ${backupPreview.current.notes} current memories and ${backupPreview.current.drafts} drafts with ${backupPreview.incoming.notes} memories and ${backupPreview.incoming.drafts} drafts.`,
+        "Replace data",
+        true,
+      ))
+    )
+      return;
     setPending("backup-import");
     setMessage("");
     try {
@@ -485,7 +592,11 @@ export default function MemorySettings({
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
       setMessage("Memory backup imported.");
-      await Promise.all([global.refetch(), extraction.refetch(), integrity.refetch()]);
+      await Promise.all([
+        global.refetch(),
+        extraction.refetch(),
+        integrity.refetch(),
+      ]);
     } catch (error) {
       setMessage(errorMessage(error, "Could not import memory data."));
     } finally {
@@ -494,7 +605,16 @@ export default function MemorySettings({
   };
 
   const resetSettings = async () => {
-    if (!(await confirm(props, "Reset memory settings?", "All Long-Term Memory settings will return to their built-in defaults. Memories will be kept.", "Reset settings", true))) return;
+    if (
+      !(await confirm(
+        props,
+        "Reset memory settings?",
+        "All Long-Term Memory settings will return to their built-in defaults. Memories will be kept.",
+        "Reset settings",
+        true,
+      ))
+    )
+      return;
     setPending("settings-reset");
     setMessage("");
     try {
@@ -503,7 +623,11 @@ export default function MemorySettings({
       setSavedGlobal(null);
       setExtractionFormState(null);
       setSavedExtraction(null);
-      await invalidateLtmQueries(queryClient, [queryKeys.settings, queryKeys.extractionSettings, queryKeys.chatDefaults]);
+      await invalidateLtmQueries(queryClient, [
+        queryKeys.settings,
+        queryKeys.extractionSettings,
+        queryKeys.chatDefaults,
+      ]);
       await Promise.all([global.refetch(), extraction.refetch()]);
       setMessage("Memory settings reset to defaults.");
     } catch (error) {
@@ -514,13 +638,31 @@ export default function MemorySettings({
   };
 
   const deleteAll = async () => {
-    if (!(await confirm(props, "Delete all memory data?", "This permanently deletes every saved memory, pending draft, activity record, and derived index. Settings will be kept.", "Delete everything", true))) return;
+    if (
+      !(await confirm(
+        props,
+        "Delete all memory data?",
+        "This permanently deletes every saved memory, pending draft, activity record, and derived index. Settings will be kept.",
+        "Delete everything",
+        true,
+      ))
+    )
+      return;
     setPending("data-delete");
     setMessage("");
     try {
       await request("/data", "DELETE");
       setBackupPreview(null);
-      await invalidateLtmQueries(queryClient, [queryKeys.root, queryKeys.notes, queryKeys.review, queryKeys.pendingDrafts, queryKeys.integrity, queryKeys.status, queryKeys.activity, ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : [])]);
+      await invalidateLtmQueries(queryClient, [
+        queryKeys.root,
+        queryKeys.notes,
+        queryKeys.review,
+        queryKeys.pendingDrafts,
+        queryKeys.integrity,
+        queryKeys.status,
+        queryKeys.activity,
+        ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
+      ]);
       await integrity.refetch();
       setMessage("All memory data deleted. Settings were kept.");
     } catch (error) {
@@ -554,6 +696,31 @@ export default function MemorySettings({
   )
     return <StatusSurface busy>Loading memory settings.</StatusSurface>;
 
+  const selectedIdentityCount = selectedIdentityCandidates.length;
+  const identitySelectionUnresolved = Boolean(
+    identityPreview?.candidates.some((candidate) => {
+      if (!selectedIdentityCandidates.includes(candidate.id)) return false;
+      const included = new Set([
+        candidate.canonicalNoteId,
+        ...(includedIdentityNoteIds[candidate.id] ?? []),
+      ]);
+      return (
+        candidate.blockingReasons.length > 0 ||
+        candidate.supersedingConflicts.some((conflict) => {
+          const includedOptions = conflict.options.filter((option) =>
+            option.noteIds.some((noteId) => included.has(noteId)),
+          );
+          if (includedOptions.length < 2) return false;
+          const choice =
+            identitySectionChoices[candidate.id]?.[conflict.sectionKey];
+          return !includedOptions.some((option) =>
+            option.noteIds.includes(choice ?? ""),
+          );
+        })
+      );
+    }),
+  );
+
   return (
     <section data-ltm-surface="memory-settings" className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -573,14 +740,24 @@ export default function MemorySettings({
           </Button>
         ) : null}
       </div>
-      <nav aria-label="Memory settings sections" className="sticky top-0 z-10 flex gap-2 overflow-x-auto bg-[var(--background)] py-2">
+      <nav
+        aria-label="Memory settings sections"
+        className="sticky top-0 z-10 flex gap-2 overflow-x-auto bg-[var(--background)] py-2"
+      >
         {[
           ["settings-recall", "Recall"],
           ["settings-backup", "Backup"],
           ["settings-extraction", "Extraction"],
           ["settings-maintenance", "Maintenance"],
         ].map(([id, label]) => (
-          <Button key={id} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })}>
+          <Button
+            key={id}
+            onClick={() =>
+              document
+                .getElementById(id)
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
             {label}
           </Button>
         ))}
@@ -593,7 +770,10 @@ export default function MemorySettings({
         </StatusSurface>
       ) : null}
 
-      <section id="settings-recall" className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3">
+      <section
+        id="settings-recall"
+        className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3"
+      >
         <div>
           <h3 className="text-sm font-semibold">Global Recall</h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -764,7 +944,10 @@ export default function MemorySettings({
         </Button>
       </section>
 
-      <section id="settings-backup" className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3">
+      <section
+        id="settings-backup"
+        className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3"
+      >
         <div>
           <h3 className="text-sm font-semibold">Backup and Reset</h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -775,7 +958,10 @@ export default function MemorySettings({
           <Button disabled={pending !== ""} onClick={() => void exportBackup()}>
             <Download aria-hidden="true" size="0.875rem" /> Export backup
           </Button>
-          <Button disabled={pending !== ""} onClick={() => backupInput.current?.click()}>
+          <Button
+            disabled={pending !== ""}
+            onClick={() => backupInput.current?.click()}
+          >
             <Upload aria-hidden="true" size="0.875rem" /> Choose backup
           </Button>
           <input
@@ -788,10 +974,17 @@ export default function MemorySettings({
               if (file) void previewBackup(file);
             }}
           />
-          <Button disabled={pending !== ""} onClick={() => void resetSettings()}>
+          <Button
+            disabled={pending !== ""}
+            onClick={() => void resetSettings()}
+          >
             <RotateCcw aria-hidden="true" size="0.875rem" /> Reset settings
           </Button>
-          <Button destructive disabled={pending !== ""} onClick={() => void deleteAll()}>
+          <Button
+            destructive
+            disabled={pending !== ""}
+            onClick={() => void deleteAll()}
+          >
             <Trash2 aria-hidden="true" size="0.875rem" /> Delete all data
           </Button>
         </div>
@@ -799,16 +992,26 @@ export default function MemorySettings({
           <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3 text-xs">
             <p className="font-semibold">Validated backup ready to import</p>
             <p className="text-[var(--muted-foreground)]">
-              Current: {backupPreview.current.notes} memories, {backupPreview.current.drafts} drafts. Incoming: {backupPreview.incoming.notes} memories, {backupPreview.incoming.drafts} drafts.
+              Current: {backupPreview.current.notes} memories,{" "}
+              {backupPreview.current.drafts} drafts. Incoming:{" "}
+              {backupPreview.incoming.notes} memories,{" "}
+              {backupPreview.incoming.drafts} drafts.
             </p>
-            <Button primary disabled={pending !== ""} onClick={() => void importBackup()}>
+            <Button
+              primary
+              disabled={pending !== ""}
+              onClick={() => void importBackup()}
+            >
               Replace with this backup
             </Button>
           </div>
         ) : null}
       </section>
 
-      <section id="settings-extraction" className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3">
+      <section
+        id="settings-extraction"
+        className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3"
+      >
         <div>
           <h3 className="text-sm font-semibold">Extraction</h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -967,7 +1170,10 @@ export default function MemorySettings({
         </Button>
       </section>
 
-      <section id="settings-maintenance" className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3">
+      <section
+        id="settings-maintenance"
+        className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3"
+      >
         <div>
           <h3 className="text-sm font-semibold">Vault Maintenance</h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -1041,10 +1247,14 @@ export default function MemorySettings({
             </Button>
             <Button
               destructive
-              disabled={pending !== "" || !identityPreview?.candidates.length}
+              disabled={
+                pending !== "" ||
+                selectedIdentityCount === 0 ||
+                identitySelectionUnresolved
+              }
               onClick={() => void applyIdentities()}
             >
-              Apply safe repairs
+              Apply selected repairs ({selectedIdentityCount})
             </Button>
           </div>
           {identityPreview ? (
@@ -1057,19 +1267,203 @@ export default function MemorySettings({
               {identityPreview.candidates.map((candidate) => (
                 <div
                   key={candidate.id}
-                  className="rounded border border-[var(--border)] p-2"
+                  className="space-y-2 rounded border border-[var(--border)] p-3"
                 >
-                  <p className="font-semibold">
-                    {candidate.subjectNames.join(" and ")}
-                  </p>
-                  <p className="text-[var(--muted-foreground)]">
-                    Keep the canonical memory; archive{" "}
-                    {candidate.duplicateNoteIds.length} duplicate
-                    {candidate.duplicateNoteIds.length === 1 ? "" : "s"}.{" "}
-                    {candidate.blockingReasons.length
-                      ? candidate.blockingReasons.join(" ")
-                      : "Ready to apply using preview defaults."}
-                  </p>
+                  <label className="flex min-h-11 items-start gap-2">
+                    <input
+                      className="mt-0.5"
+                      type="checkbox"
+                      checked={selectedIdentityCandidates.includes(
+                        candidate.id,
+                      )}
+                      disabled={
+                        pending !== "" || candidate.blockingReasons.length > 0
+                      }
+                      onChange={(event) =>
+                        setSelectedIdentityCandidates((current) =>
+                          event.target.checked
+                            ? [...current, candidate.id]
+                            : current.filter((id) => id !== candidate.id),
+                        )
+                      }
+                    />
+                    <span>
+                      <span className="block font-semibold">
+                        {candidate.subjectNames.join(" and ")}
+                      </span>
+                      <span className="block text-[var(--muted-foreground)]">
+                        {candidate.noteType === "relationship"
+                          ? "Relationship"
+                          : "Character"}{" "}
+                        match via{" "}
+                        {candidate.matchBasis.join(", ").replaceAll("_", " ")}.
+                      </span>
+                    </span>
+                  </label>
+                  {candidate.blockingReasons.length ? (
+                    <StatusSurface tone="danger">
+                      {candidate.blockingReasons.join(" ")}
+                    </StatusSurface>
+                  ) : null}
+                  <div className="space-y-1 text-[var(--muted-foreground)]">
+                    {candidate.notes.map((note) => {
+                      const canonical =
+                        note.noteId === candidate.canonicalNoteId;
+                      return (
+                        <div
+                          key={note.noteId}
+                          className="flex min-h-11 items-start gap-3 rounded border border-[var(--border)] p-2"
+                        >
+                          <label className="flex items-start gap-2">
+                            <input
+                              className="mt-0.5"
+                              type="radio"
+                              name={`canonical-${candidate.id}`}
+                              checked={canonical}
+                              disabled={
+                                pending !== "" ||
+                                !selectedIdentityCandidates.includes(candidate.id)
+                              }
+                              onChange={() =>
+                                void selectIdentityCanonical(
+                                  candidate.id,
+                                  note.noteId,
+                                )
+                              }
+                            />
+                            <span className="font-medium text-[var(--foreground)]">
+                              Keep as canonical
+                            </span>
+                          </label>
+                          <label className="flex min-w-0 flex-1 items-start gap-2">
+                            <input
+                              className="mt-0.5"
+                              type="checkbox"
+                              checked={
+                                canonical ||
+                                (
+                                  includedIdentityNoteIds[candidate.id] ?? []
+                                ).includes(note.noteId)
+                              }
+                              disabled={
+                                pending !== "" ||
+                                canonical ||
+                                !selectedIdentityCandidates.includes(candidate.id)
+                              }
+                              onChange={(event) =>
+                                setIncludedIdentityNoteIds((current) => ({
+                                  ...current,
+                                  [candidate.id]: event.target.checked
+                                    ? [
+                                        ...(current[candidate.id] ?? []),
+                                        note.noteId,
+                                      ]
+                                    : (current[candidate.id] ?? []).filter(
+                                        (id) => id !== note.noteId,
+                                      ),
+                                }))
+                              }
+                            />
+                            <span>
+                            <span className="block font-medium text-[var(--foreground)]">
+                              {canonical
+                                ? "Canonical memory"
+                                : "Include duplicate in merge and archive"}
+                              : {note.title}
+                            </span>
+                            <span className="block">
+                              {note.basis.replaceAll("_", " ")}
+                              {note.alreadyBound ? ", already bound" : ""}
+                              {note.exactFullName ? ", exact full name" : ""};
+                              created{" "}
+                              {new Date(note.createdAt).toLocaleDateString()}
+                            </span>
+                            </span>
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {candidate.additiveContent.length ? (
+                    <div className="space-y-1">
+                      <p className="font-medium">Content to add</p>
+                      {candidate.additiveContent.map((content) => (
+                        <p
+                          key={content.sectionKey}
+                          className="text-[var(--muted-foreground)]"
+                        >
+                          {content.sectionKey}: {content.addedLines.join(" | ")}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {candidate.supersedingConflicts.map((conflict) => (
+                    <fieldset
+                      key={conflict.sectionKey}
+                      className="space-y-1 border-t border-[var(--border)] pt-2"
+                      disabled={
+                        pending !== "" ||
+                        !selectedIdentityCandidates.includes(candidate.id)
+                      }
+                    >
+                      <legend className="font-medium">
+                        Choose {conflict.sectionKey} content
+                      </legend>
+                      {conflict.options.map((option) => {
+                        const included = new Set([
+                          candidate.canonicalNoteId,
+                          ...(includedIdentityNoteIds[candidate.id] ?? []),
+                        ]);
+                        const noteId = option.noteIds.find((id) =>
+                          included.has(id),
+                        );
+                        const titles = option.noteIds.map(
+                          (id) =>
+                            candidate.notes.find((note) => note.noteId === id)
+                              ?.title ?? id,
+                        );
+                        return (
+                          <label
+                            key={`${conflict.sectionKey}-${noteId}`}
+                            className="flex min-h-11 items-start gap-2 rounded border border-[var(--border)] p-2"
+                          >
+                            <input
+                              className="mt-0.5"
+                              type="radio"
+                              name={`${candidate.id}-${conflict.sectionKey}`}
+                              disabled={!noteId}
+                              checked={
+                                noteId !== undefined &&
+                                option.noteIds.includes(
+                                  identitySectionChoices[candidate.id]?.[
+                                    conflict.sectionKey
+                                  ] ?? "",
+                                )
+                              }
+                              onChange={() => {
+                                if (!noteId) return;
+                                setIdentitySectionChoices((current) => ({
+                                  ...current,
+                                  [candidate.id]: {
+                                    ...current[candidate.id],
+                                    [conflict.sectionKey]: noteId,
+                                  },
+                                }));
+                              }}
+                            />
+                            <span>
+                              <span className="block font-medium">
+                                {titles.join(", ")}
+                              </span>
+                              <span className="block whitespace-pre-wrap text-[var(--muted-foreground)]">
+                                {option.text}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </fieldset>
+                  ))}
                 </div>
               ))}
             </div>

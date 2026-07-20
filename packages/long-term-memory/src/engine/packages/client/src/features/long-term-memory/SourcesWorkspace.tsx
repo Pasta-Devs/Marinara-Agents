@@ -22,6 +22,13 @@ import type { LongTermMemoryDestinationProps } from "./types";
 
 type Source = "characters" | "lorebooks" | "chats";
 type PreviewRow = LtmInteropPreviewResponse["samples"][number];
+type ImportContract = {
+  source: Source;
+  sourceIds: string[];
+  scope?: LtmScope;
+  mode?: LtmMode;
+  selectionKey: string;
+};
 
 const sourceTabs: Array<{ id: Source; label: string }> = [
   { id: "chats", label: "Chat Summaries" },
@@ -42,6 +49,11 @@ function resultTone(status: string) {
       : "neutral";
 }
 
+function sourceStatusLabel(row: PreviewRow) {
+  if (row.status === "imported") return "Current";
+  return row.freshness === "stale" ? "Source changed" : "New";
+}
+
 export default function SourcesWorkspace({
   props,
   onOpenMemory,
@@ -49,14 +61,22 @@ export default function SourcesWorkspace({
 }: LongTermMemoryDestinationProps) {
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const importControllerRef = useRef<AbortController | null>(null);
   const [source, setSource] = useState<Source>("chats");
-  const [importScope, setImportScope] = useState<"current" | "all">("current");
+  const [importScope, setImportScope] = useState<"current" | "all">(
+    props.chatId ? "current" : "all",
+  );
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] =
     useState<LtmImportSourceNotesResponse | null>(null);
+  const [importResultContract, setImportResultContract] =
+    useState<ImportContract | null>(null);
+  const [cancelledImport, setCancelledImport] = useState<ImportContract | null>(
+    null,
+  );
   const [extractingId, setExtractingId] = useState<string | null>(null);
   const [reviewMessage, setReviewMessage] = useState("");
   const [transferNoteIds, setTransferNoteIds] = useState<Set<string>>(
@@ -79,12 +99,14 @@ export default function SourcesWorkspace({
         `/scope-targets${props.chatId ? `?chatId=${encodeURIComponent(props.chatId)}` : ""}`,
       ),
   });
+  const effectiveImportScope =
+    importScope === "current" && props.chatId ? "current" : "all";
   const sourceScope =
-    importScope === "current"
-      ? (scopeTargets.data?.currentScope ??
-        (props.chatId
-          ? { chatId: props.chatId, chatIds: [props.chatId] }
-          : undefined))
+    effectiveImportScope === "current"
+      ? (scopeTargets.data?.currentScope ?? {
+          chatId: props.chatId,
+          chatIds: [props.chatId],
+        })
       : undefined;
   const preview = useQuery({
     queryKey: [...queryKeys.preview, source, sourceScope, modeFilter],
@@ -101,13 +123,41 @@ export default function SourcesWorkspace({
   });
   const rows = preview.data?.samples ?? [];
   const pendingRows = rows.filter((row) => row.status === "pending");
-  const selectionKey = `${source}:${importScope}:${modeFilter}`;
+  const selectionKey = `${source}:${effectiveImportScope}:${modeFilter}`;
   const selectedIds = new Set(selections[selectionKey] ?? []);
-  const selectedPendingIds = pendingRows
+  const retryableIds = importResult
+    ? [
+        ...importResult.imported
+          .filter((item) => item.retryable)
+          .map((item) => item.sourceId),
+        ...importResult.writeFailures
+          .filter((item) => item.retryable)
+          .map((item) => item.sourceId),
+      ]
+    : [];
+  const retryableIdSet = new Set(retryableIds);
+  const selectableRows = rows.filter(
+    (row) => row.status === "pending" || retryableIdSet.has(row.sourceId),
+  );
+  const selectedSelectableIds = selectableRows
     .filter((row) => selectedIds.has(row.sourceId))
     .map((row) => row.sourceId);
-  const allPendingSelected =
-    pendingRows.length > 0 && selectedPendingIds.length === pendingRows.length;
+  const allSelectableSelected =
+    selectableRows.length > 0 &&
+    selectedSelectableIds.length === selectableRows.length;
+  const pendingDraftsProduced = Boolean(
+    importResult?.imported.some(
+      (item) =>
+        item.extractionStatus === "succeeded" &&
+        item.draft?.status === "pending",
+    ),
+  );
+
+  useEffect(() => {
+    if (!props.chatId && importScope === "current") setImportScope("all");
+  }, [importScope, props.chatId]);
+
+  useEffect(() => () => importControllerRef.current?.abort(), []);
 
   useEffect(() => {
     if (!preview.data) return;
@@ -124,9 +174,9 @@ export default function SourcesWorkspace({
   useEffect(() => {
     if (selectAllRef.current) {
       selectAllRef.current.indeterminate =
-        selectedPendingIds.length > 0 && !allPendingSelected;
+        selectedSelectableIds.length > 0 && !allSelectableSelected;
     }
-  }, [allPendingSelected, selectedPendingIds.length]);
+  }, [allSelectableSelected, selectedSelectableIds.length]);
 
   const invalidateAfterMutation = async () => {
     await invalidateLtmQueries(client, [
@@ -143,6 +193,8 @@ export default function SourcesWorkspace({
   const changeSource = (next: Source) => {
     setSource(next);
     setImportResult(null);
+    setImportResultContract(null);
+    setCancelledImport(null);
     setImportError("");
     setReviewMessage("");
   };
@@ -159,12 +211,37 @@ export default function SourcesWorkspace({
   const runImport = async (
     sourceIds: string[],
     action: "import" | "refresh" = "import",
+    retryContract?: ImportContract,
   ) => {
     const ids = Array.from(new Set(sourceIds)).slice(0, 100);
     if (ids.length === 0 || importing) return;
+    const contract: ImportContract = retryContract
+      ? { ...retryContract, sourceIds: ids }
+      : {
+          source,
+          sourceIds: ids,
+          ...(sourceScope
+            ? {
+                scope: {
+                  ...sourceScope,
+                  ...(sourceScope.chatIds
+                    ? { chatIds: [...sourceScope.chatIds] }
+                    : {}),
+                  ...(sourceScope.characterIds
+                    ? { characterIds: [...sourceScope.characterIds] }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+          selectionKey,
+        };
     setImporting(true);
     setImportError("");
     setReviewMessage("");
+    setCancelledImport(null);
+    const controller = new AbortController();
+    importControllerRef.current = controller;
     try {
       const result = await request<
         LtmImportSourceNotesResponse,
@@ -175,14 +252,30 @@ export default function SourcesWorkspace({
           scope?: LtmScope;
           mode?: LtmMode;
         }
-      >("/import/source-notes", "POST", {
-        source,
-        sourceIds: ids,
-        limit: 100,
-        ...(sourceScope ? { scope: sourceScope } : {}),
-        ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
-      });
+      >(
+        "/import/source-notes",
+        "POST",
+        {
+          source: contract.source,
+          sourceIds: contract.sourceIds,
+          limit: 100,
+          ...(contract.scope ? { scope: contract.scope } : {}),
+          ...(contract.mode ? { mode: contract.mode } : {}),
+        },
+        controller.signal,
+      );
       setImportResult(result);
+      setImportResultContract(contract);
+      const failedIds = [
+        ...result.imported
+          .filter((item) => item.retryable)
+          .map((item) => item.sourceId),
+        ...result.writeFailures.map((item) => item.sourceId),
+      ];
+      setSelections((current) => ({
+        ...current,
+        [contract.selectionKey]: failedIds,
+      }));
       setImporting(false);
       void invalidateAfterMutation().catch(() => undefined);
       void preview.refetch().catch(() => undefined);
@@ -191,12 +284,18 @@ export default function SourcesWorkspace({
           "Source memory refreshed. Re-extract it if you need a new draft.",
         );
     } catch (error) {
+      const cancelled = controller.signal.aborted;
+      if (cancelled) setCancelledImport(contract);
       setImportError(
-        error instanceof Error
-          ? error.message
-          : "Sources could not be imported.",
+        cancelled
+          ? "Import transport was cancelled before results were received. Some sources may have completed; the original selection is retained, and retry will use its original source, scope, and mode."
+          : error instanceof Error
+            ? error.message
+            : "Sources could not be imported.",
       );
     } finally {
+      if (importControllerRef.current === controller)
+        importControllerRef.current = null;
       setImporting(false);
     }
   };
@@ -367,18 +466,20 @@ export default function SourcesWorkspace({
           Import scope
           <select
             className={`${inputClass} min-w-44`}
-            value={importScope}
+            value={effectiveImportScope}
             onChange={(event) =>
               setImportScope(event.target.value as "current" | "all")
             }
             data-ltm-import-scope
           >
-            <option value="current">Current chat</option>
+            <option value="current" disabled={!props.chatId}>
+              Current chat
+            </option>
             <option value="all">All Available</option>
           </select>
         </label>
         <span className="text-xs text-[var(--muted-foreground)]">
-          {importScope === "all"
+          {effectiveImportScope === "all"
             ? "Search every available character, lorebook, chat, and branch."
             : "Limit imports to this chat and its related scope."}
         </span>
@@ -433,7 +534,25 @@ export default function SourcesWorkspace({
         </StatusSurface>
       ) : null}
       {importError ? (
-        <StatusSurface tone="danger">{importError}</StatusSurface>
+        <StatusSurface tone="danger">
+          {importError}
+          {cancelledImport ? (
+            <Button
+              onClick={() =>
+                void runImport(
+                  cancelledImport.sourceIds,
+                  "import",
+                  cancelledImport,
+                )
+              }
+              disabled={importing}
+              data-ltm-source-action="retry-cancelled"
+            >
+              <RefreshCw size="0.75rem" />
+              Retry original selection ({cancelledImport.sourceIds.length})
+            </Button>
+          ) : null}
+        </StatusSurface>
       ) : null}
       {reviewMessage ? (
         <StatusSurface tone="success">{reviewMessage}</StatusSurface>
@@ -448,25 +567,27 @@ export default function SourcesWorkspace({
             ref={selectAllRef}
             type="checkbox"
             aria-label="Select all visible pending sources"
-            checked={allPendingSelected}
-            disabled={pendingRows.length === 0}
-            onChange={(event) => setSelections((current) => ({
-              ...current,
-              [selectionKey]: event.target.checked
-                ? pendingRows.map((row) => row.sourceId)
-                : [],
-            }))}
+            checked={allSelectableSelected}
+            disabled={selectableRows.length === 0}
+            onChange={(event) =>
+              setSelections((current) => ({
+                ...current,
+                [selectionKey]: event.target.checked
+                  ? selectableRows.map((row) => row.sourceId)
+                  : [],
+              }))
+            }
             data-ltm-source-select-all
           />
           <span>
-            {selectedPendingIds.length} of {pendingRows.length} pending selected
+            {selectedSelectableIds.length} of {selectableRows.length} selected
           </span>
           <Button
             primary
-            disabled={importing || selectedPendingIds.length === 0}
-            onClick={() => void runImport(selectedPendingIds)}
+            disabled={importing || selectedSelectableIds.length === 0}
+            onClick={() => void runImport(selectedSelectableIds)}
             data-ltm-source-action="import-selected"
-            data-ltm-source-selected-count={selectedPendingIds.length}
+            data-ltm-source-selected-count={selectedSelectableIds.length}
           >
             {importing ? (
               <Loader2 size="0.75rem" className="animate-spin" />
@@ -475,10 +596,20 @@ export default function SourcesWorkspace({
             )}
             Import selected
           </Button>
+          {importing ? (
+            <Button
+              destructive
+              onClick={() => importControllerRef.current?.abort()}
+              data-ltm-source-action="cancel-import"
+            >
+              Cancel
+            </Button>
+          ) : null}
         </div>
         <div role="list" className="divide-y divide-[var(--border)]">
           {rows.map((row) => {
-            const pending = row.status === "pending";
+            const selectable =
+              row.status === "pending" || retryableIdSet.has(row.sourceId);
             return (
               <article
                 key={row.sourceId}
@@ -491,8 +622,8 @@ export default function SourcesWorkspace({
                   <input
                     type="checkbox"
                     aria-label={`Select ${row.title}`}
-                    checked={pending && selectedIds.has(row.sourceId)}
-                    disabled={!pending}
+                    checked={selectable && selectedIds.has(row.sourceId)}
+                    disabled={!selectable}
                     onChange={(event) =>
                       toggleSelected(row.sourceId, event.target.checked)
                     }
@@ -505,7 +636,7 @@ export default function SourcesWorkspace({
                         data-ltm-source-status={row.status}
                         className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
                       >
-                        {row.status} {row.freshness}
+                        {sourceStatusLabel(row)}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -564,6 +695,33 @@ export default function SourcesWorkspace({
           <h2 className="text-sm font-semibold">
             Import result: {importResult.batchStatus}
           </h2>
+          <div className="flex flex-wrap gap-2">
+            {retryableIds.length ? (
+              <Button
+                primary
+                disabled={importing}
+                onClick={() =>
+                  void runImport(
+                    retryableIds,
+                    "import",
+                    importResultContract ?? undefined,
+                  )
+                }
+                data-ltm-source-action="retry-failed"
+              >
+                <RefreshCw size="0.75rem" />
+                Retry failed ({retryableIds.length})
+              </Button>
+            ) : null}
+            {pendingDraftsProduced ? (
+              <Button
+                onClick={() => onOpenReview?.()}
+                data-ltm-source-action="review-imported-drafts"
+              >
+                Review imported drafts
+              </Button>
+            ) : null}
+          </div>
           <p className="text-xs text-[var(--muted-foreground)]">
             Requested {importResult.counts.requested}; wrote{" "}
             {importResult.counts.sourceNotesWritten}; succeeded{" "}

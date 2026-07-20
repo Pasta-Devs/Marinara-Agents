@@ -23,6 +23,8 @@ export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   lexicalWeight?: number;
   graphWeight?: number;
   keywordWeight?: number;
+  explain?: boolean;
+  rejectedLimit?: number;
 };
 
 function cosine(a: number[], b: number[]) {
@@ -98,6 +100,8 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     maxChunks: input.maxChunks ?? 20,
     maxTokens: input.maxTokens ?? 4096,
     normalizedScoreThreshold: input.minScore,
+    explain: input.explain,
+    rejectedLimit: input.rejectedLimit,
     dedupeExactText: true,
   });
   return { ...budgeted, embeddingsAvailable, warnings: [] as string[] };

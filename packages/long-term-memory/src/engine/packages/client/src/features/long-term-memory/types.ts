@@ -1,4 +1,9 @@
 import type { Root } from "react-dom/client";
+import type {
+  LtmExtractionDroppedCandidate,
+  LtmMode,
+  LtmScope,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 export type CapabilityProps = {
   package?: {
@@ -39,12 +44,25 @@ export type CapabilityElement = HTMLElement & {
 export type LongTermMemoryDestination =
   "vault" | "review" | "sources" | "activity" | "settings";
 
+export type LtmRecoveryHandoff = {
+  key: number;
+  candidate: LtmExtractionDroppedCandidate;
+  scope: LtmScope;
+  modes: LtmMode[];
+};
+
 export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenMemory?: (noteId: string) => void;
   onOpenSources?: () => void;
   onOpenReview?: (sourceNoteId?: string) => void;
+  onRecoverCandidate?: (
+    candidate: LtmExtractionDroppedCandidate,
+    scope: LtmScope,
+    modes: LtmMode[],
+  ) => void;
   openedNoteId?: string | null;
   reviewSourceNoteId?: string | null;
+  recoveryHandoff?: LtmRecoveryHandoff | null;
 };

@@ -74,6 +74,8 @@ export async function prepareGenerationLongTermMemory(input: {
     lexicalWeight: recall.weights.lexicalWeight,
     graphWeight: recall.weights.graphWeight,
     keywordWeight: recall.weights.keywordWeight,
+    explain: recall.debugEnabled,
+    rejectedLimit: 20,
     signal: input.signal,
   });
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {
@@ -84,14 +86,38 @@ export async function prepareGenerationLongTermMemory(input: {
   if (recall.debugEnabled) {
     await recordLtmDebugEvent({
       root: input.root,
-      phase: "injection",
-      action: "generation_recall_prepared",
+      phase: "retrieval",
+      action: "recall_explanation",
       status: "ok",
+      uiSummary: `${retrieval.chunks.length} memories selected; ${retrieval.rejected.length} candidates rejected.`,
+      counts: {
+        selected: retrieval.chunks.length,
+        rejected: retrieval.rejected.length,
+        usedTokens: retrieval.usedTokens,
+      },
       details: {
         chatId: input.chatId,
-        chunkCount: artifact.chunks.length,
-        estimatedTokens: artifact.estimatedTokens,
         embeddingsAvailable: retrieval.embeddingsAvailable,
+        maxChunks: recall.maxChunks,
+        maxTokens: recall.budgetTokens,
+        scoreThreshold: recall.scoreThreshold,
+        weights: recall.weights,
+        selected: retrieval.chunks.map((candidate) => ({
+          noteId: candidate.chunk.noteId,
+          sectionKey: candidate.chunk.sectionKey,
+          score: candidate.finalNormalizedScore ?? candidate.normalizedScore ?? candidate.score,
+          lanes: candidate.lanes,
+          reasons: candidate.reasons,
+          estimatedTokens: candidate.estimatedTokens,
+        })),
+        rejected: retrieval.rejected.map((candidate) => ({
+          noteId: candidate.noteId,
+          sectionKey: candidate.sectionKey,
+          score: candidate.finalNormalizedScore ?? candidate.normalizedScore ?? candidate.score,
+          lanes: candidate.lanes,
+          reasons: candidate.reasons,
+          rejectionReason: candidate.rejectionReason,
+        })),
       },
     });
   }

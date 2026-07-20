@@ -148,9 +148,7 @@ export class LongTermMemoryDraftStore {
         });
         await writeJsonAtomic(draftPathForId(draft.id, this.root), draft);
         try {
-          if (draft.mutations.length > 0) {
-            await this.supersedeOlderPendingDrafts(draft);
-          }
+          await this.supersedeOlderPendingDrafts(draft);
         } catch (error) {
           await unlink(draftPathForId(draft.id, this.root)).catch(() => {});
           throw error;

@@ -39,6 +39,7 @@ import {
   ltmSectionKeySchema,
   ltmSectionSchema,
   ltmStatusSchema,
+  ltmSourceDerivedMemoriesResponseSchema,
   ltmSubjectsSchema,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
@@ -89,7 +90,10 @@ import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
 import { importPackageInterop, previewPackageInterop } from "./interop.js";
-import { getLtmScopeChatIds } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
+import {
+  getLtmScopeChatIds,
+  isGlobalLtmScope,
+} from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
   applyLtmIdentityRepairs,
   LtmIdentityRepairError,
@@ -203,6 +207,9 @@ const removeScopeBody = z
       ),
     "At least one scope link is required.",
   );
+const removeCurrentChatBody = z
+  .object({ chatId: z.string().min(1).max(120) })
+  .strict();
 const applyDerivedBody = z
   .object({
     chatIds: z.array(z.string().min(1).max(120)).max(100).optional(),
@@ -227,6 +234,8 @@ const searchBody = z
     lexicalWeight: z.number().finite().min(0).max(1).optional(),
     graphWeight: z.number().finite().min(0).max(1).optional(),
     keywordWeight: z.number().finite().min(0).max(1).optional(),
+    explain: z.boolean().optional(),
+    rejectedLimit: z.number().int().min(0).max(80).optional(),
   })
   .strict();
 const draftQuery = z
@@ -342,9 +351,12 @@ export function createLongTermMemoryRoutes(runtime: {
         },
       });
     });
-    app.get<{ Querystring: unknown }>("/debug-log", async (request) => ({
-      events: await readLtmDebugLog(debugQuery.parse(request.query), root),
-    }));
+    app.get<{ Querystring: unknown }>("/debug-log", async (request, reply) => {
+      const parsed = debugQuery.safeParse(request.query);
+      if (!parsed.success)
+        return reply.status(400).send({ error: parsed.error.message });
+      return { events: await readLtmDebugLog(parsed.data, root) };
+    });
     app.get("/debug-log/export", async (_request, reply) =>
       reply
         .header("content-type", "application/x-ndjson; charset=utf-8")
@@ -424,7 +436,10 @@ export function createLongTermMemoryRoutes(runtime: {
           );
         } catch (error) {
           return reply.status(400).send({
-            error: error instanceof Error ? error.message : "Could not import backup.",
+            error:
+              error instanceof Error
+                ? error.message
+                : "Could not import backup.",
           });
         }
       },
@@ -469,7 +484,9 @@ export function createLongTermMemoryRoutes(runtime: {
               ...(query.scopeCharacterIds?.length
                 ? { characterIds: query.scopeCharacterIds }
                 : {}),
-              ...(query.scopePersonaId ? { personaId: query.scopePersonaId } : {}),
+              ...(query.scopePersonaId
+                ? { personaId: query.scopePersonaId }
+                : {}),
             }
           : undefined;
       return storage.listNotes({
@@ -530,6 +547,54 @@ export function createLongTermMemoryRoutes(runtime: {
       };
     });
     app.get<{ Params: { id: string } }>(
+      "/notes/:id/derived",
+      async (request, reply) => {
+        const sourceNoteId = ltmNoteIdSchema.parse(request.params.id);
+        const notes = await storage.listNotes();
+        const source = notes.find((note) => note.id === sourceNoteId);
+        if (!source || !isLtmSourceNote(source))
+          return reply.status(404).send({ error: "Long-term memory source note not found" });
+        const direct = notes.filter(
+          (note) =>
+            note.id !== sourceNoteId &&
+            note.links.some(
+              (link) =>
+                link.relation === "extracted_from" &&
+                link.target === sourceNoteId,
+            ),
+        );
+        const directIds = new Set(direct.map((note) => note.id));
+        const timelineIds = new Set(
+          direct
+            .filter((note) => note.type === "timeline_event")
+            .map((note) => note.id),
+        );
+        const related = [
+          ...direct,
+          ...notes.filter(
+            (note) =>
+              note.id !== sourceNoteId &&
+              !directIds.has(note.id) &&
+              note.links.some((link) => timelineIds.has(link.target)),
+          ),
+        ]
+          .sort((left, right) =>
+            (left.title ?? left.id).localeCompare(right.title ?? right.id),
+          )
+          .map(({ id, title, type, status, scope }) => ({
+            id,
+            ...(title ? { title } : {}),
+            type,
+            status,
+            scope,
+          }));
+        return ltmSourceDerivedMemoriesResponseSchema.parse({
+          sourceNoteId,
+          memories: related,
+        });
+      },
+    );
+    app.get<{ Params: { id: string } }>(
       "/notes/:id",
       async (request, reply) => {
         const note = await storage.getNote(
@@ -566,10 +631,10 @@ export function createLongTermMemoryRoutes(runtime: {
         const operationId = randomUUID();
         try {
           const resolved = await getPackageLanguageModels().resolveForRequest({
-                connectionId: body.connectionId,
-                chatConnectionId: chat?.connectionId ?? null,
-                model: body.model,
-              });
+            connectionId: body.connectionId,
+            chatConnectionId: chat?.connectionId ?? null,
+            model: body.model,
+          });
           const provider = resolved
             ? {
                 name: resolved.name,
@@ -762,7 +827,8 @@ export function createLongTermMemoryRoutes(runtime: {
       { bodyLimit: NOTE_BODY_LIMIT_BYTES },
       async (request, reply) => {
         const parsed = createNoteBody.safeParse(request.body);
-        if (!parsed.success) return reply.status(400).send({ error: parsed.error.message });
+        if (!parsed.success)
+          return reply.status(400).send({ error: parsed.error.message });
         try {
           const note = await storage.createNote(parsed.data);
           const rebuild = await rebuildAfterMutation();
@@ -790,9 +856,29 @@ export function createLongTermMemoryRoutes(runtime: {
         const patch = updateNoteBody.parse(request.body);
         if (existing.type === "source" && patch.sections !== undefined)
           return reply.status(400).send({
-            error: "Imported source content can only be updated by refreshing its source.",
+            error:
+              "Imported source content can only be updated by refreshing its source.",
           });
-        const note = await storage.updateNote(id, patch);
+        if (
+          patch.scope !== undefined &&
+          !isGlobalLtmScope(existing.scope) &&
+          isGlobalLtmScope(patch.scope)
+        )
+          return reply.status(400).send({
+            error:
+              "Clearing every scope would make this memory global. Remove scope links with the scope-removal action instead; it safely deletes the memory when no explicit scope remains.",
+          });
+        let note;
+        try {
+          note = await storage.updateNote(id, patch);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message.includes("would make this memory global")
+          )
+            return reply.status(400).send({ error: error.message });
+          throw error;
+        }
         const rebuild = await rebuildAfterMutation();
         return { note, rebuild };
       },
@@ -840,17 +926,49 @@ export function createLongTermMemoryRoutes(runtime: {
       };
     });
     app.delete<{ Params: { id: string }; Body: unknown }>(
+      "/notes/:id/scope/current-chat",
+      async (request, reply) => {
+        const id = ltmNoteIdSchema.parse(request.params.id);
+        const { chatId } = removeCurrentChatBody.parse(request.body ?? {});
+        if (!(await getPackagePersistence().getChat(chatId)))
+          return reply.status(404).send({ error: "Chat not found" });
+        let result;
+        try {
+          result = await storage.removeNoteFromScope(id, {
+            chatIds: [chatId],
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("not found"))
+            return reply.status(404).send({ error: error.message });
+          throw error;
+        }
+        const rebuild = result.changed ? await rebuildAfterMutation() : null;
+        return result.deleted
+          ? { deleted: true, unscoped: false, id, rebuild }
+          : {
+              deleted: false,
+              unscoped: result.changed,
+              id,
+              note: result.note,
+              rebuild,
+            };
+      },
+    );
+    app.delete<{ Params: { id: string }; Body: unknown }>(
       "/notes/:id/scope",
       async (request, reply) => {
         const id = ltmNoteIdSchema.parse(request.params.id);
-        if (!(await storage.getNote(id)))
-          return reply
-            .status(404)
-            .send({ error: "Long-term memory note not found" });
-        const result = await storage.removeNoteFromScope(
-          id,
-          removeScopeBody.parse(request.body ?? {}),
-        );
+        let result;
+        try {
+          result = await storage.removeNoteFromScope(
+            id,
+            removeScopeBody.parse(request.body ?? {}),
+          );
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("not found"))
+            return reply.status(404).send({ error: error.message });
+          throw error;
+        }
         const rebuild = result.changed ? await rebuildAfterMutation() : null;
         return result.deleted
           ? { deleted: true, unscoped: false, id, rebuild }
@@ -882,14 +1000,28 @@ export function createLongTermMemoryRoutes(runtime: {
     app.post<{ Body: unknown }>(
       "/identity-repair/preview",
       { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
-      async (request) => {
-        const body = ltmIdentityRepairPreviewRequestSchema.parse(
-            request.body ?? {},
-          ),
-          catalog = await loadTrustedLtmSubjectCatalog(body.scope, root);
-        return ltmIdentityRepairPreviewResponseSchema.parse(
-          previewLtmIdentityRepairs(catalog, body.scope),
-        );
+      async (request, reply) => {
+        try {
+          const body = ltmIdentityRepairPreviewRequestSchema.parse(
+              request.body ?? {},
+            ),
+            catalog = await loadTrustedLtmSubjectCatalog(body.scope, root);
+          return ltmIdentityRepairPreviewResponseSchema.parse(
+            previewLtmIdentityRepairs(
+              catalog,
+              body.scope,
+              undefined,
+              body.canonicalNoteIds,
+            ),
+          );
+        } catch (error) {
+          if (error instanceof LtmIdentityRepairError)
+            return reply.status(error.statusCode).send({
+              error: error.message,
+              code: error.code,
+            });
+          throw error;
+        }
       },
     );
     app.post<{ Body: unknown }>(

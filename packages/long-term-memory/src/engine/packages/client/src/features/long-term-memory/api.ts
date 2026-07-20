@@ -1,5 +1,7 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import { CSRF_HEADER, CSRF_HEADER_VALUE } from "@marinara-engine/shared";
+
+const CSRF_HEADER = "x-marinara-csrf";
+const CSRF_HEADER_VALUE = "1";
 
 export const API_ROOT = "/api/long-term-memory";
 
@@ -27,6 +29,7 @@ export async function request<TResponse, TBody = unknown>(
   path: string,
   method = "GET",
   body?: TBody,
+  signal?: AbortSignal,
 ): Promise<TResponse> {
   const headers = new Headers();
   if (method !== "GET") headers.set(CSRF_HEADER, CSRF_HEADER_VALUE);
@@ -36,6 +39,7 @@ export async function request<TResponse, TBody = unknown>(
     method,
     headers,
     cache: "no-store",
+    signal,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (!response.ok) {

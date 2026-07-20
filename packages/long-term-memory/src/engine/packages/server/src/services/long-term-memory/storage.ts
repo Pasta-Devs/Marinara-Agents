@@ -20,6 +20,7 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmScopeChatIds,
+  isGlobalLtmScope,
   matchesLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
@@ -294,6 +295,14 @@ export class LongTermMemoryStorage {
       if (patch.type && patch.type !== current.type)
         throw new Error(
           "Changing long-term memory note type is not supported by this package version.",
+        );
+      if (
+        patch.scope !== undefined &&
+        !isGlobalLtmScope(current.scope) &&
+        isGlobalLtmScope(patch.scope)
+      )
+        throw new Error(
+          "Clearing every scope would make this memory global. Remove scope links with the scope-removal action instead; it safely deletes the memory when no explicit scope remains.",
         );
       const next = ltmNoteSchema.parse({
         ...current,
@@ -812,39 +821,47 @@ export class LongTermMemoryStorage {
     id: string,
     input: { chatIds?: string[]; groupId?: string; characterIds?: string[] },
   ) {
-    const note = await this.getNote(id);
-    if (!note) throw new Error(`Long-term memory note not found: ${id}`);
-    const chatIds = getLtmScopeChatIds(note.scope).filter(
-      (value) => !new Set(input.chatIds ?? []).has(value),
-    );
-    const characterIds = (note.scope.characterIds ?? []).filter(
-      (value) => !new Set(input.characterIds ?? []).has(value),
-    );
-    const groupId =
-      input.groupId && note.scope.groupId === input.groupId
-        ? undefined
-        : note.scope.groupId;
-    const changed =
-      chatIds.length !== getLtmScopeChatIds(note.scope).length ||
-      characterIds.length !== (note.scope.characterIds ?? []).length ||
-      groupId !== note.scope.groupId;
-    if (!changed) return { note, deleted: false, changed: false };
-    if (!chatIds.length && !characterIds.length && !groupId) {
-      await this.deleteNotesPermanently([id]);
-      return { note: null, deleted: true, changed: true };
-    }
-    const scope: LtmScope = {};
-    if (chatIds.length) {
-      scope.chatIds = chatIds;
-      scope.chatId = chatIds[0];
-    }
-    if (characterIds.length) scope.characterIds = characterIds;
-    if (groupId) scope.groupId = groupId;
-    return {
-      note: await this.updateNote(id, { scope }),
-      deleted: false,
-      changed: true,
-    };
+    await this.initializeLtmStore();
+    return withLtmVaultLock(this.root, async () => {
+      const note = await this.getNote(id);
+      if (!note) throw new Error(`Long-term memory note not found: ${id}`);
+      const removedChatIds = new Set(input.chatIds ?? []);
+      const removedCharacterIds = new Set(input.characterIds ?? []);
+      const existingChatIds = getLtmScopeChatIds(note.scope);
+      const chatIds = existingChatIds.filter(
+        (value) => !removedChatIds.has(value),
+      );
+      const characterIds = (note.scope.characterIds ?? []).filter(
+        (value) => !removedCharacterIds.has(value),
+      );
+      const groupId =
+        input.groupId && note.scope.groupId === input.groupId
+          ? undefined
+          : note.scope.groupId;
+      const personaId = note.scope.personaId;
+      const changed =
+        chatIds.length !== existingChatIds.length ||
+        characterIds.length !== (note.scope.characterIds ?? []).length ||
+        groupId !== note.scope.groupId;
+      if (!changed) return { note, deleted: false, changed: false };
+      if (!chatIds.length && !characterIds.length && !groupId && !personaId) {
+        await this.deleteNotesPermanently([id]);
+        return { note: null, deleted: true, changed: true };
+      }
+      const scope: LtmScope = {};
+      if (chatIds.length) {
+        scope.chatIds = chatIds;
+        scope.chatId = chatIds[0];
+      }
+      if (characterIds.length) scope.characterIds = characterIds;
+      if (groupId) scope.groupId = groupId;
+      if (personaId) scope.personaId = personaId;
+      return {
+        note: await this.updateNote(id, { scope }),
+        deleted: false,
+        changed: true,
+      };
+    });
   }
   async cleanup() {
     initialized.delete(this.root);

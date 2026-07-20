@@ -39,6 +39,14 @@ cd ../Marinara-Engine
 pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-runtime.regression.ts"
 ```
 
+`long-term-memory-debug-log.regression.ts` proves debug-event field and record
+bounds, hard log rotation, complete JSONL records, and server-side filters:
+
+```bash
+cd ../Marinara-Engine
+pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-debug-log.regression.ts"
+```
+
 `long-term-memory-routes.regression.ts` proves the real Engine privileged guard,
 package-owned settings, note creation/listing, search, and route cleanup:
 
