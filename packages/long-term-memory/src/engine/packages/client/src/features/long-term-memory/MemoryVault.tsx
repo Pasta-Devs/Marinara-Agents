@@ -610,12 +610,16 @@ export default function MemoryVault({
       if (action === "delete")
         await request("/notes/permanent-delete", "POST", { ids });
       else {
-        const result = await request<LtmBulkNoteResult>("/notes/batch", "POST", {
-          noteIds: ids,
-          ...(action === "archive" ? { archive: "notes_only" } : {}),
-          ...(action === "status" ? { status: bulkStatus } : {}),
-          ...(action === "modes" ? { modes: bulkModes } : {}),
-        });
+        const result = await request<LtmBulkNoteResult>(
+          "/notes/batch",
+          "POST",
+          {
+            noteIds: ids,
+            ...(action === "archive" ? { archive: "notes_only" } : {}),
+            ...(action === "status" ? { status: bulkStatus } : {}),
+            ...(action === "modes" ? { modes: bulkModes } : {}),
+          },
+        );
         const unresolved = new Set([
           ...result.skippedNoteIds,
           ...result.failedNoteIds,
@@ -781,7 +785,80 @@ export default function MemoryVault({
       className="space-y-4"
       aria-label="Memory vault"
     >
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <style>{`
+        @media (min-width: 1280px) {
+          [data-ltm-surface="vault"] {
+            display: grid;
+            grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
+            grid-template-areas:
+              "header header"
+              "feedback feedback"
+              "controls workbench"
+              "bulk workbench"
+              "list workbench";
+            align-items: start;
+            gap: 1rem;
+          }
+          [data-ltm-vault-header] {
+            grid-area: header;
+          }
+          [data-ltm-vault-feedback] {
+            grid-area: feedback;
+            display: block;
+          }
+          [data-ltm-browser-controls] {
+            grid-area: controls;
+            grid-template-columns: minmax(0, 1fr);
+          }
+          [data-ltm-browser-controls] > * {
+            grid-column: 1;
+          }
+          [data-ltm-bulk-actions] {
+            grid-area: bulk;
+          }
+          [data-ltm-vault-workspace] {
+            display: contents;
+          }
+          [data-ltm-memory-list] {
+            grid-area: list;
+            max-height: calc(100vh - 20rem);
+            overflow-y: auto;
+          }
+          [data-ltm-note-workbench] {
+            grid-area: workbench;
+            max-height: calc(100vh - 10rem);
+            overflow-y: auto;
+          }
+          [data-ltm-note-layout] {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(15rem, 17rem);
+            gap: 1rem;
+          }
+          [data-ltm-details-toggle] {
+            display: none !important;
+          }
+          [data-ltm-note-editor],
+          [data-ltm-note-inspector] {
+            display: block !important;
+          }
+          [data-ltm-note-inspector] {
+            border-left: 1px solid var(--border);
+            padding-left: 1rem;
+          }
+          [data-ltm-inspector-tokens],
+          [data-ltm-inspector-fields] {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          [data-ltm-inspector-tokens] {
+            border-top: 0;
+            padding-top: 0;
+          }
+        }
+      `}</style>
+      <header
+        data-ltm-vault-header
+        className="flex flex-wrap items-center justify-between gap-3"
+      >
         <div>
           <h2 className="text-base font-semibold">Memory Vault</h2>
           <p className="text-xs text-[var(--muted-foreground)]">
@@ -866,7 +943,10 @@ export default function MemoryVault({
           </button>
         ))}
       </div>
-      <section className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3 sm:grid-cols-[minmax(0,1fr)_10rem_10rem_10rem]">
+      <section
+        data-ltm-browser-controls
+        className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3 sm:grid-cols-[minmax(0,1fr)_10rem_10rem_10rem]"
+      >
         <div className="relative sm:col-span-4">
           <input
             className={inputClass}
@@ -1005,8 +1085,14 @@ export default function MemoryVault({
           ))}
         </select>
       </section>
-      {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
-      {notice ? <StatusSurface tone="success">{notice}</StatusSurface> : null}
+      {error || notice ? (
+        <div data-ltm-vault-feedback className="contents">
+          {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
+          {notice ? (
+            <StatusSurface tone="success">{notice}</StatusSurface>
+          ) : null}
+        </div>
+      ) : null}
       <section
         data-ltm-bulk-actions
         className={`${selectionMode ? "flex" : "hidden"} flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3 md:flex`}
@@ -1105,7 +1191,10 @@ export default function MemoryVault({
           </>
         ) : null}
       </section>
-      <div className="grid min-w-0 min-h-0 gap-4 md:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]">
+      <div
+        data-ltm-vault-workspace
+        className="grid min-h-0 min-w-0 gap-4 md:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]"
+      >
         <section
           data-ltm-memory-list
           className={`${mobilePane === "memories" ? "block" : "hidden"} min-w-0 rounded-lg border border-[var(--border)] md:block`}
@@ -1227,6 +1316,7 @@ export default function MemoryVault({
                       });
                     }}
                     aria-pressed={detailsOpen}
+                    data-ltm-details-toggle
                     className="hidden md:inline-flex"
                   >
                     Details
@@ -1243,13 +1333,15 @@ export default function MemoryVault({
                 </div>
               </header>
               <div
+                data-ltm-note-layout
                 className={`min-w-0 ${detailsOpen ? "md:grid md:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)] md:gap-4" : ""}`}
               >
                 <div
+                  data-ltm-note-editor
                   className={
                     mobilePane === "details"
-                      ? "hidden md:block"
-                      : "contents"
+                      ? "hidden space-y-4 md:block"
+                      : "space-y-4"
                   }
                 >
                   <section className="space-y-3">
@@ -1478,16 +1570,21 @@ export default function MemoryVault({
                     </fieldset>
                   </div>
                 </div>
-                <div
+                <aside
+                  data-ltm-note-inspector
+                  aria-label="Memory inspector"
                   className={
                     detailsOpen || mobilePane === "details"
                       ? mobilePane === "editor"
                         ? "hidden md:block"
                         : "contents"
-                      : "hidden md:hidden"
+                      : "hidden"
                   }
                 >
-                  <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2">
+                  <div
+                    data-ltm-inspector-tokens
+                    className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2"
+                  >
                     <TokenEditor
                       label="Tags"
                       values={draft.tags}
@@ -1546,7 +1643,10 @@ export default function MemoryVault({
                         </Pill>
                       ) : null}
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div
+                      data-ltm-inspector-fields
+                      className="grid gap-2 sm:grid-cols-2"
+                    >
                       <input
                         className={inputClass}
                         placeholder="Add another chat"
@@ -1619,7 +1719,10 @@ export default function MemoryVault({
                         </Pill>
                       ))}
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]">
+                    <div
+                      data-ltm-inspector-fields
+                      className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]"
+                    >
                       <input
                         className={inputClass}
                         value={linkTarget}
@@ -1725,7 +1828,46 @@ export default function MemoryVault({
                       ))}
                     </section>
                   ) : null}
-                </div>
+                  <dl className="grid gap-3 border-t border-[var(--border)] pt-4 text-xs text-[var(--muted-foreground)]">
+                    <div>
+                      <dt className="font-medium text-[var(--foreground)]">
+                        Created
+                      </dt>
+                      <dd>{new Date(draft.createdAt).toLocaleString()}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-[var(--foreground)]">
+                        Updated
+                      </dt>
+                      <dd>{new Date(draft.updatedAt).toLocaleString()}</dd>
+                    </div>
+                    {draft.provenance ? (
+                      <div>
+                        <dt className="font-medium text-[var(--foreground)]">
+                          Provenance
+                        </dt>
+                        <dd className="break-words">
+                          {draft.provenance.kind.replaceAll("_", " ")}:{" "}
+                          {draft.provenance.sourceId}
+                        </dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                  {!isNew && props.chatId ? (
+                    <div className="border-t border-[var(--border)] pt-4">
+                      <Button
+                        destructive
+                        disabled={Boolean(busy)}
+                        onClick={() => void removeFromCurrentChat()}
+                      >
+                        <Trash2 size="0.875rem" />
+                        {busy === "remove-current-chat"
+                          ? "Removing"
+                          : "Remove from current chat"}
+                      </Button>
+                    </div>
+                  ) : null}
+                </aside>
               </div>
               {draft.type === "source" ? (
                 <section className="space-y-2 border-t border-[var(--border)] pt-4">
@@ -1783,31 +1925,6 @@ export default function MemoryVault({
                   ) : null}
                 </section>
               ) : null}
-              <dl className="grid gap-1 border-t border-[var(--border)] pt-4 text-xs text-[var(--muted-foreground)] sm:grid-cols-2">
-                <div>
-                  <dt className="font-medium text-[var(--foreground)]">
-                    Created
-                  </dt>
-                  <dd>{new Date(draft.createdAt).toLocaleString()}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium text-[var(--foreground)]">
-                    Updated
-                  </dt>
-                  <dd>{new Date(draft.updatedAt).toLocaleString()}</dd>
-                </div>
-                {draft.provenance ? (
-                  <div className="sm:col-span-2">
-                    <dt className="font-medium text-[var(--foreground)]">
-                      Provenance
-                    </dt>
-                    <dd>
-                      {draft.provenance.kind.replaceAll("_", " ")}:{" "}
-                      {draft.provenance.sourceId}
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
               {draft.type === "source" && !isNew ? (
                 <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-4">
                   <Button
@@ -1839,20 +1956,6 @@ export default function MemoryVault({
                   </Button>
                   <Button onClick={() => onOpenReview?.(draft.id)}>
                     Review related drafts
-                  </Button>
-                </div>
-              ) : null}
-              {!isNew && props.chatId ? (
-                <div className="border-t border-[var(--border)] pt-4">
-                  <Button
-                    destructive
-                    disabled={Boolean(busy)}
-                    onClick={() => void removeFromCurrentChat()}
-                  >
-                    <Trash2 size="0.875rem" />
-                    {busy === "remove-current-chat"
-                      ? "Removing"
-                      : "Remove from current chat"}
                   </Button>
                 </div>
               ) : null}

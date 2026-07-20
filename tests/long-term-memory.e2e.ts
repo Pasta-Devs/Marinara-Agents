@@ -163,7 +163,9 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       sources.locator('[data-ltm-source-select-all="imported"]'),
     ).toBeVisible();
-    await expect(sources.locator('[data-ltm-transfer-include-derived]')).toBeChecked();
+    await expect(
+      sources.locator("[data-ltm-transfer-include-derived]"),
+    ).toBeChecked();
 
     await navigation.locator('[data-ltm-destination="settings"]').click();
     const settings = detail.locator('[data-ltm-surface="memory-settings"]');
@@ -289,6 +291,7 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
       },
     );
     expect(deleted.ok(), await deleted.text()).toBe(true);
+    await bulkActions.getByLabel("Set status").selectOption("resolved");
     await bulkActions.getByRole("button", { name: "Set status" }).click();
     await expect(vault).toContainText("1 memory updated; 0 skipped, 1 failed.");
     await expect(bulkActions.locator("[data-ltm-selection-count]")).toHaveText(
@@ -339,14 +342,12 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
     await expect(memory).toContainText(/facts: A scoped fixture\./i);
     await expect
       .poll(() =>
-        vault.evaluate(
-          (element) => element.scrollWidth <= element.clientWidth,
-        ),
+        vault.evaluate((element) => element.scrollWidth <= element.clientWidth),
       )
       .toBe(true);
     await expect(vault.locator("[data-ltm-memory-list]")).toHaveCSS(
       "overflow-y",
-      "visible",
+      testInfo.project.name.includes("mobile") ? "visible" : "auto",
     );
     await memory.click();
     if (testInfo.project.name.includes("mobile")) {
@@ -357,9 +358,26 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
       );
       await vault.getByRole("tab", { name: "Details" }).click();
     } else {
-      await expect(vault.locator("[data-ltm-memory-list]")).toBeVisible();
+      const memoryList = vault.locator("[data-ltm-memory-list]");
+      const editor = vault.locator("[data-ltm-note-editor]");
+      const inspector = vault.locator("[data-ltm-note-inspector]");
+      await expect(memoryList).toBeVisible();
+      await expect(editor).toBeVisible();
+      await expect(inspector).toBeVisible();
       await expect(vault.getByRole("tab")).toHaveCount(0);
-      await vault.getByRole("button", { name: "Details" }).click();
+      await expect(
+        vault.getByRole("button", { name: "Details", exact: true }),
+      ).toBeHidden();
+      const [listBox, editorBox, inspectorBox] = await Promise.all([
+        memoryList.boundingBox(),
+        editor.boundingBox(),
+        inspector.boundingBox(),
+      ]);
+      expect(listBox).not.toBeNull();
+      expect(editorBox).not.toBeNull();
+      expect(inspectorBox).not.toBeNull();
+      expect(listBox!.x + listBox!.width).toBeLessThan(editorBox!.x);
+      expect(editorBox!.x + editorBox!.width).toBeLessThan(inspectorBox!.x);
     }
     await expect(vault).toContainText("Created");
     if (testInfo.project.name.includes("mobile"))
