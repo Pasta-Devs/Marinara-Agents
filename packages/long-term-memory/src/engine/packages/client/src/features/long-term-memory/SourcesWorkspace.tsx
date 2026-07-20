@@ -68,6 +68,10 @@ export default function SourcesWorkspace({
   );
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
   const [selections, setSelections] = useState<Record<string, string[]>>({});
+  const [collapsedSections, setCollapsedSections] = useState({
+    available: false,
+    imported: true,
+  });
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] =
@@ -83,6 +87,7 @@ export default function SourcesWorkspace({
     new Set(),
   );
   const [transferMode, setTransferMode] = useState<"copy" | "move">("copy");
+  const [includeDerived, setIncludeDerived] = useState(true);
   const [transferPreview, setTransferPreview] =
     useState<LtmNoteTransferPreviewResponse | null>(null);
   const [transferResult, setTransferResult] =
@@ -121,10 +126,17 @@ export default function SourcesWorkspace({
         ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
       }),
   });
-  const rows = preview.data?.samples ?? [];
+  const rows = [...(preview.data?.samples ?? [])].sort((left, right) => {
+    if (source !== "chats" || !props.chatId) return 0;
+    return Number(!left.sourceId.startsWith(`${props.chatId}:`)) -
+      Number(!right.sourceId.startsWith(`${props.chatId}:`));
+  });
   const pendingRows = rows.filter((row) => row.status === "pending");
+  const importedRows = rows.filter((row) => row.status === "imported");
   const selectionKey = `${source}:${effectiveImportScope}:${modeFilter}`;
   const selectedIds = new Set(selections[selectionKey] ?? []);
+  const importedSelectionKey = `${selectionKey}:imported`;
+  const selectedImportedIds = new Set(selections[importedSelectionKey] ?? []);
   const retryableIds = importResult
     ? [
         ...importResult.imported
@@ -145,6 +157,11 @@ export default function SourcesWorkspace({
   const allSelectableSelected =
     selectableRows.length > 0 &&
     selectedSelectableIds.length === selectableRows.length;
+  const selectedImportedRows = importedRows.filter((row) =>
+    selectedImportedIds.has(row.sourceId),
+  );
+  const allImportedSelected =
+    importedRows.length > 0 && selectedImportedRows.length === importedRows.length;
   const pendingDraftsProduced = Boolean(
     importResult?.imported.some(
       (item) =>
@@ -172,10 +189,9 @@ export default function SourcesWorkspace({
   }, [preview.data, preview.dataUpdatedAt, selectionKey]);
 
   useEffect(() => {
-    if (selectAllRef.current) {
+    if (selectAllRef.current)
       selectAllRef.current.indeterminate =
         selectedSelectableIds.length > 0 && !allSelectableSelected;
-    }
   }, [allSelectableSelected, selectedSelectableIds.length]);
 
   const invalidateAfterMutation = async () => {
@@ -219,6 +235,15 @@ export default function SourcesWorkspace({
       if (checked) next.add(sourceId);
       else next.delete(sourceId);
       return { ...current, [selectionKey]: [...next] };
+    });
+  };
+
+  const toggleImportedSelected = (sourceId: string, checked: boolean) => {
+    setSelections((current) => {
+      const next = new Set(current[importedSelectionKey] ?? []);
+      if (checked) next.add(sourceId);
+      else next.delete(sourceId);
+      return { ...current, [importedSelectionKey]: [...next] };
     });
   };
 
@@ -361,6 +386,7 @@ export default function SourcesWorkspace({
           noteIds: [...transferNoteIds],
           mode: transferMode,
           destinationChatId: props.chatId,
+          includeDerived,
         },
       );
       setTransferPreview(result);
@@ -389,7 +415,7 @@ export default function SourcesWorkspace({
           noteIds: readyIds,
           mode: transferPreview!.mode,
           destinationChatId: props.chatId,
-          includeDerived: false,
+          includeDerived: transferPreview.selection.includeDerived,
         },
       );
       setTransferResult(result);
@@ -572,133 +598,193 @@ export default function SourcesWorkspace({
         <StatusSurface tone="success">{reviewMessage}</StatusSurface>
       ) : null}
 
-      <div
-        className="overflow-hidden rounded-lg border border-[var(--border)]"
-        data-ltm-source-preview={source}
-      >
-        <div className="flex items-center gap-3 border-b border-[var(--border)] bg-[var(--secondary)]/45 px-3 py-2 text-xs font-semibold">
-          <input
-            ref={selectAllRef}
-            type="checkbox"
-            aria-label="Select all visible pending sources"
-            checked={allSelectableSelected}
-            disabled={selectableRows.length === 0}
-            onChange={(event) =>
-              setSelections((current) => ({
-                ...current,
-                [selectionKey]: event.target.checked
-                  ? selectableRows.map((row) => row.sourceId)
-                  : [],
-              }))
-            }
-            data-ltm-source-select-all
-          />
-          <span>
-            {selectedSelectableIds.length} of {selectableRows.length} selected
-          </span>
-          <Button
-            primary
-            disabled={importing || selectedSelectableIds.length === 0}
-            onClick={() => void runImport(selectedSelectableIds)}
-            data-ltm-source-action="import-selected"
-            data-ltm-source-selected-count={selectedSelectableIds.length}
+      <div data-ltm-source-preview={source} className="space-y-3">
+        {(
+          [
+            {
+              id: "available" as const,
+              title: "Ready to Import",
+              rows: selectableRows,
+              selected: selectedSelectableIds,
+              allSelected: allSelectableSelected,
+              selection: selectedIds,
+              selectAllRef,
+              action: "Import selected",
+              actionId: "import-selected",
+              onToggle: toggleSelected,
+              onSelectAll: (checked: boolean) =>
+                setSelections((current) => ({
+                  ...current,
+                  [selectionKey]: checked
+                    ? selectableRows.map((row) => row.sourceId)
+                    : [],
+                })),
+              onAction: () => void runImport(selectedSelectableIds),
+              empty: "No new or retryable sources are ready to import.",
+            },
+            {
+              id: "imported" as const,
+              title: "Already Imported",
+              rows: importedRows,
+              selected: selectedImportedRows.map((row) => row.sourceId),
+              allSelected: allImportedSelected,
+              selection: selectedImportedIds,
+              selectAllRef: undefined,
+              action: "Refresh selected",
+              actionId: "refresh-selected",
+              onToggle: toggleImportedSelected,
+              onSelectAll: (checked: boolean) =>
+                setSelections((current) => ({
+                  ...current,
+                  [importedSelectionKey]: checked
+                    ? importedRows.map((row) => row.sourceId)
+                    : [],
+                })),
+              onAction: () =>
+                void runImport(
+                  selectedImportedRows.map((row) => row.sourceId),
+                  "refresh",
+                ),
+              empty: "No sources have been imported in this scope.",
+            },
+          ] as const
+        ).map((section) => (
+          <section
+            key={section.id}
+            className="overflow-hidden rounded-lg border border-[var(--border)]"
+            data-ltm-source-section={section.id}
           >
-            {importing ? (
-              <Loader2 size="0.75rem" className="animate-spin" />
-            ) : (
-              <Check size="0.75rem" />
-            )}
-            Import selected
-          </Button>
-          {importing ? (
-            <Button
-              destructive
-              onClick={() => importControllerRef.current?.abort()}
-              data-ltm-source-action="cancel-import"
+            <button
+              type="button"
+              className="flex min-h-11 w-full items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2 text-left text-xs font-semibold"
+              aria-expanded={!collapsedSections[section.id]}
+              onClick={() =>
+                setCollapsedSections((current) => ({
+                  ...current,
+                  [section.id]: !current[section.id],
+                }))
+              }
+              data-ltm-source-section-toggle={section.id}
             >
-              Cancel
-            </Button>
-          ) : null}
-        </div>
-        <div role="list" className="divide-y divide-[var(--border)]">
-          {rows.map((row) => {
-            const selectable =
-              row.status === "pending" || retryableIdSet.has(row.sourceId);
-            return (
-              <article
-                key={row.sourceId}
-                role="listitem"
-                data-ltm-source-row-status={row.status}
-                data-ltm-source-id={row.sourceId}
-                className="space-y-2 p-3"
-              >
-                <div className="flex items-start gap-3">
+              <span>{section.title}</span>
+              <span className="text-[var(--muted-foreground)]">
+                {section.rows.length}
+              </span>
+            </button>
+            {!collapsedSections[section.id] ? (
+              <>
+                <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-3 py-2 text-xs font-semibold">
                   <input
+                    ref={section.selectAllRef}
                     type="checkbox"
-                    aria-label={`Select ${row.title}`}
-                    checked={selectable && selectedIds.has(row.sourceId)}
-                    disabled={!selectable}
-                    onChange={(event) =>
-                      toggleSelected(row.sourceId, event.target.checked)
-                    }
-                    data-ltm-source-select={row.sourceId}
+                    aria-label={`Select all ${section.title.toLowerCase()}`}
+                    checked={section.allSelected}
+                    disabled={section.rows.length === 0}
+                    onChange={(event) => section.onSelectAll(event.target.checked)}
+                    data-ltm-source-select-all={section.id}
                   />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold">{row.title}</h3>
-                      <span
-                        data-ltm-source-status={row.status}
-                        className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
-                      >
-                        {sourceStatusLabel(row)}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                      {row.summary}
-                    </p>
-                    <p className="mt-1 line-clamp-2 text-xs text-[var(--muted-foreground)]">
-                      {row.snippet}
-                    </p>
-                  </div>
-                </div>
-                {row.status === "imported" ? (
-                  <div
-                    className="ml-7 space-y-2"
-                    data-ltm-source-existing-note={row.existingNoteId}
+                  <span>
+                    {section.selected.length} of {section.rows.length} selected
+                  </span>
+                  <Button
+                    primary
+                    disabled={
+                      importing || section.selected.length === 0
+                    }
+                    onClick={section.onAction}
+                    data-ltm-source-action={section.actionId}
+                    data-ltm-source-selected-count={section.selected.length}
                   >
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      Source memory: {row.existingNoteTitle}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        disabled={importing}
-                        onClick={() =>
-                          void runImport([row.sourceId], "refresh")
-                        }
-                        data-ltm-source-action="refresh-reimport"
+                    {importing ? (
+                      <Loader2 size="0.75rem" className="animate-spin" />
+                    ) : section.id === "available" ? (
+                      <Check size="0.75rem" />
+                    ) : (
+                      <RefreshCw size="0.75rem" />
+                    )}
+                    {section.action}
+                  </Button>
+                  {importing && section.id === "available" ? (
+                    <Button
+                      destructive
+                      onClick={() => importControllerRef.current?.abort()}
+                      data-ltm-source-action="cancel-import"
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                </div>
+                <div role="list" className="divide-y divide-[var(--border)]">
+                  {section.rows.map((row) => {
+                    const selectable = section.id === "available";
+                    return (
+                      <article
+                        key={row.sourceId}
+                        role="listitem"
+                        data-ltm-source-row-status={row.status}
+                        data-ltm-source-id={row.sourceId}
+                        className="space-y-2 p-3"
                       >
-                        {importing ? (
-                          <Loader2 size="0.75rem" className="animate-spin" />
-                        ) : (
-                          <RefreshCw size="0.75rem" />
-                        )}{" "}
-                        Refresh / re-import
-                      </Button>
-                    </div>
-                    {sourceMemoryActions(row.existingNoteId)}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-          {!preview.isLoading && rows.length === 0 ? (
-            <p className="p-4 text-xs text-[var(--muted-foreground)]">
-              No importable{" "}
-              {sourceTabs.find((tab) => tab.id === source)?.label.toLowerCase()}{" "}
-              were found.
-            </p>
-          ) : null}
-        </div>
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${row.title}`}
+                            checked={section.selection.has(row.sourceId)}
+                            disabled={!selectable && section.id !== "imported"}
+                            onChange={(event) =>
+                              section.onToggle(row.sourceId, event.target.checked)
+                            }
+                            data-ltm-source-select={row.sourceId}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-sm font-semibold">{row.title}</h3>
+                              <span
+                                data-ltm-source-status={row.status}
+                                className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
+                              >
+                                {sourceStatusLabel(row)}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                              {row.summary}
+                            </p>
+                            <p className="mt-1 line-clamp-2 text-xs text-[var(--muted-foreground)]">
+                              {row.snippet}
+                            </p>
+                          </div>
+                        </div>
+                        {section.id === "imported" ? (
+                          <div
+                            className="ml-7 space-y-2"
+                            data-ltm-source-existing-note={row.existingNoteId}
+                          >
+                            <p className="text-xs text-[var(--muted-foreground)]">
+                              Source memory: {row.existingNoteTitle}
+                            </p>
+                            <Button
+                              disabled={importing}
+                              onClick={() => void runImport([row.sourceId], "refresh")}
+                              data-ltm-source-action="refresh-reimport"
+                            >
+                              <RefreshCw size="0.75rem" /> Refresh / re-import
+                            </Button>
+                            {sourceMemoryActions(row.existingNoteId)}
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                  {!preview.isLoading && section.rows.length === 0 ? (
+                    <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                      {section.empty}
+                    </p>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+          </section>
+        ))}
       </div>
 
       {importResult ? (
@@ -830,6 +916,23 @@ export default function SourcesWorkspace({
             <option value="move">Move to current chat</option>
           </select>
         </label>
+        <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
+          <input
+            type="checkbox"
+            checked={includeDerived}
+            onChange={(event) => {
+              setIncludeDerived(event.target.checked);
+              setTransferPreview(null);
+              setTransferResult(null);
+            }}
+            data-ltm-transfer-include-derived
+          />
+          Include attached durable memories
+        </label>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          Attached durable memories are linked through source extraction. Turn
+          this off to transfer only the selected source memories.
+        </p>
         <Button
           primary
           disabled={

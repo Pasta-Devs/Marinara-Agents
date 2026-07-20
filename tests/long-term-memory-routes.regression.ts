@@ -940,6 +940,44 @@ async function main() {
         ),
       true,
     );
+    const transferWithDerived = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer-preview",
+      headers,
+      payload: {
+        noteIds: ["source_route_extract"],
+        mode: "copy",
+        destinationChatId: "chat-b",
+        includeDerived: true,
+      },
+    });
+    assert.equal(transferWithDerived.statusCode, 200, transferWithDerived.body);
+    assert.equal(
+      transferWithDerived
+        .json()
+        .selection.derivedNoteIds.includes("world_cross_scope_derived"),
+      true,
+    );
+    const transferWithoutDerived = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer-preview",
+      headers,
+      payload: {
+        noteIds: ["source_route_extract"],
+        mode: "copy",
+        destinationChatId: "chat-b",
+        includeDerived: false,
+      },
+    });
+    assert.equal(
+      transferWithoutDerived.statusCode,
+      200,
+      transferWithoutDerived.body,
+    );
+    assert.equal(
+      transferWithoutDerived.json().selection.includedDerivedCount,
+      0,
+    );
     const extractionActivity = (
       await app.inject({
         method: "GET",

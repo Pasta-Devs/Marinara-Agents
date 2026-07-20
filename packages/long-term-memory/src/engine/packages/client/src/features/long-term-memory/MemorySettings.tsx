@@ -41,6 +41,14 @@ type RepairAction =
   | "rebuild_indexes"
   | "quarantine_malformed_notes"
   | "backfill_imported_source_titles";
+type SettingsTab = "recall" | "backup" | "extraction" | "maintenance";
+
+const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
+  { id: "recall", label: "Recall" },
+  { id: "backup", label: "Backup" },
+  { id: "extraction", label: "Extraction" },
+  { id: "maintenance", label: "Maintenance" },
+];
 
 const repairActions: Array<{
   id: RepairAction;
@@ -203,6 +211,7 @@ export default function MemorySettings({
   );
   const [pending, setPending] = useState("");
   const [message, setMessage] = useState("");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("recall");
   const [selectedActions, setSelectedActions] = useState<RepairAction[]>([]);
   const [identityPreview, setIdentityPreview] =
     useState<LtmIdentityRepairPreviewResponse | null>(null);
@@ -740,28 +749,40 @@ export default function MemorySettings({
           </Button>
         ) : null}
       </div>
-      <nav
+      <div
+        role="tablist"
         aria-label="Memory settings sections"
-        className="sticky top-0 z-10 flex gap-2 overflow-x-auto bg-[var(--background)] py-2"
+        className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-1 sm:grid-cols-4"
       >
-        {[
-          ["settings-recall", "Recall"],
-          ["settings-backup", "Backup"],
-          ["settings-extraction", "Extraction"],
-          ["settings-maintenance", "Maintenance"],
-        ].map(([id, label]) => (
-          <Button
-            key={id}
-            onClick={() =>
-              document
-                .getElementById(id)
-                ?.scrollIntoView({ behavior: "smooth" })
-            }
+        {settingsTabs.map((tab, index) => (
+          <button
+            key={tab.id}
+            id={`settings-tab-${tab.id}`}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`settings-panel-${tab.id}`}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            onClick={() => setActiveTab(tab.id)}
+            onKeyDown={(event) => {
+              let next = index;
+              if (event.key === "ArrowRight")
+                next = (index + 1) % settingsTabs.length;
+              else if (event.key === "ArrowLeft")
+                next = (index - 1 + settingsTabs.length) % settingsTabs.length;
+              else if (event.key === "Home") next = 0;
+              else if (event.key === "End") next = settingsTabs.length - 1;
+              else return;
+              event.preventDefault();
+              setActiveTab(settingsTabs[next].id);
+              document.getElementById(`settings-tab-${settingsTabs[next].id}`)?.focus();
+            }}
+            className={`min-h-10 rounded-md border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${activeTab === tab.id ? "border-[var(--primary)]/35 bg-[var(--primary)]/10 text-[var(--foreground)]" : "border-transparent text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
           >
-            {label}
-          </Button>
+            {tab.label}
+          </button>
         ))}
-      </nav>
+      </div>
       {message ? (
         <StatusSurface
           tone={/could not|failed/i.test(message) ? "danger" : "success"}
@@ -771,8 +792,11 @@ export default function MemorySettings({
       ) : null}
 
       <section
-        id="settings-recall"
-        className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3"
+        id="settings-panel-recall"
+        role="tabpanel"
+        aria-labelledby="settings-tab-recall"
+        hidden={activeTab !== "recall"}
+        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
       >
         <div>
           <h3 className="text-sm font-semibold">Global Recall</h3>
@@ -945,8 +969,11 @@ export default function MemorySettings({
       </section>
 
       <section
-        id="settings-backup"
-        className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3"
+        id="settings-panel-backup"
+        role="tabpanel"
+        aria-labelledby="settings-tab-backup"
+        hidden={activeTab !== "backup"}
+        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
       >
         <div>
           <h3 className="text-sm font-semibold">Backup and Reset</h3>
@@ -1009,8 +1036,11 @@ export default function MemorySettings({
       </section>
 
       <section
-        id="settings-extraction"
-        className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3"
+        id="settings-panel-extraction"
+        role="tabpanel"
+        aria-labelledby="settings-tab-extraction"
+        hidden={activeTab !== "extraction"}
+        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
       >
         <div>
           <h3 className="text-sm font-semibold">Extraction</h3>
@@ -1171,8 +1201,11 @@ export default function MemorySettings({
       </section>
 
       <section
-        id="settings-maintenance"
-        className="scroll-mt-16 space-y-3 rounded-lg border border-[var(--border)] p-3"
+        id="settings-panel-maintenance"
+        role="tabpanel"
+        aria-labelledby="settings-tab-maintenance"
+        hidden={activeTab !== "maintenance"}
+        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
       >
         <div>
           <h3 className="text-sm font-semibold">Vault Maintenance</h3>

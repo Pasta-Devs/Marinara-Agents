@@ -152,7 +152,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           <Settings2 aria-hidden="true" size="1rem" />
         </button>
       </header>
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 overflow-y-auto px-4 py-5 sm:px-6 md:flex-row">
+      <div className="flex w-full flex-1 flex-col gap-5 overflow-y-auto px-4 py-5 sm:px-6 md:flex-row">
         <LongTermMemoryNavigation
           destination={destination}
           onDestinationChange={selectDestination}

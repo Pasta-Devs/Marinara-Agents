@@ -5,8 +5,8 @@
     "minor": 5
   },
   "builtAgainst": {
-    "engineVersion": "2.3.2",
-    "engineCommit": "b78477cbf265b7486309a7738b626112dcddcda6"
+    "engineVersion": "2.3.3",
+    "engineCommit": "2d84d04789dda428e60b371917feb6b311350fac"
   },
   "privateEngineImports": []
 }

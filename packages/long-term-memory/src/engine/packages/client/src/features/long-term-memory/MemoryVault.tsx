@@ -88,6 +88,8 @@ type RemoveCurrentChatResponse = {
   note?: LtmNote;
 };
 
+let sessionTarget: Target | null = null;
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -286,7 +288,7 @@ export default function MemoryVault({
   const [targetSearch, setTargetSearch] = useState("");
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [activeTargetIndex, setActiveTargetIndex] = useState(0);
-  const [target, setTarget] = useState<Target | null>(null);
+  const [target, setTarget] = useState<Target | null>(() => sessionTarget);
   const [typeFilter, setTypeFilter] = useState<LtmNoteType | "all">("all");
   const [kindFilter, setKindFilter] = useState<"all" | "durable" | "sources">(
     "all",
@@ -297,6 +299,7 @@ export default function MemoryVault({
   const [mobilePane, setMobilePane] = useState<
     "memories" | "editor" | "details"
   >("memories");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [draft, setDraft] = useState<LtmNote | null>(null);
   const [saved, setSaved] = useState("");
   const [isNew, setIsNew] = useState(false);
@@ -328,13 +331,20 @@ export default function MemoryVault({
       });
   }, [props.chatId, props.chatName, target]);
   useEffect(() => {
-    if (!target && scopeTargets.data?.currentScope)
+    if (props.chatId && !target && scopeTargets.data?.currentScope)
       setTarget({
         id: "current",
         label: props.chatName ?? "Current chat",
         scope: scopeTargets.data.currentScope,
       });
-  }, [scopeTargets.data, target, props.chatName]);
+  }, [props.chatId, scopeTargets.data, target, props.chatName]);
+  useEffect(() => {
+    if (!target && !props.chatId && scopeTargets.isSuccess)
+      setTarget({ id: "all", label: "All memories" });
+  }, [props.chatId, scopeTargets.isSuccess, target]);
+  useEffect(() => {
+    if (target) sessionTarget = target;
+  }, [target]);
   useEffect(() => {
     if (
       target?.id === `chat:${props.chatId}` &&
@@ -481,6 +491,7 @@ export default function MemoryVault({
     setIsNew(false);
     setError("");
     setNotice("");
+    setDetailsOpen(false);
     setMobilePane("editor");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
@@ -496,6 +507,7 @@ export default function MemoryVault({
     setSaved("");
     setIsNew(true);
     setAddOpen(false);
+    setDetailsOpen(false);
     setMobilePane("editor");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
@@ -835,7 +847,7 @@ export default function MemoryVault({
       <div
         role="tablist"
         aria-label="Memory workspace"
-        className="grid grid-cols-3 rounded-lg border border-[var(--border)] p-1"
+        className="grid grid-cols-3 rounded-lg border border-[var(--border)] p-1 md:hidden"
       >
         {(["memories", "editor", "details"] as const).map((pane) => (
           <button
@@ -844,7 +856,10 @@ export default function MemoryVault({
             role="tab"
             aria-selected={mobilePane === pane}
             disabled={pane !== "memories" && !draft}
-            onClick={() => setMobilePane(pane)}
+            onClick={() => {
+              setMobilePane(pane);
+              if (pane !== "details") setDetailsOpen(false);
+            }}
             className={`min-h-11 rounded-md px-2 text-xs font-semibold capitalize disabled:opacity-40 ${mobilePane === pane ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
           >
             {pane}
@@ -1090,10 +1105,10 @@ export default function MemoryVault({
           </>
         ) : null}
       </section>
-      <div className="grid min-h-0 gap-4">
+      <div className="grid min-w-0 min-h-0 gap-4 md:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]">
         <section
           data-ltm-memory-list
-          className={`${mobilePane === "memories" ? "block" : "hidden"} rounded-lg border border-[var(--border)]`}
+          className={`${mobilePane === "memories" ? "block" : "hidden"} min-w-0 rounded-lg border border-[var(--border)] md:block`}
           aria-label="Memory list"
         >
           <p className="border-b border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
@@ -1121,7 +1136,7 @@ export default function MemoryVault({
                 key={note.id}
                 data-ltm-note-type={note.type}
                 data-ltm-note-source={note.type === "source" || undefined}
-                className={`flex gap-2 border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
+                className={`flex min-w-0 gap-2 border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
               >
                 <label
                   className={`${selectionMode ? "flex" : "hidden"} min-h-11 min-w-8 items-center justify-center md:flex`}
@@ -1144,7 +1159,7 @@ export default function MemoryVault({
                 <button
                   type="button"
                   onClick={() => void openNote(note)}
-                  className="min-h-14 min-w-0 flex-1 rounded-md px-2 text-left hover:bg-[var(--accent)]"
+                  className="min-h-14 min-w-0 flex-1 overflow-hidden rounded-md px-2 text-left hover:bg-[var(--accent)]"
                 >
                   <span className="flex items-center gap-2">
                     <strong className="truncate text-sm">
@@ -1163,7 +1178,7 @@ export default function MemoryVault({
                     </span>
                   </span>
                   {notePreview ? (
-                    <span className="mt-1 line-clamp-2 block text-xs leading-5 text-[var(--muted-foreground)]">
+                    <span className="mt-1 line-clamp-2 block break-words text-xs leading-5 text-[var(--muted-foreground)]">
                       <span className="font-medium text-[var(--foreground)]">
                         {notePreview.label}:
                       </span>{" "}
@@ -1184,7 +1199,7 @@ export default function MemoryVault({
           ref={detailRef}
           tabIndex={-1}
           data-ltm-note-workbench
-          className={`${mobilePane === "memories" ? "hidden" : "block"} scroll-mt-20 rounded-lg border border-[var(--border)] p-3`}
+          className={`${mobilePane === "memories" ? "hidden" : "block"} min-w-0 scroll-mt-20 rounded-lg border border-[var(--border)] p-3 md:block`}
           aria-label="Memory editor"
         >
           {!draft ? (
@@ -1204,6 +1219,19 @@ export default function MemoryVault({
                 </div>
                 <div className="flex gap-2">
                   <Button
+                    onClick={() => {
+                      setDetailsOpen((value) => {
+                        const next = !value;
+                        setMobilePane(next ? "details" : "editor");
+                        return next;
+                      });
+                    }}
+                    aria-pressed={detailsOpen}
+                    className="hidden md:inline-flex"
+                  >
+                    Details
+                  </Button>
+                  <Button
                     primary
                     disabled={!dirty || busy === "save"}
                     onClick={() => void save()}
@@ -1214,9 +1242,15 @@ export default function MemoryVault({
                   <Button onClick={() => void closeDraft()}>Close</Button>
                 </div>
               </header>
-              <>
+              <div
+                className={`min-w-0 ${detailsOpen ? "md:grid md:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)] md:gap-4" : ""}`}
+              >
                 <div
-                  className={mobilePane === "details" ? "hidden" : "contents"}
+                  className={
+                    mobilePane === "details"
+                      ? "hidden md:block"
+                      : "contents"
+                  }
                 >
                   <section className="space-y-3">
                     <div className="flex flex-wrap items-end gap-2">
@@ -1445,7 +1479,13 @@ export default function MemoryVault({
                   </div>
                 </div>
                 <div
-                  className={mobilePane === "editor" ? "hidden" : "contents"}
+                  className={
+                    detailsOpen || mobilePane === "details"
+                      ? mobilePane === "editor"
+                        ? "hidden md:block"
+                        : "contents"
+                      : "hidden md:hidden"
+                  }
                 >
                   <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2">
                     <TokenEditor
@@ -1686,7 +1726,7 @@ export default function MemoryVault({
                     </section>
                   ) : null}
                 </div>
-              </>
+              </div>
               {draft.type === "source" ? (
                 <section className="space-y-2 border-t border-[var(--border)] pt-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">

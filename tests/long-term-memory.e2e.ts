@@ -120,10 +120,14 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     );
     await expect(navigation).toHaveCount(1);
     await expect(detail.locator('[data-ltm-surface="vault"]')).toBeVisible();
+    await expect(detail.getByLabel("Choose memory scope")).toHaveValue(
+      chat.name,
+    );
     await detail.getByLabel("Choose memory scope").click();
     await expect(
       detail.getByRole("option", { name: "All memories" }),
     ).toBeVisible();
+    await detail.getByRole("option", { name: "All memories" }).click();
     await expect(
       navigation.locator('[data-ltm-destination="vault"]'),
     ).toHaveAttribute("aria-current", "page");
@@ -138,9 +142,55 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       sources.locator('[data-ltm-source-tab="chats"]'),
     ).toHaveAttribute("aria-selected", "true");
+    await expect(
+      sources.locator('[data-ltm-source-section="available"]'),
+    ).toBeVisible();
+    await expect(
+      sources.locator('[data-ltm-source-section="imported"]'),
+    ).toBeVisible();
+    await expect(
+      sources.locator('[data-ltm-source-section-toggle="available"]'),
+    ).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      sources.locator('[data-ltm-source-section-toggle="imported"]'),
+    ).toHaveAttribute("aria-expanded", "false");
+    await expect(
+      sources.locator('[data-ltm-source-select-all="available"]'),
+    ).toBeVisible();
+    await sources
+      .locator('[data-ltm-source-section-toggle="imported"]')
+      .click();
+    await expect(
+      sources.locator('[data-ltm-source-select-all="imported"]'),
+    ).toBeVisible();
+    await expect(sources.locator('[data-ltm-transfer-include-derived]')).toBeChecked();
+
+    await navigation.locator('[data-ltm-destination="settings"]').click();
+    const settings = detail.locator('[data-ltm-surface="memory-settings"]');
+    const recallTab = settings.getByRole("tab", { name: "Recall" });
+    await expect(recallTab).toHaveAttribute("aria-selected", "true");
+    await expect(settings.getByRole("tabpanel")).toHaveCount(1);
+    await settings.getByRole("tab", { name: "Backup" }).click();
+    await expect(
+      settings.getByRole("heading", { name: "Backup and Reset" }),
+    ).toBeVisible();
+    await settings.getByRole("tab", { name: "Backup" }).press("ArrowRight");
+    await expect(
+      settings.getByRole("tab", { name: "Extraction" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect
+      .poll(() =>
+        settings.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth,
+        ),
+      )
+      .toBe(true);
 
     await navigation.locator('[data-ltm-destination="vault"]').click();
     await expect(detail.locator('[data-ltm-surface="vault"]')).toBeVisible();
+    await expect(detail.getByLabel("Choose memory scope")).toHaveValue(
+      "All memories",
+    );
   } finally {
     await deleteChat(page, chat.id);
   }
@@ -272,7 +322,10 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
         keywords: [],
         links: [],
         sections: {
-          facts: { text: "A scoped fixture.", updatedAt: timestamp },
+          facts: {
+            text: `A scoped fixture. ${"unbroken".repeat(80)}`,
+            updatedAt: timestamp,
+          },
         },
       },
     });
@@ -284,24 +337,38 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
       name: "Visible details fixture",
     });
     await expect(memory).toContainText(/facts: A scoped fixture\./i);
+    await expect
+      .poll(() =>
+        vault.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth,
+        ),
+      )
+      .toBe(true);
     await expect(vault.locator("[data-ltm-memory-list]")).toHaveCSS(
       "overflow-y",
       "visible",
     );
     await memory.click();
-    await expect(vault.locator("[data-ltm-memory-list]")).toBeHidden();
-    await expect(vault.getByRole("tab", { name: "Editor" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    await vault.getByRole("tab", { name: "Details" }).click();
+    if (testInfo.project.name.includes("mobile")) {
+      await expect(vault.locator("[data-ltm-memory-list]")).toBeHidden();
+      await expect(vault.getByRole("tab", { name: "Editor" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await vault.getByRole("tab", { name: "Details" }).click();
+    } else {
+      await expect(vault.locator("[data-ltm-memory-list]")).toBeVisible();
+      await expect(vault.getByRole("tab")).toHaveCount(0);
+      await vault.getByRole("button", { name: "Details" }).click();
+    }
     await expect(vault).toContainText("Created");
-    await vault.getByRole("tab", { name: "Editor" }).click();
+    if (testInfo.project.name.includes("mobile"))
+      await vault.getByRole("tab", { name: "Editor" }).click();
     await expect(
       vault.getByRole("heading", { name: "Memory details" }),
     ).toBeVisible();
     await expect(vault.getByRole("textbox", { name: "facts" })).toHaveValue(
-      "A scoped fixture.",
+      /A scoped fixture\. unbroken/,
     );
 
     await vault.getByRole("button", { name: "Add memories" }).click();
