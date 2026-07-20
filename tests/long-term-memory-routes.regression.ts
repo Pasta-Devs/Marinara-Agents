@@ -303,6 +303,7 @@ async function main() {
             async listCharacters() {
               return [
                 { id: "character-mara", data: { name: "Mara" }, comment: "" },
+                { id: "character-nyra", data: { name: "Nyra" }, comment: "" },
               ];
             },
             async listPersonas() {
@@ -1179,6 +1180,85 @@ async function main() {
       "char_mara_legacy_b",
     );
     assert.equal(identityApply.json().integrity.ok, true);
+    for (const [id, createdAt, text] of [
+      [
+        "char_nyra_persona_a",
+        "2026-07-17T00:00:00.000Z",
+        "Nyra charts the northern passage.",
+      ],
+      [
+        "char_nyra_persona_b",
+        "2026-07-18T00:00:00.000Z",
+        "Nyra marks the southern passage.",
+      ],
+    ] as const) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes",
+        headers,
+        payload: {
+          id,
+          title: "Nyra",
+          type: "character",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { personaId: "persona-fixture" },
+          tags: [],
+          keywords: [],
+          createdAt,
+          updatedAt: createdAt,
+          links: [],
+          sections: { facts: { text, updatedAt: createdAt } },
+        },
+      });
+      assert.equal(response.statusCode, 201, response.body);
+    }
+    const personaIdentityPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/identity-repair/preview",
+      headers,
+      payload: { scope: { personaId: "persona-fixture" } },
+    });
+    assert.equal(
+      personaIdentityPreview.statusCode,
+      200,
+      personaIdentityPreview.body,
+    );
+    const personaIdentityCandidate = personaIdentityPreview
+      .json()
+      .candidates.find((candidate: any) =>
+        candidate.duplicateNoteIds.includes("char_nyra_persona_b"),
+      );
+    assert.ok(personaIdentityCandidate);
+    const personaIdentityApply = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/identity-repair/apply",
+      headers,
+      payload: {
+        scope: { personaId: "persona-fixture" },
+        repairs: [
+          {
+            candidateId: personaIdentityCandidate.id,
+            canonicalNoteId: personaIdentityCandidate.canonicalNoteId,
+            excludedNoteIds: [],
+            sectionChoices: [],
+          },
+        ],
+      },
+    });
+    assert.equal(
+      personaIdentityApply.statusCode,
+      200,
+      personaIdentityApply.body,
+    );
+    assert.deepEqual(
+      (
+        await storageService.storage.getNote(
+          personaIdentityCandidate.canonicalNoteId,
+        )
+      ).scope,
+      { personaId: "persona-fixture" },
+    );
     const preview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",

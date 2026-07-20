@@ -203,7 +203,10 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
       .locator('[data-ltm-note-type="timeline_event"]')
       .filter({ hasText: timelineTitle });
     await expect(timelineRow).toBeVisible();
-    await expect(timelineRow).toHaveAttribute("data-ltm-note-type", "timeline_event");
+    await expect(timelineRow).toHaveAttribute(
+      "data-ltm-note-type",
+      "timeline_event",
+    );
     if (testInfo.project.name.includes("mobile"))
       await vault.getByRole("button", { name: "Select" }).click();
     await timelineRow
@@ -224,10 +227,22 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
       bulkActions.getByRole("button", { name: "Set status" }),
     ).toBeVisible();
 
-    await bulkActions.getByRole("button", { name: "Set status" }).click();
-    await expect(vault).toContainText("1 memory updated.");
+    await bulkActions.getByRole("checkbox", { name: "Select visible" }).check();
     await expect(bulkActions.locator("[data-ltm-selection-count]")).toHaveText(
-      "0 selected",
+      "2 selected, 1 hidden by filters",
+    );
+    const deleted = await page.request.post(
+      "/api/long-term-memory/notes/permanent-delete",
+      {
+        headers: csrfHeaders,
+        data: { ids: [worldId] },
+      },
+    );
+    expect(deleted.ok(), await deleted.text()).toBe(true);
+    await bulkActions.getByRole("button", { name: "Set status" }).click();
+    await expect(vault).toContainText("1 memory updated; 0 skipped, 1 failed.");
+    await expect(bulkActions.locator("[data-ltm-selection-count]")).toHaveText(
+      "1 selected, 1 hidden by filters",
     );
   } finally {
     await deleteNotes(page, [timelineId, worldId]);
@@ -274,20 +289,20 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
       "visible",
     );
     await memory.click();
-    if (testInfo.project.name.includes("mobile")) {
-      await expect(
-        vault.getByRole("tab", { name: "Editor" }),
-      ).toHaveAttribute("aria-selected", "true");
-      await vault.getByRole("tab", { name: "Details" }).click();
-      await expect(vault).toContainText("Created");
-      await vault.getByRole("tab", { name: "Editor" }).click();
-    }
+    await expect(vault.locator("[data-ltm-memory-list]")).toBeHidden();
+    await expect(vault.getByRole("tab", { name: "Editor" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await vault.getByRole("tab", { name: "Details" }).click();
+    await expect(vault).toContainText("Created");
+    await vault.getByRole("tab", { name: "Editor" }).click();
     await expect(
       vault.getByRole("heading", { name: "Memory details" }),
     ).toBeVisible();
-    await expect(
-      vault.getByRole("textbox", { name: "facts" }),
-    ).toHaveValue("A scoped fixture.");
+    await expect(vault.getByRole("textbox", { name: "facts" })).toHaveValue(
+      "A scoped fixture.",
+    );
 
     await vault.getByRole("button", { name: "Add memories" }).click();
     await vault.getByRole("menuitem", { name: /Create manually/ }).click();
@@ -301,7 +316,9 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
       name: "Discard unsaved memory changes?",
     });
     if (await discardDialog.isVisible({ timeout: 1_000 }).catch(() => false))
-      await discardDialog.getByRole("button", { name: "Discard changes" }).click();
+      await discardDialog
+        .getByRole("button", { name: "Discard changes" })
+        .click();
     await vault.getByRole("button", { name: "Add memories" }).click();
     await vault.getByRole("menuitem", { name: /Import sources/ }).click();
     await expect(page.locator('[data-ltm-surface="sources"]')).toBeVisible();
