@@ -316,7 +316,8 @@ export const PASTA_PHONE_STYLES = `
 
 [data-pasta-phone-chat-lines] { flex: 1 1 0%; min-width: 0; }
 
-[data-pasta-phone-chat-lines] span {
+/* Direct children only: nested spans (the "· this chat" marker) stay inline. */
+[data-pasta-phone-chat-lines] > span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -401,6 +402,167 @@ export const PASTA_PHONE_STYLES = `
 
 [data-pasta-phone-store-tag] {
   font-size: 0.5625rem;
+  color: var(--marinara-chat-chrome-panel-muted);
+}
+
+/* ── Chats: mode row, open action, empty state ── */
+[data-pasta-phone-chat-preview] {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+[data-pasta-phone-open-chat] {
+  flex-shrink: 0;
+  min-height: 2rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--marinara-chat-chrome-panel-border);
+  border-radius: 0.5rem;
+  background: transparent;
+  font: inherit;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--marinara-chat-chrome-panel-text);
+  cursor: pointer;
+}
+
+[data-pasta-phone-open-chat]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+[data-pasta-phone-empty] {
+  padding: 1.5rem 0.5rem;
+  text-align: center;
+}
+
+[data-pasta-phone-empty-title] {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--marinara-chat-chrome-panel-title);
+}
+
+[data-pasta-phone-empty-body] {
+  margin: 0.375rem 0 0;
+  font-size: 0.625rem;
+  line-height: 1.5;
+  color: var(--marinara-chat-chrome-panel-muted);
+}
+
+/* ── Agent detail view ── */
+[data-pasta-phone-detail] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.25rem 0;
+  color: var(--marinara-chat-chrome-panel-text);
+}
+
+[data-pasta-phone-detail] [data-pasta-phone-note] { margin: 0; }
+
+[data-pasta-phone-detail-section] {
+  padding: 0.75rem;
+  border: 1px solid var(--marinara-chat-chrome-panel-border);
+  border-radius: 0.75rem;
+  background: var(--marinara-chat-chrome-highlight-bg);
+}
+
+[data-pasta-phone-detail-hint],
+[data-pasta-phone-detail-empty] {
+  margin: 0.25rem 0 0;
+  font-size: 0.625rem;
+  line-height: 1.5;
+  color: var(--marinara-chat-chrome-panel-muted);
+}
+
+[data-pasta-phone-detail-empty] { margin: 0; }
+
+[data-pasta-phone-detail-actions] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+[data-pasta-phone-button] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--marinara-chat-chrome-panel-border);
+  border-radius: 0.5rem;
+  background: var(--marinara-chat-chrome-button-bg);
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--marinara-chat-chrome-button-text);
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+
+[data-pasta-phone-button]:hover:not(:disabled) {
+  background: var(--marinara-chat-chrome-button-bg-hover);
+}
+
+[data-pasta-phone-button]:focus-visible {
+  outline: 2px solid var(--marinara-chat-chrome-focus-ring);
+  outline-offset: 2px;
+}
+
+[data-pasta-phone-button]:disabled { opacity: 0.45; cursor: not-allowed; }
+
+[data-pasta-phone-button="primary"] {
+  border-color: transparent;
+  background: var(--marinara-chat-chrome-highlight-text);
+  color: var(--marinara-chat-chrome-panel-bg);
+}
+
+[data-pasta-phone-button="primary"]:hover:not(:disabled) {
+  opacity: 0.9;
+  background: var(--marinara-chat-chrome-highlight-text);
+}
+
+[data-pasta-phone-button="danger"] { color: var(--destructive, #dc2626); }
+
+[data-pasta-phone-picker] {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--marinara-chat-chrome-panel-divider);
+}
+
+[data-pasta-phone-picker] button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.25rem;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.6875rem;
+  text-align: left;
+  color: var(--marinara-chat-chrome-panel-text);
+  cursor: pointer;
+}
+
+[data-pasta-phone-picker] button:hover {
+  color: var(--marinara-chat-chrome-highlight-text);
+}
+
+[data-pasta-phone-picker] li + li {
+  border-top: 1px solid var(--marinara-chat-chrome-panel-divider);
+}
+
+[data-pasta-phone-mode] {
+  flex-shrink: 0;
+  font-size: 0.5625rem;
+  text-transform: capitalize;
   color: var(--marinara-chat-chrome-panel-muted);
 }
 `;

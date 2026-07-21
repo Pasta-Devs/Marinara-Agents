@@ -5,7 +5,8 @@
 // exists so the layout can be judged, nothing else.
 // ──────────────────────────────────────────────
 import type { ReactNode } from "react";
-import { ChevronLeft, Heart, MessageSquare, Repeat2 } from "lucide-react";
+import { ChevronLeft, Drama, Gamepad2, Heart, MessageSquare, Repeat2 } from "lucide-react";
+import { useGroupForChat, type PhoneChatMode } from "./groups";
 
 interface AppScreenProps {
   title: string;
@@ -128,32 +129,65 @@ export function NoodleRAppScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-const CHATS = [
-  { id: "1", name: "Lorem Ipsum", preview: "Sample last message preview…", time: "12m", unread: 2 },
-  { id: "2", name: "Dolor Sit", preview: "Consectetur adipiscing elit.", time: "1h", unread: 0 },
-  { id: "3", name: "Amet Group", preview: "Placeholder group conversation.", time: "4h", unread: 7 },
-  { id: "4", name: "Sed Eiusmod", preview: "Tempor incididunt ut labore.", time: "yesterday", unread: 0 },
-];
+const MODE_LABELS: Record<PhoneChatMode, string> = {
+  conversation: "Conversation",
+  roleplay: "Roleplay",
+  game: "Game",
+};
 
-export function ChatsAppScreen({ onBack }: { onBack: () => void }) {
+const MODE_ICONS: Record<PhoneChatMode, typeof MessageSquare> = {
+  conversation: MessageSquare,
+  roleplay: Drama,
+  game: Gamepad2,
+};
+
+// The only app screen wired to live state. Noodle, NoodleR, and App Store above
+// stay static mocks on purpose.
+export function ChatsAppScreen({ onBack, chatId }: { onBack: () => void; chatId: string | null }) {
+  const group = useGroupForChat(chatId);
+
   return (
     <AppScreen title="Chats" accent="#1f9d68" onBack={onBack}>
-      <ul data-pasta-phone-chat-list>
-        {CHATS.map((chat) => (
-          <li key={chat.id}>
-            <span data-pasta-phone-avatar="lg" aria-hidden />
-            <span data-pasta-phone-chat-lines>
-              <span data-pasta-phone-chat-name>{chat.name}</span>
-              <span data-pasta-phone-chat-preview>{chat.preview}</span>
-            </span>
-            <span data-pasta-phone-chat-meta>
-              <span>{chat.time}</span>
-              {chat.unread > 0 ? <span data-pasta-phone-unread>{chat.unread}</span> : null}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <PlaceholderNote />
+      {!group ? (
+        <div data-pasta-phone-empty>
+          <p data-pasta-phone-empty-title>Not part of a group yet</p>
+          <p data-pasta-phone-empty-body>
+            This chat has not been added to a Pasta Phone group. Create or join one from Chat Settings
+            → Agents → Pasta Phone.
+          </p>
+        </div>
+      ) : (
+        <>
+          <p data-pasta-phone-store-heading>{group.name}</p>
+          <ul data-pasta-phone-chat-list>
+            {group.chats.map((chat) => {
+              const ModeIcon = MODE_ICONS[chat.mode];
+              return (
+                <li key={chat.id}>
+                  <span data-pasta-phone-avatar="lg" aria-hidden />
+                  <span data-pasta-phone-chat-lines>
+                    <span data-pasta-phone-chat-name>
+                      {chat.name}
+                      {chat.id === chatId ? <span data-pasta-phone-muted> · this chat</span> : null}
+                    </span>
+                    <span data-pasta-phone-chat-preview>
+                      <ModeIcon size="0.6rem" /> {MODE_LABELS[chat.mode]}
+                    </span>
+                  </span>
+                  {/* ponytail: opening another chat needs a host callback the Engine does not
+                      pass to capability packages yet, so this stays disabled rather than lying. */}
+                  <button type="button" data-pasta-phone-open-chat disabled title="Opening a chat from the phone is not wired up yet">
+                    Open
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p data-pasta-phone-note>
+            Group membership is in-memory only in this build and resets on reload.
+          </p>
+        </>
+      )}
     </AppScreen>
   );
 }

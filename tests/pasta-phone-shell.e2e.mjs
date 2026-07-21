@@ -35,7 +35,20 @@ const HARNESS = `<!doctype html><html data-theme="dark"><head><meta charset="utf
   .flex{display:flex}.h-9{height:2.25rem}.w-9{width:2.25rem}.items-center{align-items:center}.justify-center{justify-content:center}.p-0{padding:0}
 </style></head><body>
 <marinara-capability-pasta-phone view="toolbar"></marinara-capability-pasta-phone>
+<div id="detail-host"></div>
 <script type="module" src="/client.js"></script>
+<script>
+  // Mirrors how the Engine's FeatureAgentDetailHost mounts the package: set
+  // capabilityProps on the element, then let the custom element upgrade.
+  window.mountDetail = (chatId, chatName, chatMode) => {
+    const host = document.getElementById("detail-host");
+    host.innerHTML = "";
+    const el = document.createElement("marinara-capability-pasta-phone");
+    el.setAttribute("view", "detail");
+    el.capabilityProps = { chatId, chatName, chatMode };
+    host.appendChild(el);
+  };
+</script>
 </body></html>`;
 
 const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript" };
@@ -107,7 +120,72 @@ async function run(label, { theme, visual, width, height }) {
   console.log(`${label}: ok`);
 }
 
+// Group management + Chats app, driven through the detail view the Engine
+// actually mounts. In-memory state only, so this asserts UI behaviour, not
+// persistence — that arrives with the package-owned store.
+async function runGroupFlow() {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  page.on("pageerror", (error) => problems.push(`groups: pageerror ${error.message}`));
+  await page.goto(`http://localhost:${PORT}/`, { waitUntil: "networkidle" });
+  await page.evaluate(() => window.mountDetail("chat-a", "Chat A", "roleplay"));
+  await page.waitForSelector("[data-pasta-phone-detail]", { timeout: 5000 });
+
+  const openPhone = async () => {
+    await page.click('[data-pasta-phone-detail] [data-pasta-phone-button="primary"]:has-text("Open Pasta Phone")');
+    await page.waitForSelector("[data-pasta-phone-sheet]", { timeout: 5000 });
+    await page.click('[data-pasta-phone-app]:has-text("Chats")');
+    await page.waitForSelector("[data-pasta-phone-app-screen]", { timeout: 5000 });
+  };
+  const closePhone = async () => {
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+  };
+
+  // No group yet -> Chats must show the defensive empty state, not a blank list.
+  await openPhone();
+  if (!(await page.locator("[data-pasta-phone-empty]").count())) {
+    problems.push("groups: Chats did not show the not-in-a-group empty state");
+  }
+  await closePhone();
+
+  // Create a group from chat A.
+  await page.click('[data-pasta-phone-detail] button:has-text("Create a new group")');
+  await page.waitForSelector('[data-pasta-phone-detail] button:has-text("Add another chat")', { timeout: 5000 });
+
+  // Add chat B to it.
+  await page.click('[data-pasta-phone-detail] button:has-text("Add another chat")');
+  await page.click('[data-pasta-phone-picker] button:has-text("Lorem Ipsum")');
+  await page.waitForTimeout(200);
+
+  await openPhone();
+  let names = await page.locator("[data-pasta-phone-chat-name]").allInnerTexts();
+  if (names.length !== 2) problems.push(`groups: expected 2 member chats, got ${names.length}: ${names.join(", ")}`);
+  if (!names.some((n) => n.includes("Chat A"))) problems.push("groups: Chat A missing from the group list");
+  if (!names.some((n) => n.includes("Lorem Ipsum"))) problems.push("groups: added chat missing from the group list");
+  const modes = await page.locator("[data-pasta-phone-chat-preview]").allInnerTexts();
+  if (!modes.some((m) => m.includes("Roleplay"))) problems.push(`groups: chat mode not shown (${modes.join(" | ")})`);
+  if (await page.locator("[data-pasta-phone-open-chat]:not([disabled])").count()) {
+    problems.push("groups: Open action should stay disabled until the Engine exposes chat navigation");
+  }
+  await closePhone();
+
+  // Removing the current chat leaves the group intact for its other member.
+  await page.click('[data-pasta-phone-detail] button:has-text("Remove this chat")');
+  await page.waitForSelector('[data-pasta-phone-detail] button:has-text("Create a new group")', { timeout: 5000 });
+  await openPhone();
+  names = await page.locator("[data-pasta-phone-chat-name]").allInnerTexts();
+  if (!(await page.locator("[data-pasta-phone-empty]").count())) {
+    problems.push(`groups: removed chat should fall back to the empty state, saw ${names.join(", ")}`);
+  }
+  await closePhone();
+
+  await context.close();
+  console.log("group-flow: ok");
+}
+
 try {
+  await runGroupFlow();
   await run("y2k-dark", { theme: "dark", visual: null, width: 1280, height: 900 });
   await run("y2k-light", { theme: "light", visual: null, width: 1280, height: 900 });
   await run("sillytavern-dark", { theme: "dark", visual: "sillytavern", width: 1280, height: 900 });

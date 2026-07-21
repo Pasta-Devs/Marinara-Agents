@@ -18,16 +18,19 @@ import { AppStoreAppScreen, ChatsAppScreen, NoodleAppScreen, NoodleRAppScreen } 
 interface PastaPhoneSheetProps {
   open: boolean;
   onClose: () => void;
+  /** The chat the phone was opened from; Chats resolves its group from this. */
+  chatId?: string | null;
 }
 
-const SCREENS: Record<PastaPhoneAppId, ComponentType<{ onBack: () => void }>> = {
+// Noodle, NoodleR, and App Store ignore chatId — they are still static mocks.
+const SCREENS: Record<PastaPhoneAppId, ComponentType<{ onBack: () => void; chatId: string | null }>> = {
   noodle: NoodleAppScreen,
   noodler: NoodleRAppScreen,
   chats: ChatsAppScreen,
   "app-store": AppStoreAppScreen,
 };
 
-export function PastaPhoneSheet({ open, onClose }: PastaPhoneSheetProps) {
+export function PastaPhoneSheet({ open, onClose, chatId = null }: PastaPhoneSheetProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [animating, setAnimating] = useState<"enter" | "exit" | null>(null);
@@ -120,7 +123,11 @@ export function PastaPhoneSheet({ open, onClose }: PastaPhoneSheetProps) {
       >
         <PhoneStatusBar />
         <div data-pasta-phone-screen>
-          {Screen ? <Screen onBack={() => setScreen("home")} /> : <PhoneLauncher onOpenApp={setScreen} />}
+          {Screen ? (
+            <Screen onBack={() => setScreen("home")} chatId={chatId} />
+          ) : (
+            <PhoneLauncher onOpenApp={setScreen} />
+          )}
         </div>
       </div>
     </div>,

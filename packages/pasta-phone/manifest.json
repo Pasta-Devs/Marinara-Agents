@@ -18,6 +18,11 @@
     "client": "client.js"
   },
   "contributions": {
+    "agentDetail": {
+      "agentIds": [
+        "pasta-phone"
+      ]
+    },
     "slots": [
       "conversation-toolbar"
     ]
@@ -35,8 +40,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "aac083a8ad3f901dd1f5165b909fea8d2a1a27b985e9caf1fedcea7e4576bcbe",
-      "bytes": 216911
+      "sha256": "8f9894a88ca90776c3b9770f60c8774b80d80d7fc5465aec3fafeeea27105ff9",
+      "bytes": 226647
     }
   ],
   "permissions": [

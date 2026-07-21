@@ -714,20 +714,38 @@ class Element extends HTMLElement { connectedCallback() { if (!this.__root) this
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.id === "pasta-phone") {
       const sheet = join(packagesDir, "pasta-phone/src/client/PastaPhoneSheet.tsx");
+      const detail = join(packagesDir, "pasta-phone/src/client/PastaPhoneDetail.tsx");
       // The phone styles itself through a package-owned <style> block, so the only
       // utility classes here are the safelisted ones shared with the other toolbar
       // buttons. Do not add unsafelisted Tailwind classes: the Engine will not emit them.
       source = `
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Smartphone } from "lucide-react";
 import { PastaPhoneSheet } from ${JSON.stringify(sheet)};
+import { PastaPhoneDetail } from ${JSON.stringify(detail)};
 function Root({ element }) {
+  const [, redraw] = useState(0);
   const [open, setOpen] = useState(false);
-  if (element.getAttribute("view") !== "toolbar") return null;
+  useEffect(() => {
+    const update = () => redraw((value) => value + 1);
+    element.addEventListener("marinara-capability-props", update);
+    return () => element.removeEventListener("marinara-capability-props", update);
+  }, [element]);
+  const props = element.capabilityProps || {};
+  const view = element.getAttribute("view");
+  if (view === "detail") {
+    return <PastaPhoneDetail
+      chatId={typeof props.chatId === "string" ? props.chatId : null}
+      chatName={typeof props.chatName === "string" ? props.chatName : null}
+      chatMode={typeof props.chatMode === "string" ? props.chatMode : null}
+    />;
+  }
+  // Declared for the day the Engine dispatches contributions.slots generically.
+  if (view !== "toolbar") return null;
   return <>
     <button type="button" className="mari-chrome-control flex h-9 w-9 items-center justify-center p-0" title="Open Pasta Phone" aria-label="Open Pasta Phone" onClick={() => setOpen(true)}><Smartphone size="0.875rem" /></button>
-    <PastaPhoneSheet open={open} onClose={() => setOpen(false)} />
+    <PastaPhoneSheet open={open} onClose={() => setOpen(false)} chatId={typeof props.chatId === "string" ? props.chatId : null} />
   </>;
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<Root element={this} />); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
@@ -840,7 +858,14 @@ for (const feature of selectedFeatures) {
     } : feature.id === "conversation-calls" ? {
       contributions: { slots: ["conversation-toolbar", "conversation-surface", "chat-settings"] },
     } : feature.id === "pasta-phone" ? {
-      contributions: { slots: ["conversation-toolbar"] },
+      // agentDetail is what actually mounts this package: the client dispatches
+      // view="detail" generically for any package contributing an agent id. The
+      // slots list is declared for the toolbar trigger but the client never reads
+      // contributions.slots, so it does not mount anything on its own today.
+      contributions: {
+        agentDetail: { agentIds: ["pasta-phone"] },
+        slots: ["conversation-toolbar"],
+      },
     } : {}),
     files: [
       { path: "agents.json", sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength },
