@@ -309,9 +309,31 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
   test.setTimeout(90_000);
   const chat = await createChat(page, testInfo);
   const id = `world_detail_${Date.now()}`;
+  const sourceId = `source_detail_${Date.now()}`;
   const timestamp = new Date().toISOString();
 
   try {
+    const sourceTitle = "Readable source fixture";
+    const source = await page.request.post("/api/long-term-memory/notes", {
+      headers: csrfHeaders,
+      data: {
+        id: sourceId,
+        title: sourceTitle,
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: chat.id, chatIds: [chat.id] },
+        tags: ["source_summary"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: chat.id },
+        sections: {
+          source: { text: "Source fixture text.", updatedAt: timestamp },
+        },
+      },
+    });
+    expect(source.status(), await source.text()).toBe(201);
+
     const created = await page.request.post("/api/long-term-memory/notes", {
       headers: csrfHeaders,
       data: {
@@ -328,6 +350,10 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
           facts: {
             text: `A scoped fixture. ${"unbroken".repeat(80)}`,
             updatedAt: timestamp,
+            importance: "major",
+            confidence: 0.8,
+            salience: 0.7,
+            evidence: [`source_note:${sourceId}`],
           },
         },
       },
@@ -336,6 +362,19 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
 
     await openLongTermMemory(page, chat.id, testInfo);
     const vault = page.locator('[data-ltm-surface="vault"]');
+    const groups = vault.locator("[data-ltm-memory-group]");
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(0)).toHaveAttribute(
+      "data-ltm-memory-group",
+      "source",
+    );
+    await expect(groups.nth(1)).toHaveAttribute(
+      "data-ltm-memory-group",
+      "world",
+    );
+    await expect(groups.nth(0).locator("summary")).toContainText("Source");
+    await groups.nth(0).locator("summary").click();
+    await expect(groups.nth(0).getByText(sourceTitle)).toBeHidden();
     const memory = vault.getByRole("button", {
       name: "Visible details fixture",
     });
@@ -363,6 +402,8 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
       const inspector = vault.locator("[data-ltm-note-inspector]");
       await expect(memoryList).toBeVisible();
       await expect(editor).toBeVisible();
+      await expect(inspector).toBeHidden();
+      await vault.getByRole("button", { name: "Show metadata" }).click();
       await expect(inspector).toBeVisible();
       await expect(vault.getByRole("tab")).toHaveCount(0);
       await expect(
@@ -379,6 +420,9 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
       expect(listBox!.x + listBox!.width).toBeLessThan(editorBox!.x);
       expect(editorBox!.x + editorBox!.width).toBeLessThan(inspectorBox!.x);
     }
+    await expect(vault.getByLabel("Confidence")).toHaveValue("0.8");
+    await expect(vault.getByLabel("Salience")).toHaveValue("0.7");
+    await expect(vault.getByLabel("Importance")).toHaveValue("major");
     await expect(vault).toContainText("Created");
     if (testInfo.project.name.includes("mobile"))
       await vault.getByRole("tab", { name: "Editor" }).click();
@@ -388,6 +432,15 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
     await expect(vault.getByRole("textbox", { name: "facts" })).toHaveValue(
       /A scoped fixture\. unbroken/,
     );
+    const titleBox = await vault.getByLabel("Title").boundingBox();
+    const sectionBox = await vault
+      .getByRole("heading", { name: "Memory sections" })
+      .boundingBox();
+    expect(titleBox).not.toBeNull();
+    expect(sectionBox).not.toBeNull();
+    expect(titleBox!.y).toBeLessThan(sectionBox!.y);
+    await expect(vault.getByText(sourceId, { exact: false })).toHaveCount(0);
+    await expect(vault.getByText(sourceTitle, { exact: true })).toBeVisible();
 
     await vault.getByRole("button", { name: "Add memories" }).click();
     await vault.getByRole("menuitem", { name: /Create manually/ }).click();
@@ -408,7 +461,7 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
     await vault.getByRole("menuitem", { name: /Import sources/ }).click();
     await expect(page.locator('[data-ltm-surface="sources"]')).toBeVisible();
   } finally {
-    await deleteNotes(page, [id]);
+    await deleteNotes(page, [id, sourceId]);
     await deleteChat(page, chat.id);
   }
 });
