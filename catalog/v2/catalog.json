@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-21T10:55:44.754Z",
+  "generatedAt": "2026-07-21T11:09:49.824Z",
   "packages": [
     {
       "manifest": {
@@ -1035,17 +1035,20 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "3fc584c14557d8c0db7e7f0be8ae83232172291c08e5dc7e8967188ef82f132a",
-            "bytes": 371
+            "sha256": "a2cb54935e030201dd80996a82e0f60bb8198f3403ffeac20a9a3e945d871172",
+            "bytes": 8819
           },
           {
             "path": "client.js",
-            "sha256": "8f9894a88ca90776c3b9770f60c8774b80d80d7fc5465aec3fafeeea27105ff9",
-            "bytes": 226647
+            "sha256": "fd412e03e09c99779a7d7796e85a30db2981ba157bd2f7f9f16a42cb55d70e8c",
+            "bytes": 228685
           }
         ],
         "permissions": [
           "agent-runtime",
+          "chat-read",
+          "routes",
+          "storage",
           "ui"
         ],
         "restartRequired": true
@@ -1054,8 +1057,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/pasta-phone.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pasta-phone-0.1.0.zip",
-        "sha256": "e4e10fdbaf92750b44a1da384d0b4d556dd67cb5978763656f90dd4d99c04869",
-        "bytes": 70581
+        "sha256": "7ec7ca55c0882bf77199bcece1c4b5ab4f74a1ea005d85f21f0a6ff589a9d954",
+        "bytes": 73792
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#pasta-phone"
     },

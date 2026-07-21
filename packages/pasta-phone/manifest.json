@@ -35,17 +35,20 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "3fc584c14557d8c0db7e7f0be8ae83232172291c08e5dc7e8967188ef82f132a",
-      "bytes": 371
+      "sha256": "a2cb54935e030201dd80996a82e0f60bb8198f3403ffeac20a9a3e945d871172",
+      "bytes": 8819
     },
     {
       "path": "client.js",
-      "sha256": "8f9894a88ca90776c3b9770f60c8774b80d80d7fc5465aec3fafeeea27105ff9",
-      "bytes": 226647
+      "sha256": "fd412e03e09c99779a7d7796e85a30db2981ba157bd2f7f9f16a42cb55d70e8c",
+      "bytes": 228685
     }
   ],
   "permissions": [
     "agent-runtime",
+    "chat-read",
+    "routes",
+    "storage",
     "ui"
   ],
   "restartRequired": true

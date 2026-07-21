@@ -29,6 +29,21 @@ Tailwind utilities listed in its `capability-package-safelist.html`, so the phon
 styles itself through a package-owned `<style>` block instead. The layout
 assertions fail if that block stops being applied.
 
+The group flow runs against a stubbed `fetch` implementing the package's own
+route shapes plus the Engine's chat list, so it covers the UI without booting an
+Engine. The stored semantics behind those routes are checked separately:
+
+`pasta-phone-groups.test.mjs` drives `packages/pasta-phone/server.mjs` against a
+stand-in for the Fastify app and the Engine agent API. It proves a chat belongs
+to at most one group, that removing a chat leaves the group intact for its other
+members, that an emptied group is retired, that concurrent writes to the shared
+settings blob do not clobber each other, and that everything survives a restart.
+It needs no Engine checkout and no browser:
+
+```bash
+node tests/pasta-phone-groups.test.mjs
+```
+
 ## Exact-artifact lifecycle regression
 
 `hierarchical-maps-lifecycle.regression.ts` installs an immutable prior Maps

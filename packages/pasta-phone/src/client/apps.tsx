@@ -13,9 +13,11 @@ interface AppScreenProps {
   accent: string;
   onBack: () => void;
   children: ReactNode;
+  /** Mock screens say so. Chats reads live data, so it carries no badge. */
+  preview?: boolean;
 }
 
-function AppScreen({ title, accent, onBack, children }: AppScreenProps) {
+function AppScreen({ title, accent, onBack, children, preview = true }: AppScreenProps) {
   return (
     <div data-pasta-phone-app-screen>
       <header data-pasta-phone-app-header>
@@ -23,9 +25,11 @@ function AppScreen({ title, accent, onBack, children }: AppScreenProps) {
           <ChevronLeft size="1.1rem" />
         </button>
         <h3 data-pasta-phone-app-title>{title}</h3>
-        <span data-pasta-phone-preview-badge style={{ backgroundColor: accent }}>
-          Preview
-        </span>
+        {preview ? (
+          <span data-pasta-phone-preview-badge style={{ backgroundColor: accent }}>
+            Preview
+          </span>
+        ) : null}
       </header>
       <div data-pasta-phone-app-body>{children}</div>
     </div>
@@ -147,7 +151,7 @@ export function ChatsAppScreen({ onBack, chatId }: { onBack: () => void; chatId:
   const group = useGroupForChat(chatId);
 
   return (
-    <AppScreen title="Chats" accent="#1f9d68" onBack={onBack}>
+    <AppScreen title="Chats" accent="#1f9d68" onBack={onBack} preview={false}>
       {!group ? (
         <div data-pasta-phone-empty>
           <p data-pasta-phone-empty-title>Not part of a group yet</p>
@@ -183,9 +187,6 @@ export function ChatsAppScreen({ onBack, chatId }: { onBack: () => void; chatId:
               );
             })}
           </ul>
-          <p data-pasta-phone-note>
-            Group membership is in-memory only in this build and resets on reload.
-          </p>
         </>
       )}
     </AppScreen>

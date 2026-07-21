@@ -36,6 +36,66 @@ const HARNESS = `<!doctype html><html data-theme="dark"><head><meta charset="utf
 </style></head><body>
 <marinara-capability-pasta-phone view="toolbar"></marinara-capability-pasta-phone>
 <div id="detail-host"></div>
+<script>
+  // Stands in for the package's own routes plus the Engine's chat list, so this
+  // test covers the UI against the real request shapes without booting an Engine.
+  // The stored semantics themselves are checked directly against server.mjs in
+  // tests/pasta-phone-groups.test.mjs.
+  (() => {
+    const chats = [
+      { id: "chat-a", name: "Chat A", mode: "roleplay" },
+      { id: "mock-chat-b", name: "Lorem Ipsum", mode: "conversation" },
+      { id: "mock-chat-c", name: "Dolor Sit", mode: "game" },
+    ];
+    let groups = {};
+    const detach = (chatId) => {
+      for (const group of Object.values(groups)) {
+        group.chatIds = group.chatIds.filter((id) => id !== chatId);
+        if (!group.chatIds.length) delete groups[group.id];
+      }
+    };
+    const json = (body, status = 200) =>
+      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+    window.fetch = async (input, init = {}) => {
+      const url = String(input);
+      const method = (init.method || "GET").toUpperCase();
+      const path = url.replace(/^https?:\\/\\/[^/]+/, "");
+      const body = init.body ? JSON.parse(init.body) : {};
+      const list = () => Object.values(groups);
+      if (path === "/api/chats") return json(chats);
+      if (path === "/api/pasta-phone/groups" && method === "GET") return json({ groups: list() });
+      const forChat = path.match(/^\\/api\\/pasta-phone\\/groups\\/for-chat\\/(.+)$/);
+      if (forChat) return json({ group: list().find((g) => g.chatIds.includes(decodeURIComponent(forChat[1]))) ?? null });
+      if (path === "/api/pasta-phone/groups" && method === "POST") {
+        detach(body.chatId);
+        const group = { id: "grp_" + Object.keys(groups).length, name: body.name, chatIds: [body.chatId], createdAt: new Date().toISOString() };
+        groups[group.id] = group;
+        return json({ group }, 201);
+      }
+      const addTo = path.match(/^\\/api\\/pasta-phone\\/groups\\/([^/]+)\\/chats$/);
+      if (addTo && method === "POST") {
+        const id = decodeURIComponent(addTo[1]);
+        const existing = groups[id];
+        if (!existing) return json({ error: "gone" }, 404);
+        detach(body.chatId);
+        const surviving = groups[id] ?? { ...existing, chatIds: [] };
+        groups[id] = surviving;
+        if (!surviving.chatIds.includes(body.chatId)) surviving.chatIds = [...surviving.chatIds, body.chatId];
+        return json({ group: surviving });
+      }
+      const removeFrom = path.match(/^\\/api\\/pasta-phone\\/groups\\/([^/]+)\\/chats\\/([^/]+)$/);
+      if (removeFrom && method === "DELETE") {
+        const id = decodeURIComponent(removeFrom[1]);
+        const target = groups[id];
+        if (!target) return json({ error: "gone" }, 404);
+        target.chatIds = target.chatIds.filter((c) => c !== decodeURIComponent(removeFrom[2]));
+        if (!target.chatIds.length) delete groups[id];
+        return json({ removed: true, group: groups[id] ?? null });
+      }
+      return json({ error: "not found" }, 404);
+    };
+  })();
+</script>
 <script type="module" src="/client.js"></script>
 <script>
   // Mirrors how the Engine's FeatureAgentDetailHost mounts the package: set

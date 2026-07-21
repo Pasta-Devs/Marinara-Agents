@@ -559,6 +559,17 @@ export const PASTA_PHONE_STYLES = `
   border-top: 1px solid var(--marinara-chat-chrome-panel-divider);
 }
 
+[data-pasta-phone-error] {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--destructive, #dc2626) 35%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--destructive, #dc2626) 12%, transparent);
+  font-size: 0.625rem;
+  line-height: 1.5;
+  color: var(--marinara-chat-chrome-panel-text);
+}
+
 [data-pasta-phone-mode] {
   flex-shrink: 0;
   font-size: 0.5625rem;

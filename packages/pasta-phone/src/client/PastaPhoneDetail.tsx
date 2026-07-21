@@ -6,20 +6,16 @@
 // which is the only capability surface the client dispatches generically —
 // contributions.slots is declared by manifests but never read, so the
 // conversation-toolbar trigger does not mount on its own.
-//
-// Group management here is UI only, against the in-memory store in groups.ts.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { Smartphone } from "lucide-react";
 import {
   addChatToGroup,
-  CANDIDATE_CHATS,
   createGroup,
   removeChatFromGroup,
   useGroupForChat,
   usePhoneGroups,
-  type PhoneChat,
-  type PhoneChatMode,
+  usePhoneState,
 } from "./groups";
 import { PASTA_PHONE_STYLES } from "./styles";
 import { PastaPhoneSheet } from "./PastaPhoneSheet";
@@ -27,24 +23,32 @@ import { PastaPhoneSheet } from "./PastaPhoneSheet";
 interface PastaPhoneDetailProps {
   chatId: string | null;
   chatName: string | null;
-  chatMode: string | null;
 }
 
-function asMode(mode: string | null): PhoneChatMode {
-  return mode === "roleplay" || mode === "game" ? mode : "conversation";
-}
-
-export function PastaPhoneDetail({ chatId, chatName, chatMode }: PastaPhoneDetailProps) {
+export function PastaPhoneDetail({ chatId, chatName }: PastaPhoneDetailProps) {
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState<"existing" | "add" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const { status, error, chats } = usePhoneState();
   const groups = usePhoneGroups();
   const group = useGroupForChat(chatId);
 
-  const currentChat: PhoneChat | null = chatId
-    ? { id: chatId, name: chatName?.trim() || "This chat", mode: asMode(chatMode) }
-    : null;
+  // Every mutation refetches, so the UI can never drift from what was stored.
+  const run = async (operation: () => Promise<void>) => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await operation();
+      setPicking(null);
+    } catch (problem) {
+      setActionError(problem instanceof Error ? problem.message : "That did not work");
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  const available = CANDIDATE_CHATS.filter(
+  const available = chats.filter(
     (candidate) => candidate.id !== chatId && !group?.chats.some((member) => member.id === candidate.id),
   );
 
@@ -53,24 +57,28 @@ export function PastaPhoneDetail({ chatId, chatName, chatMode }: PastaPhoneDetai
       <style data-pasta-phone-styles>{PASTA_PHONE_STYLES}</style>
 
       <p data-pasta-phone-note>
-        Preview build — group membership is in-memory only and resets on reload. Noodle, NoodleR, and
-        App Store are still placeholder screens.
+        Noodle, NoodleR, and App Store are still placeholder screens. Chats and group membership are real.
       </p>
 
-      {!currentChat ? (
+      {status === "error" ? <p data-pasta-phone-error>{error}</p> : null}
+      {actionError ? <p data-pasta-phone-error>{actionError}</p> : null}
+
+      {!chatId ? (
         <p data-pasta-phone-detail-empty>Open a chat to manage its Pasta Phone group.</p>
+      ) : status === "loading" ? (
+        <p data-pasta-phone-detail-empty>Loading groups…</p>
       ) : group ? (
         <section data-pasta-phone-detail-section>
           <p data-pasta-phone-store-heading>{group.name}</p>
           <p data-pasta-phone-detail-hint>
-            {group.chats.length} {group.chats.length === 1 ? "chat" : "chats"} share this phone.
+            {group.chats.length === 1 ? "1 chat shares" : `${group.chats.length} chats share`} this phone.
           </p>
 
           <div data-pasta-phone-detail-actions>
             <button
               type="button"
               data-pasta-phone-button
-              disabled={available.length === 0}
+              disabled={busy || available.length === 0}
               onClick={() => setPicking(picking === "add" ? null : "add")}
             >
               Add another chat
@@ -78,7 +86,8 @@ export function PastaPhoneDetail({ chatId, chatName, chatMode }: PastaPhoneDetai
             <button
               type="button"
               data-pasta-phone-button="danger"
-              onClick={() => removeChatFromGroup(group.id, currentChat.id)}
+              disabled={busy}
+              onClick={() => void run(() => removeChatFromGroup(group.id, chatId))}
             >
               Remove this chat
             </button>
@@ -90,10 +99,8 @@ export function PastaPhoneDetail({ chatId, chatName, chatMode }: PastaPhoneDetai
                 <li key={candidate.id}>
                   <button
                     type="button"
-                    onClick={() => {
-                      addChatToGroup(group.id, candidate);
-                      setPicking(null);
-                    }}
+                    disabled={busy}
+                    onClick={() => void run(() => addChatToGroup(group.id, candidate.id))}
                   >
                     <span>{candidate.name}</span>
                     <span data-pasta-phone-mode>{candidate.mode}</span>
@@ -110,14 +117,15 @@ export function PastaPhoneDetail({ chatId, chatName, chatMode }: PastaPhoneDetai
             <button
               type="button"
               data-pasta-phone-button="primary"
-              onClick={() => createGroup(`${currentChat.name} group`, currentChat)}
+              disabled={busy}
+              onClick={() => void run(() => createGroup(`${chatName?.trim() || "New"} group`, chatId))}
             >
               Create a new group
             </button>
             <button
               type="button"
               data-pasta-phone-button
-              disabled={groups.length === 0}
+              disabled={busy || groups.length === 0}
               onClick={() => setPicking(picking === "existing" ? null : "existing")}
             >
               Add to existing group
@@ -130,10 +138,8 @@ export function PastaPhoneDetail({ chatId, chatName, chatMode }: PastaPhoneDetai
                 <li key={candidate.id}>
                   <button
                     type="button"
-                    onClick={() => {
-                      addChatToGroup(candidate.id, currentChat);
-                      setPicking(null);
-                    }}
+                    disabled={busy}
+                    onClick={() => void run(() => addChatToGroup(candidate.id, chatId))}
                   >
                     <span>{candidate.name}</span>
                     <span data-pasta-phone-mode>

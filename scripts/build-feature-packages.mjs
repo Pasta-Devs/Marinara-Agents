@@ -96,8 +96,10 @@ const features = [
     description: "Adds an in-chat phone shell with a Noodle, NoodleR, Chats, and App Store launcher. Preview build: every screen shows placeholder content and no real data is wired up yet.",
     kind: ["agent", "pasta-phone"],
     modes: ["conversation"],
-    // Client-only preview shell: no routes, no storage, no chat access yet.
-    permissions: ["agent-runtime", "ui"],
+    // routes + storage: the package serves its own group endpoints and persists a
+    // groups blob in its agent settings. chat-read: the group picker and the Chats
+    // app read the Engine's chat list to label members. No chat-write or network.
+    permissions: ["agent-runtime", "chat-read", "routes", "storage", "ui"],
   },
   {
     id: "conversation-calls",
@@ -738,7 +740,6 @@ function Root({ element }) {
     return <PastaPhoneDetail
       chatId={typeof props.chatId === "string" ? props.chatId : null}
       chatName={typeof props.chatName === "string" ? props.chatName : null}
-      chatMode={typeof props.chatMode === "string" ? props.chatMode : null}
     />;
   }
   // Declared for the day the Engine dispatches contributions.slots generically.
