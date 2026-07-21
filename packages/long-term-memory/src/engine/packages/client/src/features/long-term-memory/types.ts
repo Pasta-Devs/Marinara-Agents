@@ -42,7 +42,11 @@ export type CapabilityElement = HTMLElement & {
 };
 
 export type LongTermMemoryDestination =
-  "vault" | "review" | "sources" | "activity" | "settings";
+  | "vault"
+  | "review"
+  | "sources"
+  | "activity"
+  | "settings";
 
 export type LtmRecoveryHandoff = {
   key: number;
@@ -55,7 +59,6 @@ export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenMemory?: (noteId: string) => void;
-  onOpenSources?: () => void;
   onOpenReview?: (sourceNoteId?: string) => void;
   onRecoverCandidate?: (
     candidate: LtmExtractionDroppedCandidate,
@@ -63,6 +66,8 @@ export type LongTermMemoryDestinationProps = {
     modes: LtmMode[],
   ) => void;
   openedNoteId?: string | null;
+  createMemoryRequest?: number | null;
+  onCreateMemoryRequestHandled?: () => void;
   reviewSourceNoteId?: string | null;
   recoveryHandoff?: LtmRecoveryHandoff | null;
 };

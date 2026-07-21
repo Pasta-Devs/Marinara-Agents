@@ -1,6 +1,14 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BrainCircuit, Database, Settings2 } from "lucide-react";
+import {
+  ArrowLeft,
+  BrainCircuit,
+  CircleAlert,
+  Pencil,
+  Plus,
+  Settings2,
+  Upload,
+} from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
@@ -33,6 +41,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     useState<LongTermMemoryDestination>("vault");
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [createMemoryRequest, setCreateMemoryRequest] = useState<number | null>(
+    null,
+  );
   const [destinationDirty, setDestinationDirty] = useState(false);
   const [openedNoteId, setOpenedNoteId] = useState<string | null>(null);
   const [reviewSourceNoteId, setReviewSourceNoteId] = useState<string | null>(
@@ -65,6 +77,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestinationDirty(false);
     if (next === "review") setReviewSourceNoteId(null);
     if (next !== "vault") setRecoveryHandoff(null);
+    setAddOpen(false);
     setDestination(next);
   };
   const close = async () => {
@@ -98,6 +111,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const openSources = async () => {
     if (!(await confirmDestinationChange("Sources"))) return;
     setDestinationDirty(false);
+    setAddOpen(false);
     setDestination("sources");
   };
   const toggleActivation = async () => {
@@ -114,6 +128,34 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       setActivationPending(false);
     }
   };
+
+  const indexHealth = status.data?.indexes;
+  const health =
+    indexHealth?.rebuildState === "building"
+      ? "building"
+      : indexHealth?.rebuildState === "failed"
+        ? "failed"
+        : indexHealth?.health;
+  const healthLabel = {
+    healthy: "Vault healthy",
+    building: "Vault rebuilding",
+    failed: "Rebuild failed",
+    degraded: "Vault degraded",
+    stale: "Vault stale",
+    corrupt: "Vault corrupt",
+    not_built: "Vault not built",
+  }[health ?? "not_built"];
+  const emptyUnbuiltVault =
+    health === "not_built" && (status.data?.notes.total ?? 0) === 0;
+  const needsHealthAttention = health !== "healthy" && !emptyUnbuiltVault;
+  const healthTone =
+    !status.data || emptyUnbuiltVault
+      ? "bg-[var(--muted-foreground)]"
+      : health === "healthy"
+        ? "bg-emerald-500"
+        : health === "corrupt" || health === "failed"
+          ? "bg-[var(--destructive)]"
+          : "bg-amber-500";
 
   return (
     <main
@@ -164,37 +206,145 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         <div className="min-w-0 flex-1 space-y-5">
           <section
             data-ltm-surface="overview"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3"
+            aria-label="Memory status"
+            className="flex min-h-14 flex-wrap items-center gap-x-5 gap-y-2 border-y border-[var(--border)] bg-[var(--secondary)]/20 px-3 py-2 text-xs text-[var(--muted-foreground)]"
           >
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
-                <Database aria-hidden="true" size="1rem" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">
-                  {status.data
-                    ? `${status.data.notes.total} saved memories`
-                    : "Memory vault"}
-                </p>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {status.data
-                    ? `${status.data.indexes.chunkCount ?? 0} indexed chunks`
-                    : status.isError
-                      ? "Status unavailable"
-                      : "Loading status"}
-                </p>
-              </div>
-            </div>
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+              <strong className="text-[var(--foreground)]">
+                {status.data ? status.data.notes.total : "--"}
+              </strong>{" "}
+              memories
+            </span>
+            <span className="hidden whitespace-nowrap sm:inline">
+              <strong className="text-[var(--foreground)]">
+                {status.data ? (status.data.indexes.chunkCount ?? "--") : "--"}
+              </strong>{" "}
+              indexed chunks
+            </span>
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <span className={`h-1.5 w-1.5 rounded-full ${healthTone}`} />
+              {status.isError
+                ? "Status unavailable"
+                : status.data
+                  ? healthLabel
+                  : "Loading status"}
+              {status.data && needsHealthAttention ? (
+                <details
+                  className="group relative"
+                  onMouseEnter={(event) => {
+                    event.currentTarget.open = true;
+                  }}
+                  onMouseLeave={(event) => {
+                    event.currentTarget.open = false;
+                  }}
+                >
+                  <summary
+                    aria-label="How to repair vault health"
+                    className="grid h-7 w-7 cursor-pointer list-none place-items-center rounded-md text-amber-600 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] dark:text-amber-400"
+                  >
+                    <CircleAlert aria-hidden="true" size="0.875rem" />
+                  </summary>
+                  <p className="absolute left-0 top-8 z-30 w-64 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs leading-5 text-[var(--foreground)] shadow-lg">
+                    Check Settings &gt; Maintenance &gt; Reindex recall data.
+                  </p>
+                </details>
+              ) : null}
+            </span>
+            <span className="hidden flex-1 lg:block" />
             {props.chatId ? (
-              <Button
-                primary={props.enabledForChat === true}
-                disabled={activationPending}
-                onClick={() => void toggleActivation()}
-              >
-                {props.enabledForChat
-                  ? `Active in ${props.chatName ?? "this chat"}`
-                  : "Enable for this chat"}
-              </Button>
+              <div className="ml-auto inline-flex min-h-11 items-center gap-2 whitespace-nowrap">
+                <span className="hidden sm:inline">
+                  Active in{" "}
+                  <strong className="text-[var(--foreground)]">
+                    {props.chatName ?? "this chat"}
+                  </strong>
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={props.enabledForChat === true}
+                  aria-label={`Active in ${props.chatName ?? "this chat"}`}
+                  data-ltm-control="activation"
+                  className="relative h-11 w-11 rounded-md bg-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50 before:absolute before:left-0 before:top-2 before:h-6 before:w-10 before:rounded-full before:bg-[var(--secondary)] before:transition-colors aria-checked:before:bg-[var(--primary)] after:absolute after:left-1 after:top-3 after:h-4 after:w-4 after:rounded-full after:bg-[var(--foreground)] after:transition-transform aria-checked:after:translate-x-4"
+                  disabled={activationPending || !props.onEnabledForChatChange}
+                  onClick={() => void toggleActivation()}
+                />
+              </div>
+            ) : null}
+            {destination === "vault" ? (
+              <div className="relative">
+                <Button
+                  primary
+                  className="min-w-11 px-0 sm:px-3"
+                  onClick={() => setAddOpen((value) => !value)}
+                  aria-expanded={addOpen}
+                  aria-controls="ltm-add-menu"
+                  aria-label="Add memories"
+                >
+                  <Plus aria-hidden="true" size="0.875rem" />
+                  <span className="hidden sm:inline">Add memories</span>
+                </Button>
+                {addOpen ? (
+                  <div
+                    id="ltm-add-menu"
+                    aria-label="Add memories"
+                    className="absolute right-0 z-30 mt-2 w-72 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 shadow-lg"
+                  >
+                    <div className="px-2 py-1">
+                      <h2 className="text-sm font-semibold">Add memories</h2>
+                      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                        Durable context usually starts in an existing source.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void openSources()}
+                      className="mt-1 flex min-h-16 w-full items-center gap-3 rounded-md bg-[var(--primary)]/10 p-3 text-left hover:bg-[var(--primary)]/15"
+                    >
+                      <Upload
+                        aria-hidden="true"
+                        size="1rem"
+                        className="shrink-0 text-[var(--primary)]"
+                      />
+                      <span>
+                        <strong className="block text-sm">
+                          Import sources
+                        </strong>
+                        <span className="block text-xs text-[var(--primary)]">
+                          Recommended
+                        </span>
+                        <span className="block text-xs text-[var(--muted-foreground)]">
+                          Characters, lorebooks, and chat summaries
+                        </span>
+                      </span>
+                    </button>
+                    <div className="my-1 border-t border-[var(--border)]" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddOpen(false);
+                        setCreateMemoryRequest(Date.now());
+                      }}
+                      className="flex min-h-14 w-full items-center gap-3 rounded-md p-3 text-left hover:bg-[var(--accent)]"
+                    >
+                      <Pencil
+                        aria-hidden="true"
+                        size="1rem"
+                        className="shrink-0"
+                      />
+                      <span>
+                        <strong className="block text-sm">
+                          Create manually
+                        </strong>
+                        <span className="block text-xs text-[var(--muted-foreground)]">
+                          One-off durable context
+                        </span>
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
           </section>
           {activationError ? (
@@ -214,10 +364,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               props={props}
               onDirtyChange={setDestinationDirty}
               onOpenMemory={openMemory}
-              onOpenSources={openSources}
               onOpenReview={openReview}
               onRecoverCandidate={recoverCandidate}
               openedNoteId={openedNoteId}
+              createMemoryRequest={createMemoryRequest}
+              onCreateMemoryRequestHandled={() => setCreateMemoryRequest(null)}
               reviewSourceNoteId={reviewSourceNoteId}
               recoveryHandoff={recoveryHandoff}
             />

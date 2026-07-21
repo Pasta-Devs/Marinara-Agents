@@ -4,7 +4,6 @@ import {
   Archive,
   Check,
   ChevronRight,
-  FilePlus2,
   Link2,
   PanelRight,
   Plus,
@@ -301,9 +300,10 @@ function TokenEditor({
 export default function MemoryVault({
   props,
   onDirtyChange,
-  onOpenSources,
   onOpenReview,
   openedNoteId,
+  createMemoryRequest,
+  onCreateMemoryRequestHandled,
   recoveryHandoff,
 }: LongTermMemoryDestinationProps) {
   const client = useQueryClient();
@@ -313,10 +313,6 @@ export default function MemoryVault({
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [activeTargetIndex, setActiveTargetIndex] = useState(0);
   const [target, setTarget] = useState<Target | null>(() => sessionTarget);
-  const [typeFilter, setTypeFilter] = useState<LtmNoteType | "all">("all");
-  const [kindFilter, setKindFilter] = useState<"all" | "durable" | "sources">(
-    "all",
-  );
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">("all");
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -327,7 +323,6 @@ export default function MemoryVault({
   const [draft, setDraft] = useState<LtmNote | null>(null);
   const [saved, setSaved] = useState("");
   const [isNew, setIsNew] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -410,11 +405,6 @@ export default function MemoryVault({
   );
   const visible = allNotes.filter(
     (note) =>
-      (kindFilter === "all" ||
-        (kindFilter === "sources"
-          ? note.type === "source"
-          : note.type !== "source")) &&
-      (typeFilter === "all" || note.type === typeFilter) &&
       (statusFilter === "all" || note.status === statusFilter) &&
       (!search.trim() ||
         searchable(note).includes(search.trim().toLocaleLowerCase())),
@@ -475,7 +465,8 @@ export default function MemoryVault({
     if (!id) return humanizeLabel(value);
     if (kind === "source_note")
       return (
-        allNotes.find((note) => note.id === id)?.title?.trim() || "Source memory"
+        allNotes.find((note) => note.id === id)?.title?.trim() ||
+        "Source memory"
       );
     if (kind === "character") return scopeTargetLabel("character", id, targets);
     if (kind === "persona") return scopeTargetLabel("persona", id, targets);
@@ -560,7 +551,6 @@ export default function MemoryVault({
     setDraft(next);
     setSaved("");
     setIsNew(true);
-    setAddOpen(false);
     setDetailsOpen(false);
     setMobilePane("editor");
     requestAnimationFrame(() =>
@@ -570,6 +560,11 @@ export default function MemoryVault({
       }),
     );
   }
+  useEffect(() => {
+    if (!createMemoryRequest) return;
+    onCreateMemoryRequestHandled?.();
+    void startNew();
+  }, [createMemoryRequest]);
   async function closeDraft() {
     if (!(await confirm("closing this memory"))) return;
     setDraft(null);
@@ -920,70 +915,22 @@ export default function MemoryVault({
           }
         }
       `}</style>
-      <header
-        data-ltm-vault-header
-        className="flex flex-wrap items-center justify-between gap-3"
-      >
-        <div>
-          <h2 className="text-base font-semibold">Memory Vault</h2>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Memories linked to the selected chat, branch, or character.
-          </p>
+      <header data-ltm-vault-header className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-base font-semibold">Memory vault</h2>
+          <span className="text-xs text-[var(--muted-foreground)]">
+            {visible.length} shown
+          </span>
         </div>
-        <div className="relative">
-          <div className="flex gap-2">
-            <span className="md:hidden">
-              <Button
-                onClick={() => {
-                  setSelectionMode((value) => !value);
-                  if (selectionMode) setChecked(new Set());
-                }}
-              >
-                {selectionMode ? "Done" : "Select"}
-              </Button>
-            </span>
-            <Button
-              primary
-              onClick={() => setAddOpen((value) => !value)}
-              aria-haspopup="menu"
-              aria-expanded={addOpen}
-            >
-              <FilePlus2 size="0.875rem" />
-              Add memories
-            </Button>
-          </div>
-          {addOpen ? (
-            <div
-              role="menu"
-              className="absolute right-0 z-20 mt-2 w-72 space-y-1 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 shadow-lg"
-            >
-              <button
-                role="menuitem"
-                type="button"
-                onClick={() => {
-                  setAddOpen(false);
-                  onOpenSources?.();
-                }}
-                className="w-full rounded-md p-3 text-left hover:bg-[var(--accent)]"
-              >
-                <strong className="block text-sm">Import sources</strong>
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  Characters, lorebooks, and chat summaries
-                </span>
-              </button>
-              <button
-                role="menuitem"
-                type="button"
-                onClick={() => void startNew()}
-                className="w-full rounded-md p-3 text-left hover:bg-[var(--accent)]"
-              >
-                <strong className="block text-sm">Create manually</strong>
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  One-off durable context
-                </span>
-              </button>
-            </div>
-          ) : null}
+        <div className="flex gap-2 md:hidden">
+          <Button
+            onClick={() => {
+              setSelectionMode((value) => !value);
+              if (selectionMode) setChecked(new Set());
+            }}
+          >
+            {selectionMode ? "Done" : "Select"}
+          </Button>
         </div>
       </header>
       <div
@@ -1010,9 +957,9 @@ export default function MemoryVault({
       </div>
       <section
         data-ltm-browser-controls
-        className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3 sm:grid-cols-[minmax(0,1fr)_10rem_10rem_10rem]"
+        className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
       >
-        <div className="relative sm:col-span-4">
+        <div className="relative sm:col-span-2">
           <input
             className={inputClass}
             value={targetSearch || target?.label || ""}
@@ -1108,34 +1055,6 @@ export default function MemoryVault({
             </button>
           ) : null}
         </label>
-        <select
-          className={inputClass}
-          value={kindFilter}
-          onChange={(event) => {
-            setKindFilter(event.target.value as "all" | "durable" | "sources");
-            setTypeFilter("all");
-          }}
-          aria-label="Filter by memory kind"
-        >
-          <option value="all">All</option>
-          <option value="durable">Durable memories</option>
-          <option value="sources">Sources</option>
-        </select>
-        <select
-          className={inputClass}
-          value={typeFilter}
-          onChange={(event) =>
-            setTypeFilter(event.target.value as LtmNoteType | "all")
-          }
-          aria-label="Filter by type"
-        >
-          <option value="all">All types</option>
-          {noteTypes.map((type) => (
-            <option key={type} value={type}>
-              {title(type)}
-            </option>
-          ))}
-        </select>
         <select
           className={inputClass}
           value={statusFilter}
@@ -1316,9 +1235,6 @@ export default function MemoryVault({
           className={`${mobilePane === "memories" ? "block" : "hidden"} min-w-0 rounded-lg border border-[var(--border)] md:block`}
           aria-label="Memory list"
         >
-          <p className="border-b border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
-            {visible.length} shown
-          </p>
           {notes.isLoading ? (
             <StatusSurface busy>Loading memories...</StatusSurface>
           ) : null}
@@ -1340,7 +1256,7 @@ export default function MemoryVault({
             return (
               <details
                 key={type}
-                open
+                open={search.trim() ? true : undefined}
                 className="group"
                 data-ltm-memory-group={type}
               >
@@ -1484,7 +1400,9 @@ export default function MemoryVault({
                       ? "hidden space-y-4 md:block"
                       : "space-y-4"
                   }
-                  style={detailsOpen ? { flex: "1 1 0%", minWidth: 0 } : undefined}
+                  style={
+                    detailsOpen ? { flex: "1 1 0%", minWidth: 0 } : undefined
+                  }
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1 text-xs font-medium">
