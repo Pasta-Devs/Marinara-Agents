@@ -1,0 +1,19 @@
+[
+  {
+    "id": "pasta-phone",
+    "name": "Pasta Phone",
+    "description": "Adds an in-chat phone shell with a Noodle, NoodleR, Chats, and App Store launcher. Preview build: every screen shows placeholder content and no real data is wired up yet. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation mode, then open the phone from the chat toolbar.",
+    "author": "Pasta Devs",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "misc",
+    "runtimeDisabled": true,
+    "modeAllowlist": [
+      "conversation"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {},
+    "defaultPromptTemplate": "",
+    "execution": "feature"
+  }
+]

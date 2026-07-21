@@ -71,6 +71,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation"],
     activation: "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
   },
+  "pasta-phone": {
+    modes: ["conversation"],
+    activation: "Add the Agent in Chat Settings → Agents → Misc Agents for Conversation mode, then open the phone from the chat toolbar.",
+  },
   cyoa: {
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",

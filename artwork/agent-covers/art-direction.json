@@ -43,6 +43,7 @@
     { "id": "rock-paper-scissors", "name": "Rock-Paper-Scissors", "concept": "Mari throws an enthusiastic hand sign during a playful match as bold rock, paper, and scissors symbols orbit in a dynamic triangular burst.", "palette": "coral red, paper white, steel blue, sunny yellow" },
     { "id": "tic-tac-toe", "name": "Tic-Tac-Toe", "concept": "Mari excitedly draws the winning symbol on a large glowing three-by-three grid, with chunky circles and crosses arranged in a clean playful pattern.", "palette": "aqua, coral, cream, navy" },
     { "id": "uno", "name": "UNO", "concept": "Mari plays a lively hand of bright red, yellow, blue, and green action cards at a friendly table, tossing one card into the center with delighted energy; no brand logo or words.", "palette": "primary red, yellow, blue, green with navy" },
-    { "id": "world-state", "name": "World State", "concept": "Mari carefully holds a glowing miniature world showing tiny mountains and ocean, with day and night, sun, moon, rain cloud, snowflake, and temperature symbols orbiting it.", "palette": "planet blue, leaf green, sunlight gold, night violet" }
+    { "id": "world-state", "name": "World State", "concept": "Mari carefully holds a glowing miniature world showing tiny mountains and ocean, with day and night, sun, moon, rain cloud, snowflake, and temperature symbols orbiting it.", "palette": "planet blue, leaf green, sunlight gold, night violet" },
+    { "id": "pasta-phone", "name": "Pasta Phone", "concept": "Mari holds up a chunky smartphone toward the viewer with a delighted grin, its screen showing a colorful four-app grid that glows against her face.", "palette": "tomato red, cornflower blue, emerald, violet, warm cream" }
   ]
 }

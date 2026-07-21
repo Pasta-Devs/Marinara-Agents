@@ -89,6 +89,17 @@ const features = [
     prefix: "/api/chats",
   },
   {
+    id: "pasta-phone",
+    name: "Pasta Phone",
+    version: "0.1.0",
+    minEngineVersion: "2.3.3",
+    description: "Adds an in-chat phone shell with a Noodle, NoodleR, Chats, and App Store launcher. Preview build: every screen shows placeholder content and no real data is wired up yet.",
+    kind: ["agent", "pasta-phone"],
+    modes: ["conversation"],
+    // Client-only preview shell: no routes, no storage, no chat access yet.
+    permissions: ["agent-runtime", "ui"],
+  },
+  {
     id: "conversation-calls",
     name: "Calls",
     version: "1.0.5",
@@ -701,6 +712,26 @@ function Root({ element }) {
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
+    } else if (feature.id === "pasta-phone") {
+      const sheet = join(packagesDir, "pasta-phone/src/client/PastaPhoneSheet.tsx");
+      // The phone styles itself through a package-owned <style> block, so the only
+      // utility classes here are the safelisted ones shared with the other toolbar
+      // buttons. Do not add unsafelisted Tailwind classes: the Engine will not emit them.
+      source = `
+import React, { useState } from "react";
+import { createRoot } from "react-dom/client";
+import { Smartphone } from "lucide-react";
+import { PastaPhoneSheet } from ${JSON.stringify(sheet)};
+function Root({ element }) {
+  const [open, setOpen] = useState(false);
+  if (element.getAttribute("view") !== "toolbar") return null;
+  return <>
+    <button type="button" className="mari-chrome-control flex h-9 w-9 items-center justify-center p-0" title="Open Pasta Phone" aria-label="Open Pasta Phone" onClick={() => setOpen(true)}><Smartphone size="0.875rem" /></button>
+    <PastaPhoneSheet open={open} onClose={() => setOpen(false)} />
+  </>;
+}
+class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<Root element={this} />); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
+if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else return;
     const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
     const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
@@ -746,14 +777,22 @@ for (const feature of selectedFeatures) {
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
   const serverPath = join(sourceDir, "server.mjs");
   const serverSourceRoot = feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : sourceRoot;
-  const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
-  if (!reuseExistingRuntime && existsSync(serverSource)) {
+  // Features without an Engine-side runtime (Pasta Phone) ship a package-owned
+  // server.mjs instead of bundling one out of the Engine tree.
+  const serverImport = feature.serverImport || feature.engineImport;
+  const serverSource = serverImport ? resolve(serverSourceRoot, serverImport) : null;
+  if (!reuseExistingRuntime && serverSource && existsSync(serverSource)) {
     await bundleServer(feature, serverPath);
   } else if (!existsSync(serverPath)) {
     throw new Error(`Missing package-owned server source for ${feature.id}`);
   }
   const serverBuffer = await readFile(serverPath);
-  const hasClient = Boolean(feature.clientName || feature.id === "hierarchical-maps" || feature.id === "conversation-calls");
+  const hasClient = Boolean(
+    feature.clientName
+    || feature.id === "hierarchical-maps"
+    || feature.id === "conversation-calls"
+    || feature.id === "pasta-phone",
+  );
   const clientPath = hasClient ? join(sourceDir, "client.js") : null;
   if (clientPath && (!reuseExistingRuntime || rebuiltFeatureClients.has(feature.id))) {
     if (feature.clientName) await bundleGameClient(feature, clientPath);
@@ -800,6 +839,8 @@ for (const feature of selectedFeatures) {
       },
     } : feature.id === "conversation-calls" ? {
       contributions: { slots: ["conversation-toolbar", "conversation-surface", "chat-settings"] },
+    } : feature.id === "pasta-phone" ? {
+      contributions: { slots: ["conversation-toolbar"] },
     } : {}),
     files: [
       { path: "agents.json", sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength },

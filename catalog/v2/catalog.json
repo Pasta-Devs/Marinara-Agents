@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-19T08:26:16.736Z",
+  "generatedAt": "2026-07-21T10:36:35.743Z",
   "packages": [
     {
       "manifest": {
@@ -996,6 +996,63 @@
         "bytes": 1438
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "pasta-phone",
+        "name": "Pasta Phone",
+        "version": "0.1.0",
+        "description": "Adds an in-chat phone shell with a Noodle, NoodleR, Chats, and App Store launcher. Preview build: every screen shows placeholder content and no real data is wired up yet. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation mode, then open the phone from the chat toolbar.",
+        "engine": {
+          "min": "2.3.3",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "pasta-phone"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-toolbar"
+          ]
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "9100758d029682b63262933b58e807af4eef4d82ba97495bd9de1bfbd2952f56",
+            "bytes": 686
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "3fc584c14557d8c0db7e7f0be8ae83232172291c08e5dc7e8967188ef82f132a",
+            "bytes": 371
+          },
+          {
+            "path": "client.js",
+            "sha256": "aac083a8ad3f901dd1f5165b909fea8d2a1a27b985e9caf1fedcea7e4576bcbe",
+            "bytes": 216911
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/pasta-phone.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pasta-phone-0.1.0.zip",
+        "sha256": "173dece31cc117ef1bfbbce12c5ec4d7fb7d0608cbcac8f7e96cfbbf214f9737",
+        "bytes": 68240
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#pasta-phone"
     },
     {
       "manifest": {
