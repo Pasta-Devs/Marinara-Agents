@@ -114,7 +114,7 @@ async function captureEngineSources(
 const features = [
   {
     id: "long-term-memory",
-    version: "1.0.15",
+    version: "1.0.16",
     minEngineVersion: "2.3.3",
     maxEngineExclusive: "2.4.0",
     name: "Long-Term Memory",

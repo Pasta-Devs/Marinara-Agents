@@ -41,11 +41,10 @@ type RepairAction =
   | "rebuild_indexes"
   | "quarantine_malformed_notes"
   | "backfill_imported_source_titles";
-type SettingsTab = "recall" | "backup" | "extraction" | "maintenance";
+type SettingsTab = "recall" | "extraction" | "maintenance";
 
 const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
   { id: "recall", label: "Recall" },
-  { id: "backup", label: "Backup" },
   { id: "extraction", label: "Extraction" },
   { id: "maintenance", label: "Maintenance" },
 ];
@@ -752,7 +751,7 @@ export default function MemorySettings({
       <div
         role="tablist"
         aria-label="Memory settings sections"
-        className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-1 sm:grid-cols-4"
+        className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-1 sm:grid-cols-3"
       >
         {settingsTabs.map((tab, index) => (
           <button
@@ -969,73 +968,6 @@ export default function MemorySettings({
       </section>
 
       <section
-        id="settings-panel-backup"
-        role="tabpanel"
-        aria-labelledby="settings-tab-backup"
-        hidden={activeTab !== "backup"}
-        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
-      >
-        <div>
-          <h3 className="text-sm font-semibold">Backup and Reset</h3>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Export or replace the package-owned memory vault and settings.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button disabled={pending !== ""} onClick={() => void exportBackup()}>
-            <Download aria-hidden="true" size="0.875rem" /> Export backup
-          </Button>
-          <Button
-            disabled={pending !== ""}
-            onClick={() => backupInput.current?.click()}
-          >
-            <Upload aria-hidden="true" size="0.875rem" /> Choose backup
-          </Button>
-          <input
-            ref={backupInput}
-            type="file"
-            accept="application/json,.json"
-            className="sr-only"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void previewBackup(file);
-            }}
-          />
-          <Button
-            disabled={pending !== ""}
-            onClick={() => void resetSettings()}
-          >
-            <RotateCcw aria-hidden="true" size="0.875rem" /> Reset settings
-          </Button>
-          <Button
-            destructive
-            disabled={pending !== ""}
-            onClick={() => void deleteAll()}
-          >
-            <Trash2 aria-hidden="true" size="0.875rem" /> Delete all data
-          </Button>
-        </div>
-        {backupPreview ? (
-          <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3 text-xs">
-            <p className="font-semibold">Validated backup ready to import</p>
-            <p className="text-[var(--muted-foreground)]">
-              Current: {backupPreview.current.notes} memories,{" "}
-              {backupPreview.current.drafts} drafts. Incoming:{" "}
-              {backupPreview.incoming.notes} memories,{" "}
-              {backupPreview.incoming.drafts} drafts.
-            </p>
-            <Button
-              primary
-              disabled={pending !== ""}
-              onClick={() => void importBackup()}
-            >
-              Replace with this backup
-            </Button>
-          </div>
-        ) : null}
-      </section>
-
-      <section
         id="settings-panel-extraction"
         role="tabpanel"
         aria-labelledby="settings-tab-extraction"
@@ -1212,6 +1144,64 @@ export default function MemorySettings({
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
             Integrity state: {integrity.data?.health ?? "loading"}.
           </p>
+        </div>
+        <div className="border-t border-[var(--border)] pt-3">
+          <h4 className="text-xs font-semibold">Backup and Reset</h4>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            Export or replace the package-owned memory vault and settings.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button disabled={pending !== ""} onClick={() => void exportBackup()}>
+              <Download aria-hidden="true" size="0.875rem" /> Export backup
+            </Button>
+            <Button
+              disabled={pending !== ""}
+              onClick={() => backupInput.current?.click()}
+            >
+              <Upload aria-hidden="true" size="0.875rem" /> Choose backup
+            </Button>
+            <input
+              ref={backupInput}
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void previewBackup(file);
+              }}
+            />
+            <Button
+              disabled={pending !== ""}
+              onClick={() => void resetSettings()}
+            >
+              <RotateCcw aria-hidden="true" size="0.875rem" /> Reset settings
+            </Button>
+            <Button
+              destructive
+              disabled={pending !== ""}
+              onClick={() => void deleteAll()}
+            >
+              <Trash2 aria-hidden="true" size="0.875rem" /> Delete all data
+            </Button>
+          </div>
+          {backupPreview ? (
+            <div className="mt-2 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3 text-xs">
+              <p className="font-semibold">Validated backup ready to import</p>
+              <p className="text-[var(--muted-foreground)]">
+                Current: {backupPreview.current.notes} memories,{" "}
+                {backupPreview.current.drafts} drafts. Incoming:{" "}
+                {backupPreview.incoming.notes} memories,{" "}
+                {backupPreview.incoming.drafts} drafts.
+              </p>
+              <Button
+                primary
+                disabled={pending !== ""}
+                onClick={() => void importBackup()}
+              >
+                Replace with this backup
+              </Button>
+            </div>
+          ) : null}
         </div>
         {integrity.isError ? (
           <StatusSurface tone="danger">

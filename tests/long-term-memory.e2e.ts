@@ -203,14 +203,23 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     const settings = detail.locator('[data-ltm-surface="memory-settings"]');
     const recallTab = settings.getByRole("tab", { name: "Recall" });
     await expect(recallTab).toHaveAttribute("aria-selected", "true");
+    await expect(settings.getByRole("tab")).toHaveCount(3);
+    await expect(settings.getByRole("tab", { name: "Backup" })).toHaveCount(0);
     await expect(settings.getByRole("tabpanel")).toHaveCount(1);
-    await settings.getByRole("tab", { name: "Backup" }).click();
+    await settings.getByRole("tab", { name: "Maintenance" }).click();
     await expect(
       settings.getByRole("heading", { name: "Backup and Reset" }),
     ).toBeVisible();
-    await settings.getByRole("tab", { name: "Backup" }).press("ArrowRight");
+    await expect(
+      settings.getByRole("heading", { name: "Vault Maintenance" }),
+    ).toBeVisible();
+    await settings.getByRole("tab", { name: "Maintenance" }).press("ArrowLeft");
     await expect(
       settings.getByRole("tab", { name: "Extraction" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await settings.getByRole("tab", { name: "Extraction" }).press("ArrowRight");
+    await expect(
+      settings.getByRole("tab", { name: "Maintenance" }),
     ).toHaveAttribute("aria-selected", "true");
     await expect
       .poll(() =>
