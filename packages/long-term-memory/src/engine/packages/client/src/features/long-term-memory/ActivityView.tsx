@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Download, RotateCw, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  Download,
+  RotateCw,
+  Trash2,
+} from "lucide-react";
 import type {
   LtmDebugEvent,
   LtmLastInjectionResponse,
@@ -29,6 +36,12 @@ const debugPhases: LtmDebugEvent["phase"][] = [
   "replay",
   "diagnostic",
 ];
+
+const actionLabels: Record<string, string> = {
+  evidence_unit_response: "AI extraction",
+  evidence_unit_json_parse: "Read extraction result",
+  recall_explanation: "Memory recall",
+};
 
 function formatTimestamp(timestamp: string) {
   const date = new Date(timestamp);
@@ -68,6 +81,10 @@ function humanizeLabel(value: string) {
   return value
     .replaceAll("_", " ")
     .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function actionLabel(action: string) {
+  return actionLabels[action] ?? humanizeLabel(action);
 }
 
 function groupOperations(events: LtmDebugEvent[]): DebugOperation[] {
@@ -164,6 +181,7 @@ export default function ActivityView({
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<"clear" | "export" | null>(null);
   const [actionError, setActionError] = useState("");
+  const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const activityPath = (() => {
     const parameters = new URLSearchParams({ limit: "200" });
@@ -241,6 +259,23 @@ export default function ActivityView({
       );
     } finally {
       setPending(null);
+    }
+  };
+
+  const copyJson = async (eventId: string, metadata: object) => {
+    setActionError("");
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(metadata, null, 2));
+      setCopiedEventId(eventId);
+      window.setTimeout(
+        () =>
+          setCopiedEventId((current) =>
+            current === eventId ? null : current,
+          ),
+        2_000,
+      );
+    } catch {
+      setActionError("Could not copy technical details.");
     }
   };
 
@@ -384,7 +419,7 @@ export default function ActivityView({
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center justify-between gap-2 text-xs">
                         <span className="font-semibold">
-                          {humanizeLabel(firstEvent.action)}
+                          {actionLabel(firstEvent.action)}
                         </span>
                         <span
                           className={
@@ -423,7 +458,7 @@ export default function ActivityView({
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="font-medium">
                               {humanizeLabel(event.phase)} /{" "}
-                              {humanizeLabel(event.action)}
+                              {actionLabel(event.action)}
                             </span>
                             <span
                               className={
@@ -445,12 +480,33 @@ export default function ActivityView({
                               : ""}
                           </p>
                           {Object.keys(metadata).length ? (
-                            <pre className="mt-2 overflow-x-auto rounded bg-[var(--background)] p-2 text-[0.6875rem] text-[var(--muted-foreground)]">
-                              {humanizeDebugText(
-                                JSON.stringify(metadata, null, 2),
-                                noteTitles,
-                              )}
-                            </pre>
+                            <details className="mt-2 rounded bg-[var(--background)]">
+                              <summary className="min-h-11 cursor-pointer px-2 py-3 font-medium">
+                                Technical details
+                              </summary>
+                              <div className="border-t border-[var(--border)] p-2">
+                                <Button
+                                  className="mb-2"
+                                  aria-label={`Copy raw JSON for ${actionLabel(event.action)}`}
+                                  onClick={() => void copyJson(event.id, metadata)}
+                                >
+                                  {copiedEventId === event.id ? (
+                                    <Check aria-hidden="true" size="0.875rem" />
+                                  ) : (
+                                    <Copy aria-hidden="true" size="0.875rem" />
+                                  )}
+                                  {copiedEventId === event.id
+                                    ? "Copied"
+                                    : "Copy JSON"}
+                                </Button>
+                                <pre className="overflow-x-auto text-[0.6875rem] text-[var(--muted-foreground)]">
+                                  {humanizeDebugText(
+                                    JSON.stringify(metadata, null, 2),
+                                    noteTitles,
+                                  )}
+                                </pre>
+                              </div>
+                            </details>
                           ) : null}
                         </li>
                       );

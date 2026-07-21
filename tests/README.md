@@ -29,6 +29,15 @@ cd ../Marinara-Engine
 pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-storage.regression.ts"
 ```
 
+`long-term-memory-extraction-graph.regression.ts` verifies source-grounded
+static facts, timeline-linked changes, relationship causal links, lore event
+preservation, and raw `source_note:<id>` link normalization:
+
+```bash
+cd ../Marinara-Engine
+pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-extraction-graph.regression.ts"
+```
+
 `long-term-memory-runtime.regression.ts` proves keyword-only package recall,
 scope filtering, empty recall, malformed-index recovery, receipt idempotence,
 null-receipt regeneration accounting, source-note recall exclusion,

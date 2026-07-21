@@ -213,7 +213,7 @@ export function normalizeStructuredSummaryEvidenceUnits({
   const sections = parseStructuredSections(sourceText);
   if (sections.length === 0) {
     const normalized = normalizeCanonicalTargetLinks(units, units.map(normalizeTargetShapeUnit));
-    const sourceGraph = normalizeSourceEventGraph(normalized, sourceNote, sourceHash);
+    const sourceGraph = normalizeSourceEventGraph(normalized, sourceNote);
     return {
       units: sourceGraph,
       structured: false,
@@ -228,7 +228,7 @@ export function normalizeStructuredSummaryEvidenceUnits({
     units.map((unit) => normalizeUnit(unit, hints, relationshipIdentityKey)),
   );
   if (!addStructuredUnits) {
-    const sourceGraph = normalizeSourceEventGraph(normalized, sourceNote, sourceHash);
+    const sourceGraph = normalizeSourceEventGraph(normalized, sourceNote);
     return {
       units: sourceGraph,
       structured: true,
@@ -263,7 +263,7 @@ export function normalizeStructuredSummaryEvidenceUnits({
     sourceHash,
   });
 
-  const sourceGraph = normalizeSourceEventGraph(withTone, sourceNote, sourceHash);
+  const sourceGraph = normalizeSourceEventGraph(withTone, sourceNote);
   return {
     units: sourceGraph,
     structured: true,
@@ -274,55 +274,19 @@ export function normalizeStructuredSummaryEvidenceUnits({
 function normalizeSourceEventGraph(
   units: LtmEvidenceUnit[],
   sourceNote: LtmNote | undefined,
-  sourceHash: string,
 ) {
   if (!sourceNote?.provenance) return units;
   const sourceLink = { relation: "extracted_from" as const, target: sourceNote.id };
 
   if (sourceNote.provenance.kind !== "chat_summary") {
-    const subjectId = `source_assertion_${createHash("sha256").update(sourceNote.id).digest("hex").slice(0, 12)}`;
-    const eventId = noteIdForEvidenceUnit({ bucket: "timeline_event", subjectId, sectionKey: "event" });
-    const label = sourceNote.provenance.kind === "character" ? "Character record" : "Lore established";
-    const assertion: LtmEvidenceUnit = {
-      id: deterministicUuid(`${sourceNote.id}:assertion`),
-      bucket: "timeline_event",
-      subjectId,
-      sectionKey: "event",
-      text: `${label}: ${sourceNote.title ?? sourceNote.provenance.entryId ?? sourceNote.provenance.sourceId}`,
-      importance: "moderate",
-      keywords: [],
-      evidence: sourceEvidence(sourceNote),
-      confidence: 1,
-      salience: 0.5,
-      status: "active",
-      links: [sourceLink],
-      sourceHash,
-      subjectNames: [],
-    };
-    const timelineTargets = new Set(
-      units
-        .filter((unit) => unit.bucket === "timeline_event")
-        .map(noteIdForEvidenceUnit),
-    );
-    const remapLinks = (unit: LtmEvidenceUnit) => ({
+    return units.map((unit) => ({
       ...unit,
+      ...(unit.bucket === "timeline_event" ? { claimKind: "change" as const } : {}),
       links: uniqueLinks([
-        ...unit.links.map((link) => ({
-          ...link,
-          target: timelineTargets.has(link.target) ? eventId : link.target,
-        })),
-        ...(unit.bucket === "timeline_event"
-          ? []
-          : [{
-              relation: unit.bucket === "relationship_state" ? "caused_by" as const : "evidenced_by" as const,
-              target: eventId,
-            }]),
+        ...unit.links,
+        ...(unit.bucket === "timeline_event" ? [sourceLink] : []),
       ]),
-    });
-    const normalized = units.map((unit) =>
-      unit.bucket === "timeline_event" ? assertion : remapLinks(unit),
-    );
-    return timelineTargets.size ? normalized : [assertion, ...normalized];
+    }));
   }
 
   const suffix = createHash("sha256").update(sourceNote.id).digest("hex").slice(0, 10);
@@ -338,6 +302,7 @@ function normalizeSourceEventGraph(
   });
   return namespaced.map((unit) => ({
     ...unit,
+    ...(unit.bucket === "timeline_event" ? { claimKind: "change" as const } : {}),
     links: uniqueLinks([
       ...unit.links.map((link) => ({ ...link, target: timelineTargets.get(link.target) ?? link.target })),
       ...(unit.bucket === "timeline_event" ? [sourceLink] : []),
@@ -844,6 +809,7 @@ function parseStructuredRelationshipLine(
     subjectId: normalizedSubject,
     sectionKey: "state",
     text: text.slice(0, 2_000),
+    claimKind: causedBy || (dimensionChanges && Object.keys(dimensionChanges).length > 0) ? "change" : "static",
     importance,
     keywords: [],
     evidence: sourceEvidence(sourceNote),
@@ -997,6 +963,7 @@ function structuredCauseTimelineUnit({
     subjectId,
     sectionKey: "event",
     text: text.slice(0, 2_000),
+    claimKind: "change",
     importance,
     keywords: [],
     evidence: sourceEvidence(sourceNote),
@@ -1097,6 +1064,7 @@ function relationshipTextOverlap(left: string, right: string) {
 function mergeStructuredRelationshipUnit(unit: LtmEvidenceUnit, structured: LtmEvidenceUnit): LtmEvidenceUnit {
   return {
     ...unit,
+    claimKind: unit.claimKind === "change" || structured.claimKind === "change" ? "change" : "static",
     sectionKey: "state",
     links: uniqueLinks([...unit.links, ...structured.links]),
     dimensions: structured.dimensions ?? unit.dimensions,
@@ -1268,6 +1236,7 @@ function parseStructuredCharacterLine(
     subjectId: normalizedSubject,
     sectionKey: normalizedSection,
     text: text.slice(0, 2_000),
+    claimKind: ["developments", "progression"].includes(normalizedSection) ? "change" : "static",
     importance,
     keywords: [],
     evidence: sourceEvidence(sourceNote),
@@ -1361,6 +1330,7 @@ function maybeAddToneUnit({
     subjectId: "session",
     sectionKey: "observations",
     text: hints.toneText,
+    claimKind: "static",
     importance: "moderate",
     keywords: [],
     evidence: sourceEvidence(sourceNote),

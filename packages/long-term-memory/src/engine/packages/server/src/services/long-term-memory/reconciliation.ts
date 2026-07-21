@@ -71,12 +71,17 @@ function applyEdits(
       throw new Error(
         `Long-term memory edited mutation cannot change kind: ${edit.id}`,
       );
-    const { id: _id, kind: _kind, ...patch } = edit;
+    if (edit.claimKind !== undefined && edit.claimKind !== original.claimKind)
+      throw new Error(
+        `Long-term memory edited mutation cannot change claimKind: ${edit.id}`,
+      );
+    const { id: _id, kind: _kind, claimKind: _claimKind, ...patch } = edit;
     const parsed = ltmDraftMutationSchema.safeParse({
       ...original,
       ...patch,
       id: original.id,
       kind: original.kind,
+      claimKind: original.claimKind,
     });
     if (!parsed.success)
       throw new Error(
@@ -132,7 +137,12 @@ async function preflight(
   const createIds = new Set<string>();
   const required = new Set<string>();
   const links = new Set<string>();
+  const sourceEvidence = `source_note:${draft.source.sourceNoteId}`;
   for (const mutation of mutations) {
+    if (!mutation.evidence.includes(sourceEvidence))
+      throw new Error(
+        `Long-term memory draft mutation ${mutation.id} must reference ${sourceEvidence}.`,
+      );
     if (mutation.kind === "create_note") {
       if (isLtmSourceLikeNote(mutation.note) || mutation.note.type === "scene")
         throw new Error(
@@ -206,6 +216,13 @@ async function preflight(
       mutation.kind === "create_note" ? mutation.note.id : mutation.noteId,
     ),
   );
+  const changedIds = new Set(
+    mutations.flatMap((mutation) =>
+      mutation.claimKind === "change"
+        ? [mutation.kind === "create_note" ? mutation.note.id : mutation.noteId]
+        : [],
+    ),
+  );
   for (const noteId of affectedIds) {
     const note = projected.notes.get(noteId);
     if (!note) continue;
@@ -214,9 +231,9 @@ async function preflight(
         throw new Error(
           `Timeline event ${note.id} must link to draft source ${draft.source.sourceNoteId}.`,
         );
-    } else if (!note.links.some((link) => eventIds.has(link.target))) {
+    } else if (changedIds.has(noteId) && !note.links.some((link) => eventIds.has(link.target))) {
       throw new Error(
-        `Long-term memory ${note.id} must link to a timeline event created from the same source.`,
+        `Long-term memory ${note.id} must link to a timeline event grounded in the same source.`,
       );
     }
   }
@@ -399,11 +416,11 @@ async function applyInner(
               : [],
           ),
         );
-        const selectedNoteIds = new Set(
-          selected.map((mutation) =>
-            mutation.kind === "create_note"
-              ? mutation.note.id
-              : mutation.noteId,
+        const selectedChangedNoteIds = new Set(
+          selected.flatMap((mutation) =>
+            mutation.claimKind === "change"
+              ? [mutation.kind === "create_note" ? mutation.note.id : mutation.noteId]
+              : [],
           ),
         );
         const selectedEventTargets = new Set(
@@ -423,7 +440,7 @@ async function applyInner(
             mutation,
           ): mutation is Extract<LtmDraftMutation, { kind: "add_link" }> =>
             mutation.kind === "add_link" &&
-            selectedNoteIds.has(mutation.noteId) &&
+            selectedChangedNoteIds.has(mutation.noteId) &&
             eventCreateByNoteId.has(mutation.link.target),
         );
         for (const link of eventLinks) {

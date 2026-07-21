@@ -900,6 +900,16 @@ async function main() {
     assert.equal(completionOptions.at(-1)?.reasoningEffort, "low");
     assert.equal(completionOptions.at(-1)?.verbosity, "low");
     assert.equal(completionOptions.at(-1)?.responseFormat?.type, "json_schema");
+    assert.deepEqual(
+      completionOptions.at(-1)?.responseFormat?.json_schema?.schema?.properties
+        ?.units?.items?.properties?.claimKind?.enum,
+      ["static", "change"],
+    );
+    assert.equal(
+      completionOptions.at(-1)?.responseFormat?.json_schema?.schema?.properties
+        ?.units?.items?.required?.includes("claimKind"),
+      true,
+    );
     assert.equal(
       debugOverrides.some(
         (entry) => entry.enabled && entry.message.includes("extraction prompt"),
@@ -1891,11 +1901,12 @@ async function main() {
     const eventMutationId = "10000000-0000-4000-8000-000000000002";
     const eventMutation = {
       id: eventMutationId,
+      claimKind: "change",
       kind: "create_note",
       risk: "low",
       confidence: 0.9,
       summary: "Create gate event",
-      evidence: ["The eastern gate is sealed at dusk."],
+      evidence: ["source_note:source_route_review"],
       note: {
         id: "timeline_eastern_gate_sealed",
         title: "Eastern gate sealed",
@@ -1916,11 +1927,12 @@ async function main() {
     };
     const mutation = {
       id: mutationId,
+      claimKind: "change",
       kind: "create_note",
       risk: "low",
       confidence: 0.9,
       summary: "Create gate fact",
-      evidence: ["The eastern gate is sealed at dusk."],
+      evidence: ["source_note:source_route_review"],
       note: {
         id: "world_eastern_gate",
         title: "Eastern gate",

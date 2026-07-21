@@ -21,15 +21,13 @@ const THREAD_RESOLUTION_PATTERN =
   /\b(?:resolve|resolved|resolver|resolution|would resolve|will resolve|until|when|if|requires|needs|awaits|pending|unresolved|open question|pay off|payoff|future|follow-?up|goal|must|should|tomorrow|next (?:day|class|session)|cool(?:s|ed|ing)?|confess(?:ion|es|ed|ing)?|confront(?:s|ed|ing)?|dy(?:e|ing) down|explain(?:s|ed|ing|ation)?|updates?)\b/i;
 const SCENE_ONLY_TONE_PATTERN =
   /\b(?:this scene|single scene|momentarily|for the scene|scene tone|currently|right now)\b/i;
-const RELATIONSHIP_CHANGE_PATTERN =
-  /\b(?:became|becomes|grew|grows|shifted|shifts|changed|changes|strained|softened|worsened|improved|rebuild(?:s|ing|built)?|repair(?:s|ed|ing)?|recover(?:s|ed|ing)?|warm(?:s|ed|ing)?|cool(?:s|ed|ing)?|lost trust|gained trust|trusted|distrusted|forgave|resented|confessed|betrayed|reconciled)\b/i;
 const RELATIONSHIP_DIMENSION_KEYS = new Set<string>(RELATIONSHIP_DIMENSIONS);
 const SUSPICIOUS_RELATIONSHIP_DELTA_THRESHOLD = 30;
 const MAJOR_RELATIONSHIP_CAUSE_PATTERN =
   /\b(?:betray(?:al|ed|s|ing)?|breakdown|breakthrough|confess(?:ed|es|ion|ing)?|crisis|danger|life[- ]threatening|public commitment|reconcil(?:e|ed|es|iation|ing)|rescu(?:e|ed|es|ing)|saved|saves|saving)\b/i;
 
 function relationshipDescribesChange(unit: LtmEvidenceUnit): boolean {
-  return Object.keys(unit.dimensionChanges ?? {}).length > 0 || RELATIONSHIP_CHANGE_PATTERN.test(unit.text);
+  return unit.claimKind === "change" || Object.keys(unit.dimensionChanges ?? {}).length > 0;
 }
 
 function lexicalOverlap(sourceText: string, proposedText: string) {
@@ -55,20 +53,19 @@ function hasRelationshipSupport(unit: LtmEvidenceUnit, units: LtmEvidenceUnit[],
       .filter((candidate) => candidate.bucket === "timeline_event")
       .map((candidate) => noteIdForEvidenceUnit(candidate)),
   );
-  const existingNoteIds = new Set(existingNotes.map((note) => note.id));
+  const existingTimelineNoteIds = new Set(
+    existingNotes.filter((note) => note.type === "timeline_event").map((note) => note.id),
+  );
   if (
     unit.links.some(
       (link) =>
-        link.relation === "caused_by" && (currentTimelineNoteIds.has(link.target) || existingNoteIds.has(link.target)),
+        link.relation === "caused_by" &&
+        (currentTimelineNoteIds.has(link.target) || existingTimelineNoteIds.has(link.target)),
     )
   ) {
     return true;
   }
-  return existingNotes.some(
-    (note) =>
-      note.id === noteIdForEvidenceUnit(unit) &&
-      (note.sections.history?.text.trim() || note.sections.state?.text.trim()),
-  );
+  return false;
 }
 
 function isSourceNote(note: LtmNote) {
@@ -276,6 +273,16 @@ export function validateLtmEvidenceUnits({
     }
 
     unitDiagnostics.push(...relationshipDimensionDiagnostics(unit, candidateIndex, noteId));
+    if (unit.claimKind === "static" && Object.keys(unit.dimensionChanges ?? {}).length > 0) {
+      unitDiagnostics.push({
+        severity: "error",
+        code: "static_relationship_dimension_change",
+        candidateIndex,
+        mutationId: unit.id,
+        noteId,
+        message: "Relationship dimension changes must be classified as change claims.",
+      });
+    }
     unitDiagnostics.push(...relationshipCausedByDiagnostics(unit, candidateIndex, noteId, validLinkTargets));
     unitDiagnostics.push(...linkTargetDiagnostics(unit, candidateIndex, noteId, validLinkTargets));
     unitDiagnostics.push(...relationshipDeltaMagnitudeDiagnostics(unit, candidateIndex, noteId, units, existingNotes));
@@ -720,6 +727,7 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
     code === "relationship_state_missing_caused_by" ||
     code === "invalid_relationship_dimension" ||
     code === "invalid_relationship_dimension_change" ||
+    code === "static_relationship_dimension_change" ||
     code === "unknown_link_target" ||
     code === "event_shaped_character_fact" ||
     code === "vague_thread" ||

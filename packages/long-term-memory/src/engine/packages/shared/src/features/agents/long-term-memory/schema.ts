@@ -38,6 +38,8 @@ export const ltmEvidenceUnitBucketSchema = z.enum([
   "anchor",
 ]);
 
+export const ltmClaimKindSchema = z.enum(["static", "change"]);
+
 export const ltmModeSchema = z.enum(["roleplay", "conversation", "game"]);
 const LTM_EXTRACTION_MODES = ltmModeSchema.options;
 
@@ -774,6 +776,7 @@ export const ltmEvidenceUnitSchema = z
     subjectId: ltmIdentifierSchema,
     sectionKey: ltmSectionKeySchema,
     text: z.string().min(1).max(2_000),
+    claimKind: ltmClaimKindSchema.default("change"),
     importance: ltmImportanceSchema.default("moderate"),
     keywords: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
     evidence: z.array(z.string().min(1).max(240)).min(1).max(20),
@@ -1955,6 +1958,7 @@ export const ltmDraftNoteInputSchema = z
 
 const ltmDraftMutationBaseSchema = z.object({
   id: z.string().uuid(),
+  claimKind: ltmClaimKindSchema.default("change"),
   risk: ltmDraftRiskSchema.default("medium"),
   confidence: z.number().finite().min(0).max(1).default(0.5),
   summary: z.string().min(1).max(1_000),
@@ -2706,6 +2710,7 @@ export type LtmDraftIndexRebuildStatus = z.infer<
   typeof ltmDraftIndexRebuildStatusSchema
 >;
 export type LtmDraftRisk = z.infer<typeof ltmDraftRiskSchema>;
+export type LtmClaimKind = z.infer<typeof ltmClaimKindSchema>;
 export type LtmDraftSource = z.infer<typeof ltmDraftSourceSchema>;
 export type LtmDraftNoteInput = z.infer<typeof ltmDraftNoteInputSchema>;
 export type LtmDraftMutation = z.infer<typeof ltmDraftMutationSchema>;

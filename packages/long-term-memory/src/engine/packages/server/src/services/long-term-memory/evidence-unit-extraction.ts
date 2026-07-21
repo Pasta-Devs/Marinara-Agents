@@ -90,7 +90,7 @@ const LTM_EXTRACTION_TIMELINE_LINK_RELATIONS = new Set<string>([
 function serverEnforcedLinkRules(allowedBuckets: readonly LtmEvidenceUnit["bucket"][]) {
   return [
     "Every link target must resolve to sourceNote.id, an exact existingTypedNotes id, or a target note derived from a unit in the same response.",
-    "Every non-timeline unit must link to a timeline_event from this response. Every timeline_event must link to sourceNote.id with extracted_from.",
+    'Every non-timeline unit with claimKind "change" must link to a timeline_event associated with this source. Static units do not require timeline links. Every timeline_event must link to sourceNote.id with extracted_from.',
     ...(allowedBuckets.includes("relationship_state")
       ? [
           "A relationship_state that describes a change or includes dimensionChanges must include a caused_by link to a timeline_event in the same response. Same-response event targets use timeline_<subjectId>.",
@@ -231,6 +231,7 @@ export function evidenceUnitResponseFormat(options: {
                 "subjectId",
                 "sectionKey",
                 "text",
+                "claimKind",
                 "importance",
                 "evidence",
                 "confidence",
@@ -246,6 +247,7 @@ export function evidenceUnitResponseFormat(options: {
                 subjectId: { type: "string", pattern: "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$", maxLength: 120 },
                 sectionKey: { type: "string", pattern: "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$", maxLength: 80 },
                 text: { type: "string", minLength: 1, maxLength: 2_000 },
+                claimKind: { type: "string", enum: ["static", "change"] },
                 importance: { type: "string", enum: LTM_EXTRACTION_IMPORTANCE_VALUES },
                 keywords: {
                   type: "array",
@@ -543,6 +545,7 @@ function normalizeRawLinkTarget(
   const rawText = typeof value === "string" ? value.trim() : "";
   const identifier = normalizeRawIdentifier(sourceNoteMatch?.[1] ?? value, "");
   if (!identifier) return null;
+  if (sourceNoteMatch) return identifier;
   const rawWasIdentifier = rawText === identifier;
   if (hints.targetNoteIds.has(identifier)) return identifier;
 
@@ -797,6 +800,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
             : {}),
           sectionKey: "real lowercase_snake_case section",
           text: "compact memory text, not transcript summary",
+          claimKind: '"static" for an enduring fact/state; "change" for an event or event-caused outcome',
           importance: "one of critical, major, moderate, minor",
           ...(options.aiKeywordExtraction ? { keywords: "array of 3..5 concise keyword strings" } : {}),
           evidence: "array containing supplied source_note evidence",
@@ -1077,7 +1081,7 @@ export function compileEvidenceUnitExtraction(options: {
     existingNotes: options.existingNotes,
     options: { withinExtraction: true },
   });
-  const closed = closeSourceEventGraph(dedupResult.deduplicated, options.sourceNote);
+  const closed = closeSourceEventGraph(dedupResult.deduplicated, options.sourceNote, options.existingNotes);
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];
   const preValidationDroppedCandidates = options.preValidationDroppedCandidates ?? [];
   const droppedCandidates = [
@@ -1130,23 +1134,33 @@ export function compileEvidenceUnitExtraction(options: {
   };
 }
 
-function closeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote) {
+function closeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote, existingNotes: LtmNote[]) {
   let kept = [...units];
   const droppedCandidates: LtmExtractionDroppedCandidate[] = [];
   const diagnostics: LtmExtractionDiagnostic[] = [];
   let changed = true;
   while (changed) {
     changed = false;
-    const eventIds = new Set(kept.filter((unit) => unit.bucket === "timeline_event" && unit.links.some((link) => link.relation === "extracted_from" && link.target === sourceNote.id)).map(noteIdForEvidenceUnit));
+    const eventIds = new Set([
+      ...existingNotes.flatMap((note) =>
+        note.type === "timeline_event" &&
+        note.links.some((link) => link.relation === "extracted_from" && link.target === sourceNote.id)
+          ? [note.id]
+          : [],
+      ),
+      ...kept
+        .filter((unit) => unit.bucket === "timeline_event" && unit.links.some((link) => link.relation === "extracted_from" && link.target === sourceNote.id))
+        .map(noteIdForEvidenceUnit),
+    ]);
     kept = kept.filter((unit, index) => {
       const valid = unit.bucket === "timeline_event"
         ? eventIds.has(noteIdForEvidenceUnit(unit))
-        : unit.links.some((link) => eventIds.has(link.target));
+        : unit.claimKind === "static" || unit.links.some((link) => eventIds.has(link.target));
       if (valid) return true;
       changed = true;
       const message = unit.bucket === "timeline_event"
         ? "Timeline event must link to its source note."
-        : "Derived memory must link to a timeline event from the same source.";
+        : "Changed memory must link to a timeline event from the same source.";
       droppedCandidates.push({ index, reason: "unsupported_bucket", message, snippet: safeSnippet(unit.text) });
       diagnostics.push({ severity: "error", code: "source_event_graph_open", candidateIndex: index, mutationId: unit.id, noteId: noteIdForEvidenceUnit(unit), message });
       return false;

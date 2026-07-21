@@ -90,12 +90,21 @@ export function isAdditiveLtmSection(note: Pick<LtmNote, "type" | "tags">, key: 
 function projectMutation(current: LtmNote | null, mutation: LtmDraftMutation, context: LtmDraftProjectionContext, timestamp: string): LtmNote {
   if (mutation.kind === "create_note") {
     if (!canUpdateLtmScopedTarget(mutation.note.scope, context.scope)) throw new LtmDraftProjectionError(`Long-term memory draft cannot create ${mutation.note.id} because its scope does not match the draft.`, "scope_mismatch");
-    const incoming = ltmNoteSchema.parse({ ...mutation.note, createdAt: mutation.note.createdAt ?? timestamp, updatedAt: mutation.note.updatedAt ?? timestamp, version: mutation.note.version ?? 1 });
+    const sections = Object.fromEntries(
+      Object.entries(mutation.note.sections).map(([key, section]) => [
+        key,
+        {
+          ...section,
+          evidence: uniqueStrings([...mutation.evidence, ...(section.evidence ?? [])]).slice(0, 100),
+        },
+      ]),
+    );
+    const incoming = ltmNoteSchema.parse({ ...mutation.note, sections, createdAt: mutation.note.createdAt ?? timestamp, updatedAt: mutation.note.updatedAt ?? timestamp, version: mutation.note.version ?? 1 });
     if (!current) return incoming;
     assertCompatibleCreate(current, incoming);
-    const sections = { ...current.sections };
-    for (const [key, section] of Object.entries(incoming.sections)) sections[key] = mergeSection(current.sections[key], section, isAdditiveLtmSection(current, key), mutation.confidence, timestamp);
-    return { ...current, title: current.title ?? incoming.title, status: current.status === "archived" ? current.status : incoming.status, modes: uniqueStrings([...current.modes, ...incoming.modes]) as LtmMode[], scope: mergeScopes(current.scope, incoming.scope), tags: uniqueStrings([...current.tags, ...incoming.tags]), keywords: uniqueCaseInsensitive([...current.keywords, ...incoming.keywords]), links: uniqueLinks([...current.links, ...incoming.links]), sections, conflicts: optionalConflicts(uniqueConflicts([...(current.conflicts ?? []), ...(incoming.conflicts ?? [])])), subjects: current.subjects ?? incoming.subjects };
+    const mergedSections = { ...current.sections };
+    for (const [key, section] of Object.entries(incoming.sections)) mergedSections[key] = mergeSection(current.sections[key], section, isAdditiveLtmSection(current, key), mutation.confidence, timestamp);
+    return { ...current, title: current.title ?? incoming.title, status: current.status === "archived" ? current.status : incoming.status, modes: uniqueStrings([...current.modes, ...incoming.modes]) as LtmMode[], scope: mergeScopes(current.scope, incoming.scope), tags: uniqueStrings([...current.tags, ...incoming.tags]), keywords: uniqueCaseInsensitive([...current.keywords, ...incoming.keywords]), links: uniqueLinks([...current.links, ...incoming.links]), sections: mergedSections, conflicts: optionalConflicts(uniqueConflicts([...(current.conflicts ?? []), ...(incoming.conflicts ?? [])])), subjects: current.subjects ?? incoming.subjects };
   }
   if (!current) throw new LtmDraftProjectionError(`Long-term memory mutation target not found: ${mutation.noteId}`, "missing_target");
   if (!canUpdateLtmScopedTarget(current.scope, context.scope)) throw new LtmDraftProjectionError(`Long-term memory draft cannot mutate ${current.id} because it belongs to another scope.`, "scope_mismatch");

@@ -68,6 +68,11 @@ function rewriteDraftMutationNoteIds(
   if (!mutation || typeof mutation !== "object" || Array.isArray(mutation))
     return mutation;
   const next = { ...(mutation as Record<string, unknown>) };
+  if (Array.isArray(next.evidence)) {
+    next.evidence = next.evidence.map((evidence) =>
+      evidence === `source_note:${fromId}` ? `source_note:${toId}` : evidence,
+    );
+  }
   if (next.noteId === fromId) next.noteId = toId;
   if (
     next.kind === "create_note" &&

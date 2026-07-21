@@ -68,6 +68,7 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
     const sections = sectionsForUnits(units, existing, timestamp);
     const links = uniqueLinks(units.flatMap((unit) => unit.links).filter((link) => link.target !== noteId));
     const evidence = uniqueStrings(units.flatMap((unit) => unit.evidence)).slice(0, 20);
+    const claimKind = claimKindForUnits(units);
     const confidence = Math.min(...units.map((unit) => unit.confidence));
     const unitKeywords = mergeKeywords(
       units
@@ -97,6 +98,7 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
       };
       mutations.push({
         id: randomUUID(),
+        claimKind,
         kind: "create_note",
         risk: riskForCompiledMutation({
           units,
@@ -115,6 +117,7 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
     if (resolvedSubjects && !existing.subjects) {
       mutations.push({
         id: randomUUID(),
+        claimKind,
         kind: "set_subjects",
         risk: "low",
         confidence,
@@ -128,12 +131,12 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
     }
 
     for (const [sectionKey, section] of Object.entries(sections)) {
-      const existingText = existing.sections[sectionKey]?.text.trim();
       const lifecycle = lifecycleForSection(units, sectionKey);
       if (shouldAppend(lifecycle, sectionKey, existing)) {
         const sectionUnits = unitsForSection(units, sectionKey);
         mutations.push({
           id: randomUUID(),
+          claimKind: claimKindForUnits(sectionUnits),
           kind: "append_section",
           risk: riskForCompiledMutation({
             units: sectionUnits,
@@ -156,6 +159,7 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
         const sectionUnits = unitsForSection(units, sectionKey);
         mutations.push({
           id: randomUUID(),
+          claimKind: claimKindForUnits(sectionUnits),
           kind: "update_section",
           risk: riskForCompiledMutation({
             units: sectionUnits,
@@ -177,6 +181,7 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
     if (mergedKeywords.length > existing.keywords.length) {
       mutations.push({
         id: randomUUID(),
+        claimKind,
         kind: "set_keywords",
         risk: riskForCompiledMutation({
           units,
@@ -195,6 +200,7 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
     if (nextStatus !== existing.status && shouldSetStatus(units, existing.status, nextStatus)) {
       mutations.push({
         id: randomUUID(),
+        claimKind,
         kind: "set_status",
         risk: riskForCompiledMutation({
           units,
@@ -220,6 +226,9 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
       ) {
         mutations.push({
           id: randomUUID(),
+          claimKind: claimKindForUnits(
+            units.filter((unit) => unit.links.some((candidate) => candidate.target === link.target && candidate.relation === link.relation && candidate.aspect === link.aspect)),
+          ),
           kind: "add_link",
           risk: riskForCompiledMutation({
             units,
@@ -246,6 +255,10 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
       returned: mutations.length,
     },
   };
+}
+
+function claimKindForUnits(units: LtmEvidenceUnit[]) {
+  return units.some((unit) => unit.claimKind === "change") ? "change" as const : "static" as const;
 }
 
 function subjectsForNewNote(noteType: LtmNoteType, noteId: string): LtmSubject[] | undefined {

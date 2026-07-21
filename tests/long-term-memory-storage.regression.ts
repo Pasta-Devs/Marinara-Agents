@@ -299,7 +299,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Create superseded memory",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${legacySource.id}`],
             note: {
               id: "world_superseded_suggestion",
               title: "Superseded suggestion",
@@ -371,7 +371,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Create source event",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${legacySource.id}`],
             note: {
               id: "timeline_legacy_evidence",
               title: "Legacy evidence",
@@ -396,7 +396,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Link evidence",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${legacySource.id}`],
             noteId: "world_legacy_target",
             link: {
               target: "timeline_legacy_evidence",
@@ -427,6 +427,7 @@ async function main() {
       (mutation) => mutation.id === eventMutationId,
     );
     assert.equal(rewrittenEventMutation?.kind, "create_note");
+    assert.equal(rewrittenEventMutation?.claimKind, "change");
     const editedEventMutation = {
       ...rewrittenEventMutation!,
       note: {
@@ -451,6 +452,10 @@ async function main() {
     assert.equal(
       (await storage.getNote("timeline_legacy_evidence"))?.title,
       "Edited dependency",
+    );
+    assert.deepEqual(
+      (await storage.getNote("timeline_legacy_evidence"))?.sections.event.evidence,
+      [`source_note:${canonicalSourceId}`],
     );
     assert.equal(
       (await storage.getNote("world_legacy_target"))?.links[0]?.target,
@@ -486,7 +491,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Create obsolete evidence",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             note: {
               id: "timeline_obsolete_evidence",
               title: "Obsolete evidence",
@@ -510,7 +515,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Create linked memory",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             note: {
               ...noteInput,
               id: "world_edited_dependency",
@@ -564,6 +569,83 @@ async function main() {
       "timeline_existing_evidence",
     );
 
+    const staticMutationId = randomUUID();
+    const staticDraft = await draftStore.createDraft({
+      source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+      scope: legacySource.scope,
+      modes: legacySource.modes,
+      response: {
+        summary: "Create a directly grounded static fact.",
+        mutations: [
+          {
+            id: staticMutationId,
+            claimKind: "static",
+            kind: "create_note",
+            risk: "low",
+            confidence: 0.9,
+            summary: "Create static fact",
+            evidence: [`source_note:${canonicalSourceId}`],
+            note: {
+              ...noteInput,
+              id: "world_static_evidence",
+              title: "Static evidence",
+              scope: legacySource.scope,
+              links: [],
+            },
+          },
+        ],
+      },
+    });
+    const staticApplied = await applyLongTermMemoryDraft(staticDraft.id, {
+      root,
+      rebuildIndexes: false,
+    });
+    assert.deepEqual(staticApplied.appliedMutationIds, [staticMutationId]);
+
+    const unlinkedChangeMutationId = randomUUID();
+    const unlinkedChangeDraft = await draftStore.createDraft({
+      source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+      scope: legacySource.scope,
+      modes: legacySource.modes,
+      response: {
+        summary: "Reject an unlinked change.",
+        mutations: [
+          {
+            id: unlinkedChangeMutationId,
+            claimKind: "change",
+            kind: "create_note",
+            risk: "low",
+            confidence: 0.9,
+            summary: "Create unlinked change",
+            evidence: [`source_note:${canonicalSourceId}`],
+            note: {
+              ...noteInput,
+              id: "world_unlinked_change",
+              title: "Unlinked change",
+              scope: legacySource.scope,
+              links: [],
+            },
+          },
+        ],
+      },
+    });
+    await assert.rejects(
+      applyLongTermMemoryDraft(unlinkedChangeDraft.id, {
+        root,
+        editedMutations: [
+          { id: unlinkedChangeMutationId, claimKind: "static" },
+        ],
+      }),
+      /cannot change claimKind/,
+    );
+    await assert.rejects(
+      applyLongTermMemoryDraft(unlinkedChangeDraft.id, {
+        root,
+        rebuildIndexes: false,
+      }),
+      /must link to a timeline event/,
+    );
+
     const secondTargetId = "world_legacy_target_second";
     await storage.createNote({
       ...noteInput,
@@ -588,7 +670,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Create shared event",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             note: {
               id: "timeline_partial_evidence",
               title: "Partial evidence",
@@ -615,7 +697,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Link first target",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             noteId: "world_legacy_target",
             link: {
               target: "timeline_partial_evidence",
@@ -628,7 +710,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Link second target",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             noteId: secondTargetId,
             link: {
               target: "timeline_partial_evidence",
@@ -675,7 +757,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Create skipped event",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             note: {
               id: "timeline_skip_evidence",
               title: "Skip evidence",
@@ -702,7 +784,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Link skipped dependent",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             noteId: secondTargetId,
             link: {
               target: "timeline_skip_evidence",
@@ -711,11 +793,12 @@ async function main() {
           },
           {
             id: skipSiblingId,
+            claimKind: "static",
             kind: "update_section",
             risk: "low",
             confidence: 0.9,
             summary: "Update skipped dependent",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             noteId: secondTargetId,
             sectionKey: "facts",
             section: {
@@ -729,7 +812,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Create kept event",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             note: {
               id: "timeline_keep_evidence",
               title: "Keep evidence",
@@ -756,7 +839,7 @@ async function main() {
             risk: "low",
             confidence: 0.9,
             summary: "Create kept dependent",
-            evidence: ["Legacy evidence."],
+            evidence: [`source_note:${canonicalSourceId}`],
             note: {
               id: "world_keep_evidence",
               title: "Kept dependent",
@@ -785,16 +868,16 @@ async function main() {
     ]);
     assert.deepEqual(
       new Set(skipped.mutationIds),
-      new Set([skipEventId, skipDependentId, skipSiblingId]),
+      new Set([skipEventId, skipDependentId]),
     );
     assert.equal(
       skipped.mutationIds.length,
-      3,
+      2,
       "cascade response must include every removed mutation id",
     );
     assert.deepEqual(
       new Set(skipped.draft?.mutations.map((mutation) => mutation.id)),
-      new Set([keepEventId, keepDependentId]),
+      new Set([skipSiblingId, keepEventId, keepDependentId]),
     );
 
     const loreSource = await storage.createNote({
@@ -864,8 +947,8 @@ async function main() {
       sourceHash: loreHash,
       skipStructuredBackfill: true,
     });
-    assert.equal(compiledLore.accounting.deduplications, 1);
-    assert.equal(compiledLore.accounting.keptUnits, 2);
+    assert.equal(compiledLore.accounting.deduplications, 0);
+    assert.equal(compiledLore.accounting.keptUnits, 3);
     const loreMutations = compiledLore.compiledResponse.mutations.filter(
       (mutation) => mutation.kind === "create_note",
     );
@@ -873,13 +956,23 @@ async function main() {
       loreMutations.filter(
         (mutation) => mutation.note.type === "timeline_event",
       ).length,
-      1,
+      2,
     );
     assert.equal(
       loreMutations.find((mutation) => mutation.note.type === "world")?.note
         .links[0]?.target,
-      loreMutations.find((mutation) => mutation.note.type === "timeline_event")
-        ?.note.id,
+      "timeline_gate_forged",
+    );
+    assert.equal(
+      loreMutations
+        .filter((mutation) => mutation.note.type === "timeline_event")
+        .every((mutation) =>
+          mutation.note.links.some(
+            (link) =>
+              link.relation === "extracted_from" && link.target === loreSource.id,
+          ),
+        ),
+      true,
     );
 
     const bulkSource = await storage.createNote({

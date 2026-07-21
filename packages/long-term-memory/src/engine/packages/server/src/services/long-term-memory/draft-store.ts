@@ -313,7 +313,8 @@ export class LongTermMemoryDraftStore {
               ? mutation.note.links.some((link) => removedNoteIds.has(link.target))
               : mutation.kind === "add_link"
                 ? invalidatedNoteIds.has(mutation.noteId) || removedNoteIds.has(mutation.noteId) || removedNoteIds.has(mutation.link.target)
-                : invalidatedNoteIds.has(mutation.noteId) || removedNoteIds.has(mutation.noteId);
+                : removedNoteIds.has(mutation.noteId) ||
+                  (mutation.claimKind === "change" && invalidatedNoteIds.has(mutation.noteId));
           if (dependsOnRemoved) {
             mutationIdSet.add(mutation.id);
             expanded = true;
