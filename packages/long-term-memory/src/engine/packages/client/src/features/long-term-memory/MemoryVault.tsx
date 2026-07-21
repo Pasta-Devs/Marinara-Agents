@@ -6,6 +6,7 @@ import {
   ChevronRight,
   FilePlus2,
   Link2,
+  PanelRight,
   Plus,
   RefreshCw,
   Search,
@@ -829,16 +830,7 @@ export default function MemoryVault({
             max-height: calc(100vh - 10rem);
             overflow-y: auto;
           }
-          [data-ltm-note-layout] {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(15rem, 17rem);
-            gap: 1rem;
-          }
-          [data-ltm-details-toggle] {
-            display: none !important;
-          }
-          [data-ltm-note-editor],
-          [data-ltm-note-inspector] {
+          [data-ltm-note-editor] {
             display: block !important;
           }
           [data-ltm-note-inspector] {
@@ -1317,9 +1309,13 @@ export default function MemoryVault({
                     }}
                     aria-pressed={detailsOpen}
                     data-ltm-details-toggle
-                    className="hidden md:inline-flex"
+                    aria-label={
+                      detailsOpen ? "Hide metadata" : "Show metadata"
+                    }
+                    title={detailsOpen ? "Hide metadata" : "Show metadata"}
+                    className="hidden min-w-11 px-0 aria-pressed:bg-[var(--accent)] md:inline-flex"
                   >
-                    Details
+                    <PanelRight aria-hidden="true" size="0.875rem" />
                   </Button>
                   <Button
                     primary
