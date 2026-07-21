@@ -162,7 +162,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       data-ltm-surface="detail"
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]"
     >
-      <header className="sticky top-0 z-10 flex min-h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--background)] px-4">
+      <header className="sticky top-0 z-10 flex min-h-14 flex-wrap items-center gap-x-3 border-b border-[var(--border)] bg-[var(--background)] px-4 py-1">
         <button
           type="button"
           data-ltm-control="back"
@@ -183,6 +183,144 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             Version {props.package?.version ?? "unknown"}
           </p>
         </div>
+        <section
+          data-ltm-surface="overview"
+          aria-label="Memory status"
+          className="flex items-center gap-3 text-xs text-[var(--muted-foreground)]"
+        >
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+            <strong className="text-[var(--foreground)]">
+              {status.data ? status.data.notes.total : "--"}
+            </strong>{" "}
+            memories
+          </span>
+          <span className="hidden whitespace-nowrap lg:inline">
+            <strong className="text-[var(--foreground)]">
+              {status.data ? (status.data.indexes.chunkCount ?? "--") : "--"}
+            </strong>{" "}
+            indexed chunks
+          </span>
+          <span className="hidden items-center gap-1.5 whitespace-nowrap sm:inline-flex">
+            <span className={`h-1.5 w-1.5 rounded-full ${healthTone}`} />
+            {status.isError
+              ? "Status unavailable"
+              : status.data
+                ? healthLabel
+                : "Loading status"}
+            {status.data && needsHealthAttention ? (
+              <details
+                className="relative"
+                onMouseEnter={(event) => {
+                  event.currentTarget.open = true;
+                }}
+                onMouseLeave={(event) => {
+                  event.currentTarget.open = false;
+                }}
+              >
+                <summary
+                  aria-label="How to repair vault health"
+                  className="grid h-7 w-7 cursor-pointer list-none place-items-center rounded-md text-amber-600 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] dark:text-amber-400"
+                >
+                  <CircleAlert aria-hidden="true" size="0.875rem" />
+                </summary>
+                <p className="absolute right-0 top-8 z-30 w-64 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs leading-5 text-[var(--foreground)] shadow-lg">
+                  Check Settings &gt; Maintenance &gt; Reindex recall data.
+                </p>
+              </details>
+            ) : null}
+          </span>
+          {props.chatId ? (
+            <div className="inline-flex items-center gap-1 whitespace-nowrap">
+              <span className="hidden xl:inline">
+                Active in{" "}
+                <strong className="text-[var(--foreground)]">
+                  {props.chatName ?? "this chat"}
+                </strong>
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={props.enabledForChat === true}
+                aria-label={`Active in ${props.chatName ?? "this chat"}`}
+                data-ltm-control="activation"
+                className="relative h-9 w-10 rounded-md bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50 before:absolute before:left-0 before:top-1.5 before:h-6 before:w-10 before:rounded-full before:bg-[var(--secondary)] before:transition-colors aria-checked:before:bg-[var(--primary)] after:absolute after:left-1 after:top-2.5 after:h-4 after:w-4 after:rounded-full after:bg-[var(--foreground)] after:transition-transform aria-checked:after:translate-x-4"
+                disabled={activationPending || !props.onEnabledForChatChange}
+                onClick={() => void toggleActivation()}
+              />
+            </div>
+          ) : null}
+          {destination === "vault" ? (
+            <div className="relative">
+              <Button
+                primary
+                className="min-h-9 min-w-9 px-2"
+                onClick={() => setAddOpen((value) => !value)}
+                aria-expanded={addOpen}
+                aria-controls="ltm-add-menu"
+                aria-label="Add memories"
+              >
+                <Plus aria-hidden="true" size="0.75rem" />
+                <span className="hidden xl:inline">Add memories</span>
+              </Button>
+              {addOpen ? (
+                <div
+                  id="ltm-add-menu"
+                  aria-label="Add memories"
+                  className="absolute right-0 z-30 mt-2 w-72 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 shadow-lg"
+                >
+                  <div className="px-2 py-1">
+                    <h2 className="text-sm font-semibold">Add memories</h2>
+                    <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                      Durable context usually starts in an existing source.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void openSources()}
+                    className="mt-1 flex min-h-16 w-full items-center gap-3 rounded-md bg-[var(--primary)]/10 p-3 text-left hover:bg-[var(--primary)]/15"
+                  >
+                    <Upload
+                      aria-hidden="true"
+                      size="1rem"
+                      className="shrink-0 text-[var(--primary)]"
+                    />
+                    <span>
+                      <strong className="block text-sm">Import sources</strong>
+                      <span className="block text-xs text-[var(--primary)]">
+                        Recommended
+                      </span>
+                      <span className="block text-xs text-[var(--muted-foreground)]">
+                        Characters, lorebooks, and chat summaries
+                      </span>
+                    </span>
+                  </button>
+                  <div className="my-1 border-t border-[var(--border)]" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddOpen(false);
+                      setCreateMemoryRequest(Date.now());
+                    }}
+                    className="flex min-h-14 w-full items-center gap-3 rounded-md p-3 text-left hover:bg-[var(--accent)]"
+                  >
+                    <Pencil
+                      aria-hidden="true"
+                      size="1rem"
+                      className="shrink-0"
+                    />
+                    <span>
+                      <strong className="block text-sm">Create manually</strong>
+                      <span className="block text-xs text-[var(--muted-foreground)]">
+                        One-off durable context
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
         <button
           type="button"
           data-ltm-control="manage-package"
@@ -204,149 +342,6 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           }}
         />
         <div className="min-w-0 flex-1 space-y-5">
-          <section
-            data-ltm-surface="overview"
-            aria-label="Memory status"
-            className="flex min-h-14 flex-wrap items-center gap-x-5 gap-y-2 border-y border-[var(--border)] bg-[var(--secondary)]/20 px-3 py-2 text-xs text-[var(--muted-foreground)]"
-          >
-            <span className="inline-flex items-center gap-2 whitespace-nowrap">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
-              <strong className="text-[var(--foreground)]">
-                {status.data ? status.data.notes.total : "--"}
-              </strong>{" "}
-              memories
-            </span>
-            <span className="hidden whitespace-nowrap sm:inline">
-              <strong className="text-[var(--foreground)]">
-                {status.data ? (status.data.indexes.chunkCount ?? "--") : "--"}
-              </strong>{" "}
-              indexed chunks
-            </span>
-            <span className="inline-flex items-center gap-2 whitespace-nowrap">
-              <span className={`h-1.5 w-1.5 rounded-full ${healthTone}`} />
-              {status.isError
-                ? "Status unavailable"
-                : status.data
-                  ? healthLabel
-                  : "Loading status"}
-              {status.data && needsHealthAttention ? (
-                <details
-                  className="group relative"
-                  onMouseEnter={(event) => {
-                    event.currentTarget.open = true;
-                  }}
-                  onMouseLeave={(event) => {
-                    event.currentTarget.open = false;
-                  }}
-                >
-                  <summary
-                    aria-label="How to repair vault health"
-                    className="grid h-7 w-7 cursor-pointer list-none place-items-center rounded-md text-amber-600 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] dark:text-amber-400"
-                  >
-                    <CircleAlert aria-hidden="true" size="0.875rem" />
-                  </summary>
-                  <p className="absolute left-0 top-8 z-30 w-64 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs leading-5 text-[var(--foreground)] shadow-lg">
-                    Check Settings &gt; Maintenance &gt; Reindex recall data.
-                  </p>
-                </details>
-              ) : null}
-            </span>
-            <span className="hidden flex-1 lg:block" />
-            {props.chatId ? (
-              <div className="ml-auto inline-flex min-h-11 items-center gap-2 whitespace-nowrap">
-                <span className="hidden sm:inline">
-                  Active in{" "}
-                  <strong className="text-[var(--foreground)]">
-                    {props.chatName ?? "this chat"}
-                  </strong>
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={props.enabledForChat === true}
-                  aria-label={`Active in ${props.chatName ?? "this chat"}`}
-                  data-ltm-control="activation"
-                  className="relative h-11 w-11 rounded-md bg-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50 before:absolute before:left-0 before:top-2 before:h-6 before:w-10 before:rounded-full before:bg-[var(--secondary)] before:transition-colors aria-checked:before:bg-[var(--primary)] after:absolute after:left-1 after:top-3 after:h-4 after:w-4 after:rounded-full after:bg-[var(--foreground)] after:transition-transform aria-checked:after:translate-x-4"
-                  disabled={activationPending || !props.onEnabledForChatChange}
-                  onClick={() => void toggleActivation()}
-                />
-              </div>
-            ) : null}
-            {destination === "vault" ? (
-              <div className="relative">
-                <Button
-                  primary
-                  className="min-w-11 px-0 sm:px-3"
-                  onClick={() => setAddOpen((value) => !value)}
-                  aria-expanded={addOpen}
-                  aria-controls="ltm-add-menu"
-                  aria-label="Add memories"
-                >
-                  <Plus aria-hidden="true" size="0.875rem" />
-                  <span className="hidden sm:inline">Add memories</span>
-                </Button>
-                {addOpen ? (
-                  <div
-                    id="ltm-add-menu"
-                    aria-label="Add memories"
-                    className="absolute right-0 z-30 mt-2 w-72 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 shadow-lg"
-                  >
-                    <div className="px-2 py-1">
-                      <h2 className="text-sm font-semibold">Add memories</h2>
-                      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                        Durable context usually starts in an existing source.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void openSources()}
-                      className="mt-1 flex min-h-16 w-full items-center gap-3 rounded-md bg-[var(--primary)]/10 p-3 text-left hover:bg-[var(--primary)]/15"
-                    >
-                      <Upload
-                        aria-hidden="true"
-                        size="1rem"
-                        className="shrink-0 text-[var(--primary)]"
-                      />
-                      <span>
-                        <strong className="block text-sm">
-                          Import sources
-                        </strong>
-                        <span className="block text-xs text-[var(--primary)]">
-                          Recommended
-                        </span>
-                        <span className="block text-xs text-[var(--muted-foreground)]">
-                          Characters, lorebooks, and chat summaries
-                        </span>
-                      </span>
-                    </button>
-                    <div className="my-1 border-t border-[var(--border)]" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAddOpen(false);
-                        setCreateMemoryRequest(Date.now());
-                      }}
-                      className="flex min-h-14 w-full items-center gap-3 rounded-md p-3 text-left hover:bg-[var(--accent)]"
-                    >
-                      <Pencil
-                        aria-hidden="true"
-                        size="1rem"
-                        className="shrink-0"
-                      />
-                      <span>
-                        <strong className="block text-sm">
-                          Create manually
-                        </strong>
-                        <span className="block text-xs text-[var(--muted-foreground)]">
-                          One-off durable context
-                        </span>
-                      </span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </section>
           {activationError ? (
             <StatusSurface tone="danger">{activationError}</StatusSurface>
           ) : null}

@@ -308,6 +308,7 @@ export default function MemoryVault({
 }: LongTermMemoryDestinationProps) {
   const client = useQueryClient();
   const detailRef = useRef<HTMLElement>(null);
+  const scopePickerRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [targetSearch, setTargetSearch] = useState("");
   const [targetsOpen, setTargetsOpen] = useState(false);
@@ -488,6 +489,15 @@ export default function MemoryVault({
   };
 
   useEffect(() => setActiveTargetIndex(0), [targetSearch]);
+  useEffect(() => {
+    if (!targetsOpen) return;
+    const closeScopePicker = (event: PointerEvent) => {
+      if (!scopePickerRef.current?.contains(event.target as Node))
+        setTargetsOpen(false);
+    };
+    document.addEventListener("pointerdown", closeScopePicker);
+    return () => document.removeEventListener("pointerdown", closeScopePicker);
+  }, [targetsOpen]);
 
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
@@ -860,16 +870,12 @@ export default function MemoryVault({
             display: grid;
             grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
             grid-template-areas:
-              "header header"
-              "feedback feedback"
               "controls workbench"
+              "feedback feedback"
               "bulk workbench"
               "list workbench";
             align-items: start;
             gap: 1rem;
-          }
-          [data-ltm-vault-header] {
-            grid-area: header;
           }
           [data-ltm-vault-feedback] {
             grid-area: feedback;
@@ -877,10 +883,6 @@ export default function MemoryVault({
           }
           [data-ltm-browser-controls] {
             grid-area: controls;
-            grid-template-columns: minmax(0, 1fr);
-          }
-          [data-ltm-browser-controls] > * {
-            grid-column: 1;
           }
           [data-ltm-bulk-actions] {
             grid-area: bulk;
@@ -915,24 +917,6 @@ export default function MemoryVault({
           }
         }
       `}</style>
-      <header data-ltm-vault-header className="space-y-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-base font-semibold">Memory vault</h2>
-          <span className="text-xs text-[var(--muted-foreground)]">
-            {visible.length} shown
-          </span>
-        </div>
-        <div className="flex gap-2 md:hidden">
-          <Button
-            onClick={() => {
-              setSelectionMode((value) => !value);
-              if (selectionMode) setChecked(new Set());
-            }}
-          >
-            {selectionMode ? "Done" : "Select"}
-          </Button>
-        </div>
-      </header>
       <div
         role="tablist"
         aria-label="Memory workspace"
@@ -957,9 +941,38 @@ export default function MemoryVault({
       </div>
       <section
         data-ltm-browser-controls
-        className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
+        className="grid grid-cols-2 gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3"
       >
-        <div className="relative sm:col-span-2">
+        <div className="col-span-2 flex items-baseline justify-between gap-3">
+          <h2 className="text-base font-semibold">Memory vault</h2>
+          <span className="text-xs text-[var(--muted-foreground)]">
+            {visible.length} shown
+          </span>
+        </div>
+        <label className="relative col-span-2 block">
+          <Search
+            size="0.875rem"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+          />
+          <input
+            className={`${inputClass} pl-9 pr-10`}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search memories"
+            aria-label="Search memories"
+          />
+          {search ? (
+            <button
+              type="button"
+              aria-label="Clear memory search"
+              onClick={() => setSearch("")}
+              className="absolute right-1 top-1 grid h-9 w-9 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+            >
+              <X size="0.875rem" />
+            </button>
+          ) : null}
+        </label>
+        <div ref={scopePickerRef} className="relative min-w-0">
           <input
             className={inputClass}
             value={targetSearch || target?.label || ""}
@@ -968,7 +981,7 @@ export default function MemoryVault({
               setTargetSearch(event.target.value);
               setTargetsOpen(true);
             }}
-            placeholder="Search linked chats, branches, and characters"
+            placeholder="Choose scope"
             aria-label="Choose memory scope"
             role="combobox"
             aria-expanded={targetsOpen}
@@ -1032,29 +1045,6 @@ export default function MemoryVault({
             </div>
           ) : null}
         </div>
-        <label className="relative block">
-          <Search
-            size="0.875rem"
-            className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted-foreground)]"
-          />
-          <input
-            className={`${inputClass} px-9`}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search memories"
-            aria-label="Search memories"
-          />
-          {search ? (
-            <button
-              type="button"
-              aria-label="Clear memory search"
-              onClick={() => setSearch("")}
-              className="absolute right-1 top-1 grid h-9 w-9 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
-            >
-              <X size="0.875rem" />
-            </button>
-          ) : null}
-        </label>
         <select
           className={inputClass}
           value={statusFilter}
@@ -1070,6 +1060,57 @@ export default function MemoryVault({
             </option>
           ))}
         </select>
+        <div
+          className={`${selectionMode ? "flex" : "hidden"} col-span-2 flex-wrap items-center gap-3 border-t border-[var(--border)] pt-2 md:flex`}
+        >
+          <label className="flex min-h-9 items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={
+                visible.length > 0 &&
+                visible.every((note) => checked.has(note.id))
+              }
+              onChange={(event) =>
+                setChecked(
+                  event.target.checked
+                    ? new Set([...checked, ...visible.map((note) => note.id)])
+                    : new Set(
+                        [...checked].filter(
+                          (id) => !visible.some((note) => note.id === id),
+                        ),
+                      ),
+                )
+              }
+            />
+            Select visible
+          </label>
+          <span
+            data-ltm-selection-count
+            className="text-xs text-[var(--muted-foreground)]"
+          >
+            {checked.size} selected
+            {hiddenChecked ? `, ${hiddenChecked} hidden by filters` : ""}
+          </span>
+          <span className="ml-auto md:hidden">
+            <Button
+              className="min-h-9"
+              onClick={() => {
+                setSelectionMode((value) => !value);
+                if (selectionMode) setChecked(new Set());
+              }}
+            >
+              {selectionMode ? "Done" : "Select"}
+            </Button>
+          </span>
+        </div>
+        {!selectionMode ? (
+          <Button
+            className="col-span-2 min-h-9 justify-self-start md:hidden"
+            onClick={() => setSelectionMode(true)}
+          >
+            Select
+          </Button>
+        ) : null}
       </section>
       {error || notice ? (
         <div data-ltm-vault-feedback className="contents">
@@ -1079,39 +1120,11 @@ export default function MemoryVault({
           ) : null}
         </div>
       ) : null}
-      <section
-        data-ltm-bulk-actions
-        className={`${selectionMode ? "flex" : "hidden"} flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3 md:flex`}
-      >
-        <label className="flex min-h-11 items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={
-              visible.length > 0 &&
-              visible.every((note) => checked.has(note.id))
-            }
-            onChange={(event) =>
-              setChecked(
-                event.target.checked
-                  ? new Set([...checked, ...visible.map((note) => note.id)])
-                  : new Set(
-                      [...checked].filter(
-                        (id) => !visible.some((note) => note.id === id),
-                      ),
-                    ),
-              )
-            }
-          />
-          Select visible
-        </label>
-        <span
-          data-ltm-selection-count
-          className="text-xs text-[var(--muted-foreground)]"
+      {checked.size ? (
+        <section
+          data-ltm-bulk-actions
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3"
         >
-          {checked.size} selected
-          {hiddenChecked ? `, ${hiddenChecked} hidden by filters` : ""}
-        </span>
-        {checked.size ? (
           <>
             <select
               className={inputClass}
@@ -1177,8 +1190,8 @@ export default function MemoryVault({
               Delete
             </Button>
           </>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
       {deleteIds ? (
         <div
           role="dialog"

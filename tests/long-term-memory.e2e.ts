@@ -151,6 +151,11 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       detail.getByRole("option", { name: "All memories" }),
     ).toBeVisible();
+    await detail.getByRole("heading", { name: "Memory vault" }).click();
+    await expect(
+      detail.getByRole("option", { name: "All memories" }),
+    ).toBeHidden();
+    await detail.getByLabel("Choose memory scope").click();
     await detail.getByRole("option", { name: "All memories" }).click();
     await expect(
       navigation.locator('[data-ltm-destination="vault"]'),
@@ -303,17 +308,14 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
         .filter({ hasText: `E2E world ${suffix}` }),
     ).toBeVisible();
     const bulkActions = vault.locator("[data-ltm-bulk-actions]");
-    await expect(bulkActions.locator("[data-ltm-selection-count]")).toHaveText(
-      "1 selected, 1 hidden by filters",
-    );
+    const selectionCount = vault.locator("[data-ltm-selection-count]");
+    await expect(selectionCount).toHaveText("1 selected, 1 hidden by filters");
     await expect(
       bulkActions.getByRole("button", { name: "Set status" }),
     ).toBeVisible();
 
-    await bulkActions.getByRole("checkbox", { name: "Select visible" }).check();
-    await expect(bulkActions.locator("[data-ltm-selection-count]")).toHaveText(
-      "2 selected, 1 hidden by filters",
-    );
+    await vault.getByRole("checkbox", { name: "Select visible" }).check();
+    await expect(selectionCount).toHaveText("2 selected, 1 hidden by filters");
     const deleted = await page.request.post(
       "/api/long-term-memory/notes/permanent-delete",
       {
@@ -325,9 +327,7 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
     await bulkActions.getByLabel("Set status").selectOption("resolved");
     await bulkActions.getByRole("button", { name: "Set status" }).click();
     await expect(vault).toContainText("1 memory updated; 0 skipped, 1 failed.");
-    await expect(bulkActions.locator("[data-ltm-selection-count]")).toHaveText(
-      "1 selected, 1 hidden by filters",
-    );
+    await expect(selectionCount).toHaveText("1 selected, 1 hidden by filters");
   } finally {
     await deleteNotes(page, [timelineId, worldId]);
     await deleteChat(page, chat.id);
