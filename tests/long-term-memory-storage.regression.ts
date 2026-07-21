@@ -43,6 +43,9 @@ async function main() {
     `${source}/mutation-transaction.ts`
   );
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
+  const { renderSectionContributions } = await import(
+    `${source}/section-contributions.ts`
+  );
   const {
     exportLongTermMemoryData,
     replaceLongTermMemoryData,
@@ -1031,6 +1034,190 @@ async function main() {
     });
     assert.equal(noChanges.status, "no_changes");
     assert.deepEqual(noChanges.skippedNoteIds, [bulkSource.id]);
+
+    const retractSourceA = await storage.createNote({
+      ...noteInput,
+      id: "source_retract_a",
+      title: "Retraction source A",
+      type: "source",
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "a" },
+      sections: { source: { text: "Evidence A.", updatedAt: timestamp } },
+    });
+    const retractSourceB = await storage.createNote({
+      ...noteInput,
+      id: "source_retract_b",
+      title: "Retraction source B",
+      type: "source",
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "b" },
+      sections: { source: { text: "Evidence B.", updatedAt: timestamp } },
+    });
+    const hashA = sourceHashForLtmSourceNote(retractSourceA);
+    const hashB = sourceHashForLtmSourceNote(retractSourceB);
+    const sourceContribution = (
+      sourceNoteId: string,
+      sourceHash: string,
+      text: string,
+    ) => ({
+      owner: "source" as const,
+      sourceNoteId,
+      sourceHash,
+      text,
+      updatedAt: timestamp,
+      evidence: [`source_note:${sourceNoteId}`],
+    });
+    const sharedFacts = renderSectionContributions(
+      [
+        sourceContribution(retractSourceA.id, hashA, "Shared durable fact."),
+        sourceContribution(retractSourceB.id, hashB, "Shared durable fact."),
+        sourceContribution(retractSourceB.id, hashB, "B-only durable fact."),
+      ],
+      true,
+    );
+    await storage.projectNote("world_retract_shared", "world", () => ({
+      ...noteInput,
+      id: "world_retract_shared",
+      title: "Shared extracted memory",
+      status: "active",
+      links: [
+        { target: retractSourceA.id, relation: "extracted_from" },
+        { target: retractSourceB.id, relation: "extracted_from" },
+      ],
+      sections: { facts: sharedFacts! },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      version: 1,
+    }));
+    await storage.projectNote("world_retract_empty", "world", () => ({
+      ...noteInput,
+      id: "world_retract_empty",
+      title: "A-only extracted memory",
+      status: "active",
+      links: [{ target: retractSourceA.id, relation: "extracted_from" }],
+      sections: {
+        facts: renderSectionContributions(
+          [sourceContribution(retractSourceA.id, hashA, "A-only fact.")],
+          true,
+        )!,
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      version: 1,
+    }));
+    await storage.projectNote("world_retract_manual", "world", () => ({
+      ...noteInput,
+      id: "world_retract_manual",
+      title: "Manually edited memory",
+      status: "active",
+      links: [{ target: retractSourceA.id, relation: "extracted_from" }],
+      sections: {
+        facts: renderSectionContributions(
+          [sourceContribution(retractSourceA.id, hashA, "Extracted fact.")],
+          true,
+        )!,
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      version: 1,
+    }));
+    const manual = await storage.updateNote("world_retract_manual", {
+      sections: {
+        facts: { text: "Manually preserved fact.", updatedAt: timestamp },
+      },
+    });
+    assert.equal(manual.sections.facts.contributions?.[0]?.owner, "manual");
+
+    await storage.projectNote("rel_retract_fallback", "relationship", () => ({
+      ...noteInput,
+      id: "rel_retract_fallback",
+      title: "Superseding fallback",
+      type: "relationship",
+      status: "active",
+      links: [
+        { target: retractSourceA.id, relation: "extracted_from" },
+        { target: retractSourceB.id, relation: "extracted_from" },
+      ],
+      sections: {
+        state: renderSectionContributions(
+          [
+            sourceContribution(retractSourceB.id, hashB, "Earlier B state."),
+            sourceContribution(retractSourceA.id, hashA, "Latest A state."),
+          ],
+          false,
+        )!,
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      version: 1,
+    }));
+
+    const uncheckedSource = await storage.createNote({
+      ...noteInput,
+      id: "source_retract_unchecked",
+      title: "Unchecked source",
+      type: "source",
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-a",
+        entryId: "unchecked",
+      },
+      sections: { source: { text: "Unchecked evidence.", updatedAt: timestamp } },
+    });
+    await storage.projectNote("world_retract_unchecked", "world", () => ({
+      ...noteInput,
+      id: "world_retract_unchecked",
+      title: "Unchecked extracted memory",
+      status: "active",
+      links: [{ target: uncheckedSource.id, relation: "extracted_from" }],
+      sections: {
+        facts: renderSectionContributions(
+          [
+            sourceContribution(
+              uncheckedSource.id,
+              sourceHashForLtmSourceNote(uncheckedSource),
+              "Unchecked fact.",
+            ),
+          ],
+          true,
+        )!,
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      version: 1,
+    }));
+    await storage.deleteNotesPermanently([uncheckedSource.id]);
+    const uncheckedMemory = await storage.getNote("world_retract_unchecked");
+    assert.equal(uncheckedMemory?.sections.facts.text, "Unchecked fact.");
+    assert.deepEqual(uncheckedMemory?.links, []);
+
+    const retracted = await storage.deleteNotesPermanently(
+      [retractSourceA.id],
+      { retractExtracted: true },
+    );
+    assert.deepEqual(retracted.deletedIds.sort(), [
+      retractSourceA.id,
+      "world_retract_empty",
+    ]);
+    const retainedShared = await storage.getNote("world_retract_shared");
+    assert.equal(retainedShared?.sections.facts.text, "Shared durable fact.\n\nB-only durable fact.");
+    assert.deepEqual(retainedShared?.sections.facts.evidence, [
+      `source_note:${retractSourceB.id}`,
+    ]);
+    assert.deepEqual(retainedShared?.links, [
+      { target: retractSourceB.id, relation: "extracted_from" },
+    ]);
+    assert.equal(
+      (await storage.getNote("rel_retract_fallback"))?.sections.state.text,
+      "Earlier B state.",
+    );
+    assert.equal(
+      (await storage.getNote("world_retract_manual"))?.sections.facts.text,
+      "Manually preserved fact.",
+    );
+    assert.equal(
+      (await storage.getNote("world_retract_manual"))?.sections.facts.evidence,
+      undefined,
+    );
+    assert.deepEqual((await storage.getNote("world_retract_manual"))?.links, []);
 
     process.stdout.write(
       "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",

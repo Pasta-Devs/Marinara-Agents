@@ -54,6 +54,20 @@ async function deleteNotes(page: any, ids: string[]) {
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
+async function seedNotes(page: any, notes: any[]) {
+  const exported = await page.request.get(
+    "/api/long-term-memory/backup/export",
+  );
+  expect(exported.ok(), await exported.text()).toBeTruthy();
+  const backup = await exported.json();
+  backup.notes.push(...notes);
+  const imported = await page.request.post(
+    "/api/long-term-memory/backup/import",
+    { headers: csrfHeaders, data: backup },
+  );
+  expect(imported.ok(), await imported.text()).toBeTruthy();
+}
+
 async function openLongTermMemory(page: any, chatId: string, testInfo: any) {
   await page.addInitScript((activeChatId) => {
     localStorage.setItem("marinara-active-chat-id", activeChatId);
@@ -314,9 +328,8 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
 
   try {
     const sourceTitle = "Readable source fixture";
-    const source = await page.request.post("/api/long-term-memory/notes", {
-      headers: csrfHeaders,
-      data: {
+    await seedNotes(page, [
+      {
         id: sourceId,
         title: sourceTitle,
         type: "source",
@@ -330,9 +343,11 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
         sections: {
           source: { text: "Source fixture text.", updatedAt: timestamp },
         },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
       },
-    });
-    expect(source.status(), await source.text()).toBe(201);
+    ]);
 
     const created = await page.request.post("/api/long-term-memory/notes", {
       headers: csrfHeaders,
@@ -440,7 +455,11 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
     expect(sectionBox).not.toBeNull();
     expect(titleBox!.y).toBeLessThan(sectionBox!.y);
     await expect(vault.getByText(sourceId, { exact: false })).toHaveCount(0);
-    await expect(vault.getByText(sourceTitle, { exact: true })).toBeVisible();
+    await expect(
+      vault
+        .locator("[data-ltm-note-editor]")
+        .getByText(sourceTitle, { exact: true }),
+    ).toBeVisible();
 
     await vault.getByRole("button", { name: "Add memories" }).click();
     await vault.getByRole("menuitem", { name: /Create manually/ }).click();
@@ -462,6 +481,110 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
     await expect(page.locator('[data-ltm-surface="sources"]')).toBeVisible();
   } finally {
     await deleteNotes(page, [id, sourceId]);
+    await deleteChat(page, chat.id);
+  }
+});
+
+test("Long-Term Memory can delete a source and its extracted memories", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const chat = await createChat(page, testInfo);
+  const suffix = Date.now();
+  const sourceId = `source_delete_${suffix}`;
+  const memoryId = `world_delete_${suffix}`;
+  const sourceTitle = `Delete source ${suffix}`;
+  const timestamp = new Date().toISOString();
+  const scope = { chatId: chat.id, chatIds: [chat.id] };
+  const sourceHash = "a".repeat(64);
+
+  try {
+    await seedNotes(page, [
+      {
+        id: sourceId,
+        title: sourceTitle,
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope,
+        tags: ["source_summary"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: chat.id },
+        sections: {
+          source: { text: "Deletion source fixture.", updatedAt: timestamp },
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      },
+      {
+        id: memoryId,
+        title: `Extracted memory ${suffix}`,
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope,
+        tags: ["e2e_fixture"],
+        keywords: [],
+        links: [{ target: sourceId, relation: "extracted_from" }],
+        sections: {
+          facts: {
+            text: "Source-owned deletion fact.",
+            updatedAt: timestamp,
+            evidence: [`source_note:${sourceId}`],
+            contributions: [
+              {
+                owner: "source",
+                sourceNoteId: sourceId,
+                sourceHash,
+                text: "Source-owned deletion fact.",
+                updatedAt: timestamp,
+                evidence: [`source_note:${sourceId}`],
+              },
+            ],
+          },
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      },
+    ]);
+
+    await openLongTermMemory(page, chat.id, testInfo);
+    const vault = page.locator('[data-ltm-surface="vault"]');
+    if (testInfo.project.name.includes("mobile"))
+      await vault.getByRole("button", { name: "Select" }).click();
+    const sourceRow = vault
+      .locator('[data-ltm-note-type="source"]')
+      .filter({ hasText: sourceTitle });
+    await sourceRow
+      .getByRole("checkbox", { name: `Select ${sourceTitle}` })
+      .check();
+    await vault
+      .locator("[data-ltm-bulk-actions]")
+      .getByRole("button", { name: "Delete" })
+      .click();
+
+    const dialog = page.getByRole("dialog", {
+      name: "Permanently delete selected memories?",
+    });
+    const cascade = dialog.locator("[data-ltm-delete-extracted]");
+    await expect(cascade).not.toBeChecked();
+    await cascade.check();
+    await dialog.getByRole("button", { name: "Delete permanently" }).click();
+
+    await expect
+      .poll(async () =>
+        (await page.request.get(`/api/long-term-memory/notes/${sourceId}`))
+          .status(),
+      )
+      .toBe(404);
+    expect(
+      (await page.request.get(`/api/long-term-memory/notes/${memoryId}`)).status(),
+    ).toBe(404);
+  } finally {
+    await deleteNotes(page, [sourceId, memoryId]);
     await deleteChat(page, chat.id);
   }
 });

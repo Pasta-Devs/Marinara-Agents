@@ -15,6 +15,11 @@ import { stableStringify } from "./chunking.js";
 import { uniqueStrings } from "./ltm-utils.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 import { subjectsEqual } from "./subject-equality.js";
+import {
+  renderSectionContributions,
+  sectionContributions,
+  sourceContribution,
+} from "./section-contributions.js";
 
 export type LtmMutationDisposition = "new" | "merge" | "rewrite";
 export type LtmDraftProjectionContext = { source: LtmDraftSource; scope: LtmScope; modes: LtmMode[] };
@@ -93,26 +98,26 @@ function projectMutation(current: LtmNote | null, mutation: LtmDraftMutation, co
     const sections = Object.fromEntries(
       Object.entries(mutation.note.sections).map(([key, section]) => [
         key,
-        {
+        renderSectionContributions([sourceContribution({
           ...section,
           evidence: uniqueStrings([...mutation.evidence, ...(section.evidence ?? [])]).slice(0, 100),
-        },
+        }, context.source)], isAdditiveLtmSection(mutation.note, key))!,
       ]),
     );
     const incoming = ltmNoteSchema.parse({ ...mutation.note, sections, createdAt: mutation.note.createdAt ?? timestamp, updatedAt: mutation.note.updatedAt ?? timestamp, version: mutation.note.version ?? 1 });
     if (!current) return incoming;
     assertCompatibleCreate(current, incoming);
     const mergedSections = { ...current.sections };
-    for (const [key, section] of Object.entries(incoming.sections)) mergedSections[key] = mergeSection(current.sections[key], section, isAdditiveLtmSection(current, key), mutation.confidence, timestamp);
+    for (const [key, section] of Object.entries(incoming.sections)) mergedSections[key] = mergeSection(current.sections[key], section, isAdditiveLtmSection(current, key), mutation.confidence, timestamp, context.source);
     return { ...current, title: current.title ?? incoming.title, status: current.status === "archived" ? current.status : incoming.status, modes: uniqueStrings([...current.modes, ...incoming.modes]) as LtmMode[], scope: mergeScopes(current.scope, incoming.scope), tags: uniqueStrings([...current.tags, ...incoming.tags]), keywords: uniqueCaseInsensitive([...current.keywords, ...incoming.keywords]), links: uniqueLinks([...current.links, ...incoming.links]), sections: mergedSections, conflicts: optionalConflicts(uniqueConflicts([...(current.conflicts ?? []), ...(incoming.conflicts ?? [])])), subjects: current.subjects ?? incoming.subjects };
   }
   if (!current) throw new LtmDraftProjectionError(`Long-term memory mutation target not found: ${mutation.noteId}`, "missing_target");
   if (!canUpdateLtmScopedTarget(current.scope, context.scope)) throw new LtmDraftProjectionError(`Long-term memory draft cannot mutate ${current.id} because it belongs to another scope.`, "scope_mismatch");
   if (mutation.kind === "append_section") {
     const section: LtmSection = { text: mutation.text, updatedAt: timestamp, salience: mutation.salience, confidence: mutation.confidence, importance: mutation.importance, dimensions: mutation.dimensions, dimensionChanges: mutation.dimensionChanges, evidence: mutation.evidence };
-    return { ...current, sections: { ...current.sections, [mutation.sectionKey]: mergeSection(current.sections[mutation.sectionKey], section, isAdditiveLtmSection(current, mutation.sectionKey), mutation.confidence, timestamp) } };
+    return { ...current, sections: { ...current.sections, [mutation.sectionKey]: mergeSection(current.sections[mutation.sectionKey], section, isAdditiveLtmSection(current, mutation.sectionKey), mutation.confidence, timestamp, context.source) } };
   }
-  if (mutation.kind === "update_section") return { ...current, sections: { ...current.sections, [mutation.sectionKey]: mergeSection(current.sections[mutation.sectionKey], { ...mutation.section, evidence: uniqueStrings([...(mutation.section.evidence ?? []), ...mutation.evidence]) }, isAdditiveLtmSection(current, mutation.sectionKey), mutation.confidence, timestamp) } };
+  if (mutation.kind === "update_section") return { ...current, sections: { ...current.sections, [mutation.sectionKey]: mergeSection(current.sections[mutation.sectionKey], { ...mutation.section, evidence: uniqueStrings([...(mutation.section.evidence ?? []), ...mutation.evidence]) }, isAdditiveLtmSection(current, mutation.sectionKey), mutation.confidence, timestamp, context.source) } };
   if (mutation.kind === "add_link") return { ...current, links: uniqueLinks([...current.links, mutation.link]) };
   if (mutation.kind === "set_keywords") return { ...current, keywords: uniqueCaseInsensitive([...current.keywords, ...mutation.keywords]) };
   if (mutation.kind === "set_status") return { ...current, status: mutation.status };
@@ -127,15 +132,46 @@ function assertCompatibleCreate(existing: LtmNote, incoming: LtmNote) {
   if (existing.subjects && incoming.subjects && !subjectsEqual(existing.subjects, incoming.subjects)) throw new LtmDraftProjectionError(`Long-term memory draft cannot merge a different subject identity into ${existing.id}.`, "subject_identity_mismatch");
 }
 
-function mergeSection(existing: LtmSection | undefined, incoming: LtmSection, additive: boolean, confidence: number, timestamp: string): LtmSection {
-  const evidence = uniqueStrings([...(existing?.evidence ?? []), ...(incoming.evidence ?? [])]);
-  if (evidence.length > 100) throw new LtmDraftProjectionError("A projected section exceeds the 100-entry evidence limit.", "projection_limit_exceeded");
-  const text = additive ? mergeNormalizedSectionLines(existing?.text, incoming.text) : incoming.text.trim();
-  if (text.length > 20_000) throw new LtmDraftProjectionError("A projected section exceeds the 20,000-character text limit.", "projection_limit_exceeded");
-  const values = [existing?.salience, incoming.salience].filter((value): value is number => value !== undefined);
-  const confidences = [existing?.confidence, incoming.confidence, confidence].filter((value): value is number => value !== undefined);
-  const importance = (["critical", "major", "moderate", "minor"] as const).find((value) => value === existing?.importance || value === incoming.importance);
-  return { ...incoming, text, updatedAt: timestamp, salience: values.length ? Math.max(...values) : undefined, confidence: confidences.length ? Math.max(...confidences) : undefined, importance, dimensions: additive ? incoming.dimensions ?? existing?.dimensions : incoming.dimensions, dimensionChanges: additive ? incoming.dimensionChanges ?? existing?.dimensionChanges : incoming.dimensionChanges, evidence: evidence.length ? evidence : undefined };
+function mergeSection(existing: LtmSection | undefined, incoming: LtmSection, additive: boolean, confidence: number, timestamp: string, source: LtmDraftSource): LtmSection {
+  if (!source.sourceNoteId || !source.sourceHash)
+    throw new Error("Source-backed sections require source identity and hash.");
+  const existingContributions = existing ? sectionContributions(existing) : [];
+  const sameExtraction = existingContributions.filter(
+    (item) =>
+      item.owner === "source" &&
+      item.sourceNoteId === source.sourceNoteId &&
+      item.sourceHash === source.sourceHash,
+  );
+  const sourceSection = sameExtraction.length
+    ? {
+        ...incoming,
+        text: additive
+          ? mergeNormalizedSectionLines(
+              sameExtraction.map((item) => item.text).join("\n\n"),
+              incoming.text,
+            )
+          : incoming.text,
+        evidence: uniqueStrings([
+          ...sameExtraction.flatMap((item) => item.evidence ?? []),
+          ...(incoming.evidence ?? []),
+        ]),
+      }
+    : incoming;
+  const contribution = sourceContribution(
+    { ...sourceSection, confidence: Math.max(sourceSection.confidence ?? 0, confidence), updatedAt: timestamp },
+    source,
+  );
+  const contributions = [
+    ...existingContributions.filter(
+      (item) =>
+        item.owner !== "source" || item.sourceNoteId !== source.sourceNoteId,
+    ),
+    contribution,
+  ];
+  if (contributions.length > 100) throw new LtmDraftProjectionError("A projected section exceeds the 100-contribution limit.", "projection_limit_exceeded");
+  const rendered = renderSectionContributions(contributions, additive)!;
+  if (rendered.text.length > 20_000) throw new LtmDraftProjectionError("A projected section exceeds the 20,000-character text limit.", "projection_limit_exceeded");
+  return rendered;
 }
 
 export function mergeNormalizedSectionLines(existing: string | undefined, incoming: string) {

@@ -912,10 +912,15 @@ export function createLongTermMemoryRoutes(runtime: {
     );
     app.post<{ Body: unknown }>("/notes/permanent-delete", async (request) => {
       const body = z
-        .object({ ids: z.array(ltmNoteIdSchema).min(1).max(100) })
+        .object({
+          ids: z.array(ltmNoteIdSchema).min(1).max(100),
+          retractExtracted: z.boolean().optional().default(false),
+        })
         .strict()
         .parse(request.body ?? {});
-      const result = await storage.deleteNotesPermanently(body.ids);
+      const result = await storage.deleteNotesPermanently(body.ids, {
+        retractExtracted: body.retractExtracted,
+      });
       const rebuild = result.deletedIds.length
         ? await rebuildAfterMutation()
         : null;

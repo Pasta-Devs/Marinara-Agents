@@ -333,6 +333,8 @@ export default function MemoryVault({
   const [notice, setNotice] = useState("");
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
   const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
+  const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
+  const [retractExtracted, setRetractExtracted] = useState(false);
   const [linkTarget, setLinkTarget] = useState("");
   const [linkRelation, setLinkRelation] =
     useState<LtmLink["relation"]>("involves");
@@ -642,9 +644,39 @@ export default function MemoryVault({
       setBusy("");
     }
   }
+  async function deleteSelected(ids: string[], retract = false) {
+    setBusy("delete");
+    try {
+      const result = await request<{ deletedIds: string[] }>(
+        "/notes/permanent-delete",
+        "POST",
+        { ids, retractExtracted: retract },
+      );
+      setChecked(new Set());
+      setDeleteIds(null);
+      setNotice(
+        `${result.deletedIds.length} ${result.deletedIds.length === 1 ? "memory" : "memories"} deleted.`,
+      );
+      await invalidate();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not update memories.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
   async function batch(action: "status" | "modes" | "archive" | "delete") {
     const ids = [...checked];
     if (!ids.length) return;
+    const includesSource = ids.some(
+      (id) => allNotes.find((note) => note.id === id)?.type === "source",
+    );
+    if (action === "delete" && includesSource) {
+      setRetractExtracted(false);
+      setDeleteIds(ids);
+      return;
+    }
     if (
       action === "delete" &&
       !(props.confirmAction
@@ -657,43 +689,33 @@ export default function MemoryVault({
         : window.confirm("Permanently delete selected memories?"))
     )
       return;
+    if (action === "delete") {
+      await deleteSelected(ids);
+      return;
+    }
     setBusy(action);
     try {
-      if (action === "delete")
-        await request("/notes/permanent-delete", "POST", { ids });
-      else {
-        const result = await request<LtmBulkNoteResult>(
-          "/notes/batch",
-          "POST",
-          {
-            noteIds: ids,
-            ...(action === "archive" ? { archive: "notes_only" } : {}),
-            ...(action === "status" ? { status: bulkStatus } : {}),
-            ...(action === "modes" ? { modes: bulkModes } : {}),
-          },
-        );
-        const unresolved = new Set([
-          ...result.skippedNoteIds,
-          ...result.failedNoteIds,
-        ]);
-        setChecked(unresolved);
-        const unresolvedLabel = unresolved.size
-          ? `; ${result.skippedNoteIds.length} skipped, ${result.failedNoteIds.length} failed`
-          : "";
-        const message = `${result.updatedNoteIds.length} ${result.updatedNoteIds.length === 1 ? "memory" : "memories"} updated${unresolvedLabel}.`;
-        if (unresolved.size) {
-          setNotice("");
-          setError(message);
-        } else {
-          setNotice(message);
-          setError("");
-        }
-      }
-      if (action === "delete") {
-        setChecked(new Set());
-        setNotice(
-          `${ids.length} ${ids.length === 1 ? "memory" : "memories"} deleted.`,
-        );
+      const result = await request<LtmBulkNoteResult>("/notes/batch", "POST", {
+        noteIds: ids,
+        ...(action === "archive" ? { archive: "notes_only" } : {}),
+        ...(action === "status" ? { status: bulkStatus } : {}),
+        ...(action === "modes" ? { modes: bulkModes } : {}),
+      });
+      const unresolved = new Set([
+        ...result.skippedNoteIds,
+        ...result.failedNoteIds,
+      ]);
+      setChecked(unresolved);
+      const unresolvedLabel = unresolved.size
+        ? `; ${result.skippedNoteIds.length} skipped, ${result.failedNoteIds.length} failed`
+        : "";
+      const message = `${result.updatedNoteIds.length} ${result.updatedNoteIds.length === 1 ? "memory" : "memories"} updated${unresolvedLabel}.`;
+      if (unresolved.size) {
+        setNotice("");
+        setError(message);
+      } else {
+        setNotice(message);
+        setError("");
       }
       await invalidate();
     } catch (cause) {
@@ -1238,6 +1260,53 @@ export default function MemoryVault({
           </>
         ) : null}
       </section>
+      {deleteIds ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ltm-delete-title"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+        >
+          <section className="w-full max-w-md space-y-4 rounded-md border border-[var(--border)] bg-[var(--background)] p-5 shadow-xl">
+            <div className="space-y-1">
+              <h3 id="ltm-delete-title" className="text-base font-semibold">
+                Permanently delete selected memories?
+              </h3>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                This cannot be undone.
+              </p>
+            </div>
+            <label className="flex min-h-11 items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                data-ltm-delete-extracted
+                className="mt-1"
+                checked={retractExtracted}
+                onChange={(event) => setRetractExtracted(event.target.checked)}
+              />
+              <span>
+                Also delete memories extracted from the selected source
+              </span>
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button
+                disabled={Boolean(busy)}
+                onClick={() => setDeleteIds(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                destructive
+                disabled={Boolean(busy)}
+                onClick={() => void deleteSelected(deleteIds, retractExtracted)}
+              >
+                <Trash2 size="0.875rem" />
+                Delete permanently
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       <div
         data-ltm-vault-workspace
         className="grid min-h-0 min-w-0 gap-4 md:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]"
@@ -1405,7 +1474,8 @@ export default function MemoryVault({
               </header>
               <div
                 data-ltm-note-layout
-                className={`min-w-0 ${detailsOpen ? "md:grid md:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)] md:gap-4" : ""}`}
+                className={`min-w-0 ${detailsOpen ? "md:flex" : ""}`}
+                style={detailsOpen ? { columnGap: "1rem" } : undefined}
               >
                 <div
                   data-ltm-note-editor
@@ -1414,6 +1484,7 @@ export default function MemoryVault({
                       ? "hidden space-y-4 md:block"
                       : "space-y-4"
                   }
+                  style={detailsOpen ? { flex: "1 1 0%", minWidth: 0 } : undefined}
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1 text-xs font-medium">
@@ -1595,11 +1666,12 @@ export default function MemoryVault({
                 <aside
                   data-ltm-note-inspector
                   aria-label="Memory inspector"
+                  style={detailsOpen ? { flex: "0 0 18rem" } : undefined}
                   className={
                     detailsOpen || mobilePane === "details"
                       ? mobilePane === "editor"
                         ? "hidden md:block"
-                        : "contents"
+                        : "contents md:block"
                       : "hidden"
                   }
                 >

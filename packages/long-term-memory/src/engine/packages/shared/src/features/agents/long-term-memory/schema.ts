@@ -797,6 +797,34 @@ export const ltmEvidenceUnitSchema = z
  * Compiled note sections store metadata as structured fields. The text remains
  * user-editable prose; callers must not parse importance or dimensions from it.
  */
+const ltmSectionContributionFields = {
+  text: z.string().min(1).max(24_000),
+  updatedAt: ltmIsoTimestampSchema,
+  salience: z.number().finite().min(0).max(1).optional(),
+  confidence: z.number().finite().min(0).max(1).optional(),
+  importance: ltmImportanceSchema.optional(),
+  dimensions: ltmRelationshipDimensionsSchema.optional(),
+  dimensionChanges: ltmRelationshipDimensionChangesSchema.optional(),
+  evidence: z.array(z.string().min(1).max(240)).max(100).optional(),
+};
+
+export const ltmSectionContributionSchema = z.discriminatedUnion("owner", [
+  z
+    .object({
+      ...ltmSectionContributionFields,
+      owner: z.literal("source"),
+      sourceNoteId: ltmNoteIdSchema,
+      sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    })
+    .strict(),
+  z
+    .object({
+      ...ltmSectionContributionFields,
+      owner: z.literal("manual"),
+    })
+    .strict(),
+]);
+
 export const ltmSectionSchema = z
   .object({
     text: z.string().min(1).max(24_000),
@@ -807,6 +835,7 @@ export const ltmSectionSchema = z
     dimensions: ltmRelationshipDimensionsSchema.optional(),
     dimensionChanges: ltmRelationshipDimensionChangesSchema.optional(),
     evidence: z.array(z.string().min(1).max(240)).max(100).optional(),
+    contributions: z.array(ltmSectionContributionSchema).max(100).optional(),
   })
   .strip();
 
@@ -2612,6 +2641,9 @@ export type LtmSourceDerivedMemoriesResponse = z.infer<
   typeof ltmSourceDerivedMemoriesResponseSchema
 >;
 export type LtmLink = z.infer<typeof ltmLinkSchema>;
+export type LtmSectionContribution = z.infer<
+  typeof ltmSectionContributionSchema
+>;
 export type LtmSection = z.infer<typeof ltmSectionSchema>;
 export type LtmConflict = z.infer<typeof ltmConflictSchema>;
 export type LtmNote = z.infer<typeof ltmNoteSchema>;
