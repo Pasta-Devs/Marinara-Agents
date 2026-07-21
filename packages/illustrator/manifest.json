@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "illustrator",
   "name": "Illustrator",
-  "version": "1.0.2",
-  "description": "Responsible for image and video generations. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
+  "version": "1.0.3",
+  "description": "Creates images and videos, with optional automatic scene backgrounds for Roleplay location changes. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
   "engine": {
-    "min": "2.3.0",
+    "min": "2.3.3",
     "maxExclusive": "3.0.0"
   },
   "kind": [
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "600dcf747b6b3c7c3a0f059f4eeffd281d582b1fa6524b5807072267cc77f3a1",
-      "bytes": 11245
+      "sha256": "080bd63f250ec1c49cd3d698f62eaed240f0dd0cb57f13c3c8bca001be5b4413",
+      "bytes": 14845
     }
   ],
   "permissions": [
