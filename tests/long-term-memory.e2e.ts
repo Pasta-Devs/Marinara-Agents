@@ -156,7 +156,10 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       navigation.locator('[data-ltm-destination="vault"]'),
     ).toHaveAttribute("aria-current", "page");
-    await expect(navigation.locator("[data-ltm-destination]")).toHaveCount(5);
+    await expect(navigation.locator("[data-ltm-destination]")).toHaveCount(4);
+    await expect(
+      navigation.locator('[data-ltm-destination="activity"]'),
+    ).toHaveCount(0);
 
     await navigation.locator('[data-ltm-destination="sources"]').click();
     await expect(
@@ -202,6 +205,17 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(settings.getByRole("tab")).toHaveCount(3);
     await expect(settings.getByRole("tab", { name: "Backup" })).toHaveCount(0);
     await expect(settings.getByRole("tabpanel")).toHaveCount(1);
+    await expect(
+      settings.getByText("Enable Long-Term Memory", { exact: true }),
+    ).toHaveCount(0);
+    await expect(settings.getByText("Meaning match", { exact: true })).toBeVisible();
+    await expect(
+      settings.getByText("Exact words match", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      settings.getByText("Memory context instructions", { exact: true }),
+    ).toBeVisible();
+    await expect(settings.locator('[data-ltm-surface="activity"]')).toHaveCount(0);
     await settings.getByRole("tab", { name: "Maintenance" }).click();
     await expect(
       settings.getByRole("heading", { name: "Backup and Reset" }),
@@ -209,6 +223,10 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       settings.getByRole("heading", { name: "Vault Maintenance" }),
     ).toBeVisible();
+    await expect(
+      settings.getByRole("heading", { name: "Debug Activity" }),
+    ).toBeVisible();
+    await expect(settings.locator('[data-ltm-surface="activity"]')).toBeVisible();
     await settings.getByRole("tab", { name: "Maintenance" }).press("ArrowLeft");
     await expect(
       settings.getByRole("tab", { name: "Extraction" }),

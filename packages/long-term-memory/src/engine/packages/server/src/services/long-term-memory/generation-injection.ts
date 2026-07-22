@@ -55,7 +55,6 @@ export async function prepareGenerationLongTermMemory(input: {
     globalSettings: settings,
     requestDebug: input.debugMode,
   });
-  if (!recall.enabled) return null;
   const recent = input.messages.slice(-recall.contextMessages);
   const queryText = recent.map((message) => message.content).filter(Boolean).join("\n");
   if (!queryText.trim()) return null;

@@ -9,7 +9,6 @@ import { ltmModeForChatMode } from "./scope.js";
 import type { LtmResolvedGlobalSettings } from "./schema.js";
 
 export interface ResolvedLongTermMemoryRecallSettings {
-  enabled: boolean;
   budgetTokens?: number;
   maxChunks?: number;
   scoreThreshold?: number;
@@ -124,10 +123,6 @@ export function resolveLongTermMemoryRecallSettings(input: {
   const recallStyle = chatRecallStyle ?? globalRecallStyle;
   const styleWeights = LTM_RECALL_STYLE_WEIGHTS[recallStyle];
   return {
-    enabled:
-      readBoolean(chatMetadata.enableLongTermMemory) ??
-      globalSettings?.enableLongTermMemory ??
-      false,
     budgetTokens:
       parseBudgetTokens(chatMetadata.longTermMemoryBudgetTokens) ??
       parseBudgetTokens(globalSettings?.longTermMemoryBudgetTokens),

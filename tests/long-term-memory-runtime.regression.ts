@@ -171,11 +171,15 @@ async function main() {
       ...chats[0].metadata,
       enableLongTermMemory: false,
     };
-    assert.equal(await runtime.recall(input), null, "a chat-level disable must override global enablement");
-    chats[0].metadata = {
-      ...chats[0].metadata,
-      enableLongTermMemory: true,
-    };
+    await writeFile(
+      join(dataDir, "long-term-memory", "config", "settings.json"),
+      JSON.stringify({ version: 1, enableLongTermMemory: false }),
+    );
+    assert.match(
+      (await runtime.recall(input)).text,
+      /beneath the observatory/,
+      "legacy global and chat-level disable flags must not suppress an active Agent",
+    );
 
     assert.equal(await runtime.recordPromptAccepted({ chatId: "chat-a", receipt: first.receipt, messages: [{ content: first.text }] }), true);
     assert.equal(await runtime.recordPromptAccepted({ chatId: "chat-a", receipt: first.receipt, messages: [{ content: first.text }] }), false, "the same receipt must account once");

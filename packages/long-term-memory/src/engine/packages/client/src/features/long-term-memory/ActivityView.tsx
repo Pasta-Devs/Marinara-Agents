@@ -283,7 +283,7 @@ export default function ActivityView({
     <section data-ltm-surface="activity" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold">Debug</h2>
+          <h4 className="text-xs font-semibold">Debug Activity</h4>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
             Trace imports, extraction, draft actions, recall, and maintenance.
           </p>

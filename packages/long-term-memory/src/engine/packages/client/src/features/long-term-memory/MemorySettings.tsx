@@ -15,11 +15,11 @@ import {
   inputClass,
 } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
+import ActivityView from "./ActivityView";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
 
 type GlobalForm = {
   version: 1;
-  enableLongTermMemory: boolean;
   longTermMemoryBudgetTokens: number;
   longTermMemoryMaxChunks: number;
   longTermMemoryScoreThreshold: number;
@@ -99,7 +99,6 @@ async function confirm(
 function settingsForm(settings: LtmGlobalSettings): GlobalForm {
   return {
     version: 1,
-    enableLongTermMemory: settings.enableLongTermMemory ?? true,
     longTermMemoryBudgetTokens: settings.longTermMemoryBudgetTokens ?? 4096,
     longTermMemoryMaxChunks: settings.longTermMemoryMaxChunks ?? 20,
     longTermMemoryScoreThreshold: settings.longTermMemoryScoreThreshold ?? 0,
@@ -187,6 +186,7 @@ function Toggle({
 export default function MemorySettings({
   props,
   onDirtyChange,
+  onOpenMemory,
 }: LongTermMemoryDestinationProps) {
   const queryClient = useQueryClient();
   const global = useQuery({
@@ -805,13 +805,6 @@ export default function MemorySettings({
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <Toggle
-            label="Enable Long-Term Memory"
-            checked={globalForm.enableLongTermMemory}
-            onChange={(value) =>
-              setGlobalForm({ ...globalForm, enableLongTermMemory: value })
-            }
-          />
-          <Toggle
             label="Include resolved memories"
             checked={globalForm.longTermMemoryIncludeResolved}
             onChange={(value) =>
@@ -819,13 +812,6 @@ export default function MemorySettings({
                 ...globalForm,
                 longTermMemoryIncludeResolved: value,
               })
-            }
-          />
-          <Toggle
-            label="Record debug activity"
-            checked={globalForm.longTermMemoryDebug}
-            onChange={(value) =>
-              setGlobalForm({ ...globalForm, longTermMemoryDebug: value })
             }
           />
           <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
@@ -895,7 +881,7 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Semantic weight"
+            label="Meaning match"
             value={globalForm.longTermMemorySemanticWeight}
             min={0}
             max={1}
@@ -908,7 +894,7 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Lexical weight"
+            label="Exact words match"
             value={globalForm.longTermMemoryLexicalWeight}
             min={0}
             max={1}
@@ -945,7 +931,7 @@ export default function MemorySettings({
           />
         </div>
         <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span>Recall preamble</span>
+          <span>Memory context instructions</span>
           <textarea
             className={`${inputClass} min-h-24 py-2`}
             maxLength={500}
@@ -1490,6 +1476,25 @@ export default function MemorySettings({
                 </div>
               ))}
             </div>
+          ) : null}
+        </div>
+        <div className="space-y-3 border-t border-[var(--border)] pt-3">
+          <Toggle
+            label="Record debug activity"
+            checked={globalForm.longTermMemoryDebug}
+            onChange={(value) =>
+              setGlobalForm({ ...globalForm, longTermMemoryDebug: value })
+            }
+          />
+          <Button
+            primary
+            disabled={pending !== "" || same(globalForm, savedGlobal)}
+            onClick={() => void saveGlobal()}
+          >
+            Save activity settings
+          </Button>
+          {activeTab === "maintenance" ? (
+            <ActivityView props={props} onOpenMemory={onOpenMemory} />
           ) : null}
         </div>
       </section>

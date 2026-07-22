@@ -24,7 +24,6 @@ const destinations = {
   vault: lazy(() => import("./MemoryVault")),
   review: lazy(() => import("./ReviewQueue")),
   sources: lazy(() => import("./SourcesWorkspace")),
-  activity: lazy(() => import("./ActivityView")),
   settings: lazy(() => import("./MemorySettings")),
 } as const;
 

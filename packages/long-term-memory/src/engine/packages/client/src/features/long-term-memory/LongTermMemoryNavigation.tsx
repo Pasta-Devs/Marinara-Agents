@@ -1,5 +1,4 @@
 import {
-  Activity,
   Database,
   FileInput,
   ListChecks,
@@ -30,7 +29,6 @@ const destinations: Array<{
     badge: "review",
   },
   { id: "sources", label: "Sources", shortLabel: "Sources", icon: FileInput },
-  { id: "activity", label: "Activity", shortLabel: "Activity", icon: Activity },
   {
     id: "settings",
     label: "Memory Settings",

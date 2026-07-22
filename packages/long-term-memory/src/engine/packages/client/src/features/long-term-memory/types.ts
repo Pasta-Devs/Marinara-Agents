@@ -45,7 +45,6 @@ export type LongTermMemoryDestination =
   | "vault"
   | "review"
   | "sources"
-  | "activity"
   | "settings";
 
 export type LtmRecoveryHandoff = {
