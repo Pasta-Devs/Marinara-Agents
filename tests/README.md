@@ -20,40 +20,15 @@ cd ../Marinara-Engine
 MARINARA_ENGINE_ROOT="$PWD" pnpm exec playwright test -c ../Marinara-Agents/tests/long-term-memory.playwright.config.ts
 ```
 
-`long-term-memory-storage.regression.ts` proves stable-root restart persistence,
-committed transaction recovery, strict malformed-settings self-check failure,
-retention cleanup, and canonical-note preservation:
+The storage, extraction graph, runtime, and debug-log regressions cover
+persistence, extraction, recall/index recovery, and debug logging:
 
 ```bash
 cd ../Marinara-Engine
-pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-storage.regression.ts"
-```
-
-`long-term-memory-extraction-graph.regression.ts` verifies source-grounded
-static facts, timeline-linked changes, relationship causal links, lore event
-preservation, and raw `source_note:<id>` link normalization:
-
-```bash
-cd ../Marinara-Engine
-pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-extraction-graph.regression.ts"
-```
-
-`long-term-memory-runtime.regression.ts` proves keyword-only package recall,
-scope filtering, empty recall, malformed-index recovery, receipt idempotence,
-null-receipt regeneration accounting, source-note recall exclusion,
-and service activation cleanup:
-
-```bash
-cd ../Marinara-Engine
-pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-runtime.regression.ts"
-```
-
-`long-term-memory-debug-log.regression.ts` proves debug-event field and record
-bounds, hard log rotation, complete JSONL records, and server-side filters:
-
-```bash
-cd ../Marinara-Engine
-pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-debug-log.regression.ts"
+for test in storage extraction-graph runtime debug-log; do
+  pnpm --filter @marinara-engine/server exec tsx \
+    "$PWD/../Marinara-Agents/tests/long-term-memory-${test}.regression.ts"
+done
 ```
 
 `long-term-memory-routes.regression.ts` proves the real Engine privileged guard,

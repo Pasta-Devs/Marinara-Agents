@@ -5,6 +5,7 @@ import {
   DEFAULT_LTM_EXTRACTION_VERBOSITY,
   DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE,
   DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE,
+  DEFAULT_LTM_ALLOWED_STREAMS,
   RELATIONSHIP_DIMENSIONS,
   ltmExtractionAccountingSchema,
   ltmEvidenceUnitExtractionResponseSchema,
@@ -20,7 +21,7 @@ import {
   type LtmNote,
   type LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/index.js";
-import type { LongTermMemoryExtractionModel, LtmModelMessage, LtmModelOptions } from "./model.js";
+import type { PackageLanguageModel } from "./package-runtime.js";
 import { logger } from "./package-runtime.js";
 import { isPackageDebugAgentsEnabled } from "./package-runtime.js";
 import { countBy, safeSnippet } from "./ltm-utils.js";
@@ -31,7 +32,6 @@ import { recordLtmDebugEvent } from "./debug-log.js";
 import type { LtmExtractionDiagnostic } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { deduplicateUnits } from "./dedup.js";
 import { compileLtmEvidenceUnits } from "./evidence-unit-compiler.js";
-import type { LtmSuggestionMetadata } from "./evidence-unit-compiler.js";
 import { noteIdForEvidenceUnit, validateLtmEvidenceUnits } from "./evidence-unit-validation.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
 import {
@@ -49,15 +49,6 @@ const LTM_EXTRACTION_BUCKET_SCAN_ORDER = [
   "tone",
   "anchor",
 ] as const;
-export const DEFAULT_LTM_EVIDENCE_UNIT_ALLOWED_BUCKETS = [
-  "timeline_event",
-  "character_fact",
-  "relationship_state",
-  "world_fact",
-  "thread",
-  "tone",
-  "anchor",
-] as const satisfies LtmEvidenceUnit["bucket"][];
 
 const LTM_EXTRACTION_IMPORTANCE_VALUES = ["critical", "major", "moderate", "minor"] as const;
 const LTM_EXTRACTION_LINK_RELATIONS = [
@@ -106,16 +97,15 @@ export interface RunLongTermMemoryEvidenceUnitExtractionOptions {
   sourceNote: LtmNote;
   sourceText: string;
   existingNotes: LtmNote[];
-  provider: LongTermMemoryExtractionModel;
-  model: string;
+  languageModel: PackageLanguageModel;
   root?: string;
   scope: LtmScope;
   modes: LtmMode[];
   sourceHash: string;
   instruction?: string;
   systemPrompt?: string;
-  reasoningEffort?: NonNullable<LtmModelOptions["reasoningEffort"]>;
-  verbosity?: NonNullable<LtmModelOptions["verbosity"]>;
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+  verbosity?: "low" | "medium" | "high";
   maxOutputTokens?: number;
   temperature?: number;
   maxExistingNoteTokens?: number;
@@ -134,7 +124,6 @@ export interface CompileEvidenceUnitExtractionResult {
   diagnostics: LtmExtractionDiagnostic[];
   outcome: LtmExtractionOutcome;
   accounting: LtmExtractionAccounting;
-  suggestions: LtmSuggestionMetadata;
 }
 
 type ParsedEvidenceUnitPayload = {
@@ -143,8 +132,10 @@ type ParsedEvidenceUnitPayload = {
   droppedCandidates: LtmExtractionDroppedCandidate[];
 };
 
-type LtmEvidenceUnitChatOptions = LtmModelOptions & {
-  reasoningEffort: NonNullable<LtmModelOptions["reasoningEffort"]>;
+type LanguageModelMessage = Parameters<PackageLanguageModel["chatComplete"]>[0][number];
+type LanguageModelChatOptions = NonNullable<Parameters<PackageLanguageModel["chatComplete"]>[1]>;
+type LtmEvidenceUnitChatOptions = LanguageModelChatOptions & {
+  reasoningEffort: NonNullable<LanguageModelChatOptions["reasoningEffort"]>;
 };
 type LtmEvidenceUnitLinkRelation = LtmEvidenceUnit["links"][number]["relation"];
 
@@ -204,7 +195,7 @@ export function evidenceUnitResponseFormat(options: {
   allowedBuckets: readonly LtmEvidenceUnit["bucket"][];
   sourceHash: string;
   resolveSubjectNames?: boolean;
-}): NonNullable<LtmModelOptions["responseFormat"]> {
+}): NonNullable<LanguageModelChatOptions["responseFormat"]> {
   const resolveSubjectNames = options.resolveSubjectNames !== false;
   return {
     type: "json_schema",
@@ -334,12 +325,12 @@ async function chatCompleteWithReasoningFallback({
   chatOptions,
   extractionOptions,
 }: {
-  messages: LtmModelMessage[];
+  messages: LanguageModelMessage[];
   chatOptions: LtmEvidenceUnitChatOptions;
   extractionOptions: RunLongTermMemoryEvidenceUnitExtractionOptions;
 }) {
   try {
-    return await extractionOptions.provider.complete(messages, chatOptions);
+    return await extractionOptions.languageModel.chatComplete(messages, chatOptions);
   } catch (err) {
     if (chatOptions.responseFormat && isResponseFormatUnsupportedError(err)) {
       await recordLtmDebugEvent({
@@ -349,8 +340,8 @@ async function chatCompleteWithReasoningFallback({
         action: "evidence_unit_response_format_fallback",
         status: "warning",
         sourceNoteId: extractionOptions.sourceNote.id,
-        provider: extractionOptions.provider.name,
-        model: extractionOptions.model,
+        provider: extractionOptions.languageModel.name,
+        model: extractionOptions.languageModel.model,
         error: err,
         details: {
           requestedResponseFormat: chatOptions.responseFormat.type,
@@ -375,8 +366,8 @@ async function chatCompleteWithReasoningFallback({
       action: "evidence_unit_reasoning_fallback",
       status: "warning",
       sourceNoteId: extractionOptions.sourceNote.id,
-      provider: extractionOptions.provider.name,
-      model: extractionOptions.model,
+      provider: extractionOptions.languageModel.name,
+      model: extractionOptions.languageModel.model,
       error: err,
       details: {
         requestedReasoningEffort: "none",
@@ -691,14 +682,14 @@ async function preflightExtractionPromptContext({
   chatOptions,
   extractionOptions,
 }: {
-  messages: LtmModelMessage[];
+  messages: LanguageModelMessage[];
   chatOptions: LtmEvidenceUnitChatOptions;
   extractionOptions: RunLongTermMemoryEvidenceUnitExtractionOptions;
 }): Promise<number | undefined> {
-  const providerMaxContext = extractionOptions.provider.maxContext ?? undefined;
+  const providerMaxContext = extractionOptions.languageModel.maxContext ?? undefined;
   if (!providerMaxContext) return;
 
-  const fit = extractionOptions.provider.fitContext(messages, chatOptions);
+  const fit = extractionOptions.languageModel.fitContext(messages, { maxTokens: chatOptions.maxTokens });
   const requestedMaxTokens = chatOptions.maxTokens;
   const reducedOutputBudget =
     typeof requestedMaxTokens === "number" && typeof fit.maxTokens === "number" && fit.maxTokens < requestedMaxTokens;
@@ -711,8 +702,8 @@ async function preflightExtractionPromptContext({
     action: "evidence_unit_context_preflight",
     status: fit.trimmed ? "error" : "ok",
     sourceNoteId: extractionOptions.sourceNote.id,
-    provider: extractionOptions.provider.name,
-    model: extractionOptions.model,
+    provider: extractionOptions.languageModel.name,
+    model: extractionOptions.languageModel.model,
     counts: {
       maxContext: providerMaxContext,
       requestedOutputTokens: requestedMaxTokens ?? 0,
@@ -734,8 +725,8 @@ async function preflightExtractionPromptContext({
   );
 }
 
-export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtractionOptions): LtmModelMessage[] {
-  const allowedBuckets = options.allowedBuckets ?? DEFAULT_LTM_EVIDENCE_UNIT_ALLOWED_BUCKETS;
+export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtractionOptions): LanguageModelMessage[] {
+  const allowedBuckets = options.allowedBuckets ?? DEFAULT_LTM_ALLOWED_STREAMS;
   const filteredScanOrder = LTM_EXTRACTION_BUCKET_SCAN_ORDER.filter((bucket) => allowedBuckets.includes(bucket));
   const modeDescs = options.mode ? DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE[options.mode] : undefined;
   const allBucketDescriptions: Record<string, string> = {
@@ -884,19 +875,17 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
   const requestedReasoningEffort = options.reasoningEffort ?? DEFAULT_LTM_EXTRACTION_REASONING_EFFORT;
   const requestedMaxOutputTokens = options.maxOutputTokens ?? DEFAULT_LTM_EXTRACTION_MAX_TOKENS;
   const debugMode = isPackageDebugAgentsEnabled();
-  const maxOutputTokens = options.provider.maxOutputTokens
-    ? Math.min(requestedMaxOutputTokens, options.provider.maxOutputTokens)
+  const maxOutputTokens = options.languageModel.maxOutputTokens
+    ? Math.min(requestedMaxOutputTokens, options.languageModel.maxOutputTokens)
     : requestedMaxOutputTokens;
   const chatOptions: LtmEvidenceUnitChatOptions = {
-    model: options.model,
     temperature: options.temperature ?? 0,
     maxTokens: maxOutputTokens,
     reasoningEffort: requestedReasoningEffort,
     verbosity: options.verbosity ?? DEFAULT_LTM_EXTRACTION_VERBOSITY,
-    stream: true,
     signal: options.signal,
     responseFormat: evidenceUnitResponseFormat({
-      allowedBuckets: options.allowedBuckets ?? DEFAULT_LTM_EVIDENCE_UNIT_ALLOWED_BUCKETS,
+      allowedBuckets: options.allowedBuckets ?? DEFAULT_LTM_ALLOWED_STREAMS,
       sourceHash: options.sourceHash,
       resolveSubjectNames: options.resolveSubjectNames,
     }),
@@ -910,8 +899,8 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
     action: "evidence_unit_request",
     status: "started",
     sourceNoteId: options.sourceNote.id,
-    provider: options.provider.name,
-    model: options.model,
+    provider: options.languageModel.name,
+    model: options.languageModel.model,
     counts: {
       messages: messages.length,
       promptChars,
@@ -952,8 +941,8 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       action: "evidence_unit_response",
       status: content ? "ok" : "skipped",
       sourceNoteId: options.sourceNote.id,
-      provider: options.provider.name,
-      model: options.model,
+      provider: options.languageModel.name,
+      model: options.languageModel.model,
       durationMs: Date.now() - started,
       counts: {
         responseChars: content.length,
@@ -1017,8 +1006,8 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       action: "evidence_unit_request",
       status: "error",
       sourceNoteId: options.sourceNote.id,
-      provider: options.provider.name,
-      model: options.model,
+        provider: options.languageModel.name,
+        model: options.languageModel.model,
       durationMs: Date.now() - started,
       error: err,
     });
@@ -1066,11 +1055,7 @@ export function compileEvidenceUnitExtraction(options: {
       options.allowedBuckets ?? DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE[options.mode ?? options.modes[0] ?? "roleplay"],
   });
   const keptUnits = validated.keptUnits;
-  const dedupResult = deduplicateUnits({
-    units: keptUnits,
-    existingNotes: options.existingNotes,
-    options: { withinExtraction: true },
-  });
+  const dedupResult = deduplicateUnits(keptUnits, options.existingNotes);
   const closed = closeSourceEventGraph(dedupResult.deduplicated, options.sourceNote, options.existingNotes);
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];
   const preValidationDroppedCandidates = options.preValidationDroppedCandidates ?? [];
@@ -1092,9 +1077,8 @@ export function compileEvidenceUnitExtraction(options: {
     : {
         summary: options.unitResponse.summary,
         mutations: [],
-        suggestions: { generated: 0, returned: 0 },
       };
-  const { suggestions, ...compiledResponse } = compiled;
+  const compiledResponse = compiled;
   const diagnostics = [...validated.diagnostics, ...dedupResult.diagnostics, ...closed.diagnostics];
   const accounting = ltmExtractionAccountingSchema.parse({
     providerCandidates:
@@ -1120,7 +1104,6 @@ export function compileEvidenceUnitExtraction(options: {
     diagnostics,
     outcome,
     accounting,
-    suggestions,
   };
 }
 
@@ -1174,8 +1157,6 @@ export function summarizeCompiledEvidenceUnitExtraction(result: CompileEvidenceU
       diagnostics: result.diagnostics.length,
       candidateRejectionDiagnostics: result.diagnostics.filter((diagnostic) => diagnostic.severity === "error").length,
       mutations: result.compiledResponse.mutations.length,
-      generatedMutations: result.suggestions.generated,
-      returnedMutations: result.suggestions.returned,
       targetNotes: new Set(targetNoteIds).size,
     },
     mutationKinds: countBy(result.compiledResponse.mutations.map((mutation) => mutation.kind)),

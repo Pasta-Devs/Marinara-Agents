@@ -21,7 +21,6 @@ export const queryKeys = {
   scopeTargetsRoot: ["long-term-memory", "scope-targets"] as const,
   scopeTargets: (chatId: string | null | undefined) =>
     ["long-term-memory", "scope-targets", chatId] as const,
-  identityPreview: ["long-term-memory", "identity-preview"] as const,
   lastInjection: (chatId: string | null | undefined) =>
     ["long-term-memory", "last-injection", chatId] as const,
 } as const;

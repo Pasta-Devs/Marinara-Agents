@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import {
-  configurePackageEmbeddingAdapter,
   configurePackageRuntime,
   type CapabilityRuntimeHost,
 } from "./package-runtime.js";
@@ -29,7 +28,6 @@ type ActivationContext = {
 
 export async function activate({ api, dataDir }: ActivationContext) {
   const releaseHost = configurePackageRuntime({ ...api.runtime, dataDir });
-  configurePackageEmbeddingAdapter(api.runtime.embeddings ?? null);
   try {
     active = await activateLongTermMemoryStorage(
       join(dataDir, "long-term-memory"),
@@ -63,12 +61,10 @@ export async function activate({ api, dataDir }: ActivationContext) {
       releaseStorageService();
       await active?.cleanup();
       active = null;
-      configurePackageEmbeddingAdapter(null);
       releaseHost();
     };
   } catch (error) {
     active = null;
-    configurePackageEmbeddingAdapter(null);
     releaseHost();
     throw error;
   }

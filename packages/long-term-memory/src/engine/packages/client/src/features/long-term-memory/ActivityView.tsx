@@ -15,6 +15,7 @@ import type {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { API_ROOT, invalidateLtmQueries, queryKeys, request } from "./api";
 import { Button, StatusSurface } from "./shared-controls";
+import { humanizeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 
 type DebugLogResponse = { events: LtmDebugEvent[] };
@@ -75,12 +76,6 @@ function compactSummary(value: string) {
   return singleLine.length > 240
     ? `${singleLine.slice(0, 237)}...`
     : singleLine;
-}
-
-function humanizeLabel(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function actionLabel(action: string) {
@@ -269,9 +264,7 @@ export default function ActivityView({
       setCopiedEventId(eventId);
       window.setTimeout(
         () =>
-          setCopiedEventId((current) =>
-            current === eventId ? null : current,
-          ),
+          setCopiedEventId((current) => (current === eventId ? null : current)),
         2_000,
       );
     } catch {
@@ -488,7 +481,9 @@ export default function ActivityView({
                                 <Button
                                   className="mb-2"
                                   aria-label={`Copy raw JSON for ${actionLabel(event.action)}`}
-                                  onClick={() => void copyJson(event.id, metadata)}
+                                  onClick={() =>
+                                    void copyJson(event.id, metadata)
+                                  }
                                 >
                                   {copiedEventId === event.id ? (
                                     <Check aria-hidden="true" size="0.875rem" />

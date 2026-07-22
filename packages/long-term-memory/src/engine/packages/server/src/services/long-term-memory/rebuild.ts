@@ -83,7 +83,7 @@ export async function rebuildLongTermMemoryIndexes(
     };
     await writeJsonAtomic(longTermMemoryRecallIndexPath(root), index);
     await markLtmIndexesClean(root);
-    return { root,generatedAt:index.generatedAt,noteCount: notes.length, chunkCount: chunks.length,sourceChunkCount:chunks.filter((chunk)=>chunk.noteType==="source").length,embeddedChunkCount:usableVectors?.length??0, embeddingsAvailable: Boolean(usableVectors) };
+    return { root,generatedAt:index.generatedAt,noteCount: notes.length, chunkCount: chunks.length,embeddedChunkCount:usableVectors?.length??0, embeddingsAvailable: Boolean(usableVectors) };
   });
 }
 

@@ -44,40 +44,6 @@ async function deleteChat(page: any, chatId: string) {
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
-async function createLorebook(page: any, name: string) {
-  const response = await page.request.post("/api/lorebooks", {
-    data: {
-      name,
-      description: "A source-browser fixture.",
-      category: "world",
-      enabled: true,
-      isGlobal: true,
-      tags: ["ltm-e2e"],
-    },
-  });
-  expect(response.ok(), await response.text()).toBeTruthy();
-  return (await response.json()) as { id: string };
-}
-
-async function createLorebookEntry(
-  page: any,
-  lorebookId: string,
-  name: string,
-  content: string,
-) {
-  const response = await page.request.post(
-    `/api/lorebooks/${lorebookId}/entries`,
-    { data: { name, content, enabled: true } },
-  );
-  expect(response.ok(), await response.text()).toBeTruthy();
-  return (await response.json()) as { id: string };
-}
-
-async function deleteLorebook(page: any, lorebookId: string) {
-  const response = await page.request.delete(`/api/lorebooks/${lorebookId}`);
-  expect(response.ok(), await response.text()).toBeTruthy();
-}
-
 async function deleteNotes(page: any, ids: string[]) {
   if (ids.length === 0) return;
   const response = await page.request.post(
@@ -446,30 +412,16 @@ test("Long-Term Memory browses whole lorebooks and selects their entries", async
 }, testInfo) => {
   test.setTimeout(90_000);
   const chat = await createChat(page, testInfo);
-  const suffix = `${testInfo.project.name}-${Date.now()}`;
-  const atlas = await createLorebook(page, `LTM Atlas ${suffix}`);
-  const archive = await createLorebook(page, `LTM Archive ${suffix}`);
+  const atlasId = "ltm-e2e-atlas";
+  const archiveId = "ltm-e2e-archive";
+  const gateId = "ltm-e2e-cobalt-gate";
+  const atlasName = "LTM Atlas";
+  const archiveName = "LTM Archive";
+  const gateName = "Cobalt Gate";
+  const moonVaultName = "Moon Vault";
+  const quietRecordName = "Quiet Record";
 
   try {
-    const gate = await createLorebookEntry(
-      page,
-      atlas.id,
-      `Cobalt Gate ${suffix}`,
-      "The cobalt gate opens only at dusk.",
-    );
-    await createLorebookEntry(
-      page,
-      atlas.id,
-      `Moon Vault ${suffix}`,
-      "The Moon Vault lies beneath the observatory.",
-    );
-    await createLorebookEntry(
-      page,
-      archive.id,
-      `Quiet Record ${suffix}`,
-      "The archive records the seventh bell.",
-    );
-
     await page.route(
       "**/api/capability-packages/long-term-memory/client*",
       async (route) => {
@@ -505,19 +457,19 @@ test("Long-Term Memory browses whole lorebooks and selects their entries", async
       entry(
         "description",
         "Description",
-        `atlas-description-${suffix}`,
+        "atlas-description",
         "A source-browser fixture.",
       ),
       entry(
-        gate.id,
-        `Cobalt Gate ${suffix}`,
-        `atlas-gate-${suffix}`,
+        gateId,
+        gateName,
+        "atlas-gate",
         "The cobalt gate opens only at dusk.",
       ),
       entry(
         "moon-vault",
-        `Moon Vault ${suffix}`,
-        `atlas-vault-${suffix}`,
+        moonVaultName,
+        "atlas-vault",
         "The Moon Vault lies beneath the observatory.",
       ),
     ];
@@ -525,13 +477,13 @@ test("Long-Term Memory browses whole lorebooks and selects their entries", async
       entry(
         "description",
         "Description",
-        `archive-description-${suffix}`,
+        "archive-description",
         "A source-browser fixture.",
       ),
       entry(
         "quiet-record",
-        `Quiet Record ${suffix}`,
-        `archive-record-${suffix}`,
+        quietRecordName,
+        "archive-record",
         "The archive records the seventh bell.",
       ),
     ];
@@ -550,8 +502,8 @@ test("Long-Term Memory browses whole lorebooks and selects their entries", async
             },
             books: [
               {
-                id: atlas.id,
-                name: `LTM Atlas ${suffix}`,
+                id: atlasId,
+                name: atlasName,
                 description: "A source-browser fixture.",
                 category: "world",
                 tags: ["ltm-e2e"],
@@ -565,8 +517,8 @@ test("Long-Term Memory browses whole lorebooks and selects their entries", async
                 entries: atlasEntries,
               },
               {
-                id: archive.id,
-                name: `LTM Archive ${suffix}`,
+                id: archiveId,
+                name: archiveName,
                 description: "A source-browser fixture.",
                 category: "world",
                 tags: ["ltm-e2e"],
@@ -597,25 +549,23 @@ test("Long-Term Memory browses whole lorebooks and selects their entries", async
 
     const browser = sources.locator("[data-ltm-lorebook-browser]");
     await expect(browser).toBeVisible();
-    const atlasRow = browser.locator(`[data-ltm-lorebook-id="${atlas.id}"]`);
-    const archiveRow = browser.locator(
-      `[data-ltm-lorebook-id="${archive.id}"]`,
-    );
+    const atlasRow = browser.locator(`[data-ltm-lorebook-id="${atlasId}"]`);
+    const archiveRow = browser.locator(`[data-ltm-lorebook-id="${archiveId}"]`);
     await expect(atlasRow).toHaveCount(1);
     await expect(archiveRow).toHaveCount(1);
     await expect(atlasRow).toContainText("3 entries");
 
     await atlasRow.click();
     const workbench = browser.locator(
-      `[data-ltm-lorebook-workbench="${atlas.id}"]`,
+      `[data-ltm-lorebook-workbench="${atlasId}"]`,
     );
     await expect(workbench).toBeVisible();
-    await expect(workbench.getByText(`Cobalt Gate ${suffix}`)).toBeVisible();
-    await expect(workbench.getByText(`Moon Vault ${suffix}`)).toBeVisible();
-    await expect(workbench).not.toContainText(`Quiet Record ${suffix}`);
+    await expect(workbench.getByRole("heading", { name: gateName })).toBeVisible();
+    await expect(workbench.getByRole("heading", { name: moonVaultName })).toBeVisible();
+    await expect(workbench).not.toContainText(quietRecordName);
 
     const gateEntry = workbench.locator(
-      `[data-ltm-lorebook-entry="${gate.id}"]`,
+      `[data-ltm-lorebook-entry="${gateId}"]`,
     );
     await gateEntry.getByRole("checkbox").check();
     await expect(
@@ -655,8 +605,6 @@ test("Long-Term Memory browses whole lorebooks and selects their entries", async
       )
       .toBe(true);
   } finally {
-    await deleteLorebook(page, atlas.id);
-    await deleteLorebook(page, archive.id);
     await deleteChat(page, chat.id);
   }
 });

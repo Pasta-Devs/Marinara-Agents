@@ -20,6 +20,16 @@ export const DEFAULT_LTM_EXTRACTION_MAX_EXISTING_NOTE_TOKENS = 4_096;
 export const DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_CHUNKS = 12;
 export const DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_TOKENS = 4_096;
 
+export const DEFAULT_LTM_ALLOWED_STREAMS = [
+  "timeline_event",
+  "character_fact",
+  "relationship_state",
+  "world_fact",
+  "thread",
+  "tone",
+  "anchor",
+] as const satisfies readonly LtmEvidenceUnitBucket[];
+
 export const IMPORTANCE_LEVELS = {
   critical: { emoji: "🔴", value: 5, label: "Critical" },
   major: { emoji: "🟠", value: 4, label: "Major" },
@@ -244,27 +254,11 @@ export const DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE = {
 
 export const DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE: Record<
   LtmMode,
-  readonly LtmEvidenceUnitBucket[]
+  typeof DEFAULT_LTM_ALLOWED_STREAMS
 > = {
-  roleplay: [
-    "timeline_event",
-    "character_fact",
-    "relationship_state",
-    "world_fact",
-    "thread",
-    "tone",
-    "anchor",
-  ],
-  conversation: ["timeline_event", "character_fact", "relationship_state", "world_fact", "thread", "tone", "anchor"],
-  game: [
-    "timeline_event",
-    "character_fact",
-    "relationship_state",
-    "world_fact",
-    "thread",
-    "tone",
-    "anchor",
-  ],
+  roleplay: DEFAULT_LTM_ALLOWED_STREAMS,
+  conversation: DEFAULT_LTM_ALLOWED_STREAMS,
+  game: DEFAULT_LTM_ALLOWED_STREAMS,
 };
 
 export const DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE: Record<

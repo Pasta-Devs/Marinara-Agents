@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { rename, rm, stat } from "node:fs/promises";
 import {
   DEFAULT_LTM_GLOBAL_SETTINGS,
   ltmAgentSettingsSchema,
@@ -8,18 +7,14 @@ import {
   ltmExtractionDraftSchema,
   ltmExtractionSettingsSchema,
   ltmGlobalSettingsSchema,
-  ltmPoliciesConfigSchema,
   ltmRetentionConfigSchema,
-  ltmRetrievalConfigSchema,
   type LtmBackup,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   DEFAULT_LTM_EXTRACTION_CONFIG,
 } from "./extraction-config.js";
 import {
-  DEFAULT_LTM_POLICIES,
   DEFAULT_LTM_RETENTION_CONFIG,
-  DEFAULT_LTM_RETRIEVAL_CONFIG,
 } from "./default-config.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import {
@@ -55,13 +50,11 @@ export async function exportLongTermMemoryData(root = getLongTermMemoryRoot()): 
   const storage = new LongTermMemoryStorage(root);
   await storage.initializeLtmStore();
   const dirs = getLongTermMemoryDirectories(root);
-  const [notes, drafts, global, extraction, policies, retrieval, retention, agent] = await Promise.all([
+  const [notes, drafts, global, extraction, retention, agent] = await Promise.all([
     storage.listNotes(),
     new LongTermMemoryDraftStore(root).listDrafts(),
     getLtmGlobalSettings(root).then((value) => ltmGlobalSettingsSchema.parse(value)),
     readConfig(ltmExtractionConfigPath(root), ltmExtractionSettingsSchema, { version: 1 }),
-    readConfig(safeJoin(dirs.config, "policies.json"), ltmPoliciesConfigSchema, DEFAULT_LTM_POLICIES),
-    readConfig(safeJoin(dirs.config, "retrieval.json"), ltmRetrievalConfigSchema, DEFAULT_LTM_RETRIEVAL_CONFIG),
     readConfig(longTermMemoryRetentionConfigPath(root), ltmRetentionConfigSchema, DEFAULT_LTM_RETENTION_CONFIG),
     readConfig(safeJoin(dirs.config, "agent-settings.json"), ltmAgentSettingsSchema, {}),
   ]);
@@ -71,7 +64,7 @@ export async function exportLongTermMemoryData(root = getLongTermMemoryRoot()): 
     exportedAt: new Date().toISOString(),
     notes,
     drafts,
-    settings: { global, extraction, policies, retrieval, retention, agent },
+    settings: { global, extraction, retention, agent },
   });
 }
 
@@ -112,8 +105,6 @@ async function writeBackupRoot(root: string, backup: LtmBackup) {
   await Promise.all([
     writeJsonAtomic(ltmSettingsPath(root), backup.settings.global),
     writeJsonAtomic(ltmExtractionConfigPath(root), backup.settings.extraction),
-    writeJsonAtomic(safeJoin(dirs.config, "policies.json"), backup.settings.policies),
-    writeJsonAtomic(safeJoin(dirs.config, "retrieval.json"), backup.settings.retrieval),
     writeJsonAtomic(longTermMemoryRetentionConfigPath(root), backup.settings.retention),
     writeJsonAtomic(safeJoin(dirs.config, "agent-settings.json"), backup.settings.agent),
   ]);
@@ -194,8 +185,6 @@ export async function resetLongTermMemorySettings(root = getLongTermMemoryRoot()
     await Promise.all([
       writeJsonAtomic(ltmSettingsPath(root), DEFAULT_LTM_GLOBAL_SETTINGS),
       writeJsonAtomic(ltmExtractionConfigPath(root), extraction),
-      writeJsonAtomic(safeJoin(dirs.config, "policies.json"), DEFAULT_LTM_POLICIES),
-      writeJsonAtomic(safeJoin(dirs.config, "retrieval.json"), DEFAULT_LTM_RETRIEVAL_CONFIG),
       writeJsonAtomic(longTermMemoryRetentionConfigPath(root), DEFAULT_LTM_RETENTION_CONFIG),
       writeJsonAtomic(safeJoin(dirs.config, "agent-settings.json"), {}),
     ]);
@@ -204,19 +193,5 @@ export async function resetLongTermMemorySettings(root = getLongTermMemoryRoot()
       notes: backup.notes.length,
       drafts: backup.drafts.length,
     };
-  });
-}
-
-export async function copyLongTermMemoryBackupSnapshot(root: string, destinationRoot: string) {
-  return withLtmVaultLock(root, async () => {
-    try {
-      const backup = await exportLongTermMemoryData(root);
-      await mkdir(dirname(destinationRoot), { recursive: true });
-      await writeJsonAtomic(join(destinationRoot, `${basename(root)}.json`), backup);
-      return true;
-    } catch (error: any) {
-      if (error?.code === "ENOENT") return false;
-      throw error;
-    }
   });
 }

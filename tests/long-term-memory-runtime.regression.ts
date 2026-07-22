@@ -6,10 +6,17 @@ import { join } from "node:path";
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);
-  const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
+  const {
+    longTermMemoryRecallIndexPath,
+    parseLtmRecallIndex,
+    rebuildLongTermMemoryIndexes,
+  } = await import(`${source}/rebuild.ts`);
   const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
+  const { configurePackageRuntime, getPackageEmbeddingAdapter } = await import(
+    `${source}/package-runtime.ts`,
+  );
   const services = new Map<string, any>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
@@ -65,6 +72,7 @@ async function main() {
     dataDir,
     api,
   });
+  let releaseRestoredRuntime: (() => void) | undefined;
   const storage = services.get("long-term-memory:storage").storage;
   const runtime = services.get("long-term-memory:runtime");
   const timestamp = "2026-07-17T00:00:00.000Z";
@@ -108,6 +116,27 @@ async function main() {
     await storage.createNote(note("world_visible_second", "chat-a", "The cobalt archive has a brass warding seal."));
     await storage.createNote(note("world_hidden", "chat-b", "The cobalt archive key is hidden in another chat."));
     await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const recallIndexPath = longTermMemoryRecallIndexPath(storage.root);
+    const currentRecallIndex = JSON.parse(await readFile(recallIndexPath, "utf8"));
+    currentRecallIndex.metadata.byType = {};
+    currentRecallIndex.metadata.byStatus = {};
+    currentRecallIndex.metadata.byMode = {};
+    currentRecallIndex.metadata.byScope = {};
+    await writeFile(recallIndexPath, JSON.stringify(currentRecallIndex));
+    assert.deepEqual(
+      Object.keys(
+        parseLtmRecallIndex(
+          JSON.parse(await readFile(recallIndexPath, "utf8")),
+        ).metadata,
+      ).sort(),
+      ["byNoteId", "byTag", "chunks", "version"],
+      "legacy expanded metadata must be readable without rewriting",
+    );
+    assert.equal(
+      "byScope" in JSON.parse(await readFile(recallIndexPath, "utf8")).metadata,
+      true,
+      "legacy index cleanup must not rewrite a readable derived file",
+    );
     const explained = await retrieveLongTermMemory({
       root: storage.root,
       queryText: "cobalt archive",
@@ -144,6 +173,8 @@ async function main() {
       messages: [{ role: "user", content: "Where is the cobalt archive key?" }],
       debugMode: false,
     };
+    const legacyReadable = await runtime.recall(input);
+    assert.match(legacyReadable.text, /beneath the observatory/);
     const first = await runtime.recall(input);
     assert.match(first.text, /beneath the observatory/);
     assert.doesNotMatch(first.text, /another chat/, "recall must enforce chat scope");
@@ -198,6 +229,23 @@ async function main() {
     assert.match(recovered.text, /beneath the observatory/, "malformed indexes must rebuild from canonical notes");
     assert.equal(JSON.parse(await readFile(longTermMemoryRecallIndexPath(storage.root), "utf8")).version, 1);
 
+    const olderHost = {
+      dataDir,
+      logger,
+      embeddings: { label: "older", async embed() { return [[1]]; } },
+    };
+    const newerHost = {
+      dataDir,
+      logger,
+      embeddings: { label: "newer", async embed() { return [[2]]; } },
+    };
+    const releaseOlder = configurePackageRuntime(olderHost);
+    const releaseNewer = configurePackageRuntime(newerHost);
+    releaseOlder();
+    assert.equal(getPackageEmbeddingAdapter()?.label, "newer");
+    releaseNewer();
+    releaseRestoredRuntime = configurePackageRuntime({ ...api.runtime, dataDir });
+
     await storage.createNote({
       id: "source_chat_summary_runtime",
       title: "Hidden source",
@@ -236,6 +284,7 @@ async function main() {
     );
   } finally {
     await cleanup?.();
+    releaseRestoredRuntime?.();
     assert.equal(services.has("long-term-memory:runtime"), false, "cleanup must unregister runtime service");
     assert.equal(services.has("long-term-memory:storage"), false, "cleanup must unregister storage service");
     await rm(dataDir, { recursive: true, force: true });

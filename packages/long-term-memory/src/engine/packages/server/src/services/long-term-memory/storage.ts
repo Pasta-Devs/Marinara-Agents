@@ -10,9 +10,7 @@ import {
   ltmNoteIdSchema,
   ltmNoteSchema,
   ltmNoteTypeSchema,
-  ltmPoliciesConfigSchema,
   ltmRetentionConfigSchema,
-  ltmRetrievalConfigSchema,
   type LtmNote,
   type LtmBulkNoteResult,
   type LtmNoteType,
@@ -24,9 +22,7 @@ import {
   matchesLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
-  DEFAULT_LTM_POLICIES,
   DEFAULT_LTM_RETENTION_CONFIG,
-  DEFAULT_LTM_RETRIEVAL_CONFIG,
 } from "./default-config.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import {
@@ -154,16 +150,6 @@ export class LongTermMemoryStorage {
       await recoverLtmMutations(this.root);
       await quarantineLegacyCapturedTurnSources(this.root);
       const configs = [
-        [
-          safeJoin(dirs.config, "policies.json"),
-          ltmPoliciesConfigSchema,
-          DEFAULT_LTM_POLICIES,
-        ],
-        [
-          safeJoin(dirs.config, "retrieval.json"),
-          ltmRetrievalConfigSchema,
-          DEFAULT_LTM_RETRIEVAL_CONFIG,
-        ],
         [
           longTermMemoryRetentionConfigPath(this.root),
           ltmRetentionConfigSchema,

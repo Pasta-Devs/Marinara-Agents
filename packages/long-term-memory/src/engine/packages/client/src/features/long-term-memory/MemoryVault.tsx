@@ -108,9 +108,6 @@ type RemoveCurrentChatResponse = {
 
 let sessionTarget: Target | null = null;
 
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
 function fingerprint(note: LtmNote | null) {
   return note ? JSON.stringify(note) : "";
 }
@@ -122,9 +119,6 @@ function hasExplicitScope(scope: LtmScope) {
     scope.characterIds?.length ||
     scope.personaId,
   );
-}
-function title(type: string) {
-  return noteTypeLabel(type);
 }
 function list(value: string) {
   return value
@@ -161,7 +155,7 @@ function preview(note: LtmNote, search: string) {
   const match = query ? text.toLocaleLowerCase().indexOf(query) : -1;
   const start = match > 60 ? match - 60 : 0;
   return {
-    label: title(key),
+    label: noteTypeLabel(key),
     text: `${start ? "..." : ""}${text.slice(start, start + 180)}${start + 180 < text.length ? "..." : ""}`,
   };
 }
@@ -540,7 +534,7 @@ export default function MemoryVault({
   }
   async function openNote(note: LtmNote) {
     if (!(await confirm(`opening ${memoryLabel(note)}`))) return;
-    const next = clone(note);
+    const next = structuredClone(note);
     setDraft(next);
     setSaved(fingerprint(next));
     setIsNew(false);
@@ -635,7 +629,7 @@ export default function MemoryVault({
               draft,
             ),
           );
-      const next = clone(response.note);
+      const next = structuredClone(response.note);
       setDraft(next);
       setSaved(fingerprint(next));
       setIsNew(false);
@@ -764,7 +758,7 @@ export default function MemoryVault({
         setMobilePane("memories");
         setNotice("Memory removed from this chat and deleted.");
       } else if (result.note) {
-        const next = clone(result.note);
+        const next = structuredClone(result.note);
         setDraft(next);
         setSaved(fingerprint(next));
         setNotice(
@@ -1324,7 +1318,7 @@ export default function MemoryVault({
                         </span>
                         <span className="mt-1 flex gap-1 text-[0.6875rem]">
                           <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
-                            {title(note.type)}
+                            {noteTypeLabel(note.type)}
                           </span>
                           <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
                             {humanizeLabel(note.status)}
@@ -1465,14 +1459,14 @@ export default function MemoryVault({
                         >
                           {noteTypes.map((type) => (
                             <option key={type} value={type}>
-                              {title(type)}
+                              {noteTypeLabel(type)}
                             </option>
                           ))}
                         </select>
                       </label>
                     ) : (
                       <p className="self-end text-xs text-[var(--muted-foreground)]">
-                        {title(draft.type)} memory
+                        {noteTypeLabel(draft.type)} memory
                       </p>
                     )}
                     <fieldset className="sm:col-span-2">
@@ -1540,7 +1534,7 @@ export default function MemoryVault({
                             htmlFor={`ltm-section-${key}`}
                             className="text-xs font-semibold"
                           >
-                            {title(key)}
+                            {noteTypeLabel(key)}
                           </label>
                           {draft.type !== "source" ? (
                             <button
@@ -1611,7 +1605,7 @@ export default function MemoryVault({
                     {Object.entries(draft.sections).map(([key, section]) => (
                       <fieldset key={key} className="space-y-2">
                         <legend className="text-xs font-semibold">
-                          {title(key)}
+                          {noteTypeLabel(key)}
                         </legend>
                         <div className="grid gap-2">
                           <label className="text-xs">
@@ -2008,7 +2002,7 @@ export default function MemoryVault({
                           {memoryLabel(note)}
                         </strong>
                         <span className="text-xs text-[var(--muted-foreground)]">
-                          {title(note.type)}
+                          {noteTypeLabel(note.type)}
                         </span>
                       </span>
                       <ChevronRight size="0.875rem" className="shrink-0" />

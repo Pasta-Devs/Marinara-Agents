@@ -344,32 +344,35 @@ const ltmActivePromptTemplateIdsByModeSchema = z
   })
   .strict();
 
+const ltmPromptTemplatesSchema = z
+  .array(ltmExtractionPromptTemplateSchema)
+  .max(50)
+  .refine(
+    (templates) =>
+      new Set(templates.map((template) => template.id)).size ===
+      templates.length,
+    "Prompt template IDs must be unique.",
+  )
+  .optional();
+
+const ltmExtractionSettingsFields = {
+  version: z.literal(1).default(1),
+  reasoningEffort: ltmExtractionReasoningEffortSchema.optional(),
+  verbosity: ltmExtractionVerbositySchema.optional(),
+  maxOutputTokens: z.number().int().min(512).max(32_768).optional(),
+  temperature: z.number().finite().min(0).max(2).optional(),
+  maxSourceTokens: z.number().int().min(128).max(65_536).optional(),
+  maxExistingNoteTokens: z.number().int().min(128).max(32_768).optional(),
+  existingNoteMaxChunks: z.number().int().min(1).max(100).optional(),
+  existingNoteMaxTokens: z.number().int().min(128).max(32_768).optional(),
+  promptTemplates: ltmPromptTemplatesSchema,
+  activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema.optional(),
+  aiKeywordExtraction: z.boolean().optional(),
+  useExtractionAgentOnGameMode: z.boolean().optional(),
+};
+
 const ltmExtractionSettingsShape = z
-  .object({
-    version: z.literal(1).default(1),
-    reasoningEffort: ltmExtractionReasoningEffortSchema.optional(),
-    verbosity: ltmExtractionVerbositySchema.optional(),
-    maxOutputTokens: z.number().int().min(512).max(32_768).optional(),
-    temperature: z.number().finite().min(0).max(2).optional(),
-    maxSourceTokens: z.number().int().min(128).max(65_536).optional(),
-    maxExistingNoteTokens: z.number().int().min(128).max(32_768).optional(),
-    existingNoteMaxChunks: z.number().int().min(1).max(100).optional(),
-    existingNoteMaxTokens: z.number().int().min(128).max(32_768).optional(),
-    promptTemplates: z
-      .array(ltmExtractionPromptTemplateSchema)
-      .max(50)
-      .refine(
-        (templates) =>
-          new Set(templates.map((template) => template.id)).size ===
-          templates.length,
-        "Prompt template IDs must be unique.",
-      )
-      .optional(),
-    activePromptTemplateIdsByMode:
-      ltmActivePromptTemplateIdsByModeSchema.optional(),
-    aiKeywordExtraction: z.boolean().optional(),
-    useExtractionAgentOnGameMode: z.boolean().optional(),
-  })
+  .object(ltmExtractionSettingsFields)
   .strict()
   .superRefine((settings, ctx) => {
     const templateIds = new Set(
@@ -391,31 +394,7 @@ const ltmExtractionSettingsShape = z
 export const ltmExtractionSettingsPatchSchema = z.preprocess(
   (value) => normalizeLegacyExtractionSettings(value),
   z
-    .object({
-      version: z.literal(1).default(1),
-      reasoningEffort: ltmExtractionReasoningEffortSchema.optional(),
-      verbosity: ltmExtractionVerbositySchema.optional(),
-      maxOutputTokens: z.number().int().min(512).max(32_768).optional(),
-      temperature: z.number().finite().min(0).max(2).optional(),
-      maxSourceTokens: z.number().int().min(128).max(65_536).optional(),
-      maxExistingNoteTokens: z.number().int().min(128).max(32_768).optional(),
-      existingNoteMaxChunks: z.number().int().min(1).max(100).optional(),
-      existingNoteMaxTokens: z.number().int().min(128).max(32_768).optional(),
-      promptTemplates: z
-        .array(ltmExtractionPromptTemplateSchema)
-        .max(50)
-        .refine(
-          (templates) =>
-            new Set(templates.map((template) => template.id)).size ===
-            templates.length,
-          "Prompt template IDs must be unique.",
-        )
-        .optional(),
-      activePromptTemplateIdsByMode:
-        ltmActivePromptTemplateIdsByModeSchema.optional(),
-      aiKeywordExtraction: z.boolean().optional(),
-      useExtractionAgentOnGameMode: z.boolean().optional(),
-    })
+    .object(ltmExtractionSettingsFields)
     .strict(),
 );
 
@@ -1202,7 +1181,7 @@ export const ltmDebugEventSchema = z
   })
   .strict();
 
-export const ltmPolicySchema = z.preprocess(
+const ltmPolicySchema = z.preprocess(
   (value) => {
     if (!value || typeof value !== "object" || Array.isArray(value))
       return value;
@@ -1230,7 +1209,7 @@ export const ltmPolicySchema = z.preprocess(
     .strict(),
 );
 
-export const ltmPoliciesConfigSchema = z
+const ltmPoliciesConfigSchema = z
   .object({
     version: z.literal(1).default(1),
     policies: z.array(ltmPolicySchema).default([]),
@@ -1265,7 +1244,7 @@ const ltmRetrievalConfigShape = z
     "At least one retrieval weight must be positive.",
   );
 
-export const ltmRetrievalConfigSchema = z.preprocess((value) => {
+const ltmRetrievalConfigSchema = z.preprocess((value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const { enabled: _enabled, ...rest } = value as Record<string, unknown>;
   return rest;
@@ -1304,20 +1283,6 @@ export const ltmRetentionConfigSchema = z
       }
     }
   });
-
-export const ltmIndexMetadataSchema = z
-  .object({
-    version: z.literal(1),
-    chunkFormatVersion: z.number().int().min(1).optional(),
-    generatedAt: ltmIsoTimestampSchema,
-    sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
-    noteCount: z.number().int().min(0),
-    chunkCount: z.number().int().min(0),
-    files: z
-      .record(ltmSafeRelativePathSchema, z.string().regex(/^[a-f0-9]{64}$/))
-      .default({}),
-  })
-  .strict();
 
 export const ltmIndexHealthSchema = z.enum([
   "not_built",
@@ -1492,88 +1457,26 @@ export const ltmKeywordIndexSchema = z
   })
   .strict();
 
-export const ltmMetadataIndexSchema = z
+const ltmMetadataIndexShape = z
   .object({
     version: z.literal(1),
     chunks: z.record(z.string().min(1).max(240), ltmMemoryChunkSchema),
     byNoteId: ltmIndexStringBucketsSchema,
-    byType: ltmIndexStringBucketsSchema,
-    byStatus: ltmIndexStringBucketsSchema,
     byTag: ltmIndexStringBucketsSchema,
-    /** Optional for pre-Phase 10 generations. New generations group chunks by mode. */
-    byMode: ltmIndexStringBucketsSchema.optional(),
-    byScope: z
-      .object({
-        chatId: ltmIndexStringBucketsSchema,
-        groupId: ltmIndexStringBucketsSchema,
-        characterId: ltmIndexStringBucketsSchema,
-        /** Optional for pre-Phase 10 generations. New generations list globally scoped chunks directly. */
-        global: z.array(z.string().min(1).max(240)).optional(),
-      })
-      .strict(),
   })
   .strict();
 
-export const ltmIndexFamilySchema = z.enum(["typed", "source"]);
-
-export const ltmIndexFamilySummarySchema = z
-  .object({
-    chunkCount: z.number().int().min(0),
-    embeddedChunkCount: z.number().int().min(0),
-    files: z.record(
-      ltmSafeRelativePathSchema,
-      z.string().regex(/^[a-f0-9]{64}$/),
-    ),
-  })
-  .strict();
-
-export const ltmIndexGenerationManifestSchema = z
-  .object({
-    version: z.literal(2),
-    generationId: z.string().uuid(),
-    generatedAt: ltmIsoTimestampSchema,
-    chunkFormatVersion: z.number().int().min(1),
-    sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
-    noteCount: z.number().int().min(0),
-    chunkCount: z.number().int().min(0),
-    sourceChunkCount: z.number().int().min(0),
-    sourceFiles: z.record(
-      ltmSafeRelativePathSchema,
-      z.string().regex(/^[a-f0-9]{64}$/),
-    ),
-    families: z
-      .object({
-        typed: ltmIndexFamilySummarySchema,
-        source: ltmIndexFamilySummarySchema.optional(),
-      })
-      .strict(),
-  })
-  .strict();
-
-export const ltmIndexPointerSchema = z
-  .object({
-    version: z.literal(1),
-    generationId: z.string().uuid(),
-    publishedAt: ltmIsoTimestampSchema,
-    fallbackGenerationIds: z.array(z.string().uuid()).max(2).optional(),
-  })
-  .strict()
-  .superRefine((pointer, ctx) => {
-    const seen = new Set<string>();
-    for (const [index, generationId] of (
-      pointer.fallbackGenerationIds ?? []
-    ).entries()) {
-      if (generationId === pointer.generationId || seen.has(generationId)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["fallbackGenerationIds", index],
-          message:
-            "Fallback generations must be unique and different from the current generation.",
-        });
-      }
-      seen.add(generationId);
-    }
-  });
+export const ltmMetadataIndexSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const {
+    byType: _byType,
+    byStatus: _byStatus,
+    byMode: _byMode,
+    byScope: _byScope,
+    ...rest
+  } = value as Record<string, unknown>;
+  return rest;
+}, ltmMetadataIndexShape);
 
 export const ltmIndexRebuildStateSchema = z.enum([
   "idle",
@@ -1581,7 +1484,7 @@ export const ltmIndexRebuildStateSchema = z.enum([
   "failed",
 ]);
 
-export const ltmIndexStateSchema = z
+const ltmIndexStateShape = z
   .object({
     version: z.literal(1),
     revision: z.number().int().min(0).default(0),
@@ -1590,10 +1493,15 @@ export const ltmIndexStateSchema = z
     rebuildState: ltmIndexRebuildStateSchema.default("idle"),
     rebuildStartedAt: ltmIsoTimestampSchema.optional(),
     rebuildCompletedAt: ltmIsoTimestampSchema.optional(),
-    lastPublishedGenerationId: z.string().uuid().optional(),
     error: z.string().min(1).max(2_000).optional(),
-  })
-  .strict();
+  }).strict();
+
+export const ltmIndexStateSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const { lastPublishedGenerationId: _lastPublishedGenerationId, ...rest } =
+    value as Record<string, unknown>;
+  return rest;
+}, ltmIndexStateShape);
 
 export const ltmStatusResponseSchema = z
   .object({
@@ -1615,10 +1523,6 @@ export const ltmStatusResponseSchema = z
     indexes: z
       .object({
         health: ltmIndexHealthSchema,
-        manifestAvailable: z.boolean(),
-        generationId: z.string().uuid().nullable(),
-        currentGenerationId: z.string().uuid().nullable(),
-        recovered: z.boolean(),
         dirty: z.boolean(),
         rebuildState: ltmIndexRebuildStateSchema,
         errors: z.array(
@@ -1866,10 +1770,8 @@ export const ltmTransferRebuildSummarySchema = z
     generatedAt: ltmIsoTimestampSchema,
     noteCount: z.number().int().min(0),
     chunkCount: z.number().int().min(0),
-    sourceChunkCount: z.number().int().min(0),
     embeddedChunkCount: z.number().int().min(0),
     embeddingsAvailable: z.boolean(),
-    manifest: ltmIndexMetadataSchema.optional(),
   })
   .strict();
 
@@ -2798,11 +2700,7 @@ export type LtmDebugStatus = z.infer<typeof ltmDebugStatusSchema>;
 export type LtmDebugPhase = z.infer<typeof ltmDebugPhaseSchema>;
 export type LtmDebugError = z.infer<typeof ltmDebugErrorSchema>;
 export type LtmDebugEvent = z.infer<typeof ltmDebugEventSchema>;
-export type LtmPolicy = z.infer<typeof ltmPolicySchema>;
-export type LtmPoliciesConfig = z.infer<typeof ltmPoliciesConfigSchema>;
-export type LtmRetrievalConfig = z.infer<typeof ltmRetrievalConfigSchema>;
 export type LtmRetentionConfig = z.infer<typeof ltmRetentionConfigSchema>;
-export type LtmIndexMetadata = z.infer<typeof ltmIndexMetadataSchema>;
 export type LtmIndexHealth = z.infer<typeof ltmIndexHealthSchema>;
 export type LtmMemoryChunk = z.infer<typeof ltmMemoryChunkSchema>;
 export type LtmEmbeddingIndexEntry = z.infer<
@@ -2815,12 +2713,6 @@ export type LtmGraphEdge = z.infer<typeof ltmGraphEdgeSchema>;
 export type LtmGraphIndex = z.infer<typeof ltmGraphIndexSchema>;
 export type LtmKeywordIndex = z.infer<typeof ltmKeywordIndexSchema>;
 export type LtmMetadataIndex = z.infer<typeof ltmMetadataIndexSchema>;
-export type LtmIndexFamily = z.infer<typeof ltmIndexFamilySchema>;
-export type LtmIndexFamilySummary = z.infer<typeof ltmIndexFamilySummarySchema>;
-export type LtmIndexGenerationManifest = z.infer<
-  typeof ltmIndexGenerationManifestSchema
->;
-export type LtmIndexPointer = z.infer<typeof ltmIndexPointerSchema>;
 export type LtmIndexRebuildState = z.infer<typeof ltmIndexRebuildStateSchema>;
 export type LtmIndexState = z.infer<typeof ltmIndexStateSchema>;
 export type LtmStatusResponse = z.infer<typeof ltmStatusResponseSchema>;
@@ -3025,8 +2917,8 @@ export const ltmBackupSchema = z
       .object({
         global: ltmGlobalSettingsSchema,
         extraction: ltmExtractionSettingsSchema,
-        policies: ltmPoliciesConfigSchema,
-        retrieval: ltmRetrievalConfigSchema,
+        policies: ltmPoliciesConfigSchema.optional(),
+        retrieval: ltmRetrievalConfigSchema.optional(),
         retention: ltmRetentionConfigSchema,
         agent: ltmAgentSettingsSchema,
       })

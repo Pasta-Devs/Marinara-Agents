@@ -335,10 +335,6 @@ export function createLongTermMemoryRoutes(runtime: {
         events,
         indexes: {
           health: integrity.health,
-          manifestAvailable: false,
-          generationId: null,
-          currentGenerationId: null,
-          recovered: false,
           dirty: state.dirty,
           rebuildState: state.rebuildState,
           errors: integrity.issues
@@ -638,37 +634,15 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply.status(404).send({ error: "Chat not found" });
         const operationId = randomUUID();
         try {
-          const resolved = await getPackageLanguageModels().resolveForRequest({
+          const languageModel = await getPackageLanguageModels().resolveForRequest({
             connectionId: body.connectionId,
             chatConnectionId: chat?.connectionId ?? null,
             model: body.model,
           });
-          const provider = resolved
-            ? {
-                name: resolved.name,
-                maxContext: resolved.maxContext,
-                maxOutputTokens: resolved.maxOutputTokens,
-                complete: (messages: any, options: any) =>
-                  resolved.chatComplete(messages, {
-                    temperature: options.temperature,
-                    maxTokens: options.maxTokens,
-                    debugMode: options.debugMode,
-                    reasoningEffort: options.reasoningEffort,
-                    verbosity: options.verbosity,
-                    signal: options.signal,
-                    responseFormat: options.responseFormat,
-                  }),
-                fitContext: (messages: any, options: any) =>
-                  resolved.fitContext(messages, {
-                    maxTokens: options.maxTokens,
-                  }),
-              }
-            : null;
           return ltmExtractSourceNoteResponseSchema.parse(
             await processLongTermMemorySource({
               sourceNote,
-              provider,
-              model: resolved?.model,
+              languageModel,
               scope: chat ? resolveChatLtmScope(chat) : sourceNote.scope,
               modes: chat ? [ltmModeForChatMode(chat.mode)] : sourceNote.modes,
               mode: body.mode,
@@ -801,7 +775,6 @@ export function createLongTermMemoryRoutes(runtime: {
                       generatedAt: result.generatedAt,
                       noteCount: result.noteCount,
                       chunkCount: result.chunkCount,
-                      sourceChunkCount: result.sourceChunkCount,
                       embeddedChunkCount: result.embeddedChunkCount,
                       embeddingsAvailable: result.embeddingsAvailable,
                     }

@@ -9,6 +9,7 @@ import type {
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request } from "./api";
+import { humanizeLabel } from "./display-labels";
 import { Button, inputClass, StatusSurface } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 
@@ -78,11 +79,6 @@ const dispositionLabels: Record<ReviewRow["disposition"], string> = {
   rewrite: "Rewrite memory",
   unavailable: "Preview unavailable",
 };
-
-function humanLabel(value: string) {
-  const label = value.replaceAll("_", " ");
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
 
 function mutationTarget(mutation: LtmDraftMutation) {
   return mutation.kind === "create_note" ? mutation.note.id : mutation.noteId;
@@ -206,10 +202,14 @@ function recoveryLabel(
   >,
 ) {
   const hints = [
-    recovery.noteType ? `memory type ${humanLabel(recovery.noteType)}` : null,
+    recovery.noteType
+      ? `memory type ${humanizeLabel(recovery.noteType)}`
+      : null,
     recovery.noteId ? `memory ${recovery.noteId}` : null,
-    recovery.sectionKey ? `section ${humanLabel(recovery.sectionKey)}` : null,
-    recovery.status ? `status ${humanLabel(recovery.status)}` : null,
+    recovery.sectionKey
+      ? `section ${humanizeLabel(recovery.sectionKey)}`
+      : null,
+    recovery.status ? `status ${humanizeLabel(recovery.status)}` : null,
   ].filter(Boolean);
   return (
     hints.join(", ") ||
@@ -270,7 +270,7 @@ function ImportanceField({
         <option value="">Not specified</option>
         {importanceOptions.map((importance) => (
           <option key={importance} value={importance}>
-            {humanLabel(importance)}
+            {humanizeLabel(importance)}
           </option>
         ))}
       </select>
@@ -327,7 +327,7 @@ function MutationEditor({
             className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]"
           >
             <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-              <span>{humanLabel(sectionKey)}</span>
+              <span>{humanizeLabel(sectionKey)}</span>
               <textarea
                 className={`${inputClass} min-h-24 py-2`}
                 maxLength={20_000}
@@ -392,7 +392,7 @@ function MutationEditor({
         className="grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
       >
         <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span>{humanLabel(mutation.sectionKey)} text</span>
+          <span>{humanizeLabel(mutation.sectionKey)} text</span>
           <textarea
             className={`${inputClass} min-h-24 py-2`}
             maxLength={20_000}
@@ -426,7 +426,7 @@ function MutationEditor({
         className="grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
       >
         <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span>{humanLabel(mutation.sectionKey)} text</span>
+          <span>{humanizeLabel(mutation.sectionKey)} text</span>
           <textarea
             className={`${inputClass} min-h-24 py-2`}
             maxLength={20_000}
@@ -510,7 +510,7 @@ function ExtractionDetails({
             <p className="font-medium text-[var(--foreground)]">Diagnostics</p>
             {item.diagnostics.map((diagnostic, index) => (
               <p key={`${diagnostic.code}-${index}`}>
-                {humanLabel(diagnostic.code)}: {diagnostic.message}
+                {humanizeLabel(diagnostic.code)}: {diagnostic.message}
               </p>
             ))}
           </div>
@@ -526,7 +526,7 @@ function ExtractionDetails({
                 className="space-y-1"
               >
                 <p>
-                  {humanLabel(rejection.reason)}: {rejection.message}
+                  {humanizeLabel(rejection.reason)}: {rejection.message}
                 </p>
                 {rejection.snippet ? <p>Snippet: {rejection.snippet}</p> : null}
                 {rejection.issues?.map((issue) => (
@@ -887,7 +887,7 @@ export default function ReviewQueue({
               data-ltm-risk={row.mutation.risk}
               className="rounded-full bg-[var(--secondary)] px-2 py-1"
             >
-              Risk: {humanLabel(row.mutation.risk)}
+              Risk: {humanizeLabel(row.mutation.risk)}
             </span>
             <span
               data-ltm-disposition={row.disposition}
@@ -913,7 +913,7 @@ export default function ReviewQueue({
             {row.changes.map((change) => (
               <p key={`${change.kind}-${change.key}`}>
                 <span className="font-medium">
-                  {humanLabel(change.kind)} {humanLabel(change.key)}:
+                  {humanizeLabel(change.kind)} {humanizeLabel(change.key)}:
                 </span>{" "}
                 {change.before ? `${change.before} -> ` : ""}
                 {change.after}
@@ -928,7 +928,7 @@ export default function ReviewQueue({
           >
             {row.diagnostics.map((diagnostic, index) => (
               <p key={`${diagnostic.code}-${index}`}>
-                {humanLabel(diagnostic.code)}: {diagnostic.message}
+                {humanizeLabel(diagnostic.code)}: {diagnostic.message}
               </p>
             ))}
           </div>
@@ -1110,7 +1110,7 @@ export default function ReviewQueue({
                     "Untitled memory"}
                 </h3>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Modes: {source.modes.map(humanLabel).join(", ")}
+                  Modes: {source.modes.map(humanizeLabel).join(", ")}
                 </p>
               </div>
               {onOpenMemory ? (
@@ -1162,7 +1162,7 @@ export default function ReviewQueue({
                       >
                         {item.blockReasons.map((reason) => (
                           <p key={reason.code}>
-                            {humanLabel(reason.code)}: {reason.message}
+                            {humanizeLabel(reason.code)}: {reason.message}
                           </p>
                         ))}
                       </div>
@@ -1216,7 +1216,7 @@ export default function ReviewQueue({
                               : "Untitled memory")}
                         </h4>
                         <p className="text-xs text-[var(--muted-foreground)]">
-                          {humanLabel(target.noteType)}
+                          {humanizeLabel(target.noteType)}
                         </p>
                       </div>
                       {onOpenMemory && noteById.has(target.noteId) ? (
@@ -1263,7 +1263,7 @@ export default function ReviewQueue({
                       <div>
                         <h4 className="text-sm font-semibold">{title}</h4>
                         <p className="text-xs text-[var(--muted-foreground)]">
-                          {type ? humanLabel(type) : "Preview unavailable"}
+                          {type ? humanizeLabel(type) : "Preview unavailable"}
                         </p>
                       </div>
                       {onOpenMemory && note ? (

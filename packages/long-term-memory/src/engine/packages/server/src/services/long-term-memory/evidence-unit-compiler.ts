@@ -30,15 +30,6 @@ export interface CompileLtmEvidenceUnitsOptions {
   summary?: string;
 }
 
-export type LtmSuggestionMetadata = {
-  generated: number;
-  returned: number;
-};
-
-export type CompiledLtmEvidenceUnits = LtmExtractionResponse & {
-  suggestions: LtmSuggestionMetadata;
-};
-
 type UnitTarget = {
   noteId: string;
   noteType: LtmNoteType;
@@ -49,7 +40,7 @@ type UnitTarget = {
 
 type LtmCompilerLifecycle = "cumulative" | "superseding" | "rolling_until_resolved";
 
-export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions): CompiledLtmEvidenceUnits {
+export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions): LtmExtractionResponse {
   const timestamp = options.createdAt ?? new Date().toISOString();
   const existingById = new Map(options.existingNotes.map((note) => [note.id, note]));
   const mutations: LtmDraftMutation[] = [];
@@ -250,10 +241,6 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
       options.summary ??
       `Compiled ${options.units.length} evidence unit(s) into ${mutations.length} draft mutation(s).`,
     mutations,
-    suggestions: {
-      generated: mutations.length,
-      returned: mutations.length,
-    },
   };
 }
 

@@ -51,12 +51,14 @@ async function main() {
     replaceLongTermMemoryData,
     deleteAllLongTermMemoryData,
     resetLongTermMemorySettings,
+    parseLongTermMemoryBackup,
   } = await import(`${source}/backup-restore.ts`);
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
   const releaseHost = configurePackageRuntime({ dataDir, logger });
   const root = join(dataDir, "long-term-memory");
+  const freshRoot = join(dataDir, "fresh-long-term-memory");
   const timestamp = "2026-07-17T00:00:00.000Z";
   const noteInput = {
     id: "world_restart_proof",
@@ -76,6 +78,16 @@ async function main() {
   };
 
   try {
+    const freshStorage = new LongTermMemoryStorage(freshRoot);
+    await freshStorage.initializeLtmStore();
+    for (const name of ["policies.json", "retrieval.json"]) {
+      await assert.rejects(
+        stat(join(freshRoot, "config", name)),
+        { code: "ENOENT" },
+        `fresh stores must omit inert ${name}`,
+      );
+    }
+
     assert.equal(
       getLongTermMemoryRoot(),
       root,
@@ -228,6 +240,49 @@ async function main() {
       true,
     );
     assert.equal("indexes" in exported, false);
+    assert.equal("policies" in exported.settings, false);
+    assert.equal("retrieval" in exported.settings, false);
+    const legacyBackup = parseLongTermMemoryBackup({
+      ...exported,
+      settings: {
+        ...exported.settings,
+        policies: { version: 1, policies: [] },
+        retrieval: {
+          version: 1,
+          maxChunks: 12,
+          maxTokens: 2048,
+          semanticWeight: 0.6,
+          lexicalWeight: 0.3,
+          graphWeight: 0.1,
+          keywordWeight: 0.2,
+          maxMetadataCandidates: 256,
+          maxDirectCandidates: 128,
+          maxLexicalCandidates: 128,
+          maxKeywordCandidates: 128,
+          maxVectorCandidates: 256,
+          maxGraphCandidates: 128,
+          maxMandatoryCandidates: 128,
+        },
+      },
+    });
+    await replaceLongTermMemoryData(legacyBackup, freshRoot);
+    const reexportedLegacy = await exportLongTermMemoryData(freshRoot);
+    assert.equal("policies" in reexportedLegacy.settings, false);
+    assert.equal("retrieval" in reexportedLegacy.settings, false);
+    for (const [key, value] of [
+      ["policies", { version: 1, policies: [{ type: "world", bad: true }] }],
+      ["retrieval", { version: 1, maxChunks: 0 }],
+    ] as const) {
+      assert.throws(
+        () =>
+          parseLongTermMemoryBackup({
+            ...exported,
+            settings: { ...exported.settings, [key]: value },
+          }),
+        /unrecognized|unknown|greater than or equal/i,
+        `malformed legacy ${key} fields must remain rejected`,
+      );
+    }
     const importedNote = exported.notes.find(
       (note) => note.id === noteInput.id,
     )!;

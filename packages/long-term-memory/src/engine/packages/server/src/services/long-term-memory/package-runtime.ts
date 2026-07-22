@@ -80,6 +80,10 @@ export type CapabilityRuntimeHost = {
   };
 };
 
+export type PackageLanguageModel = Awaited<
+  ReturnType<NonNullable<CapabilityRuntimeHost["languageModels"]>["resolveForRequest"]>
+>;
+
 export type PackageEmbeddingAdapter = {
   label: string;
   embed(texts: string[], signal?: AbortSignal): Promise<number[][] | null>;
@@ -87,7 +91,6 @@ export type PackageEmbeddingAdapter = {
 
 let host: CapabilityRuntimeHost | null = null;
 let registration = 0;
-let embeddingAdapter: PackageEmbeddingAdapter | null = null;
 
 function currentHost() {
   if (!host) throw new Error("Long-Term Memory package runtime is not configured");
@@ -106,12 +109,8 @@ export function configurePackageRuntime(next: CapabilityRuntimeHost) {
   };
 }
 
-export function configurePackageEmbeddingAdapter(adapter: PackageEmbeddingAdapter | null) {
-  embeddingAdapter = adapter;
-}
-
 export function getPackageEmbeddingAdapter() {
-  return embeddingAdapter ?? host?.embeddings ?? null;
+  return host?.embeddings ?? null;
 }
 
 export function getPackageDataDir() {

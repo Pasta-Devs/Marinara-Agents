@@ -8,6 +8,11 @@ async function main() {
     compileEvidenceUnitExtraction,
     parseEvidenceUnitPayload,
   } = await import(`${source}/evidence-unit-extraction.ts`);
+  const { deduplicateUnits } = await import(`${source}/dedup.ts`);
+  const { subjectsEqual } = await import(`${source}/subject-identity.ts`);
+  const { projectLtmDraftMutationGroup } = await import(
+    `${source}/draft-projector.ts`,
+  );
   const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
 
   const timestamp = "2026-07-21T00:00:00.000Z";
@@ -298,6 +303,95 @@ async function main() {
       (diagnostic) => diagnostic.details?.validatorCode === "static_relationship_dimension_change",
     ),
     true,
+  );
+
+  const dedupUnit = (text: string, subjectId = "dedup_subject", sectionKey = "facts") =>
+    unit(chat, {
+      bucket: "world_fact",
+      subjectId,
+      sectionKey,
+      text,
+    });
+  const shared = Array.from({ length: 17 }, (_, index) => `shared${index}`).join(" ");
+  const exactlyThreshold = dedupUnit(shared);
+  const thresholdMatch = dedupUnit(`${shared} extraA extraB extraC`);
+  const belowThreshold = dedupUnit(`${shared} belowA belowB belowC belowD`);
+  const dedupResult = deduplicateUnits(
+    [
+      dedupUnit("A sealed observatory gate."),
+      dedupUnit("A sealed observatory gate."),
+      dedupUnit("a an the"),
+      dedupUnit("a an the"),
+      exactlyThreshold,
+      thresholdMatch,
+      belowThreshold,
+      dedupUnit("A sealed observatory gate.", "different_subject"),
+      dedupUnit("A sealed observatory gate.", "dedup_subject", "history"),
+      dedupUnit("A sealed observatory gate.", "existing_subject"),
+    ],
+    [
+      {
+        ...chat,
+        id: "world_existing_subject",
+        type: "world" as const,
+        sections: { facts: { text: "A sealed observatory gate." } },
+      } as any,
+    ],
+  );
+  assert.equal(dedupResult.deduplicated.length, 7);
+  assert.equal(
+    dedupResult.diagnostics.filter((diagnostic) => diagnostic.code === "deduplicated_evidence_unit").length,
+    3,
+    "dedup must characterize same-batch, existing-note, threshold, and exact matches",
+  );
+
+  const subject = (key: string, ref?: { kind: "character"; id: string }) => ({ key, ...(ref ? { ref } : {}) });
+  assert.equal(subjectsEqual(undefined, undefined), false);
+  assert.equal(subjectsEqual([subject("character:mara")], []), false);
+  assert.equal(
+    subjectsEqual(
+      [subject("character:mara", { kind: "character", id: "mara" })],
+      [subject("character:mara", { kind: "character", id: "other" })],
+    ),
+    true,
+  );
+  assert.equal(subjectsEqual([subject("character:mara"), subject("character:rowan")], [subject("character:rowan"), subject("character:mara")]), false);
+  const existingCharacter = {
+    id: "char_mara_subject",
+    title: "Mara",
+    type: "character" as const,
+    status: "active" as const,
+    modes: ["roleplay" as const],
+    scope: {},
+    tags: [],
+    keywords: [],
+    links: [],
+    subjects: [subject("character:mara", { kind: "character", id: "mara" })],
+    sections: { facts: { text: "Mara is present.", updatedAt: timestamp } },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    version: 1,
+  };
+  assert.throws(
+    () =>
+      projectLtmDraftMutationGroup({
+        existing: existingCharacter,
+        mutations: [
+          {
+            id: randomUUID(),
+            kind: "set_subjects",
+            noteId: existingCharacter.id,
+            subjects: [subject("character:rowan")],
+            risk: "low",
+            confidence: 0.9,
+            summary: "Mismatch subject",
+            evidence: [`source_note:${chat.id}`],
+          },
+        ],
+        context: { source: { sourceNoteId: chat.id }, scope: {}, modes: ["roleplay"] },
+        timestamp,
+      }),
+    (error: any) => error.code === "subject_identity_mismatch",
   );
 
   process.stdout.write(

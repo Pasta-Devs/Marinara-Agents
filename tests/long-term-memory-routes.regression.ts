@@ -27,6 +27,12 @@ async function main() {
   );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
+  const {
+    ltmExtractionSettingsPatchSchema,
+    ltmExtractionSettingsSchema,
+  } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"
+  );
   const app = Fastify();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-routes-"));
   const installed = {
@@ -65,6 +71,7 @@ async function main() {
   let modelCalls = 0;
   const modelRequests: any[] = [];
   const completionOptions: any[] = [];
+  const completionMessages: any[] = [];
   const debugOverrides: any[] = [];
   let failGameRefine = false;
   const refineWarnings: any[] = [];
@@ -223,6 +230,7 @@ async function main() {
                 maxOutputTokens: 4_000,
                 async chatComplete(_messages: any[], options: any) {
                   modelCalls += 1;
+                  completionMessages.push(_messages);
                   completionOptions.push(options);
                   return {
                     content: JSON.stringify({
@@ -354,16 +362,28 @@ async function main() {
       ).statusCode,
       200,
     );
-    assert.equal(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/api/long-term-memory/status",
-          headers,
-        })
-      ).statusCode,
-      200,
-    );
+    const status = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/status",
+      headers,
+    });
+    assert.equal(status.statusCode, 200, status.body);
+    assert.deepEqual(Object.keys(status.json().indexes).sort(), [
+      "chunkCount",
+      "chunkFormatVersion",
+      "dirty",
+      "embeddedChunkCount",
+      "embeddingsAvailable",
+      "errors",
+      "generatedAt",
+      "health",
+      "noteCount",
+      "rebuildState",
+      "sourceHash",
+      "warnings",
+    ]);
+    assert.equal("generationId" in status.json().indexes, false);
+    assert.equal("manifestAvailable" in status.json().indexes, false);
     const created = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",
@@ -721,6 +741,15 @@ async function main() {
     });
     assert.equal(transfer.statusCode, 200, transfer.body);
     assert.deepEqual(transfer.json().updatedNoteIds, ["world_route_fixture"]);
+    assert.deepEqual(Object.keys(transfer.json().rebuild).sort(), [
+      "chunkCount",
+      "embeddedChunkCount",
+      "embeddingsAvailable",
+      "generatedAt",
+      "noteCount",
+    ]);
+    assert.equal("manifest" in transfer.json().rebuild, false);
+    assert.equal("sourceChunkCount" in transfer.json().rebuild, false);
     await storageService.storage.createNote({
       id: "world_persona_transfer",
       title: "Persona transfer fixture",
@@ -901,6 +930,14 @@ async function main() {
     assert.equal(completionOptions.at(-1)?.reasoningEffort, "low");
     assert.equal(completionOptions.at(-1)?.verbosity, "low");
     assert.equal(completionOptions.at(-1)?.responseFormat?.type, "json_schema");
+    assert.equal("model" in completionOptions.at(-1), false);
+    assert.equal("stream" in completionOptions.at(-1), false);
+    assert.equal(
+      completionMessages.at(-1).some((message: any) =>
+        message.content.includes("Mara seals the observatory gate at dusk."),
+      ),
+      true,
+    );
     assert.deepEqual(
       completionOptions.at(-1)?.responseFormat?.json_schema?.schema?.properties
         ?.units?.items?.properties?.claimKind?.enum,
@@ -1205,6 +1242,15 @@ async function main() {
       },
     });
     assert.equal(identityApply.statusCode, 200, identityApply.body);
+    assert.deepEqual(Object.keys(identityApply.json().rebuild).sort(), [
+      "chunkCount",
+      "embeddedChunkCount",
+      "embeddingsAvailable",
+      "generatedAt",
+      "noteCount",
+    ]);
+    assert.equal("manifest" in identityApply.json().rebuild, false);
+    assert.equal("sourceChunkCount" in identityApply.json().rebuild, false);
     assert.deepEqual(identityApply.json().repairs[0].archivedNoteIds, [
       "char_mara_legacy_a",
     ]);
@@ -1949,6 +1995,23 @@ async function main() {
       extractionPatch.json().promptTemplates,
       extractionTemplates.json().promptTemplates,
     );
+    assert.equal(
+      ltmExtractionSettingsSchema.parse(extractionPatch.json()).temperature,
+      extractionPatch.json().temperature,
+    );
+    assert.equal(
+      ltmExtractionSettingsPatchSchema.parse({
+        activePromptTemplateIdsByMode: { game: "stored_elsewhere" },
+      }).activePromptTemplateIdsByMode?.game,
+      "stored_elsewhere",
+    );
+    for (const schema of [
+      ltmExtractionSettingsSchema,
+      ltmExtractionSettingsPatchSchema,
+    ]) {
+      assert.throws(() => schema.parse({ unknownExtractionField: true }));
+      assert.throws(() => schema.parse({ maxOutputTokens: 511 }));
+    }
     const invalidExtractionTemplate = await app.inject({
       method: "PUT",
       url: "/api/long-term-memory/extraction-settings",

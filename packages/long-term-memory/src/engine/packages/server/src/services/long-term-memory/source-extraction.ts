@@ -11,7 +11,7 @@ import {
   type LtmNote,
   type LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/index.js";
-import { logger } from "./package-runtime.js";
+import { logger, type PackageLanguageModel } from "./package-runtime.js";
 import {
   compileEvidenceUnitExtraction,
   runLongTermMemoryEvidenceUnitExtraction,
@@ -24,7 +24,7 @@ import { recordLtmDebugEvent, withLtmDebugOperation } from "./debug-log.js";
 import type { LtmExtractionDiagnostic } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { uniqueStrings } from "./ltm-utils.js";
-import { retrieveLongTermMemory, type RetrieveLongTermMemoryInput } from "./retrieval.js";
+import { retrieveLongTermMemory } from "./retrieval.js";
 import { canUpdateLtmScopedTarget, resolveScopedEvidenceUnitTargets, scopedVariantNoteId } from "./scoped-targets.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
@@ -32,19 +32,15 @@ import { prepareLtmSubjectIdentityContext, subjectsEqual, type TrustedLtmSubject
 import { noteIdForLtmDraftMutation, projectLtmDraftOntoNotes } from "./draft-projector.js";
 import { stableJsonHash } from "./chunking.js";
 import { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent } from "./source-hash.js";
-import type { LongTermMemoryExtractionModel } from "./model.js";
-
 export type ExtractLongTermMemoryFromSourceNoteOptions = {
   noteId: string;
-  provider: LongTermMemoryExtractionModel;
-  model: string;
+  languageModel: PackageLanguageModel;
   root?: string;
   scope?: LtmScope;
   modes?: LtmMode[];
   mode?: LtmMode;
   instruction?: string;
   signal?: AbortSignal;
-  embeddingSource?: RetrieveLongTermMemoryInput["embeddingSource"];
   operationId?: string;
   chatId?: string;
   trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
@@ -268,13 +264,11 @@ export async function finalizeLongTermMemoryExtractionDraft(
 async function getExistingTypedNotes(options: {
   storage: LongTermMemoryStorage;
   root?: string;
-  sourceNoteId: string;
   sourceText: string;
   scope: LtmScope;
   mode?: LtmMode;
   maxChunks: number;
   maxTokens: number;
-  embeddingSource?: RetrieveLongTermMemoryInput["embeddingSource"];
 }) {
   const retrieval = await retrieveLongTermMemory({
     root: options.root,
@@ -284,7 +278,6 @@ async function getExistingTypedNotes(options: {
     characterIds: options.scope.characterIds,
     maxChunks: options.maxChunks,
     maxTokens: options.maxTokens,
-    embeddingSource: options.embeddingSource,
   });
   const noteIds = Array.from(new Set(retrieval.chunks.map((chunk) => chunk.chunk.noteId)));
   const notesById = await options.storage.getNotesByIds(noteIds);
@@ -308,7 +301,7 @@ export async function extractLongTermMemoryFromSourceNote(
       phase: "extraction",
       action: "extract_source_note",
       sourceNoteId: options.noteId,
-      model: options.model,
+      model: options.languageModel.model,
       message: "Extract memory streams from source note",
     },
     async (operationId) => extractLongTermMemoryFromSourceNoteInner({ ...options, operationId }),
@@ -393,13 +386,11 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const existingNotes = await getExistingTypedNotes({
     storage,
     root: options.root,
-    sourceNoteId: sourceNote.id,
     sourceText: extractionText,
     scope,
     mode: resolvedMode,
     maxChunks: extractionConfig.existingNoteMaxChunks,
     maxTokens: extractionConfig.existingNoteMaxTokens,
-    embeddingSource: options.embeddingSource,
   });
   await recordLtmDebugEvent({
     operationId: options.operationId,
@@ -430,8 +421,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     sourceNote,
     sourceText: extractionText,
     existingNotes,
-    provider: options.provider,
-    model: options.model,
+    languageModel: options.languageModel,
     root: options.root,
     scope,
     modes,
@@ -579,8 +569,6 @@ async function extractLongTermMemoryFromSourceNoteInner(
       mutations: compiled.compiledResponse.mutations.length,
       diagnostics: compiled.diagnostics.length,
       droppedUnits: compiled.outcome.droppedUnits,
-      generatedMutations: compiled.suggestions.generated,
-      returnedMutations: compiled.suggestions.returned,
     },
     diagnostics: compiled.diagnostics.map((diagnostic) => ({ ...diagnostic })),
     details: {

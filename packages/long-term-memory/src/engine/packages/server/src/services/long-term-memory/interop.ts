@@ -693,18 +693,6 @@ export async function previewPackageLorebooks(
     books,
   };
 }
-function provider(resolved: any) {
-  return {
-    name: resolved.name,
-    maxContext: resolved.maxContext,
-    maxOutputTokens: resolved.maxOutputTokens,
-    complete: (messages: any, options: any) =>
-      resolved.chatComplete(messages, options),
-    fitContext: (messages: any, options: any) =>
-      resolved.fitContext(messages, options),
-  };
-}
-
 export async function importPackageInterop(
   request: LtmImportSourceNotesRequest,
   root: string,
@@ -806,9 +794,8 @@ export async function importPackageInterop(
     }
   }
   const results = await processLongTermMemorySourceBatch({
-      items: written,
-      provider: resolved ? provider(resolved) : null,
-      model: resolved?.model,
+    items: written,
+      languageModel: resolved,
       mode: request.mode,
       instruction: request.instruction,
       operationId,
