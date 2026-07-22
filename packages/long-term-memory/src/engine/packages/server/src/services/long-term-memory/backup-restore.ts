@@ -189,7 +189,7 @@ export async function resetLongTermMemorySettings(root = getLongTermMemoryRoot()
       promptTemplates: [],
       activePromptTemplateIdsByMode: {},
       aiKeywordExtraction: false,
-      refinePass: false,
+      useExtractionAgentOnGameMode: false,
     };
     await Promise.all([
       writeJsonAtomic(ltmSettingsPath(root), DEFAULT_LTM_GLOBAL_SETTINGS),

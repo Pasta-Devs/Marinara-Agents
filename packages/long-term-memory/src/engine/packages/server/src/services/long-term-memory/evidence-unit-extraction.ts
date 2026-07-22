@@ -5,7 +5,6 @@ import {
   DEFAULT_LTM_EXTRACTION_VERBOSITY,
   DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE,
   DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE,
-  DEFAULT_LTM_EXTRACTION_PROMPT_GAME_REFINE,
   RELATIONSHIP_DIMENSIONS,
   ltmExtractionAccountingSchema,
   ltmEvidenceUnitExtractionResponseSchema,
@@ -107,7 +106,6 @@ export interface RunLongTermMemoryEvidenceUnitExtractionOptions {
   sourceNote: LtmNote;
   sourceText: string;
   existingNotes: LtmNote[];
-  candidateUnits?: LtmEvidenceUnit[];
   provider: LongTermMemoryExtractionModel;
   model: string;
   root?: string;
@@ -126,7 +124,6 @@ export interface RunLongTermMemoryEvidenceUnitExtractionOptions {
   allowedBuckets?: LtmEvidenceUnit["bucket"][];
   mode?: LtmMode;
   aiKeywordExtraction?: boolean;
-  refinePass?: boolean;
   resolveSubjectNames?: boolean;
   trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
 }
@@ -759,12 +756,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
   const filteredBucketDescriptions: Record<string, string> = {};
   const resolveSubjectNames = options.resolveSubjectNames !== false;
   const configuredSystemPrompt = options.systemPrompt?.trim();
-  const baseSystemPrompt =
-    options.refinePass && options.mode === "game"
-      ? [configuredSystemPrompt, DEFAULT_LTM_EXTRACTION_PROMPT_GAME_REFINE]
-          .filter((prompt, index, prompts): prompt is string => Boolean(prompt) && prompts.indexOf(prompt) === index)
-          .join("\n\n")
-      : configuredSystemPrompt || DEFAULT_LTM_EXTRACTION_PROMPT;
+  const baseSystemPrompt = configuredSystemPrompt || DEFAULT_LTM_EXTRACTION_PROMPT;
   const validationRules = serverEnforcedLinkRules(allowedBuckets);
   const systemPrompt = [baseSystemPrompt, serverEnforcedLinkPrompt(validationRules)].join("\n\n");
   for (const bucket of allowedBuckets) {
@@ -864,7 +856,6 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
         ],
         trustedSubjects: trustedLtmSubjectPromptCatalog(options.trustedSubjectCatalog ?? { entries: [], notes: [] }),
         userInstruction: options.instruction?.trim() || undefined,
-        ...(options.candidateUnits?.length ? { candidateUnits: options.candidateUnits } : {}),
         ...(options.aiKeywordExtraction
           ? {
               keywordInstruction:
@@ -879,7 +870,6 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
           options.maxExistingNoteTokens,
         ),
         sourceText: options.sourceText,
-        refinePass: options.refinePass === true,
       }),
     },
   ];

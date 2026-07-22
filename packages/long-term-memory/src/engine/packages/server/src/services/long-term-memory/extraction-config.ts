@@ -38,7 +38,7 @@ export const DEFAULT_LTM_EXTRACTION_CONFIG =
     activePromptTemplateId: null,
     activePromptTemplateIdsByMode: {},
     aiKeywordExtraction: false,
-    refinePass: false,
+    useExtractionAgentOnGameMode: false,
   });
 export const ltmExtractionConfigPath = (root = getLongTermMemoryRoot()) =>
   safeJoin(getLongTermMemoryDirectories(root).config, "extraction.json");

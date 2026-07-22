@@ -236,27 +236,6 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_GAME = [
   "For enum fields, choose exactly one string from the allowed arrays. Do not join multiple values with |.",
 ].join("\n");
 
-export const DEFAULT_LTM_EXTRACTION_PROMPT_GAME_REFINE = [
-  "You refine structured evidence units from a game session transcript.",
-  "Return strict JSON only. Do not explain.",
-  "Do not include thinking, analysis, markdown, or <think> tags. Output JSON object only.",
-  "The input includes candidate evidence units. Refine them against the source transcript rather than re-extracting from scratch.",
-  "These structural refinement rules override any earlier instruction about subjectNames or character/relationship subjectId values.",
-  "Preserve every supported durable fact unless the source transcript clearly contradicts it.",
-  "Preserve character_fact and relationship_state subjectId values from candidateUnits. Those structural identities are server-owned.",
-  "Never add subjectNames or choose database subject keys. Do not add character_fact or relationship_state identities that are absent from candidateUnits.",
-  "Merge duplicate or overlapping units, improve sectionKey and non-character subjectId choices when the transcript supports a better mapping, and recalibrate confidence/salience based on the source text.",
-  "Drop units that are unsupported, redundant, or too speculative for the transcript.",
-  "Add missing durable facts that are clearly supported by the source transcript and not already covered by the candidate units.",
-  "Keep quest/objective/stage/resolution units aligned to thread memories.",
-  "Use the same allowed stream and field schema as the normal game extraction prompt.",
-  "Do not emit current scene, transient combat state, or other short-lived status unless it is represented as a durable memory stream.",
-  "Prefer concise, evidence-backed units over verbose rewrites.",
-  "Use sourceHash exactly as supplied.",
-  "Set confidence and salience from 0 to 1.",
-  "For enum fields, choose exactly one string from the allowed arrays. Do not join multiple values with |.",
-].join("\n");
-
 export const DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE = {
   roleplay: DEFAULT_LTM_EXTRACTION_PROMPT,
   conversation: DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION,

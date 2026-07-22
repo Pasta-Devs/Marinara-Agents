@@ -1501,6 +1501,7 @@ async function main() {
       true,
     );
     const gameCalls = modelCalls;
+    const gameResolutions = modelRequests.length;
     const importedGame = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
@@ -1512,12 +1513,22 @@ async function main() {
       },
     });
     assert.equal(importedGame.statusCode, 200, importedGame.body);
-    assert.equal(importedGame.json().imported[0]?.extractionMethod, "llm");
+    assert.equal(importedGame.json().imported[0]?.extractionMethod, "deterministic");
     assert.equal(
       importedGame.json().imported[0]?.extractionStatus,
       "succeeded",
     );
-    assert.equal(modelCalls, gameCalls + 1);
+    assert.equal(modelCalls, gameCalls);
+    assert.equal(modelRequests.length, gameResolutions);
+    assert.match(
+      importedGame.json().imported[0].note.sections.source.text,
+      /Summary:\nThe party discovered the Moon Vault\./,
+    );
+    assert.match(
+      importedGame.json().imported[0].note.sections.source.text,
+      /Party state:\nThe party holds the cobalt key\./,
+    );
+    assert.equal(importedGame.json().imported[0].draft.mutations.length > 0, true);
     const { configurePackageRuntime } =
       await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
     releaseRuntimeOverride = configurePackageRuntime({
@@ -1557,8 +1568,8 @@ async function main() {
               const payload = JSON.parse(messages.at(-1).content);
               return {
                 content: JSON.stringify({
-                  summary: "Refined Moon Vault discovery.",
-                  units: payload.candidateUnits,
+                  summary: "Extracted Moon Vault discovery.",
+                  units: [],
                 }),
                 finishReason: "stop",
               };
@@ -1682,15 +1693,15 @@ async function main() {
       changedGame.json().imported[0].note.extractionFingerprint,
       firstGameFingerprint,
     );
-    assert.equal(modelCalls, changedGameCalls + 1);
+    assert.equal(modelCalls, changedGameCalls);
     const enabledRefine = await app.inject({
       method: "PUT",
       url: "/api/long-term-memory/extraction-settings",
       headers,
-      payload: { version: 1, refinePass: true },
+      payload: { version: 1, useExtractionAgentOnGameMode: true },
     });
     assert.equal(enabledRefine.statusCode, 200, enabledRefine.body);
-    assert.equal(enabledRefine.json().refinePass, true);
+    assert.equal(enabledRefine.json().useExtractionAgentOnGameMode, true);
     const extractionTemplates = await app.inject({
       method: "PUT",
       url: "/api/long-term-memory/extraction-settings",
@@ -1714,7 +1725,7 @@ async function main() {
       payload: { temperature: 0.4 },
     });
     assert.equal(extractionPatch.statusCode, 200, extractionPatch.body);
-    assert.equal(extractionPatch.json().refinePass, true);
+    assert.equal(extractionPatch.json().useExtractionAgentOnGameMode, true);
     assert.deepEqual(
       extractionPatch.json().promptTemplates,
       extractionTemplates.json().promptTemplates,
@@ -1756,7 +1767,7 @@ async function main() {
     assert.equal(modelCalls, refineCalls + 1, JSON.stringify(refineWarnings));
     assert.equal(
       refinedGame.json().imported[0].draft.summary,
-      "Refined Moon Vault discovery.",
+      "Extracted Moon Vault discovery.",
       refinedGame.body,
     );
     failGameRefine = true;
@@ -1774,7 +1785,7 @@ async function main() {
       method: "PUT",
       url: "/api/long-term-memory/extraction-settings",
       headers,
-      payload: { version: 1, refinePass: false },
+      payload: { version: 1, useExtractionAgentOnGameMode: false },
     });
     chats[0].metadata.summaryEntries.push(
       {

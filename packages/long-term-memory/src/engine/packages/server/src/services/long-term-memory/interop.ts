@@ -21,6 +21,7 @@ import {
   getPackageResources,
 } from "./package-runtime.js";
 import { processLongTermMemorySourceBatch } from "./source-processing.js";
+import { getLtmExtractionConfig } from "./extraction-config.js";
 import {
   extractionFingerprintForLtmSourceMaterial,
   extractionFingerprintsEqual,
@@ -43,6 +44,7 @@ type Candidate = {
   extractionMode: LtmMode;
   mutationCount: number;
   summary: string;
+  deterministicSourceText?: string;
 };
 function object(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value))
@@ -188,8 +190,19 @@ function summaries(metadata: Record<string, unknown>) {
               ["NPC updates", stringArray(session.npcUpdates).join("\n")],
               ["Next session request", session.nextSessionRequest],
             ],
-            content = fields.flatMap(([label, value]) => text(value) ? [`${label}:\n${text(value)}`] : []).join("\n\n");
-          return content ? [{ id, content, range: `game session ${Number.isFinite(sessionNumber) ? sessionNumber : index + 1}`, origin: "game_session" }] : [];
+            content = fields.flatMap(([label, value]) => text(value) ? [`${label}:\n${text(value)}`] : []).join("\n\n"),
+            deterministicSourceText = [
+              text(session.summary) ? `## timeline_event\nSummary: ${text(session.summary)}` : "",
+              text(session.resumePoint) ? `## world_fact\nResume point: ${text(session.resumePoint)}` : "",
+              text(session.nextSessionRequest) ? `## thread\nNext session request: ${text(session.nextSessionRequest)}` : "",
+              text(session.partyDynamics) ? `## world_fact\nParty dynamics: ${text(session.partyDynamics)}` : "",
+              text(session.partyState) ? `## world_fact\nParty state: ${text(session.partyState)}` : "",
+              ...stringArray(session.keyDiscoveries).map((value) => `## world_fact\nKey discovery: ${value}`),
+              ...stringArray(session.characterMoments).map((value) => `## timeline_event\nCharacter moment: ${value}`),
+              ...stringArray(session.littleDetails).map((value) => `## world_fact\nLittle detail: ${value}`),
+              ...stringArray(session.npcUpdates).map((value) => `## world_fact\nNPC update: ${value}`),
+            ].filter(Boolean).join("\n\n");
+          return content ? [{ id, content, deterministicSourceText, range: `game session ${Number.isFinite(sessionNumber) ? sessionNumber : index + 1}`, origin: "game_session" }] : [];
         })
       : [];
   return [...ordinary, ...sessions];
@@ -394,6 +407,7 @@ async function candidates(
           extractionMode: chatMode,
           mutationCount: 1,
           summary: `Import ${title}`,
+          ...(entry.deterministicSourceText ? { deterministicSourceText: entry.deterministicSourceText } : {}),
         });
       }
     }
@@ -496,12 +510,19 @@ export async function importPackageInterop(
     resolvedIds = new Set(rows.map((item) => item.sourceId)),
     missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id));
   throwIfAborted(signal);
-  const resolved = rows.length
-       ? await getPackageLanguageModels().resolveForRequest({
-          connectionId: request.connectionId,
-          model: request.model,
-        })
-      : null;
+  const extractionConfig = await getLtmExtractionConfig(root, request.mode);
+  const useExtractionAgent = rows.some(
+    (row) =>
+      row.extractionMode !== "game" ||
+      !row.sourceId.includes(":game-session-") ||
+      extractionConfig.useExtractionAgentOnGameMode,
+  );
+  const resolved = useExtractionAgent
+    ? await getPackageLanguageModels().resolveForRequest({
+        connectionId: request.connectionId,
+        model: request.model,
+      })
+    : null;
   throwIfAborted(signal);
   const storage = new LongTermMemoryStorage(root),
     written: Array<{
@@ -509,6 +530,7 @@ export async function importPackageInterop(
       title: string;
       note: LtmNote;
       created: boolean;
+      deterministicSourceText?: string;
     }> = [],
     writeFailures: LtmImportSourceNotesResponse["writeFailures"] = [];
   for (const row of rows) {
@@ -555,6 +577,7 @@ export async function importPackageInterop(
         title: row.title,
         note,
         created: !existing,
+        ...(row.deterministicSourceText ? { deterministicSourceText: row.deterministicSourceText } : {}),
       });
     } catch (error) {
       writeFailures.push({
@@ -584,6 +607,7 @@ export async function importPackageInterop(
       applyLowRisk: request.applyLowRisk,
       concurrency: request.importConcurrency ?? 3,
       root,
+      directGameMode: !extractionConfig.useExtractionAgentOnGameMode,
     }),
     cancelled = results.filter(
       (item) => item.extractionStatus === "cancelled",

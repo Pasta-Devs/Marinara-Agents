@@ -221,6 +221,13 @@ function normalizeLegacyExtractionSettings(value: unknown) {
   if (!isRecord(value)) return value;
   const input = value;
   const normalized: Record<string, unknown> = { ...input };
+  if (
+    typeof input.useExtractionAgentOnGameMode !== "boolean" &&
+    typeof input.refinePass === "boolean"
+  ) {
+    normalized.useExtractionAgentOnGameMode = input.refinePass;
+  }
+  delete normalized.refinePass;
   delete normalized.rejectPlaceholderOutput;
   delete normalized.systemPrompt;
   delete normalized.systemPromptsByMode;
@@ -361,7 +368,7 @@ const ltmExtractionSettingsShape = z
     activePromptTemplateIdsByMode:
       ltmActivePromptTemplateIdsByModeSchema.optional(),
     aiKeywordExtraction: z.boolean().optional(),
-    refinePass: z.boolean().optional(),
+    useExtractionAgentOnGameMode: z.boolean().optional(),
   })
   .strict()
   .superRefine((settings, ctx) => {
@@ -407,7 +414,7 @@ export const ltmExtractionSettingsPatchSchema = z.preprocess(
       activePromptTemplateIdsByMode:
         ltmActivePromptTemplateIdsByModeSchema.optional(),
       aiKeywordExtraction: z.boolean().optional(),
-      refinePass: z.boolean().optional(),
+      useExtractionAgentOnGameMode: z.boolean().optional(),
     })
     .strict(),
 );
@@ -432,7 +439,7 @@ export const ltmResolvedExtractionSettingsSchema = z
     activePromptTemplateId: z.string().min(1).max(64).nullable(),
     activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema,
     aiKeywordExtraction: z.boolean(),
-    refinePass: z.boolean(),
+    useExtractionAgentOnGameMode: z.boolean(),
   })
   .strict();
 
@@ -2403,7 +2410,7 @@ const ltmImportedSourceResultBaseSchema = z.object({
   note: ltmNoteSchema,
   created: z.boolean(),
   sourceWriteStatus: z.enum(["created", "refreshed"]),
-  extractionMethod: z.literal("llm"),
+  extractionMethod: z.enum(["llm", "deterministic"]),
   outcome: ltmExtractionOutcomeSchema,
   accounting: ltmExtractionAccountingSchema,
   appliedMutationIds: z.array(z.string().uuid()).max(500),

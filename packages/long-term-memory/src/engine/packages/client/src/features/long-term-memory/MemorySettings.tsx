@@ -135,7 +135,7 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     promptTemplates: resolved.promptTemplates ?? [],
     activePromptTemplateIdsByMode: resolved.activePromptTemplateIdsByMode ?? {},
     aiKeywordExtraction: resolved.aiKeywordExtraction ?? false,
-    refinePass: resolved.refinePass ?? false,
+    useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
     ...(resolved.systemPrompt === undefined
       ? {}
       : { systemPrompt: resolved.systemPrompt }),
@@ -1104,12 +1104,12 @@ export default function MemorySettings({
             }
           />
           <Toggle
-            label="Run refinement pass"
-            checked={extractionFormState.refinePass}
+            label="Use Extraction Agent on Game Mode"
+            checked={extractionFormState.useExtractionAgentOnGameMode}
             onChange={(value) =>
               setExtractionFormState({
                 ...extractionFormState,
-                refinePass: value,
+                useExtractionAgentOnGameMode: value,
               })
             }
           />
