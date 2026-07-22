@@ -23,7 +23,7 @@ Across its Engine compatibility lanes, the catalog currently contains **29 first
 
 | Agent | Package | What it does |
 | --- | --- | --- |
-| Background | [`background`](packages/background/manifest.json) | Selects the best uploaded scene background and can request missing-location artwork. |
+| Background | [`background`](packages/background/manifest.json) | Selects the best existing scene background from your library. |
 | Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks present characters, moods, actions, appearance, thoughts, and character stats. |
 | Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks user-defined currencies, counters, flags, and other custom fields. |
 | Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |

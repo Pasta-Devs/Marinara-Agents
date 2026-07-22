@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-21T18:45:56.109Z",
+  "generatedAt": "2026-07-22T19:16:06.255Z",
   "packages": [
     {
       "manifest": {
@@ -78,8 +78,8 @@
         "schemaVersion": 1,
         "id": "background",
         "name": "Background",
-        "version": "1.0.1",
-        "description": "Selects the most fitting background image for the current scene from your uploaded backgrounds, with optional image generation for missing locations. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "version": "1.0.2",
+        "description": "Selects the most fitting existing background image for the current scene from your background library. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
           "maxExclusive": "3.0.0"
@@ -93,8 +93,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "d76cbd06060e468449e3a76da9c56801f23b145a3e45ebba9e240d0afc1311ef",
-            "bytes": 2313
+            "sha256": "60ffe8dafe22c880dd5bd3d4fec78d0256220b9e47f8c43344db334445391e18",
+            "bytes": 1597
           }
         ],
         "permissions": [
@@ -109,9 +109,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/background.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/background-1.0.1.zip",
-        "sha256": "64d71569523fce305a378e30f5a740f1d72da25673de5c78907fe6ce9a3070d1",
-        "bytes": 1706
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/background-1.0.2.zip",
+        "sha256": "ba98b22b843da43fa8ee3c817318f4fbc3ebb04eaea5266183ff42bfde013381",
+        "bytes": 1431
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#background"
     },
