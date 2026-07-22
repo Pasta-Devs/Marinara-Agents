@@ -229,6 +229,31 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
       )
       .toBe(true);
 
+    const templatePanel = settings.getByRole("tabpanel").filter({ hasText: "Prompt templates" });
+    const templateSelect = templatePanel.getByRole("combobox", { name: "Prompt template" });
+    await expect(templateSelect).toHaveValue("default:conversation");
+    await expect(templatePanel.getByRole("button", { name: "Reset to default" })).toBeVisible();
+    await templateSelect.selectOption("default:roleplay");
+    await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
+      "Built-in Default (Roleplay)",
+    );
+    await expect(templatePanel.getByRole("textbox", { name: "Template prompt" })).not.toBeEditable();
+    await templatePanel.getByRole("button", { name: "Duplicate" }).click();
+    await expect(templateSelect).toHaveValue(/custom:/);
+    await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
+      "Built-in Default (Roleplay) copy",
+    );
+    await templatePanel.getByRole("textbox", { name: "Name" }).fill("Roleplay custom");
+    await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
+      "Roleplay custom",
+    );
+    await templateSelect.selectOption("default:game");
+    await templateSelect.selectOption({ label: "Roleplay custom" });
+    await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
+      "Roleplay custom",
+    );
+    await templatePanel.getByRole("button", { name: "Reset to default" }).click();
+
     await navigation.locator('[data-ltm-destination="vault"]').click();
     await expect(detail.locator('[data-ltm-surface="vault"]')).toBeVisible();
     await expect(detail.getByLabel("Choose memory scope")).toHaveValue(

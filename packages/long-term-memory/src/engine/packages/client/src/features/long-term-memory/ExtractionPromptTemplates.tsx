@@ -1,4 +1,8 @@
 import { useState } from "react";
+import {
+  DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE,
+  type LtmMode,
+} from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import type { LtmExtractionSettingsPatch } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { Button, StatusSurface, inputClass } from "./shared-controls";
 
@@ -6,8 +10,11 @@ type ExtractionForm = Omit<
   Required<LtmExtractionSettingsPatch>,
   "systemPrompt" | "activePromptTemplateId"
 >;
-type Mode = "conversation" | "roleplay" | "game";
+type Mode = LtmMode;
 const modes: Mode[] = ["conversation", "roleplay", "game"];
+type PromptSelection =
+  | { kind: "default"; mode: Mode }
+  | { kind: "custom"; id: string };
 
 function newId(templates: ExtractionForm["promptTemplates"]) {
   let id = `template_${Date.now().toString(36)}`;
@@ -15,6 +22,20 @@ function newId(templates: ExtractionForm["promptTemplates"]) {
   while (templates.some((template) => template.id === id))
     id = `template_${Date.now().toString(36)}_${suffix++}`;
   return id;
+}
+
+function selectionKey(selection: PromptSelection) {
+  return selection.kind === "default"
+    ? `default:${selection.mode}`
+    : `custom:${selection.id}`;
+}
+
+function selectionLabel(selection: PromptSelection, templateName?: string) {
+  if (selection.kind === "default") {
+    const label = selection.mode[0]!.toUpperCase() + selection.mode.slice(1);
+    return `Built-in Default (${label})`;
+  }
+  return templateName ?? "Template";
 }
 
 export function ExtractionPromptTemplates({
@@ -30,18 +51,26 @@ export function ExtractionPromptTemplates({
     confirmLabel: string,
   ) => Promise<boolean>;
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(
-    value.promptTemplates[0]?.id ?? null,
+  const [selected, setSelected] = useState<PromptSelection>(
+    value.promptTemplates[0]
+      ? { kind: "custom", id: value.promptTemplates[0].id }
+      : { kind: "default", mode: "conversation" },
   );
-  const selected =
-    value.promptTemplates.find((template) => template.id === selectedId) ??
-    null;
-  const updateTemplate = (patch: Partial<NonNullable<typeof selected>>) => {
-    if (!selected) return;
+  const selectedTemplate =
+    selected.kind === "custom"
+      ? value.promptTemplates.find((template) => template.id === selected.id) ??
+        null
+      : null;
+  const selectedBuiltInPrompt =
+    selected.kind === "default"
+      ? DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[selected.mode]
+      : null;
+  const updateTemplate = (patch: Partial<NonNullable<typeof selectedTemplate>>) => {
+    if (!selectedTemplate) return;
     onChange({
       ...value,
       promptTemplates: value.promptTemplates.map((template) =>
-        template.id === selected.id ? { ...template, ...patch } : template,
+        template.id === selectedTemplate.id ? { ...template, ...patch } : template,
       ),
     });
   };
@@ -56,27 +85,36 @@ export function ExtractionPromptTemplates({
       ...value,
       promptTemplates: [...value.promptTemplates, template],
     });
-    setSelectedId(template.id);
+    setSelected({ kind: "custom", id: template.id });
   };
   const duplicate = () => {
-    if (!selected || value.promptTemplates.length >= 50) return;
+    if (value.promptTemplates.length >= 50) return;
+    const prompt =
+      selected.kind === "custom"
+        ? selectedTemplate
+        : {
+            name: selectionLabel(selected),
+            prompt: selectedBuiltInPrompt,
+          };
+    if (!prompt) return;
     const template = {
-      ...selected,
       id: newId(value.promptTemplates),
-      name: `${selected.name} copy`,
+      name: `${prompt.name} copy`,
+      prompt: prompt.prompt,
     };
     onChange({
       ...value,
       promptTemplates: [...value.promptTemplates, template],
     });
-    setSelectedId(template.id);
+    setSelected({ kind: "custom", id: template.id });
   };
   const remove = async () => {
     if (
-      !selected ||
+      selected.kind !== "custom" ||
+      !selectedTemplate ||
       !(await confirmAction(
         "Delete template?",
-        `Delete ${selected.name}? Modes using it will return to the built-in prompt.`,
+        `Delete ${selectedTemplate.name}? Modes using it will return to the built-in prompt.`,
         "Delete template",
       ))
     )
@@ -84,17 +122,19 @@ export function ExtractionPromptTemplates({
     onChange({
       ...value,
       promptTemplates: value.promptTemplates.filter(
-        (template) => template.id !== selected.id,
+        (template) => template.id !== selectedTemplate.id,
       ),
       activePromptTemplateIdsByMode: Object.fromEntries(
         Object.entries(value.activePromptTemplateIdsByMode).map(
-          ([mode, id]) => [mode, id === selected.id ? null : id],
+          ([mode, id]) => [mode, id === selectedTemplate.id ? null : id],
         ),
       ),
     });
-    setSelectedId(
-      value.promptTemplates.find((template) => template.id !== selected.id)
-        ?.id ?? null,
+    const nextTemplate = value.promptTemplates.find(
+      (template) => template.id !== selectedTemplate.id,
+    );
+    setSelected(
+      nextTemplate ? { kind: "custom", id: nextTemplate.id } : { kind: "default", mode: "conversation" },
     );
   };
   const setActive = (mode: Mode, id: string | null) =>
@@ -146,37 +186,81 @@ export function ExtractionPromptTemplates({
               className="text-[0.6875rem] underline"
               onClick={() => setActive(mode, null)}
             >
-              Reset to built-in
+              Reset to default
             </button>
           </label>
         ))}
       </div>
       {value.promptTemplates.length === 0 ? (
         <StatusSurface>
-          No custom templates. Built-in prompts remain active.
+          No custom templates. Built-in defaults remain active.
         </StatusSurface>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
-          <div className="max-h-56 space-y-1 overflow-y-auto">
-            {value.promptTemplates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                className={`block w-full rounded px-2 py-2 text-left text-xs ${template.id === selectedId ? "bg-[var(--primary)]/15 font-semibold" : "hover:bg-[var(--accent)]"}`}
-                onClick={() => setSelectedId(template.id)}
-              >
-                {template.name}
-              </button>
+      ) : null}
+      <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
+        <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+          <span>Prompt template</span>
+          <select
+            className={inputClass}
+            value={selectionKey(selected)}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (next.startsWith("default:")) {
+                const mode = next.slice(8) as Mode;
+                setSelected({ kind: "default", mode });
+                return;
+              }
+              setSelected({
+                kind: "custom",
+                id: next.slice(7),
+              });
+            }}
+          >
+            {modes.map((mode) => (
+              <option key={mode} value={selectionKey({ kind: "default", mode })}>
+                {selectionLabel({ kind: "default", mode })}
+              </option>
             ))}
-          </div>
-          {selected ? (
+            {value.promptTemplates.map((template) => (
+              <option key={template.id} value={selectionKey({ kind: "custom", id: template.id })}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selected.kind === "default" ? (
+            <div className="space-y-2">
+              <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+                <span>Name</span>
+                <input
+                  className={inputClass}
+                  readOnly
+                  maxLength={120}
+                  value={selectionLabel(selected)}
+                />
+              </label>
+              <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+                <span>Template prompt</span>
+                <textarea
+                  className={`${inputClass} min-h-48 py-2`}
+                  readOnly
+                  maxLength={20000}
+                  value={selectedBuiltInPrompt ?? ""}
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={value.promptTemplates.length >= 50} onClick={duplicate}>
+                  Duplicate
+                </Button>
+              </div>
+            </div>
+          ) : selectedTemplate ? (
             <div className="space-y-2">
               <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
                 <span>Name</span>
                 <input
                   className={inputClass}
                   maxLength={120}
-                  value={selected.name}
+                  value={selectedTemplate.name}
                   onChange={(event) =>
                     updateTemplate({ name: event.target.value })
                   }
@@ -187,17 +271,14 @@ export function ExtractionPromptTemplates({
                 <textarea
                   className={`${inputClass} min-h-48 py-2`}
                   maxLength={20000}
-                  value={selected.prompt}
+                  value={selectedTemplate.prompt}
                   onChange={(event) =>
                     updateTemplate({ prompt: event.target.value })
                   }
                 />
               </label>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  disabled={value.promptTemplates.length >= 50}
-                  onClick={duplicate}
-                >
+                <Button disabled={value.promptTemplates.length >= 50} onClick={duplicate}>
                   Duplicate
                 </Button>
                 <Button destructive onClick={() => void remove()}>
@@ -206,8 +287,7 @@ export function ExtractionPromptTemplates({
               </div>
             </div>
           ) : null}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
