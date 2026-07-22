@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BookOpen,
   Check,
+  ChevronRight,
   CircleAlert,
   Loader2,
   RefreshCw,
@@ -11,6 +13,9 @@ import {
 import type {
   LtmImportSourceNotesResponse,
   LtmInteropPreviewResponse,
+  LtmInteropPreviewSample,
+  LtmLorebookPreviewEntry,
+  LtmLorebookPreviewResponse,
   LtmMode,
   LtmNoteTransferApplyResponse,
   LtmNoteTransferPreviewResponse,
@@ -22,6 +27,7 @@ import type { LongTermMemoryDestinationProps } from "./types";
 
 type Source = "characters" | "lorebooks" | "chats";
 type PreviewRow = LtmInteropPreviewResponse["samples"][number];
+type LorebookCandidate = LtmInteropPreviewSample;
 type ImportContract = {
   source: Source;
   sourceIds: string[];
@@ -49,9 +55,50 @@ function resultTone(status: string) {
       : "neutral";
 }
 
+function freshnessLabel(freshness: LorebookCandidate["freshness"]) {
+  if (freshness === "source_updated") return "Update available";
+  if (freshness === "context_updated") return "Context changed";
+  if (freshness === "extraction_incomplete") return "Extraction incomplete";
+  if (freshness === "current") return "Current";
+  return "New";
+}
+
 function sourceStatusLabel(row: PreviewRow) {
-  if (row.status === "imported") return "Current";
-  return row.freshness === "stale" ? "Source changed" : "New";
+  return freshnessLabel(row.freshness);
+}
+
+function entryStatusLabel(entry: LtmLorebookPreviewEntry) {
+  const labels = new Set(
+    entry.candidates.map((candidate) => freshnessLabel(candidate.freshness)),
+  );
+  return labels.size === 1 ? [...labels][0] : "Mixed";
+}
+
+function EntrySelect({
+  entry,
+  checked,
+  indeterminate,
+  onChange,
+}: {
+  entry: LtmLorebookPreviewEntry;
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+      aria-label={`Select ${entry.name}`}
+      data-ltm-lorebook-entry-select={entry.id}
+    />
+  );
 }
 
 export default function SourcesWorkspace({
@@ -63,6 +110,12 @@ export default function SourcesWorkspace({
   const selectAllRef = useRef<HTMLInputElement>(null);
   const importControllerRef = useRef<AbortController | null>(null);
   const [source, setSource] = useState<Source>("chats");
+  const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(
+    null,
+  );
+  const [lorebookMobilePane, setLorebookMobilePane] = useState<
+    "lorebooks" | "entries"
+  >("lorebooks");
   const [importScope, setImportScope] = useState<"current" | "all">(
     props.chatId ? "current" : "all",
   );
@@ -125,11 +178,27 @@ export default function SourcesWorkspace({
         ...(sourceScope ? { scope: sourceScope } : {}),
         ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
       }),
+    enabled: source !== "lorebooks",
+  });
+  const lorebookPreview = useQuery({
+    queryKey: [...queryKeys.lorebookPreview, sourceScope, modeFilter],
+    queryFn: () =>
+      request<
+        LtmLorebookPreviewResponse,
+        { limit: number; scope?: LtmScope; mode?: LtmMode }
+      >("/import/lorebooks/preview", "POST", {
+        limit: 100,
+        ...(sourceScope ? { scope: sourceScope } : {}),
+        ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+      }),
+    enabled: source === "lorebooks",
   });
   const rows = [...(preview.data?.samples ?? [])].sort((left, right) => {
     if (source !== "chats" || !props.chatId) return 0;
-    return Number(!left.sourceId.startsWith(`${props.chatId}:`)) -
-      Number(!right.sourceId.startsWith(`${props.chatId}:`));
+    return (
+      Number(!left.sourceId.startsWith(`${props.chatId}:`)) -
+      Number(!right.sourceId.startsWith(`${props.chatId}:`))
+    );
   });
   const pendingRows = rows.filter((row) => row.status === "pending");
   const importedRows = rows.filter((row) => row.status === "imported");
@@ -161,7 +230,42 @@ export default function SourcesWorkspace({
     selectedImportedIds.has(row.sourceId),
   );
   const allImportedSelected =
-    importedRows.length > 0 && selectedImportedRows.length === importedRows.length;
+    importedRows.length > 0 &&
+    selectedImportedRows.length === importedRows.length;
+  const lorebookImportSelectionKey = `${selectionKey}:lorebook-import`;
+  const lorebookRefreshSelectionKey = `${selectionKey}:lorebook-refresh`;
+  const selectedLorebookImportIds = new Set(
+    selections[lorebookImportSelectionKey] ?? [],
+  );
+  const selectedLorebookRefreshIds = new Set(
+    selections[lorebookRefreshSelectionKey] ?? [],
+  );
+  const selectedLorebook =
+    lorebookPreview.data?.books.find(
+      (book) => book.id === selectedLorebookId,
+    ) ?? null;
+  const selectedBookImportIds =
+    selectedLorebook?.entries
+      .flatMap((entry) => entry.candidates)
+      .filter(
+        (candidate) =>
+          candidate.status === "pending" &&
+          selectedLorebookImportIds.has(candidate.sourceId),
+      )
+      .map((candidate) => candidate.sourceId) ?? [];
+  const selectedBookRefreshIds =
+    selectedLorebook?.entries
+      .flatMap((entry) => entry.candidates)
+      .filter(
+        (candidate) =>
+          candidate.status === "imported" &&
+          selectedLorebookRefreshIds.has(candidate.sourceId),
+      )
+      .map((candidate) => candidate.sourceId) ?? [];
+  const selectedLorebookCandidateIds = new Set([
+    ...selectedLorebookImportIds,
+    ...selectedLorebookRefreshIds,
+  ]);
   const pendingDraftsProduced = Boolean(
     importResult?.imported.some(
       (item) =>
@@ -189,6 +293,16 @@ export default function SourcesWorkspace({
   }, [preview.data, preview.dataUpdatedAt, selectionKey]);
 
   useEffect(() => {
+    if (source !== "lorebooks" || !lorebookPreview.data) return;
+    if (
+      selectedLorebookId &&
+      lorebookPreview.data.books.some((book) => book.id === selectedLorebookId)
+    )
+      return;
+    setSelectedLorebookId(lorebookPreview.data.books[0]?.id ?? null);
+  }, [lorebookPreview.data, selectedLorebookId, source]);
+
+  useEffect(() => {
     if (selectAllRef.current)
       selectAllRef.current.indeterminate =
         selectedSelectableIds.length > 0 && !allSelectableSelected;
@@ -203,6 +317,7 @@ export default function SourcesWorkspace({
       queryKeys.review,
       queryKeys.pendingDrafts,
       queryKeys.preview,
+      queryKeys.lorebookPreview,
     ]);
   };
 
@@ -216,6 +331,7 @@ export default function SourcesWorkspace({
 
   const changeSource = (next: Source) => {
     setSource(next);
+    if (next === "lorebooks") setLorebookMobilePane("lorebooks");
     clearImportResult();
   };
 
@@ -247,13 +363,38 @@ export default function SourcesWorkspace({
     });
   };
 
+  const toggleLorebookCandidates = (
+    candidates: LorebookCandidate[],
+    checked: boolean,
+  ) => {
+    setSelections((current) => {
+      const importIds = new Set(current[lorebookImportSelectionKey] ?? []);
+      const refreshIds = new Set(current[lorebookRefreshSelectionKey] ?? []);
+      for (const candidate of candidates) {
+        const target = candidate.status === "pending" ? importIds : refreshIds;
+        if (checked) target.add(candidate.sourceId);
+        else target.delete(candidate.sourceId);
+      }
+      return {
+        ...current,
+        [lorebookImportSelectionKey]: [...importIds],
+        [lorebookRefreshSelectionKey]: [...refreshIds],
+      };
+    });
+  };
+
   const runImport = async (
     sourceIds: string[],
     action: "import" | "refresh" = "import",
     retryContract?: ImportContract,
+    selectionKeyOverride?: string,
   ) => {
-    const ids = Array.from(new Set(sourceIds)).slice(0, 100);
+    const ids = Array.from(new Set(sourceIds));
     if (ids.length === 0 || importing) return;
+    if (ids.length > 100) {
+      setImportError("Select up to 100 source parts per import.");
+      return;
+    }
     const contract: ImportContract = retryContract
       ? { ...retryContract, sourceIds: ids }
       : {
@@ -273,7 +414,7 @@ export default function SourcesWorkspace({
               }
             : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
-          selectionKey,
+          selectionKey: selectionKeyOverride ?? selectionKey,
         };
     setImporting(true);
     setImportError("");
@@ -317,7 +458,11 @@ export default function SourcesWorkspace({
       }));
       setImporting(false);
       void invalidateAfterMutation().catch(() => undefined);
-      void preview.refetch().catch(() => undefined);
+      void (
+        contract.source === "lorebooks"
+          ? lorebookPreview.refetch()
+          : preview.refetch()
+      ).catch(() => undefined);
       if (action === "refresh")
         setReviewMessage(
           "Source memory refreshed. Re-extract it if you need a new draft.",
@@ -528,11 +673,17 @@ export default function SourcesWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p
           className="text-xs text-[var(--muted-foreground)]"
-          data-ltm-source-preview-status={preview.status}
+          data-ltm-source-preview-status={
+            source === "lorebooks" ? lorebookPreview.status : preview.status
+          }
         >
-          {preview.data
-            ? `${preview.data.scanned} scanned, ${preview.data.draftable} pending, ${preview.data.importedCount} imported`
-            : "Loading source preview..."}
+          {source === "lorebooks"
+            ? lorebookPreview.data
+              ? `${lorebookPreview.data.counts.books} lorebooks, ${lorebookPreview.data.counts.entries} entries, ${lorebookPreview.data.counts.imported} imported`
+              : "Loading lorebooks..."
+            : preview.data
+              ? `${preview.data.scanned} scanned, ${preview.data.draftable} pending, ${preview.data.importedCount} imported`
+              : "Loading source preview..."}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
@@ -552,11 +703,23 @@ export default function SourcesWorkspace({
             </select>
           </label>
           <Button
-            disabled={preview.isFetching}
-            onClick={() => void preview.refetch()}
+            disabled={
+              source === "lorebooks"
+                ? lorebookPreview.isFetching
+                : preview.isFetching
+            }
+            onClick={() =>
+              void (source === "lorebooks"
+                ? lorebookPreview.refetch()
+                : preview.refetch())
+            }
             data-ltm-source-action="refresh-preview"
           >
-            {preview.isFetching ? (
+            {(
+              source === "lorebooks"
+                ? lorebookPreview.isFetching
+                : preview.isFetching
+            ) ? (
               <Loader2 size="0.75rem" className="animate-spin" />
             ) : (
               <RefreshCw size="0.75rem" />
@@ -566,11 +729,16 @@ export default function SourcesWorkspace({
         </div>
       </div>
 
-      {preview.isError ? (
+      {(source === "lorebooks" ? lorebookPreview.isError : preview.isError) ? (
         <StatusSurface tone="danger">
-          {preview.error instanceof Error
-            ? preview.error.message
-            : "Source preview could not load."}
+          {(source === "lorebooks"
+            ? lorebookPreview.error
+            : preview.error) instanceof Error
+            ? (source === "lorebooks" ? lorebookPreview.error : preview.error)
+                .message
+            : source === "lorebooks"
+              ? "Lorebooks could not load."
+              : "Source preview could not load."}
         </StatusSurface>
       ) : null}
       {importError ? (
@@ -598,194 +766,495 @@ export default function SourcesWorkspace({
         <StatusSurface tone="success">{reviewMessage}</StatusSurface>
       ) : null}
 
-      <div data-ltm-source-preview={source} className="space-y-3">
-        {(
-          [
-            {
-              id: "available" as const,
-              title: "Ready to Import",
-              rows: selectableRows,
-              selected: selectedSelectableIds,
-              allSelected: allSelectableSelected,
-              selection: selectedIds,
-              selectAllRef,
-              action: "Import selected",
-              actionId: "import-selected",
-              onToggle: toggleSelected,
-              onSelectAll: (checked: boolean) =>
-                setSelections((current) => ({
-                  ...current,
-                  [selectionKey]: checked
-                    ? selectableRows.map((row) => row.sourceId)
-                    : [],
-                })),
-              onAction: () => void runImport(selectedSelectableIds),
-              empty: "No new or retryable sources are ready to import.",
-            },
-            {
-              id: "imported" as const,
-              title: "Already Imported",
-              rows: importedRows,
-              selected: selectedImportedRows.map((row) => row.sourceId),
-              allSelected: allImportedSelected,
-              selection: selectedImportedIds,
-              selectAllRef: undefined,
-              action: "Refresh selected",
-              actionId: "refresh-selected",
-              onToggle: toggleImportedSelected,
-              onSelectAll: (checked: boolean) =>
-                setSelections((current) => ({
-                  ...current,
-                  [importedSelectionKey]: checked
-                    ? importedRows.map((row) => row.sourceId)
-                    : [],
-                })),
-              onAction: () =>
-                void runImport(
-                  selectedImportedRows.map((row) => row.sourceId),
-                  "refresh",
-                ),
-              empty: "No sources have been imported in this scope.",
-            },
-          ] as const
-        ).map((section) => (
-          <section
-            key={section.id}
-            className="overflow-hidden rounded-lg border border-[var(--border)]"
-            data-ltm-source-section={section.id}
-          >
-            <button
-              type="button"
-              className="flex min-h-11 w-full items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2 text-left text-xs font-semibold"
-              aria-expanded={!collapsedSections[section.id]}
-              onClick={() =>
-                setCollapsedSections((current) => ({
-                  ...current,
-                  [section.id]: !current[section.id],
-                }))
+      {source === "lorebooks" ? (
+        <div
+          data-ltm-source-preview="lorebooks"
+          data-ltm-lorebook-browser
+          className="space-y-3"
+        >
+          <style>{`
+            @media (min-width: 1280px) {
+              [data-ltm-lorebook-layout] {
+                display: grid;
+                grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
+                gap: 1rem;
               }
-              data-ltm-source-section-toggle={section.id}
+              [data-ltm-lorebook-list],
+              [data-ltm-lorebook-workbench] {
+                display: block;
+                margin-top: 0;
+              }
+            }
+          `}</style>
+          <div
+            role="tablist"
+            aria-label="Lorebook workspace"
+            className="grid grid-cols-2 rounded-lg border border-[var(--border)] p-1 xl:hidden"
+          >
+            {(["lorebooks", "entries"] as const).map((pane) => (
+              <button
+                key={pane}
+                type="button"
+                role="tab"
+                aria-selected={lorebookMobilePane === pane}
+                aria-controls={`ltm-lorebook-${pane}-panel`}
+                tabIndex={lorebookMobilePane === pane ? 0 : -1}
+                disabled={pane === "entries" && !selectedLorebook}
+                onClick={() => setLorebookMobilePane(pane)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key !== "ArrowLeft" &&
+                    event.key !== "ArrowRight" &&
+                    event.key !== "Home" &&
+                    event.key !== "End"
+                  )
+                    return;
+                  event.preventDefault();
+                  const next =
+                    event.key === "ArrowRight" || event.key === "End"
+                      ? "entries"
+                      : "lorebooks";
+                  if (next === "entries" && !selectedLorebook) return;
+                  setLorebookMobilePane(next);
+                  requestAnimationFrame(() =>
+                    document
+                      .querySelector<HTMLElement>(
+                        `[data-ltm-lorebook-pane="${next}"]`,
+                      )
+                      ?.focus(),
+                  );
+                }}
+                data-ltm-lorebook-pane={pane}
+                className={`min-h-11 rounded-md px-2 text-xs font-semibold capitalize disabled:opacity-40 ${lorebookMobilePane === pane ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
+              >
+                {pane}
+              </button>
+            ))}
+          </div>
+
+          <div data-ltm-lorebook-layout>
+            <section
+              id="ltm-lorebook-lorebooks-panel"
+              role="tabpanel"
+              aria-label="Lorebooks"
+              data-ltm-lorebook-list
+              className={`${lorebookMobilePane === "lorebooks" ? "block" : "hidden"} overflow-hidden rounded-lg border border-[var(--border)] xl:block xl:max-h-[calc(100vh-20rem)] xl:overflow-y-auto`}
             >
-              <span>{section.title}</span>
-              <span className="text-[var(--muted-foreground)]">
-                {section.rows.length}
-              </span>
-            </button>
-            {!collapsedSections[section.id] ? (
-              <>
-                <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-3 py-2 text-xs font-semibold">
-                  <input
-                    ref={section.selectAllRef}
-                    type="checkbox"
-                    aria-label={`Select all ${section.title.toLowerCase()}`}
-                    checked={section.allSelected}
-                    disabled={section.rows.length === 0}
-                    onChange={(event) => section.onSelectAll(event.target.checked)}
-                    data-ltm-source-select-all={section.id}
-                  />
-                  <span>
-                    {section.selected.length} of {section.rows.length} selected
-                  </span>
-                  <Button
-                    primary
-                    disabled={
-                      importing || section.selected.length === 0
-                    }
-                    onClick={section.onAction}
-                    data-ltm-source-action={section.actionId}
-                    data-ltm-source-selected-count={section.selected.length}
+              <div className="flex min-h-11 items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2">
+                <h2 className="text-sm font-semibold">Lorebooks</h2>
+                <span className="text-xs text-[var(--muted-foreground)]">
+                  {lorebookPreview.data?.books.length ?? 0}
+                </span>
+              </div>
+              <div role="list" className="divide-y divide-[var(--border)]">
+                {(lorebookPreview.data?.books ?? []).map((book) => (
+                  <button
+                    key={book.id}
+                    type="button"
+                    role="listitem"
+                    aria-current={selectedLorebookId === book.id || undefined}
+                    data-ltm-lorebook-id={book.id}
+                    onClick={() => {
+                      setSelectedLorebookId(book.id);
+                      setLorebookMobilePane("entries");
+                    }}
+                    className={`flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--secondary)]/35 ${selectedLorebookId === book.id ? "bg-[var(--primary)]/10" : ""}`}
                   >
-                    {importing ? (
-                      <Loader2 size="0.75rem" className="animate-spin" />
-                    ) : section.id === "available" ? (
-                      <Check size="0.75rem" />
-                    ) : (
-                      <RefreshCw size="0.75rem" />
-                    )}
-                    {section.action}
-                  </Button>
-                  {importing && section.id === "available" ? (
-                    <Button
-                      destructive
-                      onClick={() => importControllerRef.current?.abort()}
-                      data-ltm-source-action="cancel-import"
-                    >
-                      Cancel
-                    </Button>
-                  ) : null}
-                </div>
-                <div role="list" className="divide-y divide-[var(--border)]">
-                  {section.rows.map((row) => {
-                    const selectable = section.id === "available";
-                    return (
-                      <article
-                        key={row.sourceId}
-                        role="listitem"
-                        data-ltm-source-row-status={row.status}
-                        data-ltm-source-id={row.sourceId}
-                        className="space-y-2 p-3"
-                      >
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${row.title}`}
-                            checked={section.selection.has(row.sourceId)}
-                            disabled={!selectable && section.id !== "imported"}
-                            onChange={(event) =>
-                              section.onToggle(row.sourceId, event.target.checked)
-                            }
-                            data-ltm-source-select={row.sourceId}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-sm font-semibold">{row.title}</h3>
-                              <span
-                                data-ltm-source-status={row.status}
-                                className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
-                              >
-                                {sourceStatusLabel(row)}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                              {row.summary}
-                            </p>
-                            <p className="mt-1 line-clamp-2 text-xs text-[var(--muted-foreground)]">
-                              {row.snippet}
-                            </p>
-                          </div>
-                        </div>
-                        {section.id === "imported" ? (
-                          <div
-                            className="ml-7 space-y-2"
-                            data-ltm-source-existing-note={row.existingNoteId}
+                    <BookOpen
+                      size="1rem"
+                      className="shrink-0 text-[var(--muted-foreground)]"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">
+                        {book.name}
+                      </span>
+                      <span className="block text-xs text-[var(--muted-foreground)]">
+                        {book.category} · {book.counts.entries} entries ·{" "}
+                        {book.counts.imported} imported
+                      </span>
+                    </span>
+                    <ChevronRight
+                      size="0.875rem"
+                      className="shrink-0 text-[var(--muted-foreground)]"
+                    />
+                  </button>
+                ))}
+                {!lorebookPreview.isLoading &&
+                lorebookPreview.data?.books.length === 0 ? (
+                  <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                    No lorebooks are available in this scope.
+                  </p>
+                ) : null}
+              </div>
+            </section>
+
+            <section
+              id="ltm-lorebook-entries-panel"
+              role="tabpanel"
+              aria-label="Lorebook entries"
+              data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
+              className={`${lorebookMobilePane === "entries" ? "block" : "hidden"} mt-3 overflow-hidden rounded-lg border border-[var(--border)] xl:mt-0 xl:block xl:max-h-[calc(100vh-14rem)] xl:overflow-y-auto`}
+            >
+              {selectedLorebook ? (
+                <>
+                  <header className="space-y-2 border-b border-[var(--border)] bg-[var(--secondary)]/25 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="text-base font-semibold">
+                          {selectedLorebook.name}
+                        </h2>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          {selectedLorebook.category} ·{" "}
+                          {selectedLorebook.counts.entries} entries ·{" "}
+                          {selectedLorebook.counts.candidates} source parts
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          primary
+                          disabled={
+                            importing || selectedBookImportIds.length === 0
+                          }
+                          onClick={() =>
+                            void runImport(
+                              selectedBookImportIds,
+                              "import",
+                              undefined,
+                              lorebookImportSelectionKey,
+                            )
+                          }
+                          data-ltm-lorebook-action="import-selected"
+                        >
+                          <Check size="0.75rem" /> Import selected (
+                          {selectedBookImportIds.length})
+                        </Button>
+                        <Button
+                          disabled={
+                            importing || selectedBookRefreshIds.length === 0
+                          }
+                          onClick={() =>
+                            void runImport(
+                              selectedBookRefreshIds,
+                              "refresh",
+                              undefined,
+                              lorebookRefreshSelectionKey,
+                            )
+                          }
+                          data-ltm-lorebook-action="refresh-selected"
+                        >
+                          <RefreshCw size="0.75rem" /> Refresh selected (
+                          {selectedBookRefreshIds.length})
+                        </Button>
+                        {importing ? (
+                          <Button
+                            destructive
+                            onClick={() => importControllerRef.current?.abort()}
+                            data-ltm-lorebook-action="cancel-import"
                           >
-                            <p className="text-xs text-[var(--muted-foreground)]">
-                              Source memory: {row.existingNoteTitle}
-                            </p>
-                            <Button
-                              disabled={importing}
-                              onClick={() => void runImport([row.sourceId], "refresh")}
-                              data-ltm-source-action="refresh-reimport"
-                            >
-                              <RefreshCw size="0.75rem" /> Refresh / re-import
-                            </Button>
-                            {sourceMemoryActions(row.existingNoteId)}
-                          </div>
+                            Cancel
+                          </Button>
                         ) : null}
-                      </article>
-                    );
-                  })}
-                  {!preview.isLoading && section.rows.length === 0 ? (
-                    <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                      {section.empty}
-                    </p>
-                  ) : null}
-                </div>
-              </>
-            ) : null}
-          </section>
-        ))}
-      </div>
+                      </div>
+                    </div>
+                    {selectedLorebook.description ? (
+                      <p className="max-w-[75ch] text-xs text-[var(--muted-foreground)]">
+                        {selectedLorebook.description}
+                      </p>
+                    ) : null}
+                    {selectedLorebook.tags.length ? (
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {selectedLorebook.tags.join(", ")}
+                      </p>
+                    ) : null}
+                  </header>
+
+                  <div role="list" className="divide-y divide-[var(--border)]">
+                    {selectedLorebook.entries.map((entry) => {
+                      const candidateIds = entry.candidates.map(
+                          (candidate) => candidate.sourceId,
+                        ),
+                        selectedCount = candidateIds.filter((id) =>
+                          selectedLorebookCandidateIds.has(id),
+                        ).length,
+                        importedCandidates = entry.candidates.filter(
+                          (candidate) => candidate.status === "imported",
+                        );
+                      return (
+                        <article
+                          key={entry.id}
+                          role="listitem"
+                          data-ltm-lorebook-entry={entry.id}
+                          className="space-y-3 p-3"
+                        >
+                          <div className="flex items-start gap-3">
+                            <EntrySelect
+                              entry={entry}
+                              checked={
+                                candidateIds.length > 0 &&
+                                selectedCount === candidateIds.length
+                              }
+                              indeterminate={
+                                selectedCount > 0 &&
+                                selectedCount < candidateIds.length
+                              }
+                              onChange={(checked) =>
+                                toggleLorebookCandidates(
+                                  entry.candidates,
+                                  checked,
+                                )
+                              }
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-sm font-semibold">
+                                  {entry.name}
+                                </h3>
+                                <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase">
+                                  {entryStatusLabel(entry)}
+                                </span>
+                                {entry.candidateCount > 1 ? (
+                                  <span className="text-xs text-[var(--muted-foreground)]">
+                                    {entry.candidateCount} parts
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[var(--muted-foreground)]">
+                                {entry.candidates[0]?.snippet}
+                              </p>
+                            </div>
+                          </div>
+                          {importedCandidates.map((candidate) => (
+                            <div
+                              key={candidate.sourceId}
+                              className="ml-7 space-y-2"
+                              data-ltm-source-existing-note={
+                                candidate.existingNoteId
+                              }
+                            >
+                              <p className="text-xs text-[var(--muted-foreground)]">
+                                Source memory: {candidate.existingNoteTitle}
+                              </p>
+                              {sourceMemoryActions(candidate.existingNoteId)}
+                            </div>
+                          ))}
+                        </article>
+                      );
+                    })}
+                    {selectedLorebook.entries.length === 0 ? (
+                      <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                        This lorebook has no importable entries.
+                      </p>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                  Select a lorebook to inspect its entries.
+                </p>
+              )}
+            </section>
+          </div>
+        </div>
+      ) : (
+        <div data-ltm-source-preview={source} className="space-y-3">
+          {(
+            [
+              {
+                id: "available" as const,
+                title: "Ready to Import",
+                rows: selectableRows,
+                selected: selectedSelectableIds,
+                allSelected: allSelectableSelected,
+                selection: selectedIds,
+                selectAllRef,
+                action: "Import selected",
+                actionId: "import-selected",
+                onToggle: toggleSelected,
+                onSelectAll: (checked: boolean) =>
+                  setSelections((current) => ({
+                    ...current,
+                    [selectionKey]: checked
+                      ? selectableRows.map((row) => row.sourceId)
+                      : [],
+                  })),
+                onAction: () => void runImport(selectedSelectableIds),
+                empty: "No new or retryable sources are ready to import.",
+              },
+              {
+                id: "imported" as const,
+                title: "Already Imported",
+                rows: importedRows,
+                selected: selectedImportedRows.map((row) => row.sourceId),
+                allSelected: allImportedSelected,
+                selection: selectedImportedIds,
+                selectAllRef: undefined,
+                action: "Refresh selected",
+                actionId: "refresh-selected",
+                onToggle: toggleImportedSelected,
+                onSelectAll: (checked: boolean) =>
+                  setSelections((current) => ({
+                    ...current,
+                    [importedSelectionKey]: checked
+                      ? importedRows.map((row) => row.sourceId)
+                      : [],
+                  })),
+                onAction: () =>
+                  void runImport(
+                    selectedImportedRows.map((row) => row.sourceId),
+                    "refresh",
+                  ),
+                empty: "No sources have been imported in this scope.",
+              },
+            ] as const
+          ).map((section) => (
+            <section
+              key={section.id}
+              className="overflow-hidden rounded-lg border border-[var(--border)]"
+              data-ltm-source-section={section.id}
+            >
+              <button
+                type="button"
+                className="flex min-h-11 w-full items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2 text-left text-xs font-semibold"
+                aria-expanded={!collapsedSections[section.id]}
+                onClick={() =>
+                  setCollapsedSections((current) => ({
+                    ...current,
+                    [section.id]: !current[section.id],
+                  }))
+                }
+                data-ltm-source-section-toggle={section.id}
+              >
+                <span>{section.title}</span>
+                <span className="text-[var(--muted-foreground)]">
+                  {section.rows.length}
+                </span>
+              </button>
+              {!collapsedSections[section.id] ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-3 py-2 text-xs font-semibold">
+                    <input
+                      ref={section.selectAllRef}
+                      type="checkbox"
+                      aria-label={`Select all ${section.title.toLowerCase()}`}
+                      checked={section.allSelected}
+                      disabled={section.rows.length === 0}
+                      onChange={(event) =>
+                        section.onSelectAll(event.target.checked)
+                      }
+                      data-ltm-source-select-all={section.id}
+                    />
+                    <span>
+                      {section.selected.length} of {section.rows.length}{" "}
+                      selected
+                    </span>
+                    <Button
+                      primary
+                      disabled={importing || section.selected.length === 0}
+                      onClick={section.onAction}
+                      data-ltm-source-action={section.actionId}
+                      data-ltm-source-selected-count={section.selected.length}
+                    >
+                      {importing ? (
+                        <Loader2 size="0.75rem" className="animate-spin" />
+                      ) : section.id === "available" ? (
+                        <Check size="0.75rem" />
+                      ) : (
+                        <RefreshCw size="0.75rem" />
+                      )}
+                      {section.action}
+                    </Button>
+                    {importing && section.id === "available" ? (
+                      <Button
+                        destructive
+                        onClick={() => importControllerRef.current?.abort()}
+                        data-ltm-source-action="cancel-import"
+                      >
+                        Cancel
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div role="list" className="divide-y divide-[var(--border)]">
+                    {section.rows.map((row) => {
+                      const selectable = section.id === "available";
+                      return (
+                        <article
+                          key={row.sourceId}
+                          role="listitem"
+                          data-ltm-source-row-status={row.status}
+                          data-ltm-source-id={row.sourceId}
+                          className="space-y-2 p-3"
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${row.title}`}
+                              checked={section.selection.has(row.sourceId)}
+                              disabled={
+                                !selectable && section.id !== "imported"
+                              }
+                              onChange={(event) =>
+                                section.onToggle(
+                                  row.sourceId,
+                                  event.target.checked,
+                                )
+                              }
+                              data-ltm-source-select={row.sourceId}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-sm font-semibold">
+                                  {row.title}
+                                </h3>
+                                <span
+                                  data-ltm-source-status={row.status}
+                                  className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
+                                >
+                                  {sourceStatusLabel(row)}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                                {row.summary}
+                              </p>
+                              <p className="mt-1 line-clamp-2 text-xs text-[var(--muted-foreground)]">
+                                {row.snippet}
+                              </p>
+                            </div>
+                          </div>
+                          {section.id === "imported" ? (
+                            <div
+                              className="ml-7 space-y-2"
+                              data-ltm-source-existing-note={row.existingNoteId}
+                            >
+                              <p className="text-xs text-[var(--muted-foreground)]">
+                                Source memory: {row.existingNoteTitle}
+                              </p>
+                              <Button
+                                disabled={importing}
+                                onClick={() =>
+                                  void runImport([row.sourceId], "refresh")
+                                }
+                                data-ltm-source-action="refresh-reimport"
+                              >
+                                <RefreshCw size="0.75rem" /> Refresh / re-import
+                              </Button>
+                              {sourceMemoryActions(row.existingNoteId)}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                    {!preview.isLoading && section.rows.length === 0 ? (
+                      <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                        {section.empty}
+                      </p>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ))}
+        </div>
+      )}
 
       {importResult ? (
         <section

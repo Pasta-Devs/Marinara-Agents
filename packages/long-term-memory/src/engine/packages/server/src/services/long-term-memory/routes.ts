@@ -16,6 +16,8 @@ import {
   ltmGlobalSettingsSchema,
   ltmIsoTimestampSchema,
   ltmLinkSchema,
+  ltmLorebookPreviewRequestSchema,
+  ltmLorebookPreviewResponseSchema,
   ltmModeSchema,
   ltmNoteIdSchema,
   ltmNoteTitleSchema,
@@ -89,7 +91,11 @@ import { readLongTermMemoryInjectionReceipt } from "./usage.js";
 import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
-import { importPackageInterop, previewPackageInterop } from "./interop.js";
+import {
+  importPackageInterop,
+  previewPackageInterop,
+  previewPackageLorebooks,
+} from "./interop.js";
 import {
   getLtmScopeChatIds,
   isGlobalLtmScope,
@@ -553,7 +559,9 @@ export function createLongTermMemoryRoutes(runtime: {
         const notes = await storage.listNotes();
         const source = notes.find((note) => note.id === sourceNoteId);
         if (!source || !isLtmSourceNote(source))
-          return reply.status(404).send({ error: "Long-term memory source note not found" });
+          return reply
+            .status(404)
+            .send({ error: "Long-term memory source note not found" });
         const direct = notes.filter(
           (note) =>
             note.id !== sourceNoteId &&
@@ -689,6 +697,17 @@ export function createLongTermMemoryRoutes(runtime: {
         ltmInteropPreviewResponseSchema.parse(
           await previewPackageInterop(
             ltmInteropPreviewRequestSchema.parse(request.body ?? {}),
+            root,
+          ),
+        ),
+    );
+    app.post<{ Body: unknown }>(
+      "/import/lorebooks/preview",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request) =>
+        ltmLorebookPreviewResponseSchema.parse(
+          await previewPackageLorebooks(
+            ltmLorebookPreviewRequestSchema.parse(request.body ?? {}),
             root,
           ),
         ),

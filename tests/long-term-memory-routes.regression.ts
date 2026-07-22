@@ -68,6 +68,7 @@ async function main() {
   const debugOverrides: any[] = [];
   let failGameRefine = false;
   const refineWarnings: any[] = [];
+  const largeLoreEntry = `${"A".repeat(13_000)} ${"B".repeat(13_000)}`;
   try {
     assert.deepEqual(installed.manifest.permissions, [
       "agent-runtime",
@@ -906,8 +907,11 @@ async function main() {
       ["static", "change"],
     );
     assert.equal(
-      completionOptions.at(-1)?.responseFormat?.json_schema?.schema?.properties
-        ?.units?.items?.required?.includes("claimKind"),
+      completionOptions
+        .at(-1)
+        ?.responseFormat?.json_schema?.schema?.properties?.units?.items?.required?.includes(
+          "claimKind",
+        ),
       true,
     );
     assert.equal(
@@ -1436,6 +1440,93 @@ async function main() {
     assert.equal(importedChat.json().imported[0]?.extractionMethod, "llm");
     assert.equal(modelCalls, importCalls + 1);
     const importedChatNote = importedChat.json().imported[0].note;
+    const currentChatPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "chats", limit: 100 },
+    });
+    const currentChatSample = currentChatPreview
+      .json()
+      .samples.find((sample: any) => sample.sourceId === "chat-a:summary-a");
+    assert.equal(currentChatSample.status, "imported");
+    assert.equal(currentChatSample.freshness, "extraction_incomplete");
+    assert.equal(currentChatSample.existingNoteId, importedChatNote.id);
+    chats[0].metadata.summaryEntries.push({
+      id: "summary-provenance-fallback",
+      content: "A provenance fallback source remains imported.",
+      enabled: true,
+    });
+    await storageService.storage.createNote({
+      id: "source_provenance_fallback",
+      title: "Fallback source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary", "imported_chat"],
+      keywords: [],
+      links: [],
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-a",
+        entryId: "summary-provenance-fallback",
+      },
+      sections: {
+        source: {
+          text: "Previously imported fallback text.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+          evidence: [
+            "chat:chat-a",
+            "summary_entry:summary-provenance-fallback",
+          ],
+        },
+      },
+    });
+    await storageService.storage.createNote({
+      id: "source_duplicate_provenance",
+      title: "Duplicate source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary", "imported_chat"],
+      keywords: [],
+      links: [],
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-a",
+        entryId: "summary-a",
+      },
+      sections: {
+        source: {
+          text: "Duplicate provenance must not beat the canonical ID.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const provenancePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "chats", limit: 100 },
+    });
+    const fallbackSample = provenancePreview
+      .json()
+      .samples.find(
+        (sample: any) =>
+          sample.sourceId === "chat-a:summary-provenance-fallback",
+      );
+    assert.equal(fallbackSample.status, "imported");
+    assert.equal(fallbackSample.freshness, "extraction_incomplete");
+    assert.equal(fallbackSample.existingNoteId, "source_provenance_fallback");
+    assert.equal(
+      provenancePreview
+        .json()
+        .samples.find((sample: any) => sample.sourceId === "chat-a:summary-a")
+        .existingNoteId,
+      importedChatNote.id,
+    );
     await storageService.storage.updateNote(importedChatNote.id, {
       tags: [...importedChatNote.tags, "user_tag"],
       keywords: ["preserve-me"],
@@ -1513,7 +1604,10 @@ async function main() {
       },
     });
     assert.equal(importedGame.statusCode, 200, importedGame.body);
-    assert.equal(importedGame.json().imported[0]?.extractionMethod, "deterministic");
+    assert.equal(
+      importedGame.json().imported[0]?.extractionMethod,
+      "deterministic",
+    );
     assert.equal(
       importedGame.json().imported[0]?.extractionStatus,
       "succeeded",
@@ -1528,7 +1622,10 @@ async function main() {
       importedGame.json().imported[0].note.sections.source.text,
       /Party state:\nThe party holds the cobalt key\./,
     );
-    assert.equal(importedGame.json().imported[0].draft.mutations.length > 0, true);
+    assert.equal(
+      importedGame.json().imported[0].draft.mutations.length > 0,
+      true,
+    );
     const { configurePackageRuntime } =
       await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
     releaseRuntimeOverride = configurePackageRuntime({
@@ -1610,10 +1707,11 @@ async function main() {
               id: "lorebook-a",
               data: {
                 name: "Scoped Lore",
+                description: "A scoped lorebook description.",
                 category: "npc",
                 chatId: "chat-a",
                 characterIds: ["character-mara"],
-                tags: ["Cobalt Lore"],
+                tags: ["Cobalt Lore", "T".repeat(140)],
               },
               entries: [
                 {
@@ -1621,7 +1719,26 @@ async function main() {
                   name: "Gate",
                   content: "The cobalt gate opens only at dusk.",
                 },
+                {
+                  id: "entry-large",
+                  name: "Gate",
+                  content: largeLoreEntry,
+                },
+                {
+                  id: "description",
+                  name: "Recorded Description",
+                  content: "A real entry may use the synthetic description ID.",
+                },
               ],
+            },
+            {
+              id: "lorebook-empty",
+              data: {
+                name: "Scoped Lore",
+                category: "empty",
+                tags: [],
+              },
+              entries: [],
             },
           ];
         },
@@ -1642,13 +1759,57 @@ async function main() {
       payload: { source: "lorebooks", limit: 10 },
     });
     assert.equal(lorePreview.statusCode, 200, lorePreview.body);
+    const groupedLorePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/lorebooks/preview",
+      headers,
+      payload: {},
+    });
+    assert.equal(groupedLorePreview.statusCode, 200, groupedLorePreview.body);
+    assert.equal(groupedLorePreview.json().counts.books, 2);
+    assert.equal(groupedLorePreview.json().counts.entries, 4);
+    assert.equal(groupedLorePreview.json().counts.candidates, 5);
+    const groupedScopedLore = groupedLorePreview
+      .json()
+      .books.find((book: any) => book.id === "lorebook-a");
+    const groupedEmptyLore = groupedLorePreview
+      .json()
+      .books.find((book: any) => book.id === "lorebook-empty");
+    assert.equal(groupedScopedLore.name, groupedEmptyLore.name);
+    assert.notEqual(groupedScopedLore.id, groupedEmptyLore.id);
+    assert.equal(groupedScopedLore.tags[1].length, 120);
+    assert.equal(
+      new Set(groupedScopedLore.entries.map((entry: any) => entry.id)).size,
+      groupedScopedLore.entries.length,
+    );
+    assert.deepEqual(groupedEmptyLore.entries, []);
+    assert.deepEqual(groupedEmptyLore.counts, {
+      entries: 0,
+      candidates: 0,
+      pending: 0,
+      imported: 0,
+    });
+    const groupedLargeEntry = groupedScopedLore.entries.find(
+      (entry: any) => entry.id === "entry-large",
+    );
+    assert.equal(groupedLargeEntry.name, "Gate");
+    assert.equal(groupedLargeEntry.candidateCount, 2);
+    assert.equal(
+      groupedLargeEntry.candidates.every(
+        (candidate: any) => candidate.snippet.length <= 203,
+      ),
+      true,
+    );
+    const groupedImportSourceId = groupedScopedLore.entries.find(
+      (entry: any) => entry.id === "entry-a",
+    ).candidates[0].sourceId;
     const loreImport = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
       payload: {
         source: "lorebooks",
-        sourceIds: [lorePreview.json().samples[0].sourceId],
+        sourceIds: [groupedImportSourceId],
       },
     });
     assert.equal(loreImport.statusCode, 200, loreImport.body);
@@ -1661,6 +1822,18 @@ async function main() {
       loreImport.json().imported[0].note.tags.includes("cobalt_lore"),
       true,
     );
+    const groupedAfterImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/lorebooks/preview",
+      headers,
+      payload: {},
+    });
+    const importedGroupedCandidate = groupedAfterImport
+      .json()
+      .books.find((book: any) => book.id === "lorebook-a")
+      .entries.find((entry: any) => entry.id === "entry-a").candidates[0];
+    assert.equal(importedGroupedCandidate.status, "imported");
+    assert.equal(importedGroupedCandidate.freshness, "current");
     const characterPreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",
@@ -1673,11 +1846,57 @@ async function main() {
     );
     const firstGameNote = importedGame.json().imported[0].note;
     const firstGameFingerprint = firstGameNote.extractionFingerprint;
+    const currentGamePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "chats", limit: 100 },
+    });
+    const currentGameSample = currentGamePreview
+      .json()
+      .samples.find(
+        (sample: any) => sample.sourceId === "game-a:game-session-1",
+      );
+    assert.equal(currentGameSample.status, "imported");
+    assert.equal(currentGameSample.freshness, "current");
+    const contextGamePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: {
+        source: "chats",
+        limit: 100,
+        scope: {
+          chatIds: ["game-a", "chat-a"],
+          groupId: "observatory-branches",
+        },
+      },
+    });
+    const contextGameSample = contextGamePreview
+      .json()
+      .samples.find(
+        (sample: any) => sample.sourceId === "game-a:game-session-1",
+      );
+    assert.equal(contextGameSample.status, "imported");
+    assert.equal(contextGameSample.freshness, "context_updated");
     const changedGameCalls = modelCalls;
     chats.find(
       (chat) => chat.id === "game-a",
     ).metadata.gamePreviousSessionSummaries[0].summary =
       "The party discovered the changed Moon Vault beneath the observatory.";
+    const changedGamePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "chats", limit: 100 },
+    });
+    const changedGameSample = changedGamePreview
+      .json()
+      .samples.find(
+        (sample: any) => sample.sourceId === "game-a:game-session-1",
+      );
+    assert.equal(changedGameSample.status, "imported");
+    assert.equal(changedGameSample.freshness, "source_updated");
     const changedGame = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",

@@ -2334,19 +2334,25 @@ const ltmInteropPreviewSampleBaseSchema = z.object({
   snippet: z.string().max(280),
 });
 
+export const ltmInteropPreviewFreshnessSchema = z.enum([
+  "new",
+  "current",
+  "source_updated",
+  "context_updated",
+  "extraction_incomplete",
+]);
+
 export const ltmInteropPreviewSampleSchema = z.discriminatedUnion("status", [
   ltmInteropPreviewSampleBaseSchema
     .extend({
       status: z.literal("pending"),
-      freshness: z.enum(["new", "stale"]).default("new"),
-      existingNoteId: ltmNoteIdSchema.optional(),
-      existingNoteTitle: z.string().min(1).max(240).optional(),
+      freshness: z.literal("new"),
     })
     .strict(),
   ltmInteropPreviewSampleBaseSchema
     .extend({
       status: z.literal("imported"),
-      freshness: z.literal("current").default("current"),
+      freshness: ltmInteropPreviewFreshnessSchema.exclude(["new"]),
       existingNoteId: ltmNoteIdSchema,
       existingNoteTitle: z.string().min(1).max(240),
     })
@@ -2380,6 +2386,130 @@ export const ltmInteropPreviewResponseSchema = z
         });
       }
     }
+  });
+
+export const ltmLorebookPreviewRequestSchema = z
+  .object({
+    limit: z.number().int().min(1).max(100).default(100),
+    scope: ltmScopeSchema.optional(),
+    mode: ltmModeSchema.optional(),
+  })
+  .strict();
+
+export const ltmLorebookPreviewEntrySchema = z
+  .object({
+    id: z.string().min(1).max(120),
+    name: z.string().min(1).max(240),
+    candidateCount: z.number().int().min(1).max(10_000),
+    candidates: z.array(ltmInteropPreviewSampleSchema).min(1).max(10_000),
+  })
+  .strict()
+  .superRefine((entry, ctx) => {
+    if (entry.candidateCount !== entry.candidates.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["candidateCount"],
+        message: "candidateCount does not match the returned entry chunks.",
+      });
+    }
+  });
+
+const ltmLorebookPreviewCountsSchema = z
+  .object({
+    entries: z.number().int().min(0).max(1_000_000),
+    candidates: z.number().int().min(0).max(1_000_000),
+    pending: z.number().int().min(0).max(1_000_000),
+    imported: z.number().int().min(0).max(1_000_000),
+  })
+  .strict();
+
+function validateLorebookPreviewCounts(
+  counts: z.infer<typeof ltmLorebookPreviewCountsSchema>,
+  expected: {
+    entries: number;
+    candidates: number;
+    pending: number;
+    imported: number;
+  },
+  ctx: z.RefinementCtx,
+) {
+  for (const key of ["entries", "candidates", "pending", "imported"] as const) {
+    if (counts[key] !== expected[key])
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["counts", key],
+        message: `${key} does not match the returned lorebook entries.`,
+      });
+  }
+}
+
+export const ltmLorebookPreviewBookSchema = z
+  .object({
+    id: z.string().min(1).max(120),
+    name: z.string().min(1).max(240),
+    description: z.string().max(600),
+    category: z.string().min(1).max(120),
+    tags: z.array(z.string().min(1).max(120)).max(100),
+    scope: ltmScopeSchema,
+    counts: ltmLorebookPreviewCountsSchema,
+    entries: z.array(ltmLorebookPreviewEntrySchema).max(10_000),
+  })
+  .strict()
+  .superRefine((book, ctx) => {
+    const candidates = book.entries.flatMap((entry) => entry.candidates);
+    validateLorebookPreviewCounts(
+      book.counts,
+      {
+        entries: book.entries.length,
+        candidates: candidates.length,
+        pending: candidates.filter(
+          (candidate) => candidate.status === "pending",
+        ).length,
+        imported: candidates.filter(
+          (candidate) => candidate.status === "imported",
+        ).length,
+      },
+      ctx,
+    );
+  });
+
+export const ltmLorebookPreviewResponseSchema = z
+  .object({
+    counts: ltmLorebookPreviewCountsSchema.extend({
+      books: z.number().int().min(0).max(100),
+    }),
+    books: z.array(ltmLorebookPreviewBookSchema).max(100),
+  })
+  .strict()
+  .superRefine((response, ctx) => {
+    validateLorebookPreviewCounts(
+      response.counts,
+      {
+        entries: response.books.reduce(
+          (total, book) => total + book.counts.entries,
+          0,
+        ),
+        candidates: response.books.reduce(
+          (total, book) => total + book.counts.candidates,
+          0,
+        ),
+        pending: response.books.reduce(
+          (total, book) => total + book.counts.pending,
+          0,
+        ),
+        imported: response.books.reduce(
+          (total, book) => total + book.counts.imported,
+          0,
+        ),
+      },
+      ctx,
+    );
+    if (response.counts.books !== response.books.length)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["counts", "books"],
+        message: "books does not match the returned lorebooks.",
+      });
   });
 
 export const ltmImportSourceNotesRequestSchema = z
@@ -2802,8 +2932,23 @@ export type LtmInteropPreviewRequest = z.infer<
 export type LtmInteropPreviewSample = z.infer<
   typeof ltmInteropPreviewSampleSchema
 >;
+export type LtmInteropPreviewFreshness = z.infer<
+  typeof ltmInteropPreviewFreshnessSchema
+>;
 export type LtmInteropPreviewResponse = z.infer<
   typeof ltmInteropPreviewResponseSchema
+>;
+export type LtmLorebookPreviewRequest = z.infer<
+  typeof ltmLorebookPreviewRequestSchema
+>;
+export type LtmLorebookPreviewEntry = z.infer<
+  typeof ltmLorebookPreviewEntrySchema
+>;
+export type LtmLorebookPreviewBook = z.infer<
+  typeof ltmLorebookPreviewBookSchema
+>;
+export type LtmLorebookPreviewResponse = z.infer<
+  typeof ltmLorebookPreviewResponseSchema
 >;
 export type LtmImportSourceNotesRequest = z.infer<
   typeof ltmImportSourceNotesRequestSchema

@@ -3,7 +3,10 @@ import {
   type LtmImportSourceNotesRequest,
   type LtmImportSourceNotesResponse,
   type LtmInteropPreviewRequest,
+  type LtmInteropPreviewFreshness,
   type LtmInteropPreviewResponse,
+  type LtmLorebookPreviewRequest,
+  type LtmLorebookPreviewResponse,
   type LtmMode,
   type LtmNote,
   type LtmScope,
@@ -22,11 +25,11 @@ import {
 } from "./package-runtime.js";
 import { processLongTermMemorySourceBatch } from "./source-processing.js";
 import { getLtmExtractionConfig } from "./extraction-config.js";
+import { extractionFingerprintForLtmSourceMaterial } from "./source-hash.js";
 import {
-  extractionFingerprintForLtmSourceMaterial,
-  extractionFingerprintsEqual,
-} from "./source-hash.js";
-import { sourceNoteIdForProvenance } from "./source-identity.js";
+  inferSourceProvenance,
+  sourceNoteIdForProvenance,
+} from "./source-identity.js";
 import { LongTermMemoryStorage } from "./storage.js";
 
 type Candidate = {
@@ -45,6 +48,17 @@ type Candidate = {
   mutationCount: number;
   summary: string;
   deterministicSourceText?: string;
+  lorebookEntryId?: string;
+  lorebookEntryName?: string;
+};
+type Lorebook = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  scope: LtmScope;
+  candidates: Candidate[];
 };
 function object(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value))
@@ -164,46 +178,91 @@ function summaries(metadata: Record<string, unknown>) {
     ordinary = entries.length
       ? entries
       : legacy
-      ? [
-          {
-            id: `summary-legacy-${hash(legacy)}`,
-            content: legacy,
-            range: "last messages",
-            origin: "legacy",
-          },
-        ]
-      : [],
+        ? [
+            {
+              id: `summary-legacy-${hash(legacy)}`,
+              content: legacy,
+              range: "last messages",
+              origin: "legacy",
+            },
+          ]
+        : [],
     sessions = Array.isArray(metadata.gamePreviousSessionSummaries)
-      ? metadata.gamePreviousSessionSummaries.map(object).flatMap((session, index) => {
-          const sessionNumber = Number(session.sessionNumber),
-            id = Number.isFinite(sessionNumber)
-              ? `game-session-${sessionNumber}`
-              : `game-session-${hash(JSON.stringify(session))}`,
-            fields: Array<[string, unknown]> = [
-              ["Summary", session.summary],
-              ["Resume point", session.resumePoint],
-              ["Party dynamics", session.partyDynamics],
-              ["Party state", session.partyState],
-              ["Key discoveries", stringArray(session.keyDiscoveries).join("\n")],
-              ["Character moments", stringArray(session.characterMoments).join("\n")],
-              ["Little details", stringArray(session.littleDetails).join("\n")],
-              ["NPC updates", stringArray(session.npcUpdates).join("\n")],
-              ["Next session request", session.nextSessionRequest],
-            ],
-            content = fields.flatMap(([label, value]) => text(value) ? [`${label}:\n${text(value)}`] : []).join("\n\n"),
-            deterministicSourceText = [
-              text(session.summary) ? `## timeline_event\nSummary: ${text(session.summary)}` : "",
-              text(session.resumePoint) ? `## world_fact\nResume point: ${text(session.resumePoint)}` : "",
-              text(session.nextSessionRequest) ? `## thread\nNext session request: ${text(session.nextSessionRequest)}` : "",
-              text(session.partyDynamics) ? `## world_fact\nParty dynamics: ${text(session.partyDynamics)}` : "",
-              text(session.partyState) ? `## world_fact\nParty state: ${text(session.partyState)}` : "",
-              ...stringArray(session.keyDiscoveries).map((value) => `## world_fact\nKey discovery: ${value}`),
-              ...stringArray(session.characterMoments).map((value) => `## timeline_event\nCharacter moment: ${value}`),
-              ...stringArray(session.littleDetails).map((value) => `## world_fact\nLittle detail: ${value}`),
-              ...stringArray(session.npcUpdates).map((value) => `## world_fact\nNPC update: ${value}`),
-            ].filter(Boolean).join("\n\n");
-          return content ? [{ id, content, deterministicSourceText, range: `game session ${Number.isFinite(sessionNumber) ? sessionNumber : index + 1}`, origin: "game_session" }] : [];
-        })
+      ? metadata.gamePreviousSessionSummaries
+          .map(object)
+          .flatMap((session, index) => {
+            const sessionNumber = Number(session.sessionNumber),
+              id = Number.isFinite(sessionNumber)
+                ? `game-session-${sessionNumber}`
+                : `game-session-${hash(JSON.stringify(session))}`,
+              fields: Array<[string, unknown]> = [
+                ["Summary", session.summary],
+                ["Resume point", session.resumePoint],
+                ["Party dynamics", session.partyDynamics],
+                ["Party state", session.partyState],
+                [
+                  "Key discoveries",
+                  stringArray(session.keyDiscoveries).join("\n"),
+                ],
+                [
+                  "Character moments",
+                  stringArray(session.characterMoments).join("\n"),
+                ],
+                [
+                  "Little details",
+                  stringArray(session.littleDetails).join("\n"),
+                ],
+                ["NPC updates", stringArray(session.npcUpdates).join("\n")],
+                ["Next session request", session.nextSessionRequest],
+              ],
+              content = fields
+                .flatMap(([label, value]) =>
+                  text(value) ? [`${label}:\n${text(value)}`] : [],
+                )
+                .join("\n\n"),
+              deterministicSourceText = [
+                text(session.summary)
+                  ? `## timeline_event\nSummary: ${text(session.summary)}`
+                  : "",
+                text(session.resumePoint)
+                  ? `## world_fact\nResume point: ${text(session.resumePoint)}`
+                  : "",
+                text(session.nextSessionRequest)
+                  ? `## thread\nNext session request: ${text(session.nextSessionRequest)}`
+                  : "",
+                text(session.partyDynamics)
+                  ? `## world_fact\nParty dynamics: ${text(session.partyDynamics)}`
+                  : "",
+                text(session.partyState)
+                  ? `## world_fact\nParty state: ${text(session.partyState)}`
+                  : "",
+                ...stringArray(session.keyDiscoveries).map(
+                  (value) => `## world_fact\nKey discovery: ${value}`,
+                ),
+                ...stringArray(session.characterMoments).map(
+                  (value) => `## timeline_event\nCharacter moment: ${value}`,
+                ),
+                ...stringArray(session.littleDetails).map(
+                  (value) => `## world_fact\nLittle detail: ${value}`,
+                ),
+                ...stringArray(session.npcUpdates).map(
+                  (value) => `## world_fact\nNPC update: ${value}`,
+                ),
+              ]
+                .filter(Boolean)
+                .join("\n\n");
+            return content
+              ? [
+                  {
+                    id,
+                    content,
+                    deterministicSourceText,
+                    range: `game session ${Number.isFinite(sessionNumber) ? sessionNumber : index + 1}`,
+                    origin: "game_session",
+                  },
+                ]
+              : [];
+          })
       : [];
   return [...ordinary, ...sessions];
 }
@@ -211,7 +270,9 @@ function scoped(candidate: Candidate, override?: LtmScope) {
   return withMergedLtmScopeLinks({ ...candidate.scope, ...override }, {});
 }
 function mode(candidate: Candidate, value?: LtmMode) {
-  return !value ? candidate : { ...candidate, modes: [value], extractionMode: value };
+  return !value
+    ? candidate
+    : { ...candidate, modes: [value], extractionMode: value };
 }
 function fingerprint(candidate: Candidate, scope: LtmScope) {
   return extractionFingerprintForLtmSourceMaterial({
@@ -228,23 +289,128 @@ function fingerprint(candidate: Candidate, scope: LtmScope) {
 
 function matchesScope(candidate: Candidate, scope?: LtmScope) {
   if (!scope) return true;
-  const scopeIds = new Set(getLtmScopeChatIds(scope));
   if (candidate.provenance.kind === "character") {
     return Boolean(
-      candidate.scope.characterIds?.some((id) => scope.characterIds?.includes(id)),
+      candidate.scope.characterIds?.some((id) =>
+        scope.characterIds?.includes(id),
+      ),
     );
   }
+  return matchesImportScope(candidate.scope, scope);
+}
+
+function matchesImportScope(candidateScope: LtmScope, scope?: LtmScope) {
+  if (!scope) return true;
+  const scopeIds = new Set(getLtmScopeChatIds(scope));
   if (scope.groupId) {
-    if (candidate.scope.groupId !== scope.groupId) return false;
+    if (candidateScope.groupId !== scope.groupId) return false;
   } else if (scopeIds.size) {
-    const candidateIds = new Set(getLtmScopeChatIds(candidate.scope));
+    const candidateIds = new Set(getLtmScopeChatIds(candidateScope));
     if (![...candidateIds].some((id) => scopeIds.has(id))) return false;
   }
   if (scope.characterIds?.length) {
-    const candidateIds = new Set(candidate.scope.characterIds ?? []);
-    if (![...candidateIds].some((id) => scope.characterIds?.includes(id))) return false;
+    const candidateIds = new Set(candidateScope.characterIds ?? []);
+    if (![...candidateIds].some((id) => scope.characterIds?.includes(id)))
+      return false;
   }
   return true;
+}
+
+function lorebookScope(data: Record<string, unknown>) {
+  return withMergedLtmScopeLinks(
+    {
+      ...(text(data.chatId) ? { chatId: text(data.chatId) } : {}),
+      ...(stringArray(data.characterIds).length
+        ? { characterIds: stringArray(data.characterIds) }
+        : {}),
+    },
+    { chatIds: text(data.chatId) ? [text(data.chatId)] : [] },
+  );
+}
+
+function normalizeLorebooks(
+  books: Array<{ id: string; data: unknown; entries: unknown[] }>,
+) {
+  return books.map((book): Lorebook => {
+    const data = object(book.data),
+      name = text(data.name) || "Lorebook",
+      description = text(data.description),
+      category = text(data.category) || "Lore",
+      normalizedCategory = identifier(category, "lore"),
+      tags = stringArray(data.tags)
+        .map((tag) => tag.trim().slice(0, 120))
+        .filter(Boolean)
+        .slice(0, 100),
+      importTags = tags.map((tag) => identifier(tag, "tag")).slice(0, 12),
+      scope = lorebookScope(data),
+      entries = [
+        ...(description
+          ? [{ id: "description", name: "Description", content: description }]
+          : []),
+        ...book.entries.map(object),
+      ],
+      normalized: Candidate[] = [],
+      usedEntryIds = new Set<string>();
+    for (const [index, entry] of entries.entries()) {
+      const content = text(entry.content);
+      if (!content) continue;
+      const rawBase =
+          text(entry.id) ||
+          text(entry.uid) ||
+          text(entry.key) ||
+          `position_${index + 1}`,
+        initialBase =
+          rawBase.length <= 120
+            ? rawBase
+            : `entry_${hash(`${rawBase}\0${index}`, 16)}`,
+        base = usedEntryIds.has(initialBase)
+          ? `entry_${hash(`${rawBase}\0${index}`, 16)}`
+          : initialBase,
+        entryName = text(entry.name) || "Entry";
+      usedEntryIds.add(base);
+      for (const [part, sourceText] of chunks(content).entries()) {
+        const rawEntryId = part ? `${base}:part:${part + 1}` : base,
+          entryId =
+            rawEntryId.length <= 120
+              ? rawEntryId
+              : `entry_${hash(`${base}\0${part}`, 16)}`,
+          sourceId = `lorebook_entry_${hash(`${book.id}\0${entryId}`)}`,
+          title = `Lorebook - ${name}: ${entryName}${part ? ` (${part + 1})` : ""}`,
+          provenance = {
+            kind: "lorebook" as const,
+            sourceId: book.id,
+            entryId,
+          };
+        normalized.push({
+          sourceId,
+          title,
+          sourceText: `Category: ${normalizedCategory}\n\n${sourceText}`,
+          sourceNoteId: sourceNoteIdForProvenance(provenance),
+          legacySourceNoteIds: [],
+          sourceTag: "imported_lorebook",
+          importTags: [...importTags, `lorebook_${normalizedCategory}`],
+          evidence: [`lorebook:${book.id}`, `lorebook_entry:${entryId}`],
+          provenance,
+          scope,
+          modes: ["roleplay", "conversation", "game"],
+          extractionMode: "roleplay",
+          mutationCount: 1,
+          summary: `Import ${title}`,
+          lorebookEntryId: base,
+          lorebookEntryName: entryName,
+        });
+      }
+    }
+    return {
+      id: book.id,
+      name,
+      description,
+      category,
+      tags,
+      scope,
+      candidates: normalized,
+    };
+  });
 }
 
 async function candidates(
@@ -286,78 +452,10 @@ async function candidates(
       });
     }
   if (request.source === "lorebooks")
-    for (const book of await getPackageResources().listLorebooks()) {
-      const data = object(book.data),
-        name = text(data.name) || "Lorebook",
-        category = identifier(text(data.category), "lore"),
-        tags = stringArray(data.tags)
-          .map((tag) => identifier(tag, "tag"))
-          .slice(0, 12),
-        scope = withMergedLtmScopeLinks(
-          {
-            ...(text(data.chatId) ? { chatId: text(data.chatId) } : {}),
-            ...(stringArray(data.characterIds).length
-              ? { characterIds: stringArray(data.characterIds) }
-              : {}),
-          },
-          { chatIds: text(data.chatId) ? [text(data.chatId)] : [] },
-        ),
-        entries = [
-          ...(text(data.description)
-            ? [
-                {
-                  id: "description",
-                  name: "Description",
-                  content: text(data.description),
-                },
-              ]
-            : []),
-          ...book.entries.map(object),
-        ];
-      for (const [index, entry] of entries.entries()) {
-        const content = text(entry.content);
-        if (!content) continue;
-        const rawBase =
-            text(entry.id) ||
-            text(entry.uid) ||
-            text(entry.key) ||
-            `position_${index + 1}`,
-          base =
-            rawBase.length <= 120
-              ? rawBase
-              : `entry_${hash(`${rawBase}\0${index}`, 16)}`;
-        for (const [part, sourceText] of chunks(content).entries()) {
-          const rawEntryId = part ? `${base}:part:${part + 1}` : base,
-            entryId =
-              rawEntryId.length <= 120
-                ? rawEntryId
-                : `entry_${hash(`${base}\0${part}`, 16)}`,
-            sourceId = `lorebook_entry_${hash(`${book.id}\0${entryId}`)}`,
-            title = `Lorebook - ${name}: ${text(entry.name) || "Entry"}${part ? ` (${part + 1})` : ""}`,
-            provenance = {
-              kind: "lorebook" as const,
-              sourceId: book.id,
-              entryId,
-            };
-          result.push({
-            sourceId,
-            title,
-            sourceText: `Category: ${category}\n\n${sourceText}`,
-            sourceNoteId: sourceNoteIdForProvenance(provenance),
-            legacySourceNoteIds: [],
-            sourceTag: "imported_lorebook",
-            importTags: [...tags, `lorebook_${category}`],
-            evidence: [`lorebook:${book.id}`, `lorebook_entry:${entryId}`],
-            provenance,
-            scope,
-            modes: ["roleplay", "conversation", "game"],
-            extractionMode: "roleplay",
-            mutationCount: 1,
-            summary: `Import ${title}`,
-          });
-        }
-      }
-    }
+    for (const book of normalizeLorebooks(
+      await getPackageResources().listLorebooks(),
+    ))
+      result.push(...book.candidates);
   if (request.source === "chats") {
     const scopeIds = new Set(getLtmScopeChatIds(request.scope));
     for (const chat of await getPackagePersistence().listChats()) {
@@ -407,7 +505,9 @@ async function candidates(
           extractionMode: chatMode,
           mutationCount: 1,
           summary: `Import ${title}`,
-          ...(entry.deterministicSourceText ? { deterministicSourceText: entry.deterministicSourceText } : {}),
+          ...(entry.deterministicSourceText
+            ? { deterministicSourceText: entry.deterministicSourceText }
+            : {}),
         });
       }
     }
@@ -428,14 +528,68 @@ async function candidates(
     .map((item) => mode(item, request.mode));
 }
 
-async function existingFor(storage: LongTermMemoryStorage, row: Candidate) {
-  const notes = await storage.getNotesByIds([
-    row.sourceNoteId,
-    ...row.legacySourceNoteIds,
-  ]);
-  return [row.sourceNoteId, ...row.legacySourceNoteIds]
-    .map((id) => notes.get(id))
-    .find((note): note is LtmNote => Boolean(note));
+function provenanceKey(provenance: LtmSourceProvenance) {
+  return `${provenance.kind}\0${provenance.sourceId}\0${provenance.entryId ?? ""}`;
+}
+
+async function existingMatcher(storage: LongTermMemoryStorage) {
+  const notes = await storage.listNotes(),
+    byId = new Map(notes.map((note) => [note.id, note])),
+    byProvenance = new Map<string, LtmNote>();
+  for (const note of notes) {
+    if (note.type !== "source") continue;
+    const provenance = inferSourceProvenance(note);
+    if (provenance && !byProvenance.has(provenanceKey(provenance)))
+      byProvenance.set(provenanceKey(provenance), note);
+  }
+  return (row: Candidate) =>
+    [row.sourceNoteId, ...row.legacySourceNoteIds]
+      .map((id) => byId.get(id))
+      .find((note): note is LtmNote => Boolean(note)) ??
+    byProvenance.get(provenanceKey(row.provenance));
+}
+
+function previewFreshness(
+  note: LtmNote,
+  candidateFingerprint: ReturnType<typeof fingerprint>,
+): LtmInteropPreviewFreshness {
+  const existingFingerprint = note.extractionFingerprint;
+  if (!existingFingerprint) return "extraction_incomplete";
+  if (existingFingerprint.sourceHash !== candidateFingerprint.sourceHash)
+    return "source_updated";
+  const { sourceHash: _existingSourceHash, ...existingContext } =
+      existingFingerprint,
+    { sourceHash: _candidateSourceHash, ...candidateContext } =
+      candidateFingerprint;
+  return JSON.stringify(existingContext) === JSON.stringify(candidateContext)
+    ? "current"
+    : "context_updated";
+}
+
+function previewSample(
+  row: Candidate,
+  note: LtmNote | undefined,
+  scope?: LtmScope,
+) {
+  const base = {
+    sourceId: row.sourceId,
+    title: row.title,
+    mutationCount: row.mutationCount,
+    summary: row.summary,
+    snippet:
+      row.sourceText.length > 200
+        ? `${row.sourceText.slice(0, 200)}...`
+        : row.sourceText,
+  };
+  return note
+    ? {
+        ...base,
+        status: "imported" as const,
+        freshness: previewFreshness(note, fingerprint(row, scoped(row, scope))),
+        existingNoteId: note.id,
+        existingNoteTitle: note.title || row.title,
+      }
+    : { ...base, status: "pending" as const, freshness: "new" as const };
 }
 export async function previewPackageInterop(
   request: LtmInteropPreviewRequest,
@@ -443,48 +597,100 @@ export async function previewPackageInterop(
 ): Promise<LtmInteropPreviewResponse> {
   const rows = await candidates(request),
     storage = new LongTermMemoryStorage(root),
-    samples = [];
-  for (const row of rows) {
-    const note = await existingFor(storage, row),
-      base = {
-        sourceId: row.sourceId,
-        title: row.title,
-        mutationCount: row.mutationCount,
-        summary: row.summary,
-        snippet:
-          row.sourceText.length > 200
-            ? `${row.sourceText.slice(0, 200)}...`
-            : row.sourceText,
-      };
-    samples.push(
-      !note
-        ? { ...base, status: "pending" as const, freshness: "new" as const }
-        : extractionFingerprintsEqual(
-              note.extractionFingerprint,
-              fingerprint(row, scoped(row, request.scope)),
-            )
-          ? {
-              ...base,
-              status: "imported" as const,
-              freshness: "current" as const,
-              existingNoteId: note.id,
-              existingNoteTitle: note.title || row.title,
-            }
-          : {
-              ...base,
-              status: "pending" as const,
-              freshness: "stale" as const,
-              existingNoteId: note.id,
-              existingNoteTitle: note.title || row.title,
-            },
+    matchExisting = await existingMatcher(storage),
+    samples = rows.map((row) =>
+      previewSample(row, matchExisting(row), request.scope),
     );
-  }
   return {
     source: request.source,
     scanned: samples.length,
     draftable: samples.filter((item) => item.status === "pending").length,
     importedCount: samples.filter((item) => item.status === "imported").length,
     samples,
+  };
+}
+
+export async function previewPackageLorebooks(
+  request: LtmLorebookPreviewRequest,
+  root: string,
+): Promise<LtmLorebookPreviewResponse> {
+  const storage = new LongTermMemoryStorage(root),
+    matchExisting = await existingMatcher(storage),
+    resources = (await getPackageResources().listLorebooks())
+      .filter((book) =>
+        matchesImportScope(lorebookScope(object(book.data)), request.scope),
+      )
+      .slice(0, request.limit),
+    books = normalizeLorebooks(resources).map((book) => {
+      const rows = book.candidates
+          .filter(
+            (row) =>
+              (!request.mode || row.modes.includes(request.mode)) &&
+              matchesScope(row, request.scope),
+          )
+          .map((row) => mode(row, request.mode)),
+        grouped = new Map<
+          string,
+          {
+            id: string;
+            name: string;
+            candidates: ReturnType<typeof previewSample>[];
+          }
+        >();
+      for (const row of rows) {
+        const id = row.lorebookEntryId!,
+          entry = grouped.get(id) ?? {
+            id,
+            name: row.lorebookEntryName!,
+            candidates: [],
+          };
+        entry.candidates.push(
+          previewSample(row, matchExisting(row), request.scope),
+        );
+        grouped.set(id, entry);
+      }
+      const entries = [...grouped.values()].map((entry) => ({
+          ...entry,
+          candidateCount: entry.candidates.length,
+        })),
+        samples = entries.flatMap((entry) => entry.candidates),
+        imported = samples.filter(
+          (sample) => sample.status === "imported",
+        ).length;
+      return {
+        id: book.id,
+        name: book.name,
+        description:
+          book.description.length > 600
+            ? `${book.description.slice(0, 597)}...`
+            : book.description,
+        category: book.category,
+        tags: book.tags,
+        scope: book.scope,
+        counts: {
+          entries: entries.length,
+          candidates: samples.length,
+          pending: samples.length - imported,
+          imported,
+        },
+        entries,
+      };
+    }),
+    entries = books.reduce((count, book) => count + book.counts.entries, 0),
+    candidatesCount = books.reduce(
+      (count, book) => count + book.counts.candidates,
+      0,
+    ),
+    imported = books.reduce((count, book) => count + book.counts.imported, 0);
+  return {
+    counts: {
+      books: books.length,
+      entries,
+      candidates: candidatesCount,
+      pending: candidatesCount - imported,
+      imported,
+    },
+    books,
   };
 }
 function provider(resolved: any) {
@@ -525,6 +731,7 @@ export async function importPackageInterop(
     : null;
   throwIfAborted(signal);
   const storage = new LongTermMemoryStorage(root),
+    matchExisting = await existingMatcher(storage),
     written: Array<{
       sourceId: string;
       title: string;
@@ -556,7 +763,7 @@ export async function importPackageInterop(
             },
           },
         },
-        found = await existingFor(storage, row),
+        found = matchExisting(row),
         existing =
           found && found.id !== row.sourceNoteId
             ? await storage.renameNoteId(found.id, row.sourceNoteId)
@@ -577,7 +784,9 @@ export async function importPackageInterop(
         title: row.title,
         note,
         created: !existing,
-        ...(row.deterministicSourceText ? { deterministicSourceText: row.deterministicSourceText } : {}),
+        ...(row.deterministicSourceText
+          ? { deterministicSourceText: row.deterministicSourceText }
+          : {}),
       });
     } catch (error) {
       writeFailures.push({

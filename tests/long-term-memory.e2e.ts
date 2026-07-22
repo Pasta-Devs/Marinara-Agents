@@ -2,6 +2,7 @@
 // Long-Term Memory package installed and active. From ../Marinara-Engine run:
 // pnpm exec playwright test -c ../Marinara-Agents/tests/long-term-memory.playwright.config.ts
 import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 const engineRoot =
@@ -40,6 +41,40 @@ async function createChat(page: any, testInfo: any) {
 
 async function deleteChat(page: any, chatId: string) {
   const response = await page.request.delete(`/api/chats/${chatId}?force=true`);
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+async function createLorebook(page: any, name: string) {
+  const response = await page.request.post("/api/lorebooks", {
+    data: {
+      name,
+      description: "A source-browser fixture.",
+      category: "world",
+      enabled: true,
+      isGlobal: true,
+      tags: ["ltm-e2e"],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return (await response.json()) as { id: string };
+}
+
+async function createLorebookEntry(
+  page: any,
+  lorebookId: string,
+  name: string,
+  content: string,
+) {
+  const response = await page.request.post(
+    `/api/lorebooks/${lorebookId}/entries`,
+    { data: { name, content, enabled: true } },
+  );
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return (await response.json()) as { id: string };
+}
+
+async function deleteLorebook(page: any, lorebookId: string) {
+  const response = await page.request.delete(`/api/lorebooks/${lorebookId}`);
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
@@ -208,14 +243,18 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       settings.getByText("Enable Long-Term Memory", { exact: true }),
     ).toHaveCount(0);
-    await expect(settings.getByText("Meaning match", { exact: true })).toBeVisible();
+    await expect(
+      settings.getByText("Meaning match", { exact: true }),
+    ).toBeVisible();
     await expect(
       settings.getByText("Exact words match", { exact: true }),
     ).toBeVisible();
     await expect(
       settings.getByText("Memory context instructions", { exact: true }),
     ).toBeVisible();
-    await expect(settings.locator('[data-ltm-surface="activity"]')).toHaveCount(0);
+    await expect(settings.locator('[data-ltm-surface="activity"]')).toHaveCount(
+      0,
+    );
     await settings.getByRole("tab", { name: "Maintenance" }).click();
     await expect(
       settings.getByRole("heading", { name: "Backup and Reset" }),
@@ -226,7 +265,9 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       settings.getByRole("heading", { name: "Debug Activity" }),
     ).toBeVisible();
-    await expect(settings.locator('[data-ltm-surface="activity"]')).toBeVisible();
+    await expect(
+      settings.locator('[data-ltm-surface="activity"]'),
+    ).toBeVisible();
     await settings.getByRole("tab", { name: "Maintenance" }).press("ArrowLeft");
     await expect(
       settings.getByRole("tab", { name: "Extraction" }),
@@ -244,30 +285,43 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
       .toBe(true);
 
     await settings.getByRole("tab", { name: "Extraction" }).click();
-    const templatePanel = settings.getByRole("tabpanel").filter({ hasText: "Prompt templates" });
-    const templateSelect = templatePanel.getByRole("combobox", { name: "Prompt template" });
+    const templatePanel = settings
+      .getByRole("tabpanel")
+      .filter({ hasText: "Prompt templates" });
+    const templateSelect = templatePanel.getByRole("combobox", {
+      name: "Prompt template",
+    });
     await expect(templateSelect).toHaveValue("default:conversation");
-    await expect(templatePanel.getByRole("button", { name: "Reset to default" })).toHaveCount(3);
+    await expect(
+      templatePanel.getByRole("button", { name: "Reset to default" }),
+    ).toHaveCount(3);
     await templateSelect.selectOption("default:roleplay");
-    await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
-      "Built-in Default (Roleplay)",
-    );
-    await expect(templatePanel.getByRole("textbox", { name: "Template prompt" })).not.toBeEditable();
+    await expect(
+      templatePanel.getByRole("textbox", { name: "Name" }),
+    ).toHaveValue("Built-in Default (Roleplay)");
+    await expect(
+      templatePanel.getByRole("textbox", { name: "Template prompt" }),
+    ).not.toBeEditable();
     await templatePanel.getByRole("button", { name: "Duplicate" }).click();
     await expect(templateSelect).toHaveValue(/custom:/);
-    await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
-      "Built-in Default (Roleplay) copy",
-    );
-    await templatePanel.getByRole("textbox", { name: "Name" }).fill("Roleplay custom");
-    await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
-      "Roleplay custom",
-    );
+    await expect(
+      templatePanel.getByRole("textbox", { name: "Name" }),
+    ).toHaveValue("Built-in Default (Roleplay) copy");
+    await templatePanel
+      .getByRole("textbox", { name: "Name" })
+      .fill("Roleplay custom");
+    await expect(
+      templatePanel.getByRole("textbox", { name: "Name" }),
+    ).toHaveValue("Roleplay custom");
     await templateSelect.selectOption("default:game");
     await templateSelect.selectOption({ label: "Roleplay custom" });
-    await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
-      "Roleplay custom",
-    );
-    await templatePanel.getByRole("button", { name: "Reset to default" }).first().click();
+    await expect(
+      templatePanel.getByRole("textbox", { name: "Name" }),
+    ).toHaveValue("Roleplay custom");
+    await templatePanel
+      .getByRole("button", { name: "Reset to default" })
+      .first()
+      .click();
 
     await navigation.locator('[data-ltm-destination="vault"]').click();
     await page
@@ -383,6 +437,226 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
     await expect(selectionCount).toHaveText("1 selected, 1 hidden by filters");
   } finally {
     await deleteNotes(page, [timelineId, worldId]);
+    await deleteChat(page, chat.id);
+  }
+});
+
+test("Long-Term Memory browses whole lorebooks and selects their entries", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const chat = await createChat(page, testInfo);
+  const suffix = `${testInfo.project.name}-${Date.now()}`;
+  const atlas = await createLorebook(page, `LTM Atlas ${suffix}`);
+  const archive = await createLorebook(page, `LTM Archive ${suffix}`);
+
+  try {
+    const gate = await createLorebookEntry(
+      page,
+      atlas.id,
+      `Cobalt Gate ${suffix}`,
+      "The cobalt gate opens only at dusk.",
+    );
+    await createLorebookEntry(
+      page,
+      atlas.id,
+      `Moon Vault ${suffix}`,
+      "The Moon Vault lies beneath the observatory.",
+    );
+    await createLorebookEntry(
+      page,
+      archive.id,
+      `Quiet Record ${suffix}`,
+      "The archive records the seventh bell.",
+    );
+
+    await page.route(
+      "**/api/capability-packages/long-term-memory/client*",
+      async (route) => {
+        await route.fulfill({
+          contentType: "text/javascript; charset=utf-8",
+          body: await readFile(
+            join(import.meta.dirname, "../packages/long-term-memory/client.js"),
+          ),
+        });
+      },
+    );
+    const candidate = (sourceId: string, title: string, snippet: string) => ({
+      sourceId,
+      title,
+      mutationCount: 1,
+      summary: `Import ${title}`,
+      snippet,
+      status: "pending",
+      freshness: "new",
+    });
+    const entry = (
+      id: string,
+      name: string,
+      sourceId: string,
+      snippet: string,
+    ) => ({
+      id,
+      name,
+      candidateCount: 1,
+      candidates: [candidate(sourceId, name, snippet)],
+    });
+    const atlasEntries = [
+      entry(
+        "description",
+        "Description",
+        `atlas-description-${suffix}`,
+        "A source-browser fixture.",
+      ),
+      entry(
+        gate.id,
+        `Cobalt Gate ${suffix}`,
+        `atlas-gate-${suffix}`,
+        "The cobalt gate opens only at dusk.",
+      ),
+      entry(
+        "moon-vault",
+        `Moon Vault ${suffix}`,
+        `atlas-vault-${suffix}`,
+        "The Moon Vault lies beneath the observatory.",
+      ),
+    ];
+    const archiveEntries = [
+      entry(
+        "description",
+        "Description",
+        `archive-description-${suffix}`,
+        "A source-browser fixture.",
+      ),
+      entry(
+        "quiet-record",
+        `Quiet Record ${suffix}`,
+        `archive-record-${suffix}`,
+        "The archive records the seventh bell.",
+      ),
+    ];
+    await page.route(
+      "**/api/long-term-memory/import/lorebooks/preview",
+      async (route) => {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            counts: {
+              books: 2,
+              entries: 5,
+              candidates: 5,
+              pending: 5,
+              imported: 0,
+            },
+            books: [
+              {
+                id: atlas.id,
+                name: `LTM Atlas ${suffix}`,
+                description: "A source-browser fixture.",
+                category: "world",
+                tags: ["ltm-e2e"],
+                scope: {},
+                counts: {
+                  entries: 3,
+                  candidates: 3,
+                  pending: 3,
+                  imported: 0,
+                },
+                entries: atlasEntries,
+              },
+              {
+                id: archive.id,
+                name: `LTM Archive ${suffix}`,
+                description: "A source-browser fixture.",
+                category: "world",
+                tags: ["ltm-e2e"],
+                scope: {},
+                counts: {
+                  entries: 2,
+                  candidates: 2,
+                  pending: 2,
+                  imported: 0,
+                },
+                entries: archiveEntries,
+              },
+            ],
+          }),
+        });
+      },
+    );
+
+    await openLongTermMemory(page, chat.id, testInfo);
+    const detail = page.locator('[data-ltm-surface="detail"]');
+    const navigation = detail.locator(
+      'nav[aria-label="Long-Term Memory sections"]:visible',
+    );
+    await navigation.locator('[data-ltm-destination="sources"]').click();
+    const sources = detail.locator('[data-ltm-surface="sources"]');
+    await sources.locator("[data-ltm-import-scope]").selectOption("all");
+    await sources.locator('[data-ltm-source-tab="lorebooks"]').click();
+
+    const browser = sources.locator("[data-ltm-lorebook-browser]");
+    await expect(browser).toBeVisible();
+    const atlasRow = browser.locator(`[data-ltm-lorebook-id="${atlas.id}"]`);
+    const archiveRow = browser.locator(
+      `[data-ltm-lorebook-id="${archive.id}"]`,
+    );
+    await expect(atlasRow).toHaveCount(1);
+    await expect(archiveRow).toHaveCount(1);
+    await expect(atlasRow).toContainText("3 entries");
+
+    await atlasRow.click();
+    const workbench = browser.locator(
+      `[data-ltm-lorebook-workbench="${atlas.id}"]`,
+    );
+    await expect(workbench).toBeVisible();
+    await expect(workbench.getByText(`Cobalt Gate ${suffix}`)).toBeVisible();
+    await expect(workbench.getByText(`Moon Vault ${suffix}`)).toBeVisible();
+    await expect(workbench).not.toContainText(`Quiet Record ${suffix}`);
+
+    const gateEntry = workbench.locator(
+      `[data-ltm-lorebook-entry="${gate.id}"]`,
+    );
+    await gateEntry.getByRole("checkbox").check();
+    await expect(
+      workbench.locator('[data-ltm-lorebook-action="import-selected"]'),
+    ).toContainText("(1)");
+    await expect(
+      workbench.locator('[data-ltm-lorebook-action="refresh-selected"]'),
+    ).toContainText("(0)");
+
+    if (testInfo.project.name.includes("mobile")) {
+      await expect(
+        browser.locator('[data-ltm-lorebook-pane="entries"]'),
+      ).toHaveAttribute("aria-selected", "true");
+      await expect(browser.locator("[data-ltm-lorebook-list]")).toBeHidden();
+      await browser
+        .locator('[data-ltm-lorebook-pane="entries"]')
+        .press("ArrowLeft");
+      await expect(
+        browser.locator('[data-ltm-lorebook-pane="lorebooks"]'),
+      ).toBeFocused();
+      await expect(browser.locator("[data-ltm-lorebook-list]")).toBeVisible();
+      await expect(workbench).toBeHidden();
+    } else {
+      const [listBox, workbenchBox] = await Promise.all([
+        browser.locator("[data-ltm-lorebook-list]").boundingBox(),
+        workbench.boundingBox(),
+      ]);
+      expect(listBox).not.toBeNull();
+      expect(workbenchBox).not.toBeNull();
+      expect(listBox!.x + listBox!.width).toBeLessThan(workbenchBox!.x);
+    }
+    await expect
+      .poll(() =>
+        sources.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth,
+        ),
+      )
+      .toBe(true);
+  } finally {
+    await deleteLorebook(page, atlas.id);
+    await deleteLorebook(page, archive.id);
     await deleteChat(page, chat.id);
   }
 });

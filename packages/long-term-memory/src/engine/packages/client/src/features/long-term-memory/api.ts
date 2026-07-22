@@ -16,6 +16,7 @@ export const queryKeys = {
   pendingDrafts: ["long-term-memory", "pending-drafts"] as const,
   integrity: ["long-term-memory", "integrity"] as const,
   preview: ["long-term-memory", "import-preview"] as const,
+  lorebookPreview: ["long-term-memory", "lorebook-import-preview"] as const,
   activity: ["long-term-memory", "activity"] as const,
   scopeTargetsRoot: ["long-term-memory", "scope-targets"] as const,
   scopeTargets: (chatId: string | null | undefined) =>
