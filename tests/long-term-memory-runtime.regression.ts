@@ -11,6 +11,7 @@ async function main() {
     parseLtmRecallIndex,
     rebuildLongTermMemoryIndexes,
   } = await import(`${source}/rebuild.ts`);
+  const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/index-state.ts`);
   const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
@@ -76,7 +77,7 @@ async function main() {
   const storage = services.get("long-term-memory:storage").storage;
   const runtime = services.get("long-term-memory:runtime");
   const timestamp = "2026-07-17T00:00:00.000Z";
-  const note = (id: string, chatId: string, text: string) => ({
+  const note = (id: string, chatId: string, text: string, overrides: Record<string, unknown> = {}) => ({
     id,
     title: id,
     type: "world",
@@ -90,6 +91,7 @@ async function main() {
     createdAt: timestamp,
     updatedAt: timestamp,
     version: 1,
+    ...overrides,
   });
 
   try {
@@ -115,6 +117,10 @@ async function main() {
     await storage.createNote(note("world_visible", "chat-a", "The cobalt archive key is beneath the observatory."));
     await storage.createNote(note("world_visible_second", "chat-a", "The cobalt archive has a brass warding seal."));
     await storage.createNote(note("world_hidden", "chat-b", "The cobalt archive key is hidden in another chat."));
+    await storage.createNote(note("world_archived", "chat-a", "The archived cobalt archive key is unavailable.", { status: "archived" }));
+    await storage.createNote(note("thread_resolved", "chat-a", "The resolved cobalt archive thread is closed.", { type: "thread", status: "resolved" }));
+    await storage.createNote(note("world_game_only", "chat-a", "The game-only cobalt archive is elsewhere.", { modes: ["game"] }));
+    await storage.createNote(note("world_tagged", "chat-a", "The brass warding marker is recorded here.", { tags: ["cobalt_tag"] }));
     await rebuildLongTermMemoryIndexes({ root: storage.root });
     const recallIndexPath = longTermMemoryRecallIndexPath(storage.root);
     const currentRecallIndex = JSON.parse(await readFile(recallIndexPath, "utf8"));
@@ -137,6 +143,22 @@ async function main() {
       true,
       "legacy index cleanup must not rewrite a readable derived file",
     );
+    await writeFile(
+      ltmIndexStatePath(storage.root),
+      JSON.stringify({
+        version: 1,
+        revision: 1,
+        dirty: false,
+        rebuildState: "idle",
+        lastPublishedGenerationId: "legacy-generation",
+      }),
+    );
+    assert.equal(
+      "lastPublishedGenerationId" in await readLtmIndexState(storage.root),
+      false,
+      "legacy generation state must normalize without retaining removed fields",
+    );
+    const indexBeforeRecall = await readFile(recallIndexPath, "utf8");
     const explained = await retrieveLongTermMemory({
       root: storage.root,
       queryText: "cobalt archive",
@@ -151,6 +173,11 @@ async function main() {
     assert.equal(explained.rejected.length, 1);
     assert.equal(explained.rejected[0].rejectionReason, "lower_rank");
     assert.equal(explained.chunks[0].lanes.length > 0, true);
+    assert.equal(
+      await readFile(recallIndexPath, "utf8"),
+      indexBeforeRecall,
+      "recall must not rewrite a valid expanded legacy index",
+    );
     const thresholded = await retrieveLongTermMemory({
       root: storage.root,
       queryText: "world_visible cobalt archive",
@@ -164,6 +191,56 @@ async function main() {
       thresholded.chunks.map((chunk: any) => chunk.chunk.noteId),
       ["world_visible"],
       "minimum score must apply to fused relevance, not a candidate's strongest lane",
+    );
+    const resolvedExcluded = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "resolved cobalt archive",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      maxChunks: 10,
+      maxTokens: 4096,
+    });
+    assert.equal(resolvedExcluded.chunks.some((chunk: any) => chunk.chunk.noteId === "thread_resolved"), false);
+    const archivedExcluded = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "archived cobalt archive",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      maxChunks: 10,
+      maxTokens: 4096,
+    });
+    assert.equal(archivedExcluded.chunks.some((chunk: any) => chunk.chunk.noteId === "world_archived"), false);
+    const modeMismatchExcluded = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "game-only cobalt archive",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      maxChunks: 10,
+      maxTokens: 4096,
+    });
+    assert.equal(modeMismatchExcluded.chunks.some((chunk: any) => chunk.chunk.noteId === "world_game_only"), false);
+    const resolvedIncluded = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "resolved cobalt archive",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      includeResolved: true,
+      maxChunks: 10,
+      maxTokens: 4096,
+    });
+    assert.equal(resolvedIncluded.chunks.some((chunk: any) => chunk.chunk.noteId === "thread_resolved"), true);
+    const tagRecall = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "#cobalt_tag",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      maxChunks: 10,
+      maxTokens: 4096,
+    });
+    assert.equal(tagRecall.chunks.some((chunk: any) => chunk.chunk.noteId === "world_tagged"), true);
+    assert.equal(
+      resolvedExcluded.chunks.some((chunk: any) => ["world_archived", "world_game_only"].includes(chunk.chunk.noteId)),
+      false,
     );
 
     const input = {

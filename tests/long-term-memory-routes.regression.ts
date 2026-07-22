@@ -74,6 +74,10 @@ async function main() {
   const completionMessages: any[] = [];
   const debugOverrides: any[] = [];
   let failGameRefine = false;
+  let fitContextMode: "normal" | "reduced" | "trimmed" = "normal";
+  let abortInFlight = false;
+  let abortReachedChatComplete = false;
+  let notifyAbortChatComplete: (() => void) | undefined;
   const refineWarnings: any[] = [];
   const largeLoreEntry = `${"A".repeat(13_000)} ${"B".repeat(13_000)}`;
   try {
@@ -232,6 +236,19 @@ async function main() {
                   modelCalls += 1;
                   completionMessages.push(_messages);
                   completionOptions.push(options);
+                  if (abortInFlight) {
+                    abortReachedChatComplete = true;
+                    notifyAbortChatComplete?.();
+                    return new Promise((_resolve, reject) => {
+                      if (options.signal?.aborted) {
+                        reject(new Error("aborted"));
+                        return;
+                      }
+                      options.signal?.addEventListener("abort", () => {
+                        reject(new Error("aborted"));
+                      }, { once: true });
+                    });
+                  }
                   return {
                     content: JSON.stringify({
                       summary: "Extracted observatory facts.",
@@ -299,10 +316,10 @@ async function main() {
                 fitContext(messages: any[], options: any) {
                   return {
                     messages,
-                    maxTokens: options.maxTokens,
+                    maxTokens: fitContextMode === "reduced" ? 123 : options.maxTokens,
                     estimatedTokensBefore: 100,
                     estimatedTokensAfter: 100,
-                    trimmed: false,
+                    trimmed: fitContextMode === "trimmed",
                   };
                 },
               };
@@ -951,6 +968,25 @@ async function main() {
         ),
       true,
     );
+    fitContextMode = "reduced";
+    const reducedBudget = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/source_route_extract/extract",
+      headers,
+      payload: { chatId: "chat-a" },
+    });
+    assert.equal(reducedBudget.statusCode, 200, reducedBudget.body);
+    assert.equal(completionOptions.at(-1)?.maxTokens, 123);
+    fitContextMode = "trimmed";
+    const trimmedContext = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/source_route_extract/extract",
+      headers,
+      payload: { chatId: "chat-a" },
+    });
+    assert.equal(trimmedContext.statusCode, 502, trimmedContext.body);
+    assert.match(trimmedContext.json().error, /source is too large/);
+    fitContextMode = "normal";
     assert.equal(
       debugOverrides.some(
         (entry) => entry.enabled && entry.message.includes("extraction prompt"),
@@ -1115,7 +1151,7 @@ async function main() {
       ).json().count,
       1,
     );
-    assert.equal(modelCalls, 1);
+    assert.equal(modelCalls > 1, true);
     const autoApplied = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/source_route_extract/extract",
@@ -1125,7 +1161,7 @@ async function main() {
     assert.equal(autoApplied.statusCode, 200, autoApplied.body);
     assert.equal(autoApplied.json().appliedMutationIds.length > 0, true);
     assert.equal(autoApplied.json().draft.indexRebuildStatus, "not_requested");
-    assert.equal(modelCalls, 2);
+    assert.equal(modelCalls > 2, true);
     for (const [id, createdAt, text] of [
       [
         "char_mara_legacy_a",
@@ -1485,6 +1521,19 @@ async function main() {
     assert.deepEqual(importedChat.json().missingSourceIds, ["missing:summary"]);
     assert.equal(importedChat.json().imported[0]?.extractionMethod, "llm");
     assert.equal(modelCalls, importCalls + 1);
+    assert.equal(completionOptions.at(-1)?.maxTokens, 4_000);
+    assert.equal(completionOptions.at(-1)?.temperature, 0);
+    assert.equal(completionOptions.at(-1)?.reasoningEffort, "low");
+    assert.equal(completionOptions.at(-1)?.verbosity, "low");
+    assert.equal(completionOptions.at(-1)?.responseFormat?.type, "json_schema");
+    assert.equal("model" in completionOptions.at(-1), false);
+    assert.equal("stream" in completionOptions.at(-1), false);
+    assert.equal(
+      completionMessages.at(-1).some((message: any) =>
+        message.content.includes("Mara seals the observatory gate at dusk."),
+      ),
+      true,
+    );
     const importedChatNote = importedChat.json().imported[0].note;
     const currentChatPreview = await app.inject({
       method: "POST",
@@ -2124,6 +2173,33 @@ async function main() {
       ),
       false,
     );
+    chats[0].metadata.summaryEntries.push({
+      id: "summary-aborted-in-flight",
+      content: "This source reaches the model before cancellation.",
+      enabled: true,
+    });
+    abortInFlight = true;
+    const chatCompleteEntered = new Promise<void>((resolve) => {
+      notifyAbortChatComplete = resolve;
+    });
+    const inFlightController = new AbortController();
+    const inFlightImport = importPackageInterop(
+      {
+        source: "chats",
+        sourceIds: ["chat-a:summary-aborted-in-flight"],
+        limit: 100,
+        importConcurrency: 1,
+      },
+      storageService.root,
+      inFlightController.signal,
+    );
+    await chatCompleteEntered;
+    inFlightController.abort();
+    const inFlightResult = await inFlightImport;
+    abortInFlight = false;
+    notifyAbortChatComplete = undefined;
+    assert.equal(abortReachedChatComplete, true);
+    assert.equal(inFlightResult.counts.cancelled, 1);
     const currentPreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",

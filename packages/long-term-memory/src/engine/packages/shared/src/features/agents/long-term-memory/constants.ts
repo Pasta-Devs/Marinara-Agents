@@ -30,13 +30,6 @@ export const DEFAULT_LTM_ALLOWED_STREAMS = [
   "anchor",
 ] as const satisfies readonly LtmEvidenceUnitBucket[];
 
-export const IMPORTANCE_LEVELS = {
-  critical: { emoji: "🔴", value: 5, label: "Critical" },
-  major: { emoji: "🟠", value: 4, label: "Major" },
-  moderate: { emoji: "🟡", value: 3, label: "Moderate" },
-  minor: { emoji: "🟢", value: 2, label: "Minor" },
-} as const;
-
 export const RELATIONSHIP_DIMENSIONS = [
   "trust",
   "respect",
@@ -49,8 +42,6 @@ export const RELATIONSHIP_DIMENSIONS = [
   "lust",
   "protectiveness",
 ] as const;
-
-export const DEFAULT_RELATIONSHIP_BASELINE = 50;
 
 export const QUEST_THREAD_SECTION_KEYS = [
   "objective",
@@ -69,12 +60,6 @@ export const CORE_LTM_EXTRACTION_RULES = [
   "Relationship_state units describing a change must include a caused_by link to a timeline_event from the same extraction.",
   "For character_fact and relationship_state, copy source-visible character names into subjectNames; never choose database subject keys.",
   "Do not emit the same fact twice. Near-duplicate units in the same extraction are rejected.",
-].join("\n");
-
-export const LTM_EXTRACTION_EXAMPLE = [
-  "Example unit shape:",
-  '{"bucket":"timeline_event","subjectId":"alice_confession","subjectNames":[],"sectionKey":"event","text":"Alice confessed the map was stolen to protect Rowan.","importance":"major","links":[{"target":"char_alice","relation":"affects_character","aspect":"development"}],"confidence":0.92,"salience":0.8,"status":"active"}',
-  '{"bucket":"relationship_state","subjectId":"alice_rowan","subjectNames":["Alice","Rowan"],"sectionKey":"state","text":"Alice and Rowan\'s trust is strained by the confession but not broken.","importance":"major","dimensions":{"trust":38,"tension":72},"dimensionChanges":{"trust":-18,"tension":24},"links":[{"target":"timeline_alice_confession","relation":"caused_by"}],"confidence":0.9,"salience":0.82,"status":"active"}',
 ].join("\n");
 
 export const DEFAULT_LTM_EXTRACTION_PROMPT = [
@@ -361,58 +346,6 @@ export type LtmRecallWeights = {
   graphWeight: number;
   keywordWeight: number;
 };
-
-export function clampLtmRecallWeight(
-  value: unknown,
-  fallback: number,
-  min = 0,
-  max = 2,
-) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(min, Math.min(max, value))
-    : fallback;
-}
-
-export function readLtmRecallWeightOverrides(
-  metadata: Record<string, unknown>,
-  fallback: LtmRecallWeights,
-): LtmRecallWeights {
-  const read = (
-    value: unknown,
-    defaultValue: number,
-    min: number,
-    max: number,
-  ) =>
-    typeof value === "number" && Number.isFinite(value)
-      ? Math.max(min, Math.min(max, value))
-      : defaultValue;
-  return {
-    semanticWeight: read(
-      metadata.longTermMemorySemanticWeight,
-      fallback.semanticWeight,
-      0,
-      1,
-    ),
-    lexicalWeight: read(
-      metadata.longTermMemoryLexicalWeight,
-      fallback.lexicalWeight,
-      0,
-      1,
-    ),
-    graphWeight: read(
-      metadata.longTermMemoryGraphWeight,
-      fallback.graphWeight,
-      0,
-      1,
-    ),
-    keywordWeight: read(
-      metadata.longTermMemoryKeywordWeight,
-      fallback.keywordWeight,
-      0,
-      1,
-    ),
-  };
-}
 
 export function parseLongTermMemoryRecallStyle(
   value: unknown,

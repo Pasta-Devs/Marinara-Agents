@@ -31,8 +31,17 @@ const artifactManifest = JSON.parse(
     encoding: "utf8",
   }),
 ) as Record<string, unknown>;
+const previousArtifactPath = join(repoRoot, "artifacts/long-term-memory-1.0.16.zip");
+const previousArtifactUrl = "https://1.1.1.1/artifacts/long-term-memory-1.0.16.zip";
+const previousArtifactBytes = readFileSync(previousArtifactPath);
+const previousArtifactManifest = JSON.parse(
+  execFileSync("unzip", ["-p", previousArtifactPath, "manifest.json"], {
+    encoding: "utf8",
+  }),
+) as Record<string, unknown>;
 const originalFetch = globalThis.fetch;
 let catalogOnline = true;
+let catalogVersion: "previous" | "current" = "previous";
 
 process.env.AUTO_CREATE_DEFAULT_CONNECTION = "false";
 process.env.DATA_DIR = dataDir;
@@ -47,17 +56,19 @@ function sha256(value: Buffer) {
   return createHash("sha256").update(value).digest("hex");
 }
 function catalog() {
+  const previous = catalogVersion === "previous";
+  const bytes = previous ? previousArtifactBytes : artifactBytes;
   return {
     schemaVersion: 1,
     generatedAt: "2026-07-18T00:00:00.000Z",
     packages: [
       {
-        manifest: artifactManifest,
+        manifest: previous ? previousArtifactManifest : artifactManifest,
         category: "misc",
         artifact: {
-          url: artifactUrl,
-          sha256: sha256(artifactBytes),
-          bytes: artifactBytes.byteLength,
+          url: previous ? previousArtifactUrl : artifactUrl,
+          sha256: sha256(bytes),
+          bytes: bytes.byteLength,
         },
       },
     ],
@@ -103,6 +114,8 @@ async function main() {
       });
     if (url === artifactUrl)
       return new Response(artifactBytes, { status: 200 });
+    if (url === previousArtifactUrl)
+      return new Response(previousArtifactBytes, { status: 200 });
     throw new Error(`Unexpected lifecycle URL: ${url}`);
   }) as typeof fetch;
   let app: {
@@ -114,9 +127,13 @@ async function main() {
   try {
     assert.equal(artifactManifest.id, "long-term-memory");
     assert.equal(artifactManifest.version, packageManifest.version);
+    assert.equal(previousArtifactManifest.version, "1.0.16");
     const { capabilityPackageManager } = await importEngine<{
       capabilityPackageManager: {
         install(id: string): Promise<{ version: string; status: string }>;
+        updateInstalledPackagesToLatest(): Promise<{
+          updated: Array<{ id: string; previousVersion: string; version: string }>;
+        }>;
         uninstall(id: string): Promise<unknown>;
       };
     }>(
@@ -127,7 +144,7 @@ async function main() {
     }>("packages/server/src/app.ts");
     const installed =
       await capabilityPackageManager.install("long-term-memory");
-    assert.equal(installed.version, artifactManifest.version);
+    assert.equal(installed.version, "1.0.16");
     catalogOnline = false;
     app = await buildApp();
     assert.equal(
@@ -174,6 +191,12 @@ async function main() {
       200,
     );
     assertSnapshot(durableRoot, beforeRestart);
+    const legacyStatePath = join(durableRoot, "indexes/state.json");
+    const legacyState = JSON.parse(readFileSync(legacyStatePath, "utf8"));
+    writeFileSync(
+      legacyStatePath,
+      JSON.stringify({ ...legacyState, lastPublishedGenerationId: "legacy-generation" }),
+    );
     const backup = await app.inject({
       method: "POST",
       url: "/api/backup/download",
@@ -189,13 +212,34 @@ async function main() {
     );
     await app.close();
     app = null;
+    catalogVersion = "current";
+    catalogOnline = true;
+    const updated = await capabilityPackageManager.updateInstalledPackagesToLatest();
+    assert.deepEqual(updated.updated, [
+      { id: "long-term-memory", previousVersion: "1.0.16", version: "1.0.17" },
+    ]);
+    catalogOnline = false;
+    app = await buildApp();
+    assert.equal(
+      (await app.inject({ method: "GET", url: "/api/long-term-memory/status" }))
+        .statusCode,
+      200,
+    );
+    assert.equal(
+      JSON.parse(readFileSync(legacyStatePath, "utf8")).lastPublishedGenerationId,
+      "legacy-generation",
+      "legacy generation state must remain readable during activation",
+    );
+    const afterMigration = snapshot(durableRoot);
+    await app.close();
+    app = null;
     await capabilityPackageManager.uninstall("long-term-memory");
     assert.ok(
       !existsSync(
         join(dataDir, "capability-packages/versions/long-term-memory"),
       ),
     );
-    assertSnapshot(durableRoot, beforeRestart);
+    assertSnapshot(durableRoot, afterMigration);
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("long-term-memory");
@@ -207,7 +251,7 @@ async function main() {
         .statusCode,
       200,
     );
-    assertSnapshot(durableRoot, beforeRestart);
+    assertSnapshot(durableRoot, afterMigration);
     console.log(
       "Long-Term Memory exact-artifact lifecycle: install, offline restart, backup inclusion, uninstall, reinstall, and durable-byte preservation ok",
     );

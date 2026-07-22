@@ -36,7 +36,7 @@ package-owned settings, note creation/listing, search, and route cleanup:
 
 ```bash
 cd ../Marinara-Engine
-MARINARA_ENGINE_ROOT=/tmp/opencode/marinara-engine-ltm-host pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-routes.regression.ts"
+MARINARA_ENGINE_ROOT="$PWD" pnpm --filter @marinara-engine/server exec tsx "$PWD/../Marinara-Agents/tests/long-term-memory-routes.regression.ts"
 ```
 
 ## Exact-artifact lifecycle regression
@@ -55,11 +55,12 @@ cd ../Marinara-Engine
 pnpm --filter @marinara-engine/server exec tsx ../Marinara-Agents/tests/hierarchical-maps-lifecycle.regression.ts
 ```
 
-`long-term-memory-lifecycle.regression.ts` installs the current generated LTM
-artifact, proves offline activation and restart, includes the durable vault in
-full backup, and verifies uninstall/reinstall preserves the vault byte-for-byte:
+`long-term-memory-lifecycle.regression.ts` installs immutable LTM `1.0.16`,
+populates its vault and legacy index state, updates to the generated `1.0.17`
+artifact, then proves offline activation, backup inclusion, uninstall/reinstall,
+and durable vault preservation:
 
 ```bash
 cd ../Marinara-Engine
-MARINARA_ENGINE_ROOT=/tmp/opencode/marinara-engine-ltm-host pnpm --filter @marinara-engine/server exec tsx ../Marinara-Agents/tests/long-term-memory-lifecycle.regression.ts
+MARINARA_ENGINE_ROOT="$PWD" pnpm --filter @marinara-engine/server exec tsx ../Marinara-Agents/tests/long-term-memory-lifecycle.regression.ts
 ```
