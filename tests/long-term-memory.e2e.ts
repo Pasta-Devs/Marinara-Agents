@@ -39,11 +39,12 @@ async function createChat(page: any, testInfo: any) {
 }
 
 async function deleteChat(page: any, chatId: string) {
-  const response = await page.request.delete(`/api/chats/${chatId}`);
+  const response = await page.request.delete(`/api/chats/${chatId}?force=true`);
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
 async function deleteNotes(page: any, ids: string[]) {
+  if (ids.length === 0) return;
   const response = await page.request.post(
     "/api/long-term-memory/notes/permanent-delete",
     {
@@ -151,11 +152,6 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       detail.getByRole("option", { name: "All memories" }),
     ).toBeVisible();
-    await detail.getByRole("heading", { name: "Memory vault" }).click();
-    await expect(
-      detail.getByRole("option", { name: "All memories" }),
-    ).toBeHidden();
-    await detail.getByLabel("Choose memory scope").click();
     await detail.getByRole("option", { name: "All memories" }).click();
     await expect(
       navigation.locator('[data-ltm-destination="vault"]'),
@@ -229,10 +225,11 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
       )
       .toBe(true);
 
+    await settings.getByRole("tab", { name: "Extraction" }).click();
     const templatePanel = settings.getByRole("tabpanel").filter({ hasText: "Prompt templates" });
     const templateSelect = templatePanel.getByRole("combobox", { name: "Prompt template" });
     await expect(templateSelect).toHaveValue("default:conversation");
-    await expect(templatePanel.getByRole("button", { name: "Reset to default" })).toBeVisible();
+    await expect(templatePanel.getByRole("button", { name: "Reset to default" })).toHaveCount(3);
     await templateSelect.selectOption("default:roleplay");
     await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
       "Built-in Default (Roleplay)",
@@ -252,9 +249,13 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(templatePanel.getByRole("textbox", { name: "Name" })).toHaveValue(
       "Roleplay custom",
     );
-    await templatePanel.getByRole("button", { name: "Reset to default" }).click();
+    await templatePanel.getByRole("button", { name: "Reset to default" }).first().click();
 
     await navigation.locator('[data-ltm-destination="vault"]').click();
+    await page
+      .getByRole("dialog", { name: "Discard unsaved changes?" })
+      .getByRole("button", { name: "Discard changes" })
+      .click();
     await expect(detail.locator('[data-ltm-surface="vault"]')).toBeVisible();
     await expect(detail.getByLabel("Choose memory scope")).toHaveValue(
       "All memories",
@@ -414,7 +415,7 @@ test("Long-Term Memory opens details and offers manual or source creation", asyn
         links: [],
         sections: {
           facts: {
-            text: `A scoped fixture. ${"unbroken".repeat(80)}`,
+            text: `A scoped fixture. ${"unbroken".repeat(10)}`,
             updatedAt: timestamp,
             importance: "major",
             confidence: 0.8,

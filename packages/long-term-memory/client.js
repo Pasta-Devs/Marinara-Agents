@@ -15,9 +15,9 @@ ${R.message}`)}async function yn(f){await gu(`opening ${f.label}`)&&(x(f),g(""),
             grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
             grid-template-areas:
               "controls workbench"
-              "feedback feedback"
               "bulk workbench"
-              "list workbench";
+              "list workbench"
+              "feedback feedback";
             align-items: start;
             gap: 1rem;
           }
