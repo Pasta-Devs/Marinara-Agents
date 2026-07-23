@@ -512,7 +512,8 @@ async function main() {
       "Edited dependency",
     );
     assert.deepEqual(
-      (await storage.getNote("timeline_legacy_evidence"))?.sections.event.evidence,
+      (await storage.getNote("timeline_legacy_evidence"))?.sections.event
+        .evidence,
       [`source_note:${canonicalSourceId}`],
     );
     assert.equal(
@@ -625,6 +626,88 @@ async function main() {
     assert.equal(
       (await storage.getNote("world_edited_dependency"))?.links[0]?.target,
       "timeline_existing_evidence",
+    );
+
+    await storage.createNote({
+      id: "timeline_existing_unbound",
+      title: "Existing unbound event",
+      type: "timeline_event",
+      status: "active",
+      modes: ["roleplay"],
+      scope: legacySource.scope,
+      tags: ["typed_memory", "timeline_event"],
+      keywords: [],
+      links: [],
+      sections: {
+        event: {
+          text: "An event awaiting source grounding.",
+          updatedAt: timestamp,
+        },
+      },
+    });
+    await storage.createNote({
+      id: "rel_existing_unbound",
+      title: "Existing unbound relationship",
+      type: "relationship",
+      status: "active",
+      modes: ["roleplay"],
+      scope: legacySource.scope,
+      tags: ["typed_memory", "relationship"],
+      keywords: [],
+      links: [{ target: "timeline_existing_unbound", relation: "caused_by" }],
+      sections: {
+        state: { text: "Their trust is changing.", updatedAt: timestamp },
+      },
+    });
+    const groundEventMutationId = randomUUID();
+    const updateRelationshipMutationId = randomUUID();
+    const existingEventDependencyDraft = await draftStore.createDraft({
+      source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+      scope: legacySource.scope,
+      modes: legacySource.modes,
+      response: {
+        summary:
+          "Ground an existing event before applying a relationship change.",
+        mutations: [
+          {
+            id: groundEventMutationId,
+            kind: "add_link",
+            risk: "low",
+            confidence: 0.9,
+            summary: "Ground existing event",
+            evidence: [`source_note:${canonicalSourceId}`],
+            noteId: "timeline_existing_unbound",
+            link: { target: canonicalSourceId, relation: "extracted_from" },
+          },
+          {
+            id: updateRelationshipMutationId,
+            claimKind: "change",
+            kind: "update_section",
+            risk: "low",
+            confidence: 0.9,
+            summary: "Update existing relationship",
+            evidence: [`source_note:${canonicalSourceId}`],
+            noteId: "rel_existing_unbound",
+            sectionKey: "state",
+            section: {
+              text: "Their trust became strained.",
+              updatedAt: timestamp,
+            },
+          },
+        ],
+      },
+    });
+    const existingEventDependencyResult = await applyLongTermMemoryDraft(
+      existingEventDependencyDraft.id,
+      {
+        root,
+        mutationIds: [updateRelationshipMutationId],
+        rebuildIndexes: false,
+      },
+    );
+    assert.deepEqual(
+      new Set(existingEventDependencyResult.appliedMutationIds),
+      new Set([groundEventMutationId, updateRelationshipMutationId]),
     );
 
     const staticMutationId = randomUUID();
@@ -1027,7 +1110,8 @@ async function main() {
         .every((mutation) =>
           mutation.note.links.some(
             (link) =>
-              link.relation === "extracted_from" && link.target === loreSource.id,
+              link.relation === "extracted_from" &&
+              link.target === loreSource.id,
           ),
         ),
       true,
@@ -1215,7 +1299,9 @@ async function main() {
         sourceId: "chat-a",
         entryId: "unchecked",
       },
-      sections: { source: { text: "Unchecked evidence.", updatedAt: timestamp } },
+      sections: {
+        source: { text: "Unchecked evidence.", updatedAt: timestamp },
+      },
     });
     await storage.projectNote("world_retract_unchecked", "world", () => ({
       ...noteInput,
@@ -1253,7 +1339,10 @@ async function main() {
       "world_retract_empty",
     ]);
     const retainedShared = await storage.getNote("world_retract_shared");
-    assert.equal(retainedShared?.sections.facts.text, "Shared durable fact.\n\nB-only durable fact.");
+    assert.equal(
+      retainedShared?.sections.facts.text,
+      "Shared durable fact.\n\nB-only durable fact.",
+    );
     assert.deepEqual(retainedShared?.sections.facts.evidence, [
       `source_note:${retractSourceB.id}`,
     ]);
@@ -1272,7 +1361,10 @@ async function main() {
       (await storage.getNote("world_retract_manual"))?.sections.facts.evidence,
       undefined,
     );
-    assert.deepEqual((await storage.getNote("world_retract_manual"))?.links, []);
+    assert.deepEqual(
+      (await storage.getNote("world_retract_manual"))?.links,
+      [],
+    );
 
     process.stdout.write(
       "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",

@@ -738,7 +738,7 @@ export default function ReviewQueue({
               `/drafts/${draftId}/accept`,
               "POST",
               {
-                mutationIds,
+                mutationIds: [...acceptedIds],
                 ...(editedMutations.length ? { editedMutations } : {}),
               },
             );

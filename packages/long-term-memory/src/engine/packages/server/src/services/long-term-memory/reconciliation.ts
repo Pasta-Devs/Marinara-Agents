@@ -160,7 +160,17 @@ async function preflight(
     }
   }
   const ids = [...new Set([...links, ...required, ...createIds])];
-  const existing = await storage.getNotesByIds(ids);
+  let existing = await storage.getNotesByIds(ids);
+  const storedLinkTargets = [...required].flatMap(
+    (id) => existing.get(id)?.links.map((link) => link.target) ?? [],
+  );
+  for (const target of storedLinkTargets) links.add(target);
+  if (storedLinkTargets.length) {
+    existing = new Map([
+      ...existing,
+      ...(await storage.getNotesByIds(storedLinkTargets)),
+    ]);
+  }
   for (const id of links)
     if (!createIds.has(id) && !existing.has(id))
       throw new Error(`Long-term memory draft link target not found: ${id}`);
@@ -231,7 +241,10 @@ async function preflight(
         throw new Error(
           `Timeline event ${note.id} must link to draft source ${draft.source.sourceNoteId}.`,
         );
-    } else if (changedIds.has(noteId) && !note.links.some((link) => eventIds.has(link.target))) {
+    } else if (
+      changedIds.has(noteId) &&
+      !note.links.some((link) => eventIds.has(link.target))
+    ) {
       throw new Error(
         `Long-term memory ${note.id} must link to a timeline event grounded in the same source.`,
       );
@@ -397,9 +410,12 @@ async function applyInner(
           !selectedIds.has(mutation.id) &&
           targets.has(mutation.note.id),
       );
-      const existing = await storage.getNotesByIds(
-        dependencies.map((mutation) => mutation.note.id),
-      );
+      const existing = await storage.getNotesByIds([
+        ...dependencies.map((mutation) => mutation.note.id),
+        ...draft.mutations.flatMap((mutation) =>
+          mutation.kind === "create_note" ? [] : [mutation.noteId],
+        ),
+      ]);
       const included = dependencies.filter(
         (mutation) => !existing.has(mutation.note.id),
       );
@@ -416,23 +432,48 @@ async function applyInner(
               : [],
           ),
         );
+        const eventMutationsByNoteId = new Map<string, LtmDraftMutation[]>();
+        for (const mutation of draft.mutations) {
+          const note =
+            mutation.kind === "create_note"
+              ? mutation.note
+              : existing.get(mutation.noteId);
+          if (note?.type !== "timeline_event") continue;
+          eventMutationsByNoteId.set(
+            mutation.kind === "create_note"
+              ? mutation.note.id
+              : mutation.noteId,
+            [
+              ...(eventMutationsByNoteId.get(
+                mutation.kind === "create_note"
+                  ? mutation.note.id
+                  : mutation.noteId,
+              ) ?? []),
+              mutation,
+            ],
+          );
+        }
         const selectedChangedNoteIds = new Set(
           selected.flatMap((mutation) =>
             mutation.claimKind === "change"
-              ? [mutation.kind === "create_note" ? mutation.note.id : mutation.noteId]
+              ? [
+                  mutation.kind === "create_note"
+                    ? mutation.note.id
+                    : mutation.noteId,
+                ]
               : [],
           ),
         );
         const selectedEventTargets = new Set(
           selected.flatMap((mutation) =>
-            mutation.kind === "create_note"
+            (mutation.kind === "create_note"
               ? mutation.note.links
-                  .filter((link) => eventCreateByNoteId.has(link.target))
-                  .map((link) => link.target)
-              : mutation.kind === "add_link" &&
-                  eventCreateByNoteId.has(mutation.link.target)
-                ? [mutation.link.target]
-                : [],
+              : mutation.kind === "add_link"
+                ? [mutation.link]
+                : (existing.get(mutation.noteId)?.links ?? [])
+            )
+              .filter((link) => eventMutationsByNoteId.has(link.target))
+              .map((link) => link.target),
           ),
         );
         const eventLinks = draft.mutations.filter(
@@ -460,14 +501,21 @@ async function applyInner(
           }
         }
         for (const target of selectedEventTargets) {
-          const create = eventCreateByNoteId.get(target);
+          const event = existing.get(target);
           if (
-            create &&
-            !selected.some((mutation) => mutation.id === create.id)
-          ) {
-            selected.unshift(create);
-            autoIncludedMutationIds.push(create.id);
-            added = true;
+            event?.links.some(
+              (link) =>
+                link.relation === "extracted_from" &&
+                link.target === draft.source.sourceNoteId,
+            )
+          )
+            continue;
+          for (const mutation of eventMutationsByNoteId.get(target) ?? []) {
+            if (!selected.some((item) => item.id === mutation.id)) {
+              selected.unshift(mutation);
+              autoIncludedMutationIds.push(mutation.id);
+              added = true;
+            }
           }
         }
       }

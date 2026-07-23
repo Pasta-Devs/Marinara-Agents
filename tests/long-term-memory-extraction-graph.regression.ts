@@ -4,21 +4,28 @@ import { randomUUID } from "node:crypto";
 async function main() {
   const source =
     "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const {
-    compileEvidenceUnitExtraction,
-    parseEvidenceUnitPayload,
-  } = await import(`${source}/evidence-unit-extraction.ts`);
+  const { compileEvidenceUnitExtraction, parseEvidenceUnitPayload } =
+    await import(`${source}/evidence-unit-extraction.ts`);
+  const { compileLtmEvidenceUnits } = await import(
+    `${source}/evidence-unit-compiler.ts`
+  );
   const { deduplicateUnits } = await import(`${source}/dedup.ts`);
   const { subjectsEqual } = await import(`${source}/subject-identity.ts`);
   const { projectLtmDraftMutationGroup } = await import(
-    `${source}/draft-projector.ts`,
+    `${source}/draft-projector.ts`
   );
-  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
+  const { sourceHashForLtmSourceNote } = await import(
+    `${source}/source-hash.ts`
+  );
 
   const timestamp = "2026-07-21T00:00:00.000Z";
   const sourceNote = (
     id: string,
-    provenance: { kind: "chat_summary" | "lorebook"; sourceId: string; entryId: string },
+    provenance: {
+      kind: "chat_summary" | "lorebook";
+      sourceId: string;
+      entryId: string;
+    },
     text: string,
   ) => ({
     id,
@@ -103,7 +110,10 @@ async function main() {
   ]);
   assert.equal(linklessCharacter.accounting.keptUnits, 1);
   assert.equal(linklessCharacter.compiledResponse.mutations.length, 1);
-  assert.equal(linklessCharacter.compiledResponse.mutations[0]?.claimKind, "static");
+  assert.equal(
+    linklessCharacter.compiledResponse.mutations[0]?.claimKind,
+    "static",
+  );
 
   const relationshipWithoutCause = compile(chat, [
     unit(chat, {
@@ -168,6 +178,43 @@ async function main() {
   assert.equal(relationshipWithEvent.accounting.keptUnits, 2);
   assert.equal(relationshipWithEvent.compiledResponse.mutations.length, 2);
 
+  const evidenceCharacter = {
+    id: "char_mara",
+    title: "Mara",
+    type: "character" as const,
+    status: "active" as const,
+    modes: ["roleplay" as const],
+    scope: {},
+    tags: [],
+    keywords: [],
+    links: [],
+    sections: {
+      abilities: {
+        text: "Mara reads old scripts.",
+        updatedAt: timestamp,
+        evidence: Array.from({ length: 20 }, (_, index) => `old:${index}`),
+      },
+    },
+  };
+  const currentEvidence = compileLtmEvidenceUnits({
+    units: [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "mara",
+        sectionKey: "abilities",
+        text: "Mara learned the observatory script.",
+        subjectNames: ["Mara"],
+      }),
+    ],
+    existingNotes: [evidenceCharacter],
+    scope: {},
+    modes: ["roleplay"],
+  });
+  assert.equal(currentEvidence.mutations[0]?.kind, "append_section");
+  assert.deepEqual(currentEvidence.mutations[0]?.evidence, [
+    `source_note:${chat.id}`,
+  ]);
+
   const invalidEventWithDependent = compile(chat, [
     unit(chat, {
       bucket: "timeline_event",
@@ -181,7 +228,9 @@ async function main() {
       sectionKey: "facts",
       text: "The argument remained consequential.",
       claimKind: "change",
-      links: [{ target: "timeline_invalid_argument", relation: "evidenced_by" }],
+      links: [
+        { target: "timeline_invalid_argument", relation: "evidenced_by" },
+      ],
     }),
   ]);
   assert.equal(invalidEventWithDependent.accounting.keptUnits, 0);
@@ -207,7 +256,10 @@ async function main() {
     }),
   ]);
   assert.equal(invalidEventWithStaticFact.accounting.keptUnits, 1);
-  assert.equal(invalidEventWithStaticFact.compiledResponse.mutations[0]?.claimKind, "static");
+  assert.equal(
+    invalidEventWithStaticFact.compiledResponse.mutations[0]?.claimKind,
+    "static",
+  );
   assert.equal(
     invalidEventWithDependent.diagnostics.some(
       (diagnostic) =>
@@ -239,14 +291,17 @@ async function main() {
   assert.equal(repairedLoreCharacter.accounting.keptUnits, 1);
   assert.equal(
     repairedLoreCharacter.compiledResponse.mutations.some(
-      (mutation) => mutation.kind === "create_note" && mutation.note.type === "timeline_event",
+      (mutation) =>
+        mutation.kind === "create_note" &&
+        mutation.note.type === "timeline_event",
     ),
     false,
     "static lore must not synthesize a timeline event",
   );
   assert.equal(
     repairedLoreCharacter.compiledResponse.mutations.some(
-      (mutation) => mutation.kind === "create_note" && mutation.note.type === "character",
+      (mutation) =>
+        mutation.kind === "create_note" && mutation.note.type === "character",
     ),
     true,
     "direct source evidence must keep the linkless static character fact",
@@ -300,19 +355,28 @@ async function main() {
   assert.equal(staticRelationshipDelta.accounting.keptUnits, 0);
   assert.equal(
     staticRelationshipDelta.diagnostics.some(
-      (diagnostic) => diagnostic.details?.validatorCode === "static_relationship_dimension_change",
+      (diagnostic) =>
+        diagnostic.details?.validatorCode ===
+        "static_relationship_dimension_change",
     ),
     true,
   );
 
-  const dedupUnit = (text: string, subjectId = "dedup_subject", sectionKey = "facts") =>
+  const dedupUnit = (
+    text: string,
+    subjectId = "dedup_subject",
+    sectionKey = "facts",
+  ) =>
     unit(chat, {
       bucket: "world_fact",
       subjectId,
       sectionKey,
       text,
     });
-  const shared = Array.from({ length: 17 }, (_, index) => `shared${index}`).join(" ");
+  const shared = Array.from(
+    { length: 17 },
+    (_, index) => `shared${index}`,
+  ).join(" ");
   const exactlyThreshold = dedupUnit(shared);
   const thresholdMatch = dedupUnit(`${shared} extraA extraB extraC`);
   const belowThreshold = dedupUnit(`${shared} belowA belowB belowC belowD`);
@@ -340,12 +404,17 @@ async function main() {
   );
   assert.equal(dedupResult.deduplicated.length, 7);
   assert.equal(
-    dedupResult.diagnostics.filter((diagnostic) => diagnostic.code === "deduplicated_evidence_unit").length,
+    dedupResult.diagnostics.filter(
+      (diagnostic) => diagnostic.code === "deduplicated_evidence_unit",
+    ).length,
     3,
     "dedup must characterize same-batch, existing-note, threshold, and exact matches",
   );
 
-  const subject = (key: string, ref?: { kind: "character"; id: string }) => ({ key, ...(ref ? { ref } : {}) });
+  const subject = (key: string, ref?: { kind: "character"; id: string }) => ({
+    key,
+    ...(ref ? { ref } : {}),
+  });
   assert.equal(subjectsEqual(undefined, undefined), false);
   assert.equal(subjectsEqual([subject("character:mara")], []), false);
   assert.equal(
@@ -355,7 +424,13 @@ async function main() {
     ),
     true,
   );
-  assert.equal(subjectsEqual([subject("character:mara"), subject("character:rowan")], [subject("character:rowan"), subject("character:mara")]), false);
+  assert.equal(
+    subjectsEqual(
+      [subject("character:mara"), subject("character:rowan")],
+      [subject("character:rowan"), subject("character:mara")],
+    ),
+    false,
+  );
   const existingCharacter = {
     id: "char_mara_subject",
     title: "Mara",
@@ -388,7 +463,11 @@ async function main() {
             evidence: [`source_note:${chat.id}`],
           },
         ],
-        context: { source: { sourceNoteId: chat.id }, scope: {}, modes: ["roleplay"] },
+        context: {
+          source: { sourceNoteId: chat.id },
+          scope: {},
+          modes: ["roleplay"],
+        },
         timestamp,
       }),
     (error: any) => error.code === "subject_identity_mismatch",
