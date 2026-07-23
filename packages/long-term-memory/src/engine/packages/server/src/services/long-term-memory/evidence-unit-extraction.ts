@@ -105,7 +105,7 @@ export interface RunLongTermMemoryEvidenceUnitExtractionOptions {
   instruction?: string;
   systemPrompt?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
-  verbosity?: "low" | "medium" | "high";
+  verbosity?: "none" | "low" | "medium" | "high";
   maxOutputTokens?: number;
   temperature?: number;
   maxExistingNoteTokens?: number;
@@ -135,7 +135,7 @@ type ParsedEvidenceUnitPayload = {
 type LanguageModelMessage = Parameters<PackageLanguageModel["chatComplete"]>[0][number];
 type LanguageModelChatOptions = NonNullable<Parameters<PackageLanguageModel["chatComplete"]>[1]>;
 type LtmEvidenceUnitChatOptions = LanguageModelChatOptions & {
-  reasoningEffort: NonNullable<LanguageModelChatOptions["reasoningEffort"]>;
+  reasoningEffort?: NonNullable<LanguageModelChatOptions["reasoningEffort"]>;
 };
 type LtmEvidenceUnitLinkRelation = LtmEvidenceUnit["links"][number]["relation"];
 
@@ -355,7 +355,7 @@ async function chatCompleteWithReasoningFallback({
       });
     }
 
-    if (chatOptions.reasoningEffort !== "none" || !isReasoningNoneUnsupportedError(err)) {
+    if (!chatOptions.reasoningEffort || !isReasoningNoneUnsupportedError(err)) {
       logger.warn(err, "[ltm] LLM chat complete failed for evidence unit extraction");
       throw err;
     }
@@ -873,6 +873,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
   const promptChars = messages.reduce((total, message) => total + message.content.length, 0);
   const started = Date.now();
   const requestedReasoningEffort = options.reasoningEffort ?? DEFAULT_LTM_EXTRACTION_REASONING_EFFORT;
+  const requestedVerbosity = options.verbosity ?? DEFAULT_LTM_EXTRACTION_VERBOSITY;
   const requestedMaxOutputTokens = options.maxOutputTokens ?? DEFAULT_LTM_EXTRACTION_MAX_TOKENS;
   const debugMode = isPackageDebugAgentsEnabled();
   const maxOutputTokens = options.languageModel.maxOutputTokens
@@ -881,8 +882,8 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
   const chatOptions: LtmEvidenceUnitChatOptions = {
     temperature: options.temperature ?? 0,
     maxTokens: maxOutputTokens,
-    reasoningEffort: requestedReasoningEffort,
-    verbosity: options.verbosity ?? DEFAULT_LTM_EXTRACTION_VERBOSITY,
+    ...(requestedReasoningEffort === "none" ? {} : { reasoningEffort: requestedReasoningEffort }),
+    ...(requestedVerbosity === "none" ? {} : { verbosity: requestedVerbosity }),
     signal: options.signal,
     responseFormat: evidenceUnitResponseFormat({
       allowedBuckets: options.allowedBuckets ?? DEFAULT_LTM_ALLOWED_STREAMS,
@@ -911,7 +912,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
     },
     details: {
       reasoningEffort: requestedReasoningEffort,
-      verbosity: options.verbosity ?? DEFAULT_LTM_EXTRACTION_VERBOSITY,
+      verbosity: requestedVerbosity,
       maxOutputTokens,
       temperature: options.temperature ?? 0,
       aiKeywordExtraction: options.aiKeywordExtraction === true,

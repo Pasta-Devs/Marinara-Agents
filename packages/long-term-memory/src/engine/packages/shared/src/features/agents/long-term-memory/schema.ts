@@ -50,7 +50,7 @@ export const ltmExtractionReasoningEffortSchema = z.enum([
   "high",
 ]);
 
-export const ltmExtractionVerbositySchema = z.enum(["low", "medium", "high"]);
+export const ltmExtractionVerbositySchema = z.enum(["none", "low", "medium", "high"]);
 
 const ltmGlobalSettingsShape = z
   .object({

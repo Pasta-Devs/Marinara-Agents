@@ -2072,6 +2072,31 @@ async function main() {
       }).activePromptTemplateIdsByMode?.game,
       "stored_elsewhere",
     );
+    const disabledExtraction = await app.inject({
+      method: "PUT",
+      url: "/api/long-term-memory/extraction-settings",
+      headers,
+      payload: { reasoningEffort: "none", verbosity: "none" },
+    });
+    assert.equal(disabledExtraction.statusCode, 200, disabledExtraction.body);
+    assert.equal(disabledExtraction.json().reasoningEffort, "none");
+    assert.equal(disabledExtraction.json().verbosity, "none");
+    const disabledExtractionRun = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/source_route_extract/extract",
+      headers,
+      payload: { chatId: "chat-a" },
+    });
+    assert.equal(disabledExtractionRun.statusCode, 200, disabledExtractionRun.body);
+    assert.equal("reasoningEffort" in completionOptions.at(-1), false);
+    assert.equal("verbosity" in completionOptions.at(-1), false);
+    const restoredExtraction = await app.inject({
+      method: "PUT",
+      url: "/api/long-term-memory/extraction-settings",
+      headers,
+      payload: { reasoningEffort: "low", verbosity: "low" },
+    });
+    assert.equal(restoredExtraction.statusCode, 200, restoredExtraction.body);
     for (const schema of [
       ltmExtractionSettingsSchema,
       ltmExtractionSettingsPatchSchema,

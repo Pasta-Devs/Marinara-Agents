@@ -216,7 +216,7 @@ async function main() {
     catalogOnline = true;
     const updated = await capabilityPackageManager.updateInstalledPackagesToLatest();
     assert.deepEqual(updated.updated, [
-      { id: "long-term-memory", previousVersion: "1.0.16", version: "1.0.17" },
+      { id: "long-term-memory", previousVersion: "1.0.16", version: "1.0.18" },
     ]);
     catalogOnline = false;
     app = await buildApp();

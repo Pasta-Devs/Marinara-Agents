@@ -988,6 +988,7 @@ export default function MemorySettings({
                 })
               }
             >
+              <option value="none">Off</option>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
@@ -1005,6 +1006,7 @@ export default function MemorySettings({
                 })
               }
             >
+              <option value="none">Off</option>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
