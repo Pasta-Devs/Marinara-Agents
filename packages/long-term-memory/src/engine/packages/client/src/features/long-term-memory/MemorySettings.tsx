@@ -41,12 +41,13 @@ type RepairAction =
   | "rebuild_indexes"
   | "quarantine_malformed_notes"
   | "backfill_imported_source_titles";
-type SettingsTab = "recall" | "extraction" | "maintenance";
+type SettingsTab = "recall" | "extraction" | "maintenance" | "debug";
 
 const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
   { id: "recall", label: "Recall" },
   { id: "extraction", label: "Extraction" },
   { id: "maintenance", label: "Maintenance" },
+  { id: "debug", label: "Debug" },
 ];
 
 const repairActions: Array<{
@@ -246,58 +247,51 @@ export default function MemorySettings({
     setSavedExtraction(next);
   }, [extraction.data, extractionFormState]);
 
-  const dirty = Boolean(
-    (globalForm && savedGlobal && !same(globalForm, savedGlobal)) ||
-    (extractionFormState &&
-      savedExtraction &&
-      !same(extractionFormState, savedExtraction)),
+  const globalDirty = Boolean(
+    globalForm && savedGlobal && !same(globalForm, savedGlobal),
   );
+  const extractionDirty = Boolean(
+    extractionFormState &&
+      savedExtraction &&
+      !same(extractionFormState, savedExtraction),
+  );
+  const dirty = globalDirty || extractionDirty;
   useEffect(() => {
     onDirtyChange?.(dirty);
     return () => onDirtyChange?.(false);
   }, [dirty, onDirtyChange]);
 
-  const saveGlobal = async () => {
-    if (!globalForm) return;
+  const saveSettings = async () => {
+    if (!globalDirty && !extractionDirty) return;
     setPending("global");
     setMessage("");
     try {
-      const saved = settingsForm(
-        await request<LtmGlobalSettings>("/settings", "PUT", globalForm),
-      );
-      setGlobalForm(saved);
-      setSavedGlobal(saved);
-      await invalidateLtmQueries(queryClient, [
-        queryKeys.settings,
-        queryKeys.chatDefaults,
-      ]);
-      setMessage("Recall settings saved.");
+      if (globalDirty && globalForm) {
+        const saved = settingsForm(
+          await request<LtmGlobalSettings>("/settings", "PUT", globalForm),
+        );
+        setGlobalForm(saved);
+        setSavedGlobal(saved);
+        await invalidateLtmQueries(queryClient, [
+          queryKeys.settings,
+          queryKeys.chatDefaults,
+        ]);
+      }
+      if (extractionDirty && extractionFormState) {
+        const saved = extractionForm(
+          await request<LtmExtractionSettingsPatch>(
+            "/extraction-settings",
+            "PUT",
+            extractionPayload(extractionFormState),
+          ),
+        );
+        setExtractionFormState(saved);
+        setSavedExtraction(saved);
+        await invalidateLtmQueries(queryClient, [queryKeys.extractionSettings]);
+      }
+      setMessage("Memory settings saved.");
     } catch (error) {
-      setMessage(errorMessage(error, "Could not save recall settings."));
-    } finally {
-      setPending("");
-    }
-  };
-
-  const saveExtraction = async () => {
-    if (!extractionFormState) return;
-    setPending("extraction");
-    setMessage("");
-    try {
-      // The GET response includes display-only resolved fields; strip them only from the PUT payload.
-      const saved = extractionForm(
-        await request<LtmExtractionSettingsPatch>(
-          "/extraction-settings",
-          "PUT",
-          extractionPayload(extractionFormState),
-        ),
-      );
-      setExtractionFormState(saved);
-      setSavedExtraction(saved);
-      await invalidateLtmQueries(queryClient, [queryKeys.extractionSettings]);
-      setMessage("Extraction settings saved.");
-    } catch (error) {
-      setMessage(errorMessage(error, "Could not save extraction settings."));
+      setMessage(errorMessage(error, "Could not save memory settings."));
     } finally {
       setPending("");
     }
@@ -747,19 +741,28 @@ export default function MemorySettings({
           </p>
         </div>
         {dirty ? (
-          <Button
-            destructive
-            disabled={pending !== ""}
-            onClick={() => void discard()}
-          >
-            Discard edits
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              primary
+              disabled={pending !== ""}
+              onClick={() => void saveSettings()}
+            >
+              Save settings
+            </Button>
+            <Button
+              destructive
+              disabled={pending !== ""}
+              onClick={() => void discard()}
+            >
+              Discard changes
+            </Button>
+          </div>
         ) : null}
       </div>
       <div
         role="tablist"
         aria-label="Memory settings sections"
-        className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-1 sm:grid-cols-3"
+        className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-1 sm:grid-cols-4"
       >
         {settingsTabs.map((tab, index) => (
           <button
@@ -952,13 +955,6 @@ export default function MemorySettings({
             }
           />
         </label>
-        <Button
-          primary
-          disabled={pending !== "" || same(globalForm, savedGlobal)}
-          onClick={() => void saveGlobal()}
-        >
-          Save recall settings
-        </Button>
       </section>
 
       <section
@@ -1117,15 +1113,6 @@ export default function MemorySettings({
             confirm(props, title, text, label, true)
           }
         />
-        <Button
-          primary
-          disabled={
-            pending !== "" || same(extractionFormState, savedExtraction)
-          }
-          onClick={() => void saveExtraction()}
-        >
-          Save extraction settings
-        </Button>
       </section>
 
       <section
@@ -1488,25 +1475,24 @@ export default function MemorySettings({
             </div>
           ) : null}
         </div>
-        <div className="space-y-3 border-t border-[var(--border)] pt-3">
-          <Toggle
-            label="Record debug activity"
-            checked={globalForm.longTermMemoryDebug}
-            onChange={(value) =>
-              setGlobalForm({ ...globalForm, longTermMemoryDebug: value })
-            }
-          />
-          <Button
-            primary
-            disabled={pending !== "" || same(globalForm, savedGlobal)}
-            onClick={() => void saveGlobal()}
-          >
-            Save activity settings
-          </Button>
-          {activeTab === "maintenance" ? (
-            <ActivityView props={props} onOpenMemory={onOpenMemory} />
-          ) : null}
-        </div>
+      </section>
+      <section
+        id="settings-panel-debug"
+        role="tabpanel"
+        aria-labelledby="settings-tab-debug"
+        hidden={activeTab !== "debug"}
+        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
+      >
+        <Toggle
+          label="Record debug activity"
+          checked={globalForm.longTermMemoryDebug}
+          onChange={(value) =>
+            setGlobalForm({ ...globalForm, longTermMemoryDebug: value })
+          }
+        />
+        {activeTab === "debug" ? (
+          <ActivityView props={props} onOpenMemory={onOpenMemory} />
+        ) : null}
       </section>
     </section>
   );

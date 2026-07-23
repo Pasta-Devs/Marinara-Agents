@@ -125,6 +125,41 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
   const chat = await createChat(page, testInfo);
 
   try {
+    const operationId = "00000000-0000-4000-8000-000000000001";
+    const eventId = "00000000-0000-4000-8000-000000000002";
+    await page.route("**/api/long-term-memory/debug-log?*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("limit") !== "200") return route.continue();
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          events: [
+            {
+              id: eventId,
+              ts: new Date().toISOString(),
+              operationId,
+              phase: "llm",
+              action: "evidence_unit_response",
+              status: "ok",
+              counts: {
+                promptTokens: 12,
+                completionTokens: 8,
+                responseChars: 99,
+              },
+            },
+          ],
+        }),
+      });
+    });
+    if (testInfo.project.name.includes("mobile")) {
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: undefined,
+        });
+        document.execCommand = () => true;
+      });
+    }
     await openLongTermMemory(page, chat.id, testInfo);
 
     const detail = page.locator('[data-ltm-surface="detail"]');
@@ -203,7 +238,7 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     const settings = detail.locator('[data-ltm-surface="memory-settings"]');
     const recallTab = settings.getByRole("tab", { name: "Recall" });
     await expect(recallTab).toHaveAttribute("aria-selected", "true");
-    await expect(settings.getByRole("tab")).toHaveCount(3);
+    await expect(settings.getByRole("tab")).toHaveCount(4);
     await expect(settings.getByRole("tab", { name: "Backup" })).toHaveCount(0);
     await expect(settings.getByRole("tabpanel")).toHaveCount(1);
     await expect(
@@ -228,12 +263,26 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       settings.getByRole("heading", { name: "Vault Maintenance" }),
     ).toBeVisible();
+    await expect(settings.locator('[data-ltm-surface="activity"]')).toHaveCount(
+      0,
+    );
+    await settings.getByRole("tab", { name: "Debug" }).click();
     await expect(
       settings.getByRole("heading", { name: "Debug Activity" }),
     ).toBeVisible();
+    const activity = settings.locator('[data-ltm-surface="activity"]');
+    await expect(activity).toBeVisible();
+    await expect(activity).not.toContainText("No message recorded.");
+    await expect(activity).toContainText("Prompt: 12 Tokens");
+    await expect(activity).toContainText("Response: 8 Tokens");
+    await expect(activity).not.toContainText("responseChars");
+    await activity.getByText("Technical details", { exact: true }).click();
+    await activity.getByRole("button", { name: "Copy JSON" }).click();
+    await expect(activity.getByRole("button", { name: "Copied" })).toBeVisible();
+    await settings.getByRole("tab", { name: "Debug" }).press("ArrowLeft");
     await expect(
-      settings.locator('[data-ltm-surface="activity"]'),
-    ).toBeVisible();
+      settings.getByRole("tab", { name: "Maintenance" }),
+    ).toHaveAttribute("aria-selected", "true");
     await settings.getByRole("tab", { name: "Maintenance" }).press("ArrowLeft");
     await expect(
       settings.getByRole("tab", { name: "Extraction" }),
@@ -288,6 +337,8 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
       .getByRole("button", { name: "Reset to default" })
       .first()
       .click();
+    await expect(settings.getByRole("button", { name: "Save settings" })).toBeVisible();
+    await expect(settings.getByRole("button", { name: "Discard changes" })).toBeVisible();
 
     await navigation.locator('[data-ltm-destination="vault"]').click();
     await page

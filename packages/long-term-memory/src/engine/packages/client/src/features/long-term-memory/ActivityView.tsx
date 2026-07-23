@@ -68,7 +68,13 @@ function describeEvent(
   if (event.error) return humanizeDebugText(event.error.message, noteTitles);
   if (event.message) return humanizeDebugText(event.message, noteTitles);
   if (event.uiSummary) return humanizeDebugText(event.uiSummary, noteTitles);
-  return "No message recorded.";
+  const summary = event.details?.summary;
+  if (typeof summary === "string")
+    return humanizeDebugText(summary, noteTitles);
+  const reason = event.details?.reason;
+  if (typeof reason === "string")
+    return `${actionLabel(event.action)}: ${humanizeLabel(reason)}.`;
+  return `${actionLabel(event.action)}: ${humanizeLabel(event.status)}.`;
 }
 
 function compactSummary(value: string) {
@@ -136,21 +142,47 @@ function eventMetadata(event: LtmDebugEvent) {
     status: _status,
     message: _message,
     uiSummary: _uiSummary,
+    counts,
     ...metadata
   } = event;
-  return metadata;
+  const visibleCounts = Object.fromEntries(
+    Object.entries(counts ?? {}).filter(([label]) => !/chars$/i.test(label)),
+  );
+  return Object.keys(visibleCounts).length
+    ? { ...metadata, counts: visibleCounts }
+    : metadata;
 }
 
 function summarizeCounts(events: LtmDebugEvent[]) {
-  const counts = events.findLast((event) => event.counts)?.counts;
-  if (!counts) return "";
-  return Object.entries(counts)
-    .slice(0, 3)
-    .map(
-      ([label, count]) =>
-        `${count.toLocaleString()} ${humanizeLabel(label).toLowerCase()}`,
-    )
-    .join(" | ");
+  const counts = new Map<string, number>();
+  for (const event of events)
+    for (const [label, count] of Object.entries(event.counts ?? {}))
+      counts.set(label, count);
+  if (!counts.size) return "";
+  const summary: string[] = [];
+  const promptTokens = counts.get("promptTokens");
+  const responseTokens =
+    counts.get("completionTokens") ?? counts.get("responseTokens");
+  if (promptTokens != null)
+    summary.push(`Prompt: ${promptTokens.toLocaleString()} Tokens`);
+  if (responseTokens != null)
+    summary.push(`Response: ${responseTokens.toLocaleString()} Tokens`);
+  summary.push(
+    ...[...counts.entries()]
+      .filter(
+        ([label]) =>
+          !/chars$/i.test(label) &&
+          label !== "promptTokens" &&
+          label !== "completionTokens" &&
+          label !== "responseTokens",
+      )
+      .slice(0, 3 - summary.length)
+      .map(
+        ([label, count]) =>
+          `${count.toLocaleString()} ${humanizeLabel(label).toLowerCase()}`,
+      ),
+  );
+  return summary.join(" | ");
 }
 
 async function confirm(
@@ -259,17 +291,45 @@ export default function ActivityView({
 
   const copyJson = async (eventId: string, metadata: object) => {
     setActionError("");
+    const text = JSON.stringify(metadata, null, 2);
+    let copied = false;
     try {
-      await navigator.clipboard.writeText(JSON.stringify(metadata, null, 2));
-      setCopiedEventId(eventId);
-      window.setTimeout(
-        () =>
-          setCopiedEventId((current) => (current === eventId ? null : current)),
-        2_000,
-      );
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      }
     } catch {
-      setActionError("Could not copy technical details.");
+      // Fall through to the legacy mobile-safe copy path.
     }
+    if (!copied) {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "-9999px";
+      document.body.appendChild(textarea);
+      try {
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, text.length);
+        if (!document.execCommand("copy")) throw new Error("Copy failed");
+        copied = true;
+      } catch {
+        copied = false;
+      } finally {
+        textarea.remove();
+      }
+    }
+    if (!copied) {
+      setActionError("Could not copy technical details.");
+      return;
+    }
+    setCopiedEventId(eventId);
+    window.setTimeout(
+      () =>
+        setCopiedEventId((current) => (current === eventId ? null : current)),
+      2_000,
+    );
   };
 
   return (
