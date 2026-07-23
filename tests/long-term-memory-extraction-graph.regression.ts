@@ -10,7 +10,12 @@ async function main() {
     `${source}/evidence-unit-compiler.ts`
   );
   const { deduplicateUnits } = await import(`${source}/dedup.ts`);
-  const { subjectsEqual } = await import(`${source}/subject-identity.ts`);
+  const {
+    analyzeTrustedLtmNoteSubjects,
+    buildTrustedLtmSubjectCatalog,
+    subjectsEqual,
+    trustedLtmIdentityNotesForSource,
+  } = await import(`${source}/subject-identity.ts`);
   const { projectLtmDraftMutationGroup } = await import(
     `${source}/draft-projector.ts`
   );
@@ -430,6 +435,85 @@ async function main() {
       [subject("character:rowan"), subject("character:mara")],
     ),
     false,
+  );
+  const identityNote = (id: string, title: string, subjects?: any[]) => ({
+    id,
+    title,
+    type: "character" as const,
+    status: "active" as const,
+    modes: ["roleplay" as const],
+    scope: {},
+    tags: [],
+    keywords: [],
+    links: [],
+    ...(subjects ? { subjects } : {}),
+    sections: { facts: { text: `${title} is trusted.`, updatedAt: timestamp } },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    version: 1,
+  });
+  const identityCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      {
+        kind: "character",
+        id: "seraphina",
+        name: "Seraphina Duvall",
+      },
+      { kind: "character", id: "other", name: "Sabrina Duvall" },
+    ],
+    notes: [],
+  });
+  const canonicalIdentityNote = identityNote(
+    "char_seraphina",
+    "Seraphina Duvall",
+    [identityCatalog.entries.find((entry: any) => entry.name === "Seraphina Duvall")!.subject],
+  );
+  identityCatalog.notes.push(canonicalIdentityNote);
+  assert.deepEqual(
+    trustedLtmIdentityNotesForSource({
+      sourceText: "Serafina Duvall entered the observatory.",
+      catalog: identityCatalog,
+    }).map((note: any) => note.id),
+    ["char_seraphina"],
+    "a unique spelling variation should select the trusted canonical identity note",
+  );
+  assert.deepEqual(
+    trustedLtmIdentityNotesForSource({
+      sourceText: "Duvall entered the observatory.",
+      catalog: identityCatalog,
+    }),
+    [],
+    "a surname-only mention must not select a trusted identity",
+  );
+  const legacySpellingNote = identityNote(
+    "char_serafina_legacy",
+    "Serafina Duvall",
+  );
+  identityCatalog.notes.push(legacySpellingNote);
+  assert.equal(
+    analyzeTrustedLtmNoteSubjects(identityCatalog).matches.find(
+      (match: any) => match.note.id === legacySpellingNote.id,
+    )?.basis,
+    "spelling_variation",
+    "identity repair should expose the conservative fuzzy match basis",
+  );
+  const ambiguousCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      { kind: "character", id: "one", name: "Seraphina Duvall" },
+      { kind: "character", id: "two", name: "Serafira Duvall" },
+    ],
+    notes: [],
+  });
+  ambiguousCatalog.notes.push(
+    identityNote("char_one", "Seraphina Duvall", [ambiguousCatalog.entries[0]!.subject]),
+  );
+  assert.deepEqual(
+    trustedLtmIdentityNotesForSource({
+      sourceText: "Serafina Duvall entered the observatory.",
+      catalog: ambiguousCatalog,
+    }),
+    [],
+    "ambiguous spelling variations must not select an identity",
   );
   const existingCharacter = {
     id: "char_mara_subject",

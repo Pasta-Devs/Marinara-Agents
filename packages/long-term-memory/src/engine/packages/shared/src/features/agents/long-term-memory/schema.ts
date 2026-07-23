@@ -1616,6 +1616,7 @@ export const ltmIdentityMatchBasisSchema = z.enum([
   "exact_name",
   "unique_alias",
   "trait_or_qualified_alias",
+  "spelling_variation",
   "unordered_pair",
 ]);
 

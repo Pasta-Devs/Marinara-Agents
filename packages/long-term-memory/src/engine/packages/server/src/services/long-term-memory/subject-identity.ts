@@ -76,6 +76,7 @@ export type TrustedLtmNoteSubjectIssue = {
 type CatalogIndex = {
   entries: TrustedLtmSubjectCatalogEntry[];
   byKey: Map<string, TrustedLtmSubjectCatalogEntry>;
+  byRef: Map<string, TrustedLtmSubjectCatalogEntry>;
   exact: Map<string, TrustedLtmSubjectCatalogEntry[]>;
   aliases: Map<string, TrustedLtmSubjectCatalogEntry[]>;
   tokens: string[];
@@ -384,7 +385,14 @@ export function buildTrustedLtmSubjectCatalog({
   for (const note of notes) {
     const subjects = note.subjects ?? [];
     for (const subject of subjects) {
-      const existing = mutable.get(subject.key);
+      const existing =
+        mutable.get(subject.key) ??
+        (subject.ref
+          ? [...mutable.values()].find(
+              (entry) =>
+                entry.subject.ref && subjectRefKey(entry.subject.ref) === subjectRefKey(subject.ref!),
+            )
+          : undefined);
       const noteName = note.type === "character" && subjects.length === 1 ? subjectNameFromNote(note) : "";
       if (existing) {
         if (noteName) existing.aliases.add(noteName);
@@ -456,7 +464,11 @@ export function analyzeTrustedLtmNoteSubjects(catalog: TrustedLtmSubjectCatalog)
   for (const note of catalog.notes.filter((candidate) => candidate.status !== "archived")) {
     const expectedSubjects = note.type === "character" ? 1 : 2;
     if (note.subjects) {
-      const entries = note.subjects.map((subject) => index.byKey.get(subject.key));
+      const entries = note.subjects.map(
+        (subject) =>
+          index.byKey.get(subject.key) ??
+          (subject.ref ? index.byRef.get(subjectRefKey(subject.ref)) : undefined),
+      );
       if (
         note.subjects.length !== expectedSubjects ||
         new Set(note.subjects.map((subject) => subject.key)).size !== expectedSubjects ||
@@ -544,6 +556,36 @@ export function analyzeTrustedLtmNoteSubjects(catalog: TrustedLtmSubjectCatalog)
   }
 
   return { matches, unresolved };
+}
+
+export function trustedLtmIdentityNotesForSource({
+  sourceText,
+  sourceTitle,
+  catalog,
+}: {
+  sourceText: string;
+  sourceTitle?: string;
+  catalog: TrustedLtmSubjectCatalog;
+}) {
+  if (catalog.entries.length === 0 || catalog.notes.length === 0) return [];
+  const index = buildCatalogIndex(catalog);
+  const detected = new Set<string>();
+  for (const value of [sourceText, sourceTitle ?? ""]) {
+    for (const name of value.matchAll(SOURCE_BACKED_NPC_NAME_PATTERN)) {
+      const match = matchLegacyCharacter(index, normalizeSubjectIdentifier(name[0], ""));
+      if (match.status === "matched") for (const entry of match.entries) detected.add(entry.subject.key);
+    }
+  }
+  if (detected.size === 0) return [];
+
+  const selected = new Map<string, TrustedLtmNoteSubjectMatch>();
+  for (const match of analyzeTrustedLtmNoteSubjects(catalog).matches) {
+    if (!match.subjects.every((subject) => detected.has(subject.key))) continue;
+    const key = `${match.note.type}\0${match.subjects.map((subject) => subject.key).join("\0")}`;
+    const current = selected.get(key);
+    if (!current || compareTrustedIdentityNotes(match, current) < 0) selected.set(key, match);
+  }
+  return [...selected.values()].map((match) => match.note).sort((left, right) => left.id.localeCompare(right.id));
 }
 
 export function prepareLtmSubjectIdentityContext({
@@ -1107,6 +1149,11 @@ function buildCatalogIndex(catalog: TrustedLtmSubjectCatalog): CatalogIndex {
   return {
     entries: [...catalog.entries],
     byKey: new Map(catalog.entries.map((entry) => [entry.subject.key, entry])),
+    byRef: new Map(
+      catalog.entries.flatMap((entry) =>
+        entry.subject.ref ? [[subjectRefKey(entry.subject.ref), entry] as const] : [],
+      ),
+    ),
     exact,
     aliases,
     tokens: uniqueStrings([...exact.keys(), ...aliases.keys()]).sort(
@@ -1169,7 +1216,51 @@ function matchDirect(index: CatalogIndex, token: string): SubjectMatch {
   const aliases = index.aliases.get(token) ?? [];
   if (aliases.length === 1) return { status: "matched", entries: aliases, basis: "unique_alias" };
   if (aliases.length > 1) return { status: "ambiguous", keys: aliases.map(subjectEntryKey), basis: "alias" };
+  const fuzzy = fuzzyMatches(index, token);
+  if (fuzzy.length === 1) return { status: "matched", entries: [fuzzy[0]!.entry], basis: "spelling_variation" };
+  if (fuzzy.length > 1) {
+    return { status: "ambiguous", keys: fuzzy.map(({ entry }) => subjectEntryKey(entry)), basis: "spelling_variation" };
+  }
   return { status: "untrusted", basis: "name" };
+}
+
+function fuzzyMatches(index: CatalogIndex, token: string) {
+  if (token.length < 5 || token.split("_").length > 3) return [];
+  const matches = new Map<string, { entry: TrustedLtmSubjectCatalogEntry; distance: number }>();
+  for (const entry of index.entries) {
+    for (const candidate of entryIdentityTokens(entry)) {
+      if (candidate.split("_").length !== token.split("_").length) continue;
+      const distance = damerauLevenshtein(token, candidate);
+      const maximum = candidate.length >= 8 ? 2 : 1;
+      if (distance > maximum) continue;
+      const current = matches.get(entry.subject.key);
+      if (!current || distance < current.distance) matches.set(entry.subject.key, { entry, distance });
+    }
+  }
+  const ranked = [...matches.values()].sort(
+    (left, right) => left.distance - right.distance || left.entry.subject.key.localeCompare(right.entry.subject.key),
+  );
+  if (ranked.length < 2 || ranked[0]!.distance < ranked[1]!.distance) return ranked.slice(0, 1);
+  return ranked.filter((candidate) => candidate.distance === ranked[0]!.distance);
+}
+
+function damerauLevenshtein(left: string, right: string) {
+  const rows = Array.from({ length: left.length + 1 }, (_, row) =>
+    Array.from({ length: right.length + 1 }, (_, column) => row + column),
+  );
+  for (let row = 1; row <= left.length; row += 1) {
+    for (let column = 1; column <= right.length; column += 1) {
+      rows[row]![column] = Math.min(
+        rows[row - 1]![column]! + 1,
+        rows[row]![column - 1]! + 1,
+        rows[row - 1]![column - 1]! + (left[row - 1] === right[column - 1] ? 0 : 1),
+        ...(row > 1 && column > 1 && left[row - 1] === right[column - 2] && left[row - 2] === right[column - 1]
+          ? [rows[row - 2]![column - 2]! + 1]
+          : []),
+      );
+    }
+  }
+  return rows[left.length]![right.length]!;
 }
 
 function matchTraitPrefix(index: CatalogIndex, raw: string): SubjectMatch {
@@ -1261,6 +1352,7 @@ function publicIdentityMatchBasis(basis: string): LtmIdentityMatchBasis {
   if (basis === "exact_name") return "exact_name";
   if (basis === "unique_alias") return "unique_alias";
   if (basis === "trait_or_qualified_alias") return "trait_or_qualified_alias";
+  if (basis === "spelling_variation") return "spelling_variation";
   return "unordered_pair";
 }
 
@@ -1268,7 +1360,16 @@ function identityBasisPriority(basis: string) {
   if (basis === "exact_name") return 0;
   if (basis === "unique_alias") return 1;
   if (basis === "trait_or_qualified_alias") return 2;
-  return 3;
+  if (basis === "spelling_variation") return 3;
+  return 4;
+}
+
+function compareTrustedIdentityNotes(left: TrustedLtmNoteSubjectMatch, right: TrustedLtmNoteSubjectMatch) {
+  return (
+    (left.exactFullName ? 0 : 1) - (right.exactFullName ? 0 : 1) ||
+    identityBasisPriority(left.basis) - identityBasisPriority(right.basis) ||
+    compareNoteAge(left.note, right.note)
+  );
 }
 
 function chooseIdentityTarget(
@@ -1490,7 +1591,7 @@ function readStringArray(value: unknown) {
 
 function expandedAliases(name: string, aliases: string[]) {
   const words = name.trim().split(/\s+/g).filter(Boolean);
-  return uniqueStrings([...aliases, ...(words.length > 1 ? [words[0], words[words.length - 1]] : [])]);
+  return uniqueStrings([...aliases, ...(words.length > 1 ? [words[0]] : [])]);
 }
 
 export function normalizeSubjectIdentifier(value: unknown, fallback = "subject") {

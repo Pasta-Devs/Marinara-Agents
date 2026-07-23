@@ -1211,6 +1211,24 @@ async function main() {
         candidate.duplicateNoteIds.includes("char_mara_legacy_b"),
       );
     assert.equal(identityCandidate.canonicalNoteId, "char_mara_legacy_a");
+    const noOpIdentityApply = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/identity-repair/apply",
+      headers,
+      payload: {
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        repairs: [
+          {
+            candidateId: identityCandidate.id,
+            canonicalNoteId: identityCandidate.canonicalNoteId,
+            excludedNoteIds: identityCandidate.duplicateNoteIds,
+            sectionChoices: [],
+          },
+        ],
+      },
+    });
+    assert.equal(noOpIdentityApply.statusCode, 400, noOpIdentityApply.body);
+    assert.equal(noOpIdentityApply.json().code, "identity_repair_noop");
     const swappedIdentityPreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/identity-repair/preview",

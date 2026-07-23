@@ -28,7 +28,12 @@ import { retrieveLongTermMemory } from "./retrieval.js";
 import { canUpdateLtmScopedTarget, resolveScopedEvidenceUnitTargets, scopedVariantNoteId } from "./scoped-targets.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
-import { prepareLtmSubjectIdentityContext, subjectsEqual, type TrustedLtmSubjectCatalog } from "./subject-identity.js";
+import {
+  prepareLtmSubjectIdentityContext,
+  subjectsEqual,
+  trustedLtmIdentityNotesForSource,
+  type TrustedLtmSubjectCatalog,
+} from "./subject-identity.js";
 import { noteIdForLtmDraftMutation, projectLtmDraftOntoNotes } from "./draft-projector.js";
 import { stableJsonHash } from "./chunking.js";
 import { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent } from "./source-hash.js";
@@ -265,10 +270,12 @@ async function getExistingTypedNotes(options: {
   storage: LongTermMemoryStorage;
   root?: string;
   sourceText: string;
+  sourceTitle?: string;
   scope: LtmScope;
   mode?: LtmMode;
   maxChunks: number;
   maxTokens: number;
+  trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
 }) {
   const retrieval = await retrieveLongTermMemory({
     root: options.root,
@@ -279,9 +286,19 @@ async function getExistingTypedNotes(options: {
     maxChunks: options.maxChunks,
     maxTokens: options.maxTokens,
   });
-  const noteIds = Array.from(new Set(retrieval.chunks.map((chunk) => chunk.chunk.noteId)));
+  const identityNotes = options.trustedSubjectCatalog
+    ? trustedLtmIdentityNotesForSource({
+        sourceText: options.sourceText,
+        sourceTitle: options.sourceTitle,
+        catalog: options.trustedSubjectCatalog,
+      })
+    : [];
+  const noteIds = Array.from(new Set([
+    ...identityNotes.map((note) => note.id),
+    ...retrieval.chunks.map((chunk) => chunk.chunk.noteId),
+  ]));
   const notesById = await options.storage.getNotesByIds(noteIds);
-  return noteIds
+  const notes = noteIds
     .map((noteId) => notesById.get(noteId))
     .filter((note): note is LtmNote => {
       if (!note) return false;
@@ -289,6 +306,10 @@ async function getExistingTypedNotes(options: {
       if (!canUpdateLtmScopedTarget(note.scope, options.scope)) return false;
       return true;
     });
+  const identityIds = new Set(identityNotes.map((note) => note.id));
+  return notes.sort(
+    (left, right) => Number(identityIds.has(right.id)) - Number(identityIds.has(left.id)) || left.id.localeCompare(right.id),
+  );
 }
 
 export async function extractLongTermMemoryFromSourceNote(
@@ -387,10 +408,12 @@ async function extractLongTermMemoryFromSourceNoteInner(
     storage,
     root: options.root,
     sourceText: extractionText,
+    sourceTitle: sourceNote.title,
     scope,
     mode: resolvedMode,
     maxChunks: extractionConfig.existingNoteMaxChunks,
     maxTokens: extractionConfig.existingNoteMaxTokens,
+    trustedSubjectCatalog: options.trustedSubjectCatalog,
   });
   await recordLtmDebugEvent({
     operationId: options.operationId,

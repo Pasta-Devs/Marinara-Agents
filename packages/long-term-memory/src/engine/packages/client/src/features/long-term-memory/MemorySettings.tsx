@@ -376,8 +376,12 @@ export default function MemorySettings({
           .map((candidate) => candidate.id),
       );
        setIdentitySectionChoices({});
-       setIncludedIdentityNoteIds({});
-       setIdentityCanonicalNoteIds({});
+        setIncludedIdentityNoteIds(
+          Object.fromEntries(
+            preview.candidates.map((candidate) => [candidate.id, candidate.duplicateNoteIds]),
+          ),
+        );
+        setIdentityCanonicalNoteIds({});
     } catch (error) {
       setMessage(errorMessage(error, "Could not preview identity repairs."));
     } finally {
@@ -473,6 +477,10 @@ export default function MemorySettings({
         repair.excludedNoteIds.length,
       0,
     );
+    if (includedDuplicateCount === 0) {
+      setMessage("Include at least one duplicate note before applying identity repairs.");
+      return;
+    }
     setPending("identity-confirm");
     setMessage("");
     let confirmed = false;
