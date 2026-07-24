@@ -55,7 +55,8 @@ async function main() {
         | "timeline_event"
         | "character_fact"
         | "relationship_state"
-        | "world_fact";
+        | "world_fact"
+        | "tone";
       subjectId: string;
       sectionKey: string;
       text: string;
@@ -83,13 +84,14 @@ async function main() {
     note: ReturnType<typeof sourceNote>,
     units: ReturnType<typeof unit>[],
     skipStructuredBackfill = true,
+    existingNotes: any[] = [],
   ) =>
     compileEvidenceUnitExtraction({
       unitResponse: { summary: "Extraction graph regression", units },
       providerCandidates: units.length,
       sourceText: note.sections.source.text,
       sourceNote: note,
-      existingNotes: [],
+      existingNotes,
       scope: {},
       modes: ["roleplay"],
       mode: "roleplay",
@@ -100,7 +102,7 @@ async function main() {
   const chat = sourceNote(
     "source_chat_graph_regression",
     { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-a" },
-    "Mara learned the observatory script. Alice and Rowan trusted each other less after the argument.",
+    "Mara learned the observatory script and is guarded. Alice and Rowan trusted each other less after the argument.",
   );
 
   const linklessCharacter = compile(chat, [
@@ -335,6 +337,83 @@ async function main() {
     [{ target: chat.id, relation: "extracted_from" }],
     "source_note:<id> extracted_from targets must normalize to the source note id",
   );
+  const oversizedPayload = parseEvidenceUnitPayload(
+    {
+      summary: "x".repeat(2_001),
+      units: Array.from({ length: 81 }, (_, index) =>
+        unit(chat, {
+          bucket: "world_fact",
+          subjectId: `bounded_${index}`,
+          sectionKey: "facts",
+          text: `Bounded candidate ${index}.`,
+        }),
+      ),
+    },
+    sourceHash,
+  );
+  assert.equal(oversizedPayload.response.summary.length, 2_000);
+  assert.equal(oversizedPayload.response.units.length, 81);
+  assert.equal(oversizedPayload.totalCandidates, 81);
+
+  const malformedPayload = parseEvidenceUnitPayload(
+    { units: Array.from({ length: 100 }, () => null) },
+    sourceHash,
+  );
+  assert.equal(malformedPayload.parserRejections, 100);
+  assert.equal(malformedPayload.droppedCandidates.length, 80);
+  const countedMalformedCompilation = compileEvidenceUnitExtraction({
+    unitResponse: malformedPayload.response,
+    providerCandidates: malformedPayload.totalCandidates,
+    parserRejectionCount: malformedPayload.parserRejections,
+    parserDroppedCandidates: malformedPayload.droppedCandidates,
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    existingNotes: [],
+    scope: {},
+    modes: ["roleplay"],
+    mode: "roleplay",
+    sourceHash,
+    skipStructuredBackfill: true,
+  });
+  assert.equal(countedMalformedCompilation.accounting.parserRejections, 100);
+  assert.equal(countedMalformedCompilation.outcome.droppedUnits, 100);
+  assert.equal(countedMalformedCompilation.outcome.droppedCandidates.length, 80);
+  assert.equal(countedMalformedCompilation.outcome.droppedCandidateDetailsTruncated, true);
+  assert.throws(
+    () => parseEvidenceUnitPayload({ units: Array.from({ length: 1_000 }, () => null) }, sourceHash),
+    /maximum is 999/,
+  );
+
+  const existingTone = {
+    ...chat,
+    id: "tone_mara",
+    type: "tone" as const,
+    tags: ["typed_memory"],
+    sections: {
+      observations: { text: "- Mara is reserved.", updatedAt: timestamp },
+      profile: { text: "Tone profile: reserved.", updatedAt: timestamp },
+    },
+  };
+  const toneCompilation = compileLtmEvidenceUnits({
+    units: [
+      unit(chat, {
+        bucket: "tone",
+        subjectId: "mara",
+        sectionKey: "observations",
+        text: "Mara is guarded.",
+      }),
+    ],
+    existingNotes: [existingTone],
+    scope: {},
+    modes: ["roleplay"],
+    createdAt: timestamp,
+  });
+  const profileMutation = toneCompilation.mutations.find(
+    (mutation) =>
+      mutation.kind === "update_section" && mutation.sectionKey === "profile",
+  );
+  assert.ok(profileMutation, "tone extraction must update the derived profile");
+  assert.deepEqual(profileMutation?.evidence, [`source_note:${chat.id}`]);
 
   const legacyMissingClaimKind = compile(chat, [
     unit(chat, {

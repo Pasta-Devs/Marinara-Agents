@@ -216,7 +216,7 @@ async function main() {
     catalogOnline = true;
     const updated = await capabilityPackageManager.updateInstalledPackagesToLatest();
     assert.deepEqual(updated.updated, [
-      { id: "long-term-memory", previousVersion: "1.0.16", version: "1.0.18" },
+      { id: "long-term-memory", previousVersion: "1.0.16", version: artifactManifest.version },
     ]);
     catalogOnline = false;
     app = await buildApp();
@@ -225,6 +225,13 @@ async function main() {
         .statusCode,
       200,
     );
+    const invalidImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers: { "x-marinara-csrf": "1" },
+      payload: { source: "invalid" },
+    });
+    assert.equal(invalidImport.statusCode, 400, invalidImport.body);
     assert.equal(
       JSON.parse(readFileSync(legacyStatePath, "utf8")).lastPublishedGenerationId,
       "legacy-generation",

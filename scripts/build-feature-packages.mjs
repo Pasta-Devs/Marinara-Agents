@@ -420,6 +420,7 @@ export async function selfCheck() {
         "--external:sharp",
         "--external:pino",
         "--external:pino-pretty",
+        "--external:zod",
         `--alias:@marinara-engine/shared=${packageSharedEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,

@@ -4,6 +4,8 @@ import {
   DEFAULT_LTM_RECALL_PREAMBLE,
   DEFAULT_LTM_RECALL_STYLE,
   DEFAULT_LTM_RECALL_STYLE_WEIGHTS,
+  LTM_EXTRACTION_MAX_CANDIDATES,
+  LTM_EXTRACTION_MAX_REJECTION_DETAILS,
 } from "./constants.js";
 
 export const ltmNoteTypeSchema = z.enum([
@@ -1986,7 +1988,7 @@ export const ltmExtractionRecoveryHintSchema = z
 
 export const ltmExtractionDroppedCandidateSchema = z
   .object({
-    index: z.number().int().min(0).max(999),
+    index: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
     reason: ltmExtractionDropReasonSchema,
     message: z.string().min(1).max(240),
     snippet: z.string().min(1).max(280).optional(),
@@ -2004,13 +2006,14 @@ export const ltmExtractionOutcomeStateSchema = z.enum([
 export const ltmExtractionOutcomeSchema = z
   .object({
     state: ltmExtractionOutcomeStateSchema,
-    totalCandidates: z.number().int().min(0).max(999),
-    keptUnits: z.number().int().min(0).max(999),
-    droppedUnits: z.number().int().min(0).max(999),
+    totalCandidates: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    keptUnits: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    droppedUnits: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
     droppedCandidates: z
       .array(ltmExtractionDroppedCandidateSchema)
-      .max(80)
+      .max(LTM_EXTRACTION_MAX_REJECTION_DETAILS)
       .default([]),
+    droppedCandidateDetailsTruncated: z.boolean().default(false),
   })
   .strict();
 
@@ -2025,7 +2028,7 @@ export const ltmExtractionDiagnosticSchema = z
   .object({
     severity: z.enum(["warning", "error"]),
     code: z.string().min(1).max(120),
-    candidateIndex: z.number().int().min(0).max(999).optional(),
+    candidateIndex: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES).optional(),
     mutationId: z.string().uuid().optional(),
     noteId: ltmNoteIdSchema.optional(),
     message: z.string().min(1).max(2_000),
@@ -2035,12 +2038,12 @@ export const ltmExtractionDiagnosticSchema = z
 
 export const ltmExtractionAccountingSchema = z
   .object({
-    providerCandidates: z.number().int().min(0).max(999),
-    normalizedAdditions: z.number().int().min(0).max(999),
-    parserRejections: z.number().int().min(0).max(999),
-    validationRejections: z.number().int().min(0).max(999),
-    deduplications: z.number().int().min(0).max(999),
-    keptUnits: z.number().int().min(0).max(999),
+    providerCandidates: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    normalizedAdditions: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    parserRejections: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    validationRejections: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    deduplications: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    keptUnits: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
   })
   .strict()
   .superRefine((accounting, ctx) => {
@@ -2609,7 +2612,7 @@ export const ltmImportSourceNotesResponseSchema = z
 export const ltmEvidenceUnitExtractionResponseSchema = z
   .object({
     summary: z.string().max(2_000).default(""),
-    units: z.array(ltmEvidenceUnitSchema).default([]),
+    units: z.array(ltmEvidenceUnitSchema).max(LTM_EXTRACTION_MAX_CANDIDATES).default([]),
   })
   .strict();
 

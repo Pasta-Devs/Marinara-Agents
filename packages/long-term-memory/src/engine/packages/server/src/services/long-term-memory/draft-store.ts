@@ -136,6 +136,7 @@ export class LongTermMemoryDraftStore {
             keptUnits: candidateCount,
             droppedUnits: 0,
             droppedCandidates: [],
+            droppedCandidateDetailsTruncated: false,
           },
           accounting: options.accounting ?? {
             providerCandidates: candidateCount,

@@ -6,6 +6,8 @@ import {
   DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE,
   DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE,
   DEFAULT_LTM_ALLOWED_STREAMS,
+  LTM_EXTRACTION_MAX_CANDIDATES,
+  LTM_EXTRACTION_MAX_REJECTION_DETAILS,
   RELATIONSHIP_DIMENSIONS,
   ltmExtractionAccountingSchema,
   ltmEvidenceUnitExtractionResponseSchema,
@@ -129,6 +131,7 @@ export interface CompileEvidenceUnitExtractionResult {
 type ParsedEvidenceUnitPayload = {
   response: LtmEvidenceUnitExtractionResponse;
   totalCandidates: number;
+  parserRejections: number;
   droppedCandidates: LtmExtractionDroppedCandidate[];
 };
 
@@ -210,6 +213,7 @@ export function evidenceUnitResponseFormat(options: {
           summary: { type: "string", maxLength: 2_000 },
           units: {
             type: "array",
+            maxItems: LTM_EXTRACTION_MAX_CANDIDATES,
             items: {
               type: "object",
               additionalProperties: false,
@@ -615,7 +619,24 @@ function formatZodIssue(issue: { path: Array<string | number>; message: string }
 }
 
 export function parseEvidenceUnitPayload(raw: unknown, expectedSourceHash: string): ParsedEvidenceUnitPayload {
-  const normalized = normalizeEvidenceUnitResponse(raw, expectedSourceHash);
+  const input =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const inputUnits = Array.isArray(input.units) ? input.units : [];
+  if (inputUnits.length > LTM_EXTRACTION_MAX_CANDIDATES) {
+    throw new Error(
+      `Extraction response contains ${inputUnits.length} candidates; the maximum is ${LTM_EXTRACTION_MAX_CANDIDATES}.`,
+    );
+  }
+  const normalized = normalizeEvidenceUnitResponse(
+    {
+      ...input,
+      summary: typeof input.summary === "string" ? input.summary.slice(0, 2_000) : "",
+      units: inputUnits,
+    },
+    expectedSourceHash,
+  );
   const record =
     normalized && typeof normalized === "object" && !Array.isArray(normalized)
       ? (normalized as Record<string, unknown>)
@@ -634,18 +655,20 @@ export function parseEvidenceUnitPayload(raw: unknown, expectedSourceHash: strin
       });
       continue;
     }
-    droppedCandidates.push({
-      index,
-      reason: "invalid_format",
-      message: "Dropped a malformed candidate.",
-      ...(extractCandidateSnippet(candidate) ? { snippet: extractCandidateSnippet(candidate) } : {}),
-      issues: parsed.error.issues.map(formatZodIssue).slice(0, 8),
-    });
+    if (droppedCandidates.length < LTM_EXTRACTION_MAX_REJECTION_DETAILS)
+      droppedCandidates.push({
+        index,
+        reason: "invalid_format",
+        message: "Dropped a malformed candidate.",
+        ...(extractCandidateSnippet(candidate) ? { snippet: extractCandidateSnippet(candidate) } : {}),
+        issues: parsed.error.issues.map(formatZodIssue).slice(0, 8),
+      });
   }
 
   return {
     response: ltmEvidenceUnitExtractionResponseSchema.parse({ summary, units }),
     totalCandidates: rawUnits.length,
+    parserRejections: rawUnits.length - units.length,
     droppedCandidates,
   };
 }
@@ -961,6 +984,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       return {
         response: ltmEvidenceUnitExtractionResponseSchema.parse({ summary: "", units: [] }),
         totalCandidates: 0,
+        parserRejections: 0,
         droppedCandidates: [],
       };
     }
@@ -979,6 +1003,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
         counts: {
           units: parsed.response.units.length,
           totalCandidates: parsed.totalCandidates,
+          parserRejections: parsed.parserRejections,
           droppedCandidates: parsed.droppedCandidates.length,
           responseChars: content.length,
         },
@@ -1020,6 +1045,7 @@ export function compileEvidenceUnitExtraction(options: {
   unitResponse: LtmEvidenceUnitExtractionResponse;
   totalCandidates?: number;
   providerCandidates?: number;
+  parserRejectionCount?: number;
   normalizedAdditions?: number;
   parserDroppedCandidates?: LtmExtractionDroppedCandidate[];
   preValidationDroppedCandidates?: LtmExtractionDroppedCandidate[];
@@ -1059,13 +1085,20 @@ export function compileEvidenceUnitExtraction(options: {
   const dedupResult = deduplicateUnits(keptUnits, options.existingNotes);
   const closed = closeSourceEventGraph(dedupResult.deduplicated, options.sourceNote, options.existingNotes);
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];
+  const parserRejectionCount = options.parserRejectionCount ?? parserDroppedCandidates.length;
   const preValidationDroppedCandidates = options.preValidationDroppedCandidates ?? [];
-  const droppedCandidates = [
+  const allDroppedCandidates = [
     ...parserDroppedCandidates,
     ...preValidationDroppedCandidates,
     ...validated.droppedCandidates,
     ...closed.droppedCandidates,
   ];
+  const droppedCandidates = allDroppedCandidates.slice(0, LTM_EXTRACTION_MAX_REJECTION_DETAILS);
+  const droppedCandidateCount =
+    parserRejectionCount +
+    preValidationDroppedCandidates.length +
+    validated.droppedCandidates.length +
+    closed.droppedCandidates.length;
   const compiled = closed.units.length
     ? compileLtmEvidenceUnits({
         units: closed.units,
@@ -1087,7 +1120,7 @@ export function compileEvidenceUnitExtraction(options: {
       options.totalCandidates ??
       options.unitResponse.units.length + parserDroppedCandidates.length + preValidationDroppedCandidates.length,
     normalizedAdditions: (options.normalizedAdditions ?? 0) + normalized.addedUnits,
-    parserRejections: parserDroppedCandidates.length,
+    parserRejections: parserRejectionCount,
     validationRejections: preValidationDroppedCandidates.length + validated.droppedCandidates.length + closed.droppedCandidates.length,
     deduplications: validated.keptUnits.length - dedupResult.deduplicated.length,
     keptUnits: closed.units.length,
@@ -1097,6 +1130,7 @@ export function compileEvidenceUnitExtraction(options: {
     totalCandidates,
     keptUnits: closed.units.length,
     droppedCandidates,
+    droppedCandidateCount,
     deduplications: accounting.deduplications,
   });
   return {
@@ -1169,9 +1203,10 @@ function summarizeExtractionOutcome(input: {
   totalCandidates: number;
   keptUnits: number;
   droppedCandidates: LtmExtractionDroppedCandidate[];
+  droppedCandidateCount: number;
   deduplications: number;
 }): LtmExtractionOutcome {
-  const droppedUnits = input.droppedCandidates.length;
+  const droppedUnits = input.droppedCandidateCount;
   const state =
     input.keptUnits > 0
       ? droppedUnits > 0 || input.deduplications > 0
@@ -1184,6 +1219,7 @@ function summarizeExtractionOutcome(input: {
     keptUnits: input.keptUnits,
     droppedUnits,
     droppedCandidates: input.droppedCandidates,
+    droppedCandidateDetailsTruncated: droppedUnits > input.droppedCandidates.length,
   };
 }
 

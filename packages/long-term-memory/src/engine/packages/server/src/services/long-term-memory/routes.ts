@@ -692,6 +692,7 @@ export function createLongTermMemoryRoutes(runtime: {
       async (request, reply) => {
         const controller = new AbortController(),
           abort = () => controller.abort();
+        const body = ltmImportSourceNotesRequestSchema.parse(request.body ?? {});
         request.raw.once("aborted", abort);
         request.raw.once("close", () => {
           if (request.raw.aborted) abort();
@@ -699,7 +700,7 @@ export function createLongTermMemoryRoutes(runtime: {
         try {
           return ltmImportSourceNotesResponseSchema.parse(
             await importPackageInterop(
-              ltmImportSourceNotesRequestSchema.parse(request.body ?? {}),
+              body,
               root,
               controller.signal,
             ),

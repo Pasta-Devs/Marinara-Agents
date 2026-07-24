@@ -823,6 +823,7 @@ export async function importPackageInterop(
           keptUnits: 0,
           droppedUnits: 0,
           droppedCandidates: [],
+          droppedCandidateDetailsTruncated: false,
         },
         accounting: {
           providerCandidates: 0,

@@ -647,7 +647,11 @@ function isResolvedLoopUnit(unit: LtmEvidenceUnit) {
 }
 
 function unitsForSection(units: LtmEvidenceUnit[], sectionKey: string) {
-  return units.filter((unit) => sectionKeyForUnit(unit) === sectionKey);
+  return units.filter(
+    (unit) =>
+      sectionKeyForUnit(unit) === sectionKey ||
+      (unit.bucket === "tone" && sectionKey === "profile"),
+  );
 }
 
 function isTypedMemoryNote(note: Pick<LtmNote, "type" | "tags">) {
