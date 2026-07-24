@@ -198,6 +198,7 @@ const PARTICIPANT_TILE_CLASSES: Record<
     avatar: string;
     fallback: string;
     name: string;
+    mobileName: string;
   }
 > = {
   large: {
@@ -205,24 +206,28 @@ const PARTICIPANT_TILE_CLASSES: Record<
     avatar: "h-24 w-24",
     fallback: "text-2xl",
     name: "bottom-3 max-w-[calc(100%-1.5rem)] px-3 py-1 text-xs",
+    mobileName: "max-w-full px-1 text-xs",
   },
   medium: {
     tile: "rounded-lg p-3",
     avatar: "h-20 w-20",
     fallback: "text-xl",
     name: "bottom-2.5 max-w-[calc(100%-1rem)] px-2.5 py-1 text-[0.72rem]",
+    mobileName: "max-w-full px-1 text-[0.72rem]",
   },
   small: {
     tile: "rounded-lg p-2",
     avatar: "h-14 w-14",
     fallback: "text-base",
     name: "bottom-2 max-w-[calc(100%-0.75rem)] px-2 py-0.5 text-[0.65rem]",
+    mobileName: "max-w-full px-1 text-[0.65rem]",
   },
   compact: {
     tile: "rounded-md p-1.5",
     avatar: "h-10 w-10",
     fallback: "text-sm",
     name: "bottom-1.5 max-w-[calc(100%-0.5rem)] px-1.5 py-0.5 text-[0.6rem]",
+    mobileName: "max-w-full px-1 text-[0.6rem]",
   },
 };
 
@@ -892,6 +897,7 @@ function ParticipantTile({
   active,
   cameraStream,
   density,
+  mobile,
   characterVideoEnabled,
   automaticVideoClipGenerationEnabled,
   videoPlayback,
@@ -902,6 +908,7 @@ function ParticipantTile({
   active: boolean;
   cameraStream?: MediaStream | null;
   density: ParticipantTileDensity;
+  mobile: boolean;
   characterVideoEnabled: boolean;
   automaticVideoClipGenerationEnabled: boolean;
   videoPlayback?: CharacterVideoPlaybackState;
@@ -1106,8 +1113,13 @@ function ParticipantTile({
       )}
       <div
         className={cn(
-          "absolute truncate rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] font-medium leading-tight text-[var(--marinara-chat-chrome-panel-title)] shadow ring-1 ring-[var(--marinara-chat-chrome-panel-border)]",
-          densityClasses.name,
+          "truncate font-medium leading-tight text-[var(--marinara-chat-chrome-panel-title)]",
+          mobile
+            ? cn("relative z-10 mt-2 rounded-none bg-transparent text-center shadow-none ring-0", densityClasses.mobileName)
+            : cn(
+                "absolute rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] shadow ring-1 ring-[var(--marinara-chat-chrome-panel-border)]",
+                densityClasses.name,
+              ),
         )}
       >
         {participant.name}
@@ -2919,6 +2931,7 @@ export function ConversationCallSurface({
                 active={speakingId === participant.id || (participant.kind === "user" && userSpeaking)}
                 cameraStream={participant.kind === "user" ? cameraStream : null}
                 density={participantGridLayout.density}
+                mobile={mobileCallLayout}
                 characterVideoEnabled={characterVideoEnabled}
                 automaticVideoClipGenerationEnabled={automaticVideoClipGenerationEnabled}
                 videoPlayback={characterVideoPlayback[participant.id]}
@@ -3047,6 +3060,7 @@ export function ConversationCallSurface({
                   "grid w-[calc(100vw-1.5rem)] items-center justify-center gap-1 overflow-visible rounded-2xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-1.5 shadow-xl shadow-black/20 sm:flex sm:w-auto sm:max-w-[calc(100vw-1.5rem)] sm:gap-2 sm:p-2",
                   callControlGridColumns,
                 )}
+                style={mobileCallLayout ? { gridTemplateColumns: "repeat(7, minmax(0, 1fr))" } : undefined}
               >
                 <div className="relative flex min-w-0 justify-center max-sm:w-full">
                   {mutedReminderVisible && !recording ? (
