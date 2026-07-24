@@ -458,6 +458,247 @@ test("Long-Term Memory preserves hidden selections for batch operations", async 
   }
 });
 
+test("Long-Term Memory review queue keeps context compact and actions contextual", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const chat = await createChat(page, testInfo);
+  const sourceId = "source_review_ui";
+  const targetId = "world_review_ui";
+  const draftId = "00000000-0000-4000-8000-000000000101";
+  const mutationId = "00000000-0000-4000-8000-000000000102";
+  const timestamp = "2026-07-23T12:00:00.000Z";
+
+  try {
+    await page.route(
+      "**/api/capability-packages/long-term-memory/client*",
+      async (route) => {
+        await route.fulfill({
+          contentType: "text/javascript; charset=utf-8",
+          body: await readFile(
+            join(import.meta.dirname, "../packages/long-term-memory/client.js"),
+          ),
+        });
+      },
+    );
+    await page.route(
+      "**/api/long-term-memory/notes?includeGlobal=true",
+      async (route) => {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify([
+            {
+              id: sourceId,
+              title: "Review source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: chat.id, chatIds: [chat.id] },
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                source: { text: "Source text", updatedAt: timestamp },
+              },
+              createdAt: timestamp,
+              updatedAt: timestamp,
+              version: 1,
+            },
+            {
+              id: targetId,
+              title: "Existing target",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: chat.id, chatIds: [chat.id] },
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                facts: { text: "Existing fact", updatedAt: timestamp },
+              },
+              createdAt: timestamp,
+              updatedAt: timestamp,
+              version: 1,
+            },
+          ]),
+        });
+      },
+    );
+    await page.route(
+      "**/api/long-term-memory/drafts/review?*",
+      async (route) => {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            generatedAt: timestamp,
+            sources: [
+              {
+                sourceNoteId: sourceId,
+                modes: ["roleplay"],
+                drafts: [
+                  {
+                    draft: {
+                      id: draftId,
+                      status: "pending",
+                      applyState: "not_started",
+                      indexRebuildStatus: "not_requested",
+                      createdAt: timestamp,
+                      updatedAt: timestamp,
+                      source: { sourceNoteId: sourceId },
+                      scope: { chatId: chat.id, chatIds: [chat.id] },
+                      modes: ["roleplay"],
+                      summary: "Compact review fixture",
+                      mutations: [
+                        {
+                          id: mutationId,
+                          kind: "append_section",
+                          noteId: targetId,
+                          sectionKey: "facts",
+                          text: "A proposed durable fact.",
+                          claimKind: "change",
+                          risk: "low",
+                          confidence: 0.9,
+                          summary: "Add one durable fact",
+                          evidence: ["The source says so."],
+                        },
+                      ],
+                      accounting: {
+                        providerCandidates: 1,
+                        normalizedAdditions: 0,
+                        parserRejections: 0,
+                        validationRejections: 0,
+                        deduplications: 0,
+                        keptUnits: 1,
+                      },
+                    },
+                    freshness: "fresh",
+                    blockReasons: [],
+                    diagnostics: [],
+                    candidateRejections: [],
+                    deduplications: [],
+                  },
+                ],
+                targets: [
+                  {
+                    noteId: targetId,
+                    title: "Existing target",
+                    noteType: "world",
+                    rows: [
+                      {
+                        draftId,
+                        mutation: {
+                          id: mutationId,
+                          kind: "append_section",
+                          noteId: targetId,
+                          sectionKey: "facts",
+                          text: "A proposed durable fact.",
+                          claimKind: "change",
+                          risk: "low",
+                          confidence: 0.9,
+                          summary: "Add one durable fact",
+                          evidence: ["The source says so."],
+                        },
+                        disposition: "merge",
+                        diagnostics: [],
+                        changes: [
+                          {
+                            kind: "section",
+                            key: "facts",
+                            before: "Existing fact",
+                            after: "Existing fact\nA proposed durable fact.",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+            counts: {
+              sources: 1,
+              drafts: 1,
+              mutations: 1,
+              blockedDrafts: 0,
+              candidateRejections: 0,
+              deduplications: 0,
+            },
+          }),
+        });
+      },
+    );
+    await page.route(
+      "**/api/long-term-memory/drafts/pending-count*",
+      async (route) => {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ count: 1 }),
+        });
+      },
+    );
+    await openLongTermMemory(page, chat.id, testInfo);
+    const detail = page.locator('[data-ltm-surface="detail"]');
+    await detail
+      .locator('nav[aria-label="Long-Term Memory sections"]:visible')
+      .locator('[data-ltm-destination="review"]')
+      .click();
+
+    const queue = detail.locator('[data-ltm-surface="review-queue"]');
+    await expect(queue).toBeVisible();
+    await expect(queue.locator("[data-ltm-review-summary]")).toHaveText(
+      "1 source | 1 pending | 1 ready | 0 blocked",
+    );
+    await expect(queue.locator("[data-ltm-review-source]")).toContainText(
+      "Review source",
+    );
+    await expect(queue.locator("[data-ltm-review-draft]")).toContainText(
+      "Created",
+    );
+    await expect(queue.locator("[data-ltm-review-batch-actions]")).toHaveCount(
+      0,
+    );
+
+    const mutation = queue.locator(
+      `[data-ltm-review-mutation="${mutationId}"]`,
+    );
+    const preview = mutation.locator("[data-ltm-review-preview]");
+    await expect(preview).not.toHaveAttribute("open", "");
+    await preview.locator("summary").click();
+    await expect(mutation.locator("[data-ltm-review-evidence]")).toBeVisible();
+    await expect(mutation.locator("[data-ltm-review-changes]")).toBeVisible();
+
+    await mutation.getByRole("checkbox").check();
+    await expect(
+      queue.locator("[data-ltm-review-batch-actions]"),
+    ).toBeVisible();
+    await expect(
+      queue.locator("[data-ltm-review-batch-actions]").getByRole("button", {
+        name: "Accept eligible (1)",
+      }),
+    ).toBeVisible();
+    await mutation.getByRole("textbox").fill("Edited durable fact.");
+    await detail
+      .locator('nav[aria-label="Long-Term Memory sections"]:visible')
+      .locator('[data-ltm-destination="vault"]')
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Discard unsaved changes?" }),
+    ).toBeVisible();
+    await page
+      .getByRole("dialog", { name: "Discard unsaved changes?" })
+      .getByRole("button", { name: "Cancel" })
+      .click();
+    await expect(queue).toBeVisible();
+    await expect
+      .poll(() =>
+        queue.evaluate((element) => element.scrollWidth <= element.clientWidth),
+      )
+      .toBe(true);
+  } finally {
+    await deleteChat(page, chat.id);
+  }
+});
+
 test("Long-Term Memory browses whole lorebooks and selects their entries", async ({
   page,
 }, testInfo) => {

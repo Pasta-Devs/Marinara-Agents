@@ -196,6 +196,11 @@ function boundedTrim(value: string, max: number) {
   return value.trim().slice(0, max);
 }
 
+function formatTimestamp(timestamp: string) {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleDateString();
+}
+
 function recoveryLabel(
   recovery: NonNullable<
     LtmDraftReviewDraft["candidateRejections"][number]["recovery"]
@@ -492,7 +497,7 @@ function ExtractionDetails({
       <summary className="cursor-pointer font-medium">
         Extraction details
         {accounting
-          ? `: ${accounting.keptUnits} kept, ${accounting.parserRejections + accounting.validationRejections} rejected, ${accounting.deduplications} deduplicated`
+          ? ` | ${accounting.keptUnits} kept | ${accounting.parserRejections + accounting.validationRejections} rejected | ${accounting.deduplications} deduplicated`
           : ""}
       </summary>
       <div className="mt-3 space-y-3 text-[var(--muted-foreground)]">
@@ -870,6 +875,7 @@ export default function ReviewQueue({
     const edited = editedById.has(row.mutation.id);
     const hideProjection = edited || projectionStale;
     const valid = selectedEditIsValid(mutation);
+    const previewChanges = hideProjection ? [] : row.changes;
     return (
       <article
         key={row.mutation.id}
@@ -882,45 +888,45 @@ export default function ReviewQueue({
             label={`Select ${mutationLabels[row.mutation.kind].toLowerCase()}`}
             onChange={() => toggleSelection(row.mutation.id)}
           />
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span
-              data-ltm-risk={row.mutation.risk}
-              className="rounded-full bg-[var(--secondary)] px-2 py-1"
-            >
-              Risk: {humanizeLabel(row.mutation.risk)}
-            </span>
-            <span
-              data-ltm-disposition={row.disposition}
-              className="rounded-full bg-[var(--secondary)] px-2 py-1"
-            >
-              {dispositionLabels[row.disposition]}
-            </span>
-          </div>
+          <p
+            data-ltm-risk={row.mutation.risk}
+            data-ltm-disposition={row.disposition}
+            className="text-right text-xs font-semibold"
+          >
+            {mutationLabels[row.mutation.kind]} |{" "}
+            {dispositionLabels[row.disposition]} |{" "}
+            {humanizeLabel(row.mutation.risk)} risk |{" "}
+            {Math.round(row.mutation.confidence * 100)}% confidence
+          </p>
         </div>
-        <p className="text-xs font-medium">
-          {mutationLabels[row.mutation.kind]}
-        </p>
         <p className="text-xs text-[var(--muted-foreground)]">
-          {row.mutation.summary} Confidence:{" "}
-          {Math.round(row.mutation.confidence * 100)}%.
+          {row.mutation.summary}
         </p>
-        <div data-ltm-review-evidence className="text-xs">
-          <span className="font-medium">Evidence:</span>{" "}
-          {row.mutation.evidence.join(" | ")}
-        </div>
-        {row.changes.length && !hideProjection ? (
-          <div data-ltm-review-changes className="space-y-1 text-xs">
-            {row.changes.map((change) => (
-              <p key={`${change.kind}-${change.key}`}>
-                <span className="font-medium">
-                  {humanizeLabel(change.kind)} {humanizeLabel(change.key)}:
-                </span>{" "}
-                {change.before ? `${change.before} -> ` : ""}
-                {change.after}
-              </p>
-            ))}
+        <details data-ltm-review-preview className="text-xs">
+          <summary className="cursor-pointer font-medium">
+            Evidence and preview | {row.mutation.evidence.length} evidence
+            {previewChanges.length ? ` | ${previewChanges.length} changes` : ""}
+          </summary>
+          <div className="mt-2 space-y-2">
+            <div data-ltm-review-evidence>
+              <span className="font-medium">Evidence:</span>{" "}
+              {row.mutation.evidence.join(" | ")}
+            </div>
+            {previewChanges.length ? (
+              <div data-ltm-review-changes className="space-y-1">
+                {previewChanges.map((change) => (
+                  <p key={`${change.kind}-${change.key}`}>
+                    <span className="font-medium">
+                      {humanizeLabel(change.kind)} {humanizeLabel(change.key)}:
+                    </span>{" "}
+                    {change.before ? `${change.before} -> ` : ""}
+                    {change.after}
+                  </p>
+                ))}
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </details>
         {row.diagnostics.length ? (
           <div
             data-ltm-review-diagnostics
@@ -980,11 +986,14 @@ export default function ReviewQueue({
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3">
         <div>
           <h2 className="text-sm font-semibold">Review queue</h2>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {review.data?.counts.mutations ?? 0} pending mutations across{" "}
-            {review.data?.counts.drafts ?? 0} drafts. {eligibleIds.size} fresh
-            and unblocked mutation{eligibleIds.size === 1 ? "" : "s"} can be
-            accepted.
+          <p
+            data-ltm-review-summary
+            className="text-xs text-[var(--muted-foreground)]"
+          >
+            {review.data?.counts.sources ?? 0} source
+            {review.data?.counts.sources === 1 ? "" : "s"} |{" "}
+            {review.data?.counts.mutations ?? 0} pending | {eligibleIds.size}{" "}
+            ready | {review.data?.counts.blockedDrafts ?? 0} blocked
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1008,34 +1017,41 @@ export default function ReviewQueue({
                   )
             }
           />
-          <Button
-            disabled={!selectedIds.size || running !== null}
-            onClick={() => setSelectedIds(new Set())}
-          >
-            Clear
-          </Button>
-          <Button
-            primary
-            disabled={
-              !eligibleSelectedRows.length ||
-              invalidSelectedEdits.length > 0 ||
-              running !== null
-            }
-            onClick={() => void runBatch("accept")}
-          >
-            {running === "accept"
-              ? "Accepting..."
-              : `Accept eligible (${eligibleSelectedRows.length})`}
-          </Button>
-          <Button
-            destructive
-            disabled={!selectedRows.length || running !== null}
-            onClick={() => void runBatch("skip")}
-          >
-            {running === "skip"
-              ? "Skipping..."
-              : `Skip selected (${selectedRows.length})`}
-          </Button>
+          {selectedRows.length ? (
+            <div
+              data-ltm-review-batch-actions
+              className="flex flex-wrap items-center gap-2"
+            >
+              <Button
+                disabled={running !== null}
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Clear
+              </Button>
+              <Button
+                primary
+                disabled={
+                  !eligibleSelectedRows.length ||
+                  invalidSelectedEdits.length > 0 ||
+                  running !== null
+                }
+                onClick={() => void runBatch("accept")}
+              >
+                {running === "accept"
+                  ? "Accepting..."
+                  : `Accept eligible (${eligibleSelectedRows.length})`}
+              </Button>
+              <Button
+                destructive
+                disabled={running !== null}
+                onClick={() => void runBatch("skip")}
+              >
+                {running === "skip"
+                  ? "Skipping..."
+                  : `Skip selected (${selectedRows.length})`}
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
       {sourceNoteId ? (
@@ -1126,7 +1142,7 @@ export default function ReviewQueue({
                   <section
                     key={item.draft.id}
                     data-ltm-review-draft={item.draft.id}
-                    className="space-y-2 rounded-lg bg-[var(--secondary)]/35 p-3"
+                    className="space-y-2 border-b border-[var(--border)] pb-3 last:border-b-0 last:pb-0"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
@@ -1144,7 +1160,7 @@ export default function ReviewQueue({
                           ) : null}
                         </div>
                         <p className="text-xs text-[var(--muted-foreground)]">
-                          Created {item.draft.createdAt}.{" "}
+                          Created {formatTimestamp(item.draft.createdAt)}.{" "}
                           {item.draft.summary || "No draft summary."}
                         </p>
                       </div>
