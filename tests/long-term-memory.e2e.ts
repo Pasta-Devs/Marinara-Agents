@@ -464,6 +464,8 @@ test("Long-Term Memory review queue keeps context compact and actions contextual
   const draftId = "00000000-0000-4000-8000-000000000101";
   const mutationId = "00000000-0000-4000-8000-000000000102";
   const timestamp = "2026-07-23T12:00:00.000Z";
+  let pendingDraftCount = 0;
+  let pendingCountRequests = 0;
 
   try {
     await page.route(
@@ -478,7 +480,7 @@ test("Long-Term Memory review queue keeps context compact and actions contextual
       },
     );
     await page.route(
-      "**/api/long-term-memory/notes?includeGlobal=true",
+      "**/api/long-term-memory/notes?*includeGlobal=*",
       async (route) => {
         await route.fulfill({
           contentType: "application/json",
@@ -626,14 +628,44 @@ test("Long-Term Memory review queue keeps context compact and actions contextual
     await page.route(
       "**/api/long-term-memory/drafts/pending-count*",
       async (route) => {
+        pendingCountRequests += 1;
         await route.fulfill({
           contentType: "application/json",
-          body: JSON.stringify({ count: 1 }),
+          body: JSON.stringify({ count: pendingDraftCount }),
         });
       },
     );
     await openLongTermMemory(page, chat.id, testInfo);
     const detail = page.locator('[data-ltm-surface="detail"]');
+    const navigation = detail.locator(
+      'nav[aria-label="Long-Term Memory sections"]:visible',
+    );
+    await expect.poll(() => pendingCountRequests).toBeGreaterThan(0);
+    await expect(
+      navigation.locator('[data-ltm-destination="review"] [data-ltm-badge]'),
+    ).toHaveCount(0);
+    await page.route(
+      `**/api/long-term-memory/notes/${sourceId}/extract`,
+      async (route) => {
+        pendingDraftCount = 1;
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({}),
+        });
+      },
+    );
+    const vault = detail.locator('[data-ltm-surface="vault"]');
+    await vault.locator('[data-ltm-memory-group="source"] summary').click();
+    await vault
+      .locator('[data-ltm-note-type="source"]')
+      .filter({ hasText: "Review source" })
+      .getByRole("button")
+      .click();
+    await detail.getByRole("button", { name: "Extract to review" }).click();
+    await expect.poll(() => pendingCountRequests).toBeGreaterThan(1);
+    await expect(
+      navigation.locator('[data-ltm-destination="review"] [data-ltm-badge]'),
+    ).toHaveText("1");
     await detail
       .locator('nav[aria-label="Long-Term Memory sections"]:visible')
       .locator('[data-ltm-destination="review"]')

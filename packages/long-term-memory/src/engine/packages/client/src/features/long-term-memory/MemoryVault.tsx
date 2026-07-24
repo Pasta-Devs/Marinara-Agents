@@ -2027,6 +2027,10 @@ export default function MemoryVault({
                           "POST",
                           props.chatId ? { chatId: props.chatId } : {},
                         );
+                        await invalidateLtmQueries(client, [
+                          queryKeys.review,
+                          queryKeys.pendingDrafts,
+                        ]);
                         setNotice(
                           "Extraction finished. Review Queue has the results.",
                         );
