@@ -7,6 +7,7 @@ import {
   type CapabilityChatRecord,
   type CapabilityResourceHost,
   type GenerateSpatialMapDraftResponse,
+  type SpatialContextDefinition,
   type SpatialMapGroundingMode,
   type SpatialMapGroundingSummary,
   type SpatialMapLocationProvenance,
@@ -847,7 +848,12 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         debugMode: debugOverrideEnabled,
       });
       const raw = result.content?.trim();
-      if (!raw) throw new Error("The model returned an empty response.");
+      if (!raw) {
+        return reply.status(502).send({
+          error: "The model returned an empty response. Try again, or check that the selected connection is working.",
+          code: "spatial_ai_generation_failed",
+        });
+      }
       logDebugOverride(
         debugOverrideEnabled,
         "[debug/spatial/map-draft] raw response chatId=%s chars=%d:\n%s",
@@ -855,25 +861,51 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         raw.length,
         raw,
       );
-      const parsedPlan = json.parseJsonish(raw);
-      const definition =
-        operation === "expand"
-          ? normalizeSpatialMapExpansionPlan(parsedPlan, {
-              definition: existingDefinition!,
-              targetLocationId: parsed.targetLocationId!,
-              sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
-              requireLoreSource: groundingMode === "lore_strict",
-              size: parsed.size,
-            })
-          : normalizeSpatialMapPlan(parsedPlan, {
-              ownerMode,
-              revision: existingDefinition?.revision ?? 0,
-              enabled: existingDefinition?.enabled ?? false,
-              size: parsed.size,
-              sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
-              requireLoreSource: groundingMode === "lore_strict",
-              requiredLocationNames,
-            });
+      let parsedPlan: unknown;
+      try {
+        parsedPlan = json.parseJsonish(raw);
+      } catch {
+        logger.warn(
+          "[spatial/map-draft] Model response was not valid JSON for chat %s (%d chars, likely truncated)",
+          chat.id,
+          raw.length,
+        );
+        return reply.status(502).send({
+          error:
+            "The model's map draft was not valid JSON, most likely because the response was cut off. Raise the connection's Max Output Tokens or choose a smaller map size, then try again.",
+          code: "spatial_ai_generation_failed",
+        });
+      }
+      let definition: SpatialContextDefinition;
+      try {
+        definition =
+          operation === "expand"
+            ? normalizeSpatialMapExpansionPlan(parsedPlan, {
+                definition: existingDefinition!,
+                targetLocationId: parsed.targetLocationId!,
+                sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
+                requireLoreSource: groundingMode === "lore_strict",
+                size: parsed.size,
+              })
+            : normalizeSpatialMapPlan(parsedPlan, {
+                ownerMode,
+                revision: existingDefinition?.revision ?? 0,
+                enabled: existingDefinition?.enabled ?? false,
+                size: parsed.size,
+                sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
+                requireLoreSource: groundingMode === "lore_strict",
+                requiredLocationNames,
+              });
+      } catch (normalizeError) {
+        logger.warn(normalizeError, "[spatial/map-draft] Draft did not match the map structure for chat %s", chat.id);
+        return reply.status(502).send({
+          error:
+            normalizeError instanceof Error && normalizeError.message
+              ? `The model's map draft could not be used: ${normalizeError.message}`
+              : "The model returned JSON that did not match the required map structure. Try again or add clearer instructions.",
+          code: "spatial_ai_generation_failed",
+        });
+      }
       const generatedLocationCount =
         operation === "expand"
           ? definition.locations.length - existingDefinition!.locations.length
