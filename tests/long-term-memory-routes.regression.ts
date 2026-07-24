@@ -1656,9 +1656,15 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
-      payload: { source: "chats", sourceIds: ["chat-a:summary-a"] },
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-a"],
+        extract: false,
+      },
     });
     assert.equal(refreshedChat.statusCode, 200, refreshedChat.body);
+    assert.equal(refreshedChat.json().imported[0].extractionStatus, "not_started");
+    assert.equal(modelCalls, importCalls + 1);
     const refreshedNote = refreshedChat.json().imported[0].note;
     assert.equal(refreshedNote.tags.includes("user_tag"), true);
     assert.deepEqual(refreshedNote.keywords, ["preserve-me"]);

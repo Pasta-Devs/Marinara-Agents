@@ -711,7 +711,7 @@ export async function importPackageInterop(
       !row.sourceId.includes(":game-session-") ||
       extractionConfig.useExtractionAgentOnGameMode,
   );
-  const resolved = useExtractionAgent
+  const resolved = request.extract && useExtractionAgent
     ? await getPackageLanguageModels().resolveForRequest({
         connectionId: request.connectionId,
         model: request.model,
@@ -793,8 +793,9 @@ export async function importPackageInterop(
       });
     }
   }
-  const results = await processLongTermMemorySourceBatch({
-    items: written,
+  const results = request.extract
+    ? await processLongTermMemorySourceBatch({
+        items: written,
       languageModel: resolved,
       mode: request.mode,
       instruction: request.instruction,
@@ -804,7 +805,36 @@ export async function importPackageInterop(
       concurrency: request.importConcurrency ?? 3,
       root,
       directGameMode: !extractionConfig.useExtractionAgentOnGameMode,
-    }),
+      })
+    : written.map((item) => ({
+        sourceId: item.sourceId,
+        title: item.title,
+        note: item.note,
+        created: item.created,
+        sourceWriteStatus: item.created ? ("created" as const) : ("refreshed" as const),
+        extractionStatus: "not_started" as const,
+        extractionMethod: "none" as const,
+        retryable: false as const,
+        draft: null,
+        diagnostics: [],
+        outcome: {
+          state: "no_suggestions_created" as const,
+          totalCandidates: 0,
+          keptUnits: 0,
+          droppedUnits: 0,
+          droppedCandidates: [],
+        },
+        accounting: {
+          providerCandidates: 0,
+          normalizedAdditions: 0,
+          parserRejections: 0,
+          validationRejections: 0,
+          deduplications: 0,
+          keptUnits: 0,
+        },
+        appliedMutationIds: [],
+        skippedMutationIds: [],
+      })),
     cancelled = results.filter(
       (item) => item.extractionStatus === "cancelled",
     ).length,

@@ -429,6 +429,7 @@ export default function SourcesWorkspace({
           source: Source;
           sourceIds: string[];
           limit: number;
+          extract: boolean;
           scope?: LtmScope;
           mode?: LtmMode;
         }
@@ -439,6 +440,7 @@ export default function SourcesWorkspace({
           source: contract.source,
           sourceIds: contract.sourceIds,
           limit: 100,
+          extract: action !== "refresh",
           ...(contract.scope ? { scope: contract.scope } : {}),
           ...(contract.mode ? { mode: contract.mode } : {}),
         },
@@ -465,7 +467,7 @@ export default function SourcesWorkspace({
       ).catch(() => undefined);
       if (action === "refresh")
         setReviewMessage(
-          "Source memory refreshed. Re-extract it if you need a new draft.",
+          "Source synced. Re-run extraction when you want a new draft.",
         );
     } catch (error) {
       const cancelled = controller.signal.aborted;
@@ -942,7 +944,7 @@ export default function SourcesWorkspace({
                           }
                           data-ltm-lorebook-action="refresh-selected"
                         >
-                          <RefreshCw size="0.75rem" /> Refresh selected (
+                          <RefreshCw size="0.75rem" /> Sync selected (
                           {selectedBookRefreshIds.length})
                         </Button>
                         {importing ? (
@@ -1235,7 +1237,7 @@ export default function SourcesWorkspace({
                                 }
                                 data-ltm-source-action="refresh-reimport"
                               >
-                                <RefreshCw size="0.75rem" /> Refresh / re-import
+                                <RefreshCw size="0.75rem" /> Sync latest source
                               </Button>
                               {sourceMemoryActions(row.existingNoteId)}
                             </div>
@@ -1326,7 +1328,8 @@ export default function SourcesWorkspace({
                   {item.outcome.state}
                 </span>
               </div>
-              {item.extractionStatus !== "succeeded" ? (
+              {item.extractionStatus === "failed" ||
+              item.extractionStatus === "cancelled" ? (
                 <StatusSurface tone={resultTone(item.extractionStatus)}>
                   {item.error.message}
                 </StatusSurface>

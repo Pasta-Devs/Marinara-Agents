@@ -2432,6 +2432,7 @@ export const ltmImportSourceNotesRequestSchema = z
     model: z.string().min(1).max(240).optional(),
     instruction: z.string().max(2_000).optional(),
     applyLowRisk: z.boolean().optional(),
+    extract: z.boolean().default(true),
     importConcurrency: z.number().int().min(1).max(10).optional(),
     mode: ltmModeSchema.optional(),
   })
@@ -2443,7 +2444,7 @@ const ltmImportedSourceResultBaseSchema = z.object({
   note: ltmNoteSchema,
   created: z.boolean(),
   sourceWriteStatus: z.enum(["created", "refreshed"]),
-  extractionMethod: z.enum(["llm", "deterministic"]),
+  extractionMethod: z.enum(["llm", "deterministic", "none"]),
   outcome: ltmExtractionOutcomeSchema,
   accounting: ltmExtractionAccountingSchema,
   appliedMutationIds: z.array(z.string().uuid()).max(500),
@@ -2484,6 +2485,14 @@ export const ltmImportedSourceResultSchema = z
             message: z.string().min(1).max(2_000),
           })
           .strict(),
+        draft: z.null(),
+        diagnostics: z.array(ltmExtractionDiagnosticSchema).max(500),
+      })
+      .strict(),
+    ltmImportedSourceResultBaseSchema
+      .extend({
+        extractionStatus: z.literal("not_started"),
+        retryable: z.literal(false),
         draft: z.null(),
         diagnostics: z.array(ltmExtractionDiagnosticSchema).max(500),
       })
