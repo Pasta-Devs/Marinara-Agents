@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import {
@@ -246,6 +246,12 @@ for (const entry of catalog.packages) {
   if (iconUrl !== catalogArtworkUrl(manifest.id)) {
     throw new Error(`Missing or invalid catalog artwork URL for ${manifest.id}`);
   }
+  const expectedArtifactName = `${manifest.id}-${manifest.version}.zip`;
+  const expectedArtifactUrl =
+    `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${expectedArtifactName}`;
+  if (artifact.url !== expectedArtifactUrl) {
+    throw new Error(`Artifact URL for ${manifest.id} must be ${expectedArtifactUrl}`);
+  }
   const artworkPath = join(repoRoot, catalogArtworkRelativePath(manifest.id));
   const artwork = await readFile(artworkPath);
   const pngSignature = artwork.subarray(0, 8).toString("hex");
@@ -264,7 +270,7 @@ for (const entry of catalog.packages) {
   if (JSON.stringify(sourceManifest) !== JSON.stringify(manifest)) {
     throw new Error(`Catalog manifest does not match packages/${manifest.id}/manifest.json`);
   }
-  const artifactPath = join(repoRoot, "artifacts", basename(new URL(artifact.url).pathname));
+  const artifactPath = join(repoRoot, "artifacts", expectedArtifactName);
   const archive = await readFile(artifactPath);
   if (archive.byteLength !== artifact.bytes) throw new Error(`Artifact size mismatch for ${manifest.id}`);
   if (createHash("sha256").update(archive).digest("hex") !== artifact.sha256) {
