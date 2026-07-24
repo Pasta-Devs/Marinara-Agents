@@ -1121,6 +1121,20 @@ function ParticipantTile({
                 densityClasses.name,
               ),
         )}
+        style={
+          mobile
+            ? undefined
+            : {
+                bottom:
+                  density === "large"
+                    ? "0.75rem"
+                    : density === "medium"
+                      ? "0.625rem"
+                      : density === "small"
+                        ? "0.5rem"
+                        : "0.375rem",
+              }
+        }
       >
         {participant.name}
       </div>
@@ -1242,7 +1256,6 @@ export function ConversationCallSurface({
   const characterVoicesMuted = conversationCallVoiceMuted || conversationCallVoiceVolume <= 0;
   const characterVoicePlaybackVolume = characterVoicesMuted ? 0 : conversationCallVoiceVolume / 100;
   const characterVoiceVolumeLabel = characterVoicesMuted ? "Muted" : `${conversationCallVoiceVolume}%`;
-  const callControlGridColumns = "grid-cols-7";
   const callControlButtonClass =
     "mari-chrome-control shrink-0 p-0 max-sm:aspect-square max-sm:h-auto max-sm:min-h-0 max-sm:w-full max-sm:max-w-10 max-sm:justify-self-center sm:h-11 sm:w-11";
   const callControlIconClass = "h-4 w-4";
@@ -3056,11 +3069,15 @@ export function ConversationCallSurface({
               )}
 
               <div
-                className={cn(
-                  "grid w-[calc(100vw-1.5rem)] items-center justify-center gap-1 overflow-visible rounded-2xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-1.5 shadow-xl shadow-black/20 sm:flex sm:w-auto sm:max-w-[calc(100vw-1.5rem)] sm:gap-2 sm:p-2",
-                  callControlGridColumns,
-                )}
-                style={mobileCallLayout ? { gridTemplateColumns: "repeat(7, minmax(0, 1fr))" } : undefined}
+                className="grid w-[calc(100vw-1.5rem)] items-center justify-center gap-1 overflow-visible rounded-2xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-1.5 shadow-xl shadow-black/20 sm:flex sm:w-auto sm:max-w-[calc(100vw-1.5rem)] sm:gap-2 sm:p-2"
+                style={
+                  mobileCallLayout
+                    ? {
+                        gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                        width: "calc(100vw - 1.5rem)",
+                      }
+                    : undefined
+                }
               >
                 <div className="relative flex min-w-0 justify-center max-sm:w-full">
                   {mutedReminderVisible && !recording ? (
