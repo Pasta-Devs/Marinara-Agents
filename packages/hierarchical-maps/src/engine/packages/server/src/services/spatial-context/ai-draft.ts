@@ -94,10 +94,17 @@ interface PlanLocationSource {
   originalIndex: number;
 }
 
+// maxTokens is the requested output budget for the draft/expansion call. It is
+// deliberately generous so reasoning-heavy models (which spend much of the
+// budget on hidden thinking) can still emit complete JSON. The Engine caps this
+// request to the connection's configured Max Output Tokens, so a lower
+// connection setting is still respected while a higher one now takes effect —
+// previously these values were too small for the connection setting to matter
+// (Marinara-Engine #4026).
 export const SPATIAL_DRAFT_SIZE_SPECS: Record<SpatialMapDraftSize, SpatialDraftSizeSpec> = {
-  small: { targetLocations: 8, maxLocations: 12, maxDepth: 3, maxTokens: 6_000 },
-  medium: { targetLocations: 16, maxLocations: 24, maxDepth: 5, maxTokens: 10_000 },
-  large: { targetLocations: 28, maxLocations: 40, maxDepth: 7, maxTokens: 16_000 },
+  small: { targetLocations: 8, maxLocations: 12, maxDepth: 3, maxTokens: 12_000 },
+  medium: { targetLocations: 16, maxLocations: 24, maxDepth: 5, maxTokens: 24_000 },
+  large: { targetLocations: 28, maxLocations: 40, maxDepth: 7, maxTokens: 40_000 },
 };
 
 const LOCATION_KINDS = new Set<SpatialLocationKind>(["region", "settlement", "place", "building", "floor", "room"]);
