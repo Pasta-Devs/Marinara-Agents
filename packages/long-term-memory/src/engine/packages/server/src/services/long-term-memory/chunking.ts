@@ -12,11 +12,12 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { extractNoteKeywords } from "./keyword-extract.js";
 
-export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 3;
+export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 4;
 
 export interface LtmMemoryChunk {
   id: string;
   noteId: string;
+  title?: string;
   sectionKey: string;
   text: string;
   noteType: LtmNoteType;
@@ -89,6 +90,7 @@ export function chunkNoteSections(note: LtmNote): LtmMemoryChunk[] {
       {
         id: `${note.id}::profile`,
         noteId: note.id,
+        title: note.title?.trim() || undefined,
         sectionKey: "profile",
         text: combined,
         noteType: note.type,
@@ -116,6 +118,7 @@ export function chunkNoteSections(note: LtmNote): LtmMemoryChunk[] {
           "",
         sourceHash: stableJsonHash({
           noteId: note.id,
+          title: note.title?.trim() || undefined,
           noteType: note.type,
           status: note.status,
           modes: note.modes,
@@ -136,6 +139,7 @@ export function chunkNoteSections(note: LtmNote): LtmMemoryChunk[] {
       return {
         id: `${note.id}::${sectionKey}`,
         noteId: note.id,
+        title: note.title?.trim() || undefined,
         sectionKey,
         text,
         noteType: note.type,
@@ -152,6 +156,7 @@ export function chunkNoteSections(note: LtmNote): LtmMemoryChunk[] {
         updatedAt: section.updatedAt,
         sourceHash: stableJsonHash({
           noteId: note.id,
+          title: note.title?.trim() || undefined,
           noteType: note.type,
           status: note.status,
           modes: note.modes,

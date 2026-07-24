@@ -1298,6 +1298,7 @@ export const ltmMemoryChunkSchema = z
   .object({
     id: z.string().min(1).max(240),
     noteId: ltmNoteIdSchema,
+    title: ltmNoteTitleSchema.optional(),
     sectionKey: ltmSectionKeySchema,
     text: z.string().min(1).max(20_000),
     noteType: ltmNoteTypeSchema,

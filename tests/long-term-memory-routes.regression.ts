@@ -424,6 +424,12 @@ async function main() {
       },
     });
     assert.equal(created.statusCode, 201, created.body);
+    const rebuiltStatus = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/status",
+      headers,
+    });
+    assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 4);
     const batch = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/batch",
