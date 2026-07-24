@@ -75,6 +75,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     if (!(await confirmDestinationChange(next))) return;
     setDestinationDirty(false);
     if (next === "review") setReviewSourceNoteId(null);
+    if (next === "vault") setOpenedNoteId(null);
     if (next !== "vault") setRecoveryHandoff(null);
     setAddOpen(false);
     setDestination(next);

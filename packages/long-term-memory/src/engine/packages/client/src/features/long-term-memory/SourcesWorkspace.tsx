@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -26,6 +26,7 @@ import { Button, StatusSurface, inputClass } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 
 type Source = "characters" | "lorebooks" | "chats";
+type FlatPanel = "available" | "imported";
 type PreviewRow = LtmInteropPreviewResponse["samples"][number];
 type LorebookCandidate = LtmInteropPreviewSample;
 type ImportContract = {
@@ -40,6 +41,11 @@ const sourceTabs: Array<{ id: Source; label: string }> = [
   { id: "chats", label: "Chat Summaries" },
   { id: "characters", label: "Characters" },
   { id: "lorebooks", label: "Lorebooks" },
+];
+
+const flatPanelTabs: Array<{ id: FlatPanel; label: string }> = [
+  { id: "available", label: "Ready to Import" },
+  { id: "imported", label: "Already Imported" },
 ];
 
 type ScopeTargets = { currentScope: LtmScope | null };
@@ -74,6 +80,34 @@ function entryStatusLabel(entry: LtmLorebookPreviewEntry) {
   return labels.size === 1 ? [...labels][0] : "Mixed";
 }
 
+function handleTabKey<T extends string>(
+  event: KeyboardEvent<HTMLButtonElement>,
+  ids: readonly T[],
+  current: T,
+  onChange: (id: T) => void,
+  selector: string,
+) {
+  const index = ids.indexOf(current);
+  if (
+    index < 0 ||
+    !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+  )
+    return;
+  event.preventDefault();
+  const nextIndex =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? ids.length - 1
+        : (index + (event.key === "ArrowRight" ? 1 : -1) + ids.length) %
+          ids.length;
+  const next = ids[nextIndex];
+  onChange(next);
+  requestAnimationFrame(() =>
+    document.querySelector<HTMLElement>(`[${selector}="${next}"]`)?.focus(),
+  );
+}
+
 function EntrySelect({
   entry,
   checked,
@@ -101,6 +135,140 @@ function EntrySelect({
   );
 }
 
+function TransferWorkbench({
+  chatId,
+  noteCount,
+  mode,
+  includeDerived,
+  busy,
+  error,
+  preview,
+  result,
+  onModeChange,
+  onIncludeDerivedChange,
+  onPreview,
+  onApply,
+}: {
+  chatId?: string | null;
+  noteCount: number;
+  mode: "copy" | "move";
+  includeDerived: boolean;
+  busy: "preview" | "apply" | null;
+  error: string;
+  preview: LtmNoteTransferPreviewResponse | null;
+  result: LtmNoteTransferApplyResponse | null;
+  onModeChange: (mode: "copy" | "move") => void;
+  onIncludeDerivedChange: (includeDerived: boolean) => void;
+  onPreview: () => void;
+  onApply: () => void;
+}) {
+  return (
+    <div
+      data-ltm-source-transfer
+      className="space-y-3 border-b border-[var(--border)] bg-[var(--secondary)]/20 p-3"
+    >
+      <div>
+        <h2 className="text-sm font-semibold">Transfer memories</h2>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          Preview a copy or move into the current chat.
+        </p>
+      </div>
+      {!chatId ? (
+        <StatusSurface tone="danger">
+          Open Long-Term Memory from a chat before transferring memories.
+        </StatusSurface>
+      ) : null}
+      {noteCount ? (
+        <>
+          <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            Mode
+            <select
+              value={mode}
+              onChange={(event) =>
+                onModeChange(event.target.value as "copy" | "move")
+              }
+              className={inputClass}
+              data-ltm-transfer-mode
+            >
+              <option value="copy">Copy to current chat</option>
+              <option value="move">Move to current chat</option>
+            </select>
+          </label>
+          <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
+            <input
+              type="checkbox"
+              checked={includeDerived}
+              onChange={(event) => onIncludeDerivedChange(event.target.checked)}
+              data-ltm-transfer-include-derived
+            />
+            Include attached durable memories
+          </label>
+        </>
+      ) : null}
+      {noteCount ? (
+        <Button
+          primary
+          disabled={!chatId || busy !== null}
+          onClick={onPreview}
+          data-ltm-transfer-action="preview"
+        >
+          {busy === "preview" ? (
+            <Loader2 size="0.75rem" className="animate-spin" />
+          ) : (
+            <Send size="0.75rem" />
+          )}
+          Preview transfer ({noteCount})
+        </Button>
+      ) : null}
+      {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
+      {preview ? (
+        <div data-ltm-transfer-preview className="space-y-2 text-xs">
+          <p role="status">
+            {preview.buckets.ready.length} ready,{" "}
+            {preview.buckets.conflict.length} conflicts,{" "}
+            {preview.buckets.noOp.length} already applicable.
+          </p>
+          {preview.items.map((item) => (
+            <p
+              key={item.noteId}
+              data-ltm-transfer-item={item.classification}
+              className="rounded bg-[var(--secondary)]/45 p-2"
+            >
+              <strong>{item.title}</strong>: {item.classification}
+              {item.reason ? ` - ${item.reason}` : ""}
+            </p>
+          ))}
+          <Button
+            primary
+            disabled={busy !== null || preview.buckets.ready.length === 0}
+            onClick={onApply}
+            data-ltm-transfer-action="apply-ready"
+            data-ltm-transfer-ready-count={preview.buckets.ready.length}
+          >
+            {busy === "apply" ? (
+              <Loader2 size="0.75rem" className="animate-spin" />
+            ) : (
+              <Check size="0.75rem" />
+            )}
+            {preview.mode === "move" ? "Move" : "Copy"}{" "}
+            {preview.buckets.ready.length} memor
+            {preview.buckets.ready.length === 1 ? "y" : "ies"}
+          </Button>
+        </div>
+      ) : null}
+      {result ? (
+        <div data-ltm-transfer-result={result.mode}>
+          <StatusSurface tone="success">
+            Updated {result.updatedNoteIds.length}; skipped{" "}
+            {result.skippedNoteIds.length}; derived touched{" "}
+            {result.derivedNoteIdsTouched.length}.
+          </StatusSurface>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function SourcesWorkspace({
   props,
   onOpenMemory,
@@ -108,6 +276,10 @@ export default function SourcesWorkspace({
 }: LongTermMemoryDestinationProps) {
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const selectAllImportedRef = useRef<HTMLInputElement>(null);
+  const [transferResultKey, setTransferResultKey] = useState<string | null>(
+    null,
+  );
   const importControllerRef = useRef<AbortController | null>(null);
   const [source, setSource] = useState<Source>("chats");
   const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(
@@ -121,10 +293,7 @@ export default function SourcesWorkspace({
   );
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
   const [selections, setSelections] = useState<Record<string, string[]>>({});
-  const [collapsedSections, setCollapsedSections] = useState({
-    available: false,
-    imported: true,
-  });
+  const [flatPanel, setFlatPanel] = useState<FlatPanel>("available");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] =
@@ -136,9 +305,7 @@ export default function SourcesWorkspace({
   );
   const [extractingId, setExtractingId] = useState<string | null>(null);
   const [reviewMessage, setReviewMessage] = useState("");
-  const [transferNoteIds, setTransferNoteIds] = useState<Set<string>>(
-    new Set(),
-  );
+  const [transferOpen, setTransferOpen] = useState(false);
   const [transferMode, setTransferMode] = useState<"copy" | "move">("copy");
   const [includeDerived, setIncludeDerived] = useState(true);
   const [transferPreview, setTransferPreview] =
@@ -266,6 +433,32 @@ export default function SourcesWorkspace({
     ...selectedLorebookImportIds,
     ...selectedLorebookRefreshIds,
   ]);
+  const selectedLorebookTransferNoteIds = new Set(
+    selectedLorebook?.entries
+      .flatMap((entry) => entry.candidates)
+      .filter(
+        (candidate) =>
+          candidate.status === "imported" &&
+          selectedLorebookRefreshIds.has(candidate.sourceId),
+      )
+      .map((candidate) => candidate.existingNoteId) ?? [],
+  );
+  const transferNoteIds = new Set(
+    source === "lorebooks"
+      ? selectedLorebookTransferNoteIds
+      : selectedImportedRows.map((row) => row.existingNoteId),
+  );
+  const transferSelectionKey = JSON.stringify([...transferNoteIds].sort());
+  const activeFlatRows =
+    flatPanel === "available" ? selectableRows : importedRows;
+  const activeFlatSelection =
+    flatPanel === "available" ? selectedIds : selectedImportedIds;
+  const activeFlatSelectedIds =
+    flatPanel === "available"
+      ? selectedSelectableIds
+      : selectedImportedRows.map((row) => row.sourceId);
+  const activeFlatAllSelected =
+    flatPanel === "available" ? allSelectableSelected : allImportedSelected;
   const pendingDraftsProduced = Boolean(
     importResult?.imported.some(
       (item) =>
@@ -308,6 +501,25 @@ export default function SourcesWorkspace({
         selectedSelectableIds.length > 0 && !allSelectableSelected;
   }, [allSelectableSelected, selectedSelectableIds.length]);
 
+  useEffect(() => {
+    if (selectAllImportedRef.current)
+      selectAllImportedRef.current.indeterminate =
+        selectedImportedRows.length > 0 && !allImportedSelected;
+  }, [allImportedSelected, selectedImportedRows.length]);
+
+  useEffect(() => {
+    const resultStillMatchesSelection =
+      transferResultKey === transferSelectionKey;
+    setTransferPreview(null);
+    setTransferError("");
+    if (!resultStillMatchesSelection) {
+      setTransferResult(null);
+      setTransferResultKey(null);
+    }
+    if (!transferNoteIds.size && !resultStillMatchesSelection)
+      setTransferOpen(false);
+  }, [transferResultKey, transferSelectionKey, transferNoteIds.size]);
+
   const invalidateAfterMutation = async () => {
     await invalidateLtmQueries(client, [
       queryKeys.notes,
@@ -327,6 +539,11 @@ export default function SourcesWorkspace({
     setCancelledImport(null);
     setImportError("");
     setReviewMessage("");
+    setTransferOpen(false);
+    setTransferPreview(null);
+    setTransferResult(null);
+    setTransferResultKey(null);
+    setTransferError("");
   };
 
   const changeSource = (next: Source) => {
@@ -509,17 +726,6 @@ export default function SourcesWorkspace({
     }
   };
 
-  const toggleTransferNote = (noteId: string, checked: boolean) => {
-    setTransferNoteIds((current) => {
-      const next = new Set(current);
-      if (checked) next.add(noteId);
-      else next.delete(noteId);
-      return next;
-    });
-    setTransferPreview(null);
-    setTransferResult(null);
-  };
-
   const previewTransfer = async () => {
     if (!props.chatId || transferNoteIds.size === 0 || transferBusy) return;
     setTransferBusy("preview");
@@ -566,6 +772,15 @@ export default function SourcesWorkspace({
         },
       );
       setTransferResult(result);
+      setTransferResultKey("[]");
+      setTransferPreview(null);
+      setSelections((current) => ({
+        ...current,
+        [source === "lorebooks"
+          ? lorebookRefreshSelectionKey
+          : importedSelectionKey]: [],
+      }));
+      setTransferOpen(true);
       await invalidateAfterMutation();
     } catch (error) {
       setTransferError(
@@ -578,20 +793,12 @@ export default function SourcesWorkspace({
     }
   };
 
-  const sourceMemoryActions = (noteId: string) => (
+  const sourceMemoryActions = (noteId: string, title: string) => (
     <div className="flex flex-wrap gap-2">
-      <label className="inline-flex min-h-11 items-center gap-2 text-xs text-[var(--muted-foreground)]">
-        <input
-          type="checkbox"
-          checked={transferNoteIds.has(noteId)}
-          onChange={(event) => toggleTransferNote(noteId, event.target.checked)}
-          data-ltm-source-transfer-note={noteId}
-        />
-        Transfer
-      </label>
       <button
         type="button"
         data-ltm-source-memory-id={noteId}
+        aria-label={`Open source memory: ${title}`}
         className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
         onClick={() => onOpenMemory?.(noteId)}
       >
@@ -638,9 +845,21 @@ export default function SourcesWorkspace({
             key={tab.id}
             type="button"
             role="tab"
+            id={`ltm-source-tab-${tab.id}`}
+            tabIndex={source === tab.id ? 0 : -1}
             aria-selected={source === tab.id}
+            aria-controls={`ltm-source-preview-${tab.id}`}
             data-ltm-source-tab={tab.id}
             onClick={() => changeSource(tab.id)}
+            onKeyDown={(event) =>
+              handleTabKey(
+                event,
+                sourceTabs.map((item) => item.id),
+                source,
+                changeSource,
+                "data-ltm-source-tab",
+              )
+            }
             className={`min-h-11 rounded-lg border px-3 text-xs font-semibold ${source === tab.id ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] bg-[var(--secondary)]"}`}
           >
             {tab.label}
@@ -770,6 +989,7 @@ export default function SourcesWorkspace({
 
       {source === "lorebooks" ? (
         <div
+          id="ltm-source-preview-lorebooks"
           data-ltm-source-preview="lorebooks"
           data-ltm-lorebook-browser
           className="space-y-3"
@@ -947,6 +1167,17 @@ export default function SourcesWorkspace({
                           <RefreshCw size="0.75rem" /> Sync selected (
                           {selectedBookRefreshIds.length})
                         </Button>
+                        {selectedLorebookTransferNoteIds.size ? (
+                          <Button
+                            primary
+                            onClick={() => setTransferOpen((open) => !open)}
+                            aria-expanded={transferOpen}
+                            data-ltm-lorebook-action="transfer-selected"
+                          >
+                            <Send size="0.75rem" /> Transfer selected (
+                            {selectedLorebookTransferNoteIds.size})
+                          </Button>
+                        ) : null}
                         {importing ? (
                           <Button
                             destructive
@@ -967,6 +1198,31 @@ export default function SourcesWorkspace({
                       <p className="text-xs text-[var(--muted-foreground)]">
                         {selectedLorebook.tags.join(", ")}
                       </p>
+                    ) : null}
+                    {transferOpen &&
+                    (selectedLorebookTransferNoteIds.size || transferResult) ? (
+                      <TransferWorkbench
+                        chatId={props.chatId}
+                        noteCount={selectedLorebookTransferNoteIds.size}
+                        mode={transferMode}
+                        includeDerived={includeDerived}
+                        busy={transferBusy}
+                        error={transferError}
+                        preview={transferPreview}
+                        result={transferResult}
+                        onModeChange={(mode) => {
+                          setTransferMode(mode);
+                          setTransferPreview(null);
+                          setTransferResult(null);
+                        }}
+                        onIncludeDerivedChange={(includeDerived) => {
+                          setIncludeDerived(includeDerived);
+                          setTransferPreview(null);
+                          setTransferResult(null);
+                        }}
+                        onPreview={() => void previewTransfer()}
+                        onApply={() => void applyTransfer()}
+                      />
                     ) : null}
                   </header>
 
@@ -1036,7 +1292,10 @@ export default function SourcesWorkspace({
                               <p className="text-xs text-[var(--muted-foreground)]">
                                 Source memory: {candidate.existingNoteTitle}
                               </p>
-                              {sourceMemoryActions(candidate.existingNoteId)}
+                              {sourceMemoryActions(
+                                candidate.existingNoteId,
+                                candidate.existingNoteTitle,
+                              )}
                             </div>
                           ))}
                         </article>
@@ -1058,204 +1317,232 @@ export default function SourcesWorkspace({
           </div>
         </div>
       ) : (
-        <div data-ltm-source-preview={source} className="space-y-3">
-          {(
-            [
-              {
-                id: "available" as const,
-                title: "Ready to Import",
-                rows: selectableRows,
-                selected: selectedSelectableIds,
-                allSelected: allSelectableSelected,
-                selection: selectedIds,
-                selectAllRef,
-                action: "Import selected",
-                actionId: "import-selected",
-                onToggle: toggleSelected,
-                onSelectAll: (checked: boolean) =>
+        <section
+          id={`ltm-source-preview-${source}`}
+          data-ltm-source-preview={source}
+          className="overflow-hidden rounded-lg border border-[var(--border)]"
+        >
+          <div
+            role="tablist"
+            aria-label="Source status"
+            className="flex border-b border-[var(--border)] bg-[var(--secondary)]/45 p-1"
+          >
+            {flatPanelTabs.map((tab) => {
+              const count =
+                tab.id === "available"
+                  ? selectableRows.length
+                  : importedRows.length;
+              return (
+                <button
+                  key={tab.id}
+                  id={`ltm-source-panel-tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  tabIndex={flatPanel === tab.id ? 0 : -1}
+                  aria-selected={flatPanel === tab.id}
+                  aria-controls={`ltm-source-panel-${tab.id}`}
+                  data-ltm-source-section={tab.id}
+                  onClick={() => setFlatPanel(tab.id)}
+                  onKeyDown={(event) =>
+                    handleTabKey(
+                      event,
+                      flatPanelTabs.map((item) => item.id),
+                      flatPanel,
+                      setFlatPanel,
+                      "data-ltm-source-section",
+                    )
+                  }
+                  className={`min-h-11 flex-1 rounded-md px-3 text-xs font-semibold ${flatPanel === tab.id ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
+                >
+                  {tab.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+          <div
+            id={`ltm-source-panel-${flatPanel}`}
+            role="tabpanel"
+            aria-labelledby={`ltm-source-panel-tab-${flatPanel}`}
+          >
+            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] px-3 py-2 text-xs font-semibold">
+              <input
+                ref={
+                  flatPanel === "available"
+                    ? selectAllRef
+                    : selectAllImportedRef
+                }
+                type="checkbox"
+                aria-label={`Select all ${flatPanel === "available" ? "ready to import" : "already imported"}`}
+                checked={activeFlatAllSelected}
+                disabled={activeFlatRows.length === 0}
+                onChange={(event) =>
                   setSelections((current) => ({
                     ...current,
-                    [selectionKey]: checked
-                      ? selectableRows.map((row) => row.sourceId)
+                    [flatPanel === "available"
+                      ? selectionKey
+                      : importedSelectionKey]: event.target.checked
+                      ? activeFlatRows.map((row) => row.sourceId)
                       : [],
-                  })),
-                onAction: () => void runImport(selectedSelectableIds),
-                empty: "No new or retryable sources are ready to import.",
-              },
-              {
-                id: "imported" as const,
-                title: "Already Imported",
-                rows: importedRows,
-                selected: selectedImportedRows.map((row) => row.sourceId),
-                allSelected: allImportedSelected,
-                selection: selectedImportedIds,
-                selectAllRef: undefined,
-                action: "Refresh selected",
-                actionId: "refresh-selected",
-                onToggle: toggleImportedSelected,
-                onSelectAll: (checked: boolean) =>
-                  setSelections((current) => ({
-                    ...current,
-                    [importedSelectionKey]: checked
-                      ? importedRows.map((row) => row.sourceId)
-                      : [],
-                  })),
-                onAction: () =>
-                  void runImport(
-                    selectedImportedRows.map((row) => row.sourceId),
-                    "refresh",
-                  ),
-                empty: "No sources have been imported in this scope.",
-              },
-            ] as const
-          ).map((section) => (
-            <section
-              key={section.id}
-              className="overflow-hidden rounded-lg border border-[var(--border)]"
-              data-ltm-source-section={section.id}
-            >
-              <button
-                type="button"
-                className="flex min-h-11 w-full items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2 text-left text-xs font-semibold"
-                aria-expanded={!collapsedSections[section.id]}
-                onClick={() =>
-                  setCollapsedSections((current) => ({
-                    ...current,
-                    [section.id]: !current[section.id],
                   }))
                 }
-                data-ltm-source-section-toggle={section.id}
-              >
-                <span>{section.title}</span>
-                <span className="text-[var(--muted-foreground)]">
-                  {section.rows.length}
-                </span>
-              </button>
-              {!collapsedSections[section.id] ? (
+                data-ltm-source-select-all={flatPanel}
+              />
+              <span>{activeFlatSelectedIds.length} selected</span>
+              {flatPanel === "available" ? (
+                <Button
+                  primary
+                  disabled={importing || activeFlatSelectedIds.length === 0}
+                  onClick={() => void runImport(activeFlatSelectedIds)}
+                  data-ltm-source-action="import-selected"
+                  data-ltm-source-selected-count={activeFlatSelectedIds.length}
+                >
+                  {importing ? (
+                    <Loader2 size="0.75rem" className="animate-spin" />
+                  ) : (
+                    <Check size="0.75rem" />
+                  )}
+                  Import selected
+                </Button>
+              ) : (
                 <>
-                  <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-3 py-2 text-xs font-semibold">
-                    <input
-                      ref={section.selectAllRef}
-                      type="checkbox"
-                      aria-label={`Select all ${section.title.toLowerCase()}`}
-                      checked={section.allSelected}
-                      disabled={section.rows.length === 0}
-                      onChange={(event) =>
-                        section.onSelectAll(event.target.checked)
-                      }
-                      data-ltm-source-select-all={section.id}
-                    />
-                    <span>
-                      {section.selected.length} of {section.rows.length}{" "}
-                      selected
-                    </span>
+                  <Button
+                    disabled={importing || activeFlatSelectedIds.length === 0}
+                    onClick={() =>
+                      void runImport(activeFlatSelectedIds, "refresh")
+                    }
+                    data-ltm-source-action="refresh-selected"
+                    data-ltm-source-selected-count={
+                      activeFlatSelectedIds.length
+                    }
+                  >
+                    <RefreshCw size="0.75rem" /> Sync selected
+                  </Button>
+                  {transferNoteIds.size ? (
                     <Button
                       primary
-                      disabled={importing || section.selected.length === 0}
-                      onClick={section.onAction}
-                      data-ltm-source-action={section.actionId}
-                      data-ltm-source-selected-count={section.selected.length}
+                      onClick={() => setTransferOpen((open) => !open)}
+                      aria-expanded={transferOpen}
+                      data-ltm-source-action="transfer-selected"
                     >
-                      {importing ? (
-                        <Loader2 size="0.75rem" className="animate-spin" />
-                      ) : section.id === "available" ? (
-                        <Check size="0.75rem" />
-                      ) : (
-                        <RefreshCw size="0.75rem" />
-                      )}
-                      {section.action}
+                      <Send size="0.75rem" /> Transfer selected (
+                      {transferNoteIds.size})
                     </Button>
-                    {importing && section.id === "available" ? (
-                      <Button
-                        destructive
-                        onClick={() => importControllerRef.current?.abort()}
-                        data-ltm-source-action="cancel-import"
-                      >
-                        Cancel
-                      </Button>
-                    ) : null}
-                  </div>
-                  <div role="list" className="divide-y divide-[var(--border)]">
-                    {section.rows.map((row) => {
-                      const selectable = section.id === "available";
-                      return (
-                        <article
-                          key={row.sourceId}
-                          role="listitem"
-                          data-ltm-source-row-status={row.status}
-                          data-ltm-source-id={row.sourceId}
-                          className="space-y-2 p-3"
-                        >
-                          <div className="flex items-start gap-3">
-                            <input
-                              type="checkbox"
-                              aria-label={`Select ${row.title}`}
-                              checked={section.selection.has(row.sourceId)}
-                              disabled={
-                                !selectable && section.id !== "imported"
-                              }
-                              onChange={(event) =>
-                                section.onToggle(
-                                  row.sourceId,
-                                  event.target.checked,
-                                )
-                              }
-                              data-ltm-source-select={row.sourceId}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="text-sm font-semibold">
-                                  {row.title}
-                                </h3>
-                                <span
-                                  data-ltm-source-status={row.status}
-                                  className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
-                                >
-                                  {sourceStatusLabel(row)}
-                                </span>
-                              </div>
-                              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                                {row.summary}
-                              </p>
-                              <p className="mt-1 line-clamp-2 text-xs text-[var(--muted-foreground)]">
-                                {row.snippet}
-                              </p>
-                            </div>
-                          </div>
-                          {section.id === "imported" ? (
-                            <div
-                              className="ml-7 space-y-2"
-                              data-ltm-source-existing-note={row.existingNoteId}
-                            >
-                              <p className="text-xs text-[var(--muted-foreground)]">
-                                Source memory: {row.existingNoteTitle}
-                              </p>
-                              <Button
-                                disabled={importing}
-                                onClick={() =>
-                                  void runImport([row.sourceId], "refresh")
-                                }
-                                data-ltm-source-action="refresh-reimport"
-                              >
-                                <RefreshCw size="0.75rem" /> Sync latest source
-                              </Button>
-                              {sourceMemoryActions(row.existingNoteId)}
-                            </div>
-                          ) : null}
-                        </article>
-                      );
-                    })}
-                    {!preview.isLoading && section.rows.length === 0 ? (
-                      <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                        {section.empty}
-                      </p>
-                    ) : null}
-                  </div>
+                  ) : null}
                 </>
+              )}
+              {importing && flatPanel === "available" ? (
+                <Button
+                  destructive
+                  onClick={() => importControllerRef.current?.abort()}
+                  data-ltm-source-action="cancel-import"
+                >
+                  Cancel
+                </Button>
               ) : null}
-            </section>
-          ))}
-        </div>
+            </div>
+            {flatPanel === "imported" &&
+            transferOpen &&
+            (transferNoteIds.size || transferResult) ? (
+              <TransferWorkbench
+                chatId={props.chatId}
+                noteCount={transferNoteIds.size}
+                mode={transferMode}
+                includeDerived={includeDerived}
+                busy={transferBusy}
+                error={transferError}
+                preview={transferPreview}
+                result={transferResult}
+                onModeChange={(mode) => {
+                  setTransferMode(mode);
+                  setTransferPreview(null);
+                  setTransferResult(null);
+                }}
+                onIncludeDerivedChange={(includeDerived) => {
+                  setIncludeDerived(includeDerived);
+                  setTransferPreview(null);
+                  setTransferResult(null);
+                }}
+                onPreview={() => void previewTransfer()}
+                onApply={() => void applyTransfer()}
+              />
+            ) : null}
+            <div role="list" className="divide-y divide-[var(--border)]">
+              {activeFlatRows.map((row) => (
+                <article
+                  key={row.sourceId}
+                  role="listitem"
+                  data-ltm-source-row-status={row.status}
+                  data-ltm-source-id={row.sourceId}
+                  className="space-y-2 p-3"
+                >
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${row.title}`}
+                      checked={activeFlatSelection.has(row.sourceId)}
+                      onChange={(event) =>
+                        flatPanel === "available"
+                          ? toggleSelected(row.sourceId, event.target.checked)
+                          : toggleImportedSelected(
+                              row.sourceId,
+                              event.target.checked,
+                            )
+                      }
+                      data-ltm-source-select={row.sourceId}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold">{row.title}</h3>
+                        <span
+                          data-ltm-source-status={row.status}
+                          className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
+                        >
+                          {sourceStatusLabel(row)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                        {row.summary}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-xs text-[var(--muted-foreground)]">
+                        {row.snippet}
+                      </p>
+                    </div>
+                  </div>
+                  {flatPanel === "imported" ? (
+                    <div
+                      className="ml-7 space-y-2"
+                      data-ltm-source-existing-note={row.existingNoteId}
+                    >
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        Source memory: {row.existingNoteTitle}
+                      </p>
+                      <Button
+                        disabled={importing}
+                        onClick={() =>
+                          void runImport([row.sourceId], "refresh")
+                        }
+                        data-ltm-source-action="refresh-reimport"
+                      >
+                        <RefreshCw size="0.75rem" /> Sync latest source
+                      </Button>
+                      {sourceMemoryActions(
+                        row.existingNoteId,
+                        row.existingNoteTitle,
+                      )}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+              {!preview.isLoading && activeFlatRows.length === 0 ? (
+                <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                  {flatPanel === "available"
+                    ? "No new or retryable sources are ready to import."
+                    : "No sources have been imported in this scope."}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
       )}
 
       {importResult ? (
@@ -1334,7 +1621,7 @@ export default function SourcesWorkspace({
                   {item.error.message}
                 </StatusSurface>
               ) : null}
-              {sourceMemoryActions(item.note.id)}
+              {sourceMemoryActions(item.note.id, item.title)}
             </article>
           ))}
           {importResult.writeFailures.map((failure) => (
@@ -1355,124 +1642,6 @@ export default function SourcesWorkspace({
           ))}
         </section>
       ) : null}
-
-      <section
-        data-ltm-source-transfer
-        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
-      >
-        <div>
-          <h2 className="text-sm font-semibold">Transfer source memories</h2>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Select source memories above, then preview a copy or move into the
-            current chat.
-          </p>
-        </div>
-        {!props.chatId ? (
-          <StatusSurface tone="danger">
-            Open Long-Term Memory from a chat before transferring memories.
-          </StatusSurface>
-        ) : null}
-        <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          Mode
-          <select
-            value={transferMode}
-            onChange={(event) => {
-              setTransferMode(event.target.value as "copy" | "move");
-              setTransferPreview(null);
-              setTransferResult(null);
-            }}
-            className={inputClass}
-            data-ltm-transfer-mode
-          >
-            <option value="copy">Copy to current chat</option>
-            <option value="move">Move to current chat</option>
-          </select>
-        </label>
-        <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
-          <input
-            type="checkbox"
-            checked={includeDerived}
-            onChange={(event) => {
-              setIncludeDerived(event.target.checked);
-              setTransferPreview(null);
-              setTransferResult(null);
-            }}
-            data-ltm-transfer-include-derived
-          />
-          Include attached durable memories
-        </label>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Attached durable memories are linked through source extraction. Turn
-          this off to transfer only the selected source memories.
-        </p>
-        <Button
-          primary
-          disabled={
-            !props.chatId || transferNoteIds.size === 0 || transferBusy !== null
-          }
-          onClick={() => void previewTransfer()}
-          data-ltm-transfer-action="preview"
-        >
-          {transferBusy === "preview" ? (
-            <Loader2 size="0.75rem" className="animate-spin" />
-          ) : (
-            <Send size="0.75rem" />
-          )}{" "}
-          Preview transfer ({transferNoteIds.size})
-        </Button>
-        {transferError ? (
-          <StatusSurface tone="danger">{transferError}</StatusSurface>
-        ) : null}
-        {transferPreview ? (
-          <div data-ltm-transfer-preview className="space-y-2 text-xs">
-            <p>
-              {transferPreview.buckets.ready.length} ready,{" "}
-              {transferPreview.buckets.conflict.length} conflicts,{" "}
-              {transferPreview.buckets.noOp.length} already applicable.
-            </p>
-            {transferPreview.items.map((item) => (
-              <p
-                key={item.noteId}
-                data-ltm-transfer-item={item.classification}
-                className="rounded bg-[var(--secondary)]/45 p-2"
-              >
-                <strong>{item.title}</strong>: {item.classification}
-                {item.reason ? ` - ${item.reason}` : ""}
-              </p>
-            ))}
-            <Button
-              primary
-              disabled={
-                transferBusy !== null ||
-                transferPreview.buckets.ready.length === 0
-              }
-              onClick={() => void applyTransfer()}
-              data-ltm-transfer-action="apply-ready"
-              data-ltm-transfer-ready-count={
-                transferPreview.buckets.ready.length
-              }
-            >
-              {transferBusy === "apply" ? (
-                <Loader2 size="0.75rem" className="animate-spin" />
-              ) : (
-                <Check size="0.75rem" />
-              )}{" "}
-              Apply {transferPreview.buckets.ready.length} ready memory
-              {transferPreview.buckets.ready.length === 1 ? "" : "ies"}
-            </Button>
-          </div>
-        ) : null}
-        {transferResult ? (
-          <StatusSurface
-            tone="success"
-            data-ltm-transfer-result={transferResult.mode}
-          >
-            Updated {transferResult.updatedNoteIds.length}; skipped{" "}
-            {transferResult.skippedNoteIds.length}; derived touched{" "}
-            {transferResult.derivedNoteIdsTouched.length}.
-          </StatusSurface>
-        ) : null}
-      </section>
     </section>
   );
 }

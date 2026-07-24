@@ -210,29 +210,19 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
       sources.locator('[data-ltm-source-tab="chats"]'),
     ).toHaveAttribute("aria-selected", "true");
     await expect(
-      sources.locator('[data-ltm-source-section="available"]'),
+      sources.getByRole("tab", { name: /Ready to Import/ }),
     ).toBeVisible();
     await expect(
-      sources.locator('[data-ltm-source-section="imported"]'),
+      sources.getByRole("tab", { name: /Already Imported/ }),
     ).toBeVisible();
     await expect(
-      sources.locator('[data-ltm-source-section-toggle="available"]'),
-    ).toHaveAttribute("aria-expanded", "true");
-    await expect(
-      sources.locator('[data-ltm-source-section-toggle="imported"]'),
-    ).toHaveAttribute("aria-expanded", "false");
+      sources.getByRole("tab", { name: /Ready to Import/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(sources.getByRole("tabpanel")).toHaveCount(1);
     await expect(
       sources.locator('[data-ltm-source-select-all="available"]'),
     ).toBeVisible();
-    await sources
-      .locator('[data-ltm-source-section-toggle="imported"]')
-      .click();
-    await expect(
-      sources.locator('[data-ltm-source-select-all="imported"]'),
-    ).toBeVisible();
-    await expect(
-      sources.locator("[data-ltm-transfer-include-derived]"),
-    ).toBeChecked();
+    await expect(sources.locator("[data-ltm-source-transfer]")).toHaveCount(0);
 
     await navigation.locator('[data-ltm-destination="settings"]').click();
     const settings = detail.locator('[data-ltm-surface="memory-settings"]');
@@ -278,7 +268,9 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(activity).not.toContainText("responseChars");
     await activity.getByText("Technical details", { exact: true }).click();
     await activity.getByRole("button", { name: "Copy JSON" }).click();
-    await expect(activity.getByRole("button", { name: "Copied" })).toBeVisible();
+    await expect(
+      activity.getByRole("button", { name: "Copied" }),
+    ).toBeVisible();
     await settings.getByRole("tab", { name: "Debug" }).press("ArrowLeft");
     await expect(
       settings.getByRole("tab", { name: "Maintenance" }),
@@ -337,8 +329,12 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
       .getByRole("button", { name: "Reset to default" })
       .first()
       .click();
-    await expect(settings.getByRole("button", { name: "Save settings" })).toBeVisible();
-    await expect(settings.getByRole("button", { name: "Discard changes" })).toBeVisible();
+    await expect(
+      settings.getByRole("button", { name: "Save settings" }),
+    ).toBeVisible();
+    await expect(
+      settings.getByRole("button", { name: "Discard changes" }),
+    ).toBeVisible();
 
     await navigation.locator('[data-ltm-destination="vault"]').click();
     await page
@@ -699,6 +695,198 @@ test("Long-Term Memory review queue keeps context compact and actions contextual
   }
 });
 
+test("Long-Term Memory manages imported sources from one workstation", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const chat = await createChat(page, testInfo);
+  const noteId = `source_workstation_${Date.now()}`;
+  const noteTitle = "Imported workstation source";
+  const timestamp = new Date().toISOString();
+  let appliedNoteIds: string[] = [];
+
+  try {
+    await seedNotes(page, [
+      {
+        id: noteId,
+        title: noteTitle,
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: chat.id, chatIds: [chat.id] },
+        tags: ["source_summary"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: chat.id },
+        sections: {
+          source: { text: "Imported source fixture.", updatedAt: timestamp },
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      },
+    ]);
+    await page.route(
+      "**/api/capability-packages/long-term-memory/client*",
+      async (route) => {
+        await route.fulfill({
+          contentType: "text/javascript; charset=utf-8",
+          body: await readFile(
+            join(import.meta.dirname, "../packages/long-term-memory/client.js"),
+          ),
+        });
+      },
+    );
+    await page.route(
+      "**/api/long-term-memory/import/preview",
+      async (route) => {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            source: "chats",
+            scanned: 2,
+            draftable: 1,
+            importedCount: 1,
+            samples: [
+              {
+                sourceId: "pending-workstation",
+                title: "Pending workstation source",
+                mutationCount: 0,
+                summary: "Ready to import.",
+                snippet: "Pending source fixture.",
+                status: "pending",
+                freshness: "new",
+              },
+              {
+                sourceId: "imported-workstation",
+                title: "Imported workstation source",
+                mutationCount: 0,
+                summary: "Already imported.",
+                snippet: "Imported source fixture.",
+                status: "imported",
+                freshness: "current",
+                existingNoteId: noteId,
+                existingNoteTitle: noteTitle,
+              },
+            ],
+          }),
+        });
+      },
+    );
+    await page.route(
+      "**/api/long-term-memory/notes/transfer-preview",
+      async (route) => {
+        const request = route.request().postDataJSON();
+        expect(request.noteIds).toEqual([noteId]);
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            mode: request.mode,
+            destinationChatId: chat.id,
+            selection: {
+              requestedNoteCount: 1,
+              totalNoteCount: 1,
+              requestedNoteIds: [noteId],
+              availableDerivedCount: 0,
+              includedDerivedCount: 0,
+              derivedNoteIds: [],
+              includeDerived: request.includeDerived,
+            },
+            buckets: { ready: [noteId], noOp: [], conflict: [] },
+            items: [
+              {
+                noteId,
+                title: noteTitle,
+                type: "source",
+                previewText: "Imported source fixture.",
+                scope: { chatId: chat.id, chatIds: [chat.id] },
+                nextScope: { chatId: chat.id, chatIds: [chat.id] },
+                derived: false,
+                classification: "ready",
+                defaultIncluded: true,
+                conflicts: [],
+              },
+            ],
+          }),
+        });
+      },
+    );
+    await page.route(
+      "**/api/long-term-memory/notes/transfer",
+      async (route) => {
+        const request = route.request().postDataJSON();
+        appliedNoteIds = request.noteIds;
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            mode: request.mode,
+            destinationChatId: chat.id,
+            updatedNoteIds: request.noteIds,
+            skippedNoteIds: [],
+            derivedNoteIdsTouched: [],
+            rebuild: null,
+          }),
+        });
+      },
+    );
+
+    await openLongTermMemory(page, chat.id, testInfo);
+    const detail = page.locator('[data-ltm-surface="detail"]');
+    const navigation = detail.locator(
+      'nav[aria-label="Long-Term Memory sections"]:visible',
+    );
+    await navigation.locator('[data-ltm-destination="sources"]').click();
+    const sources = detail.locator('[data-ltm-surface="sources"]');
+    await expect(
+      sources.getByRole("tab", { name: /Ready to Import \(1\)/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(sources.getByText("Pending workstation source")).toBeVisible();
+    await expect(sources.getByText("Imported workstation source")).toHaveCount(
+      0,
+    );
+
+    await sources.getByRole("tab", { name: /Already Imported \(1\)/ }).click();
+    const importedPanel = sources.getByRole("tabpanel");
+    await expect(
+      importedPanel.getByRole("heading", { name: noteTitle }),
+    ).toBeVisible();
+    await expect(
+      importedPanel.locator("[data-ltm-source-transfer-note]"),
+    ).toHaveCount(0);
+    await importedPanel
+      .getByLabel("Select Imported workstation source")
+      .check();
+    await expect(
+      sources.locator('[data-ltm-source-action="transfer-selected"]'),
+    ).toContainText("(1)");
+    await sources
+      .locator('[data-ltm-source-action="transfer-selected"]')
+      .click();
+    await expect(
+      sources.locator("[data-ltm-transfer-include-derived]"),
+    ).toBeChecked();
+    await sources.locator('[data-ltm-transfer-action="preview"]').click();
+    await expect(sources.locator("[data-ltm-transfer-preview]")).toContainText(
+      "1 ready",
+    );
+    await sources.locator('[data-ltm-transfer-action="apply-ready"]').click();
+    await expect(
+      sources.locator('[data-ltm-transfer-result="copy"]'),
+    ).toBeVisible();
+    expect(appliedNoteIds).toEqual([noteId]);
+
+    await sources
+      .getByRole("button", { name: `Open source memory: ${noteTitle}` })
+      .click();
+    const vault = detail.locator('[data-ltm-surface="vault"]');
+    await expect(vault).toBeVisible();
+    await expect(vault.getByLabel("Title")).toHaveValue(noteTitle);
+  } finally {
+    await deleteNotes(page, [noteId]);
+    await deleteChat(page, chat.id);
+  }
+});
+
 test("Long-Term Memory browses whole lorebooks and selects their entries", async ({
   page,
 }, testInfo) => {
@@ -852,8 +1040,12 @@ test("Long-Term Memory browses whole lorebooks and selects their entries", async
       `[data-ltm-lorebook-workbench="${atlasId}"]`,
     );
     await expect(workbench).toBeVisible();
-    await expect(workbench.getByRole("heading", { name: gateName })).toBeVisible();
-    await expect(workbench.getByRole("heading", { name: moonVaultName })).toBeVisible();
+    await expect(
+      workbench.getByRole("heading", { name: gateName }),
+    ).toBeVisible();
+    await expect(
+      workbench.getByRole("heading", { name: moonVaultName }),
+    ).toBeVisible();
     await expect(workbench).not.toContainText(quietRecordName);
 
     const gateEntry = workbench.locator(
