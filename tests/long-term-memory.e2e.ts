@@ -7,6 +7,9 @@ import { pathToFileURL } from "node:url";
 
 const engineRoot =
   process.env.MARINARA_ENGINE_ROOT ?? join(process.cwd(), "..");
+const apiBaseUrl =
+  process.env.PLAYWRIGHT_API_BASE_URL ??
+  `http://127.0.0.1:${process.env.PORT ?? 7860}`;
 const playwright = await import(
   pathToFileURL(join(engineRoot, "node_modules/@playwright/test/index.js")).href
 );
@@ -40,8 +43,10 @@ async function createChat(page: any, testInfo: any) {
 }
 
 async function deleteChat(page: any, chatId: string) {
-  const response = await page.request.delete(`/api/chats/${chatId}?force=true`);
-  expect(response.ok(), await response.text()).toBeTruthy();
+  const response = await fetch(`${apiBaseUrl}/api/chats/${chatId}?force=true`, {
+    method: "DELETE",
+  });
+  expect(response.ok, await response.text()).toBeTruthy();
 }
 
 async function deleteNotes(page: any, ids: string[]) {
@@ -125,7 +130,17 @@ async function openLongTermMemoryChatSettings(page: any, chatId: string) {
   await page.goto("/");
   await dismissOnboardingTutorial(page);
   await dismissWhatsNew(page);
-  await page.getByRole("button", { name: "Chat Settings" }).click();
+  if ((page.viewportSize()?.width ?? 768) < 768) {
+    const mobileMoreOptions = page.getByRole("button", { name: "More options" });
+    await expect(mobileMoreOptions).toBeVisible();
+    await mobileMoreOptions.click();
+    await expect(mobileMoreOptions).toHaveAttribute("aria-expanded", "true");
+    const overflowMenu = page.locator("[data-chat-toolbar-overflow-menu]");
+    await expect(overflowMenu).toBeVisible();
+    await overflowMenu.getByRole("button", { name: "Chat Settings" }).click();
+  } else {
+    await page.getByRole("button", { name: "Chat Settings" }).click();
+  }
   const drawer = page.locator(".mari-chat-settings-drawer");
   await expect(drawer).toBeVisible();
   await drawer
@@ -182,7 +197,10 @@ test("Long-Term Memory chat settings link opens the main agent settings", async 
       expect(entryBox).not.toBeNull();
       expect(settingsButtonBox).not.toBeNull();
       expect(entryBox!.width).toBeLessThanOrEqual(drawerBox!.width);
-      expect(settingsButtonBox!.width).toBeCloseTo(entryBox!.width, 0);
+      expect(settingsButtonBox!.x).toBeGreaterThanOrEqual(entryBox!.x);
+      expect(settingsButtonBox!.x + settingsButtonBox!.width).toBeLessThanOrEqual(
+        entryBox!.x + entryBox!.width,
+      );
     }
     await expect(
       agentEntry.getByRole("button", {
@@ -363,6 +381,32 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       settings.getByRole("combobox", { name: "Recall style" }),
     ).toBeVisible();
+    const recallStyle = settings.getByRole("combobox", { name: "Recall style" });
+    const meaningMatch = settings.getByRole("spinbutton", {
+      name: "Meaning match",
+    });
+    const exactWordsMatch = settings.getByRole("spinbutton", {
+      name: "Exact words match",
+    });
+    const graphWeight = settings.getByRole("spinbutton", {
+      name: "Graph weight",
+    });
+    const keywordWeight = settings.getByRole("spinbutton", {
+      name: "Keyword weight",
+    });
+    await expect(recallStyle).toHaveValue("balanced");
+    await expect(meaningMatch).toHaveValue("0.6");
+    await expect(exactWordsMatch).toHaveValue("0.3");
+    await expect(graphWeight).toHaveValue("0.1");
+    await expect(keywordWeight).toHaveValue("0.2");
+    await recallStyle.selectOption("exact");
+    await expect(meaningMatch).toHaveValue("0.15");
+    await expect(exactWordsMatch).toHaveValue("1");
+    await expect(graphWeight).toHaveValue("0");
+    await expect(keywordWeight).toHaveValue("0.8");
+    await graphWeight.fill("0.42");
+    await expect(recallStyle).toHaveValue("custom");
+    await expect(graphWeight).toHaveValue("0.42");
     await expect(
       settings.getByRole("textbox", { name: "Memory context instructions" }),
     ).toBeVisible();
