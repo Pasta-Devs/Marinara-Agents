@@ -32,8 +32,27 @@ function memoryTitle(item: LtmBudgetedChunk) {
     : item.chunk.noteId;
 }
 
+function normalizeBulletLines(text: string) {
+  const lines = text
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const normalized: string[] = [];
+  for (const line of lines) {
+    const withoutBullet = line.replace(/^[-*]\s+/, "");
+    const match = withoutBullet.match(/^(text|summary):\s*(.*)$/i);
+    if (match) {
+      if (normalized.length === 0 && match[2].trim()) normalized.push(match[2].trim());
+      continue;
+    }
+    normalized.push(withoutBullet);
+  }
+  return normalized;
+}
+
 function bullet(text: string) {
-  const lines = text.trim().split(/\r?\n/);
+  const lines = normalizeBulletLines(text);
   return lines.map((line, index) => `${index === 0 ? "- " : "  "}${line}`).join("\n");
 }
 

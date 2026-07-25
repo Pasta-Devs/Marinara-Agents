@@ -22,6 +22,9 @@ async function main() {
   const { sourceHashForLtmSourceNote } = await import(
     `${source}/source-hash.ts`
   );
+  const { normalizeStructuredSummaryEvidenceUnits } = await import(
+    `${source}/structured-summary-normalizer.ts`
+  );
 
   const timestamp = "2026-07-21T00:00:00.000Z";
   const sourceNote = (
@@ -221,6 +224,41 @@ async function main() {
   assert.deepEqual(currentEvidence.mutations[0]?.evidence, [
     `source_note:${chat.id}`,
   ]);
+
+  const structuredCharacterSource = sourceNote(
+    "source_structured_character_text",
+    { kind: "chat_summary", sourceId: "chat-b", entryId: "summary-b" },
+    [
+      "## character_fact",
+      "- Denise: Damo's reentry case officer at the Marlowe Street reentry office and identifies his case as an exoneree case rather than parole. | text: Damo's reentry case officer at the Marlowe Street reentry office; distinguishes his case as an \"exoneree\" rather than parolee, entitling him to state compensation.",
+      "- Denise | text: Began processing Damo's state compensation claim using his college records as evidence of disrupted earning potential, and referred him to civil rights attorney Mara Castellano for a possible civil suit.",
+    ].join("\n"),
+  );
+  const structuredCharacterUnits = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: structuredCharacterSource.sections.source.text,
+    sourceNote: structuredCharacterSource,
+    sourceHash: sourceHashForLtmSourceNote(structuredCharacterSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  }).units.filter((candidate) => candidate.bucket === "character_fact");
+  assert.equal(structuredCharacterUnits.length, 2);
+  assert.equal(
+    structuredCharacterUnits.some((candidate) => /(^|\s)text:/i.test(candidate.text)),
+    false,
+  );
+  assert.equal(
+    structuredCharacterUnits.some((candidate) => /(^|\s)summary:/i.test(candidate.text)),
+    false,
+  );
+  assert.equal(
+    structuredCharacterUnits[0]?.text.includes("distinguishes his case as an \"exoneree\" rather than parolee"),
+    true,
+  );
+  assert.equal(
+    structuredCharacterUnits[1]?.text.startsWith("Began processing Damo's state compensation claim"),
+    true,
+  );
 
   const invalidEventWithDependent = compile(chat, [
     unit(chat, {

@@ -151,6 +151,22 @@ async function main() {
     );
     assert.match(relationshipScores?.content ?? "", /- Relationship scores: trust 75\/100 \(\+5\)\n  Trust fact/);
 
+    const legacyBullets = serializeLongTermMemoryPrompt(
+      [makeChunk(
+        "character",
+        "char_denise",
+        '- Denise is Damo\'s reentry case officer at the Marlowe Street reentry office and treats his case as an exoneree case rather than parole.\ntext: Damo\'s reentry case officer at the Marlowe Street reentry office; distinguishes his case as an "exoneree" rather than parolee, entitling him to state compensation.',
+        "Denise",
+      )],
+      { maxTokens: 2048 },
+    );
+    assert.match(
+      legacyBullets?.content ?? "",
+      /Denise:\n- Denise is Damo's reentry case officer at the Marlowe Street reentry office and treats his case as an exonoree case rather than parole\./,
+    );
+    assert.doesNotMatch(legacyBullets?.content ?? "", /- - /);
+    assert.doesNotMatch(legacyBullets?.content ?? "", /\n\s*text:/);
+
     const tight = serializeLongTermMemoryPrompt(
       [
         makeChunk("world", "world_tight_one", "A".repeat(100)),

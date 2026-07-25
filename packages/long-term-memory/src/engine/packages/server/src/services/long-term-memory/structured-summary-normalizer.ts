@@ -1206,6 +1206,10 @@ function parseStructuredCharacterLine(
       textParts.push(value);
       continue;
     }
+    if (key === "text" || key === "summary") {
+      textParts.push(value);
+      continue;
+    }
     if (!STRUCTURED_CHARACTER_METADATA_KEYS.has(key)) {
       textParts.push(segment);
     }
