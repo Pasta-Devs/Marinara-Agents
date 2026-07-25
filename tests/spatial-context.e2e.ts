@@ -408,7 +408,6 @@ async function openHierarchicalMapsAgentControls(page: Page) {
   const drawer = await openHierarchicalMapsAgentCategory(page);
   const agentEntry = drawer.locator('[data-chat-agent-entry="hierarchical-maps"]');
   await expect(agentEntry).toBeVisible();
-  await agentEntry.getByText("Hierarchical map", { exact: true }).click();
   return { drawer, agentEntry };
 }
 
@@ -769,8 +768,7 @@ test("Hierarchical Maps activates inside its Tracker Agents entry", async ({ pag
 
     const agentEntry = drawer.locator('[data-chat-agent-entry="hierarchical-maps"]');
     await expect(agentEntry).toBeVisible();
-    await agentEntry.getByText("Hierarchical map", { exact: true }).click();
-    const activation = agentEntry.getByRole("switch", { name: /Use in this chat/ });
+    const activation = agentEntry.getByRole("switch", { name: /Enable Hierarchical Maps/ });
     await expect(activation).toHaveAttribute("aria-checked", "true");
     const activationHeight = await activation.evaluate((element) => element.getBoundingClientRect().height);
     expect(activationHeight).toBeGreaterThanOrEqual(44);
@@ -874,12 +872,12 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
-    await expect(home.getByText("v1.1.7", { exact: true })).toBeVisible();
+    await expect(home.getByText("v1.1.9", { exact: true })).toBeVisible();
     await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
     await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
 
-    const activation = home.getByRole("switch", { name: /Use in this chat/ });
+    const activation = home.getByRole("switch", { name: /Enable Hierarchical Maps/ });
     const createMap = home.getByRole("button", { name: "Create map", exact: true });
     await expect(activation).toHaveAttribute("aria-checked", "false");
     await expect(createMap).toBeDisabled();
