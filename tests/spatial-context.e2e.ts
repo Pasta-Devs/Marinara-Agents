@@ -871,8 +871,21 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
 
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
+    await expect(home).toHaveClass(/mari-editor-shell/u);
+    await expect(home.locator(":scope > .mari-editor-header")).toBeVisible();
+    await expect(home.locator(":scope > .mari-editor-header .mari-editor-header-main")).toBeVisible();
+    await expect(home.locator(".mari-editor-panel")).toHaveCount(8);
     await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
-    await expect(home.getByText("v1.1.9", { exact: true })).toBeVisible();
+    await expect(home.locator(".mari-editor-header")).toContainText("v1.1.10");
+    await expect(home.getByRole("heading", { name: "Description", exact: true })).toBeVisible();
+    await expect(home.getByRole("heading", { name: "Pipeline Phase", exact: true })).toBeVisible();
+    await expect(home.getByRole("button", { name: "Pre-Generation", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(home.getByRole("button", { name: "Parallel", exact: true })).toBeDisabled();
+    await expect(home.getByRole("heading", { name: "Connection Override", exact: true })).toBeVisible();
+    await expect(home.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
     await expect(home).toContainText("Maps Global Home Smoke · Roleplay");
     await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);

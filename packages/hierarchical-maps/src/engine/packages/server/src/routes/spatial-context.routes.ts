@@ -33,6 +33,7 @@ import {
 } from "../services/spatial-context/game-map-binding.js";
 import { parseSpatialMetadata } from "../services/spatial-context/metadata.js";
 import {
+  getPackageAgentConnectionId,
   getPackageJson,
   getPackageLanguageModels,
   getPackagePersistence,
@@ -824,7 +825,14 @@ export async function spatialContextRoutes(app: FastifyInstance) {
 
     let resolved;
     try {
-      resolved = await languageModels.resolve(parsed.connectionId ?? chat.connectionId);
+      const agentConnectionId = await getPackageAgentConnectionId("hierarchical-maps").catch((error) => {
+        logger.warn(
+          "Could not read the Hierarchical Maps connection override; using the chat connection: %s",
+          error instanceof Error ? error.message : String(error),
+        );
+        return null;
+      });
+      resolved = await languageModels.resolve(parsed.connectionId ?? agentConnectionId ?? chat.connectionId);
     } catch (error) {
       return reply.status(400).send({
         error: error instanceof Error ? error.message : "A language model connection is required.",

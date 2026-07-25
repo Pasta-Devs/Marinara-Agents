@@ -13,7 +13,7 @@ let lastSortableTimestamp = 0;
 let sortableSequence = 0;
 let runtimeHost: CapabilityRuntimeHost | null = null;
 let runtimeRegistration = 0;
-let resolveAgentSettings: ((agentType: string) => Promise<unknown>) | null = null;
+let resolveAgentConfig: ((agentType: string) => Promise<unknown>) | null = null;
 let writeAgentSettings: ((agentType: string, settings: Record<string, unknown>) => Promise<unknown>) | null = null;
 let agentSettingsUpdateQueue = Promise.resolve();
 
@@ -24,21 +24,36 @@ function getRuntimeHost(): CapabilityRuntimeHost {
 
 export function configurePackageRuntime(
   host: CapabilityRuntimeHost,
-  agentSettingsResolver: (agentType: string) => Promise<unknown>,
+  agentConfigResolver: (agentType: string) => Promise<unknown>,
   agentSettingsWriter: (agentType: string, settings: Record<string, unknown>) => Promise<unknown>,
 ): () => void {
   const registration = ++runtimeRegistration;
   runtimeHost = host;
-  resolveAgentSettings = agentSettingsResolver;
+  resolveAgentConfig = agentConfigResolver;
   writeAgentSettings = agentSettingsWriter;
   agentSettingsUpdateQueue = Promise.resolve();
   return () => {
     if (runtimeRegistration !== registration) return;
     runtimeHost = null;
-    resolveAgentSettings = null;
+    resolveAgentConfig = null;
     writeAgentSettings = null;
     agentSettingsUpdateQueue = Promise.resolve();
   };
+}
+
+async function getPackageAgentConfig(agentType: string): Promise<Record<string, unknown>> {
+  if (!resolveAgentConfig) throw new Error("Hierarchical Maps agent configuration is unavailable");
+  const value = await resolveAgentConfig(agentType);
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+export async function getPackageAgentConnectionId(agentType: string): Promise<string | null> {
+  const config = await getPackageAgentConfig(agentType);
+  return typeof config.connectionId === "string" && config.connectionId.trim()
+    ? config.connectionId.trim()
+    : null;
 }
 
 export async function updatePackageAgentSettings(
@@ -71,8 +86,8 @@ export async function updatePackageAgentSettings(
 }
 
 export async function getPackageAgentSettings(agentType: string): Promise<Record<string, unknown>> {
-  if (!resolveAgentSettings) throw new Error("Hierarchical Maps agent settings are unavailable");
-  const value = await resolveAgentSettings(agentType);
+  const config = await getPackageAgentConfig(agentType);
+  const value = config.settings;
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
   }
