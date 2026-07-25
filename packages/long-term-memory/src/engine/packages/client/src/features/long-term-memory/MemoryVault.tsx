@@ -26,6 +26,7 @@ import type {
 import { invalidateLtmQueries, queryKeys, request } from "./api";
 import {
   Button,
+  InfoPopover,
   inputClass,
   NumberField,
   StatusSurface,
@@ -241,12 +242,14 @@ function TokenEditor({
   values,
   placeholder,
   displayValue = (value) => value,
+  help,
   onChange,
 }: {
   label: string;
   values: string[];
   placeholder: string;
   displayValue?: (value: string) => string;
+  help?: ReactNode;
   onChange: (next: string[]) => void;
 }) {
   const [value, setValue] = useState("");
@@ -257,7 +260,10 @@ function TokenEditor({
   };
   return (
     <section className="space-y-2">
-      <h4 className="text-xs font-medium">{label}</h4>
+      <h4 className="flex items-center gap-1 text-xs font-medium">
+        {label}
+        {help ? <InfoPopover label={label} content={help} /> : null}
+      </h4>
       <div className="flex flex-wrap gap-1.5">
         {values.map((item) => (
           <Pill
@@ -1363,9 +1369,6 @@ export default function MemoryVault({
                   <h3 className="text-sm font-semibold">
                     {isNew ? "New memory" : "Memory details"}
                   </h3>
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    Changes are saved from this editor.
-                  </p>
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -1573,6 +1576,7 @@ export default function MemoryVault({
                           />
                           <TokenEditor
                             label="Evidence"
+                            help="References that support this section, including source memories."
                             values={section.evidence ?? []}
                             placeholder="Add evidence"
                             displayValue={referenceLabel}
@@ -1601,16 +1605,29 @@ export default function MemoryVault({
                   }
                 >
                   <section className="space-y-3 border-t border-[var(--border)] pt-4">
-                    <h4 className="text-xs font-medium">Section metadata</h4>
+                    <h4 className="flex items-center gap-1 text-xs font-medium">
+                      Section metadata
+                      <InfoPopover
+                        label="Section metadata"
+                        content="Retrieval metadata for each memory section. These values influence how extracted memory is ranked and reviewed."
+                      />
+                    </h4>
                     {Object.entries(draft.sections).map(([key, section]) => (
                       <fieldset key={key} className="space-y-2">
                         <legend className="text-xs font-semibold">
                           {noteTypeLabel(key)}
                         </legend>
                         <div className="grid gap-2">
-                          <label className="text-xs">
-                            Importance
+                          <div className="text-xs">
+                            <span className="flex items-center gap-1">
+                              Importance
+                              <InfoPopover
+                                label="Importance"
+                                content="Durability and consequence category: critical, major, moderate, or minor."
+                              />
+                            </span>
                             <select
+                              aria-label="Importance"
                               className={inputClass}
                               value={section.importance ?? ""}
                               disabled={draft.type === "source"}
@@ -1633,9 +1650,10 @@ export default function MemoryVault({
                                 ),
                               )}
                             </select>
-                          </label>
+                          </div>
                           <NumberField
                             label="Confidence"
+                            help="How strongly the stored evidence supports this section, from 0 to 1."
                             value={section.confidence ?? 0}
                             min={0}
                             max={1}
@@ -1650,6 +1668,7 @@ export default function MemoryVault({
                           />
                           <NumberField
                             label="Salience"
+                            help="How likely this section is to matter in future context, from 0 to 1."
                             value={section.salience ?? 0}
                             min={0}
                             max={1}
@@ -1684,7 +1703,13 @@ export default function MemoryVault({
                     />
                   </div>
                   <section className="space-y-2 border-t border-[var(--border)] pt-4">
-                    <h4 className="text-xs font-medium">Scope</h4>
+                    <h4 className="flex items-center gap-1 text-xs font-medium">
+                      Scope
+                      <InfoPopover
+                        label="Scope"
+                        content="Chats, branches, characters, or personas in which this memory is available."
+                      />
+                    </h4>
                     <div className="flex flex-wrap gap-1.5">
                       {(
                         draft.scope.chatIds ??
@@ -1778,7 +1803,13 @@ export default function MemoryVault({
                     </div>
                   </section>
                   <section className="space-y-2 border-t border-[var(--border)] pt-4">
-                    <h4 className="text-xs font-medium">Linked memories</h4>
+                    <h4 className="flex items-center gap-1 text-xs font-medium">
+                      Linked memories
+                      <InfoPopover
+                        label="Linked memories"
+                        content="Explicit relationships used to connect this memory to related memories."
+                      />
+                    </h4>
                     <div className="flex flex-wrap gap-1.5">
                       {draft.links.map((link, index) => (
                         <Pill
@@ -1860,7 +1891,13 @@ export default function MemoryVault({
                   {draft.type === "character" ||
                   draft.type === "relationship" ? (
                     <section className="space-y-2 border-t border-[var(--border)] pt-4">
-                      <h4 className="text-xs font-medium">Subjects</h4>
+                      <h4 className="flex items-center gap-1 text-xs font-medium">
+                        Subjects
+                        <InfoPopover
+                          label="Subjects"
+                          content="The character or relationship identities described by this memory."
+                        />
+                      </h4>
                       <div className="flex flex-wrap gap-1.5">
                         {(draft.subjects ?? []).map((subject, index) => (
                           <Pill
@@ -1933,8 +1970,12 @@ export default function MemoryVault({
                     </div>
                     {draft.provenance ? (
                       <div>
-                        <dt className="font-medium text-[var(--foreground)]">
+                        <dt className="flex items-center gap-1 font-medium text-[var(--foreground)]">
                           Provenance
+                          <InfoPopover
+                            label="Provenance"
+                            content="The character, chat summary, or lorebook from which this source memory was imported."
+                          />
                         </dt>
                         <dd className="break-words">
                           {humanizeLabel(draft.provenance.kind)}:{" "}

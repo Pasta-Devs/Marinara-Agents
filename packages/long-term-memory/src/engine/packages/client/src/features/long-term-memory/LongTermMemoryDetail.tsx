@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BrainCircuit,
-  CircleAlert,
   Pencil,
   Plus,
   Settings2,
@@ -12,7 +11,7 @@ import {
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
-import { Button, StatusSurface } from "./shared-controls";
+import { Button, InfoPopover, StatusSurface } from "./shared-controls";
 import type {
   CapabilityProps,
   LongTermMemoryDestination,
@@ -177,11 +176,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           size="1.125rem"
           className="text-[var(--primary)]"
         />
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
           <h1 className="truncate text-sm font-semibold">Long-Term Memory</h1>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Version {props.package?.version ?? "unknown"}
-          </p>
+          <InfoPopover
+            label="Long-Term Memory version"
+            content={`Package version: ${props.package?.version ?? "unknown"}.`}
+          />
         </div>
         <section
           data-ltm-surface="overview"
@@ -209,25 +209,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 ? healthLabel
                 : "Loading status"}
             {status.data && needsHealthAttention ? (
-              <details
-                className="relative"
-                onMouseEnter={(event) => {
-                  event.currentTarget.open = true;
-                }}
-                onMouseLeave={(event) => {
-                  event.currentTarget.open = false;
-                }}
-              >
-                <summary
-                  aria-label="How to repair vault health"
-                  className="grid h-7 w-7 cursor-pointer list-none place-items-center rounded-md text-amber-600 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] dark:text-amber-400"
-                >
-                  <CircleAlert aria-hidden="true" size="0.875rem" />
-                </summary>
-                <p className="absolute right-0 top-8 z-30 w-64 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs leading-5 text-[var(--foreground)] shadow-lg">
-                  Check Settings &gt; Maintenance &gt; Reindex recall data.
-                </p>
-              </details>
+              <InfoPopover
+                label="How to repair vault health"
+                content="Check Settings > Maintenance > Reindex recall data."
+              />
             ) : null}
           </span>
           {props.chatId ? (

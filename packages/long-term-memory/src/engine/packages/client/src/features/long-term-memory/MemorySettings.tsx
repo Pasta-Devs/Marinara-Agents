@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, RotateCcw, Trash2, Upload } from "lucide-react";
 import type {
@@ -10,6 +10,7 @@ import type {
 import { invalidateLtmQueries, queryKeys, request } from "./api";
 import {
   Button,
+  InfoPopover,
   NumberField,
   StatusSurface,
   inputClass,
@@ -135,7 +136,8 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     promptTemplates: resolved.promptTemplates ?? [],
     activePromptTemplateIdsByMode: resolved.activePromptTemplateIdsByMode ?? {},
     aiKeywordExtraction: resolved.aiKeywordExtraction ?? false,
-    useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
+    useExtractionAgentOnGameMode:
+      resolved.useExtractionAgentOnGameMode ?? false,
     ...(resolved.systemPrompt === undefined
       ? {}
       : { systemPrompt: resolved.systemPrompt }),
@@ -157,30 +159,35 @@ function Toggle({
   label,
   checked,
   onChange,
-  description,
+  help,
 }: {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
-  description?: string;
+  help?: ReactNode;
 }) {
+  const inputId = useId();
   return (
-    <label className="flex min-h-11 items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 px-3 py-2 text-xs">
-      <input
-        className="mt-0.5"
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-      <span>
+    <div className="flex min-h-11 items-stretch rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 text-xs">
+      <label
+        htmlFor={inputId}
+        className="flex min-h-11 flex-1 cursor-pointer items-start gap-2 px-3 py-2"
+      >
+        <input
+          id={inputId}
+          className="mt-0.5"
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+        />
         <span className="font-semibold">{label}</span>
-        {description ? (
-          <span className="mt-0.5 block text-[var(--muted-foreground)]">
-            {description}
-          </span>
-        ) : null}
-      </span>
-    </label>
+      </label>
+      {help ? (
+        <span className="p-1.5">
+          <InfoPopover label={label} content={help} />
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -189,6 +196,10 @@ export default function MemorySettings({
   onDirtyChange,
   onOpenMemory,
 }: LongTermMemoryDestinationProps) {
+  const recallStyleLabelId = useId();
+  const recallPreambleLabelId = useId();
+  const reasoningEffortLabelId = useId();
+  const verbosityLabelId = useId();
   const queryClient = useQueryClient();
   const global = useQuery({
     queryKey: queryKeys.settings,
@@ -252,8 +263,8 @@ export default function MemorySettings({
   );
   const extractionDirty = Boolean(
     extractionFormState &&
-      savedExtraction &&
-      !same(extractionFormState, savedExtraction),
+    savedExtraction &&
+    !same(extractionFormState, savedExtraction),
   );
   const dirty = globalDirty || extractionDirty;
   useEffect(() => {
@@ -369,13 +380,16 @@ export default function MemorySettings({
           .filter((candidate) => !candidate.blockingReasons.length)
           .map((candidate) => candidate.id),
       );
-       setIdentitySectionChoices({});
-        setIncludedIdentityNoteIds(
-          Object.fromEntries(
-            preview.candidates.map((candidate) => [candidate.id, candidate.duplicateNoteIds]),
-          ),
-        );
-        setIdentityCanonicalNoteIds({});
+      setIdentitySectionChoices({});
+      setIncludedIdentityNoteIds(
+        Object.fromEntries(
+          preview.candidates.map((candidate) => [
+            candidate.id,
+            candidate.duplicateNoteIds,
+          ]),
+        ),
+      );
+      setIdentityCanonicalNoteIds({});
     } catch (error) {
       setMessage(errorMessage(error, "Could not preview identity repairs."));
     } finally {
@@ -451,7 +465,7 @@ export default function MemorySettings({
       return [
         {
           candidateId: candidate.id,
-           canonicalNoteId: candidate.canonicalNoteId,
+          canonicalNoteId: candidate.canonicalNoteId,
           excludedNoteIds: candidate.duplicateNoteIds.filter(
             (noteId) => !included.has(noteId),
           ),
@@ -472,7 +486,9 @@ export default function MemorySettings({
       0,
     );
     if (includedDuplicateCount === 0) {
-      setMessage("Include at least one duplicate note before applying identity repairs.");
+      setMessage(
+        "Include at least one duplicate note before applying identity repairs.",
+      );
       return;
     }
     setPending("identity-confirm");
@@ -508,8 +524,8 @@ export default function MemorySettings({
       setIdentityPreview(null);
       setSelectedIdentityCandidates([]);
       setIdentitySectionChoices({});
-       setIncludedIdentityNoteIds({});
-       setIdentityCanonicalNoteIds({});
+      setIncludedIdentityNoteIds({});
+      setIdentityCanonicalNoteIds({});
       await invalidateLtmQueries(queryClient, [
         queryKeys.integrity,
         queryKeys.status,
@@ -736,9 +752,6 @@ export default function MemorySettings({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">Memory Settings</h2>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Global recall, extraction, and vault maintenance.
-          </p>
         </div>
         {dirty ? (
           <div className="flex flex-wrap gap-2">
@@ -785,7 +798,9 @@ export default function MemorySettings({
               else return;
               event.preventDefault();
               setActiveTab(settingsTabs[next].id);
-              document.getElementById(`settings-tab-${settingsTabs[next].id}`)?.focus();
+              document
+                .getElementById(`settings-tab-${settingsTabs[next].id}`)
+                ?.focus();
             }}
             className={`min-h-10 rounded-md border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${activeTab === tab.id ? "border-[var(--primary)]/35 bg-[var(--primary)]/10 text-[var(--foreground)]" : "border-transparent text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
           >
@@ -809,14 +824,18 @@ export default function MemorySettings({
         className="space-y-3 rounded-lg border border-[var(--border)] p-3"
       >
         <div>
-          <h3 className="text-sm font-semibold">Global Recall</h3>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Defaults used by every chat unless that chat overrides them.
-          </p>
+          <h3 className="flex items-center gap-1 text-sm font-semibold">
+            Global Recall
+            <InfoPopover
+              label="Global Recall"
+              content="Defaults used by every chat unless that chat overrides them."
+            />
+          </h3>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <Toggle
             label="Include resolved memories"
+            help="Allows resolved memories to participate in recall. Archived memories remain excluded."
             checked={globalForm.longTermMemoryIncludeResolved}
             onChange={(value) =>
               setGlobalForm({
@@ -825,9 +844,16 @@ export default function MemorySettings({
               })
             }
           />
-          <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            <span>Recall style</span>
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={recallStyleLabelId} className="flex items-center gap-1">
+              Recall style
+              <InfoPopover
+                label="Recall style"
+                content="Chooses the overall matching strategy used to find relevant memories."
+              />
+            </span>
             <select
+              aria-labelledby={recallStyleLabelId}
               className={inputClass}
               value={globalForm.longTermMemoryRecallStyle}
               onChange={(event) =>
@@ -843,9 +869,10 @@ export default function MemorySettings({
               <option value="broad">Broad</option>
               <option value="story">Story</option>
             </select>
-          </label>
+          </div>
           <NumberField
             label="Recall budget tokens"
+            help="Maximum token budget available for memories added to a model request."
             value={globalForm.longTermMemoryBudgetTokens}
             min={128}
             max={16384}
@@ -859,6 +886,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Maximum recalled memories"
+            help="Maximum number of memories that may be included in one recall."
             value={globalForm.longTermMemoryMaxChunks}
             min={1}
             max={100}
@@ -868,6 +896,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Score threshold"
+            help="Excludes candidates whose combined retrieval score falls below this value. Higher values return fewer, stronger matches."
             value={globalForm.longTermMemoryScoreThreshold}
             min={0}
             max={1}
@@ -881,6 +910,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Recent messages for recall"
+            help="Number of recent chat messages used to build the query that searches memory."
             value={globalForm.longTermMemoryRecallContextMessages}
             min={1}
             max={20}
@@ -893,6 +923,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Meaning match"
+            help="Weight given to semantic similarity between the current chat and a saved memory."
             value={globalForm.longTermMemorySemanticWeight}
             min={0}
             max={1}
@@ -906,6 +937,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Exact words match"
+            help="Weight given to matching words and phrases."
             value={globalForm.longTermMemoryLexicalWeight}
             min={0}
             max={1}
@@ -919,6 +951,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Graph weight"
+            help="Weight given to relationships between linked memories."
             value={globalForm.longTermMemoryGraphWeight}
             min={0}
             max={1}
@@ -929,6 +962,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Keyword weight"
+            help="Weight given to matching stored keywords."
             value={globalForm.longTermMemoryKeywordWeight}
             min={0}
             max={1}
@@ -941,9 +975,16 @@ export default function MemorySettings({
             }
           />
         </div>
-        <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span>Memory context instructions</span>
+        <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+          <span id={recallPreambleLabelId} className="flex items-center gap-1">
+            Memory context instructions
+            <InfoPopover
+              label="Memory context instructions"
+              content="Instructions placed before recalled memory context when it is sent to the model."
+            />
+          </span>
           <textarea
+            aria-labelledby={recallPreambleLabelId}
             className={`${inputClass} min-h-24 py-2`}
             maxLength={500}
             value={globalForm.longTermMemoryRecallPreamble}
@@ -954,7 +995,7 @@ export default function MemorySettings({
               })
             }
           />
-        </label>
+        </div>
       </section>
 
       <section
@@ -966,14 +1007,21 @@ export default function MemorySettings({
       >
         <div>
           <h3 className="text-sm font-semibold">Extraction</h3>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Controls for turning sources and turns into durable memories.
-          </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
-          <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            <span>Reasoning effort</span>
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span
+              id={reasoningEffortLabelId}
+              className="flex items-center gap-1"
+            >
+              Reasoning effort
+              <InfoPopover
+                label="Reasoning effort"
+                content="Requests this amount of model reasoning during extraction. Unsupported settings may be reduced by the selected model."
+              />
+            </span>
             <select
+              aria-labelledby={reasoningEffortLabelId}
               className={inputClass}
               value={extractionFormState.reasoningEffort}
               onChange={(event) =>
@@ -989,10 +1037,17 @@ export default function MemorySettings({
               <option value="medium">Medium</option>
               <option value="high">High</option>
             </select>
-          </label>
-          <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            <span>Verbosity</span>
+          </div>
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={verbosityLabelId} className="flex items-center gap-1">
+              Verbosity
+              <InfoPopover
+                label="Verbosity"
+                content="Requests the selected response detail level from the extraction model. The response must still follow the structured extraction format."
+              />
+            </span>
             <select
+              aria-labelledby={verbosityLabelId}
               className={inputClass}
               value={extractionFormState.verbosity}
               onChange={(event) =>
@@ -1007,9 +1062,10 @@ export default function MemorySettings({
               <option value="medium">Medium</option>
               <option value="high">High</option>
             </select>
-          </label>
+          </div>
           <NumberField
             label="Maximum output tokens"
+            help="Maximum tokens the model may produce for one extraction response, capped by the selected model's own limit."
             value={extractionFormState.maxOutputTokens}
             min={512}
             max={32768}
@@ -1023,6 +1079,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Temperature"
+            help="Controls extraction variability. Lower values are more deterministic; higher values may produce more varied results."
             value={extractionFormState.temperature}
             min={0}
             max={2}
@@ -1036,6 +1093,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Maximum source tokens"
+            help="Rejects a source when its estimated size exceeds this limit."
             value={extractionFormState.maxSourceTokens}
             min={128}
             max={65536}
@@ -1049,6 +1107,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Maximum existing-note tokens"
+            help="Maximum existing-memory context made available while the model prepares an extraction."
             value={extractionFormState.maxExistingNoteTokens}
             min={128}
             max={32768}
@@ -1062,6 +1121,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Existing-note chunks"
+            help="Maximum number of existing memory chunks considered while checking context and possible overlap."
             value={extractionFormState.existingNoteMaxChunks}
             min={1}
             max={100}
@@ -1074,6 +1134,7 @@ export default function MemorySettings({
           />
           <NumberField
             label="Existing-note token budget"
+            help="Maximum tokens from those existing chunks included in the extraction request."
             value={extractionFormState.existingNoteMaxTokens}
             min={128}
             max={32768}
@@ -1087,6 +1148,7 @@ export default function MemorySettings({
           />
           <Toggle
             label="AI keyword extraction"
+            help="Asks the model to generate concise keywords for extracted memories instead of relying only on deterministic keywords."
             checked={extractionFormState.aiKeywordExtraction}
             onChange={(value) =>
               setExtractionFormState({
@@ -1097,6 +1159,7 @@ export default function MemorySettings({
           />
           <Toggle
             label="Use Extraction Agent on Game Mode"
+            help="Routes Game-mode imports through the extraction agent instead of the direct Game-mode extraction path."
             checked={extractionFormState.useExtractionAgentOnGameMode}
             onChange={(value) =>
               setExtractionFormState({
@@ -1129,12 +1192,18 @@ export default function MemorySettings({
           </p>
         </div>
         <div className="border-t border-[var(--border)] pt-3">
-          <h4 className="text-xs font-semibold">Backup and Reset</h4>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Export or replace the package-owned memory vault and settings.
-          </p>
+          <h4 className="flex items-center gap-1 text-xs font-semibold">
+            Backup and Reset
+            <InfoPopover
+              label="Backup and Reset"
+              content="Export or replace the package-owned memory vault and settings."
+            />
+          </h4>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button disabled={pending !== ""} onClick={() => void exportBackup()}>
+            <Button
+              disabled={pending !== ""}
+              onClick={() => void exportBackup()}
+            >
               <Download aria-hidden="true" size="0.875rem" /> Export backup
             </Button>
             <Button
@@ -1219,7 +1288,7 @@ export default function MemorySettings({
             <Toggle
               key={action.id}
               label={action.label}
-              description={action.description}
+              help={action.description}
               checked={selectedActions.includes(action.id)}
               onChange={(checked) =>
                 setSelectedActions(
@@ -1239,11 +1308,13 @@ export default function MemorySettings({
           Run selected maintenance
         </Button>
         <div className="border-t border-[var(--border)] pt-3">
-          <h4 className="text-xs font-semibold">Identity repair</h4>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Preview duplicate trusted identities before merging and archiving
-            duplicates.
-          </p>
+          <h4 className="flex items-center gap-1 text-xs font-semibold">
+            Identity repair
+            <InfoPopover
+              label="Identity repair"
+              content="Preview duplicate trusted identities before merging and archiving duplicates."
+            />
+          </h4>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button
               disabled={pending !== ""}
@@ -1328,7 +1399,9 @@ export default function MemorySettings({
                               checked={canonical}
                               disabled={
                                 pending !== "" ||
-                                !selectedIdentityCandidates.includes(candidate.id)
+                                !selectedIdentityCandidates.includes(
+                                  candidate.id,
+                                )
                               }
                               onChange={() =>
                                 void selectIdentityCanonical(
@@ -1354,7 +1427,9 @@ export default function MemorySettings({
                               disabled={
                                 pending !== "" ||
                                 canonical ||
-                                !selectedIdentityCandidates.includes(candidate.id)
+                                !selectedIdentityCandidates.includes(
+                                  candidate.id,
+                                )
                               }
                               onChange={(event) =>
                                 setIncludedIdentityNoteIds((current) => ({
@@ -1371,19 +1446,19 @@ export default function MemorySettings({
                               }
                             />
                             <span>
-                            <span className="block font-medium text-[var(--foreground)]">
-                              {canonical
-                                ? "Canonical memory"
-                                : "Include duplicate in merge and archive"}
-                              : {note.title}
-                            </span>
-                            <span className="block">
-                              {note.basis.replaceAll("_", " ")}
-                              {note.alreadyBound ? ", already bound" : ""}
-                              {note.exactFullName ? ", exact full name" : ""};
-                              created{" "}
-                              {new Date(note.createdAt).toLocaleDateString()}
-                            </span>
+                              <span className="block font-medium text-[var(--foreground)]">
+                                {canonical
+                                  ? "Canonical memory"
+                                  : "Include duplicate in merge and archive"}
+                                : {note.title}
+                              </span>
+                              <span className="block">
+                                {note.basis.replaceAll("_", " ")}
+                                {note.alreadyBound ? ", already bound" : ""}
+                                {note.exactFullName ? ", exact full name" : ""};
+                                created{" "}
+                                {new Date(note.createdAt).toLocaleDateString()}
+                              </span>
                             </span>
                           </label>
                         </div>
@@ -1485,6 +1560,7 @@ export default function MemorySettings({
       >
         <Toggle
           label="Record debug activity"
+          help="Records Long-Term Memory operations for troubleshooting. Activity may include technical metadata and can be exported or cleared here."
           checked={globalForm.longTermMemoryDebug}
           onChange={(value) =>
             setGlobalForm({ ...globalForm, longTermMemoryDebug: value })

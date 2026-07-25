@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -22,7 +22,12 @@ import type {
   LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request } from "./api";
-import { Button, StatusSurface, inputClass } from "./shared-controls";
+import {
+  Button,
+  InfoPopover,
+  StatusSurface,
+  inputClass,
+} from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 
 type Source = "characters" | "lorebooks" | "chats";
@@ -167,11 +172,13 @@ function TransferWorkbench({
       data-ltm-source-transfer
       className="space-y-3 border-b border-[var(--border)] bg-[var(--secondary)]/20 p-3"
     >
-      <div>
+      <div className="flex items-center gap-1">
         <h2 className="text-sm font-semibold">Transfer memories</h2>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Preview a copy or move into the current chat.
-        </p>
+        <InfoPopover
+          label="Transfer memories"
+          wide
+          content="Preview a copy or move into the current chat. Copy keeps the original scopes. Move transfers applicability to the current chat according to the preview. Attached durable memories are included only when selected. The preview shows which memories are ready, conflicting, or already applicable."
+        />
       </div>
       {!chatId ? (
         <StatusSurface tone="danger">
@@ -274,6 +281,7 @@ export default function SourcesWorkspace({
   onOpenMemory,
   onOpenReview,
 }: LongTermMemoryDestinationProps) {
+  const importScopeLabelId = useId();
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
   const selectAllImportedRef = useRef<HTMLInputElement>(null);
@@ -868,9 +876,18 @@ export default function SourcesWorkspace({
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3">
-        <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
-          Import scope
+        <div className="flex min-h-11 items-center gap-2 text-xs font-medium">
+          <span id={importScopeLabelId}>Import scope</span>
+          <InfoPopover
+            label="Import scope"
+            content={
+              effectiveImportScope === "all"
+                ? "Search every available character, lorebook, chat, and branch."
+                : "Limit imports to this chat and its related scope."
+            }
+          />
           <select
+            aria-labelledby={importScopeLabelId}
             className={`${inputClass} min-w-44`}
             value={effectiveImportScope}
             onChange={(event) =>
@@ -883,12 +900,7 @@ export default function SourcesWorkspace({
             </option>
             <option value="all">All Available</option>
           </select>
-        </label>
-        <span className="text-xs text-[var(--muted-foreground)]">
-          {effectiveImportScope === "all"
-            ? "Search every available character, lorebook, chat, and branch."
-            : "Limit imports to this chat and its related scope."}
-        </span>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

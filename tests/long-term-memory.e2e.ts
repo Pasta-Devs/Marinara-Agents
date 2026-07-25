@@ -304,6 +304,39 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
       sources.locator('[data-ltm-source-select-all="available"]'),
     ).toBeVisible();
     await expect(sources.locator("[data-ltm-source-transfer]")).toHaveCount(0);
+    const importScopeHelp = sources.getByRole("button", {
+      name: "About Import scope",
+    });
+    const importScope = sources.getByRole("combobox", { name: "Import scope" });
+    const importHelpBox = await importScopeHelp.boundingBox();
+    expect(importHelpBox).not.toBeNull();
+    expect(importHelpBox!.width).toBeGreaterThanOrEqual(32);
+    expect(importHelpBox!.height).toBeGreaterThanOrEqual(32);
+    await importScopeHelp.click();
+    const importScopePanel = page.locator(
+      '[data-ltm-info-panel="Import scope"]',
+    );
+    await expect(importScopePanel).toContainText("Limit imports to this chat");
+    const panelBox = await importScopePanel.boundingBox();
+    const viewport = page.viewportSize();
+    expect(panelBox).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    expect(panelBox!.x).toBeGreaterThanOrEqual(0);
+    expect(panelBox!.y).toBeGreaterThanOrEqual(0);
+    expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(viewport!.width);
+    expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(
+      viewport!.height,
+    );
+    await page.mouse.click(8, 8);
+    await expect(importScopePanel).toHaveCount(0);
+    if (testInfo.project.name.includes("mobile")) {
+      await importScope.selectOption("all");
+      await importScopeHelp.click();
+      await expect(importScopePanel).toContainText(
+        "Search every available character",
+      );
+      await page.keyboard.press("Escape");
+    }
 
     await navigation.locator('[data-ltm-destination="settings"]').click();
     const settings = detail.locator('[data-ltm-surface="memory-settings"]');
@@ -324,6 +357,42 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       settings.getByText("Memory context instructions", { exact: true }),
     ).toBeVisible();
+    const scoreHelp = settings.getByRole("button", {
+      name: "About Score threshold",
+    });
+    await expect(
+      settings.getByRole("combobox", { name: "Recall style" }),
+    ).toBeVisible();
+    await expect(
+      settings.getByRole("textbox", { name: "Memory context instructions" }),
+    ).toBeVisible();
+    await expect(scoreHelp).toHaveAttribute("aria-expanded", "false");
+    if (testInfo.project.name.includes("mobile")) await scoreHelp.click();
+    else await scoreHelp.hover();
+    await expect(
+      page.locator('[data-ltm-info-panel="Score threshold"]'),
+    ).toContainText("Higher values return fewer, stronger matches.");
+    if (!testInfo.project.name.includes("mobile")) await scoreHelp.click();
+    await expect(scoreHelp).toHaveAttribute("aria-expanded", "true");
+    await expect(scoreHelp).toHaveAttribute("aria-describedby", /-panel$/);
+    await settings.getByRole("button", { name: "About Meaning match" }).click();
+    await expect(
+      page.locator('[data-ltm-info-panel="Score threshold"]'),
+    ).toHaveCount(0);
+    await expect(
+      page.locator('[data-ltm-info-panel="Meaning match"]'),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(
+      page.locator('[data-ltm-info-panel="Meaning match"]'),
+    ).toHaveCount(0);
+    if (!testInfo.project.name.includes("mobile")) {
+      await scoreHelp.focus();
+      await expect(
+        page.locator('[data-ltm-info-panel="Score threshold"]'),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+    }
     await expect(settings.locator('[data-ltm-surface="activity"]')).toHaveCount(
       0,
     );
@@ -347,11 +416,10 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(activity).toContainText("Prompt: 12 Tokens");
     await expect(activity).toContainText("Response: 8 Tokens");
     await expect(activity).not.toContainText("responseChars");
+    await activity.locator("details > summary").first().click();
     await activity.getByText("Technical details", { exact: true }).click();
-    await activity.getByRole("button", { name: "Copy JSON" }).click();
-    await expect(
-      activity.getByRole("button", { name: "Copied" }),
-    ).toBeVisible();
+    await activity.getByRole("button", { name: /Copy raw JSON/ }).click();
+    await expect(activity.getByText("Copied", { exact: true })).toBeVisible();
     await settings.getByRole("tab", { name: "Debug" }).press("ArrowLeft");
     await expect(
       settings.getByRole("tab", { name: "Maintenance" }),
@@ -373,6 +441,12 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
       .toBe(true);
 
     await settings.getByRole("tab", { name: "Extraction" }).click();
+    await expect(
+      settings.getByRole("combobox", { name: "Reasoning effort" }),
+    ).toBeVisible();
+    await expect(
+      settings.getByRole("combobox", { name: "Verbosity" }),
+    ).toBeVisible();
     const templatePanel = settings
       .getByRole("tabpanel")
       .filter({ hasText: "Prompt templates" });

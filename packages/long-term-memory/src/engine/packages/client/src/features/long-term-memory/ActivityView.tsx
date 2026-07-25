@@ -14,7 +14,7 @@ import type {
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { API_ROOT, invalidateLtmQueries, queryKeys, request } from "./api";
-import { Button, StatusSurface } from "./shared-controls";
+import { Button, InfoPopover, StatusSurface } from "./shared-controls";
 import { humanizeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 
@@ -336,10 +336,13 @@ export default function ActivityView({
     <section data-ltm-surface="activity" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h4 className="text-xs font-semibold">Debug Activity</h4>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Trace imports, extraction, draft actions, recall, and maintenance.
-          </p>
+          <h4 className="flex items-center gap-1 text-xs font-semibold">
+            Debug Activity
+            <InfoPopover
+              label="Debug Activity"
+              content="Trace imports, extraction, draft actions, recall, and maintenance."
+            />
+          </h4>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button

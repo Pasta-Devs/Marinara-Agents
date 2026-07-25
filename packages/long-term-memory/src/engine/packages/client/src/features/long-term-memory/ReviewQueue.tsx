@@ -10,7 +10,12 @@ import type {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request } from "./api";
 import { humanizeLabel } from "./display-labels";
-import { Button, inputClass, StatusSurface } from "./shared-controls";
+import {
+  Button,
+  InfoPopover,
+  inputClass,
+  StatusSurface,
+} from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 
 type ReviewRow = {
@@ -261,9 +266,16 @@ function ImportanceField({
   onChange: (value: LtmImportance | undefined) => void;
 }) {
   return (
-    <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-      <span>Importance</span>
+    <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+      <span className="flex items-center gap-1">
+        Importance
+        <InfoPopover
+          label="Importance"
+          content="Durability and consequence category: critical, major, moderate, or minor."
+        />
+      </span>
       <select
+        aria-label="Importance"
         className={inputClass}
         value={value ?? ""}
         onChange={(event) =>
@@ -279,7 +291,7 @@ function ImportanceField({
           </option>
         ))}
       </select>
-    </label>
+    </div>
   );
 }
 

@@ -1,5 +1,15 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
+import { Info, Loader2 } from "lucide-react";
+
+let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass =
   "min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]";
@@ -32,6 +42,153 @@ export function Button({
   );
 }
 
+export function InfoPopover({
+  label,
+  content,
+  wide = false,
+}: {
+  label: string;
+  content: ReactNode;
+  wide?: boolean;
+}) {
+  const id = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const closeRef = useRef<() => void>(() => undefined);
+
+  const clearCloseTimer = () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  const close = () => {
+    clearCloseTimer();
+    setOpen(false);
+    setPinned(false);
+  };
+  closeRef.current = close;
+  const show = () => {
+    clearCloseTimer();
+    if (activePopover?.id !== id) activePopover?.close();
+    activePopover = { id, close: closeRef.current };
+    setOpen(true);
+  };
+  const scheduleClose = () => {
+    if (pinned) return;
+    clearCloseTimer();
+    closeTimer.current = window.setTimeout(close, 120);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const trigger = triggerRef.current?.getBoundingClientRect();
+      if (!trigger) return;
+      const width = panelRef.current?.offsetWidth ?? (wide ? 416 : 288);
+      const height = panelRef.current?.offsetHeight ?? 160;
+      const gap = 8;
+      const left = Math.min(
+        Math.max(8, trigger.left),
+        Math.max(8, window.innerWidth - width - 8),
+      );
+      const below = trigger.bottom + gap;
+      const top =
+        below + height <= window.innerHeight - 8
+          ? below
+          : Math.max(8, trigger.top - gap - height);
+      setPosition({ top, left });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, wide]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeRef.current();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !panelRef.current?.contains(target)
+      )
+        closeRef.current();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open) activePopover = { id, close: closeRef.current };
+    return () => {
+      clearCloseTimer();
+      if (activePopover?.id === id) activePopover = null;
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={`About ${label}`}
+        aria-expanded={open}
+        aria-controls={open ? `${id}-panel` : undefined}
+        aria-describedby={open ? `${id}-panel` : undefined}
+        data-ltm-info={label}
+        className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        onMouseEnter={show}
+        onMouseLeave={scheduleClose}
+        onFocus={show}
+        onBlur={(event) => {
+          if (!panelRef.current?.contains(event.relatedTarget as Node))
+            scheduleClose();
+        }}
+        onClick={() => {
+          if (pinned) close();
+          else {
+            show();
+            setPinned(true);
+          }
+        }}
+        onMouseDown={(event) => event.preventDefault()}
+      >
+        <Info aria-hidden="true" size="0.875rem" />
+      </button>
+      {open
+        ? createPortal(
+            <div
+              ref={panelRef}
+              id={`${id}-panel`}
+              role="tooltip"
+              data-ltm-info-panel={label}
+              style={{ top: position.top, left: position.left }}
+              className={`fixed z-[100] max-h-[min(20rem,calc(100vh-1rem))] overflow-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs leading-5 text-[var(--foreground)] shadow-lg ${wide ? "w-[min(26rem,calc(100vw-1rem))]" : "w-[min(18rem,calc(100vw-1rem))]"}`}
+              onMouseEnter={clearCloseTimer}
+              onMouseLeave={scheduleClose}
+            >
+              {content}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 export function NumberField({
   label,
   value,
@@ -40,6 +197,7 @@ export function NumberField({
   step = 1,
   onChange,
   disabled = false,
+  help,
 }: {
   label: string;
   value: number;
@@ -48,11 +206,18 @@ export function NumberField({
   step?: number;
   onChange: (value: number) => void;
   disabled?: boolean;
+  help?: ReactNode;
 }) {
+  const id = useId();
   return (
-    <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-      <span>{label}</span>
+    <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+      <span id={`${id}-label`} className="flex items-center gap-1">
+        {label}
+        {help ? <InfoPopover label={label} content={help} /> : null}
+      </span>
       <input
+        id={id}
+        aria-labelledby={`${id}-label`}
         data-ltm-control="number"
         className={inputClass}
         type="number"
@@ -67,7 +232,7 @@ export function NumberField({
             onChange(Math.max(min, Math.min(max, next)));
         }}
       />
-    </label>
+    </div>
   );
 }
 

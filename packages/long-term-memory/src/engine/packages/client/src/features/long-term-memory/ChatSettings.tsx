@@ -1,15 +1,21 @@
 import { Settings2 } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   LtmGlobalSettings,
   LtmLastInjectionResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
-import { NumberField, StatusSurface, inputClass } from "./shared-controls";
+import {
+  InfoPopover,
+  NumberField,
+  StatusSurface,
+  inputClass,
+} from "./shared-controls";
 import type { CapabilityProps } from "./types";
 
 export function ChatSettings({ props }: { props: CapabilityProps }) {
+  const recallStyleLabelId = useId();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const globalSettings = useQuery({
@@ -66,9 +72,16 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         </StatusSurface>
       ) : null}
       <div className="grid gap-2">
-        <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span>Recall style</span>
+        <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+          <span id={recallStyleLabelId} className="flex items-center gap-1">
+            Recall style
+            <InfoPopover
+              label="Recall style"
+              content="Controls how broadly this chat matches saved memories. This chat overrides the global recall style."
+            />
+          </span>
           <select
+            aria-labelledby={recallStyleLabelId}
             data-ltm-control="select"
             className={inputClass}
             disabled={pending || readOnly}
@@ -84,13 +97,16 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           </select>
           {styleInherited && globalSettings.data ? (
             <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
-              (default)
+              <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
+                Global default
+              </span>
             </span>
           ) : null}
-        </label>
+        </div>
         <div className="space-y-1">
           <NumberField
             label="Recall context budget"
+            help="Maximum number of tokens that recalled memories may add to this chat's model context."
             value={effectiveBudget}
             min={128}
             max={16384}
@@ -100,13 +116,16 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           />
           {budgetInherited && globalSettings.data ? (
             <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
-              (default)
+              <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
+                Global default
+              </span>
             </span>
           ) : null}
         </div>
         <div className="space-y-1">
           <NumberField
             label="Maximum memories"
+            help="Maximum number of saved memories that one recall may add to this chat."
             value={effectiveMaxChunks}
             min={1}
             max={100}
@@ -115,7 +134,9 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           />
           {maxChunksInherited && globalSettings.data ? (
             <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
-              (default)
+              <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
+                Global default
+              </span>
             </span>
           ) : null}
         </div>
