@@ -5,6 +5,7 @@ import {
   Check,
   ChevronRight,
   CircleAlert,
+  Ellipsis,
   Loader2,
   RefreshCw,
   Send,
@@ -24,6 +25,8 @@ import type {
 import { invalidateLtmQueries, queryKeys, request } from "./api";
 import {
   Button,
+  ClickSurface,
+  IconButton,
   InfoPopover,
   StatusSurface,
   inputClass,
@@ -324,6 +327,9 @@ export default function SourcesWorkspace({
     null,
   );
   const [transferError, setTransferError] = useState("");
+  const [openSourceActionId, setOpenSourceActionId] = useState<string | null>(
+    null,
+  );
 
   const scopeTargets = useQuery({
     queryKey: queryKeys.scopeTargets(props.chatId),
@@ -801,38 +807,91 @@ export default function SourcesWorkspace({
     }
   };
 
-  const sourceMemoryActions = (noteId: string, title: string) => (
-    <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        data-ltm-source-memory-id={noteId}
-        aria-label={`Open source memory: ${title}`}
-        className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
-        onClick={() => onOpenMemory?.(noteId)}
-      >
-        Open source memory
-      </button>
-      <Button
-        disabled={extractingId !== null}
-        onClick={() => void reextract(noteId)}
-        data-ltm-source-action="re-extract"
-        data-ltm-source-note-id={noteId}
-      >
-        {extractingId === noteId ? (
-          <Loader2 size="0.75rem" className="animate-spin" />
-        ) : (
-          <Sparkles size="0.75rem" />
-        )}
-        Re-extract
-      </Button>
-      <Button
-        onClick={() => onOpenReview?.(noteId)}
-        data-ltm-review-query={noteId}
-      >
-        Review related drafts
-      </Button>
-    </div>
+  const stopRowAction = (
+    event: { preventDefault: () => void; stopPropagation: () => void },
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const toggleSourceActions = (
+    event: { preventDefault: () => void; stopPropagation: () => void },
+    noteId: string,
+  ) => {
+    stopRowAction(event);
+    setOpenSourceActionId((current) => (current === noteId ? null : noteId));
+  };
+
+  const sourceInlineActions = (noteId: string, title: string) => (
+    <>
+      <div className="hidden items-start gap-1 opacity-0 transition-opacity pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
+        <IconButton
+          icon={Sparkles}
+          label={`Re-extract ${title}`}
+          disabled={extractingId !== null}
+          onClick={(event) => {
+            stopRowAction(event);
+            setOpenSourceActionId(null);
+            void reextract(noteId);
+          }}
+          data-ltm-source-action="re-extract"
+          data-ltm-source-note-id={noteId}
+        />
+        <IconButton
+          icon={BookOpen}
+          label={`Review drafts for ${title}`}
+          onClick={(event) => {
+            stopRowAction(event);
+            setOpenSourceActionId(null);
+            onOpenReview?.(noteId);
+          }}
+          data-ltm-review-query={noteId}
+        />
+      </div>
+      <div className="md:hidden">
+        <IconButton
+          icon={Ellipsis}
+          label={`More actions for ${title}`}
+          aria-expanded={openSourceActionId === noteId}
+          aria-controls={`ltm-source-actions-${noteId}`}
+          onClick={(event) => toggleSourceActions(event, noteId)}
+        />
+      </div>
+    </>
   );
+
+  const sourceMobileActions = (noteId: string) =>
+    openSourceActionId === noteId ? (
+      <div id={`ltm-source-actions-${noteId}`} className="flex gap-2 pt-2 md:hidden">
+        <Button
+          className="flex-1"
+          disabled={extractingId !== null}
+          onClick={(event) => {
+            stopRowAction(event);
+            setOpenSourceActionId(null);
+            void reextract(noteId);
+          }}
+        >
+          {extractingId === noteId ? (
+            <Loader2 size="0.75rem" className="animate-spin" />
+          ) : (
+            <Sparkles size="0.75rem" />
+          )}
+          Re-extract
+        </Button>
+        <Button
+          className="flex-1"
+          onClick={(event) => {
+            stopRowAction(event);
+            setOpenSourceActionId(null);
+            onOpenReview?.(noteId);
+          }}
+        >
+          <BookOpen size="0.75rem" />
+          Review drafts
+        </Button>
+      </div>
+    ) : null;
 
   return (
     <section
@@ -1294,21 +1353,34 @@ export default function SourcesWorkspace({
                             </div>
                           </div>
                           {importedCandidates.map((candidate) => (
-                            <div
+                            <ClickSurface
                               key={candidate.sourceId}
-                              className="ml-7 space-y-2"
+                              className="group ml-7 space-y-2"
                               data-ltm-source-existing-note={
                                 candidate.existingNoteId
                               }
+                              data-ltm-source-actions-open={
+                                openSourceActionId === candidate.existingNoteId ||
+                                undefined
+                              }
                             >
-                              <p className="text-xs text-[var(--muted-foreground)]">
-                                Source memory: {candidate.existingNoteTitle}
-                              </p>
-                              {sourceMemoryActions(
-                                candidate.existingNoteId,
-                                candidate.existingNoteTitle,
-                              )}
-                            </div>
+                              <div className="flex items-start gap-2">
+                                <button
+                                  type="button"
+                                  data-ltm-source-memory-id={candidate.existingNoteId}
+                                  aria-label={`Open source memory: ${candidate.existingNoteTitle}`}
+                                  className="inline-flex min-h-11 flex-1 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+                                  onClick={() => onOpenMemory?.(candidate.existingNoteId)}
+                                >
+                                  Source memory: {candidate.existingNoteTitle}
+                                </button>
+                                {sourceInlineActions(
+                                  candidate.existingNoteId,
+                                  candidate.existingNoteTitle,
+                                )}
+                              </div>
+                              {sourceMobileActions(candidate.existingNoteId)}
+                            </ClickSurface>
                           ))}
                         </article>
                       );
@@ -1480,12 +1552,18 @@ export default function SourcesWorkspace({
             ) : null}
             <div role="list" className="divide-y divide-[var(--border)]">
               {activeFlatRows.map((row) => (
-                <article
+                <ClickSurface
                   key={row.sourceId}
                   role="listitem"
                   data-ltm-source-row-status={row.status}
                   data-ltm-source-id={row.sourceId}
-                  className="space-y-2 p-3"
+                  data-ltm-source-actions-open={
+                    flatPanel === "imported" &&
+                    openSourceActionId === row.existingNoteId
+                      ? true
+                      : undefined
+                  }
+                  className="group space-y-2 p-3"
                 >
                   <div className="flex items-start gap-3">
                     <input
@@ -1519,31 +1597,31 @@ export default function SourcesWorkspace({
                         {row.snippet}
                       </p>
                     </div>
+                    {flatPanel === "imported"
+                      ? sourceInlineActions(
+                          row.existingNoteId,
+                          row.existingNoteTitle,
+                        )
+                      : null}
                   </div>
                   {flatPanel === "imported" ? (
                     <div
                       className="ml-7 space-y-2"
                       data-ltm-source-existing-note={row.existingNoteId}
                     >
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        Source memory: {row.existingNoteTitle}
-                      </p>
-                      <Button
-                        disabled={importing}
-                        onClick={() =>
-                          void runImport([row.sourceId], "refresh")
-                        }
-                        data-ltm-source-action="refresh-reimport"
+                      <button
+                        type="button"
+                        data-ltm-source-memory-id={row.existingNoteId}
+                        aria-label={`Open source memory: ${row.existingNoteTitle}`}
+                        className="inline-flex min-h-11 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+                        onClick={() => onOpenMemory?.(row.existingNoteId)}
                       >
-                        <RefreshCw size="0.75rem" /> Sync latest source
-                      </Button>
-                      {sourceMemoryActions(
-                        row.existingNoteId,
-                        row.existingNoteTitle,
-                      )}
+                        Source memory: {row.existingNoteTitle}
+                      </button>
+                      {sourceMobileActions(row.existingNoteId)}
                     </div>
                   ) : null}
-                </article>
+                </ClickSurface>
               ))}
               {!preview.isLoading && activeFlatRows.length === 0 ? (
                 <p className="p-4 text-xs text-[var(--muted-foreground)]">
@@ -1633,7 +1711,36 @@ export default function SourcesWorkspace({
                   {item.error.message}
                 </StatusSurface>
               ) : null}
-              {sourceMemoryActions(item.note.id, item.title)}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  data-ltm-source-memory-id={item.note.id}
+                  aria-label={`Open source memory: ${item.title}`}
+                  className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+                  onClick={() => onOpenMemory?.(item.note.id)}
+                >
+                  Open source memory
+                </button>
+                <Button
+                  disabled={extractingId !== null}
+                  onClick={() => void reextract(item.note.id)}
+                  data-ltm-source-action="re-extract"
+                  data-ltm-source-note-id={item.note.id}
+                >
+                  {extractingId === item.note.id ? (
+                    <Loader2 size="0.75rem" className="animate-spin" />
+                  ) : (
+                    <Sparkles size="0.75rem" />
+                  )}
+                  Re-extract
+                </Button>
+                <Button
+                  onClick={() => onOpenReview?.(item.note.id)}
+                  data-ltm-review-query={item.note.id}
+                >
+                  Review related drafts
+                </Button>
+              </div>
             </article>
           ))}
           {importResult.writeFailures.map((failure) => (

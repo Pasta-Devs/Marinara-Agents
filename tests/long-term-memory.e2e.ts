@@ -1037,9 +1037,31 @@ test("Long-Term Memory manages imported sources from one workstation", async ({
     await expect(
       importedPanel.getByRole("heading", { name: noteTitle }),
     ).toBeVisible();
+    const importedRow = importedPanel.locator(`[data-ltm-source-id="imported-workstation"]`);
     await expect(
       importedPanel.locator("[data-ltm-source-transfer-note]"),
     ).toHaveCount(0);
+    if (testInfo.project.name.includes("mobile")) {
+      await importedRow
+        .getByRole("button", { name: `More actions for ${noteTitle}` })
+        .click();
+      await expect(
+        importedRow.getByRole("button", { name: "Re-extract" }),
+      ).toBeVisible();
+      await expect(
+        importedRow.getByRole("button", { name: "Review drafts" }),
+      ).toBeVisible();
+    } else {
+      await importedRow.hover();
+      await expect(
+        importedRow.getByRole("button", { name: `Re-extract ${noteTitle}` }),
+      ).toBeVisible();
+      await expect(
+        importedRow.getByRole("button", {
+          name: `Review drafts for ${noteTitle}`,
+        }),
+      ).toBeVisible();
+    }
     await importedPanel
       .getByLabel("Select Imported workstation source")
       .check();
@@ -1070,6 +1092,119 @@ test("Long-Term Memory manages imported sources from one workstation", async ({
     await expect(vault.getByLabel("Title")).toHaveValue(noteTitle);
   } finally {
     await deleteNotes(page, [noteId]);
+    await deleteChat(page, chat.id);
+  }
+});
+
+test("Long-Term Memory exposes single-memory actions without selection mode", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const chat = await createChat(page, testInfo);
+  const suffix = Date.now();
+  const sourceTitle = `Single action source ${suffix}`;
+  const worldTitle = `Single action world ${suffix}`;
+  const sourceId = `source_single_action_${suffix}`;
+  const worldId = `world_single_action_${suffix}`;
+  const timestamp = new Date().toISOString();
+  const batchRequests: Array<Record<string, unknown>> = [];
+
+  try {
+    await seedNotes(page, [
+      {
+        id: sourceId,
+        title: sourceTitle,
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: chat.id, chatIds: [chat.id] },
+        tags: ["e2e_fixture"],
+        keywords: [],
+        links: [],
+        sections: {
+          source: { text: "Single-item source fixture.", updatedAt: timestamp },
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      },
+      {
+        id: worldId,
+        title: worldTitle,
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: chat.id, chatIds: [chat.id] },
+        tags: ["e2e_fixture"],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: { text: "Single-item world fixture.", updatedAt: timestamp },
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      },
+    ]);
+    await page.route("**/api/long-term-memory/notes/batch", async (route) => {
+      const request = route.request().postDataJSON();
+      batchRequests.push(request);
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          updatedNoteIds: request.noteIds,
+          skippedNoteIds: [],
+          failedNoteIds: [],
+        }),
+      });
+    });
+
+    await openLongTermMemory(page, chat.id, testInfo);
+    const vault = page.locator('[data-ltm-surface="vault"]');
+    await vault.locator('[data-ltm-memory-group="world"] summary').click();
+    const worldRow = vault
+      .locator('[data-ltm-note-type="world"]')
+      .filter({ hasText: worldTitle });
+
+    if (testInfo.project.name.includes("mobile")) {
+      await worldRow
+        .getByRole("button", { name: `More actions for ${worldTitle}` })
+        .click();
+      await worldRow.getByRole("button", { name: "Archive" }).click();
+    } else {
+      await worldRow.hover();
+      await worldRow
+        .getByRole("button", { name: `Archive ${worldTitle}` })
+        .click();
+    }
+
+    await expect(vault).toContainText("1 memory updated.");
+    expect(batchRequests).toEqual([
+      { noteIds: [worldId], archive: "notes_only" },
+    ]);
+
+    await vault.locator('[data-ltm-memory-group="source"] summary').click();
+    const sourceRow = vault
+      .locator('[data-ltm-note-type="source"]')
+      .filter({ hasText: sourceTitle });
+    if (testInfo.project.name.includes("mobile")) {
+      await sourceRow
+        .getByRole("button", { name: `More actions for ${sourceTitle}` })
+        .click();
+      await sourceRow.getByRole("button", { name: "Delete" }).click();
+    } else {
+      await sourceRow.hover();
+      await sourceRow
+        .getByRole("button", { name: `Delete ${sourceTitle}` })
+        .click();
+    }
+
+    const dialog = page.getByRole("dialog", {
+      name: "Permanently delete selected memories?",
+    });
+    await expect(dialog.locator("[data-ltm-delete-extracted]")).toBeVisible();
+  } finally {
+    await deleteNotes(page, [sourceId, worldId]);
     await deleteChat(page, chat.id);
   }
 });

@@ -4,10 +4,11 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type HTMLAttributes,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Info, Loader2 } from "lucide-react";
+import { Info, Loader2, type LucideIcon } from "lucide-react";
 
 let activePopover: { id: string; close: () => void } | null = null;
 
@@ -39,6 +40,43 @@ export function Button({
     >
       {children}
     </button>
+  );
+}
+
+export function IconButton({
+  icon: Icon,
+  label,
+  destructive = false,
+  className = "",
+  ...props
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
+  icon: LucideIcon;
+  label: string;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      data-ltm-control="icon-button"
+      className={`inline-grid min-h-11 min-w-11 place-items-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50 ${destructive ? "border-[var(--destructive)]/35 text-[var(--destructive)] hover:bg-[var(--destructive)]/10" : "border-[var(--border)] bg-[var(--secondary)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"} ${className}`}
+      {...props}
+    >
+      <Icon aria-hidden="true" size="0.875rem" />
+    </button>
+  );
+}
+
+export function ClickSurface({
+  className = "",
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={`focus-within:outline-none focus-within:ring-2 focus-within:ring-[var(--ring)] ${className}`}
+      {...props}
+    />
   );
 }
 

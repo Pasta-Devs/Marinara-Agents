@@ -4,6 +4,7 @@ import {
   Archive,
   Check,
   ChevronRight,
+  Ellipsis,
   Link2,
   PanelRight,
   Plus,
@@ -26,6 +27,8 @@ import type {
 import { invalidateLtmQueries, queryKeys, request } from "./api";
 import {
   Button,
+  ClickSurface,
+  IconButton,
   InfoPopover,
   inputClass,
   NumberField,
@@ -330,6 +333,7 @@ export default function MemoryVault({
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
   const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
+  const [openActionNoteId, setOpenActionNoteId] = useState<string | null>(null);
   const [retractExtracted, setRetractExtracted] = useState(false);
   const [linkTarget, setLinkTarget] = useState("");
   const [linkRelation, setLinkRelation] =
@@ -657,8 +661,18 @@ export default function MemoryVault({
         "POST",
         { ids, retractExtracted: retract },
       );
-      setChecked(new Set());
+      setChecked((current) => {
+        const next = new Set(current);
+        result.deletedIds.forEach((id) => next.delete(id));
+        return next;
+      });
       setDeleteIds(null);
+      setOpenActionNoteId(null);
+      if (draft && result.deletedIds.includes(draft.id)) {
+        setDraft(null);
+        setSaved("");
+        setMobilePane("memories");
+      }
       setNotice(
         `${result.deletedIds.length} ${result.deletedIds.length === 1 ? "memory" : "memories"} deleted.`,
       );
@@ -671,8 +685,11 @@ export default function MemoryVault({
       setBusy("");
     }
   }
-  async function batch(action: "status" | "modes" | "archive" | "delete") {
-    const ids = [...checked];
+  async function runBatchForIds(
+    ids: string[],
+    action: "status" | "modes" | "archive" | "delete",
+    options?: { preserveSelection?: boolean },
+  ) {
     if (!ids.length) return;
     const includesSource = ids.some(
       (id) => allNotes.find((note) => note.id === id)?.type === "source",
@@ -710,11 +727,21 @@ export default function MemoryVault({
         ...result.skippedNoteIds,
         ...result.failedNoteIds,
       ]);
-      setChecked(unresolved);
+      if (options?.preserveSelection) {
+        setChecked((current) => {
+          const next = new Set(current);
+          ids.forEach((id) => next.delete(id));
+          unresolved.forEach((id) => next.add(id));
+          return next;
+        });
+      } else {
+        setChecked(unresolved);
+      }
       const unresolvedLabel = unresolved.size
         ? `; ${result.skippedNoteIds.length} skipped, ${result.failedNoteIds.length} failed`
         : "";
       const message = `${result.updatedNoteIds.length} ${result.updatedNoteIds.length === 1 ? "memory" : "memories"} updated${unresolvedLabel}.`;
+      setOpenActionNoteId(null);
       if (unresolved.size) {
         setNotice("");
         setError(message);
@@ -731,6 +758,28 @@ export default function MemoryVault({
       setBusy("");
     }
   }
+  async function batch(action: "status" | "modes" | "archive" | "delete") {
+    await runBatchForIds([...checked], action);
+  }
+  const runNoteAction = async (
+    event: { preventDefault: () => void; stopPropagation: () => void },
+    note: LtmNote,
+    action: "archive" | "delete",
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setOpenActionNoteId(null);
+    await runBatchForIds([note.id], action, { preserveSelection: true });
+  };
+
+  const toggleNoteActions = (
+    event: { preventDefault: () => void; stopPropagation: () => void },
+    noteId: string,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setOpenActionNoteId((current) => (current === noteId ? null : noteId));
+  };
   async function removeFromCurrentChat() {
     if (!draft || !props.chatId) return;
     const unsavedWarning = dirty
@@ -1287,59 +1336,114 @@ export default function MemoryVault({
                 {group.map((note) => {
                   const notePreview = preview(note, search);
                   return (
-                    <div
+                    <ClickSurface
                       key={note.id}
                       data-ltm-note-type={note.type}
                       data-ltm-note-source={note.type === "source" || undefined}
-                      className={`flex min-w-0 gap-2 border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
+                      data-ltm-note-actions-open={openActionNoteId === note.id || undefined}
+                      className={`group border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
                     >
-                      <label
-                        className={`${selectionMode ? "flex" : "hidden"} min-h-11 min-w-8 items-center justify-center md:flex`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked.has(note.id)}
-                          onChange={() =>
-                            setChecked((current) => {
-                              const next = new Set(current);
-                              next.has(note.id)
-                                ? next.delete(note.id)
-                                : next.add(note.id);
-                              return next;
-                            })
-                          }
-                          aria-label={`Select ${memoryLabel(note)}`}
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => void openNote(note)}
-                        className="min-h-14 min-w-0 flex-1 overflow-hidden rounded-md px-2 text-left hover:bg-[var(--accent)]"
-                      >
-                        <span className="flex items-center gap-2">
-                          <strong className="truncate text-sm">
-                            {memoryLabel(note)}
-                          </strong>
-                          <ChevronRight size="0.875rem" className="shrink-0" />
-                        </span>
-                        <span className="mt-1 flex gap-1 text-[0.6875rem]">
-                          <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
-                            {noteTypeLabel(note.type)}
+                      <div className="flex min-w-0 gap-2">
+                        <label
+                          className={`${selectionMode ? "flex" : "hidden"} min-h-11 min-w-8 items-center justify-center md:flex`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked.has(note.id)}
+                            onChange={() =>
+                              setChecked((current) => {
+                                const next = new Set(current);
+                                next.has(note.id)
+                                  ? next.delete(note.id)
+                                  : next.add(note.id);
+                                return next;
+                              })
+                            }
+                            aria-label={`Select ${memoryLabel(note)}`}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => void openNote(note)}
+                          className="min-h-14 min-w-0 flex-1 overflow-hidden rounded-md px-2 text-left hover:bg-[var(--accent)]"
+                        >
+                          <span className="flex items-center gap-2">
+                            <strong className="truncate text-sm">
+                              {memoryLabel(note)}
+                            </strong>
+                            <ChevronRight size="0.875rem" className="shrink-0" />
                           </span>
-                          <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
-                            {humanizeLabel(note.status)}
+                          <span className="mt-1 flex gap-1 text-[0.6875rem]">
+                            <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
+                              {noteTypeLabel(note.type)}
+                            </span>
+                            <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
+                              {humanizeLabel(note.status)}
+                            </span>
                           </span>
-                        </span>
-                        {notePreview ? (
-                          <span className="mt-1 line-clamp-2 block break-words text-xs leading-5 text-[var(--muted-foreground)]">
-                            <span className="font-medium text-[var(--foreground)]">
-                              {notePreview.label}:
-                            </span>{" "}
-                            {notePreview.text}
-                          </span>
+                          {notePreview ? (
+                            <span className="mt-1 line-clamp-2 block break-words text-xs leading-5 text-[var(--muted-foreground)]">
+                              <span className="font-medium text-[var(--foreground)]">
+                                {notePreview.label}:
+                              </span>{" "}
+                              {notePreview.text}
+                            </span>
+                          ) : null}
+                        </button>
+                        {!selectionMode ? (
+                          <>
+                            <div className="hidden items-start gap-1 pt-1 opacity-0 transition-opacity pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
+                              <IconButton
+                                icon={Archive}
+                                label={`Archive ${memoryLabel(note)}`}
+                                disabled={Boolean(busy)}
+                                onClick={(event) => void runNoteAction(event, note, "archive")}
+                              />
+                              <IconButton
+                                icon={Trash2}
+                                label={`Delete ${memoryLabel(note)}`}
+                                destructive
+                                disabled={Boolean(busy)}
+                                onClick={(event) => void runNoteAction(event, note, "delete")}
+                              />
+                            </div>
+                            <div className="md:hidden">
+                              <IconButton
+                                icon={Ellipsis}
+                                label={`More actions for ${memoryLabel(note)}`}
+                                aria-expanded={openActionNoteId === note.id}
+                                aria-controls={`ltm-note-actions-${note.id}`}
+                                onClick={(event) => toggleNoteActions(event, note.id)}
+                              />
+                            </div>
+                          </>
                         ) : null}
-                      </button>
-                    </div>
+                      </div>
+                      {!selectionMode && openActionNoteId === note.id ? (
+                        <div
+                          id={`ltm-note-actions-${note.id}`}
+                          className="flex gap-2 pl-10 pt-2 md:hidden"
+                        >
+                          <Button
+                            className="flex-1"
+                            disabled={Boolean(busy)}
+                            onClick={(event) => void runNoteAction(event, note, "archive")}
+                          >
+                            <Archive size="0.875rem" />
+                            Archive
+                          </Button>
+                          <Button
+                            className="flex-1"
+                            destructive
+                            disabled={Boolean(busy)}
+                            onClick={(event) => void runNoteAction(event, note, "delete")}
+                          >
+                            <Trash2 size="0.875rem" />
+                            Delete
+                          </Button>
+                        </div>
+                      ) : null}
+                    </ClickSurface>
                   );
                 })}
               </details>
