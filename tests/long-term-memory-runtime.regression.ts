@@ -162,7 +162,7 @@ async function main() {
     );
     assert.match(
       legacyBullets?.content ?? "",
-      /Denise:\n- Denise is Damo's reentry case officer at the Marlowe Street reentry office and treats his case as an exonoree case rather than parole\./,
+      /Denise:\n- Denise is Damo's reentry case officer at the Marlowe Street reentry office and treats his case as an exoneree case rather than parole\./,
     );
     assert.doesNotMatch(legacyBullets?.content ?? "", /- - /);
     assert.doesNotMatch(legacyBullets?.content ?? "", /\n\s*text:/);
@@ -219,9 +219,46 @@ async function main() {
     await storage.createNote(note("thread_resolved", "chat-a", "The resolved cobalt archive thread is closed.", { type: "thread", status: "resolved" }));
     await storage.createNote(note("world_game_only", "chat-a", "The game-only cobalt archive is elsewhere.", { modes: ["game"] }));
     await storage.createNote(note("world_tagged", "chat-a", "The brass warding marker is recorded here.", { tags: ["cobalt_tag"] }));
+    const embedCalls: string[] = [];
+    releaseRestoredRuntime = configurePackageRuntime({
+      ...api.runtime,
+      dataDir,
+      embeddings: {
+        spaceId: "test-space",
+        label: "test embeddings",
+        async embed(texts: string[]) {
+          embedCalls.push(...texts);
+          return texts.map((text) =>
+            text.includes("beneath the observatory")
+              ? [1, 0]
+              : text.includes("brass warding seal")
+                ? [0, 1]
+                : text.includes("observatory")
+                  ? [1, 0]
+                  : [0, 0],
+          );
+        },
+      },
+    });
     await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const semantic = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "observatory",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 1,
+      lexicalWeight: 0,
+      graphWeight: 0,
+      keywordWeight: 0,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(semantic.embeddingsAvailable, true);
+    assert.equal(semantic.chunks[0]?.chunk.noteId, "world_visible");
+    assert.equal(embedCalls.includes("observatory"), true);
     const recallIndexPath = longTermMemoryRecallIndexPath(storage.root);
     const currentRecallIndex = JSON.parse(await readFile(recallIndexPath, "utf8"));
+    assert.equal(currentRecallIndex.embeddings.spaceId, "test-space");
     currentRecallIndex.metadata.byType = {};
     currentRecallIndex.metadata.byStatus = {};
     currentRecallIndex.metadata.byMode = {};
@@ -276,6 +313,21 @@ async function main() {
       indexBeforeRecall,
       "recall must not rewrite a valid expanded legacy index",
     );
+    const mismatchedSpace = JSON.parse(indexBeforeRecall);
+    mismatchedSpace.embeddings.spaceId = "other-space";
+    await writeFile(recallIndexPath, JSON.stringify(mismatchedSpace));
+    const lexicalFallback = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "cobalt archive",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 1,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(lexicalFallback.embeddingsAvailable, false);
+    assert.equal(lexicalFallback.chunks.some((chunk: any) => chunk.chunk.noteId === "world_visible"), true);
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
     const thresholded = await retrieveLongTermMemory({
       root: storage.root,
       queryText: "world_visible cobalt archive",
@@ -407,18 +459,20 @@ async function main() {
     const olderHost = {
       dataDir,
       logger,
-      embeddings: { label: "older", async embed() { return [[1]]; } },
+      embeddings: { spaceId: "older-space", label: "older", async embed() { return [[1]]; } },
     };
     const newerHost = {
       dataDir,
       logger,
-      embeddings: { label: "newer", async embed() { return [[2]]; } },
+      embeddings: { spaceId: "newer-space", label: "newer", async embed() { return [[2]]; } },
     };
     const releaseOlder = configurePackageRuntime(olderHost);
     const releaseNewer = configurePackageRuntime(newerHost);
     releaseOlder();
     assert.equal(getPackageEmbeddingAdapter()?.label, "newer");
+    assert.equal(getPackageEmbeddingAdapter()?.spaceId, "newer-space");
     releaseNewer();
+    releaseRestoredRuntime?.();
     releaseRestoredRuntime = configurePackageRuntime({ ...api.runtime, dataDir });
 
     await storage.createNote({

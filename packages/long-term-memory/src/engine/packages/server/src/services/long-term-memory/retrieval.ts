@@ -6,6 +6,7 @@ import { embedLongTermMemoryTexts, type MemoryRecallEmbeddingOptions } from "./e
 import { expandLtmGraph } from "./graph.js";
 import { searchLtmKeywordIndex } from "./keyword-index.js";
 import { getLtmMetadataMatches } from "./metadata-index.js";
+import { getPackageEmbeddingAdapter } from "./package-runtime.js";
 import { loadOrRebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { reciprocalRankFuse, type LtmRankLane } from "./ranking.js";
 
@@ -38,6 +39,17 @@ function cosine(a: number[], b: number[]) {
     bb += b[index]! * b[index]!;
   }
   return aa && bb ? dot / Math.sqrt(aa * bb) : 0;
+}
+
+function hasUsableVectorIndex(
+  embeddings: Awaited<ReturnType<typeof loadOrRebuildLongTermMemoryIndexes>>["embeddings"],
+  spaceId: string,
+) {
+  return Boolean(
+    embeddings.spaceId === spaceId &&
+      embeddings.dimension &&
+      embeddings.embeddedChunkCount > 0,
+  );
 }
 
 export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput) {
@@ -82,11 +94,17 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     lanes.push({ name: "graph", weight: input.graphWeight ?? 1, items: graph.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: `graph:${hit.viaNoteId}` })) });
   }
   let embeddingsAvailable = false;
-  if ((input.semanticWeight ?? 0) > 0 && index.embeddings.dimension && query) {
-    const queryVector = (await embedLongTermMemoryTexts([query], input))?.[0];
+  const embeddingAdapter = input.embeddingAdapter ?? getPackageEmbeddingAdapter();
+  if (
+    (input.semanticWeight ?? 0) > 0 &&
+    query &&
+    embeddingAdapter &&
+    hasUsableVectorIndex(index.embeddings, embeddingAdapter.spaceId)
+  ) {
+    const queryVector = (await embedLongTermMemoryTexts([query], { ...input, embeddingAdapter }))?.[0];
     if (queryVector?.length === index.embeddings.dimension) {
       const vectors = index.embeddings.chunks.flatMap((entry) => {
-        if (!entry.vector || !allowed.has(entry.chunkId)) return [];
+        if (!entry.vector || entry.vector.length !== index.embeddings.dimension || !allowed.has(entry.chunkId)) return [];
         const score = cosine(queryVector, entry.vector);
         return score > 0 ? [{ chunkId: entry.chunkId, rawScore: score, reason: "vector" }] : [];
       }).sort((left, right) => right.rawScore - left.rawScore);

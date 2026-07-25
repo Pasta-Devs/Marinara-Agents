@@ -52,7 +52,7 @@ const packageOwnedFeatures = [
   {
     id: "long-term-memory",
     name: "Long-Term Memory",
-    capabilityApi: { major: 1, minor: 5 },
+    capabilityApi: { major: 1, minor: 6 },
     ownedSourcePaths: [
       "packages/shared/src/features/agents/long-term-memory",
       "packages/server/src/services/long-term-memory",

@@ -85,6 +85,7 @@ export type PackageLanguageModel = Awaited<
 >;
 
 export type PackageEmbeddingAdapter = {
+  spaceId: string;
   label: string;
   embed(texts: string[], signal?: AbortSignal): Promise<number[][] | null>;
 };

@@ -136,7 +136,7 @@ const features = [
       "long-term-memory/engine-boundary.json",
     ),
     boundaryDisplayName: "Long-Term Memory",
-    capabilityApi: { major: 1, minor: 5 },
+    capabilityApi: { major: 1, minor: 6 },
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"] },
       slots: ["chat-settings"],

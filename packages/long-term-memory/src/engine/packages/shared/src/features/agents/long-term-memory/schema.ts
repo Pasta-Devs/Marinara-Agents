@@ -1328,6 +1328,7 @@ export const ltmEmbeddingIndexEntrySchema = z
 export const ltmEmbeddingIndexSchema = z
   .object({
     version: z.literal(1),
+    spaceId: z.string().min(1).max(240).optional(),
     model: z.string().min(1).max(240),
     dimension: z.number().int().min(1).nullable(),
     embeddedChunkCount: z.number().int().min(0),
@@ -1372,6 +1373,20 @@ export const ltmEmbeddingIndexSchema = z
         code: z.ZodIssueCode.custom,
         path: ["dimension"],
         message: "Embedding dimension must be null when no vectors are stored.",
+      });
+    }
+    if (vectorCount === 0 && index.spaceId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["spaceId"],
+        message: "Embedding spaceId must be omitted when no vectors are stored.",
+      });
+    }
+    if (vectorCount > 0 && !index.spaceId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["spaceId"],
+        message: "Embedding spaceId is required when vectors are stored.",
       });
     }
     if (index.byChunkId) {

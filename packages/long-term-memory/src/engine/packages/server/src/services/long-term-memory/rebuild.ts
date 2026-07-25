@@ -14,6 +14,49 @@ import { getPackageEmbeddingAdapter } from "./package-runtime.js";
 import { markLtmIndexesClean } from "./index-state.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 
+const autoUpgradeFailures = new Set<string>();
+
+type EmbeddingAdapter = NonNullable<ReturnType<typeof getPackageEmbeddingAdapter>>;
+
+function autoUpgradeFailureKey(root: string, spaceId: string) {
+  return `${root}\u0000${spaceId}`;
+}
+
+function isFiniteVector(vector: number[] | undefined, dimension: number) {
+  return Array.isArray(vector) && vector.length === dimension && vector.every(Number.isFinite);
+}
+
+function getUsableEmbeddingState(index: LtmRecallIndex, adapter: EmbeddingAdapter | null) {
+  const dimension = index.embeddings.dimension;
+  if (!adapter || !index.embeddings.spaceId || index.embeddings.spaceId !== adapter.spaceId) return null;
+  if (!dimension || index.embeddings.embeddedChunkCount <= 0) return null;
+  const eligibleVectors = index.embeddings.chunks.filter((entry) => isFiniteVector(entry.vector, dimension));
+  if (eligibleVectors.length !== index.embeddings.embeddedChunkCount) return null;
+  return { adapter, dimension };
+}
+
+function clearAutoUpgradeFailure(root: string, adapter: EmbeddingAdapter | null) {
+  if (adapter) autoUpgradeFailures.delete(autoUpgradeFailureKey(root, adapter.spaceId));
+}
+
+async function tryUpgradeSemanticIndex(root: string, index: LtmRecallIndex) {
+  const adapter = getPackageEmbeddingAdapter();
+  if (!adapter) return index;
+  const failureKey = autoUpgradeFailureKey(root, adapter.spaceId);
+  if (autoUpgradeFailures.has(failureKey)) return index;
+  try {
+    const rebuilt = await rebuildLongTermMemoryIndexes({ root, embeddingAdapter: adapter });
+    if (rebuilt.embeddingsAvailable) {
+      autoUpgradeFailures.delete(failureKey);
+      return parseLtmRecallIndex(JSON.parse(await readFile(longTermMemoryRecallIndexPath(root), "utf8")));
+    }
+  } catch {
+    // ponytail: keep lexical recall; one process-local guard stops rebuild spam until manual rebuild or restart.
+  }
+  autoUpgradeFailures.add(failureKey);
+  return index;
+}
+
 export type LtmRecallIndex = {
   version: 1;
   generatedAt: string;
@@ -54,14 +97,25 @@ export async function rebuildLongTermMemoryIndexes(
 ) {
   const root = options.root ?? getLongTermMemoryRoot();
   return withLtmVaultLock(root,async()=>{
+    const embeddingAdapter = options.embeddingAdapter ?? getPackageEmbeddingAdapter();
+    clearAutoUpgradeFailure(root, embeddingAdapter ?? null);
     const notes = await new LongTermMemoryStorage(root).listNotes();
     const chunks = chunkNotes(notes, { includeSourceNotes: false });
-    const vectors = await embedLongTermMemoryTexts(chunks.map((chunk) => chunk.text), options);
+    const vectors = await embedLongTermMemoryTexts(chunks.map((chunk) => chunk.text), {
+      ...options,
+      embeddingAdapter,
+    });
+    const dimension = vectors?.[0]?.length ?? 0;
     const usableVectors =
-      vectors?.length === chunks.length && vectors.every((vector) => vector.length > 0) ? vectors : null;
+      vectors?.length === chunks.length &&
+      dimension > 0 &&
+      vectors.every((vector) => isFiniteVector(vector, dimension))
+        ? vectors
+        : null;
     const embeddings = ltmEmbeddingIndexSchema.parse({
       version: 1,
-      model: options.embeddingAdapter?.label ?? getPackageEmbeddingAdapter()?.label ?? "unavailable",
+      ...(usableVectors ? { spaceId: embeddingAdapter?.spaceId } : {}),
+      model: embeddingAdapter?.label ?? "unavailable",
       dimension: usableVectors?.[0]?.length ?? null,
       embeddedChunkCount: usableVectors?.length ?? 0,
       chunks: chunks.map((chunk, index) => ({
@@ -95,7 +149,9 @@ export async function loadOrRebuildLongTermMemoryIndexes(root = getLongTermMemor
     if (index.sourceHash !== stableJsonHash(chunkNotes(notes, { includeSourceNotes: false }))) {
       throw new Error("Stale long-term memory recall index.");
     }
-    return index;
+    const usableEmbeddings = getUsableEmbeddingState(index, getPackageEmbeddingAdapter());
+    if (usableEmbeddings || index.embeddings.embeddedChunkCount === 0) return index;
+    return await tryUpgradeSemanticIndex(root, index);
   } catch (error) {
     await quarantineLtmIndexArtifact(root, path).catch(() => {});
     await rebuildLongTermMemoryIndexes({ root });
