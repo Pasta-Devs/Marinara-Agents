@@ -97,6 +97,7 @@ const fixtures = new Map(
     artifactFixture("1.1.6"),
     artifactFixture("1.1.7"),
     artifactFixture("1.2.1"),
+    artifactFixture("1.2.2"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -411,6 +412,17 @@ const definition = {
       lorebookEntryIds: ["missing-lifecycle-lore-entry"],
       status: "active",
       sortOrder: 0,
+    },
+    {
+      id: "lifecycle_level_5",
+      parentId: "lifecycle_world",
+      name: "Level 5 — Prism Caverns",
+      kind: "floor",
+      description: "A known numbered level used to prevent duplicate discoveries.",
+      childPresentation: "list",
+      links: [],
+      status: "active",
+      sortOrder: 1,
     },
   ],
 };
@@ -2192,11 +2204,11 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.2.1";
+    catalogVersion = "1.2.2";
     catalogOnline = true;
-    const upgraded121 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded121.version, "1.2.1");
-    assert.equal(upgraded121.previousVersion, "1.1.7");
+    const upgraded122 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded122.version, "1.2.2");
+    assert.equal(upgraded122.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
@@ -2206,9 +2218,11 @@ async function main() {
       headers: csrfHeaders,
       payload: {},
     })) as { messages: Array<{ content: string }> };
+    const narratedPromptText = narratedPrompt.messages.map((message) => message.content).join("\n");
+    assert.match(narratedPromptText, /\[spatial_move: destination_id=/u);
     assert.match(
-      narratedPrompt.messages.map((message) => message.content).join("\n"),
-      /\[spatial_move: destination_id=/u,
+      narratedPromptText,
+      /Lifecycle World > Level 5 — Prism Caverns \[lifecycle_level_5\]/u,
     );
 
     const narratedMoveMessage = (await expectJson(app, {
@@ -2244,6 +2258,64 @@ async function main() {
     });
     assert.equal(invalidMoveSnapshot?.currentLocationId, "lifecycle_harbor");
     assert.equal(invalidMoveSnapshot?.transitionCommandId, null);
+
+    const knownLevelMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "A secret route reaches Level 5 by another name." },
+    })) as { id: string };
+    const knownLevelSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: knownLevelMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: {
+        type: "discover",
+        name: "Level 5 — The Hollow Foundry",
+        relation: "enter",
+        description: "A second description for an already mapped level.",
+      },
+    });
+    assert.equal(knownLevelSnapshot?.currentLocationId, "lifecycle_level_5");
+    const routedKnownLevel = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as {
+      definition: {
+        locations: Array<{
+          id: string;
+          name: string;
+          links: Array<{ targetId: string; state: string }>;
+        }>;
+      };
+    };
+    assert.equal(
+      routedKnownLevel.definition.locations.filter((location) => location.name.startsWith("Level 5")).length,
+      1,
+    );
+    assert.ok(
+      routedKnownLevel.definition.locations
+        .find((location) => location.id === "lifecycle_harbor")
+        ?.links.some((link) => link.targetId === "lifecycle_level_5" && link.state === "available"),
+    );
+
+    const returnToHarborMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The secret route returns to Lifecycle Harbor." },
+    })) as { id: string };
+    const returnToHarborSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: returnToHarborMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: { type: "move", destinationId: "lifecycle_harbor" },
+    });
+    assert.equal(returnToHarborSnapshot?.currentLocationId, "lifecycle_harbor");
 
     const discoveryMessage = (await expectJson(app, {
       method: "POST",
@@ -2385,7 +2457,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.2.1");
+    assert.equal(reinstalled.version, "1.2.2");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -2463,7 +2535,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.2.1", status: "active", readiness: "ready" }],
+      [{ version: "1.2.2", status: "active", readiness: "ready" }],
     );
 
     console.info(

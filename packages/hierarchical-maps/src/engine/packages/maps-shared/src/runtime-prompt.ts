@@ -33,6 +33,15 @@ export function buildOwnerSpatialProjection(
 
   const allDestinations = resolveSpatialDestinations(definition, currentLocationId);
   const destinations = allDestinations.slice(0, SPATIAL_CONTEXT_LIMITS.maxPromptDestinations);
+  const knownLocations = definition.locations
+    .filter((location) => location.status === "active")
+    .map((location) => ({
+      id: location.id,
+      path: resolveSpatialBreadcrumb(definition, location.id)
+        .slice(-MAX_PROMPT_BREADCRUMB_NODES)
+        .map(({ name }) => boundedText(name, SPATIAL_CONTEXT_LIMITS.maxNameLength))
+        .join(" > "),
+    }));
   return {
     kind: "owner",
     chatId,
@@ -49,6 +58,7 @@ export function buildOwnerSpatialProjection(
     referenceImageId: current.referenceImageId?.trim() || null,
     useReferenceImage: current.useReferenceImage === true,
     destinations,
+    knownLocations,
     lorebookEntryIds: current.lorebookEntryIds,
     omittedDestinationCount: Math.max(0, allDestinations.length - destinations.length),
   };
@@ -79,10 +89,20 @@ export function formatOwnerSpatialPrompt(
   if (projection.omittedDestinationCount > 0) {
     destinationLines.push(`- ${projection.omittedDestinationCount} additional destinations omitted.`);
   }
+  const knownLocationLines = projection.knownLocations?.length
+    ? projection.knownLocations.map(
+        ({ id, path }) => `- ${escapeXmlText(path)} [${escapeXmlText(id)}]`,
+      )
+    : ["- None"];
+  const knownLocationIndex = [
+    "Known map locations (active breadcrumb names and exact IDs only):",
+    ...knownLocationLines,
+    "",
+  ].join("\n");
   const authorityInstruction =
     projection.ownerMode === "game"
-      ? "Treat this as the authoritative world location for the GM and party. A legacy Game map, when present, is only local/tactical detail inside this location. Keep the current location unless the narrated scene actually arrives somewhere else. When arrival at an available destination is complete, append [spatial_move: destination_id=\"exact_id\"] as the final line. When the story arrives at a significant named, durable, revisitable place that is not mapped, append [spatial_discover: name=\"Place Name\" relation=\"enter\" description=\"Short orientation\"] as the final line; use relation=\"link\" for a neighboring or travel-connected place rather than a place inside the current one. Do not emit either command for intentions, failed or unfinished travel, mentions, imagined places, temporary camps, hallways, vehicles, or other transient scene details. These commands are hidden from the user and validated by the application."
-      : "Treat this as the authoritative location for the focal scene. Keep the current location unless the narrated scene actually arrives somewhere else. When arrival at an available destination is complete, append [spatial_move: destination_id=\"exact_id\"] as the final line. When the story arrives at a significant named, durable, revisitable place that is not mapped, append [spatial_discover: name=\"Place Name\" relation=\"enter\" description=\"Short orientation\"] as the final line; use relation=\"link\" for a neighboring or travel-connected place rather than a place inside the current one. Do not emit either command for intentions, failed or unfinished travel, mentions, imagined places, temporary camps, hallways, vehicles, or other transient scene details. These commands are hidden from the user and validated by the application.";
+      ? `${knownLocationIndex}Treat this as the authoritative world location for the GM and party. A legacy Game map, when present, is only local/tactical detail inside this location. Keep the current location unless the narrated scene actually arrives somewhere else. When arrival at any known map location is complete, append [spatial_move: destination_id=\"exact_id\"] as the final line, even when it was reached through a newly revealed or secret route; the application records that direct route. Only use [spatial_discover: name=\"Place Name\" relation=\"enter\" description=\"Short orientation\"] when no known map location matches; use relation=\"link\" for a neighboring or travel-connected place rather than a place inside the current one. Do not emit either command for intentions, failed or unfinished travel, mentions, imagined places, temporary camps, hallways, vehicles, or other transient scene details. These commands are hidden from the user and validated by the application.`
+      : `${knownLocationIndex}Treat this as the authoritative location for the focal scene. Keep the current location unless the narrated scene actually arrives somewhere else. When arrival at any known map location is complete, append [spatial_move: destination_id=\"exact_id\"] as the final line, even when it was reached through a newly revealed or secret route; the application records that direct route. Only use [spatial_discover: name=\"Place Name\" relation=\"enter\" description=\"Short orientation\"] when no known map location matches; use relation=\"link\" for a neighboring or travel-connected place rather than a place inside the current one. Do not emit either command for intentions, failed or unfinished travel, mentions, imagined places, temporary camps, hallways, vehicles, or other transient scene details. These commands are hidden from the user and validated by the application.`;
   const defaults = defaultSpatialTurnPromptTemplates();
   const selectedTemplate =
     template ??

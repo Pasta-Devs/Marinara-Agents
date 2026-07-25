@@ -1,5 +1,4 @@
 import {
-  buildSpatialLocationIndex,
   resolveSpatialBreadcrumb,
   resolveSpatialDestinations,
   SPATIAL_CONTEXT_LIMITS,
@@ -48,25 +47,38 @@ function normalizedLocationName(value: string): string {
     .trim();
 }
 
-function exactGuidanceDestination(
+function numberedLayerIdentity(value: string): string | null {
+  const match = value.trim().match(/^(level|floor|storey|story|deck)\s+([a-z]?\d+[a-z]?)\b/iu);
+  return match ? `${match[1]!.toLowerCase()} ${match[2]!.toLowerCase()}` : null;
+}
+
+function knownLocationMatches(
   definition: SpatialContextDefinition,
-  currentLocationId: string,
   guidance: string,
-): string | null {
+): SpatialLocation[] {
   const expected = normalizedLocationName(guidance);
-  if (!expected) return null;
-  const byId = buildSpatialLocationIndex(definition);
-  const candidateIds = new Set([
-    currentLocationId,
-    ...resolveSpatialDestinations(definition, currentLocationId).map((destination) => destination.id),
-  ]);
-  const matches = [...candidateIds].filter((id) => {
-    const location = byId.get(id);
-    if (!location) return false;
-    const breadcrumb = resolveSpatialBreadcrumb(definition, id).map((entry) => entry.name).join(" > ");
+  if (!expected) return [];
+  const exact = definition.locations.filter((location) => {
+    if (location.status !== "active") return false;
+    const breadcrumb = resolveSpatialBreadcrumb(definition, location.id).map((entry) => entry.name).join(" > ");
     return normalizedLocationName(location.name) === expected || normalizedLocationName(breadcrumb) === expected;
   });
-  return matches.length === 1 ? matches[0]! : null;
+  if (exact.length > 0) return exact;
+  const layerIdentity = numberedLayerIdentity(guidance);
+  return layerIdentity
+    ? definition.locations.filter(
+        (location) =>
+          location.status === "active" && numberedLayerIdentity(location.name) === layerIdentity,
+      )
+    : [];
+}
+
+function exactGuidanceDestination(
+  definition: SpatialContextDefinition,
+  guidance: string,
+): string | null {
+  const matches = knownLocationMatches(definition, guidance);
+  return matches.length === 1 ? matches[0]!.id : null;
 }
 
 function addAvailableLink(
@@ -108,9 +120,7 @@ function discoverLocation(
 ): { definition: SpatialContextDefinition; destinationId: string } | null {
   const nameKey = normalizedLocationName(directive.name);
   if (!nameKey) return null;
-  const matching = definition.locations.filter(
-    (location) => location.status === "active" && normalizedLocationName(location.name) === nameKey,
-  );
+  const matching = knownLocationMatches(definition, directive.name);
   const reachableIds = new Set(resolveSpatialDestinations(definition, currentLocationId).map((entry) => entry.id));
   const reachableMatching = matching.filter((location) => reachableIds.has(location.id));
   if (reachableMatching.length === 1) {
@@ -290,11 +300,27 @@ export async function materializeAssistantSpatialState(
       let transitionApplied = false;
 
       if (input.directive?.type === "move") {
+        const requestedDestinationId = input.directive.destinationId;
         const reachable = new Set(
           resolveSpatialDestinations(definition, state.currentLocationId).map((destination) => destination.id),
         );
-        if (reachable.has(input.directive.destinationId)) {
-          destinationId = input.directive.destinationId;
+        const destination = definition.locations.find(
+          (location) =>
+            location.id === requestedDestinationId && location.status === "active",
+        );
+        if (destination && destination.id !== state.currentLocationId) {
+          if (!reachable.has(destination.id)) {
+            const linked = addAvailableLink(definition, state.currentLocationId, destination.id);
+            if (linked) definition = linked;
+          }
+        }
+        if (
+          destination &&
+          (destination.id === state.currentLocationId ||
+            reachable.has(destination.id) ||
+            definition !== state.definition)
+        ) {
+          destinationId = destination.id;
           transitionApplied = destinationId !== state.currentLocationId;
         }
       } else if (input.directive?.type === "discover") {
@@ -307,12 +333,20 @@ export async function materializeAssistantSpatialState(
       } else if (input.locationGuidance) {
         const guidedDestinationId = exactGuidanceDestination(
           definition,
-          state.currentLocationId,
           input.locationGuidance,
         );
         if (guidedDestinationId && guidedDestinationId !== state.currentLocationId) {
-          destinationId = guidedDestinationId;
-          transitionApplied = true;
+          const reachable = new Set(
+            resolveSpatialDestinations(definition, state.currentLocationId).map((destination) => destination.id),
+          );
+          if (!reachable.has(guidedDestinationId)) {
+            const linked = addAvailableLink(definition, state.currentLocationId, guidedDestinationId);
+            if (linked) definition = linked;
+          }
+          if (reachable.has(guidedDestinationId) || definition !== state.definition) {
+            destinationId = guidedDestinationId;
+            transitionApplied = true;
+          }
         }
       }
 
