@@ -43,14 +43,11 @@ export function useSpatialGalleryImages(chatId: string) {
   });
 }
 
-export function useUploadSpatialGalleryImage(chatId: string) {
+export function useGenerateSpatialGalleryImage(chatId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      return packageApi.upload<SpatialGalleryImage>(`/gallery/${chatId}/upload`, formData);
-    },
+    mutationFn: (input: { prompt: string; debugMode?: boolean }) =>
+      packageApi.post<SpatialGalleryImage>(`/gallery/${chatId}/generate-image`, input),
     onSuccess: (image) => {
       queryClient.setQueryData<SpatialGalleryImage[]>(spatialResourceKeys.gallery(chatId), (current = []) => [
         image,

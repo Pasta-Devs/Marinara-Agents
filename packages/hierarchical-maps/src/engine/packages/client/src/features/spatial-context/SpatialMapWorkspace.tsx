@@ -1019,6 +1019,7 @@ export function SpatialMapWorkspace({
   const inspector = (
     <LocationInspector
       chatId={chatId}
+      debugMode={debugMode}
       definition={draft}
       location={selected}
       issues={issues.filter((issue) => issue.locationId === selected?.id)}

@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Archive, BookOpen, ImageIcon, Link2, Loader2, MapPin, Plus, Search, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Archive, BookOpen, Check, ImageIcon, Link2, Loader2, MapPin, Plus, RefreshCw, Search, Sparkles, Trash2, X } from "lucide-react";
 import type {
   Lorebook,
   LorebookEntry,
@@ -13,7 +13,11 @@ import { cn } from "../package-utils";
 import { getSpatialDescendantIds } from "@marinara-engine/shared";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
 import type { SpatialHierarchyProfile } from "../../../../../maps-shared/src/maps-model";
-import { useSpatialGalleryImages, useUploadSpatialGalleryImage } from "../use-spatial-resources";
+import {
+  useGenerateSpatialGalleryImage,
+  useSpatialGalleryImages,
+  type SpatialGalleryImage,
+} from "../use-spatial-resources";
 
 const INPUT_CLASS =
   "w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--marinara-chat-chrome-panel-text)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[var(--marinara-chat-chrome-panel-muted)] focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-focus-ring)]";
@@ -43,8 +47,124 @@ function Field({
   );
 }
 
+function GalleryImagePicker({
+  title,
+  images,
+  selectedId,
+  isLoading,
+  isError,
+  onSelect,
+  onConfirm,
+  onRefresh,
+  onClose,
+}: {
+  title: string;
+  images: SpatialGalleryImage[];
+  selectedId: string | null;
+  isLoading: boolean;
+  isError: boolean;
+  onSelect: (imageId: string) => void;
+  onConfirm: () => void;
+  onRefresh: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]">
+      <div className="flex min-h-11 items-center gap-2 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-3 py-2">
+        <p className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+          {title}
+        </p>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="mari-chrome-control h-9 w-9 justify-center p-0"
+          aria-label="Refresh Gallery images"
+          title="Refresh Gallery images"
+        >
+          <RefreshCw size="0.75rem" />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mari-chrome-control h-9 w-9 justify-center p-0"
+          aria-label="Close Gallery picker"
+          title="Close Gallery picker"
+        >
+          <X size="0.75rem" />
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex min-h-32 items-center justify-center gap-2 text-xs text-[var(--marinara-chat-chrome-panel-muted)]">
+          <Loader2 size="0.875rem" className="animate-spin" /> Loading Gallery…
+        </div>
+      ) : isError ? (
+        <div className="px-4 py-8 text-center text-xs text-red-400">The Gallery could not be loaded.</div>
+      ) : images.length === 0 ? (
+        <div className="px-4 py-8 text-center text-xs leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+          This chat&apos;s Gallery is empty. Upload an image from Gallery, then refresh this picker.
+        </div>
+      ) : (
+        <div className="grid max-h-80 grid-cols-2 gap-2 overflow-y-auto p-2 sm:grid-cols-3">
+          {images.map((image) => {
+            const selected = image.id === selectedId;
+            return (
+              <button
+                key={image.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => onSelect(image.id)}
+                title={image.prompt || "Gallery image"}
+                className={cn(
+                  "group relative min-h-24 overflow-hidden rounded-lg border bg-[var(--marinara-chat-chrome-panel-bg)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]",
+                  selected
+                    ? "border-[var(--marinara-chat-chrome-button-border-active)] ring-2 ring-[var(--marinara-chat-chrome-focus-ring)]"
+                    : "border-[var(--marinara-chat-chrome-panel-border)] hover:border-[var(--marinara-chat-chrome-button-border-active)]",
+                )}
+              >
+                <img src={image.url} alt="" loading="lazy" className="h-24 w-full object-cover" />
+                {selected && (
+                  <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm">
+                    <Check size="0.75rem" />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-2">
+        <button type="button" onClick={onClose} className="mari-chrome-control min-h-11 justify-center px-3 text-xs">
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!selectedId}
+          onClick={onConfirm}
+          className="mari-chrome-control min-h-11 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
+        >
+          <Check size="0.75rem" /> Use selected
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function defaultLocationReferencePrompt(location: SpatialLocation): string {
+  const description = location.description.trim();
+  return [
+    `Wide establishing image of ${location.name.trim() || "this location"}.`,
+    description,
+    "Show the environment, architecture, lighting, palette, and stable landmarks clearly. No text.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 interface LocationInspectorProps {
   chatId: string;
+  debugMode?: boolean;
   definition: SpatialContextDefinition;
   location: SpatialLocation | null;
   issues: SpatialDefinitionIssue[];
@@ -69,6 +189,7 @@ interface LocationInspectorProps {
 
 export function LocationInspector({
   chatId,
+  debugMode = false,
   definition,
   location,
   issues,
@@ -88,11 +209,13 @@ export function LocationInspector({
 }: LocationInspectorProps) {
   const [loreSearch, setLoreSearch] = useState("");
   const [newLinkTarget, setNewLinkTarget] = useState("");
-  const referenceImageInputRef = useRef<HTMLInputElement>(null);
-  const mapBackgroundInputRef = useRef<HTMLInputElement>(null);
+  const [galleryPickerTarget, setGalleryPickerTarget] = useState<"reference" | "background" | null>(null);
+  const [pendingGalleryImageId, setPendingGalleryImageId] = useState<string | null>(null);
+  const [referenceGeneratorOpen, setReferenceGeneratorOpen] = useState(false);
+  const [referenceGenerationPrompt, setReferenceGenerationPrompt] = useState("");
+  const [generatedReferenceImage, setGeneratedReferenceImage] = useState<SpatialGalleryImage | null>(null);
   const galleryImages = useSpatialGalleryImages(chatId);
-  const uploadReferenceImage = useUploadSpatialGalleryImage(chatId);
-  const uploadMapBackground = useUploadSpatialGalleryImage(chatId);
+  const generateReferenceImage = useGenerateSpatialGalleryImage(chatId);
   const referenceImage = useMemo(
     () => galleryImages.data?.find((image) => image.id === location?.referenceImageId) ?? null,
     [galleryImages.data, location?.referenceImageId],
@@ -148,22 +271,33 @@ export function LocationInspector({
   }, [location?.lorebookEntryIds, loreSearch, lorebookEntries, lorebooks]);
   const excludedLorebookIdSet = useMemo(() => new Set(excludedLorebookIds), [excludedLorebookIds]);
 
-  const uploadLocationReference = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    uploadReferenceImage.mutate(file, {
-      onSuccess: (image) => onUpdate({ referenceImageId: image.id, useReferenceImage: true }),
-    });
+  useEffect(() => {
+    setGalleryPickerTarget(null);
+    setPendingGalleryImageId(null);
+    setReferenceGeneratorOpen(false);
+    setReferenceGenerationPrompt("");
+    setGeneratedReferenceImage(null);
+  }, [location?.id]);
+
+  const openGalleryPicker = (target: "reference" | "background") => {
+    setReferenceGeneratorOpen(false);
+    setGeneratedReferenceImage(null);
+    setPendingGalleryImageId(
+      target === "reference" ? location?.referenceImageId ?? null : location?.mapBackgroundImageId ?? null,
+    );
+    setGalleryPickerTarget(target);
+    void galleryImages.refetch();
   };
 
-  const uploadLocationMapBackground = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    uploadMapBackground.mutate(file, {
-      onSuccess: (image) => onUpdate({ mapBackgroundImageId: image.id, mapBackgroundPosition: { x: 50, y: 50 } }),
-    });
+  const confirmGallerySelection = () => {
+    if (!pendingGalleryImageId || !galleryPickerTarget) return;
+    if (galleryPickerTarget === "reference") {
+      onUpdate({ referenceImageId: pendingGalleryImageId, useReferenceImage: true });
+    } else {
+      onUpdate({ mapBackgroundImageId: pendingGalleryImageId, mapBackgroundPosition: { x: 50, y: 50 } });
+    }
+    setGalleryPickerTarget(null);
+    setPendingGalleryImageId(null);
   };
 
   if (!location) {
@@ -297,7 +431,7 @@ export function LocationInspector({
             </h3>
           </div>
           <p className="mb-3 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-            Upload one image to anchor this location&apos;s look. The image stays in this chat&apos;s Gallery.
+            Choose a reviewed Gallery image or create an establishing image with AI. One image anchors this location&apos;s look.
           </p>
 
           <div className="overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
@@ -315,7 +449,7 @@ export function LocationInspector({
                     <Loader2 size="0.75rem" className="animate-spin" /> Loading reference image…
                   </span>
                 ) : referenceImageMissing ? (
-                  "This Gallery image is no longer available. Upload a replacement or remove the link."
+                  "This Gallery image is no longer available. Choose a replacement or remove the link."
                 ) : galleryImages.isError ? (
                   "The Gallery could not be loaded."
                 ) : (
@@ -325,43 +459,150 @@ export function LocationInspector({
             )}
           </div>
 
-          <input
-            ref={referenceImageInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-            className="sr-only"
-            aria-label={`Upload a reference image for ${location.name}`}
-            onChange={uploadLocationReference}
-          />
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
-              disabled={uploadReferenceImage.isPending}
-              onClick={() => referenceImageInputRef.current?.click()}
+              onClick={() => openGalleryPicker("reference")}
               className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
             >
-              {uploadReferenceImage.isPending ? (
-                <Loader2 size="0.75rem" className="animate-spin" />
-              ) : (
-                <Upload size="0.75rem" />
-              )}
-              {location.referenceImageId ? "Replace" : "Upload image"}
+              <ImageIcon size="0.75rem" /> Choose from Gallery
             </button>
             <button
               type="button"
-              disabled={!location.referenceImageId || uploadReferenceImage.isPending}
-              onClick={() => onUpdate({ referenceImageId: undefined, useReferenceImage: false })}
+              onClick={() => {
+                setGalleryPickerTarget(null);
+                setGeneratedReferenceImage(null);
+                setReferenceGenerationPrompt(defaultLocationReferencePrompt(location));
+                setReferenceGeneratorOpen(true);
+                generateReferenceImage.reset();
+              }}
               className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
             >
-              <Trash2 size="0.75rem" /> Remove
+              <Sparkles size="0.75rem" /> Create with AI
             </button>
           </div>
-          {uploadReferenceImage.isError && (
-            <p className="mt-2 text-[0.6875rem] text-red-400" role="alert">
-              {uploadReferenceImage.error instanceof Error
-                ? uploadReferenceImage.error.message
-                : "The reference image could not be uploaded."}
-            </p>
+          {location.referenceImageId && (
+            <button
+              type="button"
+              onClick={() => onUpdate({ referenceImageId: undefined, useReferenceImage: false })}
+              className="mari-chrome-control mt-2 min-h-11 w-full justify-center px-3 text-xs"
+            >
+              <Trash2 size="0.75rem" /> Remove reference
+            </button>
+          )}
+
+          {galleryPickerTarget === "reference" && (
+            <GalleryImagePicker
+              title="Choose location reference"
+              images={galleryImages.data ?? []}
+              selectedId={pendingGalleryImageId}
+              isLoading={galleryImages.isLoading || galleryImages.isFetching}
+              isError={galleryImages.isError}
+              onSelect={setPendingGalleryImageId}
+              onConfirm={confirmGallerySelection}
+              onRefresh={() => void galleryImages.refetch()}
+              onClose={() => {
+                setGalleryPickerTarget(null);
+                setPendingGalleryImageId(null);
+              }}
+            />
+          )}
+
+          {referenceGeneratorOpen && (
+            <div className="mt-3 space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3">
+              <div className="flex items-center gap-2">
+                <Sparkles size="0.8125rem" className="text-[var(--marinara-chat-chrome-accent)]" />
+                <p className="min-w-0 flex-1 text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                  Create location reference
+                </p>
+                <button
+                  type="button"
+                  disabled={generateReferenceImage.isPending}
+                  onClick={() => {
+                    setReferenceGeneratorOpen(false);
+                    setGeneratedReferenceImage(null);
+                  }}
+                  className="mari-chrome-control h-9 w-9 justify-center p-0"
+                  aria-label="Close AI reference creator"
+                  title="Close AI reference creator"
+                >
+                  <X size="0.75rem" />
+                </button>
+              </div>
+              <label className="block space-y-1.5">
+                <span className="text-[0.6875rem] font-medium text-[var(--marinara-chat-chrome-panel-title)]">
+                  Image prompt
+                </span>
+                <textarea
+                  className={`${INPUT_CLASS} min-h-28 resize-y`}
+                  value={referenceGenerationPrompt}
+                  maxLength={7_000}
+                  disabled={generateReferenceImage.isPending}
+                  onChange={(event) => setReferenceGenerationPrompt(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={generateReferenceImage.isPending || !referenceGenerationPrompt.trim()}
+                onClick={() => {
+                  setGeneratedReferenceImage(null);
+                  generateReferenceImage.mutate(
+                    { prompt: referenceGenerationPrompt.trim(), debugMode },
+                    { onSuccess: setGeneratedReferenceImage },
+                  );
+                }}
+                className="mari-chrome-control min-h-11 w-full justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
+              >
+                {generateReferenceImage.isPending ? (
+                  <Loader2 size="0.75rem" className="animate-spin" />
+                ) : (
+                  <Sparkles size="0.75rem" />
+                )}
+                {generateReferenceImage.isPending ? "Creating image…" : "Generate into Gallery"}
+              </button>
+              {generateReferenceImage.isError && (
+                <p className="text-[0.6875rem] text-red-400" role="alert">
+                  {generateReferenceImage.error instanceof Error
+                    ? generateReferenceImage.error.message
+                    : "The location reference could not be generated."}
+                </p>
+              )}
+              {generatedReferenceImage && (
+                <div className="overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)]">
+                  <img
+                    src={generatedReferenceImage.url}
+                    alt={`Generated reference candidate for ${location.name}`}
+                    className="h-40 w-full object-cover"
+                  />
+                  <p className="px-3 pt-2 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                    Saved to Gallery. Review it before making it this location&apos;s reference.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 p-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReferenceGeneratorOpen(false);
+                        setGeneratedReferenceImage(null);
+                      }}
+                      className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                    >
+                      Keep in Gallery
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onUpdate({ referenceImageId: generatedReferenceImage.id, useReferenceImage: true });
+                        setReferenceGeneratorOpen(false);
+                        setGeneratedReferenceImage(null);
+                      }}
+                      className="mari-chrome-control min-h-11 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs"
+                    >
+                      <Check size="0.75rem" /> Use as reference
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           <label className="mt-3 flex min-h-11 items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] px-3 text-xs text-[var(--marinara-chat-chrome-panel-text)]">
@@ -581,48 +822,43 @@ export function LocationInspector({
                       ) : galleryImages.isError ? (
                         "The Gallery could not be loaded."
                       ) : (
-                        "The map grid is used until you upload a background."
+                        "The map grid is used until you choose a Gallery background."
                       )}
                     </div>
                   )}
                 </div>
-                <input
-                  ref={mapBackgroundInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-                  className="sr-only"
-                  aria-label={`Upload a child map background for ${location.name}`}
-                  onChange={uploadLocationMapBackground}
-                />
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    disabled={uploadMapBackground.isPending}
-                    onClick={() => mapBackgroundInputRef.current?.click()}
+                    onClick={() => openGalleryPicker("background")}
                     className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
                   >
-                    {uploadMapBackground.isPending ? (
-                      <Loader2 size="0.75rem" className="animate-spin" />
-                    ) : (
-                      <Upload size="0.75rem" />
-                    )}
-                    {location.mapBackgroundImageId ? "Replace" : "Upload image"}
+                    <ImageIcon size="0.75rem" /> Choose from Gallery
                   </button>
                   <button
                     type="button"
-                    disabled={!location.mapBackgroundImageId || uploadMapBackground.isPending}
+                    disabled={!location.mapBackgroundImageId}
                     onClick={() => onUpdate({ mapBackgroundImageId: undefined, mapBackgroundPosition: undefined })}
                     className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
                   >
                     <Trash2 size="0.75rem" /> Remove
                   </button>
                 </div>
-                {uploadMapBackground.isError && (
-                  <p className="mt-2 text-[0.6875rem] text-red-400" role="alert">
-                    {uploadMapBackground.error instanceof Error
-                      ? uploadMapBackground.error.message
-                      : "The map background could not be uploaded."}
-                  </p>
+                {galleryPickerTarget === "background" && (
+                  <GalleryImagePicker
+                    title="Choose child map background"
+                    images={galleryImages.data ?? []}
+                    selectedId={pendingGalleryImageId}
+                    isLoading={galleryImages.isLoading || galleryImages.isFetching}
+                    isError={galleryImages.isError}
+                    onSelect={setPendingGalleryImageId}
+                    onConfirm={confirmGallerySelection}
+                    onRefresh={() => void galleryImages.refetch()}
+                    onClose={() => {
+                      setGalleryPickerTarget(null);
+                      setPendingGalleryImageId(null);
+                    }}
+                  />
                 )}
               </div>
             )}
