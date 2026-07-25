@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CornerDownRight,
   Download,
+  ImageIcon,
   List,
   Loader2,
   Map,
@@ -68,6 +69,7 @@ import {
 } from "../../../../maps-shared/src/maps-model";
 
 type MobilePane = "hierarchy" | "local" | "details";
+type LayoutEditingMode = "places" | "background" | null;
 
 type FirstSaveResult = {
   locationCount: number;
@@ -177,7 +179,7 @@ export function SpatialMapWorkspace({
   );
   const [replacementCurrentLocationId, setReplacementCurrentLocationId] = useState<string | null>(null);
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
-  const [layoutEditing, setLayoutEditing] = useState(false);
+  const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
 
   const resolveConfirmation = useCallback((confirmed: boolean) => {
@@ -372,6 +374,7 @@ export function SpatialMapWorkspace({
   }, []);
 
   const enterLocation = useCallback((locationId: string) => {
+    setLayoutEditingMode(null);
     setEnteredParentId(locationId);
     setSelectedId(locationId);
     setMobilePane("local");
@@ -847,6 +850,7 @@ export function SpatialMapWorkspace({
   const localMapBackgroundImageUrl = currentContext?.mapBackgroundImageId
     ? galleryImages.data?.find((image) => image.id === currentContext.mapBackgroundImageId)?.url
     : undefined;
+  const localMapBackgroundPosition = currentContext?.mapBackgroundPosition ?? { x: 50, y: 50 };
   const localBreadcrumb = resolveSpatialBreadcrumb(draft, enteredParentId);
   const conflictDifference = compareSpatialDefinitions(spatial.data?.definition ?? null, draft);
   const archiveRequest = draft.locations.find((location) => location.id === archiveRequestId) ?? null;
@@ -859,7 +863,10 @@ export function SpatialMapWorkspace({
           {currentContext && (
             <button
               type="button"
-              onClick={() => setEnteredParentId(currentContext.parentId)}
+              onClick={() => {
+                setLayoutEditingMode(null);
+                setEnteredParentId(currentContext.parentId);
+              }}
               aria-label="Leave this location"
               className="mari-chrome-control h-11 w-11 p-0"
             >
@@ -870,7 +877,10 @@ export function SpatialMapWorkspace({
             <div className="flex items-center gap-1 overflow-hidden text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
               <button
                 type="button"
-                onClick={() => setEnteredParentId(null)}
+                onClick={() => {
+                  setLayoutEditingMode(null);
+                  setEnteredParentId(null);
+                }}
                 className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md px-1 hover:text-[var(--marinara-chat-chrome-button-text-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
               >
                 World
@@ -880,7 +890,10 @@ export function SpatialMapWorkspace({
                   <ChevronRight size="0.625rem" className="shrink-0" />
                   <button
                     type="button"
-                    onClick={() => setEnteredParentId(location.id)}
+                    onClick={() => {
+                      setLayoutEditingMode(null);
+                      setEnteredParentId(location.id);
+                    }}
                     className="flex min-h-11 min-w-0 items-center truncate rounded-md px-1 hover:text-[var(--marinara-chat-chrome-button-text-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                   >
                     {location.name}
@@ -896,30 +909,51 @@ export function SpatialMapWorkspace({
             {localPresentation === "map" ? <Map size="0.6875rem" /> : <List size="0.6875rem" />}
             {localPresentation}
           </span>
-          {localPresentation === "map" && (
+        </div>
+        {localPresentation === "map" && (
+          <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
-              aria-pressed={layoutEditing}
-              onClick={() => setLayoutEditing((value) => !value)}
+              aria-pressed={layoutEditingMode === "places"}
+              onClick={() => setLayoutEditingMode((value) => (value === "places" ? null : "places"))}
               className={cn(
-                "mari-chrome-control min-h-11 px-3 text-xs",
-                layoutEditing && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+                "mari-chrome-control min-h-11 flex-1 justify-center px-3 text-xs sm:flex-none",
+                layoutEditingMode === "places" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
               )}
             >
-              <Move size="0.75rem" /> {layoutEditing ? "Done arranging" : "Arrange map"}
+              <Move size="0.75rem" /> {layoutEditingMode === "places" ? "Done arranging" : "Arrange map"}
             </button>
-          )}
-        </div>
+            {localMapBackgroundImageUrl && (
+              <button
+                type="button"
+                aria-pressed={layoutEditingMode === "background"}
+                onClick={() => setLayoutEditingMode((value) => (value === "background" ? null : "background"))}
+                className={cn(
+                  "mari-chrome-control min-h-11 flex-1 justify-center px-3 text-xs sm:flex-none",
+                  layoutEditingMode === "background" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+                )}
+              >
+                <ImageIcon size="0.75rem" />
+                {layoutEditingMode === "background" ? "Done repositioning" : "Reposition background"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {localPresentation === "map" ? (
           <LocalMapCanvas
             locations={localChildren}
             selectedId={selectedId}
-            onSelect={(locationId) => selectLocation(locationId, !layoutEditing)}
+            onSelect={(locationId) => selectLocation(locationId, layoutEditingMode === null)}
             onEnter={enterLocation}
             backgroundImageUrl={localMapBackgroundImageUrl}
-            editing={layoutEditing}
+            backgroundPosition={localMapBackgroundPosition}
+            backgroundEditing={layoutEditingMode === "background" && Boolean(localMapBackgroundImageUrl)}
+            onBackgroundMove={(mapBackgroundPosition) =>
+              currentContext && applyDraft(updateSpatialLocation(draft, currentContext.id, { mapBackgroundPosition }))
+            }
+            editing={layoutEditingMode === "places"}
             onMove={(locationId, placement) =>
               applyDraft(updateSpatialLocation(draft, locationId, { placement }))
             }

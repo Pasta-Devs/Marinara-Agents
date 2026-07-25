@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { CornerDownRight, MapPin, Move } from "lucide-react";
-import type { SpatialLocation } from "@marinara-engine/shared";
+import { CornerDownRight, Crosshair, MapPin, Move } from "lucide-react";
+import type { SpatialLocation, SpatialLocationPlacement } from "@marinara-engine/shared";
 import { cn } from "../package-utils";
 
 interface LocalMapCanvasProps {
@@ -9,6 +9,9 @@ interface LocalMapCanvasProps {
   onSelect: (locationId: string) => void;
   onEnter: (locationId: string) => void;
   backgroundImageUrl?: string;
+  backgroundPosition?: SpatialLocationPlacement;
+  backgroundEditing?: boolean;
+  onBackgroundMove?: (position: SpatialLocationPlacement) => void;
   editing?: boolean;
   onMove?: (locationId: string, placement: { x: number; y: number }) => void;
 }
@@ -23,11 +26,24 @@ export function LocalMapCanvas({
   onSelect,
   onEnter,
   backgroundImageUrl,
+  backgroundPosition = { x: 50, y: 50 },
+  backgroundEditing = false,
+  onBackgroundMove,
   editing = false,
   onMove,
 }: LocalMapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [draggingBackground, setDraggingBackground] = useState(false);
+
+  const backgroundFromPointer = (event: PointerEvent<HTMLElement>) => {
+    const bounds = canvasRef.current?.getBoundingClientRect();
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+    onBackgroundMove?.({
+      x: clampCoordinate(((event.clientX - bounds.left) / bounds.width) * 100),
+      y: clampCoordinate(((event.clientY - bounds.top) / bounds.height) * 100),
+    });
+  };
 
   const moveFromPointer = (locationId: string, event: PointerEvent<HTMLElement>) => {
     const bounds = canvasRef.current?.getBoundingClientRect();
@@ -49,11 +65,47 @@ export function LocalMapCanvas({
     });
   };
 
+  const nudgeBackground = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!backgroundEditing || !onBackgroundMove || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    const step = event.shiftKey ? 5 : 1;
+    onBackgroundMove({
+      x: clampCoordinate(backgroundPosition.x + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0)),
+      y: clampCoordinate(backgroundPosition.y + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0)),
+    });
+  };
+
   return (
     <div
       ref={canvasRef}
-      className="relative min-h-[22rem] overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]"
+      tabIndex={backgroundEditing ? 0 : undefined}
+      aria-label={backgroundEditing ? "Reposition map background" : undefined}
+      onKeyDown={nudgeBackground}
+      onPointerDown={(event) => {
+        if (!backgroundEditing || !onBackgroundMove || event.button !== 0) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setDraggingBackground(true);
+        backgroundFromPointer(event);
+      }}
+      onPointerMove={(event) => {
+        if (!backgroundEditing || !draggingBackground) return;
+        backgroundFromPointer(event);
+      }}
+      onPointerUp={(event) => {
+        if (!draggingBackground) return;
+        backgroundFromPointer(event);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        setDraggingBackground(false);
+      }}
+      onPointerCancel={() => setDraggingBackground(false)}
+      className={cn(
+        "relative min-h-[22rem] overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]",
+        backgroundEditing && "cursor-crosshair touch-none",
+      )}
       data-layout-editing={editing ? "true" : "false"}
+      data-background-editing={backgroundEditing ? "true" : "false"}
+      style={{ touchAction: backgroundEditing ? "none" : undefined }}
     >
       {backgroundImageUrl && (
         <img
@@ -61,6 +113,7 @@ export function LocalMapCanvas({
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: `${backgroundPosition.x}% ${backgroundPosition.y}%` }}
         />
       )}
       <div
@@ -77,6 +130,20 @@ export function LocalMapCanvas({
           <Move size="0.6875rem" /> Drag places · Arrow keys nudge · Shift moves 5
         </div>
       )}
+      {backgroundEditing && (
+        <>
+          <div className="pointer-events-none absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--background)]/95 px-2.5 py-1.5 text-[0.625rem] font-semibold text-[var(--marinara-chat-chrome-button-text-active)] shadow-sm">
+            <Crosshair size="0.6875rem" /> Drag to set focus · Arrow keys nudge · Shift moves 5
+          </div>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute z-30 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--background)]/85 text-[var(--marinara-chat-chrome-button-text-active)] shadow-lg"
+            style={{ left: `${backgroundPosition.x}%`, top: `${backgroundPosition.y}%` }}
+          >
+            <Crosshair size="0.875rem" />
+          </span>
+        </>
+      )}
       {locations.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-[var(--marinara-chat-chrome-panel-muted)]">
           Add a child location to place it on this map.
@@ -88,7 +155,10 @@ export function LocalMapCanvas({
         return (
           <div
             key={location.id}
-            className="absolute z-10 w-36 -translate-x-1/2 -translate-y-1/2"
+            className={cn(
+              "absolute z-10 w-36 -translate-x-1/2 -translate-y-1/2",
+              backgroundEditing && "pointer-events-none opacity-75",
+            )}
             style={{ left: `${placement.x}%`, top: `${placement.y}%` }}
           >
             <button

@@ -162,7 +162,7 @@ export function LocationInspector({
     event.target.value = "";
     if (!file) return;
     uploadMapBackground.mutate(file, {
-      onSuccess: (image) => onUpdate({ mapBackgroundImageId: image.id }),
+      onSuccess: (image) => onUpdate({ mapBackgroundImageId: image.id, mapBackgroundPosition: { x: 50, y: 50 } }),
     });
   };
 
@@ -566,6 +566,9 @@ export function LocationInspector({
                       alt={`${location.name} child map background`}
                       loading="lazy"
                       className="h-32 w-full object-cover"
+                      style={{
+                        objectPosition: `${location.mapBackgroundPosition?.x ?? 50}% ${location.mapBackgroundPosition?.y ?? 50}%`,
+                      }}
                     />
                   ) : (
                     <div className="flex min-h-24 items-center justify-center px-4 text-center text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
@@ -608,7 +611,7 @@ export function LocationInspector({
                   <button
                     type="button"
                     disabled={!location.mapBackgroundImageId || uploadMapBackground.isPending}
-                    onClick={() => onUpdate({ mapBackgroundImageId: undefined })}
+                    onClick={() => onUpdate({ mapBackgroundImageId: undefined, mapBackgroundPosition: undefined })}
                     className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
                   >
                     <Trash2 size="0.75rem" /> Remove

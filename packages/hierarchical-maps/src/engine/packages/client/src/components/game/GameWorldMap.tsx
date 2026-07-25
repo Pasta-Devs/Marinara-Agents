@@ -106,6 +106,7 @@ export function GameWorldMap({
   const mapBackgroundImageUrl = viewLocation?.mapBackgroundImageId
     ? galleryImages.data?.find((image) => image.id === viewLocation.mapBackgroundImageId)?.url
     : undefined;
+  const mapBackgroundPosition = viewLocation?.mapBackgroundPosition ?? { x: 50, y: 50 };
   const visibleLocations = useMemo(
     () =>
       sortLocations(
@@ -438,6 +439,7 @@ export function GameWorldMap({
                 alt=""
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                style={{ objectPosition: `${mapBackgroundPosition.x}% ${mapBackgroundPosition.y}%` }}
               />
             )}
             <div
