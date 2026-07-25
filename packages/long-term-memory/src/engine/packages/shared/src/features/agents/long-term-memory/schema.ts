@@ -73,7 +73,7 @@ const ltmGlobalSettingsShape = z
       .max(20)
       .optional(),
     longTermMemoryRecallStyle: z
-      .enum(["balanced", "exact", "broad", "story"])
+      .enum(["balanced", "exact", "broad", "story", "custom"])
       .optional(),
     longTermMemorySemanticWeight: z
       .number()
@@ -126,6 +126,7 @@ export const ltmGlobalSettingsSchema = z.preprocess((value) => {
       input.longTermMemoryRecallStyle === "exact" ||
       input.longTermMemoryRecallStyle === "broad" ||
       input.longTermMemoryRecallStyle === "story" ||
+      input.longTermMemoryRecallStyle === "custom" ||
       input.longTermMemoryRecallStyle === "balanced"
         ? input.longTermMemoryRecallStyle
         : undefined;
@@ -141,7 +142,7 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryMaxChunks: z.number().int().min(1).max(100),
     longTermMemoryScoreThreshold: z.number().finite().min(0).max(1),
     longTermMemoryRecallContextMessages: z.number().int().min(1).max(20),
-    longTermMemoryRecallStyle: z.enum(["balanced", "exact", "broad", "story"]),
+    longTermMemoryRecallStyle: z.enum(["balanced", "exact", "broad", "story", "custom"]),
     longTermMemorySemanticWeight: z.number().finite().min(0).max(1),
     longTermMemoryLexicalWeight: z.number().finite().min(0).max(1),
     longTermMemoryGraphWeight: z.number().finite().min(0).max(1),

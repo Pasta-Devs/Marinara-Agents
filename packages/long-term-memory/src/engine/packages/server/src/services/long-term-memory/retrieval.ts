@@ -52,6 +52,21 @@ function hasUsableVectorIndex(
   );
 }
 
+function pickGraphSeedNotes(
+  index: Awaited<ReturnType<typeof loadOrRebuildLongTermMemoryIndexes>>,
+  rankedHits: Array<{ chunkId: string }>,
+  limit: number,
+) {
+  return Array.from(
+    new Set(
+      rankedHits
+        .slice(0, limit)
+        .map((hit) => index.metadata.chunks[hit.chunkId]?.noteId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+}
+
 export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput) {
   const index = await loadOrRebuildLongTermMemoryIndexes(input.root);
   const query = input.queryText?.trim() ?? "";
@@ -88,7 +103,12 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     const max = keywords[0]?.score ?? 1;
     lanes.push({ name: "keyword", weight: input.keywordWeight ?? 1, items: keywords.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score / max, reason: hit.reasons.join(",") })) });
   }
-  const seedNotes = Array.from(new Set([...lexical, ...keywords].slice(0, 10).map((hit) => index.metadata.chunks[hit.chunkId]?.noteId).filter((id): id is string => Boolean(id))));
+  const seedNotes = Array.from(
+    new Set([
+      ...pickGraphSeedNotes(index, lexical, 5),
+      ...pickGraphSeedNotes(index, keywords, 5),
+    ]),
+  );
   const graph = expandLtmGraph(index.graph, seedNotes).filter((hit) => allowed.has(hit.chunkId));
   if ((input.graphWeight ?? 1) > 0 && graph.length) {
     lanes.push({ name: "graph", weight: input.graphWeight ?? 1, items: graph.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: `graph:${hit.viaNoteId}` })) });

@@ -150,7 +150,7 @@ export async function loadOrRebuildLongTermMemoryIndexes(root = getLongTermMemor
       throw new Error("Stale long-term memory recall index.");
     }
     const usableEmbeddings = getUsableEmbeddingState(index, getPackageEmbeddingAdapter());
-    if (usableEmbeddings || index.embeddings.embeddedChunkCount === 0) return index;
+    if (usableEmbeddings) return index;
     return await tryUpgradeSemanticIndex(root, index);
   } catch (error) {
     await quarantineLtmIndexArtifact(root, path).catch(() => {});

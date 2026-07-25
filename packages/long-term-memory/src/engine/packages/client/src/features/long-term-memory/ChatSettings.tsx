@@ -94,6 +94,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             <option value="exact">Exact</option>
             <option value="broad">Broad</option>
             <option value="story">Story</option>
+            <option value="custom">Custom</option>
           </select>
           {styleInherited && globalSettings.data ? (
             <span className="text-[0.6875rem] text-[var(--muted-foreground)]">

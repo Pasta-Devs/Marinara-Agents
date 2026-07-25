@@ -7,6 +7,7 @@ import type {
   LtmIdentityRepairPreviewResponse,
   LtmIntegrityResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { invalidateLtmQueries, queryKeys, request } from "./api";
 import {
   Button,
@@ -25,7 +26,12 @@ type GlobalForm = {
   longTermMemoryMaxChunks: number;
   longTermMemoryScoreThreshold: number;
   longTermMemoryRecallContextMessages: number;
-  longTermMemoryRecallStyle: "balanced" | "exact" | "broad" | "story";
+  longTermMemoryRecallStyle:
+    | "balanced"
+    | "exact"
+    | "broad"
+    | "story"
+    | "custom";
   longTermMemorySemanticWeight: number;
   longTermMemoryLexicalWeight: number;
   longTermMemoryGraphWeight: number;
@@ -99,6 +105,11 @@ async function confirm(
 }
 
 function settingsForm(settings: LtmGlobalSettings): GlobalForm {
+  const recallStyle = settings.longTermMemoryRecallStyle ?? "balanced";
+  const presetWeights =
+    recallStyle === "custom"
+      ? LTM_RECALL_STYLE_WEIGHTS.balanced
+      : LTM_RECALL_STYLE_WEIGHTS[recallStyle];
   return {
     version: 1,
     longTermMemoryBudgetTokens: settings.longTermMemoryBudgetTokens ?? 4096,
@@ -106,15 +117,53 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryScoreThreshold: settings.longTermMemoryScoreThreshold ?? 0,
     longTermMemoryRecallContextMessages:
       settings.longTermMemoryRecallContextMessages ?? 4,
-    longTermMemoryRecallStyle: settings.longTermMemoryRecallStyle ?? "balanced",
-    longTermMemorySemanticWeight: settings.longTermMemorySemanticWeight ?? 0.55,
-    longTermMemoryLexicalWeight: settings.longTermMemoryLexicalWeight ?? 0.25,
-    longTermMemoryGraphWeight: settings.longTermMemoryGraphWeight ?? 0.1,
-    longTermMemoryKeywordWeight: settings.longTermMemoryKeywordWeight ?? 0.1,
+    longTermMemoryRecallStyle: recallStyle,
+    longTermMemorySemanticWeight:
+      settings.longTermMemorySemanticWeight ?? presetWeights.semanticWeight,
+    longTermMemoryLexicalWeight:
+      settings.longTermMemoryLexicalWeight ?? presetWeights.lexicalWeight,
+    longTermMemoryGraphWeight:
+      settings.longTermMemoryGraphWeight ?? presetWeights.graphWeight,
+    longTermMemoryKeywordWeight:
+      settings.longTermMemoryKeywordWeight ?? presetWeights.keywordWeight,
     longTermMemoryIncludeResolved:
       settings.longTermMemoryIncludeResolved ?? false,
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
+  };
+}
+
+function applyRecallStyle(
+  form: GlobalForm,
+  recallStyle: GlobalForm["longTermMemoryRecallStyle"],
+): GlobalForm {
+  if (recallStyle === "custom") {
+    return { ...form, longTermMemoryRecallStyle: recallStyle };
+  }
+  const weights = LTM_RECALL_STYLE_WEIGHTS[recallStyle];
+  return {
+    ...form,
+    longTermMemoryRecallStyle: recallStyle,
+    longTermMemorySemanticWeight: weights.semanticWeight,
+    longTermMemoryLexicalWeight: weights.lexicalWeight,
+    longTermMemoryGraphWeight: weights.graphWeight,
+    longTermMemoryKeywordWeight: weights.keywordWeight,
+  };
+}
+
+function applyCustomWeight(
+  form: GlobalForm,
+  key:
+    | "longTermMemorySemanticWeight"
+    | "longTermMemoryLexicalWeight"
+    | "longTermMemoryGraphWeight"
+    | "longTermMemoryKeywordWeight",
+  value: number,
+): GlobalForm {
+  return {
+    ...form,
+    longTermMemoryRecallStyle: "custom",
+    [key]: value,
   };
 }
 
@@ -857,17 +906,19 @@ export default function MemorySettings({
               className={inputClass}
               value={globalForm.longTermMemoryRecallStyle}
               onChange={(event) =>
-                setGlobalForm({
-                  ...globalForm,
-                  longTermMemoryRecallStyle: event.target
-                    .value as GlobalForm["longTermMemoryRecallStyle"],
-                })
+                setGlobalForm(
+                  applyRecallStyle(
+                    globalForm,
+                    event.target.value as GlobalForm["longTermMemoryRecallStyle"],
+                  ),
+                )
               }
             >
               <option value="balanced">Balanced</option>
               <option value="exact">Exact</option>
               <option value="broad">Broad</option>
               <option value="story">Story</option>
+              <option value="custom">Custom</option>
             </select>
           </div>
           <NumberField
@@ -929,10 +980,13 @@ export default function MemorySettings({
             max={1}
             step={0.01}
             onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemorySemanticWeight: value,
-              })
+              setGlobalForm(
+                applyCustomWeight(
+                  globalForm,
+                  "longTermMemorySemanticWeight",
+                  value,
+                ),
+              )
             }
           />
           <NumberField
@@ -943,10 +997,13 @@ export default function MemorySettings({
             max={1}
             step={0.01}
             onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryLexicalWeight: value,
-              })
+              setGlobalForm(
+                applyCustomWeight(
+                  globalForm,
+                  "longTermMemoryLexicalWeight",
+                  value,
+                ),
+              )
             }
           />
           <NumberField
@@ -957,7 +1014,13 @@ export default function MemorySettings({
             max={1}
             step={0.01}
             onChange={(value) =>
-              setGlobalForm({ ...globalForm, longTermMemoryGraphWeight: value })
+              setGlobalForm(
+                applyCustomWeight(
+                  globalForm,
+                  "longTermMemoryGraphWeight",
+                  value,
+                ),
+              )
             }
           />
           <NumberField
@@ -968,10 +1031,13 @@ export default function MemorySettings({
             max={1}
             step={0.01}
             onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryKeywordWeight: value,
-              })
+              setGlobalForm(
+                applyCustomWeight(
+                  globalForm,
+                  "longTermMemoryKeywordWeight",
+                  value,
+                ),
+              )
             }
           />
         </div>

@@ -17,6 +17,15 @@ async function main() {
   const { serializeLongTermMemoryPrompt } = await import(`${source}/prompt.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
+  const { resolveLongTermMemoryRecallSettings } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/runtime-settings.ts"
+  );
+  const { DEFAULT_LTM_GLOBAL_SETTINGS } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"
+  );
+  const { LTM_RECALL_STYLE_WEIGHTS } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts"
+  );
   const { configurePackageRuntime, getPackageEmbeddingAdapter } = await import(
     `${source}/package-runtime.ts`,
   );
@@ -112,6 +121,109 @@ async function main() {
   });
 
   try {
+    assert.deepEqual(
+      resolveLongTermMemoryRecallSettings({
+        chatMode: "conversation",
+        chatMetadata: {},
+        globalSettings: {
+          ...DEFAULT_LTM_GLOBAL_SETTINGS,
+          longTermMemoryRecallStyle: "balanced",
+        },
+      }).weights,
+      LTM_RECALL_STYLE_WEIGHTS.balanced,
+    );
+    assert.deepEqual(
+      resolveLongTermMemoryRecallSettings({
+        chatMode: "conversation",
+        chatMetadata: {},
+        globalSettings: {
+          ...DEFAULT_LTM_GLOBAL_SETTINGS,
+          longTermMemoryRecallStyle: "exact",
+        },
+      }).weights,
+      LTM_RECALL_STYLE_WEIGHTS.exact,
+    );
+    assert.deepEqual(
+      resolveLongTermMemoryRecallSettings({
+        chatMode: "conversation",
+        chatMetadata: {},
+        globalSettings: {
+          ...DEFAULT_LTM_GLOBAL_SETTINGS,
+          longTermMemoryRecallStyle: "broad",
+        },
+      }).weights,
+      LTM_RECALL_STYLE_WEIGHTS.broad,
+    );
+    assert.deepEqual(
+      resolveLongTermMemoryRecallSettings({
+        chatMode: "conversation",
+        chatMetadata: {},
+        globalSettings: {
+          ...DEFAULT_LTM_GLOBAL_SETTINGS,
+          longTermMemoryRecallStyle: "story",
+        },
+      }).weights,
+      LTM_RECALL_STYLE_WEIGHTS.story,
+    );
+    assert.deepEqual(
+      resolveLongTermMemoryRecallSettings({
+        chatMode: "conversation",
+        chatMetadata: {},
+        globalSettings: {
+          ...DEFAULT_LTM_GLOBAL_SETTINGS,
+          longTermMemoryRecallStyle: "custom",
+          longTermMemorySemanticWeight: 0.91,
+          longTermMemoryLexicalWeight: 0.23,
+          longTermMemoryGraphWeight: 0.44,
+          longTermMemoryKeywordWeight: 0.67,
+        },
+      }).weights,
+      {
+        semanticWeight: 0.91,
+        lexicalWeight: 0.23,
+        graphWeight: 0.44,
+        keywordWeight: 0.67,
+      },
+    );
+    assert.deepEqual(
+      resolveLongTermMemoryRecallSettings({
+        chatMode: "conversation",
+        chatMetadata: { longTermMemoryRecallStyle: "exact" },
+        globalSettings: {
+          ...DEFAULT_LTM_GLOBAL_SETTINGS,
+          longTermMemoryRecallStyle: "custom",
+          longTermMemorySemanticWeight: 0.91,
+          longTermMemoryLexicalWeight: 0.23,
+          longTermMemoryGraphWeight: 0.44,
+          longTermMemoryKeywordWeight: 0.67,
+        },
+      }).weights,
+      LTM_RECALL_STYLE_WEIGHTS.exact,
+    );
+    assert.deepEqual(
+      resolveLongTermMemoryRecallSettings({
+        chatMode: "conversation",
+        chatMetadata: {
+          longTermMemoryRecallStyle: "custom",
+          longTermMemorySemanticWeight: 0.8,
+        },
+        globalSettings: {
+          ...DEFAULT_LTM_GLOBAL_SETTINGS,
+          longTermMemoryRecallStyle: "custom",
+          longTermMemorySemanticWeight: 0.91,
+          longTermMemoryLexicalWeight: 0.23,
+          longTermMemoryGraphWeight: 0.44,
+          longTermMemoryKeywordWeight: 0.67,
+        },
+      }).weights,
+      {
+        semanticWeight: 0.8,
+        lexicalWeight: 0.23,
+        graphWeight: 0.44,
+        keywordWeight: 0.67,
+      },
+    );
+
     const serialized = serializeLongTermMemoryPrompt([
       makeChunk("character", "char_lisa", "First fact\nSecond fact", "Lisa <Imai>"),
       makeChunk("character", "char_lisa", "Third fact", "Lisa <Imai>"),
@@ -233,6 +345,10 @@ async function main() {
               ? [1, 0]
               : text.includes("brass warding seal")
                 ? [0, 1]
+                : text.includes("Silent nebula resonance under glass")
+                  ? [0, 0.75]
+                  : text.includes("nebula")
+                    ? [0, 0.75]
                 : text.includes("observatory")
                   ? [1, 0]
                   : [0, 0],
@@ -256,6 +372,143 @@ async function main() {
     assert.equal(semantic.embeddingsAvailable, true);
     assert.equal(semantic.chunks[0]?.chunk.noteId, "world_visible");
     assert.equal(embedCalls.includes("observatory"), true);
+    await storage.createNote({
+      id: "world_vector_only",
+      title: "world_vector_only",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        facts: {
+          text: "Silent nebula resonance under glass.",
+          updatedAt: timestamp,
+        },
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      version: 1,
+    });
+    await storage.createNote({
+      id: "world_keyword_exact",
+      title: "world_keyword_exact",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: ["harrowmark obscryl oath"],
+      links: [],
+      sections: {
+        facts: {
+          text: "A generic phrase that avoids the exact keyword string.",
+          updatedAt: timestamp,
+        },
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      version: 1,
+    });
+    await storage.createNote({
+      id: "world_graph_seed",
+      title: "world_graph_seed",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: ["stormvault ledger"],
+      links: [{ target: "world_graph_neighbor", relation: "caused_by" }],
+      sections: {
+        facts: {
+          text: "This note mentions the stormvault ledger keyphrase.",
+          updatedAt: timestamp,
+        },
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      version: 1,
+    });
+    await storage.createNote({
+      id: "world_graph_neighbor",
+      title: "world_graph_neighbor",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        facts: {
+          text: "The linked continuation is stored elsewhere.",
+          updatedAt: timestamp,
+        },
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      version: 1,
+    });
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const semanticOnly = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "nebula",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 1,
+      lexicalWeight: 0,
+      graphWeight: 0,
+      keywordWeight: 0,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(semanticOnly.chunks[0]?.chunk.noteId, "world_vector_only");
+    const lexicalOnly = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "brass warding seal",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 0,
+      lexicalWeight: 1,
+      graphWeight: 0,
+      keywordWeight: 0,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(lexicalOnly.chunks[0]?.chunk.noteId, "world_visible_second");
+    const keywordOnly = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "harrowmark obscryl oath",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 0,
+      lexicalWeight: 0,
+      graphWeight: 0,
+      keywordWeight: 1,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(keywordOnly.chunks[0]?.chunk.noteId, "world_keyword_exact");
+    const graphOnly = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "stormvault ledger",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 0,
+      lexicalWeight: 0,
+      graphWeight: 1,
+      keywordWeight: 1,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(
+      graphOnly.chunks.some((chunk: any) => chunk.chunk.noteId === "world_graph_neighbor"),
+      true,
+      "graph recall must expand from keyword-seeded notes",
+    );
     const recallIndexPath = longTermMemoryRecallIndexPath(storage.root);
     const currentRecallIndex = JSON.parse(await readFile(recallIndexPath, "utf8"));
     assert.equal(currentRecallIndex.embeddings.spaceId, "test-space");

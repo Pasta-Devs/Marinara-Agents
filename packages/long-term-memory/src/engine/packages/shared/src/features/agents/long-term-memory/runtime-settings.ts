@@ -58,6 +58,7 @@ function readRecallStyle(
   return value === "balanced" ||
     value === "exact" ||
     value === "broad" ||
+    value === "custom" ||
     value === "story"
     ? value
     : undefined;
@@ -100,6 +101,31 @@ function resolveWeights(
   };
 }
 
+function resolveGlobalWeights(
+  globalSettings: LtmResolvedGlobalSettings | undefined,
+  fallback: LtmRecallWeights,
+): LtmRecallWeights {
+  if (!globalSettings) return fallback;
+  return {
+    semanticWeight: readWeight(
+      globalSettings.longTermMemorySemanticWeight,
+      fallback.semanticWeight,
+    ),
+    lexicalWeight: readWeight(
+      globalSettings.longTermMemoryLexicalWeight,
+      fallback.lexicalWeight,
+    ),
+    graphWeight: readWeight(
+      globalSettings.longTermMemoryGraphWeight,
+      fallback.graphWeight,
+    ),
+    keywordWeight: readWeight(
+      globalSettings.longTermMemoryKeywordWeight,
+      fallback.keywordWeight,
+    ),
+  };
+}
+
 /**
  * Resolves the effective recall behavior for one chat. This is shared by the
  * generation path and client-side recall inspection so both use the same
@@ -122,6 +148,10 @@ export function resolveLongTermMemoryRecallSettings(input: {
     : modeFallback;
   const recallStyle = chatRecallStyle ?? globalRecallStyle;
   const styleWeights = LTM_RECALL_STYLE_WEIGHTS[recallStyle];
+  const globalWeights =
+    globalRecallStyle === "custom"
+      ? resolveGlobalWeights(globalSettings, LTM_RECALL_STYLE_WEIGHTS.balanced)
+      : LTM_RECALL_STYLE_WEIGHTS[globalRecallStyle];
   return {
     budgetTokens:
       parseBudgetTokens(chatMetadata.longTermMemoryBudgetTokens) ??
@@ -133,9 +163,10 @@ export function resolveLongTermMemoryRecallSettings(input: {
       parseScoreThreshold(chatMetadata.longTermMemoryScoreThreshold) ??
       parseScoreThreshold(globalSettings?.longTermMemoryScoreThreshold),
     recallStyle,
-    // A style is the default weight preset. Per-chat weights remain explicit
-    // overrides, but stale persisted global defaults must not mask a new style.
-    weights: resolveWeights(chatMetadata, styleWeights),
+    weights: resolveWeights(
+      chatMetadata,
+      recallStyle === "custom" ? globalWeights : styleWeights,
+    ),
     debugEnabled:
       (readBoolean(chatMetadata.longTermMemoryDebug) ??
         globalSettings?.longTermMemoryDebug ??

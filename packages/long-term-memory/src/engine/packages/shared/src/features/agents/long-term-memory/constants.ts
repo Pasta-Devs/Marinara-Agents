@@ -7,6 +7,7 @@ export type LongTermMemoryRecallStyle =
   | "balanced"
   | "exact"
   | "broad"
+  | "custom"
   | "story";
 
 export const DEFAULT_LTM_EXTRACTION_REASONING_EFFORT =
@@ -318,16 +319,22 @@ export const LTM_RECALL_STYLE_WEIGHTS = {
     keywordWeight: 0.8,
   },
   broad: {
-    semanticWeight: 0.55,
-    lexicalWeight: 0.2,
-    graphWeight: 0.8,
-    keywordWeight: 0.15,
+    semanticWeight: 1,
+    lexicalWeight: 0.25,
+    graphWeight: 0.4,
+    keywordWeight: 0.2,
   },
   story: {
-    semanticWeight: 0.45,
-    lexicalWeight: 0.25,
-    graphWeight: 0.35,
-    keywordWeight: 0.25,
+    semanticWeight: 0.55,
+    lexicalWeight: 0.35,
+    graphWeight: 0.5,
+    keywordWeight: 0.3,
+  },
+  custom: {
+    semanticWeight: 0.6,
+    lexicalWeight: 0.4,
+    graphWeight: 0.15,
+    keywordWeight: 0.3,
   },
 } as const satisfies Record<
   LongTermMemoryRecallStyle,
@@ -352,7 +359,10 @@ export type LtmRecallWeights = {
 export function parseLongTermMemoryRecallStyle(
   value: unknown,
 ): LongTermMemoryRecallStyle {
-  return value === "exact" || value === "broad" || value === "story"
+  return value === "exact" ||
+    value === "broad" ||
+    value === "story" ||
+    value === "custom"
     ? value
     : DEFAULT_LTM_RECALL_STYLE;
 }

@@ -83,7 +83,12 @@ export function searchLtmKeywordIndex(
     hits.set(chunkId, existing);
   };
 
+  for (const chunkId of (index.byKeyword[normalizedQuery] ?? []).slice(0, maxCandidatesPerKeyword)) {
+    add(chunkId, normalizedQuery, 4, `keyword:exact:${normalizedQuery}`);
+  }
+
   for (const term of normalizedTerms) {
+    if (term === normalizedQuery) continue;
     for (const chunkId of (index.byKeyword[term] ?? []).slice(0, maxCandidatesPerKeyword)) {
       add(chunkId, term, 3, `keyword:exact:${term}`);
     }
