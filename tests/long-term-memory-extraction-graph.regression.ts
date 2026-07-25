@@ -393,6 +393,42 @@ async function main() {
   assert.equal(oversizedPayload.response.units.length, 81);
   assert.equal(oversizedPayload.totalCandidates, 81);
 
+  const oversizedDerivedNoteId = compile(chat, [
+    unit(chat, {
+      bucket: "timeline_event",
+      subjectId: `a${"a".repeat(119)}`,
+      sectionKey: "event",
+      text: "A long generated note id should be dropped before draft finalization.",
+      links: [{ target: chat.id, relation: "extracted_from" }],
+    }),
+  ]);
+  assert.equal(oversizedDerivedNoteId.accounting.keptUnits, 0);
+  assert.equal(oversizedDerivedNoteId.compiledResponse.mutations.length, 0);
+  assert.equal(
+    oversizedDerivedNoteId.outcome.droppedCandidates.some((candidate) =>
+      candidate.message.includes("too long to keep safely"),
+    ),
+    true,
+  );
+  assert.equal(
+    oversizedDerivedNoteId.diagnostics.some(
+      (diagnostic) =>
+        diagnostic.details?.validatorCode === "overlong_target_note_id",
+    ),
+    true,
+  );
+  assert.equal(
+    oversizedDerivedNoteId.diagnostics.find(
+      (diagnostic) =>
+        diagnostic.details?.validatorCode === "overlong_target_note_id",
+    )?.noteId,
+    undefined,
+  );
+  assert.equal(
+    oversizedDerivedNoteId.outcome.droppedCandidates[0]?.recovery?.noteId,
+    undefined,
+  );
+
   const malformedPayload = parseEvidenceUnitPayload(
     { units: Array.from({ length: 100 }, () => null) },
     sourceHash,

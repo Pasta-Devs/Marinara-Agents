@@ -6,7 +6,10 @@ import type {
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { RELATIONSHIP_DIMENSIONS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
-import { isLtmSourceLikeNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  isLtmSourceLikeNote,
+  ltmNoteIdSchema,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { tokenize } from "../../../../shared/src/features/agents/long-term-memory/utils.js";
 import type { LtmExtractionDiagnostic } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { safeSnippet } from "./ltm-utils.js";
@@ -117,7 +120,10 @@ export function validateLtmEvidenceUnits({
   const validLinkTargets = new Set<string>([
     ...(sourceNote ? [sourceNote.id] : []),
     ...existingNotes.map((note) => note.id),
-    ...units.map((unit) => noteIdForEvidenceUnit(unit)),
+    ...units.flatMap((unit) => {
+      const noteId = noteIdForEvidenceUnit(unit);
+      return isValidNoteId(noteId) ? [noteId] : [];
+    }),
   ]);
 
   if (sourceNote && !isSourceNote(sourceNote)) {
@@ -143,7 +149,7 @@ export function validateLtmEvidenceUnits({
         code: dropReasonDiagnosticCode(dropped.reason),
         candidateIndex,
         mutationId: unit.id,
-        noteId,
+        ...(isValidNoteId(noteId) ? { noteId } : {}),
         message: dropped.message,
         ...(input.code ? { details: { validatorCode: input.code, validationStage: "initial", ...input.details } } : {}),
       });
@@ -225,6 +231,16 @@ export function validateLtmEvidenceUnits({
         mutationId: unit.id,
         noteId,
         message: "Evidence unit text exceeds the maximum memory stream length.",
+      });
+    }
+
+    if (!isValidNoteId(noteId)) {
+      unitDiagnostics.push({
+        severity: "error",
+        code: "overlong_target_note_id",
+        candidateIndex,
+        mutationId: unit.id,
+        message: `Generated target note id '${noteId}' exceeds the long-term memory storage contract.`,
       });
     }
 
@@ -661,6 +677,7 @@ function droppedCandidate(
     snippet?: string;
   },
 ): LtmExtractionDroppedCandidate {
+  const recovery = recoveryHintForUnit(input.unit);
   return {
     index: input.candidateIndex,
     reason: input.reason,
@@ -668,17 +685,22 @@ function droppedCandidate(
     ...(safeSnippet(input.snippet ?? input.unit.text)
       ? { snippet: safeSnippet(input.snippet ?? input.unit.text)! }
       : {}),
-    ...(recoveryHintForUnit(input.unit) ? { recovery: recoveryHintForUnit(input.unit)! } : {}),
+    ...(recovery ? { recovery } : {}),
   };
 }
 
 function recoveryHintForUnit(unit: LtmEvidenceUnit): LtmExtractionRecoveryHint {
+  const noteId = noteIdForEvidenceUnit(unit);
   return {
     noteType: targetNoteTypeForUnit(unit),
-    noteId: noteIdForEvidenceUnit(unit),
+    ...(isValidNoteId(noteId) ? { noteId } : {}),
     sectionKey: noteIdSectionKeyForUnit(unit),
     status: targetStatusForUnit(unit),
   };
+}
+
+function isValidNoteId(noteId: string) {
+  return ltmNoteIdSchema.safeParse(noteId).success;
 }
 
 function targetNoteTypeForUnit(unit: LtmEvidenceUnit): LtmNote["type"] {
@@ -735,7 +757,8 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
   ) {
     return "unsupported_bucket";
   }
-  if (code === "overlong_evidence_unit") return "too_long_to_keep_safely";
+  if (code === "overlong_evidence_unit" || code === "overlong_target_note_id")
+    return "too_long_to_keep_safely";
   return null;
 }
 
