@@ -276,7 +276,7 @@ export function SpatialMapWorkspace({
     setFirstSaveResult(null);
     setFirstMapGenerationSession(null);
     setRegenerateRequestId(0);
-    setLayoutEditing(false);
+    setLayoutEditingMode(null);
     setImportIdReport(null);
   }, [chatId, resolveConfirmation]);
 
