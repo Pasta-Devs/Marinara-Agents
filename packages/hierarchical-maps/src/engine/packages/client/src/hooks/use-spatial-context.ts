@@ -256,7 +256,7 @@ export function useSpatialAgentConfiguration() {
       const configs = await packageApi.get<MapsAgentConfigRecord[]>("/agents");
       return configs.find((candidate) => candidate.type === "hierarchical-maps") ?? null;
     },
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
   });
 }
 
@@ -278,7 +278,7 @@ export function useUpdateSpatialAgentConfiguration() {
       settings: Record<string, unknown>;
     }) =>
       packageApi.patch<MapsAgentConfigRecord>(
-        "/agents/type/hierarchical-maps",
+        "/chats/spatial-context/agent-configuration",
         patch,
       ),
     onSuccess: (configuration) => {
@@ -371,6 +371,7 @@ export function useUpdateSpatialGenerationPromptLibrary() {
       ),
     onSuccess: (libraries) => {
       queryClient.setQueryData(spatialContextKeys.generationPromptLibraries, libraries);
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.agentConfiguration });
     },
   });
 }
@@ -402,6 +403,7 @@ export function useUpdateSpatialTurnPromptTemplates() {
       ),
     onSuccess: (templates) => {
       queryClient.setQueryData(spatialContextKeys.turnPromptTemplates, templates);
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.agentConfiguration });
     },
   });
 }

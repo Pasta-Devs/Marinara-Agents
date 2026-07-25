@@ -666,13 +666,11 @@ export function SpatialMapsHome({
     if (!agentFieldsDirty || updateAgentConfiguration.isPending) return;
     setAgentFieldsError(null);
     try {
-      const currentSettings = parseAgentSettings(agentConfiguration.data?.settings);
       const saved = await updateAgentConfiguration.mutateAsync({
         description: agentDescription,
         phase: "pre_generation",
         connectionId: agentConnectionId || null,
         settings: {
-          ...currentSettings,
           author: agentAuthor.trim() || agentInfo?.author?.trim() || "Pasta Devs",
         },
       });
@@ -703,7 +701,9 @@ export function SpatialMapsHome({
             cancelLabel: "Keep editing",
             tone: "destructive",
           })
-        : false;
+        : window.confirm(
+            "You have unsaved Hierarchical Maps agent changes. Leave the editor and discard them?",
+          );
       if (!discard) return;
     }
     onClose();
@@ -862,6 +862,7 @@ export function SpatialMapsHome({
 
           <MapsFieldGroup label="Connection Override" icon={<Link2 size="0.875rem" />}>
             <select
+              aria-label="Connection Override"
               value={agentConnectionId}
               onChange={(event) => {
                 setAgentConnectionId(event.target.value);
@@ -871,6 +872,10 @@ export function SpatialMapsHome({
               className="mari-editor-field w-full px-3 py-2.5 text-sm disabled:opacity-60"
             >
               <option value="">Use chat connection</option>
+              {agentConnectionId &&
+                !availableConnections.some((connection) => connection.id === agentConnectionId) && (
+                  <option value={agentConnectionId}>Saved connection (unavailable)</option>
+                )}
               {availableConnections.map((connection) => (
                 <option key={connection.id} value={connection.id}>
                   {connection.name} ({connection.provider})

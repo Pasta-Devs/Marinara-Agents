@@ -167,17 +167,17 @@ export async function activate({ app, api }) {
         : null;
       return config ?? null;
     },
-    async (agentType, settings) => {
+    async (agentType, patch) => {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/agents/type/" + encodeURIComponent(agentType),
         headers: { "x-marinara-csrf": "1" },
-        payload: { settings },
+        payload: patch,
       });
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw new Error("Could not update global agent settings (" + response.statusCode + ")");
+        throw new Error("Could not update global agent configuration (" + response.statusCode + ")");
       }
-      return response.json().settings ?? null;
+      return response.json();
     },
   );
   try {

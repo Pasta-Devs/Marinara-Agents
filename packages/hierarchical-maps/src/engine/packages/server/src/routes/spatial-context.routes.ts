@@ -41,6 +41,7 @@ import {
   isDebugAgentsEnabled,
   logger,
   logDebugOverride,
+  updatePackageAgentConfiguration,
   updatePackageAgentSettings,
 } from "../services/spatial-context/package-runtime.js";
 import {
@@ -73,6 +74,14 @@ function withoutKeys(value: Record<string, unknown>, keys: readonly string[]): R
 }
 
 const GAME_LOREBOOK_KEEPER_SOURCE_ID = "game-lorebook-keeper";
+const spatialAgentConfigurationUpdateSchema = z.object({
+  description: z.string(),
+  phase: z.literal("pre_generation"),
+  connectionId: z.string().nullable(),
+  settings: z.object({
+    author: z.string(),
+  }),
+});
 
 function readTrimmedString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -385,6 +394,18 @@ export async function spatialContextRoutes(app: FastifyInstance) {
   const resources = getPackageResources();
   const languageModels = getPackageLanguageModels();
   const json = getPackageJson();
+
+  app.patch("/spatial-context/agent-configuration", async (request, reply) => {
+    const patch = spatialAgentConfigurationUpdateSchema.safeParse(request.body);
+    if (!patch.success) {
+      return reply.status(400).send({
+        error: patch.error.issues[0]?.message ?? "The Hierarchical Maps agent configuration is invalid.",
+        code: "spatial_agent_configuration_invalid",
+        issues: patch.error.issues,
+      });
+    }
+    return updatePackageAgentConfiguration("hierarchical-maps", patch.data);
+  });
 
   app.put("/spatial-context/global-generation-prompt-libraries/:ownerMode", async (request, reply) => {
     const ownerMode = z.enum(["roleplay", "game"]).safeParse(
