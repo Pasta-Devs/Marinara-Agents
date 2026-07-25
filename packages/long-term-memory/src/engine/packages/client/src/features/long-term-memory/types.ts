@@ -24,6 +24,7 @@ export type CapabilityProps = {
   onChatSettingsChange?: (
     patch: Record<string, unknown>,
   ) => void | Promise<void>;
+  onOpenAgentSettings?: () => void;
   onClose?: () => void;
   onManagePackage?: () => void;
   onDirtyChange?: (dirty: boolean) => void;

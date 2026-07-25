@@ -104,6 +104,38 @@ async function openLongTermMemory(page: any, chatId: string, testInfo: any) {
   await expect(page.locator('[data-ltm-surface="detail"]')).toBeVisible();
 }
 
+async function openLongTermMemoryChatSettings(page: any, chatId: string) {
+  await page.addInitScript((activeChatId) => {
+    localStorage.setItem("marinara-active-chat-id", activeChatId);
+    localStorage.setItem(
+      "marinara-engine-ui",
+      JSON.stringify({
+        state: {
+          hasCompletedOnboarding: true,
+          rightPanelOpen: false,
+          sidebarOpen: false,
+        },
+        version: 75,
+      }),
+    );
+  }, chatId);
+  await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+    await route.fulfill({ status: 204, body: "" });
+  });
+  await page.goto("/");
+  await dismissOnboardingTutorial(page);
+  await dismissWhatsNew(page);
+  await page.getByRole("button", { name: "Chat Settings" }).click();
+  const drawer = page.locator(".mari-chat-settings-drawer");
+  await expect(drawer).toBeVisible();
+  await drawer
+    .locator('[role="button"][aria-expanded]')
+    .filter({ hasText: /^Agents/ })
+    .click();
+  await drawer.getByRole("button", { name: /Misc Agents/ }).click();
+  return drawer;
+}
+
 test.beforeEach(async ({ page }) => {
   await expect
     .poll(
@@ -116,6 +148,55 @@ test.beforeEach(async ({ page }) => {
       { timeout: 30_000 },
     )
     .toBe(true);
+});
+
+test("Long-Term Memory chat settings link opens the main agent settings", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const chat = await createChat(page, testInfo);
+
+  try {
+    const response = await page.request.patch(
+      `/api/chats/${chat.id}/metadata`,
+      {
+        data: {
+          enableAgents: true,
+          activeAgentIds: ["long-term-memory"],
+        },
+      },
+    );
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const drawer = await openLongTermMemoryChatSettings(page, chat.id);
+    const agentEntry = drawer.locator(
+      '[data-chat-agent-entry="long-term-memory"]',
+    );
+    await expect(agentEntry).toBeVisible();
+    if (testInfo.project.name.includes("mobile")) {
+      const drawerBox = await drawer.boundingBox();
+      const entryBox = await agentEntry.boundingBox();
+      const settingsButtonBox = await agentEntry
+        .getByRole("button", { name: "Open Long-Term Memory settings" })
+        .boundingBox();
+      expect(drawerBox).not.toBeNull();
+      expect(entryBox).not.toBeNull();
+      expect(settingsButtonBox).not.toBeNull();
+      expect(entryBox!.width).toBeLessThanOrEqual(drawerBox!.width);
+      expect(settingsButtonBox!.width).toBeCloseTo(entryBox!.width, 0);
+    }
+    await expect(
+      agentEntry.getByRole("button", {
+        name: "Open Long-Term Memory settings",
+      }),
+    ).toBeVisible();
+    await agentEntry
+      .getByRole("button", { name: "Open Long-Term Memory settings" })
+      .click();
+    await expect(drawer).toBeHidden();
+    await expect(page.locator('[data-ltm-surface="detail"]')).toBeVisible();
+  } finally {
+    await deleteChat(page, chat.id);
+  }
 });
 
 test("Long-Term Memory opens its default vault and exposes every navigation destination", async ({

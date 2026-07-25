@@ -75,10 +75,13 @@ export function StatusSurface({
   children,
   tone = "neutral",
   busy = false,
+  compact = false,
+  className = "",
 }: {
   children: ReactNode;
   tone?: "neutral" | "success" | "danger";
   busy?: boolean;
+  compact?: boolean;
 }) {
   const toneClass = {
     neutral: "border-[var(--border)] text-[var(--muted-foreground)]",
@@ -90,7 +93,7 @@ export function StatusSurface({
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
-      className={`flex min-h-11 items-center gap-2 rounded-lg border bg-[var(--secondary)]/45 px-3 text-xs ${toneClass}`}
+      className={`flex items-center gap-2 rounded-lg border bg-[var(--secondary)]/45 ${compact ? "px-2 py-1.5 text-[0.625rem]" : "min-h-11 px-3 text-xs"} ${toneClass}`}
     >
       {busy ? (
         <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin" />
