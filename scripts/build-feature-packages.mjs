@@ -75,7 +75,7 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
 const features = [
   {
     id: "hierarchical-maps",
-    version: "1.1.9",
+    version: "1.1.10",
     minEngineVersion: "2.3.3",
     maxEngineExclusive: "3.0.0",
     name: "Hierarchical Maps",
@@ -165,19 +165,19 @@ export async function activate({ app, api }) {
       const config = Array.isArray(configs)
         ? configs.find((candidate) => candidate && typeof candidate === "object" && candidate.type === agentType)
         : null;
-      return config?.settings ?? null;
+      return config ?? null;
     },
-    async (agentType, settings) => {
+    async (agentType, patch) => {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/agents/type/" + encodeURIComponent(agentType),
         headers: { "x-marinara-csrf": "1" },
-        payload: { settings },
+        payload: patch,
       });
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw new Error("Could not update global agent settings (" + response.statusCode + ")");
+        throw new Error("Could not update global agent configuration (" + response.statusCode + ")");
       }
-      return response.json().settings ?? null;
+      return response.json();
     },
   );
   try {
@@ -579,7 +579,7 @@ function Root({ element }) {
   };
   if (workspaceOpen && chatId) return <WorkspaceOverlay chatId={chatId} props={props} onClose={closeWorkspace} />;
   if (worldMapOpen && chatId) return <WorldMapOverlay chatId={chatId} props={props} onClose={() => setWorldMapOpen(false)} onOpenEditor={editFromWorldMap} />;
-  if (view === "detail") return <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenMap={() => setWorldMapOpen(true)} onOpenEditor={() => setWorkspaceOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /><Toaster richColors /></>;
+  if (view === "detail") return <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} agentInfo={props.agent || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenMap={() => setWorldMapOpen(true)} onOpenEditor={() => setWorkspaceOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} confirmAction={typeof props.confirmAction === "function" ? props.confirmAction : undefined} onDirtyChange={typeof props.onDirtyChange === "function" ? props.onDirtyChange : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /><Toaster richColors /></>;
   if (!chatId) return null;
   if (view === "runtime") return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><style data-marinara-maps-runtime-styles>{runtimeStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>;
   if (view === "world-map") return <WorldMapView props={props} chatId={chatId} onOpenEditor={() => setWorkspaceOpen(true)} />;

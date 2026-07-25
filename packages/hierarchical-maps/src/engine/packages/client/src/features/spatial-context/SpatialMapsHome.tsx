@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  Activity,
+  AlertCircle,
   ArrowLeft,
   Box,
+  Check,
   CheckCircle2,
   CircleAlert,
   ClipboardCopy,
+  Clock,
   Code2,
   Eye,
   FileText,
+  Info,
+  Link2,
   LoaderCircle,
   Map,
   MapPin,
@@ -19,14 +25,19 @@ import {
   Save,
   Settings2,
   Trash2,
+  Zap,
 } from "lucide-react";
 import type { ResolvedOwnerSpatialProjection, SpatialOwnerMode } from "@marinara-engine/shared";
 import {
   getSpatialContextProblem,
+  parseAgentSettings,
   usePreviewSpatialMapPrompt,
+  useSpatialAgentConfiguration,
+  useSpatialConnections,
   useSpatialContext,
   useSpatialGenerationPromptLibraries,
   useSpatialTurnPromptTemplates,
+  useUpdateSpatialAgentConfiguration,
   useUpdateSpatialGenerationPreferences,
   useUpdateSpatialGenerationPromptLibrary,
   useUpdateSpatialTurnPromptTemplates,
@@ -68,12 +79,46 @@ interface SpatialMapsHomeProps {
     status?: string | null;
     readiness?: string | null;
   } | null;
+  agentInfo?: {
+    name?: string | null;
+    description?: string | null;
+    author?: string | null;
+  } | null;
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
   onOpenMap: () => void;
   onOpenEditor: () => void;
   onManagePackage?: () => void;
+  confirmAction?: (options: {
+    title?: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    tone?: "default" | "destructive" | "accent";
+  }) => Promise<boolean>;
+  onDirtyChange?: (dirty: boolean) => void;
   onClose?: () => void;
 }
+
+const DEFAULT_MAPS_DESCRIPTION =
+  "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.";
+
+const MAPS_PHASE_META = [
+  {
+    phase: "pre_generation",
+    label: "Pre-Generation",
+    icon: Zap,
+  },
+  {
+    phase: "parallel",
+    label: "Parallel",
+    icon: Activity,
+  },
+  {
+    phase: "post_processing",
+    label: "Post-Processing",
+    icon: Clock,
+  },
+] as const;
 
 function modeLabel(mode: string | null) {
   if (mode === "roleplay") return "Roleplay";
@@ -191,15 +236,29 @@ export function SpatialMapsHome({
   chatMode,
   enabledForChat,
   packageInfo,
+  agentInfo,
   onEnabledForChatChange,
   onOpenMap,
   onOpenEditor,
   onManagePackage,
+  confirmAction,
+  onDirtyChange,
   onClose,
 }: SpatialMapsHomeProps) {
   const spatial = useSpatialContext(chatId);
+  const agentConfiguration = useSpatialAgentConfiguration();
+  const connections = useSpatialConnections();
+  const updateAgentConfiguration = useUpdateSpatialAgentConfiguration();
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
+  const [agentDescription, setAgentDescription] = useState(
+    agentInfo?.description?.trim() || DEFAULT_MAPS_DESCRIPTION,
+  );
+  const [agentAuthor, setAgentAuthor] = useState(agentInfo?.author?.trim() || "Pasta Devs");
+  const [agentConnectionId, setAgentConnectionId] = useState("");
+  const [agentFieldsDirty, setAgentFieldsDirty] = useState(false);
+  const [agentFieldsSaved, setAgentFieldsSaved] = useState(false);
+  const [agentFieldsError, setAgentFieldsError] = useState<string | null>(null);
   const updateSpatial = useUpdateSpatialContext();
   const updateGenerationPreferences = useUpdateSpatialGenerationPreferences();
   const updateTurnPromptTemplates = useUpdateSpatialTurnPromptTemplates();
@@ -263,6 +322,9 @@ export function SpatialMapsHome({
       : "Saved, map disabled";
   const packageReady =
     packageInfo?.status === "active" && (packageInfo.readiness === "ready" || packageInfo.readiness == null);
+  const availableConnections = (connections.data ?? []).filter(
+    (connection) => connection.provider !== "image_generation" && connection.provider !== "video_generation",
+  );
   const currentChatIdRef = useRef(chatId);
   currentChatIdRef.current = chatId;
   const promptPreviewRequestIdRef = useRef(0);
@@ -271,6 +333,35 @@ export function SpatialMapsHome({
   const resetTurnPromptTemplatesUpdate = updateTurnPromptTemplates.reset;
   const resetSpatialUpdate = updateSpatial.reset;
   const resetPromptPreviewRequest = previewGenerationPrompt.reset;
+  useEffect(() => {
+    if (!agentConfiguration.isSuccess || agentFieldsDirty) return;
+    const configuration = agentConfiguration.data;
+    const settings = parseAgentSettings(configuration?.settings);
+    setAgentDescription(
+      configuration?.description?.trim() || agentInfo?.description?.trim() || DEFAULT_MAPS_DESCRIPTION,
+    );
+    setAgentAuthor(
+      (typeof settings.author === "string" && settings.author.trim()) ||
+        agentInfo?.author?.trim() ||
+        "Pasta Devs",
+    );
+    setAgentConnectionId(configuration?.connectionId ?? "");
+  }, [
+    agentConfiguration.data,
+    agentConfiguration.isSuccess,
+    agentFieldsDirty,
+    agentInfo?.author,
+    agentInfo?.description,
+  ]);
+  useEffect(() => {
+    onDirtyChange?.(agentFieldsDirty);
+    return () => onDirtyChange?.(false);
+  }, [agentFieldsDirty, onDirtyChange]);
+  useEffect(() => {
+    if (!agentFieldsSaved) return;
+    const timer = window.setTimeout(() => setAgentFieldsSaved(false), 1_800);
+    return () => window.clearTimeout(timer);
+  }, [agentFieldsSaved]);
   useEffect(() => {
     setPromptEditing(false);
     setPromptMode(chatOwnerMode);
@@ -566,97 +657,268 @@ export function SpatialMapsHome({
       setActivationPending(false);
     }
   };
+  const markAgentFieldsDirty = () => {
+    setAgentFieldsDirty(true);
+    setAgentFieldsSaved(false);
+    setAgentFieldsError(null);
+  };
+  const saveAgentFields = async () => {
+    if (!agentFieldsDirty || updateAgentConfiguration.isPending) return;
+    setAgentFieldsError(null);
+    try {
+      const saved = await updateAgentConfiguration.mutateAsync({
+        description: agentDescription,
+        phase: "pre_generation",
+        connectionId: agentConnectionId || null,
+        settings: {
+          author: agentAuthor.trim() || agentInfo?.author?.trim() || "Pasta Devs",
+        },
+      });
+      const savedSettings = parseAgentSettings(saved.settings);
+      setAgentDescription(saved.description || DEFAULT_MAPS_DESCRIPTION);
+      setAgentAuthor(
+        (typeof savedSettings.author === "string" && savedSettings.author.trim()) ||
+          agentInfo?.author?.trim() ||
+          "Pasta Devs",
+      );
+      setAgentConnectionId(saved.connectionId ?? "");
+      setAgentFieldsDirty(false);
+      setAgentFieldsSaved(true);
+    } catch (error) {
+      setAgentFieldsError(
+        error instanceof Error ? error.message : "Hierarchical Maps settings could not be saved.",
+      );
+    }
+  };
+  const closeHome = async () => {
+    if (!onClose) return;
+    if (agentFieldsDirty) {
+      const discard = confirmAction
+        ? await confirmAction({
+            title: "Discard agent changes?",
+            message: "You have unsaved Hierarchical Maps agent changes. Leave the editor and discard them?",
+            confirmLabel: "Discard changes",
+            cancelLabel: "Keep editing",
+            tone: "destructive",
+          })
+        : window.confirm(
+            "You have unsaved Hierarchical Maps agent changes. Leave the editor and discard them?",
+          );
+      if (!discard) return;
+    }
+    onClose();
+  };
 
   return (
     <section
       data-marinara-maps-home
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--background)] text-[var(--foreground)]"
+      className="mari-editor-shell mari-editor-legacy-bridge flex min-h-0 flex-1 flex-col overflow-hidden"
       aria-labelledby="hierarchical-maps-home-title"
     >
-      <header className="sticky top-0 z-10 flex min-h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--background)]/95 px-4 backdrop-blur-xl">
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Back to Agents"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-          >
-            <ArrowLeft size="1rem" />
-          </button>
-        )}
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/12 text-[var(--marinara-chat-chrome-accent)]">
-          <Map size="1rem" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 id="hierarchical-maps-home-title" className="truncate text-sm font-semibold">
-            Hierarchical Maps
-          </h1>
-          <p className="text-[0.625rem] uppercase tracking-[0.12em] text-[var(--marinara-chat-chrome-accent)]">
-            World location feature
-          </p>
-        </div>
-        {packageInfo?.version && (
-          <span className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-2.5 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
-            v{packageInfo.version}
+      <header className="mari-editor-header">
+        <div className="mari-editor-header-main max-md:min-w-full">
+          {onClose && (
+            <button
+              type="button"
+              onClick={() => void closeHome()}
+              aria-label="Back to Agents"
+              className="mari-editor-action inline-flex"
+              style={{ minHeight: 44, minWidth: 44 }}
+            >
+              <ArrowLeft size="1.125rem" />
+            </button>
+          )}
+          <span className="mari-editor-icon-tile">
+            <Map size="1.125rem" />
           </span>
-        )}
-      </header>
-
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-4 sm:p-6">
-        <div>
-          <p className="max-w-2xl text-sm leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-            Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2" aria-label="Supported chat modes">
-            {['Roleplay', 'Game'].map((mode) => (
-              <span key={mode} className="rounded-full bg-[var(--secondary)] px-2.5 py-1 text-[0.6875rem] font-medium">
-                {mode}
-              </span>
-            ))}
+          <div className="min-w-0 flex-1">
+            <h1 id="hierarchical-maps-home-title" className="mari-editor-title truncate">
+              {agentInfo?.name?.trim() || "Hierarchical Maps"}
+            </h1>
+            <p className="mari-editor-meta mt-0.5">
+              {agentAuthor || agentInfo?.author?.trim() || "Pasta Devs"}
+              {packageInfo?.version ? ` · v${packageInfo.version}` : ""}
+            </p>
           </div>
         </div>
+        <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
+          {agentFieldsError && (
+            <span className="mari-editor-status mr-2 text-[var(--destructive)]">
+              <AlertCircle size="0.6875rem" /> Save failed
+            </span>
+          )}
+          {agentFieldsSaved && !agentFieldsDirty && (
+            <span className="mari-editor-status mr-2">
+              <Check size="0.6875rem" /> Saved
+            </span>
+          )}
+          {agentFieldsDirty && !agentFieldsError && (
+            <span className="mari-editor-status mr-2">Unsaved</span>
+          )}
+          <button
+            type="button"
+            onClick={() => void saveAgentFields()}
+            disabled={!agentFieldsDirty || updateAgentConfiguration.isPending}
+            className="mari-editor-action mari-editor-action--primary inline-flex"
+            aria-label="Save"
+          >
+            {updateAgentConfiguration.isPending ? (
+              <LoaderCircle size="0.8125rem" className="animate-spin" />
+            ) : (
+              <Save size="0.8125rem" />
+            )}
+            <span className="max-md:hidden">Save</span>
+          </button>
+          {onManagePackage && (
+            <button
+              type="button"
+              onClick={onManagePackage}
+              className="mari-editor-action inline-flex"
+              title="Manage package"
+              aria-label="Manage package"
+              style={{ minHeight: 44, minWidth: 44 }}
+            >
+              <Settings2 size="0.9375rem" />
+            </button>
+          )}
+        </div>
+      </header>
 
-        <article className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+      <div className="mari-editor-content max-md:p-4">
+        <div className="mari-editor-content-inner mari-editor-content-inner--wide space-y-6">
+          {agentFieldsError && (
+            <div
+              role="alert"
+              className="mari-editor-panel flex items-center gap-2 border-[var(--destructive)]/30 p-3 text-xs text-[var(--destructive)]"
+            >
+              <AlertCircle size="0.8125rem" />
+              <span className="min-w-0 flex-1">{agentFieldsError}</span>
+            </div>
+          )}
+
+          <MapsFieldGroup label="Description" icon={<Info size="0.875rem" />}>
+            <div className="grid gap-3 sm:grid-cols-[1fr_14rem]">
+              <label className="flex min-w-0 flex-col gap-1.5">
+                <span className="text-[0.6875rem] font-medium text-[var(--marinara-editor-muted)]">
+                  Description
+                </span>
+                <input
+                  value={agentDescription}
+                  onChange={(event) => {
+                    setAgentDescription(event.target.value);
+                    markAgentFieldsDirty();
+                  }}
+                  disabled={!agentConfiguration.isSuccess}
+                  className="mari-editor-field w-full px-3 py-2.5 text-sm disabled:opacity-60"
+                  placeholder="What does this agent do?"
+                />
+              </label>
+              <label className="flex min-w-0 flex-col gap-1.5">
+                <span className="text-[0.6875rem] font-medium text-[var(--marinara-editor-muted)]">
+                  Author
+                </span>
+                <input
+                  value={agentAuthor}
+                  onChange={(event) => {
+                    setAgentAuthor(event.target.value);
+                    markAgentFieldsDirty();
+                  }}
+                  disabled={!agentConfiguration.isSuccess}
+                  className="mari-editor-field w-full px-3 py-2.5 text-sm disabled:opacity-60"
+                  placeholder="Pasta Devs"
+                />
+              </label>
+            </div>
+          </MapsFieldGroup>
+
+          <MapsFieldGroup label="Pipeline Phase" icon={<Zap size="0.875rem" />}>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {MAPS_PHASE_META.map((meta) => {
+                const active = meta.phase === "pre_generation";
+                const Icon = meta.icon;
+                return (
+                  <button
+                    key={meta.phase}
+                    type="button"
+                    aria-pressed={active}
+                    disabled={!active}
+                    className={`flex flex-col items-center gap-1.5 rounded-xl p-3 text-xs ring-1 transition-all ${
+                      active
+                        ? "bg-[var(--primary)]/10 text-amber-400 ring-[var(--primary)]"
+                        : "cursor-not-allowed text-[var(--marinara-editor-muted)] opacity-55 ring-[var(--marinara-editor-border)]"
+                    }`}
+                  >
+                    <Icon size="1rem" />
+                    <span className="font-medium">{meta.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[0.625rem] text-[var(--marinara-editor-muted)]">
+              Hierarchical Maps runs before generation so its saved location can ground the main AI response.
+              This feature-owned phase is fixed.
+            </p>
+          </MapsFieldGroup>
+
+          <MapsFieldGroup label="Connection Override" icon={<Link2 size="0.875rem" />}>
+            <select
+              aria-label="Connection Override"
+              value={agentConnectionId}
+              onChange={(event) => {
+                setAgentConnectionId(event.target.value);
+                markAgentFieldsDirty();
+              }}
+              disabled={!agentConfiguration.isSuccess || connections.isLoading}
+              className="mari-editor-field w-full px-3 py-2.5 text-sm disabled:opacity-60"
+            >
+              <option value="">Use chat connection</option>
+              {agentConnectionId &&
+                !availableConnections.some((connection) => connection.id === agentConnectionId) && (
+                  <option value={agentConnectionId}>Saved connection (unavailable)</option>
+                )}
+              {availableConnections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.name} ({connection.provider})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[0.625rem] text-[var(--marinara-editor-muted)]">
+              Used for AI map drafts and expansions. When empty, Maps uses the current chat connection.
+            </p>
+          </MapsFieldGroup>
+
+        <article className="mari-editor-panel p-4">
           <div className="flex flex-wrap items-start gap-3">
             <span className={`mt-0.5 ${packageReady ? "text-emerald-400" : "text-amber-400"}`}>
               {packageReady ? <CheckCircle2 size="1rem" /> : <CircleAlert size="1rem" />}
             </span>
             <div className="min-w-52 flex-1">
               <h2 className="text-xs font-semibold">Installed package</h2>
-              <p className="mt-1 text-[0.6875rem] text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-1 text-[0.6875rem] text-[var(--marinara-editor-muted)]">
                 {packageReady ? "Ready to use" : "Restart or package attention may be required"}
                 {packageInfo?.version ? ` · Version ${packageInfo.version}` : ""}
               </p>
             </div>
-            {onManagePackage && (
-              <button
-                type="button"
-                onClick={onManagePackage}
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-3 text-xs font-medium transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-              >
-                <Settings2 size="0.8125rem" /> Manage package
-              </button>
-            )}
           </div>
         </article>
 
-        <article className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+        <article className="mari-editor-panel overflow-hidden">
           <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-3">
-            <MessageSquare size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+            <MessageSquare size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
             <div className="min-w-0 flex-1">
               <h2 className="text-xs font-semibold">Current chat</h2>
-              <p className="mt-1 truncate text-[0.6875rem] text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-1 truncate text-[0.6875rem] text-[var(--marinara-editor-muted)]">
                 {chatId ? `${chatName || "Untitled chat"} · ${modeLabel(chatMode)}` : "No chat is open"}
               </p>
             </div>
           </div>
 
           {!chatId ? (
-            <div className="px-4 py-5 text-sm text-[var(--marinara-chat-chrome-accent)]">
+            <div className="px-4 py-5 text-sm text-[var(--marinara-editor-muted)]">
               Open a Roleplay or Game chat to activate Maps and create its world hierarchy.
             </div>
           ) : !supportedChat ? (
-            <div className="px-4 py-5 text-sm text-[var(--marinara-chat-chrome-accent)]">
+            <div className="px-4 py-5 text-sm text-[var(--marinara-editor-muted)]">
               Hierarchical Maps supports Roleplay and Game. The current {modeLabel(chatMode)} chat is unchanged.
             </div>
           ) : (
@@ -675,7 +937,7 @@ export function SpatialMapsHome({
               >
                 <span className="min-w-0 flex-1">
                   <span className="block text-xs font-medium">Enable Hierarchical Maps</span>
-                  <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                  <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                     {enabledForChat
                       ? "Active in this chat. Saved map context can participate in turns."
                       : "Installed in Marinara, but not active in this chat yet."}
@@ -696,7 +958,7 @@ export function SpatialMapsHome({
               </button>
 
               {activationPending && (
-                <p role="status" aria-live="polite" className="text-[0.6875rem] text-[var(--marinara-chat-chrome-accent)]">
+                <p role="status" aria-live="polite" className="text-[0.6875rem] text-[var(--marinara-editor-muted)]">
                   Updating Hierarchical Maps…
                 </p>
               )}
@@ -707,10 +969,10 @@ export function SpatialMapsHome({
               )}
 
               <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/35 p-3">
-                <MapPin size="0.9375rem" className="shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+                <MapPin size="0.9375rem" className="shrink-0 text-[var(--marinara-editor-muted)]" />
                 <div className="min-w-52 flex-1">
                   <p className="text-xs font-semibold">{spatial.isError ? "Map status unavailable" : mapState}</p>
-                  <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                  <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                     {spatial.isLoading
                       ? "Loading this chat’s map status…"
                       : spatial.isError
@@ -724,7 +986,7 @@ export function SpatialMapsHome({
                   <button
                     type="button"
                     onClick={() => void spatial.refetch()}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-medium text-[var(--marinara-chat-chrome-accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-medium text-[var(--marinara-editor-muted)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
                   >
                     <RefreshCw size="0.8125rem" /> Retry status
                   </button>
@@ -764,16 +1026,16 @@ export function SpatialMapsHome({
           )}
         </article>
 
-        <article className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4" aria-labelledby="maps-generation-prompt-title">
+        <article className="mari-editor-panel p-4" aria-labelledby="maps-generation-prompt-title">
             <div className="flex flex-wrap items-start gap-3">
-              <FileText size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+              <FileText size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
               <div className="min-w-52 flex-1">
                 <h2 id="maps-generation-prompt-title" className="text-xs font-semibold">Generation prompt</h2>
-                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                   These named templates are global. Edit them once, then select an option independently in each matching chat.
                 </p>
               </div>
-              <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
+              <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
                 {modeLabel(promptMode)} · {activePromptOption.name}
               </span>
             </div>
@@ -793,7 +1055,7 @@ export function SpatialMapsHome({
                   className={`min-h-11 flex-1 rounded-md px-3 text-[0.6875rem] font-medium disabled:opacity-45 ${
                     promptMode === mode
                       ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
-                      : "text-[var(--marinara-chat-chrome-accent)]"
+                      : "text-[var(--marinara-editor-muted)]"
                   }`}
                 >
                   {modeLabel(mode)}
@@ -802,7 +1064,7 @@ export function SpatialMapsHome({
             </div>
 
             {promptLibraries.isLoading && (
-              <p className="mt-3 flex min-h-11 items-center gap-2 text-[0.6875rem] text-[var(--marinara-chat-chrome-accent)]" role="status">
+              <p className="mt-3 flex min-h-11 items-center gap-2 text-[0.6875rem] text-[var(--marinara-editor-muted)]" role="status">
                 <LoaderCircle size="0.8125rem" className="animate-spin" /> Loading global prompt library…
               </p>
             )}
@@ -846,7 +1108,7 @@ export function SpatialMapsHome({
                   <Plus size="0.75rem" /> Add option
                 </button>
               </div>
-              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                 Options are shared globally. {promptAppliesToCurrentChat
                   ? `Selecting one activates it for ${chatName ?? "the current chat"}.`
                   : `Open a ${modeLabel(promptMode)} chat to select its active option or preview resolved context.`}
@@ -877,7 +1139,7 @@ export function SpatialMapsHome({
                   </label>
                 </div>
               ) : activePromptOption.description ? (
-                <p className="mt-3 rounded-lg bg-[var(--secondary)]/50 px-3 py-2 text-[0.6875rem] text-[var(--marinara-chat-chrome-accent)]">
+                <p className="mt-3 rounded-lg bg-[var(--secondary)]/50 px-3 py-2 text-[0.6875rem] text-[var(--marinara-editor-muted)]">
                   {activePromptOption.description}
                 </p>
               ) : null}
@@ -892,7 +1154,7 @@ export function SpatialMapsHome({
                     aria-pressed={promptOperation === value}
                     onClick={() => setPromptOperation(value)}
                     className={`min-h-9 rounded-md px-3 text-[0.6875rem] font-medium ${
-                      promptOperation === value ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm" : "text-[var(--marinara-chat-chrome-accent)]"
+                      promptOperation === value ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm" : "text-[var(--marinara-editor-muted)]"
                     }`}
                   >
                     {value === "draft" ? "New map" : "Expansion"}
@@ -906,7 +1168,7 @@ export function SpatialMapsHome({
                 <label htmlFor="maps-generation-system-template" className="text-[0.6875rem] font-semibold">
                   {promptOperation === "draft" ? "New map" : "Expansion"} System template
                 </label>
-                <span className="text-[0.5625rem] text-[var(--marinara-chat-chrome-accent)]">
+                <span className="text-[0.5625rem] text-[var(--marinara-editor-muted)]">
                   {activePromptOption.prompts[selectedPromptFields.system].length} chars
                 </span>
               </div>
@@ -930,7 +1192,7 @@ export function SpatialMapsHome({
                 <label htmlFor="maps-generation-user-template" className="text-[0.6875rem] font-semibold">
                   {promptOperation === "draft" ? "New map" : "Expansion"} User template
                 </label>
-                <span className="text-[0.5625rem] text-[var(--marinara-chat-chrome-accent)]">
+                <span className="text-[0.5625rem] text-[var(--marinara-editor-muted)]">
                   {activePromptOption.prompts[selectedPromptFields.user].length} chars
                 </span>
               </div>
@@ -947,7 +1209,7 @@ export function SpatialMapsHome({
                 }
                 className="mt-2 min-h-56 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed outline-none read-only:cursor-default read-only:opacity-85 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
               />
-              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                 Maps sends these as two messages in order: System first, then User.
               </p>
             </div>
@@ -959,7 +1221,7 @@ export function SpatialMapsHome({
                   ? ` + ${activePromptOption.customVariables.length} custom`
                   : ""})
               </summary>
-              <p className="mt-2 max-w-3xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-2 max-w-3xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                 Built-in values come from the current request and chat. Their position in a template is editable, but generated context and response contracts cannot be replaced with stored text.
               </p>
 
@@ -972,11 +1234,11 @@ export function SpatialMapsHome({
                         <code className="inline-flex items-center gap-1 rounded-md bg-[var(--secondary)] px-2 py-1 font-mono text-[0.625rem] text-[var(--foreground)]">
                           <Code2 size="0.625rem" /> ${"{"}{variable}{"}"}
                         </code>
-                        <span className="rounded-full border border-[var(--border)] px-2 py-1 text-[0.5625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
+                        <span className="rounded-full border border-[var(--border)] px-2 py-1 text-[0.5625rem] font-medium text-[var(--marinara-editor-muted)]">
                           {detail.source}
                         </span>
                       </div>
-                      <p className="mt-1.5 max-w-3xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                      <p className="mt-1.5 max-w-3xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                         {detail.description}
                       </p>
                       {variable === "creatorGuidanceBlock" && (
@@ -1004,7 +1266,7 @@ export function SpatialMapsHome({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <h3 className="text-[0.6875rem] font-semibold">Custom variables</h3>
-                    <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                    <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                       Store reusable text with this prompt option, then insert it in any System or User template using its token.
                     </p>
                   </div>
@@ -1021,7 +1283,7 @@ export function SpatialMapsHome({
                 </div>
 
                 {activePromptOption.customVariables.length === 0 ? (
-                  <p className="mt-3 text-[0.625rem] text-[var(--marinara-chat-chrome-accent)]">
+                  <p className="mt-3 text-[0.625rem] text-[var(--marinara-editor-muted)]">
                     {promptEditing ? "No custom variables yet." : "Edit this prompt option to add custom variables."}
                   </p>
                 ) : (
@@ -1037,7 +1299,7 @@ export function SpatialMapsHome({
                               type="button"
                               onClick={() => removeCustomVariable(index)}
                               aria-label={`Remove custom variable ${index + 1}`}
-                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-accent)] hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
+                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--marinara-editor-muted)] hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
                             >
                               <Trash2 size="0.75rem" />
                             </button>
@@ -1073,17 +1335,17 @@ export function SpatialMapsHome({
                   </div>
                 )}
               </div>
-              <p className="mt-3 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-3 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                 Preview uses the unsaved template, guidance, and custom-variable values currently shown here.
               </p>
             </details>
 
             <section className="mt-4 border-t border-[var(--border)] pt-4" aria-labelledby="maps-resolved-prompt-title">
               <div className="flex flex-wrap items-start gap-3">
-                <Eye size="0.875rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+                <Eye size="0.875rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
                 <div className="min-w-52 flex-1">
                   <h3 id="maps-resolved-prompt-title" className="text-xs font-semibold">Resolved prompt preview</h3>
-                  <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                  <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                     Uses Medium size, setup context, and {promptOperation === "draft" ? "Auto hierarchy" : expansionPreviewTarget ? `the existing hierarchy at ${expansionPreviewTarget.name}` : "the existing hierarchy"}. No model request is made.
                   </p>
                 </div>
@@ -1143,7 +1405,7 @@ export function SpatialMapsHome({
                   </p>
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <h4 className="text-[0.6875rem] font-semibold">System message</h4>
-                    <span className="text-[0.5625rem] text-[var(--marinara-chat-chrome-accent)]">
+                    <span className="text-[0.5625rem] text-[var(--marinara-editor-muted)]">
                       {promptPreview.system.length} chars
                     </span>
                   </div>
@@ -1152,7 +1414,7 @@ export function SpatialMapsHome({
                   </pre>
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <h4 className="text-[0.6875rem] font-semibold">User message</h4>
-                    <span className="text-[0.5625rem] text-[var(--marinara-chat-chrome-accent)]">
+                    <span className="text-[0.5625rem] text-[var(--marinara-editor-muted)]">
                       {promptPreview.user.length} chars
                     </span>
                   </div>
@@ -1256,18 +1518,18 @@ export function SpatialMapsHome({
           </article>
 
         <article
-          className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
+          className="mari-editor-panel p-4"
           aria-labelledby="maps-turn-prompt-title"
         >
           <div className="flex flex-wrap items-start gap-3">
-            <Code2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+            <Code2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
             <div className="min-w-52 flex-1">
               <h2 id="maps-turn-prompt-title" className="text-xs font-semibold">Turn prompt insert</h2>
-              <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                 Edit the global system message injected once per model request before visible history. Roleplay and Game templates apply to every matching chat and are not copied into chat messages.
               </p>
             </div>
-            <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
+            <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
               {globalTurnPromptTemplates.isError
                 ? "Templates unavailable"
                 : !globalTurnPromptTemplates.isSuccess
@@ -1300,7 +1562,7 @@ export function SpatialMapsHome({
                 className={`min-h-11 flex-1 rounded-md px-3 text-[0.6875rem] font-medium disabled:opacity-45 ${
                   turnPromptMode === mode
                     ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
-                    : "text-[var(--marinara-chat-chrome-accent)]"
+                    : "text-[var(--marinara-editor-muted)]"
                 }`}
               >
                 {modeLabel(mode)}
@@ -1340,7 +1602,7 @@ export function SpatialMapsHome({
               >
                 {modeLabel(turnPromptMode)} turn prompt template
               </label>
-              <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                 Marinara keeps the application-owned <code className="font-mono">&lt;spatial_context&gt;</code> wrapper around this text. Required variables preserve current location data and the mode's authority rule.
               </p>
               <textarea
@@ -1360,7 +1622,7 @@ export function SpatialMapsHome({
                 className="mt-3 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-45"
               />
               <div className="mt-3" aria-label="Turn prompt variables">
-                <p className="text-[0.625rem] font-semibold text-[var(--marinara-chat-chrome-accent)]">
+                <p className="text-[0.625rem] font-semibold text-[var(--marinara-editor-muted)]">
                   Available variables
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1395,7 +1657,7 @@ export function SpatialMapsHome({
                       ? "Resolved system message"
                       : `${modeLabel(turnPromptMode)} format`}
                 </h3>
-                <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                   {liveTurnPromptProjection
                     ? `Resolved from ${chatName ?? "the current chat"}'s saved current location.`
                     : `Open a ${modeLabel(turnPromptMode)} chat with an enabled saved map to replace the example values with its live insert.`}
@@ -1497,11 +1759,11 @@ export function SpatialMapsHome({
                 {turnPromptText}
               </pre>
             )}
-            <p className="mt-3 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+            <p className="mt-3 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
               Lore linked to the exact current location is activated separately through the lorebook pipeline at each entry's configured prompt position. It is not duplicated inside this block.
             </p>
             {turnPromptMode === "game" && (
-              <p className="mt-2 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-2 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                 Game requests also relabel legacy <code className="font-mono">&lt;map_state&gt;</code> context as local tactical state and restrict <code className="font-mono">[map_update]</code> to movement inside this hierarchical location.
               </p>
             )}
@@ -1510,26 +1772,26 @@ export function SpatialMapsHome({
 
         {chatId && supportedChat && (
           <article
-            className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
+            className="mari-editor-panel p-4"
             aria-labelledby="maps-location-types-title"
           >
             <div className="flex flex-wrap items-start gap-3">
-              <Settings2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+              <Settings2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
               <div className="min-w-52 flex-1">
                 <h2 id="maps-location-types-title" className="text-xs font-semibold">Location types</h2>
-                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                   View and edit the vocabulary saved with this chat’s map. These hierarchy names and semantic base kinds are used throughout the map and reused by AI expansions.
                 </p>
               </div>
               {hierarchyDraft && (
-                <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
+                <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
                   {hierarchyDraft.profile.mode === "custom" ? "Custom" : hierarchyDraft.profile.mode === "auto" ? "Chosen by AI" : "Template"}
                 </span>
               )}
             </div>
 
             {spatial.isLoading ? (
-              <div className="mt-4 flex min-h-20 items-center gap-2 text-xs text-[var(--marinara-chat-chrome-accent)]" role="status">
+              <div className="mt-4 flex min-h-20 items-center gap-2 text-xs text-[var(--marinara-editor-muted)]" role="status">
                 <LoaderCircle size="0.875rem" className="animate-spin" /> Loading location types…
               </div>
             ) : hierarchyDraft && definition ? (
@@ -1589,25 +1851,51 @@ export function SpatialMapsHome({
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--secondary)]/30 px-3 py-4 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              <div className="mt-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--secondary)]/30 px-3 py-4 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                 Create or import a map first. Its generated or imported hierarchy vocabulary will then be editable here.
               </div>
             )}
           </article>
         )}
 
-        <article className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--secondary)]/30 p-4">
+        <article className="mari-editor-empty p-4">
           <div className="flex items-start gap-3">
-            <Box size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+            <Box size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
             <div>
               <h2 className="text-xs font-semibold">Map state stays with each chat</h2>
-              <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+              <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                 Prompt libraries are global. Each chat still keeps its selected prompt option, hierarchy contents, current location, bindings, history, and unsaved drafts.
               </p>
             </div>
           </div>
         </article>
+        </div>
       </div>
+    </section>
+  );
+}
+
+function MapsFieldGroup({
+  label,
+  icon,
+  children,
+}: {
+  label: string;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mari-editor-panel space-y-2 p-3" aria-labelledby={`maps-agent-${label.toLowerCase().replace(/\s+/gu, "-")}`}>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[var(--marinara-editor-accent)]">{icon}</span>
+        <h2
+          id={`maps-agent-${label.toLowerCase().replace(/\s+/gu, "-")}`}
+          className="text-xs font-semibold text-[var(--marinara-editor-text)]"
+        >
+          {label}
+        </h2>
+      </div>
+      {children}
     </section>
   );
 }
