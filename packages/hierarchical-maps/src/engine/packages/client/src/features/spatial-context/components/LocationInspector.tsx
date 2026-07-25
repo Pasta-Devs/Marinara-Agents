@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { Archive, BookOpen, Link2, MapPin, Plus, Search, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { Archive, BookOpen, ImageIcon, Link2, Loader2, MapPin, Plus, Search, Trash2, Upload } from "lucide-react";
 import type {
   Lorebook,
   LorebookEntry,
@@ -13,6 +13,7 @@ import { cn } from "../package-utils";
 import { getSpatialDescendantIds } from "@marinara-engine/shared";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
 import type { SpatialHierarchyProfile } from "../../../../../maps-shared/src/maps-model";
+import { useSpatialGalleryImages, useUploadSpatialGalleryImage } from "../use-spatial-resources";
 
 const INPUT_CLASS =
   "w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--marinara-chat-chrome-panel-text)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[var(--marinara-chat-chrome-panel-muted)] focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-focus-ring)]";
@@ -43,6 +44,7 @@ function Field({
 }
 
 interface LocationInspectorProps {
+  chatId: string;
   definition: SpatialContextDefinition;
   location: SpatialLocation | null;
   issues: SpatialDefinitionIssue[];
@@ -66,6 +68,7 @@ interface LocationInspectorProps {
 }
 
 export function LocationInspector({
+  chatId,
   definition,
   location,
   issues,
@@ -85,6 +88,23 @@ export function LocationInspector({
 }: LocationInspectorProps) {
   const [loreSearch, setLoreSearch] = useState("");
   const [newLinkTarget, setNewLinkTarget] = useState("");
+  const referenceImageInputRef = useRef<HTMLInputElement>(null);
+  const mapBackgroundInputRef = useRef<HTMLInputElement>(null);
+  const galleryImages = useSpatialGalleryImages(chatId);
+  const uploadReferenceImage = useUploadSpatialGalleryImage(chatId);
+  const uploadMapBackground = useUploadSpatialGalleryImage(chatId);
+  const referenceImage = useMemo(
+    () => galleryImages.data?.find((image) => image.id === location?.referenceImageId) ?? null,
+    [galleryImages.data, location?.referenceImageId],
+  );
+  const referenceImageMissing =
+    Boolean(location?.referenceImageId) && galleryImages.isSuccess && referenceImage === null;
+  const mapBackgroundImage = useMemo(
+    () => galleryImages.data?.find((image) => image.id === location?.mapBackgroundImageId) ?? null,
+    [galleryImages.data, location?.mapBackgroundImageId],
+  );
+  const mapBackgroundImageMissing =
+    Boolean(location?.mapBackgroundImageId) && galleryImages.isSuccess && mapBackgroundImage === null;
   const descendants = useMemo(
     () => (location ? getSpatialDescendantIds(definition, location.id) : new Set<string>()),
     [definition, location],
@@ -127,6 +147,24 @@ export function LocationInspector({
       .filter((group) => group.entries.length > 0);
   }, [location?.lorebookEntryIds, loreSearch, lorebookEntries, lorebooks]);
   const excludedLorebookIdSet = useMemo(() => new Set(excludedLorebookIds), [excludedLorebookIds]);
+
+  const uploadLocationReference = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    uploadReferenceImage.mutate(file, {
+      onSuccess: (image) => onUpdate({ referenceImageId: image.id, useReferenceImage: true }),
+    });
+  };
+
+  const uploadLocationMapBackground = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    uploadMapBackground.mutate(file, {
+      onSuccess: (image) => onUpdate({ mapBackgroundImageId: image.id }),
+    });
+  };
 
   if (!location) {
     return (
@@ -250,6 +288,92 @@ export function LocationInspector({
             onChange={(event) => onUpdate({ awarenessSummary: event.target.value || undefined })}
           />
         </Field>
+
+        <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] pt-4">
+          <div className="mb-3 flex items-center gap-2">
+            <ImageIcon size="0.8125rem" className="text-[var(--marinara-chat-chrome-accent)]" />
+            <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+              Location reference image
+            </h3>
+          </div>
+          <p className="mb-3 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+            Upload one image to anchor this location&apos;s look. The image stays in this chat&apos;s Gallery.
+          </p>
+
+          <div className="overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
+            {referenceImage ? (
+              <img
+                src={referenceImage.url}
+                alt={`${location.name} location reference`}
+                loading="lazy"
+                className="h-40 w-full object-cover"
+              />
+            ) : (
+              <div className="flex min-h-32 items-center justify-center px-4 text-center text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                {galleryImages.isLoading && location.referenceImageId ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 size="0.75rem" className="animate-spin" /> Loading reference image…
+                  </span>
+                ) : referenceImageMissing ? (
+                  "This Gallery image is no longer available. Upload a replacement or remove the link."
+                ) : galleryImages.isError ? (
+                  "The Gallery could not be loaded."
+                ) : (
+                  "No reference image yet."
+                )}
+              </div>
+            )}
+          </div>
+
+          <input
+            ref={referenceImageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+            className="sr-only"
+            aria-label={`Upload a reference image for ${location.name}`}
+            onChange={uploadLocationReference}
+          />
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={uploadReferenceImage.isPending}
+              onClick={() => referenceImageInputRef.current?.click()}
+              className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+            >
+              {uploadReferenceImage.isPending ? (
+                <Loader2 size="0.75rem" className="animate-spin" />
+              ) : (
+                <Upload size="0.75rem" />
+              )}
+              {location.referenceImageId ? "Replace" : "Upload image"}
+            </button>
+            <button
+              type="button"
+              disabled={!location.referenceImageId || uploadReferenceImage.isPending}
+              onClick={() => onUpdate({ referenceImageId: undefined, useReferenceImage: false })}
+              className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+            >
+              <Trash2 size="0.75rem" /> Remove
+            </button>
+          </div>
+          {uploadReferenceImage.isError && (
+            <p className="mt-2 text-[0.6875rem] text-red-400" role="alert">
+              {uploadReferenceImage.error instanceof Error
+                ? uploadReferenceImage.error.message
+                : "The reference image could not be uploaded."}
+            </p>
+          )}
+
+          <label className="mt-3 flex min-h-11 items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] px-3 text-xs text-[var(--marinara-chat-chrome-panel-text)]">
+            <input
+              type="checkbox"
+              checked={location.useReferenceImage === true}
+              disabled={!referenceImage}
+              onChange={(event) => onUpdate({ useReferenceImage: event.target.checked })}
+            />
+            Use for Roleplay illustrations and Game storyboards
+          </label>
+        </div>
 
 
         <details className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
@@ -424,6 +548,81 @@ export function LocationInspector({
                 <option value="layers">Layers</option>
               </select>
             </Field>
+            {location.childPresentation === "map" && (
+              <div className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon size="0.75rem" className="text-[var(--marinara-chat-chrome-accent)]" />
+                  <p className="text-xs font-medium text-[var(--marinara-chat-chrome-panel-title)]">
+                    Child map background
+                  </p>
+                </div>
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                  Displayed behind the movable places on this map and in the runtime minimap. It is never sent to image generation.
+                </p>
+                <div className="mt-3 overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]">
+                  {mapBackgroundImage ? (
+                    <img
+                      src={mapBackgroundImage.url}
+                      alt={`${location.name} child map background`}
+                      loading="lazy"
+                      className="h-32 w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex min-h-24 items-center justify-center px-4 text-center text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                      {galleryImages.isLoading && location.mapBackgroundImageId ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 size="0.75rem" className="animate-spin" /> Loading map background…
+                        </span>
+                      ) : mapBackgroundImageMissing ? (
+                        "This Gallery image is no longer available."
+                      ) : galleryImages.isError ? (
+                        "The Gallery could not be loaded."
+                      ) : (
+                        "The map grid is used until you upload a background."
+                      )}
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={mapBackgroundInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+                  className="sr-only"
+                  aria-label={`Upload a child map background for ${location.name}`}
+                  onChange={uploadLocationMapBackground}
+                />
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={uploadMapBackground.isPending}
+                    onClick={() => mapBackgroundInputRef.current?.click()}
+                    className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                  >
+                    {uploadMapBackground.isPending ? (
+                      <Loader2 size="0.75rem" className="animate-spin" />
+                    ) : (
+                      <Upload size="0.75rem" />
+                    )}
+                    {location.mapBackgroundImageId ? "Replace" : "Upload image"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!location.mapBackgroundImageId || uploadMapBackground.isPending}
+                    onClick={() => onUpdate({ mapBackgroundImageId: undefined })}
+                    className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                  >
+                    <Trash2 size="0.75rem" /> Remove
+                  </button>
+                </div>
+                {uploadMapBackground.isError && (
+                  <p className="mt-2 text-[0.6875rem] text-red-400" role="alert">
+                    {uploadMapBackground.error instanceof Error
+                      ? uploadMapBackground.error.message
+                      : "The map background could not be uploaded."}
+                  </p>
+                )}
+              </div>
+            )}
             {location.placement && (
               <details className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center px-3 text-xs font-medium text-[var(--marinara-chat-chrome-panel-title)]">

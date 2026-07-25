@@ -8,6 +8,7 @@ interface LocalMapCanvasProps {
   selectedId: string | null;
   onSelect: (locationId: string) => void;
   onEnter: (locationId: string) => void;
+  backgroundImageUrl?: string;
   editing?: boolean;
   onMove?: (locationId: string, placement: { x: number; y: number }) => void;
 }
@@ -21,6 +22,7 @@ export function LocalMapCanvas({
   selectedId,
   onSelect,
   onEnter,
+  backgroundImageUrl,
   editing = false,
   onMove,
 }: LocalMapCanvasProps) {
@@ -53,9 +55,17 @@ export function LocalMapCanvas({
       className="relative min-h-[22rem] overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]"
       data-layout-editing={editing ? "true" : "false"}
     >
+      {backgroundImageUrl && (
+        <img
+          src={backgroundImageUrl}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+        />
+      )}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-35"
+        className={cn("pointer-events-none absolute inset-0", backgroundImageUrl ? "opacity-15" : "opacity-35")}
         style={{
           backgroundImage:
             "linear-gradient(to right, var(--marinara-chat-chrome-panel-divider) 1px, transparent 1px), linear-gradient(to bottom, var(--marinara-chat-chrome-panel-divider) 1px, transparent 1px)",

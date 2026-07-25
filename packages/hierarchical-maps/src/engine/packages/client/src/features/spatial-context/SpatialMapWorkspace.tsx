@@ -54,6 +54,7 @@ import {
 import {
   getSpatialExcludedLorebookIds,
   useSpatialChat,
+  useSpatialGalleryImages,
   useSpatialLorebookEntries,
   useSpatialLorebooks,
 } from "./use-spatial-resources";
@@ -140,6 +141,7 @@ export function SpatialMapWorkspace({
   const spatial = useSpatialContext(chatId);
   const updateSpatial = useUpdateSpatialContext();
   const { data: chat } = useSpatialChat(chatId);
+  const galleryImages = useSpatialGalleryImages(chatId);
   const pendingSetupReview = pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
   const [baseDefinition, setBaseDefinition] = useState<SpatialContextDefinition | null>(null);
   const [draft, setDraft] = useState<SpatialContextDefinition | null>(null);
@@ -842,6 +844,9 @@ export function SpatialMapWorkspace({
     : null;
   const localChildren = sortedChildren(draft, enteredParentId);
   const localPresentation = currentContext?.childPresentation ?? "list";
+  const localMapBackgroundImageUrl = currentContext?.mapBackgroundImageId
+    ? galleryImages.data?.find((image) => image.id === currentContext.mapBackgroundImageId)?.url
+    : undefined;
   const localBreadcrumb = resolveSpatialBreadcrumb(draft, enteredParentId);
   const conflictDifference = compareSpatialDefinitions(spatial.data?.definition ?? null, draft);
   const archiveRequest = draft.locations.find((location) => location.id === archiveRequestId) ?? null;
@@ -913,6 +918,7 @@ export function SpatialMapWorkspace({
             selectedId={selectedId}
             onSelect={(locationId) => selectLocation(locationId, !layoutEditing)}
             onEnter={enterLocation}
+            backgroundImageUrl={localMapBackgroundImageUrl}
             editing={layoutEditing}
             onMove={(locationId, placement) =>
               applyDraft(updateSpatialLocation(draft, locationId, { placement }))
@@ -978,6 +984,7 @@ export function SpatialMapWorkspace({
 
   const inspector = (
     <LocationInspector
+      chatId={chatId}
       definition={draft}
       location={selected}
       issues={issues.filter((issue) => issue.locationId === selected?.id)}

@@ -4,9 +4,23 @@ import { PackageApiError, packageApi } from "./package-api";
 
 export const spatialResourceKeys = {
   chat: (chatId: string) => ["hierarchical-maps", "chat", chatId] as const,
+  gallery: (chatId: string) => ["hierarchical-maps", "gallery", chatId] as const,
   lorebooks: ["hierarchical-maps", "lorebooks"] as const,
   lorebookEntries: (lorebookId: string) => ["hierarchical-maps", "lorebooks", lorebookId, "entries"] as const,
 };
+
+export interface SpatialGalleryImage {
+  id: string;
+  chatId: string;
+  filePath: string;
+  prompt: string;
+  provider: string;
+  model: string;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+  url: string;
+}
 
 export function useSpatialChat(chatId: string | null) {
   return useQuery({
@@ -17,6 +31,31 @@ export function useSpatialChat(chatId: string | null) {
     retry: (failureCount, error) => {
       if (error instanceof PackageApiError && error.status >= 400 && error.status < 500) return false;
       return failureCount < 3;
+    },
+  });
+}
+
+export function useSpatialGalleryImages(chatId: string) {
+  return useQuery({
+    queryKey: spatialResourceKeys.gallery(chatId),
+    queryFn: () => packageApi.get<SpatialGalleryImage[]>(`/gallery/${chatId}`),
+    staleTime: 60_000,
+  });
+}
+
+export function useUploadSpatialGalleryImage(chatId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return packageApi.upload<SpatialGalleryImage>(`/gallery/${chatId}/upload`, formData);
+    },
+    onSuccess: (image) => {
+      queryClient.setQueryData<SpatialGalleryImage[]>(spatialResourceKeys.gallery(chatId), (current = []) => [
+        image,
+        ...current.filter((candidate) => candidate.id !== image.id),
+      ]);
     },
   });
 }

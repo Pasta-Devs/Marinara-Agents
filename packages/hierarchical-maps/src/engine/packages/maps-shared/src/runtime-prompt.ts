@@ -46,6 +46,8 @@ export function buildOwnerSpatialProjection(
     modelMemory: current.modelMemory
       ? boundedText(current.modelMemory, SPATIAL_CONTEXT_LIMITS.maxModelMemoryLength) || null
       : null,
+    referenceImageId: current.referenceImageId?.trim() || null,
+    useReferenceImage: current.useReferenceImage === true,
     destinations,
     lorebookEntryIds: current.lorebookEntryIds,
     omittedDestinationCount: Math.max(0, allDestinations.length - destinations.length),

@@ -42,6 +42,21 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return response.json() as Promise<T>;
 }
 
+async function upload<T>(path: string, formData: FormData): Promise<T> {
+  const headers = new Headers({ [CSRF_HEADER]: CSRF_HEADER_VALUE });
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    cache: "no-store",
+    body: formData,
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as unknown;
+    throw new PackageApiError(response.status, errorMessage(payload, response.statusText), payload);
+  }
+  return response.json() as Promise<T>;
+}
+
 export const packageApi = {
   get<T>(path: string): Promise<T> {
     return request<T>(path);
@@ -54,5 +69,8 @@ export const packageApi = {
   },
   patch<T>(path: string, body?: unknown): Promise<T> {
     return request<T>(path, "PATCH", body);
+  },
+  upload<T>(path: string, formData: FormData): Promise<T> {
+    return upload<T>(path, formData);
   },
 };

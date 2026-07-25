@@ -19,6 +19,7 @@ import {
   type SpatialLocation,
 } from "@marinara-engine/shared";
 import { cn, generateClientId } from "../../features/spatial-context/package-utils";
+import { useSpatialGalleryImages } from "../../features/spatial-context/use-spatial-resources";
 import {
   cancelSpatialRoute,
   findSpatialRoute,
@@ -82,6 +83,7 @@ export function GameWorldMap({
   const [showListView, setShowListView] = useState(false);
   const pending = usePendingSpatialTransition(chatId);
   const routePlan = useSpatialRoutePlan(chatId);
+  const galleryImages = useSpatialGalleryImages(chatId);
 
   useEffect(() => {
     if (routePlan) reconcileSpatialRoutePlan(chatId, spatial);
@@ -101,6 +103,9 @@ export function GameWorldMap({
     [activeLocations],
   );
   const viewLocation = viewLocationId ? (locationById.get(viewLocationId) ?? null) : null;
+  const mapBackgroundImageUrl = viewLocation?.mapBackgroundImageId
+    ? galleryImages.data?.find((image) => image.id === viewLocation.mapBackgroundImageId)?.url
+    : undefined;
   const visibleLocations = useMemo(
     () =>
       sortLocations(
@@ -427,9 +432,20 @@ export function GameWorldMap({
               compact ? "h-56" : "h-52",
             )}
           >
+            {mapBackgroundImageUrl && (
+              <img
+                src={mapBackgroundImageUrl}
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+              />
+            )}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 opacity-25"
+              className={cn(
+                "pointer-events-none absolute inset-0",
+                mapBackgroundImageUrl ? "opacity-15" : "opacity-25",
+              )}
               style={{
                 backgroundImage:
                   "linear-gradient(to right, var(--marinara-chat-chrome-panel-divider) 1px, transparent 1px), linear-gradient(to bottom, var(--marinara-chat-chrome-panel-divider) 1px, transparent 1px)",
