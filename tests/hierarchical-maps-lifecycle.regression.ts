@@ -96,6 +96,7 @@ const fixtures = new Map(
     artifactFixture("1.1.5"),
     artifactFixture("1.1.6"),
     artifactFixture("1.1.7"),
+    artifactFixture("1.2.1"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -460,9 +461,18 @@ async function main() {
           swipeIndex: number;
           regenerate: boolean;
           continuation: boolean;
+          directive?:
+            | { type: "move"; destinationId: string }
+            | { type: "discover"; name: string; relation: "enter" | "link"; description?: string }
+            | null;
+          locationGuidance?: string | null;
         },
         chatMetadata?: unknown,
-      ): Promise<{ currentLocationId: string } | null>;
+      ): Promise<{
+        currentLocationId: string;
+        definitionRevision: number;
+        transitionCommandId: string | null;
+      } | null>;
       resolveEffectiveSpatialState(
         chatId: string,
         options?: { exactAnchor?: { messageId: string; swipeIndex: number } },
@@ -2181,6 +2191,111 @@ async function main() {
       url: `/api/chats/${branch.id}/spatial-context`,
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
+
+    catalogVersion = "1.2.1";
+    catalogOnline = true;
+    const upgraded121 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded121.version, "1.2.1");
+    assert.equal(upgraded121.previousVersion, "1.1.7");
+    catalogOnline = false;
+    await app.close();
+    app = await buildApp();
+    const narratedPrompt = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/peek-prompt`,
+      headers: csrfHeaders,
+      payload: {},
+    })) as { messages: Array<{ content: string }> };
+    assert.match(
+      narratedPrompt.messages.map((message) => message.content).join("\n"),
+      /\[spatial_move: destination_id=/u,
+    );
+
+    const narratedMoveMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The story arrives at Lifecycle Harbor." },
+    })) as { id: string };
+    const narratedMoveSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: narratedMoveMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: { type: "move", destinationId: "lifecycle_harbor" },
+    });
+    assert.equal(narratedMoveSnapshot?.currentLocationId, "lifecycle_harbor");
+    assert.match(narratedMoveSnapshot?.transitionCommandId ?? "", /^assistant:/u);
+
+    const invalidMoveMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The story only mentions an unreachable place." },
+    })) as { id: string };
+    const invalidMoveSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: invalidMoveMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: { type: "move", destinationId: "missing_location" },
+    });
+    assert.equal(invalidMoveSnapshot?.currentLocationId, "lifecycle_harbor");
+    assert.equal(invalidMoveSnapshot?.transitionCommandId, null);
+
+    const discoveryMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "A hidden chart room becomes a lasting destination." },
+    })) as { id: string };
+    const discoverySnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: discoveryMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: {
+        type: "discover",
+        name: "Hidden Chart Room",
+        relation: "enter",
+        description: "A chart room concealed behind the harbor office.",
+      },
+    });
+    assert.ok(discoverySnapshot?.currentLocationId?.startsWith("loc_"));
+    const discoveredBranch = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as {
+      currentLocationId: string;
+      definition: { locations: Array<{ id: string; parentId: string | null; name: string }> };
+    };
+    assert.equal(discoveredBranch.currentLocationId, discoverySnapshot?.currentLocationId);
+    const discoveredLocation = discoveredBranch.definition.locations.find(
+      (location) => location.id === discoverySnapshot?.currentLocationId,
+    );
+    assert.equal(discoveredLocation?.parentId, "lifecycle_harbor");
+    assert.equal(discoveredLocation?.name, "Hidden Chart Room");
+
+    const guidanceMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The tracker identifies Lifecycle Harbor." },
+    })) as { id: string };
+    const guidanceSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: guidanceMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      locationGuidance: "Lifecycle Harbor",
+    });
+    assert.equal(guidanceSnapshot?.currentLocationId, "lifecycle_harbor");
+    assert.match(guidanceSnapshot?.transitionCommandId ?? "", /^assistant:/u);
+
     for (const disposableChatId of [branch.id, imported.chatId]) {
       await expectJson(
         app,
@@ -2270,7 +2385,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.1.7");
+    assert.equal(reinstalled.version, "1.2.1");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -2348,7 +2463,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.1.7", status: "active", readiness: "ready" }],
+      [{ version: "1.2.1", status: "active", readiness: "ready" }],
     );
 
     console.info(
