@@ -674,7 +674,7 @@ export function SpatialMapsHome({
                 }`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium">Use in this chat</span>
+                  <span className="block text-xs font-medium">Enable Hierarchical Maps</span>
                   <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
                     {enabledForChat
                       ? "Active in this chat. Saved map context can participate in turns."

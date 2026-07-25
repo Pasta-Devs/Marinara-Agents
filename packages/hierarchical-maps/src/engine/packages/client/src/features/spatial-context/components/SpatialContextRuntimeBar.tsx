@@ -204,9 +204,9 @@ export function SpatialContextRuntimeBar({
       className={cn(
         "relative mb-2 text-[var(--marinara-chat-chrome-panel-text)]",
         pending || !enabled
-          ? "w-full overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] shadow-sm"
+          ? "w-full overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] shadow-sm"
           : cn(
-              "ml-auto h-11 w-11 overflow-visible sm:ml-0 sm:h-auto sm:w-full sm:rounded-xl sm:border sm:border-[var(--marinara-chat-chrome-panel-border)] sm:bg-[var(--background)] sm:shadow-sm",
+              "ml-auto h-11 w-11 overflow-visible sm:ml-0 sm:h-auto sm:w-full sm:rounded-xl sm:border sm:border-[var(--marinara-chat-chrome-panel-border)] sm:bg-[var(--marinara-chat-chrome-panel-bg)] sm:shadow-sm",
               mapOpen ? "sm:overflow-visible" : "sm:overflow-hidden",
             ),
       )}

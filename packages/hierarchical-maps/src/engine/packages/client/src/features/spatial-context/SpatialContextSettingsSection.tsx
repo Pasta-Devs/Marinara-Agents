@@ -1,7 +1,6 @@
-import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, CircleHelp, Map, MapPin } from "lucide-react";
+import { useState, type CSSProperties } from "react";
+import { AlertTriangle, ChevronRight, MapPin } from "lucide-react";
 import { useSpatialContext } from "../../hooks/use-spatial-context";
-import { cn } from "./package-utils";
 
 interface SpatialContextSettingsSectionProps {
   chatId: string;
@@ -9,58 +8,6 @@ interface SpatialContextSettingsSectionProps {
   enabledForChat: boolean;
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
   onOpenEditor: () => void;
-}
-
-function SettingsSection({
-  label,
-  icon,
-  count,
-  help,
-  style,
-  children,
-}: {
-  label: string;
-  icon: ReactNode;
-  count: number;
-  help: string;
-  style?: CSSProperties;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const toggle = () => setOpen((value) => !value);
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
-    event.preventDefault();
-    toggle();
-  };
-  return (
-    <div className="border-b border-[var(--border)]" style={style}>
-      <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        onClick={toggle}
-        onKeyDown={onKeyDown}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-[var(--accent)]/50"
-      >
-        <span className="text-[var(--marinara-chat-chrome-accent)]">{icon}</span>
-        <span className="flex-1 text-xs font-semibold">{label}</span>
-        {count > 0 && (
-          <span className="rounded-full bg-[var(--primary)]/15 px-1.5 py-0.5 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]">
-            {count}
-          </span>
-        )}
-        <span title={help} aria-label={help} className="text-[var(--marinara-chat-chrome-accent)]">
-          <CircleHelp size="0.75rem" />
-        </span>
-        <ChevronDown
-          size="0.75rem"
-          className={cn("text-[var(--marinara-chat-chrome-accent)] transition-transform", open && "rotate-180")}
-        />
-      </div>
-      {open && <div className="px-4 pb-3 pt-3">{children}</div>}
-    </div>
-  );
 }
 
 export function SpatialContextSettingsSection({
@@ -91,13 +38,7 @@ export function SpatialContextSettingsSection({
   };
 
   return (
-    <SettingsSection
-      label="Hierarchical map"
-      icon={<Map size="0.875rem" />}
-      count={activeCount}
-      help="Give the AI spatial orientation with nested locations. Only the current location context is active during a chat."
-      style={style}
-    >
+    <div className="px-3 py-3" style={style}>
       <div className="mb-3 space-y-2">
         <button
           type="button"
@@ -112,7 +53,7 @@ export function SpatialContextSettingsSection({
           }`}
         >
           <span className="min-w-0 flex-1">
-            <span className="block text-xs font-medium text-[var(--foreground)]">Use in this chat</span>
+            <span className="block text-xs font-medium text-[var(--foreground)]">Enable Hierarchical Maps</span>
             <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
               {enabledForChat
                 ? "Hierarchical Maps can provide location context during generation."
@@ -147,7 +88,7 @@ export function SpatialContextSettingsSection({
         <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--secondary)]/35 px-3 py-4 text-center">
           <p className="text-xs font-medium text-[var(--foreground)]">Maps is ready to add</p>
           <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-            Turn on “Use in this chat” above to create a map or return to an existing one.
+            Turn on “Enable Hierarchical Maps” above to create a map or return to an existing one.
           </p>
         </div>
       ) : spatial.isLoading ? (
@@ -205,6 +146,6 @@ export function SpatialContextSettingsSection({
           </button>
         </div>
       )}
-    </SettingsSection>
+    </div>
   );
 }
