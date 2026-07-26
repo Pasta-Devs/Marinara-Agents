@@ -65,7 +65,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
   const maxChunksInherited = settings.longTermMemoryMaxChunks == null;
 
   return (
-    <section data-ltm-surface="chat-settings" className="space-y-2">
+    <section data-ltm-surface="chat-settings" className="space-y-2 px-2">
       {readOnly ? (
         <StatusSurface>
           Chat settings are managed by the host and cannot be changed from this
