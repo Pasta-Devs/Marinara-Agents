@@ -87,6 +87,8 @@
       "keyframeCount": 3,
       "animationDurationSeconds": 6,
       "viewerDisplayMode": "floating",
+      "includeCharacterAppearance": true,
+      "useAvatarReferences": true,
       "useNovelAiCharacterPrompts": true
     },
     "promptTemplates": [
