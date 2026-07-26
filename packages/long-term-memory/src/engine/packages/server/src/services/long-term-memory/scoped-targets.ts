@@ -69,7 +69,11 @@ export async function resolveScopedEvidenceUnitTargets({
   }
 
   const targetNoteIds = Array.from(targetIndexes.keys());
-  const targetNotesById = await storage.getNotesByIds(targetNoteIds.filter((noteId) => !safeExistingById.has(noteId)));
+  const targetNotesById = await storage.getNotesByIds(
+    targetNoteIds.filter(
+      (noteId) => ltmNoteIdSchema.safeParse(noteId).success && !safeExistingById.has(noteId),
+    ),
+  );
   const remaps = new Map<string, string>();
   const diagnostics: LtmExtractionDiagnostic[] = [];
 

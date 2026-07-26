@@ -30,6 +30,12 @@ async function main() {
   const { normalizeStructuredSummaryEvidenceUnits } = await import(
     `${source}/structured-summary-normalizer.ts`
   );
+  const { resolveScopedEvidenceUnitTargets } = await import(
+    `${source}/scoped-targets.ts`
+  );
+  const { ltmNoteIdSchema } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"
+  );
 
   const timestamp = "2026-07-21T00:00:00.000Z";
   const sourceNote = (
@@ -453,6 +459,38 @@ async function main() {
   assert.equal(
     oversizedDerivedNoteId.outcome.droppedCandidates[0]?.recovery?.noteId,
     undefined,
+  );
+
+  const strictStorageIds: string[][] = [];
+  const targetResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "timeline_event",
+        subjectId: `a${"a".repeat(119)}`,
+        sectionKey: "event",
+        text: "A long generated note id must not reach strict storage lookup.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [],
+    storage: {
+      getNotesByIds: async (ids) => {
+        strictStorageIds.push(ids);
+        for (const id of ids) ltmNoteIdSchema.parse(id);
+        return new Map();
+      },
+    },
+    scope: {},
+  });
+  assert.deepEqual(strictStorageIds, [[]]);
+  const extractedCompilation = compile(chat, targetResolution.units);
+  assert.equal(extractedCompilation.accounting.keptUnits, 0);
+  assert.equal(extractedCompilation.compiledResponse.mutations.length, 0);
+  assert.equal(
+    extractedCompilation.diagnostics.some(
+      (diagnostic) => diagnostic.details?.validatorCode === "overlong_target_note_id",
+    ),
+    true,
   );
 
   const malformedPayload = parseEvidenceUnitPayload(
