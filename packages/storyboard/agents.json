@@ -6,14 +6,31 @@
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",
+    "execution": "host",
     "modeAllowlist": [
       "game"
     ],
     "defaultTools": [],
     "defaultSettings": {
-      "resultType": "storyboard_plan",
       "defaultPromptTemplateName": "Still Keyframes",
       "defaultPromptTemplateDescription": "Turns the latest completed GM narration into ordered still keyframe illustration prompts.",
+      "illustrationPlannerTemplateIds": [
+        "still-keyframes",
+        "novelai-keyframes",
+        "comic-page-keyframes",
+        "colored-manga-keyframes",
+        "bw-manga-keyframes"
+      ],
+      "animationPlannerTemplateIds": [
+        "still-keyframes-animation",
+        "comic-page-animation",
+        "anime-episode-director",
+        "novelai-keyframes-animation",
+        "colored-manga-keyframes-animation",
+        "bw-manga-keyframes-animation",
+        "ltx-director-storyboard",
+        "ltx-simple-image-to-video"
+      ],
       "illustrationPlannerTemplateId": "still-keyframes",
       "animationPlannerTemplateId": "comic-page-animation",
       "illustrationTemplates": [
@@ -21,19 +38,19 @@
           "id": "game-scene-illustration",
           "name": "Game Scene Illustration",
           "description": "Uses the standard Game Mode scene-illustration formatter. Existing chats keep this behavior by default.",
-          "promptTemplate": "${sceneTitleLine}\nScene moment: ${scenePrompt}\n${finalVisibilityRuleLine}\n${narrativePurposeLine}\n${charactersLine}\n${referenceHandlingLine}\n${appearanceNotesBlock}\n${artDirectionLine}\n${imagePromptInstructionsLine}"
+          "promptTemplate": "${sceneTitleLine}\nScene moment: ${scenePrompt}\n${finalVisibilityRuleLine}\n${narrativePurposeLine}\n${charactersLine}\n${referenceHandlingLine}\n${locationHandlingLine}\n${appearanceNotesBlock}\n${artDirectionLine}\n${imagePromptInstructionsLine}"
         },
         {
           "id": "storyboard-illustration",
           "name": "Storyboard Illustration",
           "description": "Keeps the planner's keyframe description primary while adding character references, appearance, campaign art direction, and image instructions.",
-          "promptTemplate": "${sceneTitleLine}\nStoryboard keyframe: ${scenePrompt}\n${finalVisibilityRuleLine}\n${referenceHandlingLine}\n${appearanceNotesBlock}\n${artDirectionLine}\n${imagePromptInstructionsLine}"
+          "promptTemplate": "${sceneTitleLine}\nStoryboard keyframe: ${scenePrompt}\n${finalVisibilityRuleLine}\n${referenceHandlingLine}\n${locationHandlingLine}\n${appearanceNotesBlock}\n${artDirectionLine}\n${imagePromptInstructionsLine}"
         },
         {
           "id": "storyboard-first-frame",
           "name": "Storyboard First Frame",
           "description": "Sends the planner's complete T=0 scene directly, without adding the keyframe title, prompt labels, or repeated art direction.",
-          "promptTemplate": "${scenePrompt} ${imagePromptInstructionsLine}"
+          "promptTemplate": "${scenePrompt} ${locationHandlingLine} ${imagePromptInstructionsLine}"
         }
       ],
       "videoTemplates": [
@@ -64,6 +81,8 @@
       ],
       "illustrationTemplateId": "game-scene-illustration",
       "videoTemplateId": "cinematic-scene-video",
+      "imageConnectionId": null,
+      "videoConnectionId": null,
       "autoGenerateMode": "illustration",
       "keyframeCount": 3,
       "animationDurationSeconds": 6,
