@@ -38,6 +38,8 @@ export const spatialContextKeys = {
   detail: (chatId: string) => [...spatialContextKeys.all, chatId] as const,
   gameMapReconciliation: (chatId: string) =>
     [...spatialContextKeys.detail(chatId), "game-map-reconciliation"] as const,
+  agentConfiguration: ["spatial-context", "agent-configuration"] as const,
+  connections: ["spatial-context", "connections"] as const,
   generationPromptLibraries: ["spatial-context", "generation-prompt-libraries"] as const,
   turnPromptTemplates: ["spatial-context", "turn-prompt-templates"] as const,
 };
@@ -137,12 +139,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-interface MapsAgentConfigRecord {
+export interface MapsAgentConfigRecord {
+  id: string;
   type: string;
+  name: string;
+  description: string;
+  phase: "pre_generation" | "parallel" | "post_processing";
+  connectionId: string | null;
   settings: unknown;
 }
 
-function parseAgentSettings(value: unknown): Record<string, unknown> {
+export interface MapsConnectionRecord {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+export function parseAgentSettings(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value) as unknown;
@@ -236,6 +249,46 @@ export function useSpatialContext(chatId: string | null) {
   });
 }
 
+export function useSpatialAgentConfiguration() {
+  return useQuery({
+    queryKey: spatialContextKeys.agentConfiguration,
+    queryFn: async () => {
+      const configs = await packageApi.get<MapsAgentConfigRecord[]>("/agents");
+      return configs.find((candidate) => candidate.type === "hierarchical-maps") ?? null;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useSpatialConnections() {
+  return useQuery({
+    queryKey: spatialContextKeys.connections,
+    queryFn: () => packageApi.get<MapsConnectionRecord[]>("/connections"),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useUpdateSpatialAgentConfiguration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: {
+      description: string;
+      phase: "pre_generation";
+      connectionId: string | null;
+      settings: Record<string, unknown>;
+    }) =>
+      packageApi.patch<MapsAgentConfigRecord>(
+        "/chats/spatial-context/agent-configuration",
+        patch,
+      ),
+    onSuccess: (configuration) => {
+      queryClient.setQueryData(spatialContextKeys.agentConfiguration, configuration);
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.generationPromptLibraries });
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.turnPromptTemplates });
+    },
+  });
+}
+
 export function useUpdateSpatialContext() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -318,6 +371,7 @@ export function useUpdateSpatialGenerationPromptLibrary() {
       ),
     onSuccess: (libraries) => {
       queryClient.setQueryData(spatialContextKeys.generationPromptLibraries, libraries);
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.agentConfiguration });
     },
   });
 }
@@ -349,6 +403,7 @@ export function useUpdateSpatialTurnPromptTemplates() {
       ),
     onSuccess: (templates) => {
       queryClient.setQueryData(spatialContextKeys.turnPromptTemplates, templates);
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.agentConfiguration });
     },
   });
 }
