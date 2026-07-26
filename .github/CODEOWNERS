@@ -1,0 +1,11 @@
+# Agent packages are executable code loaded by Marinara Engine. Keep the
+# publishing pipeline, package payloads, and generated trust metadata under
+# explicit maintainer review.
+/.github/CODEOWNERS @SpicyMarinara
+/.github/workflows/ @SpicyMarinara
+/scripts/ @SpicyMarinara
+/schemas/ @SpicyMarinara
+/packages/ @SpicyMarinara
+/sources/ @SpicyMarinara
+/artifacts/ @SpicyMarinara
+/catalog/ @SpicyMarinara

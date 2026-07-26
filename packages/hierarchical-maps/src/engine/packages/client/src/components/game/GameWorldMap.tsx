@@ -9,6 +9,7 @@ import {
   Map as MapIcon,
   PencilLine,
   Route,
+  X,
 } from "lucide-react";
 import {
   compareSpatialLocations,
@@ -19,6 +20,13 @@ import {
 } from "@marinara-engine/shared";
 import { cn, generateClientId } from "../../features/spatial-context/package-utils";
 import {
+  cancelSpatialRoute,
+  findSpatialRoute,
+  reconcileSpatialRoutePlan,
+  startSpatialRoute,
+  useSpatialRoutePlan,
+} from "../../features/spatial-context/spatial-route-plans";
+import {
   setPendingSpatialTransition,
   usePendingSpatialTransition,
 } from "../../features/spatial-context/pending-spatial-transitions";
@@ -28,6 +36,7 @@ interface GameWorldMapProps {
   spatial: SpatialContextResponse;
   disabled?: boolean;
   compact?: boolean;
+  useParentScroll?: boolean;
   onDestinationQueued?: () => void;
   onOpenEditor?: () => void;
 }
@@ -62,6 +71,7 @@ export function GameWorldMap({
   spatial,
   disabled = false,
   compact = false,
+  useParentScroll = false,
   onDestinationQueued,
   onOpenEditor,
 }: GameWorldMapProps) {
@@ -71,6 +81,11 @@ export function GameWorldMap({
   const [selectedId, setSelectedId] = useState<string | null>(spatial.currentLocationId);
   const [showListView, setShowListView] = useState(false);
   const pending = usePendingSpatialTransition(chatId);
+  const routePlan = useSpatialRoutePlan(chatId);
+
+  useEffect(() => {
+    if (routePlan) reconcileSpatialRoutePlan(chatId, spatial);
+  }, [chatId, routePlan, spatial]);
 
   useEffect(() => {
     setViewLocationId(centeredViewLocationId);
@@ -142,6 +157,13 @@ export function GameWorldMap({
     return [...linked.values()].sort((left, right) => compareSpatialLocations(left.location, right.location));
   }, [activeLocations, locationById, selected]);
   const selectedDestination = spatial.destinations.find((destination) => destination.id === selected?.id);
+  const selectedRoute = useMemo(
+    () =>
+      definition && selected
+        ? findSpatialRoute(definition, spatial.currentLocationId, selected.id)
+        : null,
+    [definition, selected, spatial.currentLocationId],
+  );
   const selectedHasChildren = selected
     ? activeLocations.some((location) => location.parentId === selected.id)
     : false;
@@ -167,6 +189,14 @@ export function GameWorldMap({
 
   const queueDestination = () => {
     if (!definition || !spatial.currentLocationId || !selectedDestination || disabled) return;
+    if (
+      routePlan &&
+      routePlan.targetLocationId !== selectedDestination.id &&
+      !window.confirm(`Replace the route to ${routePlan.targetLocationName} with a direct move to ${selectedDestination.name}?`)
+    ) {
+      return;
+    }
+    if (routePlan) cancelSpatialRoute(chatId);
     setPendingSpatialTransition(chatId, {
       transition: {
         destinationId: selectedDestination.id,
@@ -180,6 +210,36 @@ export function GameWorldMap({
       status: "ready",
     });
     onDestinationQueued?.();
+  };
+
+  const planRoute = () => {
+    if (!definition || !spatial.currentLocationId || !selected || disabled || !selectedRoute) return;
+    const firstStep = selectedRoute.steps[0];
+    if (
+      !firstStep ||
+      !spatial.destinations.some((destination) => destination.id === firstStep.locationId)
+    ) {
+      return;
+    }
+    if (
+      (routePlan || pending) &&
+      !window.confirm(
+        routePlan
+          ? `Replace the route to ${routePlan.targetLocationName} with a route to ${selected.name}?`
+          : `Replace the queued destination with a route to ${selected.name}?`,
+      )
+    ) {
+      return;
+    }
+    cancelSpatialRoute(chatId);
+    const created = startSpatialRoute(
+      chatId,
+      definition,
+      spatial.currentLocationId,
+      selected,
+      spatial.destinations,
+    );
+    if (created) onDestinationQueued?.();
   };
 
   const renderLocationRow = (location: SpatialLocation, layer = false) => {
@@ -296,7 +356,35 @@ export function GameWorldMap({
         )}
       </div>
 
-      {pending && (
+      {routePlan ? (
+        <div
+          className={cn(
+            "mx-1 mt-2 flex min-h-11 items-center gap-2 rounded-lg border px-2 text-[0.6875rem]",
+            routePlan.status === "needs_review"
+              ? "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+              : "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+          )}
+          role="status"
+        >
+          {routePlan.status === "needs_review" ? <AlertTriangle size="0.8125rem" /> : <Route size="0.8125rem" />}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold">Route to {routePlan.targetLocationName}</span>
+            <span className="block truncate text-[0.625rem] opacity-75">
+              {routePlan.status === "needs_review"
+                ? "Needs review"
+                : `Next step ${Math.min(routePlan.currentIndex + 1, routePlan.steps.length)} of ${routePlan.steps.length}`}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => cancelSpatialRoute(chatId)}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-foreground/10"
+            aria-label={`Cancel route to ${routePlan.targetLocationName}`}
+          >
+            <X size="0.75rem" />
+          </button>
+        </div>
+      ) : pending && (
         <div
           className={cn(
             "mx-1 mt-2 flex min-h-10 items-center gap-2 rounded-lg border px-2 text-[0.6875rem]",
@@ -313,7 +401,15 @@ export function GameWorldMap({
         </div>
       )}
 
-      <div className={cn("min-h-0 overflow-auto overscroll-contain py-2", compact ? "max-h-[40dvh]" : "max-h-80")}>
+      <div
+        data-marinara-maps-world-scroll={useParentScroll ? "parent" : "self"}
+        className={cn(
+          "min-h-0 py-2",
+          useParentScroll
+            ? "max-h-none overflow-visible"
+            : cn("overflow-auto overscroll-contain", compact ? "max-h-[40dvh]" : "max-h-80"),
+        )}
+      >
         {visibleLocations.length === 0 ? (
           <div className="flex min-h-36 flex-col items-center justify-center px-5 text-center">
             <span className="text-2xl" aria-hidden="true">{viewLocation?.icon || "📍"}</span>
@@ -450,6 +546,24 @@ export function GameWorldMap({
               </div>
             </div>
           )}
+          {selectedRoute && selectedRoute.steps.length > 1 && (
+            <div className="mt-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]/40 p-2">
+              <p className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-panel-muted)]">
+                Shortest route · {selectedRoute.steps.length} hops
+              </p>
+              <ol className="mt-1 space-y-1 text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                {selectedRoute.steps.map((step, index) => (
+                  <li key={`${step.locationId}-${index}`} className="flex items-center gap-1.5">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] text-[0.5625rem] font-semibold">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{step.locationName}</span>
+                    {step.label && <span className="max-w-28 truncate opacity-70">{step.label}</span>}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap justify-end gap-1.5">
             {selectedHasChildren && selected.id !== viewLocation?.id && (
               <button
@@ -468,6 +582,10 @@ export function GameWorldMap({
               <span className="flex min-h-11 items-center gap-1.5 px-2 text-[0.6875rem] font-semibold text-[var(--marinara-chat-chrome-accent)]">
                 <Route size="0.75rem" /> Destination queued
               </span>
+            ) : selected.id === routePlan?.targetLocationId ? (
+              <span className="flex min-h-11 items-center gap-1.5 px-2 text-[0.6875rem] font-semibold text-[var(--marinara-chat-chrome-accent)]">
+                <Route size="0.75rem" /> Route planned
+              </span>
             ) : selectedDestination ? (
               <button
                 type="button"
@@ -478,9 +596,19 @@ export function GameWorldMap({
               >
                 <Route size="0.75rem" /> Set destination
               </button>
+            ) : selectedRoute && selectedRoute.steps.length > 1 ? (
+              <button
+                type="button"
+                onClick={planRoute}
+                disabled={disabled}
+                className="flex min-h-11 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[0.6875rem] font-bold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:opacity-50"
+                aria-label={`Plan route to ${selected.name}`}
+              >
+                <Route size="0.75rem" /> Plan route
+              </button>
             ) : (
               <span className="flex min-h-11 items-center px-2 text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
-                Browse only from here
+                No available route from here
               </span>
             )}
           </div>

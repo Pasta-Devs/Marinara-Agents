@@ -375,9 +375,9 @@ export function EightBallBoard({ chatId }: Props) {
   const move = useEightBallMove(chatId);
   const resign = useResignEightBall(chatId);
 
-  // Hydrate the table on mount / chat switch (no-op if no active game).
+  // Keep the table query active so package SSE invalidations refetch bot moves.
   const active = !!current && current.chatId === chatId;
-  useEightBallState(active ? null : chatId);
+  useEightBallState(chatId);
 
   const view = active ? current : null;
   const disabled = isStreaming || move.isPending || resign.isPending;

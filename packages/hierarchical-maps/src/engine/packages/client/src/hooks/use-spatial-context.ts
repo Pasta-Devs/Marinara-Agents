@@ -8,6 +8,9 @@ import type {
   SpatialContextDefinition,
   SpatialContextResponse,
   SpatialDefinitionIssue,
+  SpatialMapDraftOperation,
+  SpatialMapDraftSize,
+  SpatialOwnerMode,
 } from "@marinara-engine/shared";
 import { PackageApiError, packageApi } from "../features/spatial-context/package-api";
 import {
@@ -15,12 +18,30 @@ import {
   setPendingSpatialTransitionStatus,
 } from "../features/spatial-context/pending-spatial-transitions";
 import { spatialResourceKeys } from "../features/spatial-context/use-spatial-resources";
+import type {
+  MapsSpatialContextResponse,
+  SpatialGenerationPreferences,
+  SpatialGenerationPromptLibraries,
+  SpatialGenerationPromptLibrary,
+  SpatialHierarchyProfile,
+  SpatialTurnPromptTemplates,
+} from "../../../maps-shared/src/maps-model";
+import {
+  SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY,
+  SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY,
+  normalizeSpatialTurnPromptTemplates,
+  parseSpatialGenerationPromptLibraries,
+} from "../../../maps-shared/src/maps-model";
 
 export const spatialContextKeys = {
   all: ["spatial-context"] as const,
   detail: (chatId: string) => [...spatialContextKeys.all, chatId] as const,
   gameMapReconciliation: (chatId: string) =>
     [...spatialContextKeys.detail(chatId), "game-map-reconciliation"] as const,
+  agentConfiguration: ["spatial-context", "agent-configuration"] as const,
+  connections: ["spatial-context", "connections"] as const,
+  generationPromptLibraries: ["spatial-context", "generation-prompt-libraries"] as const,
+  turnPromptTemplates: ["spatial-context", "turn-prompt-templates"] as const,
 };
 
 export type GameMapBindingTarget =
@@ -66,11 +87,33 @@ export interface UpdateSpatialContextInput {
   expectedCurrentLocationId: string | null;
   replacementCurrentLocationId?: string | null;
   definition: SpatialContextDefinition;
+  hierarchyProfile?: SpatialHierarchyProfile;
 }
 
 export interface GenerateSpatialMapDraftInput extends GenerateSpatialMapDraftRequest {
   chatId: string;
+  hierarchyMode?: SpatialHierarchyProfile["mode"];
+  hierarchyProfile?: SpatialHierarchyProfile;
+  generationPreferencesOverride?: SpatialGenerationPreferences;
 }
+
+export type PreviewSpatialMapPromptInput = GenerateSpatialMapDraftInput & {
+  generationPreferencesOverride?: SpatialGenerationPreferences;
+};
+
+export interface SpatialMapPromptPreview {
+  ownerMode: SpatialOwnerMode;
+  operation: SpatialMapDraftOperation;
+  size: SpatialMapDraftSize;
+  maxTokens: number;
+  containsPrivateContext: true;
+  system: string;
+  user: string;
+}
+
+export type MapsGenerateSpatialMapDraftResponse = GenerateSpatialMapDraftResponse & {
+  hierarchyProfile: SpatialHierarchyProfile;
+};
 
 export interface CommitSpatialOwnerTurnInput {
   chatId: string;
@@ -94,6 +137,51 @@ export interface SpatialContextProblem {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+export interface MapsAgentConfigRecord {
+  id: string;
+  type: string;
+  name: string;
+  description: string;
+  phase: "pre_generation" | "parallel" | "post_processing";
+  connectionId: string | null;
+  settings: unknown;
+}
+
+export interface MapsConnectionRecord {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+export function parseAgentSettings(value: unknown): Record<string, unknown> {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return isRecord(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return isRecord(value) ? value : {};
+}
+
+async function readSpatialAgentSettings(): Promise<{
+  libraries: SpatialGenerationPromptLibraries | null;
+  turnPromptTemplates: SpatialTurnPromptTemplates;
+}> {
+  const configs = await packageApi.get<MapsAgentConfigRecord[]>("/agents");
+  const config = configs.find((candidate) => candidate.type === "hierarchical-maps") ?? null;
+  const settings = parseAgentSettings(config?.settings);
+  return {
+    libraries: parseSpatialGenerationPromptLibraries(
+      settings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
+    ),
+    turnPromptTemplates: normalizeSpatialTurnPromptTemplates(
+      settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
+    ),
+  };
 }
 
 function readIssues(value: unknown): SpatialDefinitionIssue[] {
@@ -151,7 +239,7 @@ export function getSpatialContextProblem(error: unknown): SpatialContextProblem 
 export function useSpatialContext(chatId: string | null) {
   return useQuery({
     queryKey: spatialContextKeys.detail(chatId ?? ""),
-    queryFn: () => packageApi.get<SpatialContextResponse>(`/chats/${chatId}/spatial-context`),
+    queryFn: () => packageApi.get<MapsSpatialContextResponse>(`/chats/${chatId}/spatial-context`),
     enabled: !!chatId,
     staleTime: 30_000,
     retry: (failureCount, error) => {
@@ -161,11 +249,51 @@ export function useSpatialContext(chatId: string | null) {
   });
 }
 
+export function useSpatialAgentConfiguration() {
+  return useQuery({
+    queryKey: spatialContextKeys.agentConfiguration,
+    queryFn: async () => {
+      const configs = await packageApi.get<MapsAgentConfigRecord[]>("/agents");
+      return configs.find((candidate) => candidate.type === "hierarchical-maps") ?? null;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useSpatialConnections() {
+  return useQuery({
+    queryKey: spatialContextKeys.connections,
+    queryFn: () => packageApi.get<MapsConnectionRecord[]>("/connections"),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useUpdateSpatialAgentConfiguration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: {
+      description: string;
+      phase: "pre_generation";
+      connectionId: string | null;
+      settings: Record<string, unknown>;
+    }) =>
+      packageApi.patch<MapsAgentConfigRecord>(
+        "/chats/spatial-context/agent-configuration",
+        patch,
+      ),
+    onSuccess: (configuration) => {
+      queryClient.setQueryData(spatialContextKeys.agentConfiguration, configuration);
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.generationPromptLibraries });
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.turnPromptTemplates });
+    },
+  });
+}
+
 export function useUpdateSpatialContext() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, ...request }: UpdateSpatialContextInput) =>
-      packageApi.put<SpatialContextResponse>(`/chats/${chatId}/spatial-context`, request),
+      packageApi.put<MapsSpatialContextResponse>(`/chats/${chatId}/spatial-context`, request),
     onSuccess: (response, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), response);
     },
@@ -197,7 +325,86 @@ export function useCommitSpatialOwnerTurn() {
 export function useGenerateSpatialMapDraft() {
   return useMutation({
     mutationFn: ({ chatId, ...request }: GenerateSpatialMapDraftInput) =>
-      packageApi.post<GenerateSpatialMapDraftResponse>(`/chats/${chatId}/spatial-context/generate`, request),
+      packageApi.post<MapsGenerateSpatialMapDraftResponse>(`/chats/${chatId}/spatial-context/generate`, request),
+  });
+}
+
+export function usePreviewSpatialMapPrompt() {
+  return useMutation({
+    mutationFn: ({ chatId, ...request }: PreviewSpatialMapPromptInput) =>
+      packageApi.post<SpatialMapPromptPreview>(
+        `/chats/${chatId}/spatial-context/generation-prompt/preview`,
+        request,
+      ),
+  });
+}
+
+export function useSpatialGenerationPromptLibraries() {
+  return useQuery({
+    queryKey: spatialContextKeys.generationPromptLibraries,
+    queryFn: async () => (await readSpatialAgentSettings()).libraries,
+    staleTime: 30_000,
+  });
+}
+
+export function useSpatialTurnPromptTemplates() {
+  return useQuery({
+    queryKey: spatialContextKeys.turnPromptTemplates,
+    queryFn: async () => (await readSpatialAgentSettings()).turnPromptTemplates,
+    staleTime: 30_000,
+  });
+}
+
+export function useUpdateSpatialGenerationPromptLibrary() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ownerMode,
+      library,
+    }: {
+      ownerMode: SpatialOwnerMode;
+      library: SpatialGenerationPromptLibrary;
+    }) =>
+      packageApi.put<SpatialGenerationPromptLibraries>(
+        `/chats/spatial-context/global-generation-prompt-libraries/${ownerMode}`,
+        library,
+      ),
+    onSuccess: (libraries) => {
+      queryClient.setQueryData(spatialContextKeys.generationPromptLibraries, libraries);
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.agentConfiguration });
+    },
+  });
+}
+
+export function useUpdateSpatialGenerationPreferences() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, preferences }: { chatId: string; preferences: SpatialGenerationPreferences }) =>
+      packageApi.put<SpatialGenerationPreferences>(
+        `/chats/${chatId}/spatial-context/generation-preferences`,
+        preferences,
+      ),
+    onSuccess: (preferences, variables) => {
+      queryClient.setQueryData<MapsSpatialContextResponse>(
+        spatialContextKeys.detail(variables.chatId),
+        (current) => (current ? { ...current, generationPreferences: preferences } : current),
+      );
+    },
+  });
+}
+
+export function useUpdateSpatialTurnPromptTemplates() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (templates: SpatialTurnPromptTemplates) =>
+      packageApi.put<SpatialTurnPromptTemplates>(
+        "/chats/spatial-context/global-turn-prompt-templates",
+        templates,
+      ),
+    onSuccess: (templates) => {
+      queryClient.setQueryData(spatialContextKeys.turnPromptTemplates, templates);
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.agentConfiguration });
+    },
   });
 }
 

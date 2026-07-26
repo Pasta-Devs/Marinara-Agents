@@ -101,6 +101,38 @@ export function addSpatialLocation(
   return { definition: next, location };
 }
 
+export function startNewSpatialMap(
+  definition: SpatialContextDefinition,
+  preserveExistingLocations: boolean,
+): { definition: SpatialContextDefinition; location: SpatialLocation } {
+  const locations = preserveExistingLocations
+    ? definition.locations.map((location) => ({
+        ...location,
+        status: "archived" as const,
+        ...(location.parentId === null ? { sortOrder: location.sortOrder + 1 } : {}),
+      }))
+    : [];
+  const result = addSpatialLocation(
+    {
+      ...definition,
+      locations,
+      startingLocationId: null,
+    },
+    { name: "New world", kind: "region" },
+  );
+  if (!preserveExistingLocations) return result;
+  const location = { ...result.location, sortOrder: 0 };
+  return {
+    location,
+    definition: {
+      ...result.definition,
+      locations: result.definition.locations.map((candidate) =>
+        candidate.id === location.id ? location : candidate,
+      ),
+    },
+  };
+}
+
 function normalizeChildPresentation(
   definition: SpatialContextDefinition,
   parentId: string,

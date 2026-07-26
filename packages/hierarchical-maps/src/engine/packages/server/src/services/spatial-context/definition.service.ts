@@ -19,8 +19,19 @@ import {
   GameMapBindingError,
   type GameMapBindingReconciliationSelection,
 } from "./game-map-binding.js";
+import {
+  defaultGenerationPreferences,
+  normalizeGenerationPreferences,
+  normalizeHierarchyProfile,
+  spatialGenerationPreferencesSchema,
+  type MapsSpatialContextResponse,
+  type SpatialGenerationPreferences,
+  type SpatialHierarchyProfile,
+} from "../../../../maps-shared/src/maps-model.js";
 
 const METADATA_KEY = "spatialContext";
+const HIERARCHY_PROFILE_KEY = "spatialContextHierarchyProfile";
+const GENERATION_PREFERENCES_KEY = "spatialMapGenerationPreferences";
 
 export type SpatialContextServiceErrorCode =
   | "chat_not_found"
@@ -73,7 +84,9 @@ function buildResponse(
   corrupt = false,
   hasCommittedSpatialHistory = false,
   referenceWarnings: SpatialContextResponse["warnings"] = [],
-): SpatialContextResponse {
+  hierarchyProfile: SpatialHierarchyProfile = normalizeHierarchyProfile(null, definition),
+  generationPreferences: SpatialGenerationPreferences = defaultGenerationPreferences(),
+): MapsSpatialContextResponse {
   if (!definition) {
     return {
       definition: null,
@@ -90,6 +103,8 @@ function buildResponse(
             },
           ]
         : [],
+      hierarchyProfile,
+      generationPreferences,
     };
   }
 
@@ -103,7 +118,16 @@ function buildResponse(
     destinations: resolveSpatialDestinations(definition, effectiveCurrentId),
     warnings: referenceWarnings,
     hasCommittedSpatialHistory,
+    hierarchyProfile,
+    generationPreferences,
   };
+}
+
+function readGenerationPreferences(
+  metadata: Record<string, unknown>,
+  ownerMode: "roleplay" | "game",
+): SpatialGenerationPreferences {
+  return normalizeGenerationPreferences(metadata[GENERATION_PREFERENCES_KEY], ownerMode);
 }
 
 async function resolveLoreReferenceWarnings(
@@ -134,14 +158,27 @@ async function resolveLoreReferenceWarnings(
 export function createSpatialContextService() {
   const persistence = getPackagePersistence();
   return {
-    async get(chatId: string): Promise<SpatialContextResponse> {
+    async get(chatId: string): Promise<MapsSpatialContextResponse> {
       const chat = await persistence.getChat(chatId);
       if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
       assertSupportedMode(chat.mode);
 
       const hasCommittedSpatialHistory = await createSpatialContextStorage(persistence).hasMessageSnapshots(chatId);
-      const stored = readDefinition(parseSpatialMetadata(chat.metadata));
-      if (!stored.definition) return buildResponse(null, null, stored.corrupt, hasCommittedSpatialHistory);
+      const metadata = parseSpatialMetadata(chat.metadata);
+      const stored = readDefinition(metadata);
+      const hierarchyProfile = normalizeHierarchyProfile(metadata[HIERARCHY_PROFILE_KEY], stored.definition);
+      const generationPreferences = readGenerationPreferences(metadata, chat.mode);
+      if (!stored.definition) {
+        return buildResponse(
+          null,
+          null,
+          stored.corrupt,
+          hasCommittedSpatialHistory,
+          [],
+          hierarchyProfile,
+          generationPreferences,
+        );
+      }
 
       const state = await resolveEffectiveSpatialState(chatId, {}, persistence);
       return buildResponse(
@@ -150,7 +187,35 @@ export function createSpatialContextService() {
         false,
         hasCommittedSpatialHistory,
         await resolveLoreReferenceWarnings(stored.definition, persistence),
+        hierarchyProfile,
+        generationPreferences,
       );
+    },
+
+    async updateGenerationPreferences(
+      chatId: string,
+      input: SpatialGenerationPreferences,
+    ): Promise<SpatialGenerationPreferences> {
+      return persistence.withChatLock(chatId, async () => {
+        const chat = await persistence.getChat(chatId);
+        if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
+        assertSupportedMode(chat.mode);
+        const parsed = spatialGenerationPreferencesSchema.safeParse(input);
+        if (!parsed.success) {
+          throw new SpatialContextServiceError(
+            "spatial_replacement_invalid",
+            parsed.error.issues[0]?.message ?? "The generation prompt preference is invalid.",
+            400,
+          );
+        }
+        const metadata = parseSpatialMetadata(chat.metadata);
+        await persistence.updateChatMetadata({
+          chatId,
+          metadata: { ...metadata, [GENERATION_PREFERENCES_KEY]: parsed.data },
+          updatedAt: now(),
+        });
+        return parsed.data;
+      });
     },
 
     async getGameMapBindingReconciliation(chatId: string) {
@@ -233,7 +298,10 @@ export function createSpatialContextService() {
       });
     },
 
-    async update(chatId: string, input: UpdateSpatialContextRequestInput): Promise<SpatialContextResponse> {
+    async update(
+      chatId: string,
+      input: UpdateSpatialContextRequestInput & { hierarchyProfile?: SpatialHierarchyProfile },
+    ): Promise<MapsSpatialContextResponse> {
       return persistence.withChatLock(chatId, async () => {
         const chat = await persistence.getChat(chatId);
         if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
@@ -273,6 +341,10 @@ export function createSpatialContextService() {
           ownerMode: chat.mode,
           revision: currentRevision + 1,
         };
+        const hierarchyProfile = normalizeHierarchyProfile(
+          input.hierarchyProfile ?? metadata[HIERARCHY_PROFILE_KEY],
+          definition,
+        );
         const parsedDefinition = spatialContextDefinitionSchema.safeParse(definition);
         if (!parsedDefinition.success) {
           throw new SpatialContextServiceError(
@@ -322,7 +394,11 @@ export function createSpatialContextService() {
           chat.mode === "game" && !stored.definition && metadata.gameSessionStatus === "ready"
             ? bindGameMapsToExactSpatialLocations(metadata, definition)
             : { metadata, bindingCount: 0 };
-        const nextMetadata = { ...initialGameMapBindings.metadata, [METADATA_KEY]: definition };
+        const nextMetadata = {
+          ...initialGameMapBindings.metadata,
+          [METADATA_KEY]: definition,
+          [HIERARCHY_PROFILE_KEY]: hierarchyProfile,
+        };
         await persistence.transaction(async (transaction) => {
           await transaction.updateChatMetadata({ chatId, metadata: nextMetadata, updatedAt: now() });
 
@@ -369,6 +445,8 @@ export function createSpatialContextService() {
           false,
           hasCommittedSpatialHistory || Boolean(state.visibleAnchor),
           await resolveLoreReferenceWarnings(definition, persistence),
+          hierarchyProfile,
+          readGenerationPreferences(metadata, chat.mode),
         );
       });
     },

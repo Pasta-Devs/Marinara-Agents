@@ -44,9 +44,9 @@ export function RockPaperScissorsBoard({ chatId }: Props) {
   const castRevealTimer = useRef<number | null>(null);
   const lastAnimatedRound = useRef<number | null>(null);
 
-  // Hydrate the match on mount / chat switch (no-op if no active game).
+  // Keep the match query active so package SSE invalidations refetch bot moves.
   const active = !!current && current.chatId === chatId;
-  useRockPaperScissorsState(active ? null : chatId);
+  useRockPaperScissorsState(chatId);
 
   const view = active ? current : null;
   const latestRound = view?.rounds[view.rounds.length - 1] ?? null;

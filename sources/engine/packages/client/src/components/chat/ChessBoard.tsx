@@ -163,9 +163,9 @@ export function ChessBoard({ chatId }: Props) {
   const move = useChessMove(chatId);
   const resign = useResignChess(chatId);
 
-  // Hydrate the board on mount / chat switch (no-op if no active game).
+  // Keep the board query active so package SSE invalidations refetch bot moves.
   const active = !!current && current.chatId === chatId;
-  useChessState(active ? null : chatId);
+  useChessState(chatId);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);

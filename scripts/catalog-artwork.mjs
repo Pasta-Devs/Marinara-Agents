@@ -6,9 +6,5 @@ export function catalogArtworkRelativePath(packageId) {
 }
 
 export function catalogArtworkUrl(packageId) {
-  const baseUrl =
-    packageId === "long-term-memory"
-      ? (process.env.MARINARA_AGENTS_LTM_CATALOG_BASE_URL ?? "https://raw.githubusercontent.com/Promansis/Marinara-Agents/main")
-      : "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main";
-  return `${baseUrl.replace(/\/$/, "")}/${catalogArtworkRelativePath(packageId)}`;
+  return `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/${catalogArtworkRelativePath(packageId)}`;
 }

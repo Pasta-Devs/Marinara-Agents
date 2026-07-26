@@ -91,9 +91,9 @@ export function UnoBoard({ chatId }: Props) {
   const move = useUnoMove(chatId);
   const resign = useResignUno(chatId);
 
-  // Hydrate the board on mount / chat switch (no-op if no active game).
+  // Keep the board query active so package SSE invalidations refetch bot moves.
   const active = !!current && current.chatId === chatId;
-  useUnoState(active ? null : chatId);
+  useUnoState(chatId);
 
   const [pending, setPending] = useState<{ card: UnoCard; kind: "color" | "swap" } | null>(null);
   useEffect(() => setPending(null), [chatId]);

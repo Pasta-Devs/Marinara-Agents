@@ -130,10 +130,13 @@ async function main() {
     assert.equal(previousArtifactManifest.version, "1.0.16");
     const { capabilityPackageManager } = await importEngine<{
       capabilityPackageManager: {
-        install(id: string): Promise<{ version: string; status: string }>;
-        updateInstalledPackagesToLatest(): Promise<{
-          updated: Array<{ id: string; previousVersion: string; version: string }>;
-        }>;
+        install(
+          id: string,
+          expectedVersion?: string,
+        ): Promise<{ version: string; previousVersion?: string }>;
+        pendingUpdates(): Promise<
+          Array<{ id: string; installedVersion: string; version: string }>
+        >;
         uninstall(id: string): Promise<unknown>;
       };
     }>(
@@ -214,10 +217,21 @@ async function main() {
     app = null;
     catalogVersion = "current";
     catalogOnline = true;
-    const updated = await capabilityPackageManager.updateInstalledPackagesToLatest();
-    assert.deepEqual(updated.updated, [
-      { id: "long-term-memory", previousVersion: "1.0.16", version: artifactManifest.version },
+    assert.deepEqual(await capabilityPackageManager.pendingUpdates(), [
+      {
+        id: "long-term-memory",
+        name: "Long-Term Memory",
+        installedVersion: "1.0.16",
+        version: artifactManifest.version,
+        restartRequired: true,
+      },
     ]);
+    const updated = await capabilityPackageManager.install(
+      "long-term-memory",
+      artifactManifest.version as string,
+    );
+    assert.equal(updated.version, artifactManifest.version);
+    assert.equal(updated.previousVersion, "1.0.16");
     catalogOnline = false;
     app = await buildApp();
     assert.equal(

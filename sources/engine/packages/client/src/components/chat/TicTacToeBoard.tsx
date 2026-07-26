@@ -30,9 +30,9 @@ export function TicTacToeBoard({ chatId }: Props) {
   const move = useTicTacToeMove(chatId);
   const resign = useResignTicTacToe(chatId);
 
-  // Hydrate the board on mount / chat switch (no-op if no active game).
+  // Keep the board query active so package SSE invalidations refetch bot moves.
   const active = !!current && current.chatId === chatId;
-  useTicTacToeState(active ? null : chatId);
+  useTicTacToeState(chatId);
 
   const view = active ? current : null;
   if (!view) return null;
