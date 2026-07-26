@@ -10,7 +10,7 @@
   },
   "id": "hierarchical-maps",
   "name": "Hierarchical Maps",
-  "version": "1.2.2",
+  "version": "1.2.0",
   "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
   "engine": {
     "min": "2.3.5",
