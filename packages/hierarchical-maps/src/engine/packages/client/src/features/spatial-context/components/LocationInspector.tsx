@@ -151,7 +151,7 @@ function GalleryImagePicker({
   );
 }
 
-function defaultLocationReferencePrompt(location: SpatialLocation): string {
+export function defaultLocationReferencePrompt(location: SpatialLocation): string {
   const description = location.description.trim();
   return [
     `Wide establishing image of ${location.name.trim() || "this location"}.`,

@@ -1590,6 +1590,149 @@ test("global Hierarchical Maps home edits the current map location types", async
   }
 });
 
+test("Map editor fills missing location artwork with one image per location", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Artwork generation is shared across viewports.");
+  test.setTimeout(90_000);
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: "Maps Artwork Fill",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const artworkDefinition = {
+    ...generatedDefinition,
+    enabled: true,
+    locations: generatedDefinition.locations.map((location) => {
+      if (location.id === "ai_lighthouse") {
+        return {
+          ...location,
+          childPresentation: "map" as const,
+          referenceImageId: "existing-lighthouse-art",
+          useReferenceImage: true,
+        };
+      }
+      if (location.id === "ai_sewers") {
+        return {
+          ...location,
+          childPresentation: "map" as const,
+          mapBackgroundImageId: "existing-sewers-art",
+          mapBackgroundPosition: { x: 40, y: 65 },
+        };
+      }
+      return location;
+    }),
+  };
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: artworkDefinition,
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  const generatedPrompts: string[] = [];
+  try {
+    await page.route(`**/api/gallery/${chat.id}/generate-image`, async (route) => {
+      const payload = route.request().postDataJSON() as { prompt?: unknown };
+      const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
+      generatedPrompts.push(prompt);
+      const id = `generated-map-art-${generatedPrompts.length}`;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id,
+          chatId: chat.id,
+          filePath: `/tmp/${id}.png`,
+          prompt,
+          provider: "test",
+          model: "test-art",
+          width: 1024,
+          height: 1024,
+          createdAt: new Date().toISOString(),
+          url: `/api/gallery/${chat.id}/${id}`,
+        }),
+      });
+    });
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    const fillArtwork = workspace.locator("[data-marinara-fill-map-artwork]");
+    await expect(workspace).toContainText("Create 2 missing images");
+    await fillArtwork.click();
+    await expect(fillArtwork).toHaveCount(0);
+    expect(generatedPrompts).toHaveLength(2);
+    expect(generatedPrompts[0]).toContain("Shrouded Coast");
+    expect(generatedPrompts[1]).toContain("Gloam Harbor");
+
+    const beforeSaveResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    const beforeSave = (await beforeSaveResponse.json()) as {
+      definition: { locations: Array<{ id: string; referenceImageId?: string }> };
+    };
+    expect(beforeSave.definition.locations.find((location) => location.id === "ai_world")?.referenceImageId).toBeUndefined();
+
+    await workspace.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(workspace).toContainText("Saved");
+    const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    const stored = (await storedResponse.json()) as {
+      definition: {
+        locations: Array<{
+          id: string;
+          referenceImageId?: string;
+          useReferenceImage?: boolean;
+          mapBackgroundImageId?: string;
+        }>;
+      };
+    };
+    const locations = new Map(stored.definition.locations.map((location) => [location.id, location]));
+    expect(locations.get("ai_world")).toMatchObject({
+      referenceImageId: "generated-map-art-1",
+      useReferenceImage: true,
+      mapBackgroundImageId: "generated-map-art-1",
+    });
+    expect(locations.get("ai_harbor")).toMatchObject({
+      referenceImageId: "generated-map-art-2",
+      useReferenceImage: true,
+    });
+    expect(locations.get("ai_lighthouse")).toMatchObject({
+      referenceImageId: "existing-lighthouse-art",
+      mapBackgroundImageId: "existing-lighthouse-art",
+    });
+    expect(locations.get("ai_sewers")).toMatchObject({
+      referenceImageId: "existing-sewers-art",
+      useReferenceImage: true,
+      mapBackgroundImageId: "existing-sewers-art",
+    });
+  } finally {
+    await page.unroute(`**/api/gallery/${chat.id}/generate-image`);
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
 test("Deep maps and long labels remain keyboard and touch operable across themes", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const chatResponse = await page.request.post("/api/chats", {

@@ -38,7 +38,7 @@ import { cn } from "./package-utils";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
 import { LocalMapCanvas } from "./components/LocalMapCanvas";
-import { LocationInspector } from "./components/LocationInspector";
+import { defaultLocationReferencePrompt, LocationInspector } from "./components/LocationInspector";
 import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
 import {
   addSpatialLocation,
@@ -55,6 +55,7 @@ import {
 } from "./editor-state";
 import {
   getSpatialExcludedLorebookIds,
+  useGenerateSpatialGalleryImage,
   useSpatialChat,
   useSpatialGalleryImages,
   useSpatialLorebookEntries,
@@ -79,6 +80,12 @@ type FirstSaveResult = {
 
 type ImportIdReport = {
   missing: Array<{ id: string; name: string }>;
+};
+
+type ArtworkProgress = {
+  completed: number;
+  total: number;
+  currentName: string;
 };
 
 type MapConfirmationOptions = {
@@ -145,6 +152,7 @@ export function SpatialMapWorkspace({
   const updateSpatial = useUpdateSpatialContext();
   const { data: chat } = useSpatialChat(chatId);
   const galleryImages = useSpatialGalleryImages(chatId);
+  const generateGalleryImage = useGenerateSpatialGalleryImage(chatId);
   const pendingSetupReview = pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
   const [baseDefinition, setBaseDefinition] = useState<SpatialContextDefinition | null>(null);
   const [draft, setDraft] = useState<SpatialContextDefinition | null>(null);
@@ -182,6 +190,7 @@ export function SpatialMapWorkspace({
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
   const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
+  const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
   const backgroundMoveFrameRef = useRef<number | null>(null);
   const pendingBackgroundMoveRef = useRef<{
     locationId: string;
@@ -295,6 +304,7 @@ export function SpatialMapWorkspace({
     setRegenerateRequestId(0);
     setLayoutEditingMode(null);
     setImportIdReport(null);
+    setArtworkProgress(null);
   }, [chatId, resolveConfirmation]);
 
   useEffect(() => {
@@ -346,6 +356,19 @@ export function SpatialMapWorkspace({
       : layoutEditingMode;
   const currentLocationId = spatial.data?.currentLocationId ?? null;
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
+  const missingArtworkLocations = useMemo(
+    () =>
+      draft?.locations.filter(
+        (location) =>
+          location.status === "active" &&
+          (!location.referenceImageId ||
+            (location.childPresentation === "map" && !location.mapBackgroundImageId)),
+      ) ?? [],
+    [draft],
+  );
+  const artworkImagesToGenerate = missingArtworkLocations.filter(
+    (location) => !location.referenceImageId && !location.mapBackgroundImageId,
+  ).length;
   const canEnable =
     !!draft?.startingLocationId &&
     draft.locations.some((location) => location.id === draft.startingLocationId && location.status === "active");
@@ -399,6 +422,74 @@ export function SpatialMapWorkspace({
     setSavedFlash(false);
     setFirstSaveResult(null);
   }, []);
+
+  const fillMissingArtwork = useCallback(async () => {
+    if (!draft || artworkProgress || missingArtworkLocations.length === 0) return;
+
+    let next = draft;
+    let updatedLocations = 0;
+    let failedImages = 0;
+    setArtworkProgress({ completed: 0, total: missingArtworkLocations.length, currentName: "" });
+
+    for (const [index, target] of missingArtworkLocations.entries()) {
+      setArtworkProgress({
+        completed: index,
+        total: missingArtworkLocations.length,
+        currentName: target.name,
+      });
+
+      let imageId = target.referenceImageId ?? target.mapBackgroundImageId ?? null;
+      if (!imageId) {
+        try {
+          const image = await generateGalleryImage.mutateAsync({
+            prompt: defaultLocationReferencePrompt(target),
+            debugMode,
+          });
+          imageId = image.id;
+        } catch {
+          failedImages += 1;
+          continue;
+        }
+      }
+
+      const current = next.locations.find((location) => location.id === target.id);
+      if (!current) continue;
+      const shouldSetReference = !current.referenceImageId;
+      const shouldSetBackground = current.childPresentation === "map" && !current.mapBackgroundImageId;
+      if (!shouldSetReference && !shouldSetBackground) continue;
+
+      next = updateSpatialLocation(next, current.id, {
+        ...(shouldSetReference ? { referenceImageId: imageId, useReferenceImage: true } : {}),
+        ...(shouldSetBackground
+          ? {
+              mapBackgroundImageId: imageId,
+              mapBackgroundPosition: current.mapBackgroundPosition ?? { x: 50, y: 50 },
+            }
+          : {}),
+      });
+      updatedLocations += 1;
+    }
+
+    if (updatedLocations > 0) {
+      applyDraft(next);
+      toast.success(
+        `Added artwork to ${updatedLocations} location${updatedLocations === 1 ? "" : "s"}. Review it, then Save.`,
+      );
+    }
+    if (failedImages > 0) {
+      toast.error(
+        `${failedImages} location image${failedImages === 1 ? "" : "s"} could not be created. Any successful artwork is still in the working copy.`,
+      );
+    }
+    setArtworkProgress(null);
+  }, [
+    applyDraft,
+    artworkProgress,
+    debugMode,
+    draft,
+    generateGalleryImage,
+    missingArtworkLocations,
+  ]);
 
   const flushBackgroundMove = useCallback(() => {
     backgroundMoveFrameRef.current = null;
@@ -1297,6 +1388,40 @@ export function SpatialMapWorkspace({
         onClose={closeAiBuilder}
         onApply={applyGeneratedDraft}
       />
+
+      {!aiBuilderOpen && missingArtworkLocations.length > 0 && (
+        <section className="flex flex-col gap-3 border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">Location artwork</p>
+            <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+              {artworkImagesToGenerate > 0
+                ? `Create ${artworkImagesToGenerate} missing image${artworkImagesToGenerate === 1 ? "" : "s"}. Each location uses the same image for its reference and child-map background.`
+                : "Reuse existing location art for missing references and child-map backgrounds."}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-marinara-fill-map-artwork
+            onClick={() => void fillMissingArtwork()}
+            disabled={artworkProgress !== null || conflict || updateSpatial.isPending}
+            className="mari-chrome-control min-h-11 shrink-0 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
+          >
+            {artworkProgress ? (
+              <Loader2 size="0.8125rem" className="animate-spin" />
+            ) : (
+              <ImageIcon size="0.8125rem" />
+            )}
+            {artworkProgress
+              ? `Creating ${Math.min(artworkProgress.completed + 1, artworkProgress.total)} of ${artworkProgress.total}`
+              : "Create missing artwork"}
+          </button>
+          {artworkProgress?.currentName && (
+            <span className="sr-only" role="status" aria-live="polite">
+              Creating artwork for {artworkProgress.currentName}
+            </span>
+          )}
+        </section>
+      )}
 
       {!aiBuilderOpen && importIdReport && (
         <section
