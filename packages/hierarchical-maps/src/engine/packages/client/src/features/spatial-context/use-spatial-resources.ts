@@ -35,11 +35,16 @@ export function useSpatialChat(chatId: string | null) {
   });
 }
 
-export function useSpatialGalleryImages(chatId: string) {
+export function useSpatialGalleryImages(chatId: string, enabled = true) {
   return useQuery({
     queryKey: spatialResourceKeys.gallery(chatId),
     queryFn: () => packageApi.get<SpatialGalleryImage[]>(`/gallery/${chatId}`),
+    enabled: enabled && chatId.length > 0,
     staleTime: 60_000,
+    retry: (failureCount, error) => {
+      if (error instanceof PackageApiError && error.status >= 400 && error.status < 500) return false;
+      return failureCount < 3;
+    },
   });
 }
 

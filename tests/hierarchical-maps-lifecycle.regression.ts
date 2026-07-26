@@ -423,6 +423,28 @@ const definition = {
       status: "active",
       sortOrder: 1,
     },
+    {
+      id: "lifecycle_deck",
+      parentId: "lifecycle_world",
+      name: "Deck",
+      kind: "floor",
+      description: "A bare deck name used to detect false location aliases.",
+      childPresentation: "list",
+      links: [],
+      status: "active",
+      sortOrder: 2,
+    },
+    {
+      id: "lifecycle_deck_a",
+      parentId: "lifecycle_world",
+      name: "Deck A",
+      kind: "floor",
+      description: "A lettered deck that must retain its single-letter designator.",
+      childPresentation: "list",
+      links: [],
+      status: "active",
+      sortOrder: 3,
+    },
   ],
 };
 
@@ -2315,6 +2337,43 @@ async function main() {
       directive: { type: "move", destinationId: "lifecycle_harbor" },
     });
     assert.equal(returnToHarborSnapshot?.currentLocationId, "lifecycle_harbor");
+
+    const deckAMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The hidden lift arrives at Deck A." },
+    })) as { id: string };
+    const deckASnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: deckAMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: {
+        type: "discover",
+        name: "Deck A",
+        relation: "link",
+        description: "A lettered deck that is distinct from the generic Deck location.",
+      },
+    });
+    assert.equal(deckASnapshot?.currentLocationId, "lifecycle_deck_a");
+
+    const deckReturnMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The lift returns to Lifecycle Harbor." },
+    })) as { id: string };
+    const deckReturnSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: deckReturnMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: { type: "move", destinationId: "lifecycle_harbor" },
+    });
+    assert.equal(deckReturnSnapshot?.currentLocationId, "lifecycle_harbor");
 
     const discoveryMessage = (await expectJson(app, {
       method: "POST",

@@ -12,6 +12,11 @@ import {
 } from "./maps-model.js";
 
 const MAX_PROMPT_BREADCRUMB_NODES = 20;
+const MAX_PROMPT_KNOWN_LOCATIONS = 50;
+
+type ResolvedOwnerSpatialProjectionWithKnownLocationLimit = ResolvedOwnerSpatialProjection & {
+  omittedKnownLocationCount?: number;
+};
 
 function boundedText(value: string | undefined, maximumLength: number): string {
   return (value ?? "").trim().slice(0, maximumLength);
@@ -25,7 +30,7 @@ export function buildOwnerSpatialProjection(
   chatId: string,
   definition: SpatialContextDefinition | null,
   currentLocationId: string | null,
-): ResolvedOwnerSpatialProjection | null {
+): ResolvedOwnerSpatialProjectionWithKnownLocationLimit | null {
   if (!definition?.enabled || !currentLocationId) return null;
 
   const current = buildSpatialLocationIndex(definition).get(currentLocationId);
@@ -33,8 +38,9 @@ export function buildOwnerSpatialProjection(
 
   const allDestinations = resolveSpatialDestinations(definition, currentLocationId);
   const destinations = allDestinations.slice(0, SPATIAL_CONTEXT_LIMITS.maxPromptDestinations);
-  const knownLocations = definition.locations
-    .filter((location) => location.status === "active")
+  const allKnownLocations = definition.locations.filter((location) => location.status === "active");
+  const knownLocations = allKnownLocations
+    .slice(0, MAX_PROMPT_KNOWN_LOCATIONS)
     .map((location) => ({
       id: location.id,
       path: resolveSpatialBreadcrumb(definition, location.id)
@@ -59,6 +65,7 @@ export function buildOwnerSpatialProjection(
     useReferenceImage: current.useReferenceImage === true,
     destinations,
     knownLocations,
+    omittedKnownLocationCount: Math.max(0, allKnownLocations.length - knownLocations.length),
     lorebookEntryIds: current.lorebookEntryIds,
     omittedDestinationCount: Math.max(0, allDestinations.length - destinations.length),
   };
@@ -94,6 +101,11 @@ export function formatOwnerSpatialPrompt(
         ({ id, path }) => `- ${escapeXmlText(path)} [${escapeXmlText(id)}]`,
       )
     : ["- None"];
+  const omittedKnownLocationCount =
+    (projection as ResolvedOwnerSpatialProjectionWithKnownLocationLimit).omittedKnownLocationCount ?? 0;
+  if (omittedKnownLocationCount > 0) {
+    knownLocationLines.push(`- ${omittedKnownLocationCount} additional known locations omitted.`);
+  }
   const knownLocationIndex = [
     "Known map locations (active breadcrumb names and exact IDs only):",
     ...knownLocationLines,

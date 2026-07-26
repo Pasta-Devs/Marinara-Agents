@@ -84,6 +84,7 @@ export function LocalMapCanvas({
       onPointerDown={(event) => {
         if (!backgroundEditing || !onBackgroundMove || event.button !== 0) return;
         event.preventDefault();
+        event.currentTarget.focus();
         event.currentTarget.setPointerCapture(event.pointerId);
         setDraggingBackground(true);
         backgroundFromPointer(event);

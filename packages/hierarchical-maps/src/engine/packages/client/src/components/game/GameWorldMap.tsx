@@ -83,7 +83,6 @@ export function GameWorldMap({
   const [showListView, setShowListView] = useState(false);
   const pending = usePendingSpatialTransition(chatId);
   const routePlan = useSpatialRoutePlan(chatId);
-  const galleryImages = useSpatialGalleryImages(chatId);
 
   useEffect(() => {
     if (routePlan) reconcileSpatialRoutePlan(chatId, spatial);
@@ -97,6 +96,10 @@ export function GameWorldMap({
   const activeLocations = useMemo(
     () => definition?.locations.filter((location) => location.status === "active") ?? [],
     [definition?.locations],
+  );
+  const galleryImages = useSpatialGalleryImages(
+    chatId,
+    definition?.enabled === true && activeLocations.some((location) => Boolean(location.mapBackgroundImageId)),
   );
   const locationById = useMemo(
     () => new Map(activeLocations.map((location) => [location.id, location])),

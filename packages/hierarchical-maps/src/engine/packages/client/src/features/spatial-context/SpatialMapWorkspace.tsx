@@ -30,6 +30,7 @@ import {
   type GenerateSpatialMapDraftResponse,
   type SpatialContextDefinition,
   type SpatialDefinitionIssue,
+  type SpatialLocationPlacement,
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
 import { getSpatialContextProblem, useSpatialContext, useUpdateSpatialContext } from "../../hooks/use-spatial-context";
@@ -181,6 +182,11 @@ export function SpatialMapWorkspace({
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
   const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
+  const backgroundMoveFrameRef = useRef<number | null>(null);
+  const pendingBackgroundMoveRef = useRef<{
+    locationId: string;
+    position: SpatialLocationPlacement;
+  } | null>(null);
 
   const resolveConfirmation = useCallback((confirmed: boolean) => {
     const resolve = confirmationResolverRef.current;
@@ -238,6 +244,17 @@ export function SpatialMapWorkspace({
       confirmationResolverRef.current = null;
     },
     [],
+  );
+
+  useEffect(
+    () => () => {
+      if (backgroundMoveFrameRef.current !== null) {
+        window.cancelAnimationFrame(backgroundMoveFrameRef.current);
+        backgroundMoveFrameRef.current = null;
+      }
+      pendingBackgroundMoveRef.current = null;
+    },
+    [chatId],
   );
 
   const ownerMode: SpatialOwnerMode = chat?.mode === "game" ? "game" : "roleplay";
@@ -312,6 +329,21 @@ export function SpatialMapWorkspace({
     [baseDefinition, baseHierarchyProfile, draft, draftHierarchyProfile],
   );
   const selected = draft?.locations.find((location) => location.id === selectedId) ?? null;
+  const currentContext = enteredParentId
+    ? (draft?.locations.find((location) => location.id === enteredParentId) ?? null)
+    : null;
+  const currentContextId = currentContext?.id ?? null;
+  const localPresentation = currentContext?.childPresentation ?? "list";
+  const localMapBackgroundImageUrl = currentContext?.mapBackgroundImageId
+    ? galleryImages.data?.find((image) => image.id === currentContext.mapBackgroundImageId)?.url
+    : undefined;
+  const galleryImagesInitiallyLoading =
+    galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined);
+  const effectiveLayoutEditingMode =
+    layoutEditingMode === "background" &&
+    (localPresentation !== "map" || !localMapBackgroundImageUrl)
+      ? null
+      : layoutEditingMode;
   const currentLocationId = spatial.data?.currentLocationId ?? null;
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
   const canEnable =
@@ -350,12 +382,50 @@ export function SpatialMapWorkspace({
     return () => window.clearTimeout(timer);
   }, [savedFlash]);
 
+  useEffect(() => {
+    if (
+      layoutEditingMode !== "background" ||
+      (localPresentation === "map" && localMapBackgroundImageUrl) ||
+      galleryImagesInitiallyLoading
+    ) {
+      return;
+    }
+    setLayoutEditingMode(null);
+  }, [galleryImagesInitiallyLoading, layoutEditingMode, localMapBackgroundImageUrl, localPresentation]);
+
   const applyDraft = useCallback((next: SpatialContextDefinition) => {
     setDraft(next);
     setServerIssues([]);
     setSavedFlash(false);
     setFirstSaveResult(null);
   }, []);
+
+  const flushBackgroundMove = useCallback(() => {
+    backgroundMoveFrameRef.current = null;
+    const pending = pendingBackgroundMoveRef.current;
+    pendingBackgroundMoveRef.current = null;
+    if (!pending) return;
+    setDraft((currentDraft) =>
+      currentDraft
+        ? updateSpatialLocation(currentDraft, pending.locationId, {
+            mapBackgroundPosition: pending.position,
+          })
+        : currentDraft,
+    );
+    setServerIssues([]);
+    setSavedFlash(false);
+    setFirstSaveResult(null);
+  }, []);
+
+  const queueBackgroundMove = useCallback(
+    (position: SpatialLocationPlacement) => {
+      if (!currentContextId) return;
+      pendingBackgroundMoveRef.current = { locationId: currentContextId, position };
+      if (backgroundMoveFrameRef.current !== null) return;
+      backgroundMoveFrameRef.current = window.requestAnimationFrame(flushBackgroundMove);
+    },
+    [currentContextId, flushBackgroundMove],
+  );
 
   const applyHierarchyProfile = useCallback(
     (next: SpatialHierarchyProfile) => {
@@ -842,14 +912,7 @@ export function SpatialMapWorkspace({
     pending: updateSpatial.isPending,
     savedFlash,
   });
-  const currentContext = enteredParentId
-    ? (draft.locations.find((location) => location.id === enteredParentId) ?? null)
-    : null;
   const localChildren = sortedChildren(draft, enteredParentId);
-  const localPresentation = currentContext?.childPresentation ?? "list";
-  const localMapBackgroundImageUrl = currentContext?.mapBackgroundImageId
-    ? galleryImages.data?.find((image) => image.id === currentContext.mapBackgroundImageId)?.url
-    : undefined;
   const localMapBackgroundPosition = currentContext?.mapBackgroundPosition ?? { x: 50, y: 50 };
   const localBreadcrumb = resolveSpatialBreadcrumb(draft, enteredParentId);
   const conflictDifference = compareSpatialDefinitions(spatial.data?.definition ?? null, draft);
@@ -914,27 +977,27 @@ export function SpatialMapWorkspace({
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
-              aria-pressed={layoutEditingMode === "places"}
+              aria-pressed={effectiveLayoutEditingMode === "places"}
               onClick={() => setLayoutEditingMode((value) => (value === "places" ? null : "places"))}
               className={cn(
                 "mari-chrome-control min-h-11 flex-1 justify-center px-3 text-xs sm:flex-none",
-                layoutEditingMode === "places" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+                effectiveLayoutEditingMode === "places" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
               )}
             >
-              <Move size="0.75rem" /> {layoutEditingMode === "places" ? "Done arranging" : "Arrange map"}
+              <Move size="0.75rem" /> {effectiveLayoutEditingMode === "places" ? "Done arranging" : "Arrange map"}
             </button>
             {localMapBackgroundImageUrl && (
               <button
                 type="button"
-                aria-pressed={layoutEditingMode === "background"}
+                aria-pressed={effectiveLayoutEditingMode === "background"}
                 onClick={() => setLayoutEditingMode((value) => (value === "background" ? null : "background"))}
                 className={cn(
                   "mari-chrome-control min-h-11 flex-1 justify-center px-3 text-xs sm:flex-none",
-                  layoutEditingMode === "background" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+                  effectiveLayoutEditingMode === "background" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
                 )}
               >
                 <ImageIcon size="0.75rem" />
-                {layoutEditingMode === "background" ? "Done repositioning" : "Reposition background"}
+                {effectiveLayoutEditingMode === "background" ? "Done repositioning" : "Reposition background"}
               </button>
             )}
           </div>
@@ -945,15 +1008,13 @@ export function SpatialMapWorkspace({
           <LocalMapCanvas
             locations={localChildren}
             selectedId={selectedId}
-            onSelect={(locationId) => selectLocation(locationId, layoutEditingMode === null)}
+            onSelect={(locationId) => selectLocation(locationId, effectiveLayoutEditingMode === null)}
             onEnter={enterLocation}
             backgroundImageUrl={localMapBackgroundImageUrl}
             backgroundPosition={localMapBackgroundPosition}
-            backgroundEditing={layoutEditingMode === "background" && Boolean(localMapBackgroundImageUrl)}
-            onBackgroundMove={(mapBackgroundPosition) =>
-              currentContext && applyDraft(updateSpatialLocation(draft, currentContext.id, { mapBackgroundPosition }))
-            }
-            editing={layoutEditingMode === "places"}
+            backgroundEditing={effectiveLayoutEditingMode === "background"}
+            onBackgroundMove={queueBackgroundMove}
+            editing={effectiveLayoutEditingMode === "places"}
             onMove={(locationId, placement) =>
               applyDraft(updateSpatialLocation(draft, locationId, { placement }))
             }

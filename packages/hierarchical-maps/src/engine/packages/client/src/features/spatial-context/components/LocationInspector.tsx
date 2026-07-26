@@ -215,6 +215,8 @@ export function LocationInspector({
   const [referenceGenerationPrompt, setReferenceGenerationPrompt] = useState("");
   const [generatedReferenceImage, setGeneratedReferenceImage] = useState<SpatialGalleryImage | null>(null);
   const galleryImages = useSpatialGalleryImages(chatId);
+  const galleryPickerLoading =
+    galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined);
   const generateReferenceImage = useGenerateSpatialGalleryImage(chatId);
   const referenceImage = useMemo(
     () => galleryImages.data?.find((image) => image.id === location?.referenceImageId) ?? null,
@@ -496,7 +498,7 @@ export function LocationInspector({
               title="Choose location reference"
               images={galleryImages.data ?? []}
               selectedId={pendingGalleryImageId}
-              isLoading={galleryImages.isLoading || galleryImages.isFetching}
+              isLoading={galleryPickerLoading}
               isError={galleryImages.isError}
               onSelect={setPendingGalleryImageId}
               onConfirm={confirmGallerySelection}
@@ -849,7 +851,7 @@ export function LocationInspector({
                     title="Choose child map background"
                     images={galleryImages.data ?? []}
                     selectedId={pendingGalleryImageId}
-                    isLoading={galleryImages.isLoading || galleryImages.isFetching}
+                    isLoading={galleryPickerLoading}
                     isError={galleryImages.isError}
                     onSelect={setPendingGalleryImageId}
                     onConfirm={confirmGallerySelection}

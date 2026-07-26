@@ -42,7 +42,7 @@ function normalizedLocationName(value: string): string {
     .toLowerCase()
     .replace(/[_-]+/gu, " ")
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\b(?:the|a|an)\b/gu, " ")
+    .replace(/^\s*(?:the|a|an)\s+/u, " ")
     .replace(/\s+/gu, " ")
     .trim();
 }
