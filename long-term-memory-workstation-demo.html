@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Long-Term Memory Workstation Demo</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #100e14;
+      --panel: #15121a;
+      --panel-2: #1b1721;
+      --panel-3: #231a2c;
+      --line: #302839;
+      --line-strong: #4a375b;
+      --text: #f0ebf4;
+      --muted: #a99caf;
+      --faint: #786d80;
+      --accent: #c987ee;
+      --accent-soft: #32213d;
+      --green: #72d39a;
+      --amber: #e4b86b;
+      --danger: #ee7f91;
+      --nav-width: 184px;
+      --browser-width: minmax(270px, 340px);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      letter-spacing: 0;
+    }
+    button, input, select, textarea { font: inherit; }
+    button, select { color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    svg { width: 17px; height: 17px; stroke-width: 1.7; }
+
+    .app { display: grid; grid-template-columns: var(--nav-width) minmax(0, 1fr); height: 100%; }
+    .rail { border-right: 1px solid var(--line); background: #0f0d13; padding: 18px 10px; }
+    .eyebrow { margin: 0 10px 10px; color: #9b85aa; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+    .nav-list { display: grid; gap: 5px; }
+    .nav-item {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      align-items: center;
+      width: 100%;
+      min-height: 44px;
+      padding: 0 11px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+      font-weight: 650;
+    }
+    .nav-item:hover { background: var(--panel-2); color: var(--text); }
+    .nav-item[aria-current="page"] { border-color: var(--line-strong); background: var(--accent-soft); color: var(--accent); }
+    .badge { min-width: 20px; padding: 2px 6px; border-radius: 99px; background: #5e3473; color: #f8eaff; font-size: 10px; text-align: center; }
+
+    .main { display: grid; grid-template-rows: 54px minmax(0, 1fr); min-width: 0; }
+    .command-bar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      min-width: 0;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+      background: #131018;
+    }
+    .stats { display: flex; align-items: center; gap: 22px; min-width: 0; }
+    .stat { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; color: var(--muted); font-size: 11px; }
+    .stat strong { color: var(--text); font-size: 12px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(201, 135, 238, .12); }
+    .dot.green { background: var(--green); }
+    .command-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .activation { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .activation strong { color: var(--text); }
+    .switch { position: relative; width: 38px; height: 22px; border: 0; border-radius: 99px; background: var(--accent); }
+    .switch::after { content: ""; position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: #24162b; }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel-2); color: var(--text); font-weight: 650; }
+    .button:hover { background: #28202e; }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: #211326; }
+    .button.danger { border-color: #703847; color: var(--danger); background: transparent; }
+    .icon-button { width: 36px; padding: 0; }
+
+    .workspace { min-height: 0; overflow: hidden; }
+    .page { display: none; height: 100%; min-width: 0; }
+    .page.active { display: grid; }
+    .page.single { grid-template-rows: auto minmax(0, 1fr); }
+    .page.two { grid-template-columns: var(--browser-width) minmax(0, 1fr); }
+    .page.three { grid-template-columns: var(--browser-width) minmax(440px, 1fr) 290px; }
+
+    .pane { min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid var(--line); }
+    .pane:last-child { border-right: 0; }
+    .pane-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 66px; padding: 16px 14px 12px; border-bottom: 1px solid var(--line); }
+    .pane-header h1, .pane-header h2 { margin: 0; font-size: 16px; line-height: 1.25; }
+    .pane-header p { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+    .count { color: var(--faint); font-size: 10px; white-space: nowrap; }
+    .toolbar { display: grid; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--panel); }
+    .toolbar-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .field { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; background: #121016; color: var(--text); padding: 0 12px; }
+    textarea.field { min-height: 235px; padding: 14px; resize: vertical; line-height: 1.65; }
+    .search-wrap { position: relative; }
+    .search-wrap svg { position: absolute; left: 11px; top: 11px; color: var(--faint); }
+    .search-wrap input { padding-left: 37px; }
+
+    .record-list { display: grid; }
+    .record {
+      width: 100%;
+      min-height: 84px;
+      padding: 12px 14px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      color: inherit;
+      text-align: left;
+    }
+    .record:hover { background: var(--panel-2); }
+    .record.selected { box-shadow: inset 2px 0 var(--accent); background: var(--panel-3); }
+    .record-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .record-title { font-weight: 700; }
+    .record p { margin: 7px 0; color: #c1b6c7; font-family: Georgia, serif; font-size: 11px; line-height: 1.35; }
+    .tag { border: 1px solid var(--line-strong); border-radius: 4px; padding: 2px 5px; color: #cbb8d7; font-size: 9px; }
+    .meta { color: var(--faint); font-size: 9px; }
+    .meta .live { color: var(--green); }
+
+    .editor { background: #121015; }
+    .editor-content { padding: 20px; }
+    .form-grid { display: grid; grid-template-columns: 1.45fr .9fr .9fr; gap: 12px; }
+    .label { display: grid; gap: 7px; color: #b8a9c0; font-size: 10px; font-weight: 650; }
+    .modes { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+    .check { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 6px; }
+    .check input { accent-color: var(--accent); }
+    .memory-copy { font-family: Georgia, serif; font-size: 15px; font-weight: 600; }
+
+    .inspector { background: #100e14; }
+    .inspector-section { padding: 16px; border-bottom: 1px solid var(--line); }
+    .inspector-section h3 { margin: 0 0 13px; color: #9d84a8; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+    .data-list { display: grid; gap: 12px; }
+    .data-row { display: flex; justify-content: space-between; gap: 14px; color: var(--muted); font-size: 10px; }
+    .data-row strong { color: var(--text); font-weight: 600; text-align: right; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { border: 1px solid var(--line); border-radius: 4px; padding: 4px 7px; color: #c9b9d1; font-size: 9px; }
+    .linked { display: flex; align-items: center; gap: 10px; color: #d8a7f1; }
+
+    .page-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 74px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+    .page-top h1 { margin: 0; font-size: 17px; }
+    .page-top p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+    .page-body { min-height: 0; overflow: auto; padding: 18px; }
+    .segmented { display: flex; gap: 2px; width: fit-content; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+    .segment { min-height: 34px; padding: 0 12px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-weight: 650; }
+    .segment[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+    .summary-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--line); background: var(--panel); }
+    .summary-bar strong { display: block; margin-bottom: 3px; }
+    .muted { color: var(--muted); font-size: 11px; }
+    .review-list { display: grid; gap: 10px; max-width: 1120px; }
+    .review-row { display: grid; grid-template-columns: 26px minmax(170px, .7fr) minmax(260px, 1.5fr) auto; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--line); background: var(--panel); }
+    .review-row h2 { margin: 0 0 4px; font-size: 13px; }
+    .change { padding: 10px; border: 1px solid var(--line); background: #110f14; color: #c8bbcD; font-family: Georgia, serif; font-size: 11px; line-height: 1.45; }
+    .review-actions { display: flex; gap: 7px; }
+
+    .source-browser .record { min-height: 72px; }
+    .source-detail { padding: 18px; }
+    .source-detail > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+    .source-detail h2 { margin: 0; font-size: 17px; }
+    .entry-list { display: grid; }
+    .entry { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+    .entry h3 { margin: 0 0 5px; font-size: 13px; }
+    .entry p { max-width: 75ch; margin: 0; color: var(--muted); font-family: Georgia, serif; font-size: 12px; line-height: 1.5; }
+
+    .settings-layout { display: grid; grid-template-columns: minmax(0, 780px); gap: 14px; }
+    .settings-panel { border: 1px solid var(--line); background: var(--panel); }
+    .settings-panel > header { padding: 14px; border-bottom: 1px solid var(--line); }
+    .settings-panel h2 { margin: 0; font-size: 14px; }
+    .settings-panel p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 10px 12px; border: 1px solid var(--line); }
+    .toggle-row strong { display: block; font-size: 12px; }
+    .toggle-row span { color: var(--muted); font-size: 10px; }
+    .activity-list { display: grid; max-width: 1120px; border: 1px solid var(--line); background: var(--panel); }
+    .activity-row { display: grid; grid-template-columns: 92px 120px minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 58px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+    .activity-row:last-child { border-bottom: 0; }
+    .activity-row strong { font-size: 12px; }
+    .activity-status { display: inline-flex; align-items: center; gap: 6px; color: var(--green); font-size: 10px; }
+
+    .mobile-tabs { display: none; }
+    .mobile-nav { display: none; }
+
+    @media (max-width: 1279px) {
+      .page.two, .page.three { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+      .page.two > .pane, .page.three > .pane { display: none; border-right: 0; }
+      .page.two[data-pane="browser"] > .pane.browser,
+      .page.two[data-pane="workbench"] > .pane.workbench,
+      .page.three[data-pane="browser"] > .pane.browser,
+      .page.three[data-pane="workbench"] > .pane.workbench,
+      .page.three[data-pane="details"] > .pane.inspector { display: block; }
+      .mobile-tabs { display: flex; gap: 2px; padding: 6px; border-bottom: 1px solid var(--line); background: #131018; }
+      .mobile-tabs button { flex: 1; min-height: 34px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-weight: 650; }
+      .mobile-tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+    }
+
+    @media (max-width: 760px) {
+      body { overflow: hidden; }
+      .app { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 60px; }
+      .rail { display: none; }
+      .main { grid-row: 1; grid-template-rows: 48px minmax(0, 1fr); }
+      .command-bar { padding: 0 10px; gap: 8px; }
+      .stat:nth-child(n+2), .activation, .switch, .command-actions .primary span:last-child { display: none; }
+      .page-top { align-items: flex-start; min-height: 68px; padding: 12px; }
+      .page-top p { max-width: 44ch; }
+      .page-body { padding: 12px; }
+      .mobile-nav { display: grid; grid-row: 2; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: #0f0d13; }
+      .mobile-nav button { display: grid; place-items: center; gap: 2px; border: 0; background: transparent; color: var(--muted); font-size: 9px; }
+      .mobile-nav button[aria-current="page"] { color: var(--accent); }
+      .mobile-nav svg { width: 16px; height: 16px; }
+      .form-grid, .settings-grid { grid-template-columns: 1fr; }
+      .review-row { grid-template-columns: 24px minmax(0, 1fr); }
+      .review-row .change, .review-row .review-actions { grid-column: 2; }
+      .review-actions { flex-wrap: wrap; }
+      .summary-bar { align-items: flex-start; }
+      .summary-bar .button { display: none; }
+      .segmented { width: 100%; overflow-x: auto; }
+      .segment { flex: 1; white-space: nowrap; }
+      .source-detail { padding: 12px; }
+      .source-detail > header { display: grid; }
+      .entry { grid-template-columns: 22px minmax(0, 1fr); }
+      .entry > .tag { grid-column: 2; width: fit-content; }
+      .activity-row { grid-template-columns: 72px minmax(0, 1fr); gap: 6px 10px; }
+      .activity-row > :nth-child(n+3) { grid-column: 2; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <p class="eyebrow">Workspace</p>
+      <nav class="nav-list" aria-label="Long-Term Memory sections">
+        <button class="nav-item" data-page="vault" aria-current="page"><span data-icon="database"></span><span>Memories</span></button>
+        <button class="nav-item" data-page="review"><span data-icon="check-square"></span><span>Review</span><span class="badge">4</span></button>
+        <button class="nav-item" data-page="sources"><span data-icon="book"></span><span>Sources</span></button>
+        <button class="nav-item" data-page="activity"><span data-icon="activity"></span><span>Activity</span></button>
+        <button class="nav-item" data-page="settings"><span data-icon="settings"></span><span>Settings</span></button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="command-bar">
+        <div class="stats">
+          <span class="stat"><i class="dot"></i><strong>42</strong> memories</span>
+          <span class="stat"><strong>186</strong> indexed chunks</span>
+          <span class="stat"><i class="dot green"></i>Vault healthy</span>
+        </div>
+        <div class="command-actions">
+          <span class="activation">Active in <strong>The Observatory</strong></span>
+          <button class="switch" aria-label="Active in The Observatory" aria-pressed="true"></button>
+          <button class="button primary"><span data-icon="plus"></span><span>Add memories</span></button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <section class="page three active" data-page-panel="vault" data-pane="workbench">
+          <div class="mobile-tabs" role="tablist" aria-label="Memory workspace">
+            <button data-pane-target="browser" role="tab">Memories</button>
+            <button data-pane-target="workbench" role="tab" aria-selected="true">Editor</button>
+            <button data-pane-target="details" role="tab">Details</button>
+          </div>
+          <aside class="pane browser">
+            <header class="pane-header"><h1>Memory vault</h1><span class="count">7 shown</span></header>
+            <div class="toolbar">
+              <label class="search-wrap"><span data-icon="search"></span><input class="field" value="" placeholder="Search memories" aria-label="Search memories"></label>
+              <div class="toolbar-row"><select class="field" aria-label="Memory type"><option>All types</option></select><select class="field" aria-label="Memory status"><option>Any status</option></select></div>
+            </div>
+            <div class="record-list">
+              <button class="record"><span class="record-line"><span class="record-title">Mara Vey</span><span class="tag">character</span></span><p>Mara seals the observatory gate at dusk.</p><span class="meta"><span class="live">●</span> Active &nbsp;/&nbsp; Updated 18 Jul</span></button>
+              <button class="record selected"><span class="record-line"><span class="record-title">The Observatory</span><span class="tag">world</span></span><p>An ancient observatory above the eastern cliffs.</p><span class="meta"><span class="live">●</span> Active &nbsp;/&nbsp; Updated 17 Jul</span></button>
+              <button class="record"><span class="record-line"><span class="record-title">Eastern Gate</span><span class="tag">scene</span></span><p>The cobalt key remains hidden beneath the arch.</p><span class="meta"><span class="live">●</span> Active &nbsp;/&nbsp; Updated 16 Jul</span></button>
+              <button class="record"><span class="record-line"><span class="record-title">Mara and Elias</span><span class="tag">relationship</span></span><p>Their trust is cautious but steadily growing.</p><span class="meta"><span class="live">●</span> Active &nbsp;/&nbsp; Updated 15 Jul</span></button>
+              <button class="record"><span class="record-line"><span class="record-title">Chapter 12: The Signal</span><span class="tag">timeline</span></span><p>A signal appeared shortly before midnight.</p><span class="meta"><span class="live">●</span> Active &nbsp;/&nbsp; Updated 14 Jul</span></button>
+            </div>
+          </aside>
+          <article class="pane workbench editor">
+            <header class="pane-header"><div><h2>The Observatory</h2><p>World / Active / Updated 17 Jul</p></div><button class="button"><span data-icon="info"></span>Details</button></header>
+            <div class="editor-content">
+              <div class="form-grid">
+                <label class="label">Title<input class="field" value="The Observatory"></label>
+                <label class="label">Type<select class="field"><option>world</option></select></label>
+                <label class="label">Status<select class="field"><option>active</option></select></label>
+              </div>
+              <div class="modes" aria-label="Available modes">
+                <label class="check"><input type="checkbox" checked> Conversation</label>
+                <label class="check"><input type="checkbox" checked> Roleplay</label>
+                <label class="check"><input type="checkbox" checked> Game</label>
+              </div>
+              <label class="label">Memory text<textarea class="field memory-copy">The Observatory stands above the eastern cliffs, where sea fog reaches the lower terraces before dawn. Its brass lens assembly still tracks the stars, although the western gearing slips in cold weather.</textarea></label>
+            </div>
+          </article>
+          <aside class="pane inspector">
+            <header class="pane-header"><h2>Details</h2><button class="button icon-button" aria-label="Close details"><span data-icon="x"></span></button></header>
+            <section class="inspector-section"><h3>Recall</h3><div class="data-list"><div class="data-row"><span>Scope</span><strong>Global</strong></div><div class="data-row"><span>Available modes</span><strong>Conversation, Roleplay, Game</strong></div><div class="data-row"><span>Recall count</span><strong>31</strong></div><div class="data-row"><span>Last recall</span><strong>8 min ago</strong></div></div></section>
+            <section class="inspector-section"><h3>Tags</h3><div class="chips"><span class="chip">location</span><span class="chip">cliffs</span><span class="chip">+ lens chamber</span><span class="chip">+ sea fog</span></div></section>
+            <section class="inspector-section"><h3>Linked memories</h3><div class="linked"><span data-icon="database"></span>Mara Vey</div></section>
+            <section class="inspector-section"><h3>Record</h3><div class="data-list"><div class="data-row"><span>Memory ID</span><strong>mem_01J2W7KP</strong></div><div class="data-row"><span>Created</span><strong>1 Jun 2026</strong></div><div class="data-row"><span>Updated</span><strong>17 Jul</strong></div><div class="data-row"><span>Source</span><strong>Lorebook: Observatory</strong></div></div></section>
+            <section class="inspector-section"><div class="toolbar-row"><button class="button">Archive</button><button class="button danger">Delete</button></div></section>
+          </aside>
+        </section>
+
+        <section class="page single" data-page-panel="review">
+          <header class="page-top"><div><h1>Review queue</h1><p>Confirm extracted memories before they enter the vault.</p></div><button class="button primary">Accept eligible (4)</button></header>
+          <div class="page-body">
+            <div class="summary-bar"><div><strong>4 changes ready</strong><span class="muted">2 source records, 4 pending, 0 blocked</span></div><button class="button">Select all</button></div>
+            <div class="review-list">
+              <article class="review-row"><input type="checkbox" checked aria-label="Select Eastern Gate"><div><h2>Eastern Gate</h2><span class="muted">Lorebook / New memory</span></div><div class="change">The cobalt key is hidden beneath the eastern arch, wrapped in oilcloth.</div><div class="review-actions"><button class="button primary">Accept</button><button class="button danger">Skip</button></div></article>
+              <article class="review-row"><input type="checkbox" checked aria-label="Select Mara Vey"><div><h2>Mara Vey</h2><span class="muted">Chat summary / Update</span></div><div class="change">Add to background: Mara closes the upper gate each evening before the fog arrives.</div><div class="review-actions"><button class="button primary">Accept</button><button class="button danger">Skip</button></div></article>
+              <article class="review-row"><input type="checkbox" checked aria-label="Select Chapter 12"><div><h2>Chapter 12: The Signal</h2><span class="muted">Chat summary / Timeline event</span></div><div class="change">A narrow-band signal appeared at 23:48 and repeated every eleven minutes.</div><div class="review-actions"><button class="button primary">Accept</button><button class="button danger">Skip</button></div></article>
+              <article class="review-row"><input type="checkbox" checked aria-label="Select Mara and Elias"><div><h2>Mara and Elias</h2><span class="muted">Character / Relationship update</span></div><div class="change">Their working trust strengthened after Elias repaired the lower lens track.</div><div class="review-actions"><button class="button primary">Accept</button><button class="button danger">Skip</button></div></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="page two" data-page-panel="sources" data-pane="browser">
+          <div class="mobile-tabs" role="tablist" aria-label="Sources workspace"><button data-pane-target="browser" aria-selected="true">Sources</button><button data-pane-target="workbench">Entries</button></div>
+          <aside class="pane browser source-browser">
+            <header class="pane-header"><div><h1>Sources</h1><p>Browse content available for import.</p></div><span class="count">3 groups</span></header>
+            <div class="toolbar"><div class="segmented" role="tablist" aria-label="Source type"><button class="segment">Chats</button><button class="segment">Characters</button><button class="segment" aria-selected="true">Lorebooks</button></div><label class="search-wrap"><span data-icon="search"></span><input class="field" placeholder="Search lorebooks" aria-label="Search lorebooks"></label></div>
+            <div class="record-list">
+              <button class="record selected"><span class="record-line"><span class="record-title">The Observatory</span><span class="tag">18 entries</span></span><p>Locations, instruments, staff, and recorded phenomena.</p><span class="meta">12 imported / 4 updates</span></button>
+              <button class="record"><span class="record-line"><span class="record-title">Coastal Provinces</span><span class="tag">31 entries</span></span><p>Settlements, roads, tides, and regional customs.</p><span class="meta">8 imported / 23 new</span></button>
+              <button class="record"><span class="record-line"><span class="record-title">Guild Records</span><span class="tag">12 entries</span></span><p>Membership, obligations, archives, and disputes.</p><span class="meta">Not imported</span></button>
+            </div>
+          </aside>
+          <article class="pane workbench source-detail">
+            <header><div><h2>The Observatory</h2><p class="muted">18 entries / 12 imported / 4 updates available</p></div><div class="review-actions"><button class="button">Sync selected (2)</button><button class="button primary">Import selected (3)</button></div></header>
+            <div class="entry-list">
+              <article class="entry"><input type="checkbox" checked aria-label="Select Lens Chamber"><div><h3>Lens Chamber</h3><p>The brass lens assembly occupies the upper chamber and requires manual correction in cold weather.</p></div><span class="tag">Update available</span></article>
+              <article class="entry"><input type="checkbox" checked aria-label="Select Eastern Gate"><div><h3>Eastern Gate</h3><p>A narrow service entrance in the outer wall, opened with a cobalt key kept beneath the arch.</p></div><span class="tag">New</span></article>
+              <article class="entry"><input type="checkbox" aria-label="Select Signal Log"><div><h3>Signal Log</h3><p>Records narrow-band signals, their intervals, and the corresponding orientation of the lens array.</p></div><span class="tag">Current</span></article>
+              <article class="entry"><input type="checkbox" checked aria-label="Select Fog Bell"><div><h3>Fog Bell</h3><p>The lower terrace bell sounds when visibility falls below the eastern marker post.</p></div><span class="tag">New</span></article>
+            </div>
+          </article>
+        </section>
+
+        <section class="page single" data-page-panel="activity">
+          <header class="page-top"><div><h1>Activity</h1><p>Extraction, recall, and maintenance events from the memory system.</p></div><button class="button">Refresh</button></header>
+          <div class="page-body">
+            <div class="summary-bar"><div><strong>Recent activity</strong><span class="muted">All operations completed normally.</span></div><div class="segmented" role="tablist" aria-label="Activity filters"><button class="segment" aria-selected="true">All</button><button class="segment">Recall</button><button class="segment">Extraction</button></div></div>
+            <div class="activity-list">
+              <article class="activity-row"><span class="muted">8 min ago</span><strong>Recall</strong><span>31 chunks considered, 6 memories added to The Observatory.</span><span class="activity-status"><i class="dot green"></i>Complete</span></article>
+              <article class="activity-row"><span class="muted">21 min ago</span><strong>Extraction</strong><span>Chapter 12 summary produced 3 proposed memory changes.</span><span class="activity-status"><i class="dot green"></i>Complete</span></article>
+              <article class="activity-row"><span class="muted">1 hr ago</span><strong>Source sync</strong><span>The Observatory lorebook found 2 updates and 1 new entry.</span><span class="activity-status"><i class="dot green"></i>Complete</span></article>
+              <article class="activity-row"><span class="muted">Yesterday</span><strong>Maintenance</strong><span>Recall index rebuilt from 42 saved memories.</span><span class="activity-status"><i class="dot green"></i>Complete</span></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="page single" data-page-panel="settings">
+          <header class="page-top"><div><h1>Memory settings</h1><p>Global recall, extraction, and vault maintenance.</p></div><button class="button primary">Save settings</button></header>
+          <div class="page-body">
+            <div class="segmented" role="tablist" aria-label="Memory settings sections"><button class="segment" aria-selected="true">Recall</button><button class="segment">Extraction</button><button class="segment">Maintenance</button><button class="segment">Debug</button></div>
+            <div class="settings-layout" style="margin-top: 14px">
+              <section class="settings-panel"><header><h2>Global recall</h2><p>Defaults used by every chat unless that chat overrides them.</p></header><div class="settings-grid">
+                <label class="label">Recall style<select class="field"><option>Balanced</option></select></label>
+                <label class="label">Maximum recalled memories<input class="field" type="number" value="20"></label>
+                <label class="label">Recall budget tokens<input class="field" type="number" value="4096"></label>
+                <label class="label">Recent messages for recall<input class="field" type="number" value="4"></label>
+                <div class="toggle-row"><div><strong>Include resolved memories</strong><span>Allow completed threads in recall.</span></div><button class="switch" aria-label="Include resolved memories" aria-pressed="true"></button></div>
+                <div class="toggle-row"><div><strong>Keyword matching</strong><span>Combine exact terms with semantic recall.</span></div><button class="switch" aria-label="Keyword matching" aria-pressed="true"></button></div>
+              </div></section>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <nav class="mobile-nav" aria-label="Long-Term Memory sections">
+      <button data-page="vault" aria-current="page"><span data-icon="database"></span>Memories</button>
+      <button data-page="review"><span data-icon="check-square"></span>Review</button>
+      <button data-page="sources"><span data-icon="book"></span>Sources</button>
+      <button data-page="activity"><span data-icon="activity"></span>Activity</button>
+      <button data-page="settings"><span data-icon="settings"></span>Settings</button>
+    </nav>
+  </div>
+
+  <script>
+    const icons = {
+      database: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
+      'check-square': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m7 12 3 3 7-7"/></svg>',
+      book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13Z"/><path d="M8 7h8M8 11h6"/></svg>',
+      activity: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>',
+      settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>',
+      plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>',
+      search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>',
+      info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+      x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18"/></svg>'
+    };
+
+    document.querySelectorAll('[data-icon]').forEach((node) => {
+      node.innerHTML = icons[node.dataset.icon] || '';
+    });
+
+    function openPage(page) {
+      document.querySelectorAll('[data-page-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.pagePanel === page));
+      document.querySelectorAll('[data-page]').forEach((button) => {
+        if (button.dataset.page === page) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      });
+    }
+
+    document.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => openPage(button.dataset.page)));
+
+    const requestedPage = new URLSearchParams(location.search).get('page');
+    if (requestedPage && document.querySelector(`[data-page-panel="${requestedPage}"]`)) openPage(requestedPage);
+
+    document.querySelectorAll('[data-pane-target]').forEach((button) => button.addEventListener('click', () => {
+      const page = button.closest('[data-page-panel]');
+      page.dataset.pane = button.dataset.paneTarget;
+      page.querySelectorAll('[data-pane-target]').forEach((tab) => tab.setAttribute('aria-selected', String(tab === button)));
+    }));
+
+    document.querySelectorAll('.segment').forEach((button) => button.addEventListener('click', () => {
+      button.parentElement.querySelectorAll('.segment').forEach((tab) => tab.setAttribute('aria-selected', String(tab === button)));
+    }));
+
+    document.querySelectorAll('.switch').forEach((button) => button.addEventListener('click', () => {
+      const active = button.getAttribute('aria-pressed') === 'true';
+      button.setAttribute('aria-pressed', String(!active));
+      button.style.background = active ? 'var(--line-strong)' : 'var(--accent)';
+    }));
+  </script>
+</body>
+</html>
