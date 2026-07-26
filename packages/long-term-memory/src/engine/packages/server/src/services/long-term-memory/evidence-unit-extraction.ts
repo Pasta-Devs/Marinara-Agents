@@ -238,6 +238,7 @@ export function evidenceUnitResponseFormat(options: {
                 bucket: { type: "string", enum: options.allowedBuckets },
                 subjectId: { type: "string", pattern: "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$", maxLength: 120 },
                 sectionKey: { type: "string", pattern: "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$", maxLength: 80 },
+                title: { type: "string", minLength: 1, maxLength: 80 },
                 text: { type: "string", minLength: 1, maxLength: 2_000 },
                 claimKind: { type: "string", enum: ["static", "change"] },
                 importance: { type: "string", enum: LTM_EXTRACTION_IMPORTANCE_VALUES },
@@ -805,6 +806,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
               }
             : {}),
           sectionKey: "real lowercase_snake_case section",
+          title: "optional short memory label, maximum 80 characters; do not copy a sentence from text",
           text: "compact memory text, not transcript summary",
           claimKind: '"static" for an enduring fact/state; "change" for an event or event-caused outcome',
           importance: "one of critical, major, moderate, minor",

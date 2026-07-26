@@ -4,7 +4,12 @@ import { randomUUID } from "node:crypto";
 async function main() {
   const source =
     "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { compileEvidenceUnitExtraction, parseEvidenceUnitPayload } =
+  const {
+    compileEvidenceUnitExtraction,
+    evidenceUnitMessages,
+    evidenceUnitResponseFormat,
+    parseEvidenceUnitPayload,
+  } =
     await import(`${source}/evidence-unit-extraction.ts`);
   const { compileLtmEvidenceUnits } = await import(
     `${source}/evidence-unit-compiler.ts`
@@ -59,9 +64,11 @@ async function main() {
         | "character_fact"
         | "relationship_state"
         | "world_fact"
+        | "thread"
         | "tone";
       subjectId: string;
       sectionKey: string;
+      title?: string;
       text: string;
       claimKind?: "static" | "change";
       links?: Array<{
@@ -353,6 +360,25 @@ async function main() {
   );
 
   const sourceHash = sourceHashForLtmSourceNote(chat);
+  const extractionMessages = evidenceUnitMessages({
+    sourceNote: chat,
+    sourceText: chat.sections.source.text,
+    existingNotes: [],
+    scope: {},
+    modes: ["roleplay"],
+    sourceHash,
+    mode: "roleplay",
+  } as any);
+  const unitFields = JSON.parse(String(extractionMessages[1]?.content)).unitFields;
+  assert.match(unitFields.title, /short memory label/i);
+  assert.equal(
+    evidenceUnitResponseFormat({
+      allowedBuckets: ["timeline_event"],
+      sourceHash,
+    }).json_schema.schema.properties.units.items.properties.title.maxLength,
+    80,
+  );
+
   const parsedSourcePrefixedLink = parseEvidenceUnitPayload(
     {
       summary: "Source-prefixed link normalization",
@@ -488,6 +514,133 @@ async function main() {
   );
   assert.ok(profileMutation, "tone extraction must update the derived profile");
   assert.deepEqual(profileMutation?.evidence, [`source_note:${chat.id}`]);
+
+  const titleCases: Array<Parameters<typeof unit>[1]> = [
+    {
+      bucket: "timeline_event",
+      subjectId: "argument_strained_trust",
+      sectionKey: "event",
+      title: "Trust-Straining Argument",
+      text: "Alice and Rowan argued, straining their trust.",
+    },
+    {
+      bucket: "thread",
+      subjectId: "repair_their_trust",
+      sectionKey: "summary",
+      title: "Repair Their Trust",
+      text: "Alice and Rowan need to repair their trust after the argument.",
+      claimKind: "static",
+    },
+    {
+      bucket: "world_fact",
+      subjectId: "observatory_script",
+      sectionKey: "facts",
+      title: "Observatory Script",
+      text: "The observatory script can be read by Mara.",
+      claimKind: "static",
+    },
+    {
+      bucket: "tone",
+      subjectId: "guarded_register",
+      sectionKey: "observations",
+      title: "Guarded Register",
+      text: "The conversation keeps a guarded register.",
+      claimKind: "static",
+    },
+    {
+      bucket: "character_fact",
+      subjectId: "mara",
+      sectionKey: "abilities",
+      title: "Should Be Ignored For Character",
+      text: "Mara can read the observatory script.",
+      claimKind: "static",
+      subjectNames: ["Mara"],
+    },
+    {
+      bucket: "relationship_state",
+      subjectId: "alice_rowan",
+      sectionKey: "state",
+      title: "Should Be Ignored For Relationship",
+      text: "Alice and Rowan trust each other less after the argument.",
+      claimKind: "change",
+      subjectNames: ["Alice", "Rowan"],
+      links: [{ target: "timeline_argument_strained_trust", relation: "caused_by" }],
+    },
+  ];
+  const compileTitleCases = (cases: Array<Parameters<typeof unit>[1]>) =>
+    compileLtmEvidenceUnits({
+      units: cases.map((input) => unit(chat, input)),
+      existingNotes: [],
+      scope: {},
+      modes: ["roleplay"],
+      createdAt: timestamp,
+    });
+  const titledCreateCompilation = compileTitleCases(titleCases);
+  const createdTitles = new Map(
+    titledCreateCompilation.mutations
+      .filter((mutation): mutation is Extract<(typeof titledCreateCompilation.mutations)[number], { kind: "create_note" }> => mutation.kind === "create_note")
+      .map((mutation) => [mutation.note.type, mutation.note.title]),
+  );
+  assert.equal(createdTitles.get("timeline_event"), "Trust-Straining Argument");
+  assert.equal(createdTitles.get("thread"), "Repair Their Trust");
+  assert.equal(createdTitles.get("world"), "Observatory Script");
+  assert.equal(createdTitles.get("tone"), "Guarded Register");
+  assert.equal(createdTitles.get("character"), "Mara");
+  assert.equal(createdTitles.get("relationship"), "Alice and Rowan");
+
+  const untitledCreateCompilation = compileTitleCases(
+    titleCases.map(({ title: _title, ...input }) => input),
+  );
+  const fallbackTitles = new Map(
+    untitledCreateCompilation.mutations
+      .filter((mutation): mutation is Extract<(typeof untitledCreateCompilation.mutations)[number], { kind: "create_note" }> => mutation.kind === "create_note")
+      .map((mutation) => [mutation.note.type, mutation.note.title]),
+  );
+  assert.equal(fallbackTitles.get("timeline_event"), "Argument Strained Trust");
+  assert.equal(fallbackTitles.get("thread"), "Repair Their Trust");
+  assert.equal(fallbackTitles.get("world"), "Observatory Script");
+  assert.equal(fallbackTitles.get("tone"), "Tone: Guarded Register");
+  assert.equal(fallbackTitles.get("character"), "Mara");
+  assert.equal(fallbackTitles.get("relationship"), "Alice and Rowan");
+
+  const existingWorld = {
+    id: "world_observatory_script",
+    title: "Manual Observatory Title",
+    type: "world" as const,
+    status: "active" as const,
+    modes: ["roleplay" as const],
+    scope: {},
+    tags: ["typed_memory"],
+    keywords: [],
+    links: [],
+    sections: {
+      facts: { text: "Existing observatory fact.", updatedAt: timestamp },
+    },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    version: 1,
+  };
+  const preservedTitleProjection = projectLtmDraftMutationGroup({
+    existing: existingWorld,
+    mutations: titledCreateCompilation.mutations.filter(
+      (mutation): mutation is Extract<(typeof titledCreateCompilation.mutations)[number], { kind: "create_note" }> =>
+        mutation.kind === "create_note" && mutation.note.id === existingWorld.id,
+    ),
+    context: {
+      source: {
+        sourceNoteId: chat.id,
+        sourceHash: sourceHashForLtmSourceNote(chat),
+      },
+      scope: {},
+      modes: ["roleplay"],
+    },
+    timestamp,
+  });
+  assert.equal(
+    preservedTitleProjection.after.title,
+    "Manual Observatory Title",
+    "existing note titles must be preserved on merge",
+  );
 
   const legacyMissingClaimKind = compile(chat, [
     unit(chat, {

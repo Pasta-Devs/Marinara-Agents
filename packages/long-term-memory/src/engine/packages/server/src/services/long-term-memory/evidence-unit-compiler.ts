@@ -619,15 +619,28 @@ function titleForUnits(
     return subjectNames[0].slice(0, 240);
   if (noteType === "relationship" && subjectNames?.length)
     return subjectNames.join(" and ").slice(0, 240);
+  const extractedTitle = units
+    .map((unit) => unit.title?.trim())
+    .find((title) => title?.length);
+  if (extractedTitle) return extractedTitle.slice(0, 240);
+  return fallbackTitleForUnits(units, noteType);
+}
+
+function fallbackTitleForUnits(units: LtmEvidenceUnit[], noteType: LtmNoteType) {
   const unit = units[0]!;
-  if (noteType === "timeline_event") {
-    return unit.text
-      .replace(/\s+/g, " ")
-      .split(/[.!?;\n]/, 1)[0]!
-      .trim()
-      .slice(0, 240);
+  const subject = humanizeSubjectId(unit.subjectId);
+  if (noteType === "timeline_event") return subject;
+  if (noteType === "thread") {
+    return unit.sectionKey === "summary"
+      ? subject
+      : `${subject}: ${humanizeSubjectId(unit.sectionKey)}`.slice(0, 240);
   }
-  return unit.subjectId
+  if (noteType === "tone") return `Tone: ${subject}`.slice(0, 240);
+  return subject;
+}
+
+function humanizeSubjectId(value: string) {
+  return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
     .slice(0, 240);

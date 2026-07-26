@@ -20,6 +20,7 @@ export const ltmNoteTypeSchema = z.enum([
 ]);
 
 export const ltmNoteTitleSchema = z.string().trim().min(1).max(240);
+export const ltmEvidenceUnitTitleSchema = z.string().trim().min(1).max(80);
 
 export const ltmStatusSchema = z.enum(["active", "resolved", "archived"]);
 
@@ -764,6 +765,7 @@ export const ltmEvidenceUnitSchema = z
     bucket: ltmEvidenceUnitBucketSchema,
     subjectId: ltmIdentifierSchema,
     sectionKey: ltmSectionKeySchema,
+    title: ltmEvidenceUnitTitleSchema.optional(),
     text: z.string().min(1).max(2_000),
     claimKind: ltmClaimKindSchema.default("change"),
     importance: ltmImportanceSchema.default("moderate"),
