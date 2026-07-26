@@ -614,6 +614,7 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
     expect(request.chatId).toBe(chat.id);
     expect(request.connectionId).toBe(connection.id);
     expect(request.setupConfig).not.toHaveProperty("draftSpatialMap");
+    expect(request.setupConfig.gameWorldMapMode).toBe("hierarchical");
     await route.continue();
   });
   await page.route("**/api/game/setup", async (route) => {
@@ -624,12 +625,28 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
       data: {
         gameSessionStatus: "ready",
         gameWorldOverview: "A fogbound coast ruled by rival harbor guilds.",
-        gameMaps: [acceptedGameSetupMap],
-        gameMap: acceptedGameSetupMap,
-        activeGameMapId: acceptedGameSetupMap.id,
+        gameMaps: [],
+        gameMap: null,
+        activeGameMapId: null,
+        gameInitialMapFallback: acceptedGameSetupMap,
       },
     });
     expect(readyResponse.ok()).toBeTruthy();
+    const previewResponse = await page.request.post(`/api/chats/${chat.id}/spatial-context/generation-prompt/preview`, {
+      data: {
+        operation: "create",
+        size: "small",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        debugMode: false,
+      },
+    });
+    expect(previewResponse.ok(), await previewResponse.text()).toBeTruthy();
+    const preview = (await previewResponse.json()) as { system?: string; user?: string };
+    const previewPrompt = `${preview.system ?? ""}\n${preview.user ?? ""}`;
+    expect(previewPrompt).not.toContain("accepted_game_setup_map");
+    expect(previewPrompt).not.toContain("Required accepted Game map location names");
+    expect(previewPrompt).not.toContain(acceptedGameSetupMap.name);
     setupPersisted = true;
     await route.fulfill({
       status: 200,
@@ -2354,7 +2371,7 @@ test("AI map expansion preserves a campaign map and its current location", async
   }
 });
 
-test("Game setup hands an optional map draft into review before Save", async ({ page }, testInfo) => {
+test("Game setup stages an optional hierarchical draft as the sole world map before Start", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const { chat } = await openGameSetupMapDraftReview(page, testInfo);
 
@@ -2407,38 +2424,53 @@ test("Game setup hands an optional map draft into review before Save", async ({ 
     const boundChatResponse = await page.request.get(`/api/chats/${chat.id}`);
     expect(boundChatResponse.ok()).toBeTruthy();
     const boundChat = (await boundChatResponse.json()) as { metadata: unknown };
-    type BoundGameMap = {
+    type StagedGameMap = {
       id: string;
       spatialLocationId?: string;
       nodes: Array<{ id: string; spatialLocationId?: string }>;
     };
-    const boundMetadata =
+    const stagedMetadata =
       typeof boundChat.metadata === "string"
         ? (JSON.parse(boundChat.metadata) as {
-            gameMap: BoundGameMap;
-            gameMaps: BoundGameMap[];
-            activeGameMapId: string;
+            gameMap: null;
+            gameMaps: StagedGameMap[];
+            activeGameMapId: null;
+            gameInitialMapFallback: StagedGameMap;
           })
         : (boundChat.metadata as {
-            gameMap: BoundGameMap;
-            gameMaps: BoundGameMap[];
-            activeGameMapId: string;
+            gameMap: null;
+            gameMaps: StagedGameMap[];
+            activeGameMapId: null;
+            gameInitialMapFallback: StagedGameMap;
           });
-    const expectedNodeBindings = {
-      "gloam-harbor": "ai_harbor",
-      "blackglass-lighthouse": "ai_lighthouse",
+    expect(stagedMetadata.gameMap).toBeNull();
+    expect(stagedMetadata.gameMaps).toEqual([]);
+    expect(stagedMetadata.activeGameMapId).toBeNull();
+    expect(stagedMetadata.gameInitialMapFallback.id).toBe(acceptedGameSetupMap.id);
+    expect(stagedMetadata.gameInitialMapFallback.spatialLocationId).toBeUndefined();
+    expect(
+      Object.fromEntries(stagedMetadata.gameInitialMapFallback.nodes.map((node) => [node.id, node.spatialLocationId])),
+    ).toEqual({
+      "gloam-harbor": undefined,
+      "blackglass-lighthouse": undefined,
       "old-sewers": "existing-old-sewers-binding",
-    };
-    expect(boundMetadata.gameMap.spatialLocationId).toBe("ai_world");
-    expect(
-      Object.fromEntries(boundMetadata.gameMap.nodes.map((node) => [node.id, node.spatialLocationId])),
-    ).toEqual(expectedNodeBindings);
-    expect(boundMetadata.activeGameMapId).toBe(acceptedGameSetupMap.id);
-    const selectedGameMap = boundMetadata.gameMaps.find((map) => map.id === boundMetadata.activeGameMapId);
-    expect(selectedGameMap?.spatialLocationId).toBe("ai_world");
-    expect(
-      Object.fromEntries((selectedGameMap?.nodes ?? []).map((node) => [node.id, node.spatialLocationId])),
-    ).toEqual(expectedNodeBindings);
+    });
+
+    const startResponse = await page.request.post("/api/game/start", { data: { chatId: chat.id } });
+    expect(startResponse.ok(), await startResponse.text()).toBeTruthy();
+    expect((await startResponse.json()) as { status: string }).toMatchObject({ status: "active" });
+
+    const startedChatResponse = await page.request.get(`/api/chats/${chat.id}`);
+    expect(startedChatResponse.ok()).toBeTruthy();
+    const startedChat = (await startedChatResponse.json()) as { metadata: unknown };
+    const startedMetadata =
+      typeof startedChat.metadata === "string"
+        ? (JSON.parse(startedChat.metadata) as Record<string, unknown>)
+        : (startedChat.metadata as Record<string, unknown>);
+    expect(startedMetadata.gameInitialMapFallback).toBeNull();
+    expect(startedMetadata.gameMap).toBeNull();
+    expect(startedMetadata.gameMaps).toEqual([]);
+    expect(startedMetadata.activeGameMapId).toBeNull();
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
@@ -2508,6 +2540,20 @@ test("Game setup can skip a generated map without persisting it", async ({ page 
     const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(storedResponse.ok()).toBeTruthy();
     expect(((await storedResponse.json()) as { definition: unknown }).definition).toBeNull();
+
+    const startResponse = await page.request.post("/api/game/start", { data: { chatId: chat.id } });
+    expect(startResponse.ok(), await startResponse.text()).toBeTruthy();
+    const startedChatResponse = await page.request.get(`/api/chats/${chat.id}`);
+    expect(startedChatResponse.ok()).toBeTruthy();
+    const startedChat = (await startedChatResponse.json()) as { metadata: unknown };
+    const startedMetadata =
+      typeof startedChat.metadata === "string"
+        ? (JSON.parse(startedChat.metadata) as Record<string, unknown>)
+        : (startedChat.metadata as Record<string, unknown>);
+    expect(startedMetadata.gameInitialMapFallback).toBeNull();
+    expect(startedMetadata.activeGameMapId).toBe(acceptedGameSetupMap.id);
+    expect((startedMetadata.gameMap as { id?: string } | null)?.id).toBe(acceptedGameSetupMap.id);
+    expect((startedMetadata.gameSetupConfig as { gameWorldMapMode?: string }).gameWorldMapMode).toBe("standard");
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
