@@ -66,10 +66,10 @@ export function LongTermMemoryNavigation({
         aria-current={active ? "page" : undefined}
         onClick={() => onDestinationChange(item.id)}
         className={mobile
-          ? `relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[0.625rem] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] ${active ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`
+          ? `relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1.5 px-2 text-[0.625rem] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] ${active ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`
           : `flex min-h-11 shrink-0 items-center justify-between gap-3 rounded-lg border px-3 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${active ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]" : "border-[var(--border)] bg-[var(--secondary)]/45 text-[var(--muted-foreground)] hover:bg-[var(--accent)]"}`}
       >
-        {mobile ? <Icon aria-hidden="true" size="1rem" /> : null}
+        {mobile ? <Icon aria-hidden="true" size="1.125rem" /> : null}
         <span>{mobile ? item.shortLabel : item.label}</span>
         {typeof badge === "number" && badge > 0 ? (
           <span

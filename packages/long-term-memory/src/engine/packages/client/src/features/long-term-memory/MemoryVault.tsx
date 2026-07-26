@@ -232,9 +232,9 @@ function Pill({
         type="button"
         onClick={onRemove}
         aria-label={`Remove ${label ?? String(children)}`}
-        className="grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-md hover:bg-[var(--accent)]"
       >
-        <X size="0.75rem" />
+        <X size="0.875rem" />
       </button>
     </span>
   );
@@ -1017,7 +1017,7 @@ export default function MemoryVault({
               onClick={() => setSearch("")}
               className="absolute right-1 top-1 grid h-9 w-9 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
             >
-              <X size="0.875rem" />
+              <X size="1rem" />
             </button>
           ) : null}
         </label>
@@ -1652,9 +1652,9 @@ export default function MemoryVault({
                                 update("sections", next);
                               }}
                               aria-label={`Remove ${key} section`}
-                              className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
+                              className="grid h-9 w-9 place-items-center rounded-md text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
                             >
-                              <Trash2 size="0.75rem" />
+                              <Trash2 size="0.875rem" />
                             </button>
                           ) : null}
                         </div>

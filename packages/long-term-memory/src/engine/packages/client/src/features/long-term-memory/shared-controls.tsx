@@ -60,10 +60,10 @@ export function IconButton({
       aria-label={label}
       title={label}
       data-ltm-control="icon-button"
-      className={`inline-grid min-h-11 min-w-11 place-items-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50 ${destructive ? "border-[var(--destructive)]/35 text-[var(--destructive)] hover:bg-[var(--destructive)]/10" : "border-[var(--border)] bg-[var(--secondary)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"} ${className}`}
+      className={`inline-grid h-11 w-11 shrink-0 place-items-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50 ${destructive ? "border-[var(--destructive)]/35 text-[var(--destructive)] hover:bg-[var(--destructive)]/10" : "border-[var(--border)] bg-[var(--secondary)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"} ${className}`}
       {...props}
     >
-      <Icon aria-hidden="true" size="0.875rem" />
+      <Icon aria-hidden="true" size="1rem" />
     </button>
   );
 }
@@ -187,7 +187,7 @@ export function InfoPopover({
         aria-controls={open ? `${id}-panel` : undefined}
         aria-describedby={open ? `${id}-panel` : undefined}
         data-ltm-info={label}
-        className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
         onMouseEnter={show}
         onMouseLeave={scheduleClose}
         onFocus={show}
@@ -204,7 +204,7 @@ export function InfoPopover({
         }}
         onMouseDown={(event) => event.preventDefault()}
       >
-        <Info aria-hidden="true" size="0.875rem" />
+        <Info aria-hidden="true" size="1rem" />
       </button>
       {open
         ? createPortal(

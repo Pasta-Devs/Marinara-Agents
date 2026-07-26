@@ -3,15 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BrainCircuit,
+  CirclePlus,
   Pencil,
-  Plus,
   Settings2,
   Upload,
 } from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
-import { Button, InfoPopover, StatusSurface } from "./shared-controls";
+import { Button, IconButton, InfoPopover, StatusSurface } from "./shared-controls";
 import type {
   CapabilityProps,
   LongTermMemoryDestination,
@@ -162,15 +162,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]"
     >
       <header className="sticky top-0 z-10 flex min-h-14 flex-wrap items-center gap-x-3 border-b border-[var(--border)] bg-[var(--background)] px-4 py-1">
-        <button
-          type="button"
+        <IconButton
+          icon={ArrowLeft}
+          label="Back to Agents"
           data-ltm-control="back"
           onClick={() => void close()}
-          aria-label="Back to Agents"
-          className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-        >
-          <ArrowLeft aria-hidden="true" size="1rem" />
-        </button>
+          className="border-transparent bg-transparent"
+        />
         <BrainCircuit
           aria-hidden="true"
           size="1.125rem"
@@ -245,7 +243,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 aria-controls="ltm-add-menu"
                 aria-label="Add memories"
               >
-                <Plus aria-hidden="true" size="0.75rem" />
+                <CirclePlus aria-hidden="true" size="0.875rem" />
                 <span className="hidden xl:inline">Add memories</span>
               </Button>
               {addOpen ? (
@@ -306,16 +304,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             </div>
           ) : null}
         </section>
-        <button
-          type="button"
+        <IconButton
+          icon={Settings2}
+          label="Manage package"
           data-ltm-control="manage-package"
           onClick={props.onManagePackage}
-          aria-label="Manage package"
-          title="Manage package"
-          className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-        >
-          <Settings2 aria-hidden="true" size="1rem" />
-        </button>
+          className="border-transparent bg-transparent"
+        />
       </header>
       <div className="flex w-full flex-1 flex-col gap-5 overflow-y-auto px-4 py-5 sm:px-6 md:flex-row">
         <LongTermMemoryNavigation
