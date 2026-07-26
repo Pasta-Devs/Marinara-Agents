@@ -6,7 +6,10 @@ import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
-import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
+import {
+  assertHierarchicalMapsPrivateImportBoundary,
+  assertPackagePrivateImportBoundary,
+} from "./hierarchical-maps-boundary.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
@@ -32,6 +35,12 @@ const hierarchicalMapsOwnedSourcePaths = [
   "packages/client/src/components/game/GameWorldMap.tsx",
   "packages/maps-shared",
 ];
+const longTermMemoryOwnedSourcePaths = [
+  "packages/shared/src/features/agents/long-term-memory",
+  "packages/server/src/services/long-term-memory",
+  "packages/client/src/features/long-term-memory",
+];
+const longTermMemorySourceRoot = join(packagesDir, "long-term-memory/src/engine");
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
   String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "").split(",").filter(Boolean),
@@ -43,14 +52,17 @@ const featureSource = (relativePath, buildRoot = sourceRoot) => {
 };
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id !== "hierarchical-maps") {
+  const packageSourceRoot = feature.id === "hierarchical-maps"
+    ? hierarchicalMapsSourceRoot
+    : feature.packageSourceRoot;
+  if (!packageSourceRoot) {
     return { buildRoot: sourceRoot, cleanup: async () => {} };
   }
-  if (!existsSync(hierarchicalMapsSourceRoot)) {
-    throw new Error("Missing package-owned Hierarchical Maps source");
+  if (!existsSync(packageSourceRoot)) {
+    throw new Error(`Missing package-owned ${feature.name} source`);
   }
-  const buildRoot = await mkdtemp(join(tmpdir(), "marinara-hierarchical-maps-source-"));
-  await cp(hierarchicalMapsSourceRoot, buildRoot, { recursive: true, force: true });
+  const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
+  await cp(packageSourceRoot, buildRoot, { recursive: true, force: true });
   return {
     buildRoot,
     cleanup: () => rm(buildRoot, { recursive: true, force: true }),
@@ -73,6 +85,30 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
 }
 
 const features = [
+  {
+    id: "long-term-memory",
+    version: "1.0.0",
+    minEngineVersion: "2.3.5",
+    maxEngineExclusive: "2.4.0",
+    name: "Long-Term Memory",
+    description: "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "visual_novel", "game"],
+    permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/long-term-memory/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/features/long-term-memory/client-entry.tsx",
+    packageSourceRoot: longTermMemorySourceRoot,
+    ownedSourcePaths: longTermMemoryOwnedSourcePaths,
+    engineBoundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
+    boundaryDisplayName: "Long-Term Memory",
+    capabilityApi: { major: 1, minor: 6 },
+    contributions: {
+      agentDetail: { agentIds: ["long-term-memory"] },
+      slots: ["chat-settings"],
+    },
+  },
   {
     id: "hierarchical-maps",
     version: "1.1.10",
@@ -138,13 +174,23 @@ if (selectedFeatures.length !== requestedFeatureIds.size && requestedFeatureIds.
 const hierarchicalMapsBoundary = selectedFeatures.some((feature) => feature.id === "hierarchical-maps")
   ? await assertHierarchicalMapsPrivateImportBoundary()
   : null;
+const longTermMemoryBoundary = selectedFeatures.some((feature) => feature.id === "long-term-memory")
+  ? await assertPackagePrivateImportBoundary({
+      sourceRoot: longTermMemorySourceRoot,
+      boundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
+      displayName: "Long-Term Memory",
+      capabilityApi: { major: 1, minor: 6 },
+    })
+  : null;
 
 async function bundleServer(feature, output) {
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-entry-${feature.id}-`));
   const prepared = await prepareFeatureBuildRoot(feature);
   try {
     const target = resolve(prepared.buildRoot, feature.serverImport || feature.engineImport);
-    const source = feature.id === "hierarchical-maps"
+    const source = feature.serverEntry
+      ? `export { activate, selfCheck } from ${JSON.stringify(target)};\n`
+      : feature.id === "hierarchical-maps"
       ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
 import * as projection from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/projection.ts"))};
 import * as stateResolution from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/state-resolution.ts"))};
@@ -240,7 +286,7 @@ export async function selfCheck() {
       "--bundle", "--platform=node", "--format=esm", "--target=node22", "--minify",
       "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
       "--external:@huggingface/transformers", "--external:onnxruntime-node", "--external:onnxruntime-web", "--external:sharp",
-      "--external:pino", "--external:pino-pretty",
+      "--external:pino", "--external:pino-pretty", "--external:zod",
       `--alias:@marinara-engine/shared=${packageSharedEntry}`,
       `--metafile=${metafile}`,
       `--outfile=${output}`,
@@ -255,7 +301,9 @@ export async function selfCheck() {
     await captureEngineSources(
       metafile,
       prepared.buildRoot,
-      feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+      feature.id === "hierarchical-maps"
+        ? hierarchicalMapsOwnedSourcePaths
+        : feature.ownedSourcePaths ?? [],
     );
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -701,6 +749,8 @@ function Root({ element }) {
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
+    } else if (feature.clientImport) {
+      source = `import ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
     } else return;
     const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
     const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
@@ -708,7 +758,9 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     await captureEngineSources(
       metafile,
       prepared.buildRoot,
-      feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+      feature.id === "hierarchical-maps"
+        ? hierarchicalMapsOwnedSourcePaths
+        : feature.ownedSourcePaths ?? [],
     );
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -745,7 +797,9 @@ for (const feature of selectedFeatures) {
   };
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
   const serverPath = join(sourceDir, "server.mjs");
-  const serverSourceRoot = feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : sourceRoot;
+  const serverSourceRoot = feature.id === "hierarchical-maps"
+    ? hierarchicalMapsSourceRoot
+    : feature.packageSourceRoot ?? sourceRoot;
   const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
   if (!reuseExistingRuntime && existsSync(serverSource)) {
     await bundleServer(feature, serverPath);
@@ -753,7 +807,7 @@ for (const feature of selectedFeatures) {
     throw new Error(`Missing package-owned server source for ${feature.id}`);
   }
   const serverBuffer = await readFile(serverPath);
-  const hasClient = Boolean(feature.clientName || feature.id === "hierarchical-maps" || feature.id === "conversation-calls");
+  const hasClient = Boolean(feature.clientName || feature.clientImport || feature.id === "hierarchical-maps" || feature.id === "conversation-calls");
   const clientPath = hasClient ? join(sourceDir, "client.js") : null;
   if (clientPath && (!reuseExistingRuntime || rebuiltFeatureClients.has(feature.id))) {
     if (feature.clientName) await bundleGameClient(feature, clientPath);
@@ -763,7 +817,11 @@ for (const feature of selectedFeatures) {
   }
   const clientBuffer = clientPath ? await readFile(clientPath) : null;
   await writeFile(join(sourceDir, "agents.json"), agentsBuffer);
-  const boundary = feature.id === "hierarchical-maps" ? hierarchicalMapsBoundary : null;
+  const boundary = feature.id === "hierarchical-maps"
+    ? hierarchicalMapsBoundary
+    : feature.id === "long-term-memory"
+      ? longTermMemoryBoundary
+      : null;
   const manifest = {
     schemaVersion: boundary ? 2 : 1,
     ...(boundary ? {
@@ -793,6 +851,8 @@ for (const feature of selectedFeatures) {
           playerLabel: feature.playerLabel,
         },
       },
+    } : feature.contributions ? {
+      contributions: feature.contributions,
     } : feature.id === "hierarchical-maps" ? {
       contributions: {
         agentDetail: { agentIds: ["hierarchical-maps"] },
