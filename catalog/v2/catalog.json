@@ -637,7 +637,7 @@
         },
         "id": "hierarchical-maps",
         "name": "Hierarchical Maps",
-        "version": "1.2.2",
+        "version": "1.2.0",
         "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.5",
@@ -697,7 +697,7 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.0.zip",
         "sha256": "d0d43879ffbb833aee34aa84a84c3813a6052d9f89cf6ac7513d027ce16c9692",
         "bytes": 303601
       },
