@@ -24,9 +24,11 @@ async function dismissOnboardingTutorial(page: any) {
 }
 
 async function dismissWhatsNew(page: any) {
-  const gotIt = page.getByRole("button", { name: "Got it" });
-  if (await gotIt.isVisible({ timeout: 3_000 }).catch(() => false))
-    await gotIt.click();
+  const modal = page.getByRole("dialog", { name: "What's New?" });
+  if (await modal.isVisible({ timeout: 10_000 }).catch(() => false)) {
+    await modal.getByRole("button", { name: "Got it" }).click();
+    await expect(modal).toBeHidden();
+  }
 }
 
 async function createChat(page: any, testInfo: any) {
@@ -75,21 +77,56 @@ async function seedNotes(page: any, notes: any[]) {
   expect(imported.ok(), await imported.text()).toBeTruthy();
 }
 
-async function openLongTermMemory(page: any, chatId: string, testInfo: any) {
-  await page.addInitScript((activeChatId) => {
-    localStorage.setItem("marinara-active-chat-id", activeChatId);
-    localStorage.setItem(
-      "marinara-engine-ui",
-      JSON.stringify({
-        state: {
-          hasCompletedOnboarding: true,
-          rightPanelOpen: false,
-          sidebarOpen: false,
-        },
-        version: 75,
-      }),
-    );
-  }, chatId);
+async function expectImagesLoaded(images: any) {
+  await expect
+    .poll(() =>
+      images.evaluateAll((elements: HTMLImageElement[]) =>
+        elements.every((image) => image.naturalWidth > 0),
+      ),
+    )
+    .toBe(true);
+}
+
+async function replayOnboarding(page: any) {
+  await page
+    .getByRole("button", { name: "Show setup guide" })
+    .evaluate((button: HTMLButtonElement) => button.click());
+}
+
+async function openLongTermMemory(
+  page: any,
+  chatId: string,
+  testInfo: any,
+  showOnboarding = false,
+) {
+  await page.addInitScript(
+    ({ activeChatId, showOnboarding }) => {
+      localStorage.setItem("marinara-active-chat-id", activeChatId);
+      if (
+        showOnboarding &&
+        !sessionStorage.getItem("ltm-onboarding-test-initialized")
+      ) {
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
+        sessionStorage.setItem("ltm-onboarding-test-initialized", "true");
+      } else if (!showOnboarding)
+        localStorage.setItem(
+          "marinara-long-term-memory-onboarding-v1",
+          "complete",
+        );
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
+          version: 75,
+        }),
+      );
+    },
+    { activeChatId: chatId, showOnboarding },
+  );
   await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
     await route.fulfill({ status: 204, body: "" });
   });
@@ -165,6 +202,192 @@ test.beforeEach(async ({ page }) => {
       { timeout: 30_000 },
     )
     .toBe(true);
+});
+
+test("Long-Term Memory guides an empty vault and supports replay", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const chat = await createChat(page, testInfo);
+  let mockedMemoryTotal = 0;
+
+  try {
+    await page.route(
+      "**/api/capability-packages/long-term-memory/client*",
+      async (route) => {
+        await route.fulfill({
+          contentType: "text/javascript; charset=utf-8",
+          body: await readFile(
+            join(import.meta.dirname, "../packages/long-term-memory/client.js"),
+          ),
+        });
+      },
+    );
+    await page.route("**/api/long-term-memory/status**", async (route) => {
+      await route.fulfill({
+        json: {
+          initialized: true,
+          directory: "long-term-memory",
+          notes: { total: mockedMemoryTotal, byType: {}, byStatus: {} },
+          events: { logAvailable: false, bytes: 0 },
+          indexes: {
+            health: mockedMemoryTotal === 0 ? "not_built" : "healthy",
+            dirty: false,
+            rebuildState: "idle",
+            errors: [],
+            warnings: [],
+            generatedAt: null,
+            sourceHash: null,
+            noteCount: mockedMemoryTotal === 0 ? null : mockedMemoryTotal,
+            chunkCount: mockedMemoryTotal === 0 ? null : 0,
+            chunkFormatVersion: null,
+            embeddingsAvailable: false,
+            embeddedChunkCount: 0,
+          },
+        },
+      });
+    });
+    await openLongTermMemory(page, chat.id, testInfo, true);
+
+    const guide = page.locator('[data-ltm-surface="onboarding"]');
+    await expect(
+      guide.getByRole("heading", { name: "Meet Long-Term Memory" }),
+    ).toBeVisible();
+    await expect(guide.locator("img")).toHaveCount(2);
+    await expect(
+      guide.locator('img[src$="chibi-professor-mari.png"]'),
+    ).toBeVisible();
+    await expect(guide.locator('img[src$="Mari_wave.png"]')).toBeVisible();
+    await expectImagesLoaded(guide.locator("img"));
+    if (testInfo.project.name.includes("mobile")) {
+      const guideBox = await guide.boundingBox();
+      const mobileNavigationBox = await page
+        .locator('nav[aria-label="Long-Term Memory sections"]:visible')
+        .boundingBox();
+      const viewport = page.viewportSize();
+      expect(guideBox).not.toBeNull();
+      expect(mobileNavigationBox).not.toBeNull();
+      expect(viewport).not.toBeNull();
+      expect(guideBox!.x).toBeGreaterThanOrEqual(0);
+      expect(guideBox!.x + guideBox!.width).toBeLessThanOrEqual(
+        viewport!.width,
+      );
+      expect(guideBox!.y + guideBox!.height).toBeLessThanOrEqual(
+        mobileNavigationBox!.y,
+      );
+    }
+    await guide.getByRole("button", { name: "Next" }).click();
+    await expect(guide).toContainText(`Active in ${chat.name}`);
+    await expect(
+      guide.locator('img[src$="Mari_point_middle_left.png"]'),
+    ).toBeVisible();
+    await expectImagesLoaded(guide.locator("img"));
+    await guide.getByRole("button", { name: "Next" }).click();
+    await expect(
+      guide.locator('img[src$="Mari_explaining.png"]'),
+    ).toBeVisible();
+    await expectImagesLoaded(guide.locator("img"));
+    await guide.getByRole("button", { name: "Open Sources" }).click();
+    await expect(page.locator('[data-ltm-surface="sources"]')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+      )
+      .toBe("complete");
+    await page.reload();
+    await expect(page.locator('[data-ltm-surface="onboarding"]')).toHaveCount(
+      0,
+    );
+    await dismissWhatsNew(page);
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator(
+      testInfo.project.name.includes("mobile")
+        ? '[data-component="RightPanelMobile"]'
+        : '[data-component="RightPanelDesktop"]',
+    );
+    await agentsPanel
+      .locator('[data-agent-name="Long-Term Memory"]')
+      .getByText("Long-Term Memory", { exact: true })
+      .click();
+    await expect(page.locator('[data-ltm-surface="onboarding"]')).toHaveCount(
+      0,
+    );
+    await replayOnboarding(page);
+    await expect(
+      page.getByRole("heading", { name: "Meet Long-Term Memory" }),
+    ).toBeVisible();
+    await page.evaluate(() =>
+      localStorage.removeItem("marinara-long-term-memory-onboarding-v1"),
+    );
+    await guide.getByRole("button", { name: "Skip" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+      )
+      .toBe("complete");
+
+    const navigation = page.locator(
+      'nav[aria-label="Long-Term Memory sections"]:visible',
+    );
+    await navigation.locator('[data-ltm-destination="sources"]').click();
+    await replayOnboarding(page);
+    await guide.getByRole("button", { name: "Next" }).click();
+    await guide.getByRole("button", { name: "Next" }).click();
+    await page.evaluate(() =>
+      localStorage.removeItem("marinara-long-term-memory-onboarding-v1"),
+    );
+    await guide.getByRole("button", { name: "Finish for now" }).click();
+    await expect(page.locator('[data-ltm-surface="vault"]')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+      )
+      .toBe("complete");
+
+    await replayOnboarding(page);
+    await page.evaluate(() =>
+      localStorage.removeItem("marinara-long-term-memory-onboarding-v1"),
+    );
+    await navigation.locator('[data-ltm-destination="settings"]').click();
+    await expect(page.locator('[data-ltm-surface="onboarding"]')).toHaveCount(
+      0,
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+      )
+      .toBe("complete");
+
+    mockedMemoryTotal = 1;
+    await page.evaluate(() =>
+      localStorage.removeItem("marinara-long-term-memory-onboarding-v1"),
+    );
+    await page.reload();
+    await dismissWhatsNew(page);
+    await page.locator('[data-tour="panel-agents"]').click();
+    await page
+      .locator(
+        testInfo.project.name.includes("mobile")
+          ? '[data-component="RightPanelMobile"]'
+          : '[data-component="RightPanelDesktop"]',
+      )
+      .locator('[data-agent-name="Long-Term Memory"]')
+      .getByText("Long-Term Memory", { exact: true })
+      .click();
+    await expect(page.locator('[data-ltm-surface="onboarding"]')).toHaveCount(
+      0,
+    );
+  } finally {
+    await deleteChat(page, chat.id);
+  }
 });
 
 test("Long-Term Memory chat settings link opens the main agent settings", async ({

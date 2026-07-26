@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BrainCircuit,
+  CircleHelp,
   CirclePlus,
   Pencil,
   Settings2,
@@ -11,13 +12,20 @@ import {
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
-import { Button, IconButton, InfoPopover, StatusSurface } from "./shared-controls";
+import {
+  Button,
+  IconButton,
+  InfoPopover,
+  StatusSurface,
+} from "./shared-controls";
 import type {
   CapabilityProps,
   LongTermMemoryDestination,
   LongTermMemoryDestinationProps,
   LtmRecoveryHandoff,
 } from "./types";
+
+const onboardingStorageKey = "marinara-long-term-memory-onboarding-v1";
 
 const destinations = {
   vault: lazy(() => import("./MemoryVault")),
@@ -50,12 +58,29 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   );
   const [recoveryHandoff, setRecoveryHandoff] =
     useState<LtmRecoveryHandoff | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
   const Destination = destinations[destination];
 
   useEffect(() => {
     props.onDirtyChange?.(destinationDirty);
     return () => props.onDirtyChange?.(false);
   }, [destinationDirty, props.onDirtyChange]);
+
+  useEffect(() => {
+    if (!status.isSuccess || status.data.notes.total !== 0) return;
+    try {
+      if (localStorage.getItem(onboardingStorageKey) === "complete") return;
+    } catch {}
+    setOnboardingOpen(true);
+  }, [status.isSuccess, status.data?.notes.total]);
+
+  const completeOnboarding = () => {
+    setOnboardingOpen(false);
+    try {
+      localStorage.setItem(onboardingStorageKey, "complete");
+    } catch {}
+  };
 
   const confirmDestinationChange = async (next: string) => {
     if (!destinationDirty) return true;
@@ -72,6 +97,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const selectDestination = async (next: LongTermMemoryDestination) => {
     if (next === destination) return;
     if (!(await confirmDestinationChange(next))) return;
+    if (onboardingOpen) completeOnboarding();
     setDestinationDirty(false);
     if (next === "review") setReviewSourceNoteId(null);
     if (next === "vault") setOpenedNoteId(null);
@@ -108,10 +134,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestination("vault");
   };
   const openSources = async () => {
-    if (!(await confirmDestinationChange("Sources"))) return;
+    if (!(await confirmDestinationChange("Sources"))) return false;
     setDestinationDirty(false);
     setAddOpen(false);
     setDestination("sources");
+    return true;
   };
   const toggleActivation = async () => {
     if (!props.onEnabledForChatChange) return;
@@ -305,6 +332,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           ) : null}
         </section>
         <IconButton
+          icon={CircleHelp}
+          label="Show setup guide"
+          onClick={() => {
+            setOnboardingStep(0);
+            setOnboardingOpen(true);
+          }}
+          className="border-transparent bg-transparent"
+        />
+        <IconButton
           icon={Settings2}
           label="Manage package"
           data-ltm-control="manage-package"
@@ -329,6 +365,111 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             <StatusSurface tone="danger">
               Long-Term Memory status could not load.
             </StatusSurface>
+          ) : null}
+          {onboardingOpen ? (
+            <section
+              aria-labelledby="ltm-onboarding-title"
+              data-ltm-surface="onboarding"
+              className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--secondary)]/45"
+            >
+              <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
+                <img
+                  src="/sprites/mari/chibi-professor-mari.png"
+                  alt=""
+                  draggable={false}
+                  className="h-10 w-10 shrink-0 object-contain"
+                />
+                <p className="min-w-0 flex-1 text-xs font-semibold">
+                  Professor Mari's setup guide
+                </p>
+                <p
+                  aria-live="polite"
+                  className="shrink-0 text-xs text-[var(--muted-foreground)]"
+                >
+                  Step {onboardingStep + 1} of 3
+                </p>
+              </div>
+              <div className="grid items-center gap-5 p-4 sm:p-6 md:grid-cols-[minmax(0,1fr)_12rem]">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <h2
+                      id="ltm-onboarding-title"
+                      className="text-lg font-semibold"
+                    >
+                      {onboardingStep === 0
+                        ? "Meet Long-Term Memory"
+                        : onboardingStep === 1
+                          ? "Enable It for a Chat"
+                          : "Add Memories"}
+                    </h2>
+                    <p className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]">
+                      {onboardingStep === 0
+                        ? "Long-Term Memory saves durable facts from chats, characters, and lorebooks, then recalls relevant details when they matter. Your existing Memory Settings are ready to use."
+                        : onboardingStep === 1
+                          ? props.chatId
+                            ? props.enabledForChat
+                              ? `Long-Term Memory is active in ${props.chatName ?? "this chat"}.`
+                              : `Use the Active in ${props.chatName ?? "this chat"} switch above to turn it on.`
+                            : "Open a supported chat, then use Chat Settings > Agents > Misc Agents to add Long-Term Memory."
+                          : "Open Sources to import chat summaries, characters, or lorebooks. Imported information appears in Memory Vault and can be recalled in chats where Long-Term Memory is active."}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {onboardingStep > 0 ? (
+                      <Button
+                        onClick={() => setOnboardingStep((step) => step - 1)}
+                      >
+                        Back
+                      </Button>
+                    ) : null}
+                    {onboardingStep < 2 ? (
+                      <Button
+                        primary
+                        onClick={() => setOnboardingStep((step) => step + 1)}
+                      >
+                        Next
+                      </Button>
+                    ) : (
+                      <Button
+                        primary
+                        onClick={async () => {
+                          if (await openSources()) completeOnboarding();
+                        }}
+                      >
+                        Open Sources
+                      </Button>
+                    )}
+                    <Button
+                      onClick={() => {
+                        if (onboardingStep < 2 || destination === "vault")
+                          completeOnboarding();
+                        else void selectDestination("vault");
+                      }}
+                    >
+                      {onboardingStep === 2 ? "Finish for now" : "Skip"}
+                    </Button>
+                  </div>
+                </div>
+                <img
+                  src={
+                    onboardingStep === 0
+                      ? "/sprites/mari/Mari_wave.png"
+                      : onboardingStep === 1
+                        ? "/sprites/mari/Mari_point_middle_left.png"
+                        : "/sprites/mari/Mari_explaining.png"
+                  }
+                  alt={
+                    onboardingStep === 0
+                      ? "Professor Mari welcomes you to Long-Term Memory"
+                      : onboardingStep === 1
+                        ? "Professor Mari points toward the chat activation control"
+                        : "Professor Mari explains how to add memory sources"
+                  }
+                  draggable={false}
+                  className="order-first h-24 w-full object-contain md:order-last md:h-36"
+                />
+              </div>
+            </section>
           ) : null}
           <Suspense
             fallback={
