@@ -698,10 +698,13 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
     await wizard.getByRole("button", { name: "Next" }).click();
     await expect(wizard.getByRole("heading", { name: heading, exact: true })).toBeVisible();
   }
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(wizard.getByRole("heading", { name: "Features", exact: true })).toBeVisible();
+  await wizard.getByRole("button", { name: /Enable Agents/ }).click();
   await wizard.getByRole("button", { name: /Draft with AI/ }).click();
   await wizard.getByRole("button", { name: /Small About 8 places/ }).click();
   await wizard.getByRole("button", { name: "Next" }).click();
-  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(wizard.getByRole("heading", { name: "GM", exact: true })).toBeVisible();
   await wizard.getByRole("button", { name: "Start Game" }).click();
 
   await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
