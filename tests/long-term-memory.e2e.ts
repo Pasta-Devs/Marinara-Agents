@@ -131,7 +131,9 @@ async function openLongTermMemoryChatSettings(page: any, chatId: string) {
   await dismissOnboardingTutorial(page);
   await dismissWhatsNew(page);
   if ((page.viewportSize()?.width ?? 768) < 768) {
-    const mobileMoreOptions = page.getByRole("button", { name: "More options" });
+    const mobileMoreOptions = page.getByRole("button", {
+      name: "More options",
+    });
     await expect(mobileMoreOptions).toBeVisible();
     await mobileMoreOptions.click();
     await expect(mobileMoreOptions).toHaveAttribute("aria-expanded", "true");
@@ -172,6 +174,25 @@ test("Long-Term Memory chat settings link opens the main agent settings", async 
   const chat = await createChat(page, testInfo);
 
   try {
+    await page.route(
+      `**/api/long-term-memory/last-injection/${chat.id}`,
+      async (route) =>
+        route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            memoryCount: 2,
+            tokenCount: 321,
+            memories: [
+              {
+                noteId: "world_gate",
+                title: "Observatory Gate",
+                tokenCount: 180,
+              },
+              { noteId: "character_mara", title: "Mara", tokenCount: 141 },
+            ],
+          }),
+        }),
+    );
     const response = await page.request.patch(
       `/api/chats/${chat.id}/metadata`,
       {
@@ -187,6 +208,15 @@ test("Long-Term Memory chat settings link opens the main agent settings", async 
       '[data-chat-agent-entry="long-term-memory"]',
     );
     await expect(agentEntry).toBeVisible();
+    const lastInjection = agentEntry.locator("[data-ltm-last-injection]");
+    await expect(lastInjection).toContainText("2 memories injected");
+    await expect(lastInjection).toContainText("321 tokens");
+    await lastInjection.locator("summary").click();
+    await expect(lastInjection).toContainText("Observatory Gate");
+    await expect(lastInjection).toContainText("180 tokens");
+    await expect(lastInjection).toContainText("Mara");
+    await expect(lastInjection).toContainText("141 tokens");
+    await expect(lastInjection).not.toContainText(/relevance|score/i);
     if (testInfo.project.name.includes("mobile")) {
       const drawerBox = await drawer.boundingBox();
       const entryBox = await agentEntry.boundingBox();
@@ -198,9 +228,9 @@ test("Long-Term Memory chat settings link opens the main agent settings", async 
       expect(settingsButtonBox).not.toBeNull();
       expect(entryBox!.width).toBeLessThanOrEqual(drawerBox!.width);
       expect(settingsButtonBox!.x).toBeGreaterThanOrEqual(entryBox!.x);
-      expect(settingsButtonBox!.x + settingsButtonBox!.width).toBeLessThanOrEqual(
-        entryBox!.x + entryBox!.width,
-      );
+      expect(
+        settingsButtonBox!.x + settingsButtonBox!.width,
+      ).toBeLessThanOrEqual(entryBox!.x + entryBox!.width);
     }
     await expect(
       agentEntry.getByRole("button", {
@@ -226,27 +256,65 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
   try {
     const operationId = "00000000-0000-4000-8000-000000000001";
     const eventId = "00000000-0000-4000-8000-000000000002";
+    const recallEventId = "00000000-0000-4000-8000-000000000003";
     await page.route("**/api/long-term-memory/debug-log?*", async (route) => {
       const url = new URL(route.request().url());
       if (url.searchParams.get("limit") !== "200") return route.continue();
+      const phase = url.searchParams.get("phase");
+      const llmEvent = {
+        id: eventId,
+        ts: new Date().toISOString(),
+        operationId,
+        phase: "llm",
+        action: "evidence_unit_response",
+        status: "ok",
+        counts: {
+          promptTokens: 12,
+          completionTokens: 8,
+          responseChars: 99,
+        },
+      };
+      const recallEvent = {
+        id: recallEventId,
+        ts: new Date().toISOString(),
+        operationId: "00000000-0000-4000-8000-000000000004",
+        phase: "retrieval",
+        action: "recall_explanation",
+        status: "ok",
+        chatId: chat.id,
+        counts: { selected: 1, rejected: 2, usedTokens: 42 },
+        details: {
+          maxChunks: 20,
+          maxTokens: 4096,
+          scoreThreshold: 0.2,
+          weights: { semanticWeight: 0.6, lexicalWeight: 0.3 },
+          selected: [
+            {
+              noteId: "world_observatory",
+              sectionKey: "summary",
+              score: 0.91,
+              lanes: ["vector", "bm25"],
+            },
+          ],
+          rejected: [
+            {
+              noteId: "world_archive",
+              sectionKey: "summary",
+              score: 0.12,
+              rejectionReason: "score_threshold",
+            },
+          ],
+        },
+      };
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          events: [
-            {
-              id: eventId,
-              ts: new Date().toISOString(),
-              operationId,
-              phase: "llm",
-              action: "evidence_unit_response",
-              status: "ok",
-              counts: {
-                promptTokens: 12,
-                completionTokens: 8,
-                responseChars: 99,
-              },
-            },
-          ],
+          events:
+            phase === "retrieval"
+              ? [recallEvent]
+              : phase || url.searchParams.has("status")
+                ? []
+                : [llmEvent, recallEvent],
         }),
       });
     });
@@ -381,7 +449,9 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(
       settings.getByRole("combobox", { name: "Recall style" }),
     ).toBeVisible();
-    const recallStyle = settings.getByRole("combobox", { name: "Recall style" });
+    const recallStyle = settings.getByRole("combobox", {
+      name: "Recall style",
+    });
     const meaningMatch = settings.getByRole("spinbutton", {
       name: "Meaning match",
     });
@@ -460,7 +530,20 @@ test("Long-Term Memory opens its default vault and exposes every navigation dest
     await expect(activity).toContainText("Prompt: 12 Tokens");
     await expect(activity).toContainText("Response: 8 Tokens");
     await expect(activity).not.toContainText("responseChars");
-    await activity.locator("details > summary").first().click();
+    await expect(activity.locator("[data-ltm-recall-workflow]")).toContainText(
+      "Latest recall workflow",
+    );
+    await activity.getByLabel("Show events").selectOption("errors");
+    await activity.locator("[data-ltm-recall-workflow] > summary").click();
+    await expect(activity).toContainText("Relevance: 91%");
+    await expect(activity).toContainText("world_observatory · summary");
+    await expect(activity).toContainText("Relevance: 12%");
+    await expect(activity).not.toContainText("Final injection:");
+    await activity.getByLabel("Show events").selectOption("all");
+    await activity
+      .locator('[aria-label="Long-Term Memory activity log"] details > summary')
+      .first()
+      .click();
     await activity.getByText("Technical details", { exact: true }).click();
     await activity.getByRole("button", { name: /Copy raw JSON/ }).click();
     await expect(activity.getByText("Copied", { exact: true })).toBeVisible();
@@ -1081,7 +1164,9 @@ test("Long-Term Memory manages imported sources from one workstation", async ({
     await expect(
       importedPanel.getByRole("heading", { name: noteTitle }),
     ).toBeVisible();
-    const importedRow = importedPanel.locator(`[data-ltm-source-id="imported-workstation"]`);
+    const importedRow = importedPanel.locator(
+      `[data-ltm-source-id="imported-workstation"]`,
+    );
     await expect(
       importedPanel.locator("[data-ltm-source-transfer-note]"),
     ).toHaveCount(0);

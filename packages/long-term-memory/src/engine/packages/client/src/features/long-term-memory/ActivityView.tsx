@@ -17,6 +17,7 @@ import { API_ROOT, invalidateLtmQueries, queryKeys, request } from "./api";
 import { Button, InfoPopover, StatusSurface } from "./shared-controls";
 import { humanizeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
+import { LastInjectionSummary } from "./LastInjectionSummary";
 
 type DebugLogResponse = { events: LtmDebugEvent[] };
 type DebugOperation = { operationId: string; events: LtmDebugEvent[] };
@@ -185,6 +186,26 @@ function summarizeCounts(events: LtmDebugEvent[]) {
   return summary.join(" | ");
 }
 
+function latestRecallEvent(events: LtmDebugEvent[], chatId?: string) {
+  return events
+    .filter(
+      (event) =>
+        event.phase === "retrieval" &&
+        event.action === "recall_explanation" &&
+        (!chatId ||
+          event.chatId === chatId ||
+          event.details?.chatId === chatId),
+    )
+    .sort((left, right) => right.ts.localeCompare(left.ts))[0];
+}
+
+function recallDetails(event: LtmDebugEvent | undefined) {
+  const details = event?.details;
+  return details && typeof details === "object" && !Array.isArray(details)
+    ? details
+    : null;
+}
+
 async function confirm(
   props: LongTermMemoryDestinationProps["props"],
   title: string,
@@ -210,6 +231,7 @@ export default function ActivityView({
   const [actionError, setActionError] = useState("");
   const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ActivityFilter>("all");
+  const [recallOpen, setRecallOpen] = useState(false);
   const activityPath = (() => {
     const parameters = new URLSearchParams({ limit: "200" });
     if (filter === "errors") parameters.set("status", "error");
@@ -219,6 +241,12 @@ export default function ActivityView({
   const activity = useQuery({
     queryKey: [...queryKeys.activity, filter],
     queryFn: () => request<DebugLogResponse>(activityPath),
+  });
+  const recallActivity = useQuery({
+    queryKey: [...queryKeys.activity, "recall-workflow"],
+    enabled: recallOpen && filter !== "all",
+    queryFn: () =>
+      request<DebugLogResponse>("/debug-log?limit=200&phase=retrieval"),
   });
   const notes = useQuery({
     queryKey: queryKeys.notes,
@@ -231,6 +259,23 @@ export default function ActivityView({
     ]),
   );
   const operations = groupOperations(activity.data?.events ?? []);
+  const recallEvents =
+    filter === "all"
+      ? (activity.data?.events ?? [])
+      : (recallActivity.data?.events ?? []);
+  const recallLoading =
+    filter === "all" ? activity.isLoading : recallActivity.isLoading;
+  const recallError =
+    filter === "all" ? activity.isError : recallActivity.isError;
+  const recallEvent = latestRecallEvent(recallEvents, props.chatId);
+  const recallWorkflow = recallDetails(recallEvent) as {
+    maxChunks?: number;
+    maxTokens?: number;
+    scoreThreshold?: number;
+    weights?: Record<string, number>;
+    selected?: Array<Record<string, unknown>>;
+    rejected?: Array<Record<string, unknown>>;
+  } | null;
   const lastInjection = useQuery({
     enabled: Boolean(props.chatId),
     queryKey: queryKeys.lastInjection(props.chatId),
@@ -254,7 +299,10 @@ export default function ActivityView({
     setActionError("");
     try {
       await request<unknown>("/debug-log", "DELETE");
-      await invalidateLtmQueries(queryClient, [queryKeys.activity]);
+      await invalidateLtmQueries(queryClient, [
+        queryKeys.activity,
+        [...queryKeys.activity, "recall-workflow"],
+      ]);
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : "Could not clear activity.",
@@ -346,8 +394,12 @@ export default function ActivityView({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
-            disabled={activity.isFetching}
-            onClick={() => void activity.refetch()}
+            disabled={activity.isFetching || recallActivity.isFetching}
+            onClick={() =>
+              void (filter === "all" || !recallOpen
+                ? activity.refetch()
+                : Promise.all([activity.refetch(), recallActivity.refetch()]))
+            }
           >
             <RotateCw aria-hidden="true" size="0.875rem" /> Refresh
           </Button>
@@ -382,48 +434,149 @@ export default function ActivityView({
       </label>
 
       {props.chatId ? (
-        <section className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3">
-          <h3 className="text-xs font-semibold">
-            Last recall for {props.chatName ?? "this chat"}
-          </h3>
-          {lastInjection.isLoading ? (
-            <StatusSurface busy>Loading recalled memories.</StatusSurface>
-          ) : null}
-          {lastInjection.isError ? (
-            <StatusSurface tone="danger">
-              The last recall could not load.
-            </StatusSurface>
-          ) : null}
-          {lastInjection.data ? (
-            <div className="mt-2 space-y-2 text-xs text-[var(--muted-foreground)]">
-              <p>
-                {lastInjection.data.memoryCount} memories,{" "}
-                {lastInjection.data.tokenCount.toLocaleString()} tokens.
-              </p>
-              {lastInjection.data.memories.length ? (
-                <ul className="space-y-1">
-                  {lastInjection.data.memories.map((memory) => (
-                    <li
-                      key={memory.noteId}
-                      className="rounded bg-[var(--background)] px-2 py-1"
-                    >
-                      <button
-                        type="button"
-                        data-ltm-recalled-note={memory.noteId}
-                        className="min-h-11 text-left text-[var(--primary)] underline underline-offset-2"
-                        onClick={() => onOpenMemory?.(memory.noteId)}
-                      >
-                        {memory.title} ({memory.tokenCount.toLocaleString()}{" "}
-                        tokens)
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
+        <LastInjectionSummary
+          data={lastInjection.data}
+          loading={lastInjection.isLoading}
+          error={lastInjection.isError}
+          onOpenMemory={onOpenMemory}
+        />
       ) : null}
+
+      <details
+        data-ltm-recall-workflow
+        className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30"
+        onToggle={(event) => setRecallOpen(event.currentTarget.open)}
+      >
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
+          <span>Latest recall workflow</span>
+          {recallEvent?.counts ? (
+            <span className="shrink-0 text-[0.6875rem] font-normal text-[var(--muted-foreground)]">
+              {recallEvent.counts.selected ?? 0} selected ·{" "}
+              {recallEvent.counts.rejected ?? 0} rejected
+            </span>
+          ) : null}
+        </summary>
+        <div className="space-y-3 border-t border-[var(--border)] px-3 py-3 text-xs">
+          {recallLoading ? (
+            <StatusSurface busy>Loading recall workflow.</StatusSurface>
+          ) : recallError ? (
+            <StatusSurface tone="danger">
+              The recall workflow could not load.
+            </StatusSurface>
+          ) : !recallEvent || !recallWorkflow ? (
+            <p className="text-[var(--muted-foreground)]">
+              No recall workflow has been recorded. Enable debug activity to
+              record future recalls.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-1 text-[var(--muted-foreground)] sm:grid-cols-2">
+                <span>Recent context was used for recall.</span>
+                <span>
+                  Limits: {String(recallWorkflow.maxChunks ?? "--")} chunks ·{" "}
+                  {Number(recallWorkflow.maxTokens ?? 0).toLocaleString()}{" "}
+                  tokens
+                </span>
+                <span>
+                  Threshold: {String(recallWorkflow.scoreThreshold ?? 0)}
+                </span>
+                <span>
+                  Used: {(recallEvent.counts?.usedTokens ?? 0).toLocaleString()}{" "}
+                  tokens
+                </span>
+              </div>
+              {recallWorkflow.weights ? (
+                <p className="text-[var(--muted-foreground)]">
+                  Weights:{" "}
+                  {Object.entries(recallWorkflow.weights)
+                    .map(([name, value]) => `${humanizeLabel(name)} ${value}`)
+                    .join(" · ")}
+                </p>
+              ) : null}
+              {recallWorkflow.selected?.length ? (
+                <div>
+                  <h4 className="mb-1 font-semibold">Selected chunks</h4>
+                  <ul className="space-y-1 text-[var(--muted-foreground)]">
+                    {recallWorkflow.selected.map((candidate, index) => {
+                      const noteId =
+                        typeof candidate.noteId === "string"
+                          ? candidate.noteId
+                          : undefined;
+                      const score =
+                        typeof candidate.score === "number"
+                          ? candidate.score
+                          : undefined;
+                      return (
+                        <li
+                          key={`${noteId ?? "candidate"}-${index}`}
+                          className="flex flex-wrap justify-between gap-2 rounded bg-[var(--background)] px-2 py-1"
+                        >
+                          <span>
+                            {noteId && noteTitles.get(noteId)
+                              ? noteTitles.get(noteId)
+                              : (noteId ?? "Unknown memory")}{" "}
+                            · {String(candidate.sectionKey ?? "chunk")}
+                          </span>
+                          <span>
+                            Relevance:{" "}
+                            {score == null
+                              ? "--"
+                              : `${Math.round(score * 100)}%`}{" "}
+                            ·{" "}
+                            {Array.isArray(candidate.lanes)
+                              ? candidate.lanes.join(", ")
+                              : ""}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+              {recallWorkflow.rejected?.length ? (
+                <div>
+                  <h4 className="mb-1 font-semibold">Rejected candidates</h4>
+                  <ul className="space-y-1 text-[var(--muted-foreground)]">
+                    {recallWorkflow.rejected.map((candidate, index) => {
+                      const noteId =
+                        typeof candidate.noteId === "string"
+                          ? candidate.noteId
+                          : undefined;
+                      const score =
+                        typeof candidate.score === "number"
+                          ? candidate.score
+                          : undefined;
+                      return (
+                        <li
+                          key={`${noteId ?? "candidate"}-${index}`}
+                          className="flex flex-wrap justify-between gap-2 rounded bg-[var(--background)] px-2 py-1"
+                        >
+                          <span>
+                            {noteId && noteTitles.get(noteId)
+                              ? noteTitles.get(noteId)
+                              : (noteId ?? "Unknown memory")}{" "}
+                            · {String(candidate.sectionKey ?? "chunk")}
+                          </span>
+                          <span>
+                            Relevance:{" "}
+                            {score == null
+                              ? "--"
+                              : `${Math.round(score * 100)}%`}{" "}
+                            ·{" "}
+                            {humanizeLabel(
+                              String(candidate.rejectionReason ?? "rejected"),
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </details>
 
       {actionError ? (
         <StatusSurface tone="danger">{actionError}</StatusSurface>

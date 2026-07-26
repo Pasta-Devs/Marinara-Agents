@@ -13,6 +13,7 @@ import {
   inputClass,
 } from "./shared-controls";
 import type { CapabilityProps } from "./types";
+import { LastInjectionSummary } from "./LastInjectionSummary";
 
 export function ChatSettings({ props }: { props: CapabilityProps }) {
   const recallStyleLabelId = useId();
@@ -142,17 +143,11 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       </div>
-      <StatusSurface
-        compact
-        tone={lastInjection.isError ? "danger" : "neutral"}
-        busy={lastInjection.isLoading}
-      >
-        {lastInjection.data
-          ? `${lastInjection.data.memoryCount} memories, ${lastInjection.data.tokenCount.toLocaleString()} tokens in the last recall.`
-          : lastInjection.isError
-            ? "The last recall could not load."
-            : "No memories have been recalled for this chat yet."}
-      </StatusSurface>
+      <LastInjectionSummary
+        data={lastInjection.data}
+        loading={lastInjection.isLoading}
+        error={lastInjection.isError}
+      />
       {props.onOpenAgentSettings ? (
         <button
           type="button"
