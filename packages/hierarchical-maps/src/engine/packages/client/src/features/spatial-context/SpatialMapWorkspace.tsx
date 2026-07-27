@@ -1659,7 +1659,7 @@ export function SpatialMapWorkspace({
           data-marinara-map-mobile-actions
           role="region"
           aria-label="Map actions"
-          className="relative z-40 border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 p-3 lg:hidden"
+          className="relative z-40 border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)] p-3 lg:hidden"
         >
           <div className="grid grid-cols-2 gap-2">
             {!templateMode && (
