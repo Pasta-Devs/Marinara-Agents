@@ -199,7 +199,9 @@ export function SpatialMapAiBuilder({
         : definition.startingLocationId) ??
     activeLocations[0]?.id ??
     "";
-  const initialOperation = initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create");
+  const initialOperation = standalone
+    ? "create"
+    : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
   const [operation, setOperation] = useState<SpatialMapDraftOperation>(initialOperation);
   const [targetLocationId, setTargetLocationId] = useState(defaultTargetLocationId);
   const [size, setSize] = useState<SpatialMapDraftSize>(initialSession?.size ?? initialResult?.size ?? "medium");
@@ -308,7 +310,9 @@ export function SpatialMapAiBuilder({
 
   useEffect(() => {
     if (!open) return;
-    const nextOperation = initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create");
+    const nextOperation = standalone
+      ? "create"
+      : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
     setOperation(nextOperation);
     setTargetLocationId(initialSession?.targetLocationId ?? initialResult?.targetLocationId ?? defaultTargetLocationId);
     setSize(initialSession?.size ?? initialResult?.size ?? "medium");
@@ -332,9 +336,9 @@ export function SpatialMapAiBuilder({
       setError(null);
       try {
         const requestInput = {
-          operation: request.operation,
+          operation: standalone ? "create" : request.operation,
           size: request.size,
-          ...(request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
+          ...(!standalone && request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
           instructions: request.instructions.trim() || undefined,
           groundingMode: request.groundingMode,
           sourceLorebookIds: request.groundingMode === "setup" ? [] : request.sourceLorebookIds,
@@ -559,7 +563,7 @@ export function SpatialMapAiBuilder({
             </div>
           )}
 
-          {advancedOpen && hasLocations && !hasCommittedSpatialHistory && (
+          {!standalone && advancedOpen && hasLocations && !hasCommittedSpatialHistory && (
             <fieldset className="mb-4">
               <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">AI action</legend>
               <div className="mt-2 grid grid-cols-2 gap-2">

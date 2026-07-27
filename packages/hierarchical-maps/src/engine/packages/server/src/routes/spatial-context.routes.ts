@@ -754,9 +754,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       logger.error(error, "[spatial/map-template] Generation failed");
       return reply.status(502).send({
         error:
-          error instanceof Error && error.message
-            ? `The AI map template could not be used: ${error.message}`
-            : "The AI could not create a valid map template.",
+          "The AI could not create a valid map template. Try again, add clearer instructions, or choose a smaller size.",
         code: "spatial_ai_generation_failed",
       });
     }

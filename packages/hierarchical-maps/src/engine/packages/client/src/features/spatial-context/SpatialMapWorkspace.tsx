@@ -332,7 +332,7 @@ export function SpatialMapWorkspace({
     setArtworkProgress(null);
     setTemplateName(template?.name ?? "");
     setBaseTemplateName(template?.name ?? "");
-  }, [chatId, resolveConfirmation, template?.id, template?.name]);
+  }, [chatId, resolveConfirmation, template?.id]);
 
   useEffect(() => {
     if (initialized) return;

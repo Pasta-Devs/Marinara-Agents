@@ -468,6 +468,11 @@ export function useUpdateSpatialMapTemplate() {
         current.map((candidate) => (candidate.id === template.id ? template : candidate)),
       );
     },
+    onError: (error) => {
+      if (error instanceof PackageApiError && error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: spatialContextKeys.templates });
+      }
+    },
   });
 }
 
@@ -480,6 +485,11 @@ export function useDeleteSpatialMapTemplate() {
       queryClient.setQueryData<SpatialMapTemplateRecord[]>(spatialContextKeys.templates, (current = []) =>
         current.filter((candidate) => candidate.id !== variables.id),
       );
+    },
+    onError: (error) => {
+      if (error instanceof PackageApiError && error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: spatialContextKeys.templates });
+      }
     },
   });
 }

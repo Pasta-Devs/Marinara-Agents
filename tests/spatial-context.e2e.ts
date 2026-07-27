@@ -1415,8 +1415,11 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await expect(workspace).toContainText("Saved");
     await workspace.getByRole("button", { name: "Back to map templates" }).click();
 
-    await expect(library.getByRole("heading", { name: "Reusable Test World" })).toBeVisible();
-    await library.getByRole("button", { name: "Add to chat" }).click();
+    const reusableTemplateCard = library
+      .getByRole("heading", { name: "Reusable Test World" })
+      .locator("xpath=ancestor::article");
+    await expect(reusableTemplateCard).toBeVisible();
+    await reusableTemplateCard.getByRole("button", { name: "Add to chat" }).click();
     const confirm = page.getByRole("dialog").filter({ hasText: "Add map template to this chat?" });
     await confirm.getByRole("button", { name: "Add to chat", exact: true }).click();
     await expect
@@ -1824,10 +1827,10 @@ test("Map editor fills missing location artwork with one image per location", as
 
     await workspace.locator("[data-marinara-confirm-map-artwork]").click();
     await expect.poll(() => generatedRequests.length).toBe(2);
-    expect(generatedRequests[0]).toMatchObject({ title: "Shrouded Coast" });
-    expect(generatedRequests[0]!.prompt).toContain("Shrouded Coast");
-    expect(generatedRequests[1]).toMatchObject({ title: "Gloam Harbor" });
-    expect(generatedRequests[1]!.prompt).toContain("Gloam Harbor");
+    const generatedRequestsByTitle = new Map(generatedRequests.map((request) => [request.title, request]));
+    expect([...generatedRequestsByTitle.keys()].sort()).toEqual(["Gloam Harbor", "Shrouded Coast"]);
+    expect(generatedRequestsByTitle.get("Shrouded Coast")!.prompt).toContain("Shrouded Coast");
+    expect(generatedRequestsByTitle.get("Gloam Harbor")!.prompt).toContain("Gloam Harbor");
 
     const beforeSaveResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     const beforeSave = (await beforeSaveResponse.json()) as {

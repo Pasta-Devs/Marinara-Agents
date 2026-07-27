@@ -814,8 +814,13 @@ export function createSpatialMapTemplateData(
     enabled: false,
     revision: 0,
     locations: definition.locations.map(
-      ({ referenceImageId: _referenceImageId, useReferenceImage: _useReferenceImage, mapBackgroundImageId: _mapBackgroundImageId, ...location }) =>
-        location,
+      ({
+        referenceImageId: _referenceImageId,
+        useReferenceImage: _useReferenceImage,
+        mapBackgroundImageId: _mapBackgroundImageId,
+        mapBackgroundPosition: _mapBackgroundPosition,
+        ...location
+      }) => location,
     ),
   };
   return {

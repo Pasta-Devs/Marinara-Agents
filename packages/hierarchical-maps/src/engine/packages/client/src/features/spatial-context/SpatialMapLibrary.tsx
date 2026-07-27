@@ -22,6 +22,7 @@ interface SpatialMapLibraryProps {
   chatId: string | null;
   chatName: string | null;
   chatMode: string | null;
+  enabledForChat?: boolean;
   onClose: () => void;
   onAppliedToChat?: () => void;
   onOpenLorebook?: (lorebookId: string) => void;
@@ -48,6 +49,7 @@ export function SpatialMapLibrary({
   chatId,
   chatName,
   chatMode,
+  enabledForChat = false,
   onClose,
   onAppliedToChat,
   onOpenLorebook,
@@ -169,8 +171,9 @@ export function SpatialMapLibrary({
     if (!confirmed) return;
     const ownerMode: SpatialOwnerMode = chatMode === "game" ? "game" : "roleplay";
     const instantiated = instantiateSpatialMapTemplate(template.data, ownerMode);
+    const enablementChanged = !enabledForChat && Boolean(onEnabledForChatChange);
     try {
-      await onEnabledForChatChange?.(true);
+      if (enablementChanged) await onEnabledForChatChange?.(true);
       await updateSpatial.mutateAsync({
         chatId,
         expectedRevision: existing?.revision ?? 0,
@@ -190,6 +193,13 @@ export function SpatialMapLibrary({
       toast.success(`Added “${template.name}” to ${chatName || "the chat"}.`);
       onAppliedToChat?.();
     } catch (error) {
+      if (enablementChanged) {
+        try {
+          await onEnabledForChatChange?.(false);
+        } catch {
+          // Preserve the original apply error; the chat settings control still exposes the enabled state.
+        }
+      }
       toast.error(error instanceof Error ? error.message : "The map template could not be added to this chat.");
     }
   };
