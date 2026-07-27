@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const source =
@@ -29,6 +30,15 @@ async function main() {
   }) as typeof fetch;
   assert.equal((await requestAllNotes<number>("/notes?includeGlobal=true")).length, 501);
   assert.deepEqual(requestedOffsets, ["0", "500"]);
+  requestedOffsets.length = 0;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url, "http://localhost");
+    requestedOffsets.push(url.searchParams.get("offset") ?? "");
+    return new Response(JSON.stringify(Array.from({ length: 500 }, (_, id) => id)));
+  }) as typeof fetch;
+  assert.equal((await requestAllNotes<number>("/notes")).length, 100_000);
+  assert.equal(requestedOffsets.length, 200);
+  assert.equal(requestedOffsets.at(-1), "99500");
   globalThis.fetch = originalFetch;
   const { configurePackageRuntime } = await import(
     `${source}/package-runtime.ts`
@@ -96,8 +106,7 @@ async function main() {
 
   let first: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null = null;
   let restarted: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null = null;
-  let primaryFailure = false;
-  try {
+  await runWithSafeCleanup("LTM storage", async () => {
     const freshStorage = new LongTermMemoryStorage(freshRoot);
     await freshStorage.initializeLtmStore();
     for (const name of ["policies.json", "retrieval.json"]) {
@@ -211,6 +220,8 @@ async function main() {
         `${JSON.stringify(transaction)}\n`,
       );
     }
+    const malformedJournal = join(getLongTermMemoryDirectories(root).transactions, "malformed.json");
+    await writeFile(malformedJournal, "{not-json\n");
     const notesBeforeRecovery = await restarted.storage.listNotes();
     await writeLtmNoteSummary(root, notesBeforeRecovery);
     await recoverLtmMutations(root);
@@ -219,6 +230,14 @@ async function main() {
       assert.equal(JSON.parse(await readFile(notePathForId(interruptedNote.id, "world", root), "utf8")).id, interruptedNote.id);
       await assert.rejects(stat(join(getLongTermMemoryDirectories(root).transactions, `${interruptedIds[index]}.json`)));
     }
+    await assert.rejects(stat(malformedJournal));
+    const transactionQuarantine = join(root, "quarantine", "transactions");
+    const quarantinedTransactions = await readdir(transactionQuarantine);
+    assert.equal(quarantinedTransactions.length, 1);
+    assert.equal(
+      await readFile(join(transactionQuarantine, quarantinedTransactions[0]!, "malformed.json"), "utf8"),
+      "{not-json\n",
+    );
 
     await writeFile(ltmSettingsPath(root), '{"version":1,"unknown":true}\n');
     await restarted.cleanup();
@@ -245,6 +264,28 @@ async function main() {
       (await new LongTermMemoryStorage(root).getNote(noteInput.id))?.id,
       noteInput.id,
       "cleanup must preserve canonical notes",
+    );
+    const dirs = getLongTermMemoryDirectories(root);
+    await writeFile(join(dirs.receipts, "malformed.json"), "{bad\n");
+    await writeFile(join(dirs.receipts, "expired.json"), JSON.stringify({ dispatchedAt: "2020-01-01T00:00:00.000Z" }));
+    await writeFile(dirs.eventLog, [
+      JSON.stringify({ ts: "2020-01-01T00:00:00.000Z", type: "old.event" }),
+      "malformed event",
+      JSON.stringify({ ts: "2026-07-17T00:00:00.000Z", type: "new.event" }),
+      "",
+    ].join("\n"));
+    const retained = await runLongTermMemoryRetention({
+      root,
+      now: new Date("2026-07-18T00:00:00Z"),
+      force: true,
+    });
+    assert.equal(retained.receiptsRemoved, 1);
+    assert.equal(retained.eventsRemoved, 1);
+    assert.equal(await readFile(join(dirs.receipts, "malformed.json"), "utf8"), "{bad\n");
+    await assert.rejects(stat(join(dirs.receipts, "expired.json")));
+    assert.equal(
+      await readFile(dirs.eventLog, "utf8"),
+      `malformed event\n${JSON.stringify({ ts: "2026-07-17T00:00:00.000Z", type: "new.event" })}\n`,
     );
 
     const exported = await exportLongTermMemoryData(root);
@@ -1383,32 +1424,12 @@ async function main() {
     process.stdout.write(
       "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",
     );
-  } catch (error) {
-    primaryFailure = true;
-    throw error;
-  } finally {
-    let cleanupError: unknown = null;
-    for (const cleanupStep of [
-      () => restarted?.cleanup(),
-      () => first?.cleanup(),
-      () => releaseHost(),
-    ]) {
-      try {
-        await cleanupStep();
-      } catch (error) {
-        cleanupError ??= error;
-      }
-    }
-    try {
-      await rm(dataDir, { recursive: true, force: true });
-    } catch (error) {
-      cleanupError ??= error;
-    }
-    if (cleanupError) {
-      if (primaryFailure) console.error("LTM storage cleanup failed after the primary failure", cleanupError);
-      else throw cleanupError;
-    }
-  }
+  }, [
+    () => restarted?.cleanup(),
+    () => first?.cleanup(),
+    () => releaseHost(),
+    () => rm(dataDir, { recursive: true, force: true }),
+  ]);
 }
 
 void main().catch((error) => {

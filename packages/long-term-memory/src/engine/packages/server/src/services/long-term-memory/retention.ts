@@ -1,8 +1,11 @@
-import { readdir, readFile, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { open, readdir, readFile, rm, stat, unlink } from "node:fs/promises";
+import { createInterface } from "node:readline";
+import { dirname, join, resolve } from "node:path";
 import { ltmRetentionConfigSchema } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { DEFAULT_LTM_RETENTION_CONFIG } from "./default-config.js";
-import { readJsonFile, writeJsonAtomic, writeTextAtomic } from "./atomic-json.js";
+import { fsyncPath, readJsonFile, renameWithRetry, writeJsonAtomic } from "./atomic-json.js";
 import { isEnoent } from "./ltm-utils.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { readLongTermMemoryUsage, longTermMemoryUsagePath } from "./usage.js";
@@ -10,6 +13,40 @@ import { withLtmVaultLock } from "./vault-lock.js";
 
 const lastRetentionRun = new Map<string, number>();
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+async function pruneEventLog(path: string, cutoff: number) {
+  const tmp = `${path}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
+  let output;
+  let removed = 0;
+  try {
+    output = await open(tmp, "wx", 0o600);
+    const lines = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
+    for await (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let expired = false;
+      try {
+        const event = JSON.parse(trimmed);
+        expired = Boolean(event.ts && new Date(event.ts).getTime() < cutoff);
+      } catch {}
+      if (expired) removed++;
+      else await output.writeFile(`${line}\n`, "utf8");
+    }
+    await output.sync();
+    await output.close();
+    output = undefined;
+    if (removed) {
+      await renameWithRetry(tmp, path);
+      await fsyncPath(dirname(path));
+    } else await unlink(tmp);
+    return removed;
+  } catch (error) {
+    await output?.close().catch(() => {});
+    await unlink(tmp).catch(() => {});
+    if (isEnoent(error)) return 0;
+    throw error;
+  }
+}
 
 export const longTermMemoryRetentionConfigPath = (root = getLongTermMemoryRoot()) =>
   safeJoin(getLongTermMemoryDirectories(root).config, "retention.json");
@@ -107,52 +144,26 @@ async function runLongTermMemoryRetentionUnsafe({
   })) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
     const path = safeJoin(dirs.receipts, entry.name);
+    const raw = await readFile(path, "utf8");
+    let receipt;
     try {
-      const receipt = JSON.parse(await readFile(path, "utf8"));
-      if (
-        receipt.dispatchedAt &&
-        new Date(receipt.dispatchedAt).getTime() < receiptCutoff
-      ) {
-        await rm(path, { force: true });
-        receiptsRemoved++;
-      }
+      receipt = JSON.parse(raw);
     } catch {
       // skip malformed receipt files
+      continue;
+    }
+    if (
+      receipt.dispatchedAt &&
+      new Date(receipt.dispatchedAt).getTime() < receiptCutoff
+    ) {
+      await rm(path, { force: true });
+      receiptsRemoved++;
     }
   }
 
   // 4. Event log cleanup
   for (const eventLogPath of [dirs.eventLog, dirs.debugLog]) {
-    try {
-      const content = await readFile(eventLogPath, "utf8").catch((e) => {
-        if (isEnoent(e)) return null;
-        throw e;
-      });
-      if (!content) continue;
-      const lines = content.split("\n");
-      const filtered = lines.filter((line) => {
-        const trimmed = line.trim();
-        if (!trimmed) return false;
-        try {
-          const event = JSON.parse(trimmed);
-          if (event.ts && new Date(event.ts).getTime() < eventCutoff) {
-            eventsRemoved++;
-            return false;
-          }
-          return true;
-        } catch {
-          return true;
-        }
-      });
-      if (filtered.length < lines.filter((line) => line.trim()).length) {
-        await writeTextAtomic(
-          eventLogPath,
-          filtered.join("\n") + (filtered.length ? "\n" : ""),
-        );
-      }
-    } catch (e) {
-      if (!isEnoent(e)) throw e;
-    }
+    eventsRemoved += await pruneEventLog(eventLogPath, eventCutoff);
   }
 
   // 5. Incomplete generation receipt cleanup

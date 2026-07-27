@@ -1,4 +1,5 @@
 import {
+  forwardRef,
   useEffect,
   useId,
   useRef,
@@ -15,17 +16,17 @@ let activePopover: { id: string; close: () => void } | null = null;
 export const inputClass =
   "min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]";
 
-export function Button({
+export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
+  children: ReactNode;
+  primary?: boolean;
+  destructive?: boolean;
+}>(function Button({
   children,
   primary = false,
   destructive = false,
   className = "",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  children: ReactNode;
-  primary?: boolean;
-  destructive?: boolean;
-}) {
+}, ref) {
   const tone = primary
     ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
     : destructive
@@ -33,6 +34,7 @@ export function Button({
       : "border-[var(--border)] bg-[var(--secondary)] text-[var(--foreground)] hover:bg-[var(--accent)]";
   return (
     <button
+      ref={ref}
       type="button"
       data-ltm-control="button"
       className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50 ${tone} ${className}`}
@@ -41,7 +43,7 @@ export function Button({
       {children}
     </button>
   );
-}
+});
 
 export function IconButton({
   icon: Icon,

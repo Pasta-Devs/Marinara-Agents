@@ -47,9 +47,7 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
       const rawScore = typeof item.rawScore === "number" && Number.isFinite(item.rawScore) ? item.rawScore : 0;
       const normalizedRawScore = lane.name === "bm25"
         ? rawScore / (rawScore + 1)
-        : lane.name === "keyword"
-          ? Math.max(0, Math.min(1, rawScore))
-          : Math.max(0, Math.min(1, rawScore));
+        : Math.max(0, Math.min(1, rawScore));
       const rawFactor = typeof item.rawScore === "number" ? normalizedRawScore : 1;
       const score = lane.weight * (1 / (RRF_K + rank)) * rawFactor;
       const rawScoreBoost = rawScore * 0.001 * lane.weight;

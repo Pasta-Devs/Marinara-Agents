@@ -55,11 +55,12 @@ export async function request<TResponse, TBody = unknown>(
 
 export async function requestAllNotes<T>(path: string): Promise<T[]> {
   const notes: T[] = [];
-  for (let offset = 0; ; offset += 500) {
+  for (let offset = 0; offset < 100_000; offset += 500) {
     const page = await request<T[]>(`${path}${path.includes("?") ? "&" : "?"}limit=500&offset=${offset}`);
     notes.push(...page);
     if (page.length < 500) return notes;
   }
+  return notes;
 }
 
 /** Invalidations must name each affected resource rather than clearing the package cache. */

@@ -10,7 +10,7 @@ import type {
   LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { isLtmSourceLikeNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import type { PackageLanguageModel } from "./package-runtime.js";
+import { logger, type PackageLanguageModel } from "./package-runtime.js";
 import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { applyLongTermMemoryDraft } from "./reconciliation.js";
 import { extractLongTermMemoryFromSourceNote, finalizeLongTermMemoryExtractionDraft } from "./source-extraction.js";
@@ -28,6 +28,7 @@ function abortError(){const error=new Error("Long-term memory import was cancell
 function throwIfAborted(signal?:AbortSignal){if(signal?.aborted)throw abortError();}
 function cancelled(error:unknown,signal?:AbortSignal){return signal?.aborted||(error instanceof Error&&error.name==="AbortError");}
 function canMarkCurrent(prepared:PreparedSource){return prepared.outcome.state==="success"||(prepared.extractionMethod==="deterministic"&&prepared.outcome.state==="partial_success"&&!prepared.diagnostics.some((item)=>item.severity==="error"))||(prepared.outcome.state==="no_suggestions_created"&&prepared.outcome.droppedUnits===0&&!prepared.diagnostics.some((item)=>item.severity==="error"));}
+async function rebuildAfterSourceExtraction(root?: string) { try { await rebuildLongTermMemoryIndexes({ root }); } catch (error) { logger.warn(error, "[ltm] Deferred index rebuild after source extraction"); } }
 
 function deterministicUuid(seed: string) {
   const hex = createHash("sha256").update(seed).digest("hex");
@@ -112,10 +113,11 @@ async function commitPreparedLongTermMemorySource(prepared: PreparedSource, opti
     reviewRequired: prepared.reviewRequired,
     chatId: prepared.chatId,
   }, { root: options.root, overlay: options.overlay });
-  const note = canMarkCurrent(prepared) && draft.source.extractionFingerprint
+  const markCurrent = canMarkCurrent(prepared);
+  const note = markCurrent && draft.source.extractionFingerprint
     ? await new LongTermMemoryStorage(options.root).updateNote(prepared.sourceNote.id, { extractionFingerprint: draft.source.extractionFingerprint })
     : prepared.sourceNote;
-  const fingerprintPersisted = canMarkCurrent(prepared) && Boolean(note.extractionFingerprint);
+  const fingerprintPersisted = markCurrent && Boolean(note.extractionFingerprint);
   const applyResult = options.applyLowRisk && !prepared.reviewRequired && fingerprintPersisted && draft.mutations.length
     ? await applyLongTermMemoryDraft(draft.id, { root: options.root, actor: "maintenance_api", autoApplyLowRiskOnly: true, rebuildIndexes: false, operationId: prepared.operationId })
     : null;
@@ -126,7 +128,7 @@ async function commitPreparedLongTermMemorySource(prepared: PreparedSource, opti
 export async function processLongTermMemorySource(options:PrepareOptions&{applyLowRisk?:boolean}){
   const prepared=await prepareLongTermMemorySource(options);
   const committed=await commitPreparedLongTermMemorySource(prepared,{root:options.root,applyLowRisk:options.applyLowRisk});
-  if (committed.draft.mutations.length) await rebuildLongTermMemoryIndexes({root:options.root});
+  if (committed.draft.mutations.length) await rebuildAfterSourceExtraction(options.root);
   return{operationId:prepared.operationId,draft:committed.draft,diagnostics:prepared.diagnostics,outcome:prepared.outcome,accounting:prepared.accounting,response:prepared.response,appliedMutationIds:committed.applyResult?.appliedMutationIds??[],skippedMutationIds:committed.applyResult?.skippedMutationIds??[]};
 }
 
@@ -140,6 +142,6 @@ export async function processLongTermMemorySourceBatch(options:{items:ImportedSo
   await Promise.all(Array.from({length:Math.min(Math.max(options.concurrency,1),options.items.length)},async()=>{while(next<options.items.length){const index=next++,item=options.items[index]!,directGameMode=Boolean(options.directGameMode&&item.deterministicSourceText);try{preparedResults[index]={state:"prepared",item,prepared:await prepareLongTermMemorySource({sourceNote:item.note,languageModel:options.languageModel,mode:options.mode,instruction:options.instruction,operationId:options.operationId,signal:options.signal,root:options.root,chatId:options.chatId,directGameMode,directSourceText:item.deterministicSourceText})};}catch(error){preparedResults[index]={state:"failed",result:failed(item,directGameMode?"deterministic":"llm","extract",error,cancelled(error,options.signal))};}}}));
   const storage=new LongTermMemoryStorage(options.root),overlay=new Map<string,LtmNote>(),results:LtmImportedSourceResult[]=[];
   for(const entry of preparedResults){if(!entry)continue;if(entry.state==="failed"){results.push(entry.result);continue;}const{item,prepared}=entry;try{throwIfAborted(options.signal);const committed=await commitPreparedLongTermMemorySource(prepared,{root:options.root,overlay,applyLowRisk:options.applyLowRisk});results.push({sourceId:item.sourceId,title:item.title,note:committed.note,created:item.created,sourceWriteStatus:item.created?"created":"refreshed",extractionStatus:"succeeded",extractionMethod:prepared.extractionMethod,retryable:false,draft:committed.draft,diagnostics:prepared.diagnostics,outcome:prepared.outcome,accounting:prepared.accounting,appliedMutationIds:committed.applyResult?.appliedMutationIds??[],skippedMutationIds:committed.applyResult?.skippedMutationIds??[]});}catch(error){results.push(failed(item,prepared.extractionMethod,"finalize",error,cancelled(error,options.signal),prepared));}}
-  if(options.items.length)await rebuildLongTermMemoryIndexes({root:options.root});
+  if(results.some((result)=>result.extractionStatus==="succeeded"))await rebuildAfterSourceExtraction(options.root);
   return results;
 }

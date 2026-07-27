@@ -878,14 +878,13 @@ export default function SourcesWorkspace({
               }}
             />
           </>
-        ) : (
-          <IconButton
-            icon={Ellipsis}
-            label={`More actions for ${title}`}
-            aria-expanded={false}
-            onClick={(event) => toggleSourceActions(event, noteId)}
-          />
-        )}
+        ) : null}
+        <IconButton
+          icon={Ellipsis}
+          label={`More actions for ${title}`}
+          aria-expanded={openSourceActionId === noteId}
+          onClick={(event) => toggleSourceActions(event, noteId)}
+        />
       </div>
     </>
   );

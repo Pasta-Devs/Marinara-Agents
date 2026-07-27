@@ -51,6 +51,7 @@ import { withLtmVaultLock } from "./vault-lock.js";
 import { LtmServiceError } from "./service-error.js";
 import { quarantineLegacyCapturedTurnSources } from "./legacy-source-quarantine.js";
 import { isAdditiveLtmSection } from "./draft-projector.js";
+import { logger } from "./package-runtime.js";
 import {
   manualContribution,
   renderSectionContributions,
@@ -148,7 +149,7 @@ export class LongTermMemoryStorage {
     return withLtmVaultLock(this.root, async () => {
       const rootKey = resolve(this.root);
       if (initialized.has(rootKey)) {
-        await runLongTermMemoryRetention({ root: this.root }).catch(() => {});
+        await runLongTermMemoryRetention({ root: this.root }).catch((error) => logger.warn(error, "[ltm] Deferred retention run failed"));
         return;
       }
       if (!isLtmBackupRestoreActive(this.root)) await recoverInterruptedLtmBackupRestore(this.root);
@@ -184,7 +185,7 @@ export class LongTermMemoryStorage {
         await writeJsonAtomic(path, parsed);
       }
       initialized.add(rootKey);
-      await runLongTermMemoryRetention({ root: this.root }).catch(() => {});
+      await runLongTermMemoryRetention({ root: this.root }).catch((error) => logger.warn(error, "[ltm] Deferred retention run failed"));
     });
   }
   async listNotes(filter: ListLtmNotesOptions = {}) {

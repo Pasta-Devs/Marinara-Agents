@@ -202,10 +202,10 @@ export async function finalizeLongTermMemoryExtractionDraft(
   const storage = new LongTermMemoryStorage(options.root);
   const currentSource = await storage.getNote(input.sourceNote.id);
   if (!currentSource || !isLtmSourceNote(currentSource)) {
-    throw new Error(`Long-term memory source note disappeared before draft finalization: ${input.sourceNote.id}`);
+    throw new LtmServiceError(`Long-term memory source note disappeared before draft finalization: ${input.sourceNote.id}`, 404, "ltm_note_not_found");
   }
   if (sourceHashForEvidenceUnitExtraction(currentSource) !== sourceHashForEvidenceUnitExtraction(input.sourceNote)) {
-    throw new Error(`Long-term memory source note changed before draft finalization: ${input.sourceNote.id}`);
+    throw new LtmServiceError(`Long-term memory source note changed before draft finalization: ${input.sourceNote.id}`, 409, "ltm_source_changed");
   }
   const expectedFingerprint = extractionFingerprintForLtmSourceNote(input.sourceNote, {
     scope: input.scope,
@@ -213,8 +213,10 @@ export async function finalizeLongTermMemoryExtractionDraft(
     extractionMode: input.extractionMode,
   });
   if (!isLtmSourceExtractionFingerprintCurrent(currentSource, expectedFingerprint)) {
-    throw new Error(
+    throw new LtmServiceError(
       `Long-term memory source extraction context changed before draft finalization: ${input.sourceNote.id}`,
+      409,
+      "ltm_source_context_changed",
     );
   }
 

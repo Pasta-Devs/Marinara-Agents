@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
@@ -100,7 +101,6 @@ async function main() {
   let releaseRestoredRuntime: (() => void) | undefined;
   let storage: any;
   let runtime: any;
-  let primaryFailure = false;
   const note = (id: string, chatId: string, text: string, overrides: Record<string, unknown> = {}) => ({
     id,
     title: id,
@@ -118,7 +118,7 @@ async function main() {
     ...overrides,
   });
 
-  try {
+  await runWithSafeCleanup("LTM runtime", async () => {
     cleanup = await activate({ dataDir, api });
     storage = services.get("long-term-memory:storage").storage;
     runtime = services.get("long-term-memory:runtime");
@@ -783,33 +783,13 @@ async function main() {
       preferencesBeforeUninstall,
       "uninstall and reinstall must preserve exact agent preference bytes",
     );
-  } catch (error) {
-    primaryFailure = true;
-    throw error;
-  } finally {
-    let cleanupError: unknown = null;
-    for (const cleanupStep of [
-      () => cleanup?.(),
-      () => releaseRestoredRuntime?.(),
-      () => assert.equal(services.has("long-term-memory:runtime"), false, "cleanup must unregister runtime service"),
-      () => assert.equal(services.has("long-term-memory:storage"), false, "cleanup must unregister storage service"),
-    ]) {
-      try {
-        await cleanupStep();
-      } catch (error) {
-        cleanupError ??= error;
-      }
-    }
-    try {
-      await rm(dataDir, { recursive: true, force: true });
-    } catch (error) {
-      cleanupError ??= error;
-    }
-    if (cleanupError) {
-      if (primaryFailure) console.error("LTM runtime cleanup failed after the primary failure", cleanupError);
-      else throw cleanupError;
-    }
-  }
+  }, [
+    () => cleanup?.(),
+    () => releaseRestoredRuntime?.(),
+    () => assert.equal(services.has("long-term-memory:runtime"), false, "cleanup must unregister runtime service"),
+    () => assert.equal(services.has("long-term-memory:storage"), false, "cleanup must unregister storage service"),
+    () => rm(dataDir, { recursive: true, force: true }),
+  ]);
 
   process.stdout.write("Long-Term Memory runtime regression: recall, receipts, source exclusion, activation cleanup ok\n");
 }

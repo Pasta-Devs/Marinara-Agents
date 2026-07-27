@@ -988,6 +988,13 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
         responseSnippet: content.slice(0, 1_500),
       },
     });
+    if (["length", "max_tokens", "token_limit"].includes(result.finishReason.toLowerCase())) {
+      throw new LtmServiceError(
+        "truncated_output: extraction response reached the model output limit",
+        400,
+        "ltm_model_output_truncated",
+      );
+    }
     if (!content) {
       return {
         response: ltmEvidenceUnitExtractionResponseSchema.parse({ summary: "", units: [] }),
@@ -995,13 +1002,6 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
         parserRejections: 0,
         droppedCandidates: [],
       };
-    }
-    if (["length", "max_tokens", "token_limit"].includes(result.finishReason.toLowerCase())) {
-      throw new LtmServiceError(
-        "truncated_output: extraction response reached the model output limit",
-        400,
-        "ltm_model_output_truncated",
-      );
     }
     try {
       const parsed = parseEvidenceUnitPayload(JSON.parse(extractJsonObject(content)), options.sourceHash);

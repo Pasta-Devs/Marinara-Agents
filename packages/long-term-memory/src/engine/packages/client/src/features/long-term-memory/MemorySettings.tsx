@@ -1590,7 +1590,7 @@ export default function MemorySettings({
                         );
                         return (
                           <label
-                            key={`${conflict.sectionKey}-${noteId}`}
+                            key={`${conflict.sectionKey}-${option.noteIds.join(":")}`}
                             className="flex min-h-11 items-start gap-2 rounded border border-[var(--border)] p-2"
                           >
                             <input

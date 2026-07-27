@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { runWithSafeCleanup } from "./regression-helpers.ts";
 
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const engineRoot = resolve(
@@ -121,8 +122,7 @@ async function main() {
     ) => Promise<{ statusCode: number; body: string; rawPayload: Buffer }>;
     close: () => Promise<void>;
   } | null = null;
-  let primaryFailure = false;
-  try {
+  await runWithSafeCleanup("LTM lifecycle", async () => {
     assert.equal(artifactManifest.id, "long-term-memory");
     assert.equal(artifactManifest.version, packageManifest.version);
     const { capabilityPackageManager } = await importEngine<{
@@ -232,28 +232,11 @@ async function main() {
     console.log(
       `Long-Term Memory ${packageManifest.version} lifecycle: install, offline restart, backup inclusion, uninstall, reinstall, and durable-byte preservation ok`,
     );
-  } catch (error) {
-    primaryFailure = true;
-    throw error;
-  } finally {
-    let cleanupError: unknown = null;
-    try {
-      if (app) await app.close();
-    } catch (error) {
-      cleanupError = error;
-    } finally {
-      globalThis.fetch = originalFetch;
-      try {
-        rmSync(dataDir, { recursive: true, force: true });
-      } catch (error) {
-        cleanupError ??= error;
-      }
-    }
-    if (cleanupError) {
-      if (primaryFailure) console.error("LTM lifecycle cleanup failed after the primary failure", cleanupError);
-      else throw cleanupError;
-    }
-  }
+  }, [
+    () => app?.close(),
+    () => { globalThis.fetch = originalFetch; },
+    () => rmSync(dataDir, { recursive: true, force: true }),
+  ]);
 }
 main().catch((error) => {
   process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);

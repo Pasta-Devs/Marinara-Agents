@@ -17,9 +17,17 @@ try {
     'import value = require("./outside");',
     'const dynamic = import("./outside");',
     'const common = require("./outside");',
+    'const dynamicTemplate = import(`./dynamic-template`);',
+    'const commonTemplate = require(`./common-template`);',
+    'const ignoredDynamic = import(`./${name}`);',
+    'const ignoredCommon = require(`./${name}`);',
   ].join("\n"));
   await symlink(join(outside, "outside.ts"), join(root, "outside.ts"));
+  await symlink(join(outside, "dynamic-template.ts"), join(root, "dynamic-template.ts"));
+  await symlink(join(outside, "common-template.ts"), join(root, "common-template.ts"));
   assert.deepEqual(await findPackagePrivateEngineImports(root), [
+    { source: "entry.ts", specifier: "./common-template" },
+    { source: "entry.ts", specifier: "./dynamic-template" },
     { source: "entry.ts", specifier: "./outside" },
   ]);
   const boundaryPath = join(root, "boundary.json");
@@ -30,7 +38,11 @@ try {
       engineVersion: "2.3.3",
       engineCommit: "0".repeat(40),
     },
-    privateEngineImports: [{ source: "entry.ts", specifier: "./outside" }],
+    privateEngineImports: [
+      { source: "entry.ts", specifier: "./common-template" },
+      { source: "entry.ts", specifier: "./dynamic-template" },
+      { source: "entry.ts", specifier: "./outside" },
+    ],
   }));
   await assertPackagePrivateImportBoundary({
     sourceRoot: root,

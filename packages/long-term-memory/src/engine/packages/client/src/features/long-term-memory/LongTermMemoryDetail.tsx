@@ -98,6 +98,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [activationError, setActivationError] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
+  const addTriggerRef = useRef<HTMLButtonElement>(null);
   const [createMemoryRequest, setCreateMemoryRequest] = useState<number | null>(
     null,
   );
@@ -114,11 +115,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
 
   useEffect(() => {
     if (!addOpen) return;
+    const dismiss = () => {
+      setAddOpen(false);
+      addTriggerRef.current?.focus();
+    };
     const close = (event: PointerEvent) => {
-      if (!addMenuRef.current?.contains(event.target as Node)) setAddOpen(false);
+      if (!addMenuRef.current?.contains(event.target as Node)) dismiss();
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAddOpen(false);
+      if (event.key === "Escape") dismiss();
     };
     document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", onKeyDown);
@@ -329,6 +334,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           {destination === "vault" ? (
             <div ref={addMenuRef} className="relative">
               <Button
+                ref={addTriggerRef}
                 primary
                 className="max-sm:min-h-8 min-h-8 min-w-8 px-2 sm:min-h-9 sm:min-w-0 sm:px-3"
                 onClick={() => setAddOpen((value) => !value)}

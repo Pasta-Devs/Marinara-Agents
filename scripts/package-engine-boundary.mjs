@@ -51,11 +51,11 @@ function packageOwnedTargetExists(importer, specifier, sourceRoot) {
 function importSpecifiers(source) {
   const specifiers = new Set();
   const staticImport = /\b(?:import|export)\s+(?:type\s+)?(?:[^"'`;]*?\s+from\s*)?["']([^"']+)["']/gsu;
-  const dynamicImport = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/gu;
-  const commonJs = /\brequire\s*\(\s*["']([^"']+)["']\s*\)/gu;
+  const dynamicImport = /\bimport\s*\(\s*(?:["']([^"']+)["']|`((?:(?!\$\{)[^`])+)`)\s*\)/gu;
+  const commonJs = /\brequire\s*\(\s*(?:["']([^"']+)["']|`((?:(?!\$\{)[^`])+)`)\s*\)/gu;
   const importAssignment = /\bimport\s+[^=;]+\s*=\s*require\s*\(\s*["']([^"']+)["']\s*\)/gu;
   for (const pattern of [staticImport, dynamicImport, commonJs, importAssignment]) {
-    for (const match of source.matchAll(pattern)) specifiers.add(match[1]);
+    for (const match of source.matchAll(pattern)) specifiers.add(match[1] ?? match[2]);
   }
   return [...specifiers];
 }

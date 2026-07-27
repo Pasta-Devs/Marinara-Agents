@@ -155,7 +155,7 @@ export async function replaceLongTermMemoryData(value: unknown, root = getLongTe
     } catch (error) {
       if (journalWritten && journal) {
         try {
-          await recoverInterruptedLtmBackupRestore(root);
+          await recoverInterruptedLtmBackupRestore(root, { rollbackPublished: true });
         } catch (recoveryError) {
           throw new AggregateError([error, recoveryError], "Long-Term Memory restore and rollback both failed.");
         }

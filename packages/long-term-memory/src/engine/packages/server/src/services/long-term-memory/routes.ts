@@ -282,8 +282,6 @@ function routeError(error: unknown, fallback: string) {
   if (error instanceof LtmServiceError || (error && typeof error === "object" && "statusCode" in error && "code" in error))
     return ltmErrorResponse(error, fallback);
   const message = error instanceof Error ? error.message : fallback;
-  if (/language model.*(?:not found|connection)|selected language model|selected connection|no language model|no model|no base URL|random pool|choose a language model|configured/i.test(message))
-    return { statusCode: 400, body: { error: message, code: "ltm_model_configuration" } };
   return {
     statusCode: 500,
     body: {
@@ -437,11 +435,7 @@ export function createLongTermMemoryRoutes(runtime: {
         try {
           return await previewLongTermMemoryBackup(request.body, root);
         } catch (error) {
-          const result = error instanceof z.ZodError
-            ? { statusCode: 400, body: { error: error.message, code: "ltm_invalid_request" } }
-            : error instanceof LtmServiceError
-              ? ltmErrorResponse(error, "Could not preview backup.")
-              : { statusCode: 500, body: { error: error instanceof Error ? error.message : "Could not preview backup.", code: "ltm_unexpected_failure" } };
+          const result = routeError(error, "Could not preview backup.");
           return reply.status(result.statusCode).send(result.body);
         }
       },
@@ -456,11 +450,7 @@ export function createLongTermMemoryRoutes(runtime: {
             root,
           );
         } catch (error) {
-          const result = error instanceof z.ZodError
-            ? { statusCode: 400, body: { error: error.message, code: "ltm_invalid_request" } }
-            : error instanceof LtmServiceError
-              ? ltmErrorResponse(error, "Could not import backup.")
-              : { statusCode: 500, body: { error: error instanceof Error ? error.message : "Could not import backup.", code: "ltm_unexpected_failure" } };
+          const result = routeError(error, "Could not import backup.");
           return reply.status(result.statusCode).send(result.body);
         }
       },
@@ -659,11 +649,20 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply.status(404).send({ error: "Chat not found" });
         const operationId = randomUUID();
         try {
-            const languageModel = await getPackageLanguageModels().resolveForRequest({
-              connectionId: body.connectionId,
-              chatConnectionId: chat?.connectionId ?? null,
-              model: body.model,
-            });
+          let languageModel;
+          try {
+            languageModel = await getPackageLanguageModels().resolveForRequest({
+                connectionId: body.connectionId,
+                chatConnectionId: chat?.connectionId ?? null,
+                model: body.model,
+              });
+          } catch (error) {
+            throw new LtmServiceError(
+              error instanceof Error ? error.message : "Language model configuration is invalid",
+              400,
+              "ltm_model_configuration",
+            );
+          }
           return ltmExtractSourceNoteResponseSchema.parse(
             await processLongTermMemorySource({
               sourceNote,

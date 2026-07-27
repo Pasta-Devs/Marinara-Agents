@@ -907,6 +907,7 @@ async function main() {
       payload: { chatId: "chat-a", model: "missing-model" },
     });
     assert.equal(missingModel.statusCode, 400, missingModel.body);
+    assert.equal(missingModel.json().code, "ltm_model_configuration");
     const extracted = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/source_route_extract/extract",
@@ -1572,6 +1573,7 @@ async function main() {
       },
     });
     assert.equal(failedProvider.statusCode, 400, failedProvider.body);
+    assert.equal(failedProvider.json().code, "ltm_model_configuration");
     assert.equal(
       (await storageService.storage.listNotes({ type: "source" })).some(
         (note: any) => note.provenance?.entryId === "summary-provider-fail",
@@ -1836,8 +1838,6 @@ async function main() {
               modelCalls += 1;
               completionOptions.push(options);
               if (failGameRefine) throw new Error("Fixture refine failure");
-              const payload = JSON.parse(messages.at(-1).content) as Record<string, unknown>;
-              assert.ok(payload);
               return {
                 content: JSON.stringify({
                   summary: "Extracted Moon Vault discovery.",

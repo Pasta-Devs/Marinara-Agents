@@ -499,6 +499,14 @@ export async function applyLtmNoteTransfer<TRebuild = unknown>(
     const skippedNoteIds: string[] = [];
     const derivedNoteIdsTouched: string[] = [];
     const applyIds = new Set(request.applyNoteIds);
+    const planIds = new Set(plan.items.map((item) => item.noteId));
+    const missingNoteIds = request.applyNoteIds.filter((id) => !planIds.has(id));
+    if (missingNoteIds.length > 0) {
+      throw new LtmNoteTransferError(
+        `The transfer preview is stale because ${missingNoteIds.length === 1 ? "a memory is no longer available" : "memories are no longer available"}. Refresh the preview before applying.`,
+        409,
+      );
+    }
     const conflictingNoteIds = plan.items
       .filter((item) => applyIds.has(item.noteId))
       .filter((item) => item.classification === "conflict")

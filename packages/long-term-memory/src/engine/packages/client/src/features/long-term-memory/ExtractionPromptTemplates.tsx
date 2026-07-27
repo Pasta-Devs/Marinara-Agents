@@ -115,7 +115,7 @@ export function ExtractionPromptTemplates({
             name: selectionLabel(selected),
             prompt: selectedBuiltInPrompt,
           };
-    if (!prompt) return;
+    if (!prompt || typeof prompt.prompt !== "string" || !prompt.prompt.trim()) return;
     const template = {
       id: newId(value.promptTemplates),
       name: `${prompt.name} copy`,

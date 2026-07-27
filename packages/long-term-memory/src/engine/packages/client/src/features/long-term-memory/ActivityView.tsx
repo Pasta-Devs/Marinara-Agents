@@ -324,8 +324,10 @@ export default function ActivityView({
       const link = document.createElement("a");
       link.href = url;
       link.download = "ltm-debug-log.jsonl";
+      document.body.appendChild(link);
       link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : "Could not export activity.",
