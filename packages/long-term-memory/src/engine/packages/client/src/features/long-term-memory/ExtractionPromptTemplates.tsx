@@ -16,7 +16,13 @@ type ExtractionForm = Omit<
   "systemPrompt" | "activePromptTemplateId"
 >;
 type Mode = LtmMode;
-const modes: Mode[] = ["conversation", "roleplay", "game"];
+const modes: Mode[] = ["conversation", "roleplay", "visual_novel", "game"];
+const modeLabels: Record<Mode, string> = {
+  conversation: "Conversation",
+  roleplay: "Roleplay",
+  visual_novel: "Visual Novel",
+  game: "Game",
+};
 type PromptSelection =
   | { kind: "default"; mode: Mode }
   | { kind: "custom"; id: string };
@@ -37,8 +43,7 @@ function selectionKey(selection: PromptSelection) {
 
 function selectionLabel(selection: PromptSelection, templateName?: string) {
   if (selection.kind === "default") {
-    const label = selection.mode[0]!.toUpperCase() + selection.mode.slice(1);
-    return `Built-in Default (${label})`;
+    return `Built-in Default (${modeLabels[selection.mode]})`;
   }
   return templateName ?? "Template";
 }
@@ -175,7 +180,7 @@ export function ExtractionPromptTemplates({
             Prompt templates
             <InfoPopover
               label="Prompt templates"
-              content="Custom templates can be activated independently for Conversation, Roleplay, and Game."
+              content="Custom templates can be activated independently for Conversation, Roleplay, Visual Novel, and Game."
             />
           </h4>
         </div>
@@ -191,7 +196,7 @@ export function ExtractionPromptTemplates({
           >
             <span>
               <span className="flex items-center gap-1">
-                {mode[0]!.toUpperCase() + mode.slice(1)} active template
+                {modeLabels[mode]} active template
                 <InfoPopover
                   label={`${mode} active template`}
                   content="Selects the extraction prompt used for this mode. Built-in default uses the package-provided prompt."
@@ -199,7 +204,7 @@ export function ExtractionPromptTemplates({
               </span>
             </span>
             <select
-              aria-label={`${mode[0]!.toUpperCase() + mode.slice(1)} active template`}
+              aria-label={`${modeLabels[mode]} active template`}
               className={inputClass}
               value={value.activePromptTemplateIdsByMode[mode] ?? ""}
               onChange={(event) => setActive(mode, event.target.value || null)}

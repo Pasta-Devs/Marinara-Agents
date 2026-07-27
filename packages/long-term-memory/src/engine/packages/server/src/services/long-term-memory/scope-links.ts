@@ -3,6 +3,7 @@ import { ltmEventSchema, ltmNoteSchema, type LtmEvent } from "../../../../shared
 import { withMergedLtmScopeLinks } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { commitLtmMutation, type LtmMutationFileChange } from "./mutation-transaction.js";
 import { nowIso } from "./ltm-utils.js";
+import { logger } from "./package-runtime.js";
 import { notePathForId } from "./paths.js";
 import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { LongTermMemoryStorage } from "./storage.js";
@@ -30,7 +31,8 @@ export async function applyLtmScopeLinksToDerivedNotes(
       events.push(ltmEventSchema.parse({id:randomUUID(),ts:timestamp,type:`${next.type}.updated`,target:next.id,payload:{note:next,patch:{scope}}}));
     }
     if(files.length)await commitLtmMutation(options.root,{files,events});
-    const rebuild=affectedNoteIds.length?await rebuildLongTermMemoryIndexes({root:options.root}):null;
+    let rebuild=null;
+    if(affectedNoteIds.length)try{rebuild={status:"complete" as const,...await rebuildLongTermMemoryIndexes({root:options.root})};}catch(error){logger.warn(error,"[ltm] Deferred index rebuild after scope-link mutation");rebuild={status:"deferred" as const,error:error instanceof Error?error.message:"Index rebuild failed"};}
     return{sourceNoteId,count:affectedNoteIds.length,affectedNoteIds,rebuild};
   });
 }

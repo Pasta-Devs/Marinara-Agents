@@ -988,6 +988,7 @@ export default function SourcesWorkspace({
               <option value="game">Game</option>
               <option value="conversation">Conversation</option>
               <option value="roleplay">Roleplay</option>
+              <option value="visual_novel">Visual Novel</option>
             </select>
           </label>
           <Button

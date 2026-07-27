@@ -22,24 +22,33 @@ async function main() {
   );
   const originalFetch = globalThis.fetch;
   const requestedOffsets: string[] = [];
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url, "http://localhost");
-    requestedOffsets.push(url.searchParams.get("offset") ?? "");
-    const offset = Number(url.searchParams.get("offset"));
-    return new Response(JSON.stringify(offset === 0 ? Array.from({ length: 500 }, (_, id) => id) : [500]));
-  }) as typeof fetch;
-  assert.equal((await requestAllNotes<number>("/notes?includeGlobal=true")).length, 501);
-  assert.deepEqual(requestedOffsets, ["0", "500"]);
+  try {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url, "http://localhost");
+      requestedOffsets.push(url.searchParams.get("offset") ?? "");
+      const offset = Number(url.searchParams.get("offset"));
+      return new Response(JSON.stringify(offset === 0 ? Array.from({ length: 500 }, (_, id) => id) : [500]));
+    }) as typeof fetch;
+    assert.equal((await requestAllNotes<number>("/notes?includeGlobal=true")).length, 501);
+    assert.deepEqual(requestedOffsets, ["0", "500"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
   requestedOffsets.length = 0;
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url, "http://localhost");
-    requestedOffsets.push(url.searchParams.get("offset") ?? "");
-    return new Response(JSON.stringify(Array.from({ length: 500 }, (_, id) => id)));
-  }) as typeof fetch;
-  assert.equal((await requestAllNotes<number>("/notes")).length, 100_000);
-  assert.equal(requestedOffsets.length, 200);
-  assert.equal(requestedOffsets.at(-1), "99500");
-  globalThis.fetch = originalFetch;
+  try {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url, "http://localhost");
+      requestedOffsets.push(url.searchParams.get("offset") ?? "");
+      return new Response(JSON.stringify(Array.from({ length: 500 }, (_, id) => id)));
+    }) as typeof fetch;
+    await assert.rejects(requestAllNotes<number>("/notes"), {
+      message: "Long-Term Memory note limit exceeded (100,000 notes)",
+    });
+    assert.equal(requestedOffsets.length, 201);
+    assert.equal(requestedOffsets.at(-1), "100000");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
   const { configurePackageRuntime } = await import(
     `${source}/package-runtime.ts`
   );

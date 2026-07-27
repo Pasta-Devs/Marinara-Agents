@@ -43,7 +43,7 @@ export const ltmEvidenceUnitBucketSchema = z.enum([
 
 export const ltmClaimKindSchema = z.enum(["static", "change"]);
 
-export const ltmModeSchema = z.enum(["roleplay", "conversation", "game"]);
+export const ltmModeSchema = z.enum(["roleplay", "conversation", "visual_novel", "game"]);
 const LTM_EXTRACTION_MODES = ltmModeSchema.options;
 
 export const ltmExtractionReasoningEffortSchema = z.enum([
@@ -186,6 +186,7 @@ export const ltmExtractionPromptTemplateSchema = z
 const LTM_EXTRACTION_MODE_LABELS = {
   roleplay: "Roleplay",
   conversation: "Conversation",
+  visual_novel: "Visual Novel",
   game: "Game",
 } as const satisfies Record<(typeof LTM_EXTRACTION_MODES)[number], string>;
 
@@ -196,7 +197,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isLtmExtractionMode(
   value: unknown,
 ): value is (typeof LTM_EXTRACTION_MODES)[number] {
-  return value === "roleplay" || value === "conversation" || value === "game";
+  return value === "roleplay" || value === "conversation" || value === "visual_novel" || value === "game";
 }
 
 function stripLegacyPromptTemplateMode(template: unknown) {
@@ -344,6 +345,7 @@ const ltmActivePromptTemplateIdsByModeSchema = z
   .object({
     roleplay: z.string().min(1).max(64).nullable().optional(),
     conversation: z.string().min(1).max(64).nullable().optional(),
+    visual_novel: z.string().min(1).max(64).nullable().optional(),
     game: z.string().min(1).max(64).nullable().optional(),
   })
   .strict();

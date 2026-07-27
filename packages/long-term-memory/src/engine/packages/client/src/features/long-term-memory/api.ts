@@ -60,6 +60,8 @@ export async function requestAllNotes<T>(path: string): Promise<T[]> {
     notes.push(...page);
     if (page.length < 500) return notes;
   }
+  const overflow = await request<T[]>(`${path}${path.includes("?") ? "&" : "?"}limit=500&offset=100000`);
+  if (overflow.length) throw new Error("Long-Term Memory note limit exceeded (100,000 notes)");
   return notes;
 }
 

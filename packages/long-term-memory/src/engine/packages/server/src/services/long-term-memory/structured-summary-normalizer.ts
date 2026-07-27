@@ -1580,7 +1580,7 @@ function renderToneText(section: StructuredSection) {
 }
 
 function isRoleplayMode(mode?: LtmMode, modes?: readonly LtmMode[]) {
-  return (mode ?? modes?.[0] ?? "roleplay") === "roleplay";
+  return ["roleplay", "visual_novel"].includes(mode ?? modes?.[0] ?? "roleplay");
 }
 
 function isEmptyLinkValue(value: string) {
