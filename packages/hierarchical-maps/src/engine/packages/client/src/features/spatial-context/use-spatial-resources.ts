@@ -22,6 +22,41 @@ export interface SpatialGalleryImage {
   url: string;
 }
 
+export interface SpatialGalleryImagePromptPreviewItem {
+  id: string;
+  kind: "background";
+  title: string;
+  sourcePrompt: string;
+  prompt: string;
+  negativePrompt: string;
+  width: number;
+  height: number;
+}
+
+export interface SpatialGalleryImagePromptPreview {
+  requestCount: number;
+  connection: {
+    id: string;
+    name: string;
+    model: string;
+    source: string;
+  };
+  styleProfile: {
+    id: string;
+    name: string;
+  };
+  campaign: {
+    included: boolean;
+    artStyleIncluded: boolean;
+  };
+  chatSettings: {
+    imageInstructionsIncluded: boolean;
+  };
+  width: number;
+  height: number;
+  items: SpatialGalleryImagePromptPreviewItem[];
+}
+
 export function useSpatialChat(chatId: string | null) {
   return useQuery({
     queryKey: spatialResourceKeys.chat(chatId ?? ""),
@@ -51,7 +86,7 @@ export function useSpatialGalleryImages(chatId: string, enabled = true) {
 export function useGenerateSpatialGalleryImage(chatId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { prompt: string; debugMode?: boolean }) =>
+    mutationFn: (input: { prompt: string; title?: string; debugMode?: boolean }) =>
       packageApi.post<SpatialGalleryImage>(`/gallery/${chatId}/generate-image`, input),
     onSuccess: (image) => {
       queryClient.setQueryData<SpatialGalleryImage[]>(spatialResourceKeys.gallery(chatId), (current = []) => [
@@ -59,6 +94,16 @@ export function useGenerateSpatialGalleryImage(chatId: string) {
         ...current.filter((candidate) => candidate.id !== image.id),
       ]);
     },
+  });
+}
+
+export function usePreviewSpatialGalleryImages(chatId: string) {
+  return useMutation({
+    mutationFn: (input: {
+      items: Array<{ id: string; title: string; prompt: string }>;
+      debugMode?: boolean;
+    }) =>
+      packageApi.post<SpatialGalleryImagePromptPreview>(`/gallery/${chatId}/generate-image/preview`, input),
   });
 }
 

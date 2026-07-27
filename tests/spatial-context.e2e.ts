@@ -1635,13 +1635,53 @@ test("Map editor fills missing location artwork with one image per location", as
   });
   expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
 
-  const generatedPrompts: string[] = [];
+  const generatedRequests: Array<{ prompt: string; title: string }> = [];
+  const previewRequests: Array<{ id: string; title: string; prompt: string }> = [];
   try {
+    await page.route(`**/api/gallery/${chat.id}/generate-image/preview`, async (route) => {
+      const payload = route.request().postDataJSON() as {
+        items?: Array<{ id?: unknown; title?: unknown; prompt?: unknown }>;
+      };
+      const items = (payload.items ?? []).map((item) => ({
+        id: typeof item.id === "string" ? item.id : "",
+        title: typeof item.title === "string" ? item.title : "",
+        prompt: typeof item.prompt === "string" ? item.prompt : "",
+      }));
+      previewRequests.push(...items);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          requestCount: items.length,
+          connection: {
+            id: "maps-art-connection",
+            name: "Maps Art Connection",
+            model: "test-art-model",
+            source: "test-art-service",
+          },
+          styleProfile: { id: "velvet-campaign", name: "Velvet Campaign" },
+          campaign: { included: true, artStyleIncluded: true },
+          chatSettings: { imageInstructionsIncluded: true },
+          width: 1280,
+          height: 768,
+          items: items.map((item) => ({
+            ...item,
+            kind: "background",
+            sourcePrompt: item.prompt,
+            prompt: `Engine campaign style. ${item.prompt}`,
+            negativePrompt: "global negative, campaign hard negative",
+            width: 1280,
+            height: 768,
+          })),
+        }),
+      });
+    });
     await page.route(`**/api/gallery/${chat.id}/generate-image`, async (route) => {
-      const payload = route.request().postDataJSON() as { prompt?: unknown };
+      const payload = route.request().postDataJSON() as { prompt?: unknown; title?: unknown };
       const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
-      generatedPrompts.push(prompt);
-      const id = `generated-map-art-${generatedPrompts.length}`;
+      const title = typeof payload.title === "string" ? payload.title : "";
+      generatedRequests.push({ prompt, title });
+      const id = `generated-map-art-${generatedRequests.length}`;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1682,12 +1722,28 @@ test("Map editor fills missing location artwork with one image per location", as
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
     const fillArtwork = workspace.locator("[data-marinara-fill-map-artwork]");
-    await expect(workspace).toContainText("Create 2 missing images");
+    await expect(workspace).toContainText("Review 2 missing image requests");
     await fillArtwork.click();
     await expect(fillArtwork).toHaveCount(0);
-    expect(generatedPrompts).toHaveLength(2);
-    expect(generatedPrompts[0]).toContain("Shrouded Coast");
-    expect(generatedPrompts[1]).toContain("Gloam Harbor");
+    expect(previewRequests).toHaveLength(2);
+    expect(generatedRequests).toHaveLength(0);
+    await expect(workspace).toContainText("Review 2 image requests");
+    await expect(workspace).toContainText("Maps Art Connection");
+    await expect(workspace).toContainText("test-art-model");
+    await expect(workspace).toContainText("Velvet Campaign");
+    await expect(workspace).toContainText("World + art style");
+    await expect(workspace).toContainText("Scene instructions");
+    await expect(workspace).toContainText("Included");
+    await expect(workspace).toContainText("1280 × 768");
+    await expect(workspace).toContainText("Engine campaign style. Wide establishing image of Shrouded Coast");
+    await expect(workspace).toContainText("global negative, campaign hard negative");
+
+    await workspace.locator("[data-marinara-confirm-map-artwork]").click();
+    await expect.poll(() => generatedRequests.length).toBe(2);
+    expect(generatedRequests[0]).toMatchObject({ title: "Shrouded Coast" });
+    expect(generatedRequests[0]!.prompt).toContain("Shrouded Coast");
+    expect(generatedRequests[1]).toMatchObject({ title: "Gloam Harbor" });
+    expect(generatedRequests[1]!.prompt).toContain("Gloam Harbor");
 
     const beforeSaveResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     const beforeSave = (await beforeSaveResponse.json()) as {
@@ -1728,6 +1784,7 @@ test("Map editor fills missing location artwork with one image per location", as
       mapBackgroundImageId: "existing-sewers-art",
     });
   } finally {
+    await page.unroute(`**/api/gallery/${chat.id}/generate-image/preview`);
     await page.unroute(`**/api/gallery/${chat.id}/generate-image`);
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }

@@ -56,10 +56,12 @@ import {
 import {
   getSpatialExcludedLorebookIds,
   useGenerateSpatialGalleryImage,
+  usePreviewSpatialGalleryImages,
   useSpatialChat,
   useSpatialGalleryImages,
   useSpatialLorebookEntries,
   useSpatialLorebooks,
+  type SpatialGalleryImagePromptPreview,
 } from "./use-spatial-resources";
 import {
   defaultGenerationPreferences,
@@ -153,6 +155,7 @@ export function SpatialMapWorkspace({
   const { data: chat } = useSpatialChat(chatId);
   const galleryImages = useSpatialGalleryImages(chatId);
   const generateGalleryImage = useGenerateSpatialGalleryImage(chatId);
+  const previewGalleryImages = usePreviewSpatialGalleryImages(chatId);
   const pendingSetupReview = pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
   const [baseDefinition, setBaseDefinition] = useState<SpatialContextDefinition | null>(null);
   const [draft, setDraft] = useState<SpatialContextDefinition | null>(null);
@@ -191,6 +194,7 @@ export function SpatialMapWorkspace({
   const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
   const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
+  const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
   const backgroundMoveFrameRef = useRef<number | null>(null);
   const pendingBackgroundMoveRef = useRef<{
     locationId: string;
@@ -369,6 +373,10 @@ export function SpatialMapWorkspace({
   const artworkImagesToGenerate = missingArtworkLocations.filter(
     (location) => !location.referenceImageId && !location.mapBackgroundImageId,
   ).length;
+  const artworkPreviewSignature = missingArtworkLocations
+    .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
+    .map((location) => `${location.id}\u0000${location.name}\u0000${defaultLocationReferencePrompt(location)}`)
+    .join("\u0001");
   const canEnable =
     !!draft?.startingLocationId &&
     draft.locations.some((location) => location.id === draft.startingLocationId && location.status === "active");
@@ -406,6 +414,10 @@ export function SpatialMapWorkspace({
   }, [savedFlash]);
 
   useEffect(() => {
+    setArtworkPreview(null);
+  }, [artworkPreviewSignature]);
+
+  useEffect(() => {
     if (
       layoutEditingMode !== "background" ||
       (localPresentation === "map" && localMapBackgroundImageUrl) ||
@@ -421,6 +433,7 @@ export function SpatialMapWorkspace({
     setServerIssues([]);
     setSavedFlash(false);
     setFirstSaveResult(null);
+    setArtworkPreview(null);
   }, []);
 
   const fillMissingArtwork = useCallback(async () => {
@@ -429,6 +442,7 @@ export function SpatialMapWorkspace({
     let next = draft;
     let updatedLocations = 0;
     let failedImages = 0;
+    setArtworkPreview(null);
     setArtworkProgress({ completed: 0, total: missingArtworkLocations.length, currentName: "" });
 
     for (const [index, target] of missingArtworkLocations.entries()) {
@@ -443,6 +457,7 @@ export function SpatialMapWorkspace({
         try {
           const image = await generateGalleryImage.mutateAsync({
             prompt: defaultLocationReferencePrompt(target),
+            title: target.name,
             debugMode,
           });
           imageId = image.id;
@@ -490,6 +505,23 @@ export function SpatialMapWorkspace({
     generateGalleryImage,
     missingArtworkLocations,
   ]);
+
+  const reviewMissingArtwork = useCallback(async () => {
+    if (artworkProgress || previewGalleryImages.isPending || artworkImagesToGenerate === 0) return;
+    const items = missingArtworkLocations
+      .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
+      .map((location) => ({
+        id: location.id,
+        title: location.name,
+        prompt: defaultLocationReferencePrompt(location),
+      }));
+    try {
+      const preview = await previewGalleryImages.mutateAsync({ items, debugMode });
+      setArtworkPreview(preview);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not prepare the image request preview.");
+    }
+  }, [artworkImagesToGenerate, artworkProgress, debugMode, missingArtworkLocations, previewGalleryImages]);
 
   const flushBackgroundMove = useCallback(() => {
     backgroundMoveFrameRef.current = null;
@@ -1390,35 +1422,155 @@ export function SpatialMapWorkspace({
       />
 
       {!aiBuilderOpen && missingArtworkLocations.length > 0 && (
-        <section className="flex flex-col gap-3 border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3 sm:flex-row sm:items-center">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">Location artwork</p>
-            <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-              {artworkImagesToGenerate > 0
-                ? `Create ${artworkImagesToGenerate} missing image${artworkImagesToGenerate === 1 ? "" : "s"}. Each location uses the same image for its reference and child-map background.`
-                : "Reuse existing location art for missing references and child-map backgrounds."}
-            </p>
-          </div>
-          <button
-            type="button"
-            data-marinara-fill-map-artwork
-            onClick={() => void fillMissingArtwork()}
-            disabled={artworkProgress !== null || conflict || updateSpatial.isPending}
-            className="mari-chrome-control min-h-11 shrink-0 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
-          >
-            {artworkProgress ? (
-              <Loader2 size="0.8125rem" className="animate-spin" />
-            ) : (
-              <ImageIcon size="0.8125rem" />
-            )}
-            {artworkProgress
-              ? `Creating ${Math.min(artworkProgress.completed + 1, artworkProgress.total)} of ${artworkProgress.total}`
-              : "Create missing artwork"}
-          </button>
-          {artworkProgress?.currentName && (
-            <span className="sr-only" role="status" aria-live="polite">
-              Creating artwork for {artworkProgress.currentName}
-            </span>
+        <section className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3">
+          {artworkPreview ? (
+            <div
+              className="mx-auto flex w-full max-w-5xl flex-col gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 p-3"
+              aria-label="Review location artwork image requests"
+            >
+              <div className="flex items-start gap-2.5">
+                <AlertCircle size="0.9375rem" className="mt-0.5 shrink-0 text-amber-300" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">
+                    Review {artworkPreview.requestCount} image request
+                    {artworkPreview.requestCount === 1 ? "" : "s"}
+                  </p>
+                  <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                    This will send {artworkPreview.requestCount} separate request
+                    {artworkPreview.requestCount === 1 ? "" : "s"} to your image provider. Existing artwork is
+                    reused, nothing is replaced, and each new image becomes both the location reference and its
+                    child-map background. Prompts use the relevant Chat Settings and global image-generation settings.
+                  </p>
+                </div>
+              </div>
+
+              <dl className="grid gap-2 text-[0.6875rem] sm:grid-cols-2 lg:grid-cols-6">
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Image connection</dt>
+                  <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.connection.name}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Model</dt>
+                  <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.connection.model}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Engine style</dt>
+                  <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.styleProfile.name}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Campaign settings</dt>
+                  <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.campaign.included
+                      ? artworkPreview.campaign.artStyleIncluded
+                        ? "World + art style"
+                        : "World context"
+                      : "No saved context"}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Scene instructions</dt>
+                  <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.chatSettings.imageInstructionsIncluded ? "Included" : "None saved"}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Image size</dt>
+                  <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.width} × {artworkPreview.height}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="grid gap-2">
+                {artworkPreview.items.map((item, index) => (
+                  <details key={item.id} className="rounded-lg border border-white/10 bg-black/10" open={index === 0}>
+                    <summary className="cursor-pointer px-3 py-2 text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">
+                      {index + 1}. {item.title}
+                    </summary>
+                    <div className="grid gap-2 border-t border-white/10 px-3 py-2.5">
+                      <div>
+                        <p className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]">
+                          Prompt sent to provider
+                        </p>
+                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-black/15 p-2 font-mono text-[0.625rem] leading-relaxed text-[var(--marinara-editor-title)]">
+                          {item.prompt}
+                        </pre>
+                      </div>
+                      <div>
+                        <p className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]">
+                          Negative prompt
+                        </p>
+                        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-black/15 p-2 font-mono text-[0.625rem] leading-relaxed text-[var(--marinara-editor-title)]">
+                          {item.negativePrompt || "None"}
+                        </pre>
+                      </div>
+                    </div>
+                  </details>
+                ))}
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setArtworkPreview(null)}
+                  className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  data-marinara-confirm-map-artwork
+                  onClick={() => void fillMissingArtwork()}
+                  disabled={artworkProgress !== null || conflict || updateSpatial.isPending}
+                  className="mari-editor-action mari-editor-action--primary min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                >
+                  <Sparkles size="0.8125rem" /> Generate {artworkPreview.requestCount} image
+                  {artworkPreview.requestCount === 1 ? "" : "s"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">Location artwork</p>
+                <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                  {artworkImagesToGenerate > 0
+                    ? `Review ${artworkImagesToGenerate} missing image request${artworkImagesToGenerate === 1 ? "" : "s"} before anything is generated. Each location uses the same image for its reference and child-map background.`
+                    : "Reuse existing location art for missing references and child-map backgrounds."}
+                </p>
+              </div>
+              <button
+                type="button"
+                data-marinara-fill-map-artwork
+                onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
+                disabled={artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending}
+                className="mari-chrome-control min-h-11 shrink-0 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
+              >
+                {artworkProgress || previewGalleryImages.isPending ? (
+                  <Loader2 size="0.8125rem" className="animate-spin" />
+                ) : (
+                  <ImageIcon size="0.8125rem" />
+                )}
+                {artworkProgress
+                  ? `Creating ${Math.min(artworkProgress.completed + 1, artworkProgress.total)} of ${artworkProgress.total}`
+                  : previewGalleryImages.isPending
+                    ? "Preparing preview"
+                    : artworkImagesToGenerate > 0
+                      ? `Review ${artworkImagesToGenerate} request${artworkImagesToGenerate === 1 ? "" : "s"}`
+                      : "Apply existing artwork"}
+              </button>
+              {artworkProgress?.currentName && (
+                <span className="sr-only" role="status" aria-live="polite">
+                  Creating artwork for {artworkProgress.currentName}
+                </span>
+              )}
+            </div>
           )}
         </section>
       )}
