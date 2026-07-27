@@ -1593,7 +1593,8 @@ export function SpatialMapWorkspace({
         <section className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3">
           {artworkPreview ? (
             <div
-              className="mx-auto flex max-h-[calc(100dvh-8rem)] min-h-0 w-full max-w-5xl flex-col gap-3 overflow-hidden rounded-xl border border-amber-500/35 bg-amber-500/10 p-3"
+              className="mx-auto flex min-h-0 w-full max-w-5xl flex-col gap-3 overflow-hidden rounded-xl border border-amber-500/35 bg-amber-500/10 p-3"
+              style={{ maxHeight: "calc(100dvh - 8rem)" }}
               aria-label="Review location artwork image requests"
             >
               <div className="flex items-start gap-2.5">

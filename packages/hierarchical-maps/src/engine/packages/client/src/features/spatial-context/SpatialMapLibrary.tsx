@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { ArrowLeft, Download, Loader2, Map, PencilLine, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { spatialContextDefinitionSchema, type SpatialOwnerMode } from "@marinara-engine/shared";
@@ -26,13 +26,14 @@ interface SpatialMapLibraryProps {
   onAppliedToChat?: () => void;
   onOpenLorebook?: (lorebookId: string) => void;
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
-  confirmAction?: (options: {
-    title?: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-    tone?: "default" | "destructive" | "accent";
-  }) => Promise<boolean>;
+}
+
+interface LibraryConfirmationOptions {
+  title?: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: "default" | "destructive" | "accent";
 }
 
 function importedTemplateName(fileName: string): string {
@@ -51,7 +52,6 @@ export function SpatialMapLibrary({
   onAppliedToChat,
   onOpenLorebook,
   onEnabledForChatChange,
-  confirmAction,
 }: SpatialMapLibraryProps) {
   const templates = useSpatialMapTemplates();
   const createTemplate = useCreateSpatialMapTemplate();
@@ -61,6 +61,8 @@ export function SpatialMapLibrary({
   const importInputRef = useRef<HTMLInputElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [pendingConfirmation, setPendingConfirmation] = useState<LibraryConfirmationOptions | null>(null);
+  const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const editingTemplate = templates.data?.find((template) => template.id === editingId) ?? null;
   const supportedChat = !!chatId && (chatMode === "roleplay" || chatMode === "game");
   const visibleTemplates = useMemo(() => {
@@ -69,10 +71,28 @@ export function SpatialMapLibrary({
     return (templates.data ?? []).filter((template) => template.name.toLocaleLowerCase().includes(normalized));
   }, [query, templates.data]);
 
-  const ask = async (options: Parameters<NonNullable<typeof confirmAction>>[0]) => {
-    if (confirmAction) return confirmAction(options);
-    return window.confirm(options.message);
-  };
+  const resolveConfirmation = useCallback((confirmed: boolean) => {
+    const resolve = confirmationResolverRef.current;
+    confirmationResolverRef.current = null;
+    setPendingConfirmation(null);
+    resolve?.(confirmed);
+  }, []);
+
+  const ask = useCallback((options: LibraryConfirmationOptions) => {
+    confirmationResolverRef.current?.(false);
+    return new Promise<boolean>((resolve) => {
+      confirmationResolverRef.current = resolve;
+      setPendingConfirmation(options);
+    });
+  }, []);
+
+  useEffect(
+    () => () => {
+      confirmationResolverRef.current?.(false);
+      confirmationResolverRef.current = null;
+    },
+    [],
+  );
 
   const createBlank = async () => {
     if (createTemplate.isPending) return;
@@ -187,6 +207,50 @@ export function SpatialMapLibrary({
 
   return (
     <div className="mari-editor-shell flex min-h-0 flex-1 flex-col overflow-hidden" data-marinara-map-template-library>
+      {pendingConfirmation && (
+        <div
+          data-chat-floating-panel
+          role="dialog"
+          aria-modal="true"
+          aria-label={pendingConfirmation.title ?? "Confirm map template action"}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--background)]/85 p-3 sm:p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) resolveConfirmation(false);
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background)] shadow-2xl">
+            <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">
+              <h2 className="text-base font-semibold text-[var(--foreground)]">
+                {pendingConfirmation.title ?? "Confirm map template action"}
+              </h2>
+            </div>
+            <p className="whitespace-pre-wrap px-4 py-4 text-sm leading-relaxed text-[var(--foreground)] sm:px-5">
+              {pendingConfirmation.message}
+            </p>
+            <div className="flex flex-col gap-2 border-t border-[var(--border)] px-4 py-4 sm:flex-row sm:justify-end sm:px-5">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => resolveConfirmation(false)}
+                className="mari-chrome-control min-h-11 w-full px-4 text-sm sm:w-auto"
+              >
+                {pendingConfirmation.cancelLabel ?? "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => resolveConfirmation(true)}
+                className={
+                  pendingConfirmation.tone === "destructive"
+                    ? "mari-chrome-control mari-chrome-control--danger min-h-11 w-full px-4 text-sm sm:w-auto"
+                    : "mari-editor-action mari-editor-action--primary min-h-11 w-full px-4 text-sm sm:w-auto"
+                }
+              >
+                {pendingConfirmation.confirmLabel ?? "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="mari-editor-header">
         <button type="button" onClick={onClose} className="mari-editor-action inline-flex min-h-11 min-w-11" aria-label="Back to Maps">
           <ArrowLeft size="1.125rem" />
