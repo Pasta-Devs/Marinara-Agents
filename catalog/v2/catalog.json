@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-27T01:46:39.492Z",
+  "generatedAt": "2026-07-27T02:22:48.667Z",
   "packages": [
     {
       "manifest": {
@@ -1298,7 +1298,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.0.0.zip",
-        "sha256": "defc6f47f81291d71f9f0c839d610ea213ef20767f3db64066284a7aa39853dd",
+        "sha256": "b3f438e1932c33d1d4e973179747b8052fc607c053973bcfae90e7fa46d62762",
         "bytes": 11958
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
