@@ -198,7 +198,7 @@ export function ExtractionPromptTemplates({
               <span className="flex items-center gap-1">
                 {modeLabels[mode]} active template
                 <InfoPopover
-                  label={`${mode} active template`}
+                  label={`${modeLabels[mode]} active template`}
                   content="Selects the extraction prompt used for this mode. Built-in default uses the package-provided prompt."
                 />
               </span>
