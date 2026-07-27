@@ -149,7 +149,7 @@ async function resolveLoreReferenceWarnings(
         : [
             {
               code: "lorebook_entry_missing" as const,
-              message: `Linked lore entry ${entryId} no longer exists. Detach it or import the missing lorebook.`,
+              message: `“${location.name}” links to a lore entry that was deleted or is unavailable. Open Linked lore for this location and detach the missing entry, or restore/import its lorebook.`,
               path: ["locations", locationIndex, "lorebookEntryIds", entryIndex],
               locationId: location.id,
             },

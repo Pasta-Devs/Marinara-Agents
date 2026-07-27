@@ -2258,14 +2258,16 @@ async function main() {
     const upgradedBranchSpatial = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${branch.id}/spatial-context`,
-    })) as { warnings: Array<{ code: string; locationId?: string }> };
+    })) as { warnings: Array<{ code: string; message: string; locationId?: string }> };
     assert.ok(
       upgradedBranchSpatial.warnings.some(
         (warning) =>
           warning.code === "lorebook_entry_missing" &&
-          warning.locationId === "lifecycle_harbor",
+          warning.locationId === "lifecycle_harbor" &&
+          warning.message ===
+            "“Lifecycle Harbor” links to a lore entry that was deleted or is unavailable. Open Linked lore for this location and detach the missing entry, or restore/import its lorebook.",
       ),
-      "The updated artifact must keep warning for an active location's missing lore link",
+      "The updated artifact must identify the active location without exposing its opaque missing lore ID",
     );
     assert.equal(
       upgradedBranchSpatial.warnings.some(

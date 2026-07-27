@@ -2122,6 +2122,87 @@ test("Large map artwork reviews keep their actions visible while requests scroll
   }
 });
 
+test("missing location lore explains the problem without exposing opaque entry IDs", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const missingEntryId = `opaque-missing-entry-${Date.now()}`;
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: `Maps Missing Lore ${testInfo.project.name}`,
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: {
+        ...generatedDefinition,
+        enabled: true,
+        startingLocationId: "ai_harbor",
+        locations: generatedDefinition.locations.map((location) =>
+          location.id === "ai_harbor"
+            ? { ...location, lorebookEntryIds: [missingEntryId] }
+            : location,
+        ),
+      },
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator(
+      testInfo.project.name.includes("mobile")
+        ? '[data-component="RightPanelMobile"]'
+        : '[data-component="RightPanelDesktop"]',
+    );
+    await agentsPanel
+      .locator('[data-agent-name="Hierarchical Maps"]')
+      .getByText("Hierarchical Maps", { exact: true })
+      .click();
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(home).toBeVisible();
+    await home.getByRole("button", { name: "Edit map", exact: true }).click();
+
+    const workspace = page.locator("[data-marinara-maps-workspace-overlay]");
+    const message =
+      "“Gloam Harbor” links to a lore entry that was deleted or is unavailable. Open Linked lore for this location and detach the missing entry, or restore/import its lorebook.";
+    await expect(workspace.getByText("Fix 1 issue(s) before saving.", { exact: true })).toBeVisible();
+    await expect(workspace).toContainText(message);
+    await expect(workspace).not.toContainText(missingEntryId);
+
+    const details = workspace.locator('section[aria-label="Details for Gloam Harbor"]');
+    await details.getByText("Linked lore", { exact: true }).click();
+    await expect(details.getByText("Missing lore entry", { exact: true })).toBeVisible();
+    await expect(details.getByText("The original entry name is unavailable.", { exact: true })).toBeVisible();
+    await details.getByRole("button", { name: "Detach", exact: true }).click();
+    await expect(workspace.getByText("Fix 1 issue(s) before saving.", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
 test("Deep maps and long labels remain keyboard and touch operable across themes", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const chatResponse = await page.request.post("/api/chats", {
@@ -4059,11 +4140,18 @@ test("Roleplay and Game generation, retry, and continuation share historical pro
     const roleplaySave = (await roleplaySaveResponse.json()) as {
       currentLocationId: string;
       definition: { revision: number };
-      warnings?: Array<{ code?: string }>;
+      warnings?: Array<{ code?: string; message?: string; locationId?: string }>;
     };
     expect(roleplaySave.currentLocationId).toBe("ai_harbor");
     expect(roleplaySave.warnings).toEqual(
-      expect.arrayContaining([expect.objectContaining({ code: "lorebook_entry_missing" })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "lorebook_entry_missing",
+          locationId: "ai_harbor",
+          message:
+            "“Gloam Harbor” links to a lore entry that was deleted or is unavailable. Open Linked lore for this location and detach the missing entry, or restore/import its lorebook.",
+        }),
+      ]),
     );
 
     const roleplayLive = await previewPrompt(roleplayChat.id);
@@ -4245,11 +4333,18 @@ test("Roleplay and Game generation, retry, and continuation share historical pro
     const gameSave = (await gameSaveResponse.json()) as {
       currentLocationId: string;
       definition: { revision: number };
-      warnings?: Array<{ code?: string }>;
+      warnings?: Array<{ code?: string; message?: string; locationId?: string }>;
     };
     expect(gameSave.currentLocationId).toBe("ai_harbor");
     expect(gameSave.warnings).toEqual(
-      expect.arrayContaining([expect.objectContaining({ code: "lorebook_entry_missing" })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "lorebook_entry_missing",
+          locationId: "ai_harbor",
+          message:
+            "“Gloam Harbor” links to a lore entry that was deleted or is unavailable. Open Linked lore for this location and detach the missing entry, or restore/import its lorebook.",
+        }),
+      ]),
     );
 
     const gameLive = await previewPrompt(gameChat.id);

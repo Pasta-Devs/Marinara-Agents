@@ -688,7 +688,7 @@ export function LocationInspector({
                           </p>
                           <p className="mt-0.5 truncate text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
                             {!entry
-                              ? entryId
+                              ? "The original entry name is unavailable."
                               : excluded
                                 ? `${lorebook?.name ?? "Lorebook"} · excluded from this chat`
                                 : disabled
