@@ -3,8 +3,10 @@ import { z } from "zod";
 import {
   generateSpatialMapDraftRequestSchema,
   pendingSpatialTransitionSchema,
+  spatialContextDefinitionSchema,
   updateSpatialContextRequestSchema,
   type CapabilityChatRecord,
+  type CapabilityDocumentRecord,
   type CapabilityResourceHost,
   type GenerateSpatialMapDraftResponse,
   type SpatialContextDefinition,
@@ -34,6 +36,7 @@ import {
 import { parseSpatialMetadata } from "../services/spatial-context/metadata.js";
 import {
   getPackageAgentConnectionId,
+  getPackageAgentSettings,
   getPackageJson,
   getPackageLanguageModels,
   getPackagePersistence,
@@ -41,12 +44,17 @@ import {
   isDebugAgentsEnabled,
   logger,
   logDebugOverride,
+  newTimeSortableId,
+  now,
   updatePackageAgentConfiguration,
   updatePackageAgentSettings,
 } from "../services/spatial-context/package-runtime.js";
 import {
   GENERATION_PROMPT_LIBRARIES_VERSION,
+  defaultGenerationPreferences,
+  generationPreferencesWithPromptLibrary,
   normalizeHierarchyProfile,
+  createSpatialMapTemplateData,
   parseSpatialGenerationPromptLibraries,
   resolveSpatialGenerationPromptOption,
   SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY,
@@ -56,6 +64,8 @@ import {
   spatialGenerationPreferencesSchema,
   spatialHierarchyProfileSchema,
   spatialTurnPromptTemplatesSchema,
+  SPATIAL_MAP_TEMPLATE_VERSION,
+  type SpatialMapTemplateRecord,
   type SpatialGenerationPromptLibraries,
   type SpatialHierarchyProfile,
 } from "../../../maps-shared/src/maps-model.js";
@@ -82,6 +92,51 @@ const spatialAgentConfigurationUpdateSchema = z.object({
     author: z.string(),
   }),
 });
+
+const SPATIAL_MAP_TEMPLATE_PACKAGE_ID = "hierarchical-maps";
+const SPATIAL_MAP_TEMPLATE_KIND = "map-template";
+
+const spatialMapTemplateInputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(1_000).default(""),
+    definition: spatialContextDefinitionSchema,
+    hierarchyProfile: spatialHierarchyProfileSchema,
+  })
+  .strict();
+
+const spatialMapTemplateUpdateSchema = spatialMapTemplateInputSchema.extend({
+  expectedRevision: z.number().int().positive().safe(),
+});
+
+const spatialMapTemplateDeleteSchema = z
+  .object({ expectedRevision: z.number().int().positive().safe() })
+  .strict();
+
+const spatialMapTemplateDataSchema = z
+  .object({
+    version: z.literal(SPATIAL_MAP_TEMPLATE_VERSION),
+    definition: spatialContextDefinitionSchema,
+    hierarchyProfile: spatialHierarchyProfileSchema,
+  })
+  .strict();
+
+function readSpatialMapTemplate(document: CapabilityDocumentRecord): SpatialMapTemplateRecord | null {
+  const data = spatialMapTemplateDataSchema.safeParse(document.data);
+  if (!data.success) {
+    logger.warn("Ignored invalid Hierarchical Maps template document %s", document.id);
+    return null;
+  }
+  return {
+    id: document.id,
+    name: document.name,
+    description: document.description,
+    data: data.data,
+    revision: document.revision,
+    createdAt: document.createdAt,
+    updatedAt: document.updatedAt,
+  };
+}
 
 function readTrimmedString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -459,6 +514,252 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     return spatialTurnPromptTemplatesSchema.parse(
       settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
     );
+  });
+
+  app.get("/spatial-context/templates", async () => {
+    const documents = await persistence.documents.list(SPATIAL_MAP_TEMPLATE_PACKAGE_ID, SPATIAL_MAP_TEMPLATE_KIND);
+    return documents.flatMap((document) => {
+      const template = readSpatialMapTemplate(document);
+      return template ? [template] : [];
+    });
+  });
+
+  app.post("/spatial-context/templates", async (request, reply) => {
+    const input = spatialMapTemplateInputSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.status(400).send({
+        error: input.error.issues[0]?.message ?? "The map template is invalid.",
+        code: "spatial_map_template_invalid",
+        issues: input.error.issues,
+      });
+    }
+    const timestamp = now();
+    const document = await persistence.documents.create({
+      id: newTimeSortableId(),
+      packageId: SPATIAL_MAP_TEMPLATE_PACKAGE_ID,
+      kind: SPATIAL_MAP_TEMPLATE_KIND,
+      name: input.data.name,
+      description: input.data.description,
+      data: createSpatialMapTemplateData(input.data.definition, input.data.hierarchyProfile),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    return reply.status(201).send(readSpatialMapTemplate(document));
+  });
+
+  app.put("/spatial-context/templates/:templateId", async (request, reply) => {
+    const templateId = z.string().trim().min(1).safeParse(
+      (request.params as { templateId?: unknown }).templateId,
+    );
+    const input = spatialMapTemplateUpdateSchema.safeParse(request.body);
+    if (!templateId.success || !input.success) {
+      return reply.status(400).send({
+        error: input.success
+          ? "Choose a map template."
+          : input.error.issues[0]?.message ?? "The map template is invalid.",
+        code: "spatial_map_template_invalid",
+        ...(!input.success ? { issues: input.error.issues } : {}),
+      });
+    }
+    const document = await persistence.documents.update({
+      id: templateId.data,
+      packageId: SPATIAL_MAP_TEMPLATE_PACKAGE_ID,
+      expectedRevision: input.data.expectedRevision,
+      name: input.data.name,
+      description: input.data.description,
+      data: createSpatialMapTemplateData(input.data.definition, input.data.hierarchyProfile),
+      updatedAt: now(),
+    });
+    if (!document) {
+      return reply.status(409).send({
+        error: "This map template changed or was removed. Return to the library and open it again.",
+        code: "spatial_map_template_stale",
+      });
+    }
+    return readSpatialMapTemplate(document);
+  });
+
+  app.delete("/spatial-context/templates/:templateId", async (request, reply) => {
+    const templateId = z.string().trim().min(1).safeParse(
+      (request.params as { templateId?: unknown }).templateId,
+    );
+    const input = spatialMapTemplateDeleteSchema.safeParse(request.body);
+    if (!templateId.success || !input.success) {
+      return reply.status(400).send({
+        error: input.success
+          ? "Choose a map template."
+          : input.error.issues[0]?.message ?? "The map template revision is invalid.",
+        code: "spatial_map_template_invalid",
+      });
+    }
+    const removed = await persistence.documents.remove(
+      SPATIAL_MAP_TEMPLATE_PACKAGE_ID,
+      templateId.data,
+      input.data.expectedRevision,
+    );
+    if (!removed) {
+      return reply.status(409).send({
+        error: "This map template changed or was already removed. Refresh the library.",
+        code: "spatial_map_template_stale",
+      });
+    }
+    return reply.status(204).send();
+  });
+
+  app.post("/spatial-context/templates/generate", async (request, reply) => {
+    const body = isRecord(request.body) ? request.body : {};
+    const parsed = generateSpatialMapDraftRequestSchema.safeParse(
+      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "generationPreferencesOverride"]),
+    );
+    const hierarchyMode = z.enum(["auto", "template", "custom"]).safeParse(body.hierarchyMode ?? "auto");
+    const requestedProfile = body.hierarchyProfile === undefined
+      ? null
+      : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
+    const preferenceOverride = body.generationPreferencesOverride === undefined
+      ? null
+      : spatialGenerationPreferencesSchema.safeParse(body.generationPreferencesOverride);
+    if (
+      !parsed.success ||
+      parsed.data.operation !== "create" ||
+      !hierarchyMode.success ||
+      (requestedProfile && !requestedProfile.success) ||
+      (preferenceOverride && !preferenceOverride.success)
+    ) {
+      return reply.status(400).send({
+        error: "A new map template needs a valid create-map request.",
+        code: "spatial_map_template_generation_invalid",
+      });
+    }
+
+    const groundingMode = parsed.data.groundingMode;
+    const loreCatalog = await buildSpatialLoreCatalog(
+      resources,
+      groundingMode,
+      parsed.data.sourceLorebookIds,
+      parsed.data.sourceEntryIds,
+      { excludedLorebookIds: [], excludedSourceAgentIds: [] },
+    );
+    if (groundingMode !== "setup" && loreCatalog.grounding.consideredEntryCount === 0) {
+      return reply.status(400).send({
+        error: "None of the selected lore entries are available.",
+        code: "spatial_ai_lore_sources_unavailable",
+      });
+    }
+
+    const agentSettings: Record<string, unknown> = await getPackageAgentSettings("hierarchical-maps").catch(
+      (): Record<string, unknown> => ({}),
+    );
+    const libraries = parseSpatialGenerationPromptLibraries(
+      agentSettings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
+    );
+    const preferences = preferenceOverride?.success
+      ? preferenceOverride.data
+      : generationPreferencesWithPromptLibrary(
+          libraries?.roleplay,
+          defaultGenerationPreferences("roleplay"),
+          "roleplay",
+        );
+    const promptOption = resolveSpatialGenerationPromptOption(preferences);
+    let prompt;
+    try {
+      prompt = buildSpatialMapDraftPrompt({
+        ownerMode: "roleplay",
+        size: parsed.data.size,
+        groundingMode,
+        loreCatalog: loreCatalog.prompt,
+        sourceContext: "{}",
+        instructions: parsed.data.instructions,
+        requiredLocationNames: [],
+        hierarchyMode: hierarchyMode.data,
+        hierarchyProfile: requestedProfile?.success ? requestedProfile.data : undefined,
+        creatorGuidance: promptOption.guidance,
+        promptVariables: spatialGenerationCustomVariableValues(promptOption),
+        promptTemplates: promptOption.prompts,
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        error: error instanceof Error ? error.message : "The map template prompt is invalid.",
+        code: "spatial_map_template_generation_invalid",
+      });
+    }
+
+    let resolved;
+    try {
+      const agentConnectionId = await getPackageAgentConnectionId("hierarchical-maps");
+      resolved = await languageModels.resolve(parsed.data.connectionId ?? agentConnectionId);
+    } catch (error) {
+      return reply.status(400).send({
+        error: error instanceof Error ? error.message : "Choose a Maps language model connection first.",
+        code: "spatial_ai_connection_invalid",
+      });
+    }
+
+    const debugOverrideEnabled = parsed.data.debugMode || isDebugAgentsEnabled();
+    logDebugOverride(
+      debugOverrideEnabled,
+      "[debug/spatial/map-template] final prompt model=%s:\n%s",
+      resolved.model,
+      JSON.stringify(prompt.messages, null, 2),
+    );
+
+    try {
+      const result = await resolved.chatComplete(prompt.messages, {
+        temperature: 0.55,
+        maxTokens: prompt.maxTokens,
+        debugMode: debugOverrideEnabled,
+      });
+      const raw = result.content?.trim();
+      if (!raw) throw new Error("The model returned an empty response.");
+      logDebugOverride(
+        debugOverrideEnabled,
+        "[debug/spatial/map-template] raw response chars=%d:\n%s",
+        raw.length,
+        raw,
+      );
+      const parsedPlan = json.parseJsonish(raw);
+      const definition = normalizeSpatialMapPlan(parsedPlan, {
+        ownerMode: "roleplay",
+        revision: 0,
+        enabled: false,
+        size: parsed.data.size,
+        sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
+        requireLoreSource: groundingMode === "lore_strict",
+        requiredLocationNames: [],
+      });
+      const hierarchyProfile = normalizeHierarchyProfile(
+        readSpatialHierarchyProfile(
+          parsedPlan,
+          definition.locations,
+          requestedProfile?.success ? requestedProfile.data : undefined,
+        ),
+        definition,
+      );
+      const provenance = buildSpatialMapProvenance(parsedPlan, definition.locations, loreCatalog, groundingMode);
+      logger.info(
+        "[spatial/map-template] Generated %d template locations with model %s",
+        definition.locations.length,
+        resolved.model,
+      );
+      return {
+        definition,
+        operation: "create",
+        size: parsed.data.size,
+        source: "roleplay_setup",
+        generatedLocationCount: definition.locations.length,
+        ...(provenance ? { provenance } : {}),
+        grounding: loreCatalog.grounding,
+        hierarchyProfile,
+      } satisfies GenerateSpatialMapDraftResponse & { hierarchyProfile: SpatialHierarchyProfile };
+    } catch (error) {
+      logger.error(error, "[spatial/map-template] Generation failed");
+      return reply.status(502).send({
+        error:
+          error instanceof Error && error.message
+            ? `The AI map template could not be used: ${error.message}`
+            : "The AI could not create a valid map template.",
+        code: "spatial_ai_generation_failed",
+      });
+    }
   });
 
   const prepareSpatialMapPrompt = async (
@@ -926,7 +1227,11 @@ export async function spatialContextRoutes(app: FastifyInstance) {
                 requiredLocationNames,
               });
       } catch (normalizeError) {
-        logger.warn(normalizeError, "[spatial/map-draft] Draft did not match the map structure for chat %s", chat.id);
+        logger.warn(
+          "[spatial/map-draft] Draft did not match the map structure for chat %s: %s",
+          chat.id,
+          normalizeError instanceof Error ? normalizeError.message : String(normalizeError),
+        );
         return reply.status(502).send({
           error:
             normalizeError instanceof Error && normalizeError.message

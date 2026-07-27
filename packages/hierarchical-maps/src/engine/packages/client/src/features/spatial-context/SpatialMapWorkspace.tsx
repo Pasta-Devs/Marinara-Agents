@@ -33,7 +33,13 @@ import {
   type SpatialLocationPlacement,
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
-import { getSpatialContextProblem, useSpatialContext, useUpdateSpatialContext } from "../../hooks/use-spatial-context";
+import {
+  getSpatialContextProblem,
+  useCreateSpatialMapTemplate,
+  useSpatialContext,
+  useUpdateSpatialContext,
+  useUpdateSpatialMapTemplate,
+} from "../../hooks/use-spatial-context";
 import { cn } from "./package-utils";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
@@ -49,6 +55,7 @@ import {
   duplicateSpatialSubtree,
   isSpatialDefinitionDirty,
   reparentSpatialLocation,
+  removeSpatialSubtree,
   spatialDefinitionIssues,
   startNewSpatialMap,
   updateSpatialLocation,
@@ -70,6 +77,7 @@ import {
   normalizeHierarchyProfile,
   withLocationHierarchyType,
   type SpatialHierarchyProfile,
+  type SpatialMapTemplateRecord,
 } from "../../../../maps-shared/src/maps-model";
 
 type MobilePane = "hierarchy" | "local" | "details";
@@ -99,12 +107,14 @@ type MapConfirmationOptions = {
 };
 
 interface SpatialMapWorkspaceProps {
-  chatId: string;
+  chatId: string | null;
+  template?: SpatialMapTemplateRecord;
   debugMode?: boolean;
   pendingDraftReview?: { chatId: string; result: GenerateSpatialMapDraftResponse } | null;
   onClearPendingDraftReview?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenLorebook?: (lorebookId: string) => void;
+  onOpenTemplates?: () => void;
   onClose: () => void;
 }
 
@@ -143,20 +153,25 @@ function statusCopy(options: {
 
 export function SpatialMapWorkspace({
   chatId,
+  template,
   debugMode = false,
   pendingDraftReview = null,
   onClearPendingDraftReview,
   onDirtyChange,
   onOpenLorebook,
+  onOpenTemplates,
   onClose,
 }: SpatialMapWorkspaceProps) {
-  const spatial = useSpatialContext(chatId);
+  const templateMode = template !== undefined;
+  const spatial = useSpatialContext(templateMode ? null : chatId);
   const updateSpatial = useUpdateSpatialContext();
-  const { data: chat } = useSpatialChat(chatId);
-  const galleryImages = useSpatialGalleryImages(chatId);
-  const generateGalleryImage = useGenerateSpatialGalleryImage(chatId);
-  const previewGalleryImages = usePreviewSpatialGalleryImages(chatId);
-  const pendingSetupReview = pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
+  const updateTemplate = useUpdateSpatialMapTemplate();
+  const createTemplate = useCreateSpatialMapTemplate();
+  const { data: chat } = useSpatialChat(templateMode ? null : chatId);
+  const galleryImages = useSpatialGalleryImages(chatId ?? "", !templateMode);
+  const generateGalleryImage = useGenerateSpatialGalleryImage(chatId ?? "");
+  const previewGalleryImages = usePreviewSpatialGalleryImages(chatId ?? "");
+  const pendingSetupReview = !templateMode && pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
   const [baseDefinition, setBaseDefinition] = useState<SpatialContextDefinition | null>(null);
   const [draft, setDraft] = useState<SpatialContextDefinition | null>(null);
   const [baseHierarchyProfile, setBaseHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
@@ -170,6 +185,8 @@ export function SpatialMapWorkspace({
   const confirmationDialogRef = useRef<HTMLDivElement>(null);
   const confirmationCancelRef = useRef<HTMLButtonElement>(null);
   const [initialized, setInitialized] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [baseTemplateName, setBaseTemplateName] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [enteredParentId, setEnteredParentId] = useState<string | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("hierarchy");
@@ -270,7 +287,11 @@ export function SpatialMapWorkspace({
     [chatId],
   );
 
-  const ownerMode: SpatialOwnerMode = chat?.mode === "game" ? "game" : "roleplay";
+  const ownerMode: SpatialOwnerMode = templateMode
+    ? template.data.definition.ownerMode
+    : chat?.mode === "game"
+      ? "game"
+      : "roleplay";
   const gameMaps = useMemo(() => {
     if (ownerMode !== "game") return [];
     const raw = chat?.metadata as unknown;
@@ -309,10 +330,26 @@ export function SpatialMapWorkspace({
     setLayoutEditingMode(null);
     setImportIdReport(null);
     setArtworkProgress(null);
-  }, [chatId, resolveConfirmation]);
+    setTemplateName(template?.name ?? "");
+    setBaseTemplateName(template?.name ?? "");
+  }, [chatId, resolveConfirmation, template?.id, template?.name]);
 
   useEffect(() => {
-    if (!spatial.isSuccess || initialized) return;
+    if (initialized) return;
+    if (templateMode && template) {
+      const definition = cloneSpatialDefinition(template.data.definition);
+      const hierarchyProfile = normalizeHierarchyProfile(template.data.hierarchyProfile, definition);
+      setBaseDefinition(cloneSpatialDefinition(definition));
+      setDraft(definition);
+      setBaseHierarchyProfile(hierarchyProfile);
+      setDraftHierarchyProfile(hierarchyProfile);
+      setSelectedId(definition.startingLocationId ?? definition.locations[0]?.id ?? null);
+      setEnteredParentId(null);
+      setServerIssues([]);
+      setInitialized(true);
+      return;
+    }
+    if (!spatial.isSuccess) return;
     const server = spatial.data.definition;
     const nextDraft = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
     setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
@@ -324,7 +361,7 @@ export function SpatialMapWorkspace({
     setEnteredParentId(null);
     setServerIssues(spatial.data.warnings);
     setInitialized(true);
-  }, [initialized, ownerMode, spatial.data, spatial.isSuccess]);
+  }, [initialized, ownerMode, spatial.data, spatial.isSuccess, template, templateMode]);
 
   useEffect(() => {
     if (!initialized || !pendingSetupReview) return;
@@ -339,8 +376,9 @@ export function SpatialMapWorkspace({
     () =>
       !!draft &&
       (isSpatialDefinitionDirty(baseDefinition, draft) ||
-        JSON.stringify(baseHierarchyProfile) !== JSON.stringify(normalizeHierarchyProfile(draftHierarchyProfile, draft))),
-    [baseDefinition, baseHierarchyProfile, draft, draftHierarchyProfile],
+        JSON.stringify(baseHierarchyProfile) !== JSON.stringify(normalizeHierarchyProfile(draftHierarchyProfile, draft)) ||
+        (templateMode && templateName.trim() !== baseTemplateName)),
+    [baseDefinition, baseHierarchyProfile, baseTemplateName, draft, draftHierarchyProfile, templateMode, templateName],
   );
   const selected = draft?.locations.find((location) => location.id === selectedId) ?? null;
   const currentContext = enteredParentId
@@ -358,7 +396,7 @@ export function SpatialMapWorkspace({
     (localPresentation !== "map" || !localMapBackgroundImageUrl)
       ? null
       : layoutEditingMode;
-  const currentLocationId = spatial.data?.currentLocationId ?? null;
+  const currentLocationId = templateMode ? null : (spatial.data?.currentLocationId ?? null);
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
   const missingArtworkLocations = useMemo(
     () =>
@@ -631,6 +669,24 @@ export function SpatialMapWorkspace({
   const requestArchive = useCallback(
     (locationId: string) => {
       if (!draft) return;
+      if (templateMode) {
+        const location = draft.locations.find((candidate) => candidate.id === locationId);
+        if (!location) return;
+        const next = removeSpatialSubtree(draft, locationId);
+        const removedCount = draft.locations.length - next.locations.length;
+        void confirmAction({
+          title: "Delete template location?",
+          message: `Delete ${location.name || "this location"}${removedCount > 1 ? ` and its ${removedCount - 1} child locations` : ""} from this template?`,
+          confirmLabel: "Delete location",
+          tone: "destructive",
+        }).then((confirmed) => {
+          if (!confirmed) return;
+          applyDraft(next);
+          setSelectedId(location.parentId);
+          if (enteredParentId === locationId) setEnteredParentId(location.parentId);
+        });
+        return;
+      }
       const validation = validateSpatialArchive(draft, locationId, { currentLocationId });
       if (validation.ok) {
         void finishArchive(locationId);
@@ -646,7 +702,7 @@ export function SpatialMapWorkspace({
       }
       toast.error(validation.message);
     },
-    [currentLocationId, draft, finishArchive],
+    [applyDraft, confirmAction, currentLocationId, draft, enteredParentId, finishArchive, templateMode],
   );
 
   const handleDeleteMap = useCallback(async () => {
@@ -721,14 +777,14 @@ export function SpatialMapWorkspace({
     );
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const safeName = (chat?.name ?? "hierarchical-map")
+    const safeName = (templateMode ? templateName : (chat?.name ?? "hierarchical-map"))
       .replace(/[^a-z0-9._-]+/gi, "-")
       .replace(/^-+|-+$/g, "") || "hierarchical-map";
     link.href = url;
     link.download = `${safeName}.hierarchical-map.json`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [chat?.name, draft, draftHierarchyProfile]);
+  }, [chat?.name, draft, draftHierarchyProfile, templateMode, templateName]);
 
   const handleImport = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -770,29 +826,92 @@ export function SpatialMapWorkspace({
         setSelectedId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
         setEnteredParentId(null);
         setMobilePane("hierarchy");
-        toast.success("Map imported into the working copy. Review it, then Save.");
+        toast.success(
+          templateMode
+            ? "Map imported into this template. Review it, then Save template."
+            : "Map imported into the working copy. Review it, then Save.",
+        );
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "The map could not be imported.");
       }
     },
-    [applyDraft, baseDefinition, draft, ownerMode, spatial.data?.hasCommittedSpatialHistory],
+    [applyDraft, baseDefinition, draft, ownerMode, spatial.data?.hasCommittedSpatialHistory, templateMode],
   );
+
+  const saveAsTemplate = useCallback(async () => {
+    if (templateMode || !draft || draft.locations.length === 0 || createTemplate.isPending) return;
+    const name = `${chat?.name?.trim() || "Untitled"} map`;
+    const confirmed = await confirmAction({
+      title: "Save map as a template?",
+      message:
+        `Save a reusable copy named “${name}” to Agents → Maps? Campaign history, current location, Game bindings, and chat Gallery images are not copied.`,
+      confirmLabel: "Save template",
+    });
+    if (!confirmed) return;
+    try {
+      await createTemplate.mutateAsync({
+        name,
+        description: "",
+        definition: draft,
+        hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+      });
+      toast.success("Map template saved. You can edit it from Agents → Maps.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The map template could not be saved.");
+    }
+  }, [chat?.name, confirmAction, createTemplate, draft, draftHierarchyProfile, templateMode]);
 
   const handleClose = useCallback(async () => {
     if (dirty) {
       const discard = await confirmAction({
-        title: "Discard map changes?",
-        message: "You have unsaved hierarchical map changes. Leave the editor and discard them?",
+        title: templateMode ? "Discard template changes?" : "Discard map changes?",
+        message: templateMode
+          ? "You have unsaved map template changes. Return to the library and discard them?"
+          : "You have unsaved hierarchical map changes. Leave the editor and discard them?",
         confirmLabel: "Discard changes",
         tone: "destructive",
       });
       if (!discard) return;
     }
     onClose();
-  }, [confirmAction, dirty, onClose]);
+  }, [confirmAction, dirty, onClose, templateMode]);
 
   const handleSave = useCallback(async (enableForFirstSave = false) => {
     if (!draft || !dirty || issues.length > 0) return;
+    if (templateMode && template) {
+      const name = templateName.trim();
+      if (!name) {
+        toast.error("Give this map template a name before saving.");
+        return;
+      }
+      setConflict(false);
+      try {
+        const saved = await updateTemplate.mutateAsync({
+          id: template.id,
+          expectedRevision: template.revision,
+          name,
+          description: template.description,
+          definition: draft,
+          hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+        });
+        const savedDefinition = cloneSpatialDefinition(saved.data.definition);
+        const savedProfile = normalizeHierarchyProfile(saved.data.hierarchyProfile, savedDefinition);
+        setBaseDefinition(savedDefinition);
+        setDraft(cloneSpatialDefinition(savedDefinition));
+        setBaseHierarchyProfile(savedProfile);
+        setDraftHierarchyProfile(savedProfile);
+        setTemplateName(saved.name);
+        setBaseTemplateName(saved.name);
+        setSavedFlash(true);
+        onDirtyChange?.(false);
+        toast.success("Map template saved.");
+      } catch (error) {
+        if (error instanceof Error && "status" in error && error.status === 409) setConflict(true);
+        toast.error(error instanceof Error ? error.message : "The map template could not be saved.");
+      }
+      return;
+    }
+    if (!chatId) return;
     const completingFirstMap = enableForFirstSave && baseDefinition === null;
     if (completingFirstMap && !canEnable) return;
     const definitionToSave = completingFirstMap ? { ...draft, enabled: true } : draft;
@@ -851,6 +970,10 @@ export function SpatialMapWorkspace({
     onDirtyChange,
     spatial,
     updateSpatial,
+    updateTemplate,
+    template,
+    templateMode,
+    templateName,
   ]);
 
   const reloadServerVersion = useCallback(async () => {
@@ -917,12 +1040,14 @@ export function SpatialMapWorkspace({
       }
       setAiBuilderOpen(false);
       toast.success(
-        expandedExistingMap
+        templateMode
+          ? "AI map draft applied. Review it, choose a start, then save the template."
+          : expandedExistingMap
           ? "AI expansion added to the working map. Review it, then Save."
           : "AI map draft applied. Review it, choose a start, then enable and save.",
       );
     },
-    [applyDraft, baseDefinition, currentLocationId, draft, draftHierarchyProfile, onClearPendingDraftReview, ownerMode],
+    [applyDraft, baseDefinition, currentLocationId, draft, draftHierarchyProfile, onClearPendingDraftReview, ownerMode, templateMode],
   );
 
   const regenerateFirstMapDraft = useCallback(async () => {
@@ -992,7 +1117,7 @@ export function SpatialMapWorkspace({
     );
   }
 
-  if (spatial.isError) {
+  if (!templateMode && spatial.isError) {
     return (
       <div
         className="mari-editor-shell flex flex-1 items-center justify-center p-6"
@@ -1032,7 +1157,7 @@ export function SpatialMapWorkspace({
     dirty,
     conflict,
     invalid: issues.length > 0,
-    pending: updateSpatial.isPending,
+    pending: updateSpatial.isPending || updateTemplate.isPending,
     savedFlash,
   });
   const localChildren = sortedChildren(draft, enteredParentId);
@@ -1202,7 +1327,8 @@ export function SpatialMapWorkspace({
 
   const inspector = (
     <LocationInspector
-      chatId={chatId}
+      chatId={chatId ?? ""}
+      artworkEnabled={!templateMode}
       debugMode={debugMode}
       definition={draft}
       location={selected}
@@ -1226,7 +1352,7 @@ export function SpatialMapWorkspace({
       onSetStarting={() => selected && applyDraft({ ...draft, startingLocationId: selected.id })}
       onArchive={() => selected && requestArchive(selected.id)}
       gameBinding={
-        ownerMode === "game"
+        !templateMode && ownerMode === "game" && chatId
           ? {
               chatId,
               maps: gameMaps,
@@ -1297,7 +1423,7 @@ export function SpatialMapWorkspace({
         <button
           type="button"
           onClick={() => void handleClose()}
-          aria-label="Back to chat"
+          aria-label={templateMode ? "Back to map templates" : "Back to chat"}
           className="mari-editor-action inline-flex min-h-11 min-w-11"
         >
           <ArrowLeft size="1.125rem" />
@@ -1306,11 +1432,30 @@ export function SpatialMapWorkspace({
           <Map size="1.125rem" />
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-semibold text-[var(--marinara-editor-title)]">Hierarchical map</h1>
-          <p className="truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">{chat?.name ?? "Chat"}</p>
+          {templateMode ? (
+            <label className="block max-w-md">
+              <span className="sr-only">Map template name</span>
+              <input
+                aria-label="Map template name"
+                value={templateName}
+                maxLength={120}
+                onChange={(event) => setTemplateName(event.target.value)}
+                className="w-full border-0 bg-transparent p-0 text-sm font-semibold text-[var(--marinara-editor-title)] outline-none placeholder:text-[var(--marinara-editor-muted)]"
+                placeholder="Untitled map"
+              />
+              <span className="block truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">
+                Reusable map template · no chat history
+              </span>
+            </label>
+          ) : (
+            <>
+              <h1 className="truncate text-sm font-semibold text-[var(--marinara-editor-title)]">Hierarchical map</h1>
+              <p className="truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">{chat?.name ?? "Chat"}</p>
+            </>
+          )}
         </div>
         <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
-          <button
+          {!templateMode && <button
             type="button"
             onClick={() => {
               void spatial.refetch();
@@ -1325,7 +1470,7 @@ export function SpatialMapWorkspace({
               : draft.locations.length > 0
                 ? "Expand with AI"
                 : "Build with AI"}
-          </button>
+          </button>}
           <button
             type="button"
             onClick={handleExport}
@@ -1343,7 +1488,28 @@ export function SpatialMapWorkspace({
           >
             <Download size="0.8125rem" /> Import
           </button>
-          {baseDefinition && baseDefinition.locations.length > 0 && (
+          {!templateMode && onOpenTemplates && (
+            <button
+              type="button"
+              onClick={onOpenTemplates}
+              disabled={conflict || updateSpatial.isPending}
+              className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              aria-label="Add a saved map template"
+            >
+              <Map size="0.8125rem" /> Templates
+            </button>
+          )}
+          {!templateMode && draft.locations.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void saveAsTemplate()}
+              disabled={createTemplate.isPending}
+              className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+            >
+              <Save size="0.8125rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
+            </button>
+          )}
+          {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
             <button
               type="button"
               onClick={() => void handleDeleteMap()}
@@ -1368,7 +1534,7 @@ export function SpatialMapWorkspace({
             {status.icon}
             {status.label}
           </span>
-          {!isFirstMapDraft && (
+          {!templateMode && !isFirstMapDraft && (
             <label className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs">
               <input
                 type="checkbox"
@@ -1386,18 +1552,20 @@ export function SpatialMapWorkspace({
               !dirty ||
               issues.length > 0 ||
               updateSpatial.isPending ||
+              updateTemplate.isPending ||
               conflict ||
-              (isFirstMapDraft && !canEnable)
+              (!templateMode && isFirstMapDraft && !canEnable)
             }
             className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 disabled:opacity-45"
           >
-            <Save size="0.8125rem" /> {isFirstMapDraft ? "Enable and save map" : "Save"}
+            <Save size="0.8125rem" /> {templateMode ? "Save template" : isFirstMapDraft ? "Enable and save map" : "Save"}
           </button>
         </div>
       </div>
 
       <SpatialMapAiBuilder
-        chatId={chatId}
+        chatId={chatId ?? ""}
+        standalone={templateMode}
         debugMode={debugMode}
         ownerMode={ownerMode}
         open={aiBuilderOpen}
@@ -1421,11 +1589,11 @@ export function SpatialMapWorkspace({
         onApply={applyGeneratedDraft}
       />
 
-      {!aiBuilderOpen && missingArtworkLocations.length > 0 && (
+      {!templateMode && !aiBuilderOpen && missingArtworkLocations.length > 0 && (
         <section className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3">
           {artworkPreview ? (
             <div
-              className="mx-auto flex w-full max-w-5xl flex-col gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 p-3"
+              className="mx-auto flex max-h-[calc(100dvh-8rem)] min-h-0 w-full max-w-5xl flex-col gap-3 overflow-hidden rounded-xl border border-amber-500/35 bg-amber-500/10 p-3"
               aria-label="Review location artwork image requests"
             >
               <div className="flex items-start gap-2.5">
@@ -1444,7 +1612,11 @@ export function SpatialMapWorkspace({
                 </div>
               </div>
 
-              <dl className="grid gap-2 text-[0.6875rem] sm:grid-cols-2 lg:grid-cols-6">
+              <div
+                className="grid min-h-0 flex-1 gap-3 overflow-y-auto overscroll-contain pr-1"
+                data-marinara-map-artwork-review-scroll
+              >
+                <dl className="grid gap-2 text-[0.6875rem] sm:grid-cols-2 lg:grid-cols-6">
                 <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
                   <dt className="text-[var(--marinara-editor-muted)]">Image connection</dt>
                   <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
@@ -1485,10 +1657,10 @@ export function SpatialMapWorkspace({
                     {artworkPreview.width} × {artworkPreview.height}
                   </dd>
                 </div>
-              </dl>
+                </dl>
 
-              <div className="grid gap-2">
-                {artworkPreview.items.map((item, index) => (
+                <div className="grid gap-2">
+                  {artworkPreview.items.map((item, index) => (
                   <details key={item.id} className="rounded-lg border border-white/10 bg-black/10" open={index === 0}>
                     <summary className="cursor-pointer px-3 py-2 text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">
                       {index + 1}. {item.title}
@@ -1512,7 +1684,8 @@ export function SpatialMapWorkspace({
                       </div>
                     </div>
                   </details>
-                ))}
+                  ))}
+                </div>
               </div>
 
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -1711,9 +1884,19 @@ export function SpatialMapWorkspace({
           <div className="flex flex-wrap items-center gap-2">
             <AlertCircle size="0.8125rem" />
             <span className="min-w-52 flex-1 font-medium">
-              The map changed elsewhere. Your working copy is preserved.
+              {templateMode
+                ? "This template changed elsewhere. Your working copy is preserved. Return to the library and reopen it."
+                : "The map changed elsewhere. Your working copy is preserved."}
             </span>
-            <button
+            {templateMode ? (
+              <button
+                type="button"
+                onClick={() => void handleClose()}
+                className="mari-chrome-control min-h-11 px-3 text-xs"
+              >
+                <ArrowLeft size="0.75rem" /> Return to library
+              </button>
+            ) : <><button
               type="button"
               onClick={() => void reloadServerVersion()}
               className="mari-chrome-control min-h-11 px-3 text-xs"
@@ -1727,8 +1910,9 @@ export function SpatialMapWorkspace({
             >
               Review differences
             </button>
+            </>}
           </div>
-          {reviewConflict && (
+          {!templateMode && reviewConflict && (
             <div className="mt-3 grid gap-2 rounded-lg border border-red-500/20 bg-[var(--background)]/40 p-3 sm:grid-cols-4">
               <span>{conflictDifference.added.length} added</span>
               <span>{conflictDifference.removed.length} removed</span>
@@ -1810,10 +1994,12 @@ export function SpatialMapWorkspace({
               <Map size="1.25rem" />
             </span>
             <h2 className="mt-4 text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
-              Create a starting location
+              {templateMode ? "Create a map template" : "Create a starting location"}
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-              Let AI draft the full hierarchy from the game or chat setup, or start manually with one broad place.
+              {templateMode
+                ? "Describe a fandom or setting for Maps to draft without a chat, or start manually with one broad place."
+                : "Let AI draft the full hierarchy from the game or chat setup, add a saved template, or start manually with one broad place."}
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <button
@@ -1821,7 +2007,7 @@ export function SpatialMapWorkspace({
                 onClick={() => setAiBuilderOpen(true)}
                 className="mari-chrome-control mari-chrome-control--primary min-h-11 px-5 text-sm"
               >
-                <Sparkles size="0.875rem" /> Draft with AI
+                <Sparkles size="0.875rem" /> {templateMode ? "Create with AI" : "Draft with AI"}
               </button>
               <button
                 type="button"

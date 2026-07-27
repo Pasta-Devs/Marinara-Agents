@@ -55,4 +55,7 @@ export const packageApi = {
   patch<T>(path: string, body?: unknown): Promise<T> {
     return request<T>(path, "PATCH", body);
   },
+  delete<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>(path, "DELETE", body);
+  },
 };

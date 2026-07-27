@@ -11,6 +11,7 @@ export const HIERARCHY_PROFILE_VERSION = 1 as const;
 export const GENERATION_PREFERENCES_VERSION = 3 as const;
 export const GENERATION_PROMPT_LIBRARIES_VERSION = 1 as const;
 export const TURN_PROMPT_TEMPLATES_VERSION = 1 as const;
+export const SPATIAL_MAP_TEMPLATE_VERSION = 1 as const;
 export const DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID = "default";
 export const SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY = "spatialMapGenerationPromptLibraries";
 export const SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY = "spatialMapTurnPromptTemplates";
@@ -186,6 +187,23 @@ export interface SpatialHierarchyProfile {
   name: string;
   types: SpatialHierarchyType[];
   locationTypeIds: Record<string, string>;
+}
+
+/** Reusable hierarchy content. Campaign state and chat-owned artwork are intentionally excluded. */
+export interface SpatialMapTemplateData {
+  version: typeof SPATIAL_MAP_TEMPLATE_VERSION;
+  definition: SpatialContextDefinition;
+  hierarchyProfile: SpatialHierarchyProfile;
+}
+
+export interface SpatialMapTemplateRecord {
+  id: string;
+  name: string;
+  description: string;
+  data: SpatialMapTemplateData;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface SpatialGenerationPreferences {
@@ -784,6 +802,48 @@ export function normalizeHierarchyProfile(
     }
   }
   return { ...parsed.data, locationTypeIds };
+}
+
+export function createSpatialMapTemplateData(
+  definition: SpatialContextDefinition,
+  hierarchyProfile: SpatialHierarchyProfile,
+): SpatialMapTemplateData {
+  const portableDefinition: SpatialContextDefinition = {
+    ...definition,
+    ownerMode: "roleplay",
+    enabled: false,
+    revision: 0,
+    locations: definition.locations.map(
+      ({ referenceImageId: _referenceImageId, useReferenceImage: _useReferenceImage, mapBackgroundImageId: _mapBackgroundImageId, ...location }) =>
+        location,
+    ),
+  };
+  return {
+    version: SPATIAL_MAP_TEMPLATE_VERSION,
+    definition: portableDefinition,
+    hierarchyProfile: normalizeHierarchyProfile(hierarchyProfile, portableDefinition),
+  };
+}
+
+export function instantiateSpatialMapTemplate(
+  template: SpatialMapTemplateData,
+  ownerMode: SpatialOwnerMode,
+): { definition: SpatialContextDefinition; hierarchyProfile: SpatialHierarchyProfile } {
+  const definition: SpatialContextDefinition = {
+    ...template.definition,
+    ownerMode,
+    enabled: true,
+    revision: 0,
+    locations: template.definition.locations.map((location) => ({
+      ...location,
+      lorebookEntryIds: [...location.lorebookEntryIds],
+      links: location.links.map((link) => ({ ...link })),
+    })),
+  };
+  return {
+    definition,
+    hierarchyProfile: normalizeHierarchyProfile(template.hierarchyProfile, definition),
+  };
 }
 
 export function hierarchyTypeForLocation(

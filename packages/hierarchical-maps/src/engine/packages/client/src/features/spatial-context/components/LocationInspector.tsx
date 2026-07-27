@@ -164,6 +164,7 @@ export function defaultLocationReferencePrompt(location: SpatialLocation): strin
 
 interface LocationInspectorProps {
   chatId: string;
+  artworkEnabled?: boolean;
   debugMode?: boolean;
   definition: SpatialContextDefinition;
   location: SpatialLocation | null;
@@ -189,6 +190,7 @@ interface LocationInspectorProps {
 
 export function LocationInspector({
   chatId,
+  artworkEnabled = true,
   debugMode = false,
   definition,
   location,
@@ -214,7 +216,7 @@ export function LocationInspector({
   const [referenceGeneratorOpen, setReferenceGeneratorOpen] = useState(false);
   const [referenceGenerationPrompt, setReferenceGenerationPrompt] = useState("");
   const [generatedReferenceImage, setGeneratedReferenceImage] = useState<SpatialGalleryImage | null>(null);
-  const galleryImages = useSpatialGalleryImages(chatId);
+  const galleryImages = useSpatialGalleryImages(chatId, artworkEnabled);
   const galleryPickerLoading =
     galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined);
   const generateReferenceImage = useGenerateSpatialGalleryImage(chatId);
@@ -425,7 +427,7 @@ export function LocationInspector({
           />
         </Field>
 
-        <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] pt-4">
+        {artworkEnabled && <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] pt-4">
           <div className="mb-3 flex items-center gap-2">
             <ImageIcon size="0.8125rem" className="text-[var(--marinara-chat-chrome-accent)]" />
             <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
@@ -616,7 +618,7 @@ export function LocationInspector({
             />
             Use for Roleplay illustrations and Game storyboards
           </label>
-        </div>
+        </div>}
 
 
         <details className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">

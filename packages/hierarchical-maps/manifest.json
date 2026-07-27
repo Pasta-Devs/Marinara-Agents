@@ -2,11 +2,11 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 3
+    "minor": 4
   },
   "builtAgainst": {
     "engineVersion": "2.3.5",
-    "engineCommit": "2e3ed6f568c9041802fb1e7003318294efbc8389"
+    "engineCommit": "cea51e655f50d858efd0712e7c990dd45bed6591"
   },
   "id": "hierarchical-maps",
   "name": "Hierarchical Maps",
@@ -46,13 +46,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "beb5741d348b735b5fc5658546ff025ac5c1c512c9807acddbf737fb26058d44",
-      "bytes": 325613
+      "sha256": "395854a7791677666c6dc1d7d25d820717c56d18c615339bb28ee7bb3a476903",
+      "bytes": 331694
     },
     {
       "path": "client.js",
-      "sha256": "2393112955a8488c87326516f5da3dbb9ca30a432608295b6ed35f2a7997f732",
-      "bytes": 832370
+      "sha256": "631c6073694294ac6a416f2a045a1bdf5e78922e378f5140f2e068f08a74f9e1",
+      "bytes": 849595
     }
   ],
   "permissions": [

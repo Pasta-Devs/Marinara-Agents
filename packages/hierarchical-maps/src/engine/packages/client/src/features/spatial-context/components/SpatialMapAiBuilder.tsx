@@ -29,6 +29,7 @@ import type {
 import { compareSpatialLocations } from "@marinara-engine/shared";
 import {
   useGenerateSpatialMapDraft,
+  useGenerateSpatialMapTemplateDraft,
   useSpatialGenerationPromptLibraries,
   type MapsGenerateSpatialMapDraftResponse,
 } from "../../../hooks/use-spatial-context";
@@ -46,6 +47,7 @@ import {
 
 interface SpatialMapAiBuilderProps {
   chatId: string;
+  standalone?: boolean;
   ownerMode: SpatialOwnerMode;
   open: boolean;
   definition: SpatialContextDefinition;
@@ -92,7 +94,8 @@ const SIZE_OPTIONS: Array<{
   { value: "large", label: "Large", description: "About 28 places" },
 ];
 
-function sourceCopy(ownerMode: SpatialOwnerMode): string {
+function sourceCopy(ownerMode: SpatialOwnerMode, standalone: boolean): string {
+  if (standalone) return "Uses only your instructions and any lorebooks you explicitly select. No chat or Game plot is used.";
   return ownerMode === "game"
     ? "Uses the game setup, world overview, and party characters. Turn history is not included."
     : "Uses the chat setup and character cards. Turn history is not included.";
@@ -152,6 +155,7 @@ function withHierarchyProfile(
 
 export function SpatialMapAiBuilder({
   chatId,
+  standalone = false,
   ownerMode,
   open,
   definition,
@@ -173,6 +177,7 @@ export function SpatialMapAiBuilder({
   onApply,
 }: SpatialMapAiBuilderProps) {
   const generateDraft = useGenerateSpatialMapDraft();
+  const generateTemplateDraft = useGenerateSpatialMapTemplateDraft();
   const promptLibraries = useSpatialGenerationPromptLibraries();
   const generationPreferencesOverride = useMemo(
     () =>
@@ -326,8 +331,7 @@ export function SpatialMapAiBuilder({
     async (request: SpatialMapAiBuilderRequest) => {
       setError(null);
       try {
-        const generated = await generateDraft.mutateAsync({
-          chatId,
+        const requestInput = {
           operation: request.operation,
           size: request.size,
           ...(request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
@@ -338,14 +342,17 @@ export function SpatialMapAiBuilder({
           ...(request.hierarchyProfile ? { hierarchyProfile: request.hierarchyProfile } : {}),
           generationPreferencesOverride,
           debugMode,
-        });
+        };
+        const generated = standalone
+          ? await generateTemplateDraft.mutateAsync(requestInput)
+          : await generateDraft.mutateAsync({ chatId, ...requestInput });
         setResult(withHierarchyProfile(generated, request.hierarchyProfile ?? workingHierarchyProfile));
       } catch (generationError) {
         setResult(null);
         setError(generationError instanceof Error ? generationError.message : "The map draft could not be generated.");
       }
     },
-    [chatId, debugMode, generateDraft, generationPreferencesOverride, workingHierarchyProfile],
+    [chatId, debugMode, generateDraft, generateTemplateDraft, generationPreferencesOverride, standalone, workingHierarchyProfile],
   );
 
   useEffect(() => {
@@ -418,7 +425,8 @@ export function SpatialMapAiBuilder({
   const resultHierarchyValid = Boolean(
     result && result.hierarchyProfile.types.every((type) => type.label.trim().length > 0),
   );
-  const generationDisabled = generateDraft.isPending || requestInvalid;
+  const generationPending = generateDraft.isPending || generateTemplateDraft.isPending;
+  const generationDisabled = generationPending || requestInvalid;
   const generate = () => runGeneration(currentRequest);
   const selectedPreviewProvenance = selectedPreviewLocation ? result?.provenance?.[selectedPreviewLocation.id] : null;
   const togglePreviewExpanded = (locationId: string) => {
@@ -560,7 +568,7 @@ export function SpatialMapAiBuilder({
                     key={value}
                     type="button"
                     aria-pressed={operation === value}
-                    disabled={generateDraft.isPending}
+                    disabled={generationPending}
                     onClick={() => {
                       setOperation(value);
                       resetResult();
@@ -590,7 +598,7 @@ export function SpatialMapAiBuilder({
               <select
                 id="spatial-ai-target"
                 value={targetLocationId}
-                disabled={generateDraft.isPending}
+                disabled={generationPending}
                 onChange={(event) => {
                   setTargetLocationId(event.target.value);
                   resetResult();
@@ -624,7 +632,7 @@ export function SpatialMapAiBuilder({
                     key={option.value}
                     type="button"
                     aria-pressed={hierarchyMode === option.value}
-                    disabled={generateDraft.isPending}
+                    disabled={generationPending}
                     onClick={() => {
                       setHierarchyMode(option.value);
                       if (option.value === "template") {
@@ -791,7 +799,7 @@ export function SpatialMapAiBuilder({
                     key={option.value}
                     type="button"
                     aria-pressed={selected}
-                    disabled={generateDraft.isPending || (option.value !== "setup" && eligibleLorebooks.length === 0)}
+                    disabled={generationPending || (option.value !== "setup" && eligibleLorebooks.length === 0)}
                     onClick={() => {
                       setGroundingMode(option.value);
                       resetResult();
@@ -831,7 +839,7 @@ export function SpatialMapAiBuilder({
                       key={option.value}
                       type="button"
                       aria-pressed={groundingMode === option.value}
-                      disabled={generateDraft.isPending}
+                      disabled={generationPending}
                       onClick={() => {
                         setGroundingMode(option.value);
                         resetResult();
@@ -862,7 +870,7 @@ export function SpatialMapAiBuilder({
                         <input
                           type="checkbox"
                           checked={checked}
-                          disabled={generateDraft.isPending}
+                          disabled={generationPending}
                           onChange={() => {
                             setSourceLorebookIds((ids) => (checked ? ids.filter((id) => id !== lorebook.id) : [...ids, lorebook.id]));
                             resetResult();
@@ -888,7 +896,7 @@ export function SpatialMapAiBuilder({
             ref={requestInputRef}
             id="spatial-ai-request"
             value={instructions}
-            disabled={generateDraft.isPending}
+            disabled={generationPending}
             onChange={(event) => {
               setInstructions(event.target.value);
               resetResult();
@@ -916,7 +924,7 @@ export function SpatialMapAiBuilder({
                   key={option.value}
                   type="button"
                   aria-pressed={size === option.value}
-                  disabled={generateDraft.isPending}
+                  disabled={generationPending}
                   onClick={() => {
                     setSize(option.value);
                     resetResult();
@@ -937,7 +945,7 @@ export function SpatialMapAiBuilder({
 
           <p className="mt-4 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
             {groundingMode === "setup"
-              ? sourceCopy(ownerMode)
+              ? sourceCopy(ownerMode, standalone)
               : `Uses ${sourceLorebookIds.length} selected lorebook${sourceLorebookIds.length === 1 ? "" : "s"} plus setup context. Turn history is not included.`}
           </p>
           {setupReview && (
@@ -971,7 +979,7 @@ export function SpatialMapAiBuilder({
                 disabled={generationDisabled}
                 className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs disabled:opacity-50"
               >
-                {generateDraft.isPending ? (
+                {generationPending ? (
                   <>
                     <LoaderCircle size="0.8125rem" className="animate-spin" /> Building map
                   </>
@@ -987,7 +995,7 @@ export function SpatialMapAiBuilder({
 
         <div className="flex min-h-56 flex-col bg-[var(--marinara-editor-bg)] p-4" aria-live="polite">
           <h3 className="text-xs font-semibold text-[var(--marinara-editor-title)]">Draft preview</h3>
-          {generateDraft.isPending ? (
+          {generationPending ? (
             <div className="mt-4 space-y-3" aria-label="Generating map draft">
               <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--marinara-editor-surface)]" />
               <div className="h-12 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />

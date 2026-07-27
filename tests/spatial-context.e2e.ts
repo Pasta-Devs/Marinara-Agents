@@ -1363,6 +1363,90 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
   }
 });
 
+test("Map templates are created outside chats and copied into Roleplay", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The template library flow is shared across viewports.");
+  test.setTimeout(90_000);
+  const existingTemplatesResponse = await page.request.get("/api/chats/spatial-context/templates");
+  expect(existingTemplatesResponse.ok(), await existingTemplatesResponse.text()).toBeTruthy();
+  const existingTemplateIds = new Set(
+    ((await existingTemplatesResponse.json()) as Array<{ id: string }>).map((template) => template.id),
+  );
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: "Map Template Copy", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
+    const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
+    await mapsCard.getByText("Hierarchical Maps", { exact: true }).click();
+
+    const home = page.locator("[data-marinara-maps-home]");
+    await home.getByRole("button", { name: "Open map templates" }).click();
+    const library = page.locator("[data-marinara-map-template-library]");
+    await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
+    await expect(library).toContainText("chat Gallery artwork is not copied");
+    await library.getByRole("button", { name: "New map template" }).first().click();
+
+    const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    await expect(workspace.getByRole("heading", { name: "Create a map template" })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Create with AI" })).toBeVisible();
+    await workspace.getByRole("button", { name: "Build manually" }).click();
+    await workspace.getByLabel("Map template name").fill("Reusable Test World");
+    await workspace.getByRole("button", { name: "Save template", exact: true }).click();
+    await expect(workspace).toContainText("Saved");
+    await workspace.getByRole("button", { name: "Back to map templates" }).click();
+
+    await expect(library.getByRole("heading", { name: "Reusable Test World" })).toBeVisible();
+    await library.getByRole("button", { name: "Add to chat" }).click();
+    const confirm = page.getByRole("dialog").filter({ hasText: "Add map template to this chat?" });
+    await confirm.getByRole("button", { name: "Add to chat", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const body = (await response.json()) as {
+          definition?: { ownerMode?: string; locations?: Array<unknown> } | null;
+        };
+        return {
+          ownerMode: body.definition?.ownerMode,
+          locationCount: body.definition?.locations?.length,
+        };
+      })
+      .toEqual({ ownerMode: "roleplay", locationCount: 1 });
+  } finally {
+    const templatesResponse = await page.request.get("/api/chats/spatial-context/templates");
+    if (templatesResponse.ok()) {
+      const templates = (await templatesResponse.json()) as Array<{ id: string; revision: number }>;
+      for (const template of templates) {
+        if (existingTemplateIds.has(template.id)) continue;
+        const response = await page.request.delete(`/api/chats/spatial-context/templates/${template.id}`, {
+          data: { expectedRevision: template.revision },
+        });
+        expect(response.ok(), await response.text()).toBeTruthy();
+      }
+    }
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
 test("global Hierarchical Maps home protects templates after a settings load failure", async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   const response = await page.request.post("/api/chats", {
@@ -1786,6 +1870,115 @@ test("Map editor fills missing location artwork with one image per location", as
   } finally {
     await page.unroute(`**/api/gallery/${chat.id}/generate-image/preview`);
     await page.unroute(`**/api/gallery/${chat.id}/generate-image`);
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("Large map artwork reviews keep their actions visible while requests scroll", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The long artwork review uses the desktop viewport.");
+  test.setTimeout(90_000);
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: "Maps Artwork Scroll",
+      mode: "game",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const locations = Array.from({ length: 31 }, (_, index) => ({
+    ...(index === 0 ? generatedDefinition.locations[0] : generatedDefinition.locations[1]),
+    id: `artwork-scroll-${index + 1}`,
+    parentId: index === 0 ? null : "artwork-scroll-1",
+    name: index === 0 ? "The Spiral Crown" : `Location ${index + 1}`,
+    childPresentation: index === 0 ? ("map" as const) : ("list" as const),
+    links: [],
+    sortOrder: index,
+  }));
+  const definition = {
+    ...generatedDefinition,
+    ownerMode: "game" as const,
+    enabled: true,
+    startingLocationId: locations[0]!.id,
+    locations,
+  };
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition,
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.route(`**/api/gallery/${chat.id}/generate-image/preview`, async (route) => {
+      const payload = route.request().postDataJSON() as {
+        items?: Array<{ id?: unknown; title?: unknown; prompt?: unknown }>;
+      };
+      const items = (payload.items ?? []).map((item) => ({
+        id: typeof item.id === "string" ? item.id : "",
+        title: typeof item.title === "string" ? item.title : "",
+        prompt: typeof item.prompt === "string" ? item.prompt : "",
+      }));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          requestCount: items.length,
+          connection: { id: "scroll-art", name: "krea2", model: "krea2", source: "test" },
+          styleProfile: { id: "auto", name: "Auto" },
+          campaign: { included: true, artStyleIncluded: false },
+          chatSettings: { imageInstructionsIncluded: false },
+          width: 1280,
+          height: 720,
+          items: items.map((item) => ({
+            ...item,
+            kind: "background",
+            sourcePrompt: item.prompt,
+            prompt: `Engine style. ${item.prompt}`,
+            negativePrompt: "text, UI, watermark",
+            width: 1280,
+            height: 720,
+          })),
+        }),
+      });
+    });
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    await workspace.locator("[data-marinara-fill-map-artwork]").click();
+    const review = workspace.getByLabel("Review location artwork image requests");
+    await expect(review).toContainText("Review 31 image requests");
+    await expect(review.locator("[data-marinara-confirm-map-artwork]")).toBeVisible();
+    const scroller = review.locator("[data-marinara-map-artwork-review-scroll]");
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true);
+    await scroller.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    await expect(review.getByText("31. Location 31", { exact: true })).toBeVisible();
+    await expect(review.locator("[data-marinara-confirm-map-artwork]")).toBeVisible();
+  } finally {
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });

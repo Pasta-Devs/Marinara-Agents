@@ -87,6 +87,7 @@ interface SpatialMapsHomeProps {
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
   onOpenMap: () => void;
   onOpenEditor: () => void;
+  onOpenLibrary: () => void;
   onManagePackage?: () => void;
   confirmAction?: (options: {
     title?: string;
@@ -215,6 +216,8 @@ function exampleTurnPromptProjection(ownerMode: SpatialOwnerMode): ResolvedOwner
     ],
     description: "The exact current location's public description appears here.",
     modelMemory: "The exact current location's private model memory appears here when it is set.",
+    referenceImageId: null,
+    useReferenceImage: false,
     destinations: [
       {
         id: "reachable-location-id",
@@ -240,6 +243,7 @@ export function SpatialMapsHome({
   onEnabledForChatChange,
   onOpenMap,
   onOpenEditor,
+  onOpenLibrary,
   onManagePackage,
   confirmAction,
   onDirtyChange,
@@ -900,6 +904,25 @@ export function SpatialMapsHome({
               </p>
             </div>
           </div>
+        </article>
+
+        <article className="mari-editor-panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-accent)]">
+            <Map size="1rem" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xs font-semibold">Map templates</h2>
+            <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+              Create fandom or original maps with AI or by hand, then add a clean copy to any Roleplay or Game chat.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenLibrary}
+            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 shrink-0 justify-center px-4 text-xs"
+          >
+            Open map templates
+          </button>
         </article>
 
         <article className="mari-editor-panel overflow-hidden">

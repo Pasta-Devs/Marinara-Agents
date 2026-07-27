@@ -52,9 +52,9 @@ export async function resolveOwnerSpatialProjection(
   const state = await resolveEffectiveSpatialState(chatId, options);
   const projection = buildOwnerSpatialProjection(chatId, state.definition, state.currentLocationId);
   if (!projection) return null;
-  const settings = await getPackageAgentSettings("hierarchical-maps").catch((error) => {
+  const settings: Record<string, unknown> = await getPackageAgentSettings("hierarchical-maps").catch((error) => {
     logger.warn("Could not read global Hierarchical Maps turn prompt templates; using built-ins: %s", error);
-    return {};
+    return {} as Record<string, unknown>;
   });
   const templates = normalizeSpatialTurnPromptTemplates(
     settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
