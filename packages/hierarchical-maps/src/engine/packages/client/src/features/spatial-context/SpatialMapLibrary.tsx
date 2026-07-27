@@ -67,6 +67,8 @@ export function SpatialMapLibrary({
   const [query, setQuery] = useState("");
   const [pendingConfirmation, setPendingConfirmation] = useState<LibraryConfirmationOptions | null>(null);
   const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+  const confirmationDialogRef = useRef<HTMLDivElement>(null);
+  const confirmationCancelRef = useRef<HTMLButtonElement>(null);
   const editingTemplate = templates.data?.find((template) => template.id === editingId) ?? null;
   const supportedChat = !!chatId && (chatMode === "roleplay" || chatMode === "game");
   const visibleTemplates = useMemo(() => {
@@ -89,6 +91,47 @@ export function SpatialMapLibrary({
       setPendingConfirmation(options);
     });
   }, []);
+
+  useEffect(() => {
+    if (!pendingConfirmation) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => confirmationCancelRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        resolveConfirmation(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        confirmationDialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (
+        event.shiftKey &&
+        (document.activeElement === first || !confirmationDialogRef.current?.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === last || !confirmationDialogRef.current?.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [pendingConfirmation, resolveConfirmation]);
 
   useEffect(
     () => () => {
@@ -231,10 +274,12 @@ export function SpatialMapLibrary({
     <div className="mari-editor-shell flex min-h-0 flex-1 flex-col overflow-hidden" data-marinara-map-template-library>
       {pendingConfirmation && (
         <div
+          ref={confirmationDialogRef}
           data-chat-floating-panel
           role="dialog"
           aria-modal="true"
           aria-label={pendingConfirmation.title ?? "Confirm map template action"}
+          aria-describedby="marinara-map-library-confirmation-message"
           className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--background)]/85 p-3 sm:p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) resolveConfirmation(false);
@@ -246,13 +291,16 @@ export function SpatialMapLibrary({
                 {pendingConfirmation.title ?? "Confirm map template action"}
               </h2>
             </div>
-            <p className="whitespace-pre-wrap px-4 py-4 text-sm leading-relaxed text-[var(--foreground)] sm:px-5">
+            <p
+              id="marinara-map-library-confirmation-message"
+              className="whitespace-pre-wrap px-4 py-4 text-sm leading-relaxed text-[var(--foreground)] sm:px-5"
+            >
               {pendingConfirmation.message}
             </p>
             <div className="flex flex-col gap-2 border-t border-[var(--border)] px-4 py-4 sm:flex-row sm:justify-end sm:px-5">
               <button
+                ref={confirmationCancelRef}
                 type="button"
-                autoFocus
                 onClick={() => resolveConfirmation(false)}
                 className="mari-chrome-control min-h-11 w-full px-4 text-sm sm:w-auto"
               >

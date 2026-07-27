@@ -1478,7 +1478,20 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       .locator("xpath=ancestor::article");
     await expect(chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" })).toBeVisible();
     await chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" }).click();
-    const confirm = page.getByRole("dialog").filter({ hasText: "Add map template to this chat?" });
+    let confirm = page.getByRole("dialog").filter({ hasText: "Add map template to this chat?" });
+    const cancelButton = confirm.getByRole("button", { name: "Cancel", exact: true });
+    const confirmButton = confirm.getByRole("button", { name: "Add to chat", exact: true });
+    await expect(cancelButton).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(confirmButton).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(cancelButton).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(confirm).toHaveCount(0);
+    await expect(chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" })).toBeFocused();
+
+    await chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" }).click();
+    confirm = page.getByRole("dialog").filter({ hasText: "Add map template to this chat?" });
     await confirm.getByRole("button", { name: "Add to chat", exact: true }).click();
     await expect
       .poll(async () => {
