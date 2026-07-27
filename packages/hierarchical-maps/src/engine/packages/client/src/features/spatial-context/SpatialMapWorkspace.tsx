@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Check,
+  ChevronDown,
   ChevronRight,
   CornerDownRight,
   Download,
@@ -10,6 +11,7 @@ import {
   List,
   Loader2,
   Map,
+  MoreHorizontal,
   Move,
   Plus,
   RefreshCw,
@@ -197,6 +199,7 @@ export function SpatialMapWorkspace({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [enteredParentId, setEnteredParentId] = useState<string | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("hierarchy");
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const [serverIssues, setServerIssues] = useState<SpatialDefinitionIssue[]>([]);
   const [conflict, setConflict] = useState(false);
   const [reviewConflict, setReviewConflict] = useState(false);
@@ -329,6 +332,7 @@ export function SpatialMapWorkspace({
     setBaseDefinition(null);
     setSelectedId(null);
     setEnteredParentId(null);
+    setMobileActionsOpen(false);
     setConflict(false);
     setAiBuilderOpen(false);
     setFirstSaveResult(null);
@@ -1208,6 +1212,7 @@ export function SpatialMapWorkspace({
     pending: updateSpatial.isPending || updateTemplate.isPending,
     savedFlash,
   });
+  const saveLabel = templateMode ? "Save template" : isFirstMapDraft ? "Enable and save map" : "Save";
   const localChildren = sortedChildren(draft, enteredParentId);
   const localMapBackgroundPosition = currentContext?.mapBackgroundPosition ?? { x: 50, y: 50 };
   const localBreadcrumb = resolveSpatialBreadcrumb(draft, enteredParentId);
@@ -1502,72 +1507,95 @@ export function SpatialMapWorkspace({
             </>
           )}
         </div>
-        <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
-          {!templateMode && <button
-            type="button"
-            onClick={() => {
-              void spatial.refetch();
-              setAiBuilderOpen(true);
-            }}
-            disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
-            className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-          >
-            <Sparkles size="0.8125rem" />{" "}
-            {firstMapGenerationSession
-              ? "Regenerate with AI"
-              : draft.locations.length > 0
-                ? "Expand with AI"
-                : "Build with AI"}
-          </button>}
-          <button
-            type="button"
-            onClick={handleExport}
-            className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
-            aria-label="Export hierarchical map"
-          >
-            <Upload size="0.8125rem" /> Export
-          </button>
-          <button
-            type="button"
-            onClick={() => importInputRef.current?.click()}
-            disabled={conflict || updateSpatial.isPending}
-            className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-            aria-label="Import hierarchical map"
-          >
-            <Download size="0.8125rem" /> Import
-          </button>
-          {!templateMode && onOpenTemplates && (
+        <div className="mari-editor-actions flex max-md:w-full max-md:justify-between max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
+          <div className="hidden items-center gap-1.5 lg:flex">
+            {!templateMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  void spatial.refetch();
+                  setAiBuilderOpen(true);
+                }}
+                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              >
+                <Sparkles size="0.8125rem" />{" "}
+                {firstMapGenerationSession
+                  ? "Regenerate with AI"
+                  : draft.locations.length > 0
+                    ? "Expand with AI"
+                    : "Build with AI"}
+              </button>
+            )}
             <button
               type="button"
-              onClick={onOpenTemplates}
+              onClick={handleExport}
+              className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+              aria-label="Export hierarchical map"
+            >
+              <Upload size="0.8125rem" /> Export
+            </button>
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
               disabled={conflict || updateSpatial.isPending}
               className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-              aria-label="Add a saved map template"
+              aria-label="Import hierarchical map"
             >
-              <Map size="0.8125rem" /> Templates
+              <Download size="0.8125rem" /> Import
             </button>
-          )}
-          {!templateMode && draft.locations.length > 0 && (
+            {!templateMode && onOpenTemplates && (
+              <button
+                type="button"
+                onClick={onOpenTemplates}
+                disabled={conflict || updateSpatial.isPending}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+                aria-label="Add a saved map template"
+              >
+                <Map size="0.8125rem" /> Templates
+              </button>
+            )}
+            {!templateMode && draft.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void saveAsTemplate()}
+                disabled={createTemplate.isPending}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              >
+                <Save size="0.8125rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
+              </button>
+            )}
+            {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleDeleteMap()}
+                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
+                aria-label="Delete map and start over"
+              >
+                <Trash2 size="0.8125rem" /> Delete map
+              </button>
+            )}
+          </div>
+          <div className="shrink-0 lg:hidden">
             <button
               type="button"
-              onClick={() => void saveAsTemplate()}
-              disabled={createTemplate.isPending}
-              className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              onClick={() => setMobileActionsOpen((open) => !open)}
+              className={cn(
+                "mari-editor-action inline-flex min-h-11 px-3 text-xs",
+                mobileActionsOpen && "mari-editor-action--accent",
+              )}
+              aria-expanded={mobileActionsOpen}
+              aria-controls="hierarchical-map-mobile-actions"
+              aria-label={mobileActionsOpen ? "Close map actions" : "More map actions"}
             >
-              <Save size="0.8125rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
+              <MoreHorizontal size="0.8125rem" /> More
+              <ChevronDown
+                size="0.75rem"
+                className={cn("transition-transform duration-150", mobileActionsOpen && "rotate-180")}
+              />
             </button>
-          )}
-          {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
-            <button
-              type="button"
-              onClick={() => void handleDeleteMap()}
-              disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
-              className="mari-editor-action inline-flex min-h-11 px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
-              aria-label="Delete map and start over"
-            >
-              <Trash2 size="0.8125rem" /> Delete map
-            </button>
-          )}
+          </div>
           <input
             data-marinara-map-import-input
             ref={importInputRef}
@@ -1578,24 +1606,35 @@ export function SpatialMapWorkspace({
             aria-hidden="true"
             onChange={(event) => void handleImport(event)}
           />
-          <span className={cn("mari-editor-status mr-2", status.className)}>
+          <span
+            className={cn(
+              "mari-editor-status mr-2",
+              "max-md:mr-0 max-md:min-w-0 max-md:flex-1 max-md:justify-end max-md:overflow-hidden max-md:whitespace-nowrap",
+              status.className,
+            )}
+          >
             {status.icon}
             {status.label}
           </span>
           {!templateMode && !isFirstMapDraft && (
-            <label className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs">
-              <input
-                type="checkbox"
-                checked={draft.enabled}
-                disabled={!canEnable && !draft.enabled}
-                onChange={(event) => applyDraft({ ...draft, enabled: event.target.checked })}
-              />
-              <span>{draft.enabled ? "Enabled" : "Disabled"}</span>
-            </label>
+            <div className="hidden lg:block">
+              <label className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs">
+                <input
+                  type="checkbox"
+                  checked={draft.enabled}
+                  disabled={!canEnable && !draft.enabled}
+                  onChange={(event) => applyDraft({ ...draft, enabled: event.target.checked })}
+                />
+                <span>{draft.enabled ? "Enabled" : "Disabled"}</span>
+              </label>
+            </div>
           )}
           <button
             type="button"
-            onClick={() => void handleSave(isFirstMapDraft)}
+            onClick={() => {
+              setMobileActionsOpen(false);
+              void handleSave(isFirstMapDraft);
+            }}
             disabled={
               !dirty ||
               issues.length > 0 ||
@@ -1604,12 +1643,116 @@ export function SpatialMapWorkspace({
               conflict ||
               (!templateMode && isFirstMapDraft && !canEnable)
             }
-            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 disabled:opacity-45"
+            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 shrink-0 disabled:opacity-45"
+            aria-label={saveLabel}
           >
-            <Save size="0.8125rem" /> {templateMode ? "Save template" : isFirstMapDraft ? "Enable and save map" : "Save"}
+            <Save size="0.8125rem" />
+            <span className="lg:hidden">{isFirstMapDraft ? "Enable & save" : "Save"}</span>
+            <span className="hidden lg:inline">{saveLabel}</span>
           </button>
         </div>
       </div>
+
+      {mobileActionsOpen && (
+        <section
+          id="hierarchical-map-mobile-actions"
+          data-marinara-map-mobile-actions
+          role="region"
+          aria-label="Map actions"
+          className="relative z-40 border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 p-3 lg:hidden"
+        >
+          <div className="grid grid-cols-2 gap-2">
+            {!templateMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileActionsOpen(false);
+                  void spatial.refetch();
+                  setAiBuilderOpen(true);
+                }}
+                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              >
+                <Sparkles size="0.8125rem" />{" "}
+                {firstMapGenerationSession
+                  ? "Regenerate with AI"
+                  : draft.locations.length > 0
+                    ? "Expand with AI"
+                    : "Build with AI"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setMobileActionsOpen(false);
+                handleExport();
+              }}
+              className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs"
+              aria-label="Export hierarchical map"
+            >
+              <Upload size="0.8125rem" /> Export
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileActionsOpen(false);
+                importInputRef.current?.click();
+              }}
+              disabled={conflict || updateSpatial.isPending}
+              className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              aria-label="Import hierarchical map"
+            >
+              <Download size="0.8125rem" /> Import
+            </button>
+            {!templateMode && onOpenTemplates && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileActionsOpen(false);
+                  onOpenTemplates();
+                }}
+                disabled={conflict || updateSpatial.isPending}
+                className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+                aria-label="Add a saved map template"
+              >
+                <Map size="0.8125rem" /> Templates
+              </button>
+            )}
+            {!templateMode && draft.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void saveAsTemplate()}
+                disabled={createTemplate.isPending}
+                className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              >
+                <Save size="0.8125rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
+              </button>
+            )}
+            {!templateMode && !isFirstMapDraft && (
+              <label className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs">
+                <span>{draft.enabled ? "Map enabled" : "Map disabled"}</span>
+                <input
+                  type="checkbox"
+                  checked={draft.enabled}
+                  disabled={!canEnable && !draft.enabled}
+                  onChange={(event) => applyDraft({ ...draft, enabled: event.target.checked })}
+                />
+              </label>
+            )}
+            {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleDeleteMap()}
+                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
+                aria-label="Delete map and start over"
+              >
+                <Trash2 size="0.8125rem" /> Delete map
+              </button>
+            )}
+          </div>
+        </section>
+      )}
 
       <SpatialMapAiBuilder
         chatId={chatId ?? ""}

@@ -2523,6 +2523,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     }
 
     await expectWorkspaceFillsOverlay(page);
+    const workspace = page.locator("[data-marinara-maps-workspace-root]");
     await page.getByRole("button", { name: "Draft with AI" }).click();
     await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
     await expectAiBuilderLayout(page, mobile);
@@ -2623,7 +2624,45 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       "Old Sewers",
     ]);
 
-    const deleteMap = page.getByRole("button", { name: "Delete map and start over" });
+    let deleteMap = workspace.getByRole("button", { name: "Delete map and start over" });
+    if (mobile) {
+      const header = workspace.locator(":scope > .mari-editor-header");
+      const moreActions = header.getByRole("button", { name: "More map actions" });
+      await expectMinimumInteractiveSize(moreActions, "Mobile map actions control");
+      await expect(workspace.getByRole("button", { name: "Expand with AI", exact: true })).toHaveCount(0);
+      const headerGeometry = await header.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+          left: rect.left,
+          right: rect.right,
+          viewportWidth: window.innerWidth,
+        };
+      });
+      expect(headerGeometry.scrollWidth).toBeLessThanOrEqual(headerGeometry.clientWidth + 1);
+      expect(headerGeometry.left).toBeGreaterThanOrEqual(-1);
+      expect(headerGeometry.right).toBeLessThanOrEqual(headerGeometry.viewportWidth + 1);
+
+      await moreActions.click();
+      const mobileActions = workspace.getByRole("region", { name: "Map actions" });
+      await expect(mobileActions).toBeVisible();
+      await expect(mobileActions.getByRole("button", { name: "Expand with AI", exact: true })).toBeVisible();
+      await expect(mobileActions.getByRole("button", { name: "Add a saved map template" })).toBeVisible();
+      await expect(mobileActions.getByRole("button", { name: "Export hierarchical map" })).toBeVisible();
+      await expect(mobileActions.getByRole("button", { name: "Import hierarchical map" })).toBeVisible();
+      await expectMinimumInteractiveSize(
+        mobileActions.getByRole("button", { name: "Expand with AI", exact: true }),
+        "Mobile AI map action",
+      );
+      await expectMinimumInteractiveSize(
+        mobileActions.getByRole("button", { name: "Add a saved map template" }),
+        "Mobile map templates action",
+      );
+      deleteMap = mobileActions.getByRole("button", { name: "Delete map and start over" });
+    } else {
+      await expect(workspace.getByRole("button", { name: "More map actions" })).toHaveCount(0);
+    }
     await expectMinimumInteractiveSize(deleteMap, "Delete map control");
     await deleteMap.click();
     const deleteDialog = page.getByRole("dialog", { name: "Delete this map and start over?" });
