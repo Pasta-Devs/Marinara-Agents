@@ -96,13 +96,11 @@ async function main() {
       return () => {};
     },
   };
-  let cleanup: Awaited<ReturnType<typeof activate>> | null = await activate({
-    dataDir,
-    api,
-  });
+  let cleanup: Awaited<ReturnType<typeof activate>> | null = null;
   let releaseRestoredRuntime: (() => void) | undefined;
-  const storage = services.get("long-term-memory:storage").storage;
-  const runtime = services.get("long-term-memory:runtime");
+  let storage: any;
+  let runtime: any;
+  let primaryFailure = false;
   const note = (id: string, chatId: string, text: string, overrides: Record<string, unknown> = {}) => ({
     id,
     title: id,
@@ -121,6 +119,9 @@ async function main() {
   });
 
   try {
+    cleanup = await activate({ dataDir, api });
+    storage = services.get("long-term-memory:storage").storage;
+    runtime = services.get("long-term-memory:runtime");
     assert.deepEqual(
       resolveLongTermMemoryRecallSettings({
         chatMode: "conversation",
@@ -492,6 +493,24 @@ async function main() {
       maxTokens: 4096,
     });
     assert.equal(keywordOnly.chunks[0]?.chunk.noteId, "world_keyword_exact");
+    const keywordThresholded = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "harrowmark obscryl oath",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 0,
+      lexicalWeight: 0,
+      graphWeight: 0,
+      keywordWeight: 1,
+      minScore: 0.75,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.deepEqual(
+      keywordThresholded.chunks.map((chunk: any) => chunk.chunk.noteId),
+      ["world_keyword_exact"],
+      "an exact keyword match must retain absolute relevance above the threshold",
+    );
     const graphOnly = await retrieveLongTermMemory({
       root: storage.root,
       queryText: "stormvault ledger",
@@ -592,7 +611,7 @@ async function main() {
     });
     assert.deepEqual(
       thresholded.chunks.map((chunk: any) => chunk.chunk.noteId),
-      ["world_visible"],
+      ["world_visible", "world_visible_second"],
       "minimum score must apply to fused relevance, not a candidate's strongest lane",
     );
     const resolvedExcluded = await retrieveLongTermMemory({
@@ -764,12 +783,32 @@ async function main() {
       preferencesBeforeUninstall,
       "uninstall and reinstall must preserve exact agent preference bytes",
     );
+  } catch (error) {
+    primaryFailure = true;
+    throw error;
   } finally {
-    await cleanup?.();
-    releaseRestoredRuntime?.();
-    assert.equal(services.has("long-term-memory:runtime"), false, "cleanup must unregister runtime service");
-    assert.equal(services.has("long-term-memory:storage"), false, "cleanup must unregister storage service");
-    await rm(dataDir, { recursive: true, force: true });
+    let cleanupError: unknown = null;
+    for (const cleanupStep of [
+      () => cleanup?.(),
+      () => releaseRestoredRuntime?.(),
+      () => assert.equal(services.has("long-term-memory:runtime"), false, "cleanup must unregister runtime service"),
+      () => assert.equal(services.has("long-term-memory:storage"), false, "cleanup must unregister storage service"),
+    ]) {
+      try {
+        await cleanupStep();
+      } catch (error) {
+        cleanupError ??= error;
+      }
+    }
+    try {
+      await rm(dataDir, { recursive: true, force: true });
+    } catch (error) {
+      cleanupError ??= error;
+    }
+    if (cleanupError) {
+      if (primaryFailure) console.error("LTM runtime cleanup failed after the primary failure", cleanupError);
+      else throw cleanupError;
+    }
   }
 
   process.stdout.write("Long-Term Memory runtime regression: recall, receipts, source exclusion, activation cleanup ok\n");

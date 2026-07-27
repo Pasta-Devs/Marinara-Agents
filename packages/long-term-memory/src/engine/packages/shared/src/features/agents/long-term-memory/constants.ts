@@ -217,7 +217,7 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_GAME = [
   "- relationship_state: state. Include dimensions/dimensionChanges when the source supports them; relationship changes need a caused_by link.",
   "- world_fact: facts or items.",
   "- timeline_event: event.",
-  "- thread: objective, stage, or summary. The text must describe an unresolved situation and what would resolve it. When the thread is marked resolved, also emit a timeline_event capturing what changed.",
+   "- thread: objective, stage, or resolution. The text must describe an unresolved situation and what would resolve it. When the thread is marked resolved, also emit a timeline_event capturing what changed.",
   "- tone: observations. World/session-level atmospheric register only, not one-scene mood.",
   "- anchor: the source section key. Recurring motif or planted callback only.",
   "",

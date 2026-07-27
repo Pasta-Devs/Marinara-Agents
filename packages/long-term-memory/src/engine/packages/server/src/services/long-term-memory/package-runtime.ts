@@ -144,16 +144,17 @@ export function isPackageDebugAgentsEnabled() {
 }
 
 export const logger = {
-  debug: (message: string, ...args: RuntimeLogArgument[]) => currentHost().logger.debug(message, ...args),
-  info: (message: string, ...args: RuntimeLogArgument[]) => currentHost().logger.info(message, ...args),
+  debug: (message: string, ...args: RuntimeLogArgument[]) => host?.logger.debug(message, ...args),
+  info: (message: string, ...args: RuntimeLogArgument[]) => host?.logger.info(message, ...args),
   warn: (first: unknown, second?: RuntimeLogArgument, ...args: RuntimeLogArgument[]) =>
-    typeof first === "string"
-      ? currentHost().logger.warn(first, second, ...args)
-      : currentHost().logger.warn(typeof second === "string" ? second : "Long-Term Memory warning", first as RuntimeLogArgument, ...args),
+    host && (typeof first === "string"
+      ? host.logger.warn(first, second, ...args)
+      : host.logger.warn(typeof second === "string" ? second : "Long-Term Memory warning", first as RuntimeLogArgument, ...args)),
   error: (error: unknown, message: string, ...args: RuntimeLogArgument[]) =>
-    currentHost().logger.error(error, message, ...args),
+    host?.logger.error(error, message, ...args),
   debugOverride: (overrideEnabled: boolean, message: string, ...args: RuntimeLogArgument[]) => {
-    const runtime = currentHost();
+    const runtime = host;
+    if (!runtime) return;
     if (runtime.logger.debugOverride) runtime.logger.debugOverride(overrideEnabled, message, ...args);
     else if (overrideEnabled) runtime.logger.debug(message, ...args);
   },

@@ -109,7 +109,8 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       ...pickGraphSeedNotes(index, keywords, 5),
     ]),
   );
-  const graph = expandLtmGraph(index.graph, seedNotes).filter((hit) => allowed.has(hit.chunkId));
+  const allowedNoteIds = new Set(Array.from(allowed, (chunkId) => index.metadata.chunks[chunkId]?.noteId).filter((id): id is string => Boolean(id)));
+  const graph = expandLtmGraph(index.graph, seedNotes, { allowedNoteIds }).filter((hit) => allowed.has(hit.chunkId));
   if ((input.graphWeight ?? 1) > 0 && graph.length) {
     lanes.push({ name: "graph", weight: input.graphWeight ?? 1, items: graph.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: `graph:${hit.viaNoteId}` })) });
   }
@@ -137,7 +138,7 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   const budgeted = applyLtmBudget(ranked, chunksById, {
     maxChunks: input.maxChunks ?? 20,
     maxTokens: input.maxTokens ?? 4096,
-    normalizedScoreThreshold: input.minScore,
+    relevanceScoreThreshold: input.minScore,
     explain: input.explain,
     rejectedLimit: input.rejectedLimit,
     dedupeExactText: true,

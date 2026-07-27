@@ -13,7 +13,7 @@ import type {
   LtmLastInjectionResponse,
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { API_ROOT, invalidateLtmQueries, queryKeys, request } from "./api";
+import { API_ROOT, invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
 import { Button, InfoPopover, StatusSurface } from "./shared-controls";
 import { humanizeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
@@ -54,12 +54,10 @@ function humanizeDebugText(
   text: string,
   noteTitles: ReadonlyMap<string, string>,
 ) {
-  let result = text;
-  for (const [id, title] of noteTitles) result = result.replaceAll(id, title);
-  return result.replaceAll(
-    /\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi,
-    "an internal record",
-  );
+  const ids = [...noteTitles.keys()].sort((left, right) => right.length - left.length);
+  const escaped = ids.map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = [...escaped, "\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b"].join("|");
+  return text.replace(new RegExp(pattern, "gi"), (id) => noteTitles.get(id) ?? "an internal record");
 }
 
 function describeEvent(
@@ -250,7 +248,7 @@ export default function ActivityView({
   });
   const notes = useQuery({
     queryKey: queryKeys.notes,
-    queryFn: () => request<LtmNote[]>("/notes?includeGlobal=true"),
+    queryFn: () => requestAllNotes<LtmNote>("/notes?includeGlobal=true"),
   });
   const noteTitles = new Map(
     (notes.data ?? []).map((note) => [
@@ -327,7 +325,7 @@ export default function ActivityView({
       link.href = url;
       link.download = "ltm-debug-log.jsonl";
       link.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : "Could not export activity.",

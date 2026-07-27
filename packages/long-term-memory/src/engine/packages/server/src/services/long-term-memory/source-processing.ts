@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import type {
   LtmExtractionAccounting,
   LtmExtractionDiagnostic,
-  LtmExtractionDraft,
   LtmExtractionOutcome,
   LtmExtractionResponse,
   LtmImportedSourceResult,
@@ -19,10 +18,11 @@ import { LongTermMemoryStorage } from "./storage.js";
 import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
 import { compileEvidenceUnitExtraction, sourceHashForEvidenceUnitExtraction } from "./evidence-unit-extraction.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
+import { LtmServiceError } from "./service-error.js";
 
 export type ImportedSourceItem={sourceId:string;title:string;note:LtmNote;created:boolean;deterministicSourceText?:string};
-type PreparedSource={extractionMethod:"llm"|"deterministic";sourceNote:LtmNote;extractionMode:LtmMode;diagnostics:LtmExtractionDiagnostic[];outcome:LtmExtractionOutcome;accounting:LtmExtractionAccounting;response:LtmExtractionResponse;draft:LtmExtractionDraft|null};
-type PrepareOptions={sourceNote:LtmNote;languageModel?:PackageLanguageModel|null;scope?:LtmScope;modes?:LtmMode[];mode?:LtmMode;instruction?:string;operationId:string;signal?:AbortSignal;root?:string;chatId?:string;persistDraft?:boolean;directGameMode?:boolean;directSourceText?:string};
+type PreparedSource={operationId:string;chatId?:string;extractionMethod:"llm"|"deterministic";sourceNote:LtmNote;extractionMode:LtmMode;diagnostics:LtmExtractionDiagnostic[];outcome:LtmExtractionOutcome;accounting:LtmExtractionAccounting;response:LtmExtractionResponse;reviewRequired:boolean};
+type PrepareOptions={sourceNote:LtmNote;languageModel?:PackageLanguageModel|null;scope?:LtmScope;modes?:LtmMode[];mode?:LtmMode;instruction?:string;operationId:string;signal?:AbortSignal;root?:string;chatId?:string;directGameMode?:boolean;directSourceText?:string};
 
 function abortError(){const error=new Error("Long-term memory import was cancelled.");error.name="AbortError";return error;}
 function throwIfAborted(signal?:AbortSignal){if(signal?.aborted)throw abortError();}
@@ -90,21 +90,44 @@ export async function prepareLongTermMemorySource(options:PrepareOptions):Promis
       scope, modes: options.modes ?? ["game"], mode: "game", sourceHash,
       skipStructuredBackfill: true,
     });
-    return { operationId: options.operationId, sourceNote: options.sourceNote, extractionMode: "game", response: compiled.compiledResponse, draft: null, diagnostics: compiled.diagnostics, outcome: compiled.outcome, accounting: compiled.accounting, extractionMethod: "deterministic" };
+    return { operationId: options.operationId, chatId: options.chatId, sourceNote: options.sourceNote, extractionMode: "game", response: compiled.compiledResponse, diagnostics: compiled.diagnostics, outcome: compiled.outcome, accounting: compiled.accounting, extractionMethod: "deterministic", reviewRequired: false };
   }
-  if(!options.languageModel)throw new Error("No language model available for source note extraction");
-  const result=await extractLongTermMemoryFromSourceNote({noteId:options.sourceNote.id,languageModel:options.languageModel,scope,modes:options.modes??options.sourceNote.modes,mode:options.mode,instruction:options.instruction,operationId:options.operationId,signal:options.signal,root:options.root,chatId:options.chatId,trustedSubjectCatalog:await loadTrustedLtmSubjectCatalog(scope,options.root),persistDraft:options.persistDraft});
+  if(!options.languageModel)throw new LtmServiceError("No language model available for source note extraction",400,"ltm_model_configuration");
+  const result=await extractLongTermMemoryFromSourceNote({noteId:options.sourceNote.id,languageModel:options.languageModel,scope,modes:options.modes??options.sourceNote.modes,mode:options.mode,instruction:options.instruction,operationId:options.operationId,signal:options.signal,root:options.root,chatId:options.chatId,trustedSubjectCatalog:await loadTrustedLtmSubjectCatalog(scope,options.root)});
   throwIfAborted(options.signal);
-  return{...result,extractionMethod:"llm"};
+  return{...result,extractionMethod:"llm",reviewRequired: options.sourceNote.provenance?.kind === "character" || options.sourceNote.provenance?.kind === "lorebook"};
+}
+
+async function commitPreparedLongTermMemorySource(prepared: PreparedSource, options: { root?: string; overlay?: Map<string, LtmNote>; applyLowRisk?: boolean }) {
+  const draft = await finalizeLongTermMemoryExtractionDraft({
+    sourceNote: prepared.sourceNote,
+    response: prepared.response,
+    scope: prepared.sourceNote.scope,
+    modes: prepared.sourceNote.modes,
+    extractionMode: prepared.extractionMode,
+    operationId: prepared.operationId,
+    diagnostics: prepared.diagnostics,
+    outcome: prepared.outcome,
+    accounting: prepared.accounting,
+    reviewRequired: prepared.reviewRequired,
+    chatId: prepared.chatId,
+  }, { root: options.root, overlay: options.overlay });
+  const note = canMarkCurrent(prepared) && draft.source.extractionFingerprint
+    ? await new LongTermMemoryStorage(options.root).updateNote(prepared.sourceNote.id, { extractionFingerprint: draft.source.extractionFingerprint })
+    : prepared.sourceNote;
+  const fingerprintPersisted = canMarkCurrent(prepared) && Boolean(note.extractionFingerprint);
+  const applyResult = options.applyLowRisk && !prepared.reviewRequired && fingerprintPersisted && draft.mutations.length
+    ? await applyLongTermMemoryDraft(draft.id, { root: options.root, actor: "maintenance_api", autoApplyLowRiskOnly: true, rebuildIndexes: false, operationId: prepared.operationId })
+    : null;
+  const finalDraft = applyResult?.draft ?? draft;
+  return { draft: finalDraft, note, applyResult };
 }
 
 export async function processLongTermMemorySource(options:PrepareOptions&{applyLowRisk?:boolean}){
-  const prepared=await prepareLongTermMemorySource({...options,persistDraft:true});
-  const applyResult=options.applyLowRisk&&prepared.draft?.mutations.length?await applyLongTermMemoryDraft(prepared.draft.id,{root:options.root,actor:"maintenance_api",autoApplyLowRiskOnly:true,rebuildIndexes:false,operationId:options.operationId}):null;
-  const draft=applyResult?.draft??prepared.draft;
-  if(canMarkCurrent(prepared)&&draft?.source.extractionFingerprint)await new LongTermMemoryStorage(options.root).updateNote(prepared.sourceNote.id,{extractionFingerprint:draft.source.extractionFingerprint});
-  await rebuildLongTermMemoryIndexes({root:options.root});
-  return{operationId:options.operationId,draft,diagnostics:prepared.diagnostics,outcome:prepared.outcome,accounting:prepared.accounting,response:prepared.response,appliedMutationIds:applyResult?.appliedMutationIds??[],skippedMutationIds:applyResult?.skippedMutationIds??[]};
+  const prepared=await prepareLongTermMemorySource(options);
+  const committed=await commitPreparedLongTermMemorySource(prepared,{root:options.root,applyLowRisk:options.applyLowRisk});
+  if (committed.draft.mutations.length) await rebuildLongTermMemoryIndexes({root:options.root});
+  return{operationId:prepared.operationId,draft:committed.draft,diagnostics:prepared.diagnostics,outcome:prepared.outcome,accounting:prepared.accounting,response:prepared.response,appliedMutationIds:committed.applyResult?.appliedMutationIds??[],skippedMutationIds:committed.applyResult?.skippedMutationIds??[]};
 }
 
 function failed(item:ImportedSourceItem,method:"llm"|"deterministic",stage:"extract"|"finalize",error:unknown,isCancelled:boolean,prepared?:PreparedSource):LtmImportedSourceResult{
@@ -112,11 +135,11 @@ function failed(item:ImportedSourceItem,method:"llm"|"deterministic",stage:"extr
   return isCancelled?{...base,extractionStatus:"cancelled",error:{code:"cancelled",message},diagnostics:[...(prepared?.diagnostics??[]),{severity:"warning",code:"cancelled",message}]}:{...base,extractionStatus:"failed",error:{code:`${stage}_failed`,message},diagnostics:[...(prepared?.diagnostics??[]),{severity:"error",code:`${stage}_failed`,message}]};
 }
 
-export async function processLongTermMemorySourceBatch(options:{items:ImportedSourceItem[];languageModel?:PackageLanguageModel|null;mode?:LtmMode;instruction?:string;operationId:string;signal:AbortSignal;applyLowRisk?:boolean;concurrency:number;root?:string;directGameMode?:boolean}){
+export async function processLongTermMemorySourceBatch(options:{items:ImportedSourceItem[];languageModel?:PackageLanguageModel|null;mode?:LtmMode;instruction?:string;operationId:string;signal:AbortSignal;applyLowRisk?:boolean;concurrency:number;root?:string;chatId?:string;directGameMode?:boolean}){
   const preparedResults:Array<{state:"prepared";item:ImportedSourceItem;prepared:PreparedSource}|{state:"failed";result:LtmImportedSourceResult}|undefined>=new Array(options.items.length);let next=0;
-  await Promise.all(Array.from({length:Math.min(Math.max(options.concurrency,1),options.items.length)},async()=>{while(next<options.items.length){const index=next++,item=options.items[index]!,directGameMode=Boolean(options.directGameMode&&item.deterministicSourceText);try{preparedResults[index]={state:"prepared",item,prepared:await prepareLongTermMemorySource({sourceNote:item.note,languageModel:options.languageModel,mode:options.mode,instruction:options.instruction,operationId:options.operationId,signal:options.signal,root:options.root,persistDraft:false,directGameMode,directSourceText:item.deterministicSourceText})};}catch(error){preparedResults[index]={state:"failed",result:failed(item,directGameMode?"deterministic":"llm","extract",error,cancelled(error,options.signal))};}}}));
+  await Promise.all(Array.from({length:Math.min(Math.max(options.concurrency,1),options.items.length)},async()=>{while(next<options.items.length){const index=next++,item=options.items[index]!,directGameMode=Boolean(options.directGameMode&&item.deterministicSourceText);try{preparedResults[index]={state:"prepared",item,prepared:await prepareLongTermMemorySource({sourceNote:item.note,languageModel:options.languageModel,mode:options.mode,instruction:options.instruction,operationId:options.operationId,signal:options.signal,root:options.root,chatId:options.chatId,directGameMode,directSourceText:item.deterministicSourceText})};}catch(error){preparedResults[index]={state:"failed",result:failed(item,directGameMode?"deterministic":"llm","extract",error,cancelled(error,options.signal))};}}}));
   const storage=new LongTermMemoryStorage(options.root),overlay=new Map<string,LtmNote>(),results:LtmImportedSourceResult[]=[];
-  for(const entry of preparedResults){if(!entry)continue;if(entry.state==="failed"){results.push(entry.result);continue;}const{item,prepared}=entry;try{throwIfAborted(options.signal);const draft=await finalizeLongTermMemoryExtractionDraft({sourceNote:prepared.sourceNote,response:prepared.response,scope:prepared.sourceNote.scope,modes:prepared.sourceNote.modes,extractionMode:prepared.extractionMode,operationId:options.operationId,diagnostics:prepared.diagnostics,outcome:prepared.outcome,accounting:prepared.accounting},{root:options.root,overlay});const applied=options.applyLowRisk&&draft.mutations.length?await applyLongTermMemoryDraft(draft.id,{root:options.root,actor:"maintenance_api",autoApplyLowRiskOnly:true,rebuildIndexes:false,operationId:options.operationId}):null,finalDraft=applied?.draft??draft,note=canMarkCurrent(prepared)&&finalDraft.source.extractionFingerprint?await storage.updateNote(prepared.sourceNote.id,{extractionFingerprint:finalDraft.source.extractionFingerprint}):prepared.sourceNote;results.push({sourceId:item.sourceId,title:item.title,note,created:item.created,sourceWriteStatus:item.created?"created":"refreshed",extractionStatus:"succeeded",extractionMethod:prepared.extractionMethod,retryable:false,draft:finalDraft,diagnostics:prepared.diagnostics,outcome:prepared.outcome,accounting:prepared.accounting,appliedMutationIds:applied?.appliedMutationIds??[],skippedMutationIds:applied?.skippedMutationIds??[]});}catch(error){results.push(failed(item,prepared.extractionMethod,"finalize",error,cancelled(error,options.signal),prepared));}}
+  for(const entry of preparedResults){if(!entry)continue;if(entry.state==="failed"){results.push(entry.result);continue;}const{item,prepared}=entry;try{throwIfAborted(options.signal);const committed=await commitPreparedLongTermMemorySource(prepared,{root:options.root,overlay,applyLowRisk:options.applyLowRisk});results.push({sourceId:item.sourceId,title:item.title,note:committed.note,created:item.created,sourceWriteStatus:item.created?"created":"refreshed",extractionStatus:"succeeded",extractionMethod:prepared.extractionMethod,retryable:false,draft:committed.draft,diagnostics:prepared.diagnostics,outcome:prepared.outcome,accounting:prepared.accounting,appliedMutationIds:committed.applyResult?.appliedMutationIds??[],skippedMutationIds:committed.applyResult?.skippedMutationIds??[]});}catch(error){results.push(failed(item,prepared.extractionMethod,"finalize",error,cancelled(error,options.signal),prepared));}}
   if(options.items.length)await rebuildLongTermMemoryIndexes({root:options.root});
   return results;
 }

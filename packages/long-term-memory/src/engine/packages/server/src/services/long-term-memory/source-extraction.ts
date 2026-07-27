@@ -2,7 +2,6 @@ import {
   isLtmSourceLikeNote,
   DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE,
   DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE,
-  type LtmExtractionDraft,
   type LtmExtractionAccounting,
   type LtmDraftMutation,
   type LtmExtractionOutcome,
@@ -37,6 +36,7 @@ import {
 import { noteIdForLtmDraftMutation, projectLtmDraftOntoNotes } from "./draft-projector.js";
 import { stableJsonHash } from "./chunking.js";
 import { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent } from "./source-hash.js";
+import { LtmServiceError } from "./service-error.js";
 export type ExtractLongTermMemoryFromSourceNoteOptions = {
   noteId: string;
   languageModel: PackageLanguageModel;
@@ -49,15 +49,14 @@ export type ExtractLongTermMemoryFromSourceNoteOptions = {
   operationId?: string;
   chatId?: string;
   trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
-  persistDraft?: boolean;
 };
 
 export type ExtractLongTermMemoryFromSourceNoteResult = {
   operationId: string;
+  chatId?: string;
   sourceNote: LtmNote;
   extractionMode: LtmMode;
   response: LtmExtractionResponse;
-  draft: LtmExtractionDraft | null;
   diagnostics: LtmExtractionDiagnostic[];
   outcome: LtmExtractionOutcome;
   accounting: LtmExtractionAccounting;
@@ -196,6 +195,7 @@ export async function finalizeLongTermMemoryExtractionDraft(
     outcome?: LtmExtractionOutcome;
     accounting?: LtmExtractionAccounting;
     chatId?: string;
+    reviewRequired?: boolean;
   },
   options: { root?: string; overlay?: Map<string, LtmNote> } = {},
 ) {
@@ -225,13 +225,14 @@ export async function finalizeLongTermMemoryExtractionDraft(
         overlay: options.overlay,
       })
     : input.response;
-  const source = {
-    ...sourceMetadataForEvidenceUnitDraft(currentSource, {
+  const sourceMetadata = sourceMetadataForEvidenceUnitDraft(currentSource, {
       scope: input.scope,
       modes: input.modes,
       extractionMode: input.extractionMode,
-    }),
-    ...(input.chatId ? { chatId: input.chatId } : {}),
+    });
+  const source = {
+    ...sourceMetadata,
+    ...(!sourceMetadata.chatId && input.chatId ? { chatId: input.chatId } : {}),
   };
   const projected = response.mutations.length
     ? await (async () => {
@@ -259,6 +260,7 @@ export async function finalizeLongTermMemoryExtractionDraft(
     diagnostics: input.diagnostics,
     outcome: input.outcome,
     accounting: input.accounting,
+    reviewRequired: input.reviewRequired,
   });
   if (options.overlay && projected) {
     for (const projection of projected.projections) options.overlay.set(projection.noteId, projection.after);
@@ -336,18 +338,18 @@ async function extractLongTermMemoryFromSourceNoteInner(
   let sourceNote = await storage.getNote(options.noteId);
   if (!sourceNote) {
     logger.warn("[ltm] Source note not found: %s", options.noteId);
-    throw new Error(`Long-term memory note not found: ${options.noteId}`);
+    throw new LtmServiceError(`Long-term memory note not found: ${options.noteId}`, 404, "ltm_note_not_found");
   }
   if (!isLtmSourceNote(sourceNote)) {
     logger.warn("[ltm] Note %s is not a source note", options.noteId);
-    throw new Error(`Long-term memory note is not a source note: ${options.noteId}`);
+    throw new LtmServiceError(`Long-term memory note is not a source note: ${options.noteId}`, 400, "ltm_source_invalid");
   }
 
   const requestedScope = options.scope ?? sourceNote.scope;
   const requestedModes = options.modes?.length ? options.modes : sourceNote.modes;
   const resolvedMode = options.mode ?? requestedModes[0] ?? "roleplay";
   if (!requestedModes.includes(resolvedMode)) {
-    throw new Error(`Long-term memory extraction mode is not enabled for source note: ${resolvedMode}`);
+    throw new LtmServiceError(`Long-term memory extraction mode is not enabled for source note: ${resolvedMode}`, 400, "ltm_mode_not_enabled");
   }
   sourceNote = await bindSourceNoteToExtractionContext({
     storage,
@@ -358,7 +360,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const sourceText = getLtmSourceNoteText(sourceNote);
   if (!sourceText) {
     logger.warn("[ltm] Source note %s has no source text", options.noteId);
-    throw new Error(`Long-term memory source note has no source text: ${options.noteId}`);
+    throw new LtmServiceError(`Long-term memory source note has no source text: ${options.noteId}`, 400, "ltm_source_empty");
   }
 
   const scope = sourceNote.scope;
@@ -368,7 +370,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const estimatedSourceTokens = Math.max(1, Math.ceil(sourceText.length / 4));
   const sourceExceedsTokenLimit = estimatedSourceTokens > extractionConfig.maxSourceTokens;
   if (sourceExceedsTokenLimit) {
-    throw new Error(`source_too_large: source requires about ${estimatedSourceTokens} tokens; maximum is ${extractionConfig.maxSourceTokens}`);
+    throw new LtmServiceError(`source_too_large: source requires about ${estimatedSourceTokens} tokens; maximum is ${extractionConfig.maxSourceTokens}`, 400, "ltm_source_too_large");
   }
   const extractionText = sourceText;
   await recordLtmDebugEvent({
@@ -556,39 +558,14 @@ async function extractLongTermMemoryFromSourceNoteInner(
     },
   });
 
-  const draft =
-    options.persistDraft !== false
-      ? await finalizeLongTermMemoryExtractionDraft(
-          {
-            sourceNote,
-            response: compiled.compiledResponse,
-            scope,
-            modes,
-            extractionMode: resolvedMode,
-            operationId: options.operationId,
-            diagnostics: compiled.diagnostics,
-            outcome: compiled.outcome,
-            accounting: compiled.accounting,
-            chatId: options.chatId,
-          },
-          { root: options.root },
-        )
-      : null;
-
   await recordLtmDebugEvent({
     operationId: options.operationId,
     root: options.root,
     phase: "draft",
-    action: draft ? "draft_created" : options.persistDraft === false ? "draft_deferred" : "draft_skipped",
-    status: draft
-      ? "ok"
-      : options.persistDraft === false
-        ? "ok"
-        : compiled.outcome.droppedUnits > 0
-          ? "warning"
-          : "skipped",
+    action: "draft_deferred",
+    status: "ok",
     sourceNoteId: sourceNote.id,
-    draftId: draft?.id,
+    draftId: undefined,
     counts: {
       mutations: compiled.compiledResponse.mutations.length,
       diagnostics: compiled.diagnostics.length,
@@ -596,22 +573,16 @@ async function extractLongTermMemoryFromSourceNoteInner(
     },
     diagnostics: compiled.diagnostics.map((diagnostic) => ({ ...diagnostic })),
     details: {
-      reason: draft
-        ? "created"
-        : options.persistDraft === false
-          ? "deferred_for_batch_overlay"
-          : compiled.outcome.droppedUnits > 0
-            ? "dropped_candidates_only"
-            : "no_mutations",
+      reason: "deferred_for_commit",
       extractionOutcome: compiled.outcome,
     },
   });
   return {
     operationId: options.operationId,
+    ...(options.chatId ? { chatId: options.chatId } : {}),
     sourceNote,
     extractionMode: resolvedMode,
     response: compiled.compiledResponse,
-    draft,
     diagnostics: compiled.diagnostics,
     outcome: compiled.outcome,
     accounting: compiled.accounting,

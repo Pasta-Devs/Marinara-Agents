@@ -18,7 +18,6 @@ const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const engineRoot = resolve(
   process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"),
 );
-const dataDir = mkdtempSync(join(tmpdir(), "marinara-ltm-lifecycle-"));
 const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
 const packageManifest = JSON.parse(
   readFileSync(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"),
@@ -26,20 +25,28 @@ const packageManifest = JSON.parse(
 const artifactPath = join(repoRoot, `artifacts/long-term-memory-${packageManifest.version}.zip`);
 const artifactUrl = `https://1.1.1.1/artifacts/long-term-memory-${packageManifest.version}.zip`;
 const artifactBytes = readFileSync(artifactPath);
+function unzip(args: string[], purpose: string) {
+  try {
+    return execFileSync("unzip", args, { encoding: "utf8" });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
+      throw new Error(`Cannot ${purpose}: unzip executable was not found; install unzip and retry.`);
+    throw new Error(
+      `Could not ${purpose}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
 const artifactManifest = JSON.parse(
-  execFileSync("unzip", ["-p", artifactPath, "manifest.json"], {
-    encoding: "utf8",
-  }),
+  unzip(["-p", artifactPath, "manifest.json"], `read ${artifactPath}/manifest.json`),
 ) as Record<string, unknown>;
 const originalFetch = globalThis.fetch;
 let catalogOnline = true;
 
 process.env.AUTO_CREATE_DEFAULT_CONNECTION = "false";
-process.env.DATA_DIR = dataDir;
 process.env.LOG_DISABLE_REQUEST_LOGGING = "true";
 process.env.LOG_LEVEL = "silent";
 process.env.MARINARA_AGENT_CATALOG_URL = catalogUrl;
-process.env.MARINARA_ENV_FILE = join(dataDir, ".env");
 process.env.MARINARA_LITE = "true";
 process.env.NODE_ENV = "test";
 
@@ -88,6 +95,9 @@ async function importEngine<T>(relativePath: string): Promise<T> {
   ) as Promise<T>;
 }
 async function main() {
+  const dataDir = mkdtempSync(join(tmpdir(), "marinara-ltm-lifecycle-"));
+  process.env.DATA_DIR = dataDir;
+  process.env.MARINARA_ENV_FILE = join(dataDir, ".env");
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url =
       typeof input === "string"
@@ -111,6 +121,7 @@ async function main() {
     ) => Promise<{ statusCode: number; body: string; rawPayload: Buffer }>;
     close: () => Promise<void>;
   } | null = null;
+  let primaryFailure = false;
   try {
     assert.equal(artifactManifest.id, "long-term-memory");
     assert.equal(artifactManifest.version, packageManifest.version);
@@ -193,7 +204,7 @@ async function main() {
     mkdirSync(dirname(backupPath), { recursive: true });
     writeFileSync(backupPath, backup.rawPayload);
     assert.match(
-      execFileSync("unzip", ["-Z1", backupPath], { encoding: "utf8" }),
+      unzip(["-Z1", backupPath], `inspect ${backupPath}`),
       /long-term-memory\/vault\/world\/world_artifact_lifecycle\.json/u,
     );
     await app.close();
@@ -219,12 +230,32 @@ async function main() {
     );
     assertSnapshot(durableRoot, afterMigration);
     console.log(
-      "Long-Term Memory 1.0.0 lifecycle: install, offline restart, backup inclusion, uninstall, reinstall, and durable-byte preservation ok",
+      `Long-Term Memory ${packageManifest.version} lifecycle: install, offline restart, backup inclusion, uninstall, reinstall, and durable-byte preservation ok`,
     );
+  } catch (error) {
+    primaryFailure = true;
+    throw error;
   } finally {
-    if (app) await app.close();
-    globalThis.fetch = originalFetch;
-    rmSync(dataDir, { recursive: true, force: true });
+    let cleanupError: unknown = null;
+    try {
+      if (app) await app.close();
+    } catch (error) {
+      cleanupError = error;
+    } finally {
+      globalThis.fetch = originalFetch;
+      try {
+        rmSync(dataDir, { recursive: true, force: true });
+      } catch (error) {
+        cleanupError ??= error;
+      }
+    }
+    if (cleanupError) {
+      if (primaryFailure) console.error("LTM lifecycle cleanup failed after the primary failure", cleanupError);
+      else throw cleanupError;
+    }
   }
 }
-void main();
+main().catch((error) => {
+  process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  process.exitCode = 1;
+});

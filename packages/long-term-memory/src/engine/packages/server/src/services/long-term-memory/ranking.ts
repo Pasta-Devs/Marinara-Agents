@@ -3,6 +3,7 @@ export interface LtmRankedCandidate {
   score: number;
   normalizedScore?: number;
   finalNormalizedScore?: number;
+  relevanceScore: number;
   reasons: string[];
   lanes: string[];
   laneScores?: Record<string, number>;
@@ -44,13 +45,11 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
     lane.items.forEach((item, index) => {
       const rank = index + 1;
       const rawScore = typeof item.rawScore === "number" && Number.isFinite(item.rawScore) ? item.rawScore : 0;
-      const usesAbsoluteRelevance =
-        lane.name === "vector" || lane.name === "keyword" || lane.name === "direct" || lane.name === "mandatory";
-      const normalizedRawScore = usesAbsoluteRelevance
-        ? Math.max(0, Math.min(1, rawScore))
-        : topRawScore > 0
-          ? rawScore / topRawScore
-          : 0;
+      const normalizedRawScore = lane.name === "bm25"
+        ? rawScore / (rawScore + 1)
+        : lane.name === "keyword"
+          ? Math.max(0, Math.min(1, rawScore))
+          : Math.max(0, Math.min(1, rawScore));
       const rawFactor = typeof item.rawScore === "number" ? normalizedRawScore : 1;
       const score = lane.weight * (1 / (RRF_K + rank)) * rawFactor;
       const rawScoreBoost = rawScore * 0.001 * lane.weight;
@@ -59,6 +58,7 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
         ({
           chunkId: item.chunkId,
           score: 0,
+          relevanceScore: 0,
           reasons: [],
           lanes: [],
           laneScores: {},
@@ -66,6 +66,10 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
         } satisfies LtmRankedCandidate);
       candidate.score += score + rawScoreBoost;
       candidate.normalizedScore = Math.max(candidate.normalizedScore ?? 0, normalizedRawScore);
+      candidate.relevanceScore = Math.max(
+        candidate.relevanceScore,
+        normalizedRawScore * lane.weight,
+      );
       candidate.laneScores ??= {};
       candidate.rawLaneScores ??= {};
       candidate.laneScores[lane.name] = (candidate.laneScores[lane.name] ?? 0) + score + rawScoreBoost;

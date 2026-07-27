@@ -9,31 +9,11 @@ import {
   type LtmMode,
   type LtmRelationshipDimensionChanges,
   type LtmRelationshipDimensions,
+  type LtmMemoryChunk,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { extractNoteKeywords } from "./keyword-extract.js";
 
 export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 4;
-
-export interface LtmMemoryChunk {
-  id: string;
-  noteId: string;
-  title?: string;
-  sectionKey: string;
-  text: string;
-  noteType: LtmNoteType;
-  status: LtmStatus;
-  modes?: LtmMode[];
-  scope: LtmScope;
-  tags: string[];
-  keywords: string[];
-  salience?: number;
-  confidence?: number;
-  importance?: LtmImportance;
-  dimensions?: LtmRelationshipDimensions;
-  dimensionChanges?: LtmRelationshipDimensionChanges;
-  updatedAt: string;
-  sourceHash: string;
-}
 
 export interface ChunkLtmNotesOptions {
   includeSourceNotes?: boolean;

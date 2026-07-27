@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { readFile, rm, stat, unlink } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { fsyncPath, renameWithRetry, writeJsonAtomic } from "./atomic-json.js";
 import { isEnoent, nowIso } from "./ltm-utils.js";
 const schema = z.object({ version: z.literal(1), id: z.string().uuid(), createdAt: z.string().datetime(), phase: z.enum(["staged", "current_root_moved", "published", "rebuilt", "verified"]), hadPreviousRoot: z.boolean() }).strict();
 const active = new Set<string>();
-export const isLtmBackupRestoreActive = (root: string) => active.has(root);
-export async function withActiveLtmBackupRestore<T>(root: string, operation: () => Promise<T>) { active.add(root); try { return await operation(); } finally { active.delete(root); } }
+export const isLtmBackupRestoreActive = (root: string) => active.has(resolve(root));
+export async function withActiveLtmBackupRestore<T>(root: string, operation: () => Promise<T>) { const key = resolve(root); active.add(key); try { return await operation(); } finally { active.delete(key); } }
 export const ltmBackupRestoreWorkspacePath = (root: string, label: string, id: string) => join(dirname(root), `.${basename(root)}-${label}-${id}`);
 export const ltmBackupRestoreJournalPath = (root: string) => join(dirname(root), `.${basename(root)}-restore.json`);
 export type LtmBackupRestoreJournal = z.infer<typeof schema>;

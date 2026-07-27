@@ -21,6 +21,7 @@ import {
   getLongTermMemoryRoot,
 } from "./paths.js";
 import { logger } from "./package-runtime.js";
+import { withLtmVaultLock } from "./vault-lock.js";
 
 export type LtmDebugEventInput = Omit<
   LtmDebugEvent,
@@ -253,7 +254,7 @@ export async function recordLtmDebugEvent(
     const path = getLongTermMemoryDirectories(root).debugLog;
     await mkdir(dirname(path), { recursive: true });
     const line = compactEvent(event);
-    await queueAppend(path, line);
+    await withLtmVaultLock(root, () => queueAppend(path, line));
     return ltmDebugEventSchema.parse(JSON.parse(line));
   } catch (error) {
     logger.warn(error, "[ltm] Failed to record debug event");
@@ -342,6 +343,6 @@ export async function exportLtmDebugLog(root = getLongTermMemoryRoot()) {
 export async function clearLtmDebugLog(root = getLongTermMemoryRoot()) {
   const path = getLongTermMemoryDirectories(root).debugLog;
   await mkdir(dirname(path), { recursive: true });
-  await queueWrite(path, () => writeFile(path, "", "utf8"));
+  await withLtmVaultLock(root, () => queueWrite(path, () => writeFile(path, "", "utf8")));
   return { cleared: true };
 }

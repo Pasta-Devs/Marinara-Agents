@@ -20,12 +20,13 @@ import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { LongTermMemoryStorage,type UpdateLtmNotePatch } from "./storage.js";
 import { analyzeTrustedLtmNoteSubjects,type TrustedLtmNoteSubjectMatch,type TrustedLtmSubjectCatalog } from "./subject-identity.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { LtmServiceError } from "./service-error.js";
 
 type Group={id:string;noteType:"character"|"relationship";subjects:LtmSubject[];subjectNames:string[];matches:TrustedLtmNoteSubjectMatch[];canonical:TrustedLtmNoteSubjectMatch};
 type Prepared={group:Group;canonical:TrustedLtmNoteSubjectMatch;archived:TrustedLtmNoteSubjectMatch[];excludedNoteIds:string[];patch:UpdateLtmNotePatch};
 export type LtmIdentityRepairBackup={id:string;createdAt:string;directory:string;snapshotRoot:string};
 const locks=new Map<string,Promise<void>>();
-export class LtmIdentityRepairError extends Error{constructor(message:string,readonly statusCode:number,readonly code:string){super(message);this.name="LtmIdentityRepairError";}}
+export class LtmIdentityRepairError extends LtmServiceError{constructor(message:string,readonly statusCode:number,readonly code:string){super(message,statusCode,code);this.name="LtmIdentityRepairError";}}
 
 export function previewLtmIdentityRepairs(catalog:TrustedLtmSubjectCatalog,scope:LtmScope,generatedAt=nowIso(),canonicalNoteIds:Record<string,string>={}):LtmIdentityRepairPreviewResponse{const{groups,unresolved,analyzedNotes}=analyze(catalog),candidates=groups.map((group)=>candidate(group,canonicalNoteIds[group.id]));return ltmIdentityRepairPreviewResponseSchema.parse({generatedAt,scope,counts:{analyzedNotes,candidateCount:candidates.length,bindableNotes:groups.reduce((n,g)=>n+g.matches.filter((m)=>!m.note.subjects).length,0),duplicateNotes:groups.reduce((n,g)=>n+Math.max(0,g.matches.length-1),0),unresolvedNotes:unresolved.length},candidates,unresolved});}
 

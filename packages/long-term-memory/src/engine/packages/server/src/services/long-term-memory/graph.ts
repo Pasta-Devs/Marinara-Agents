@@ -1,19 +1,4 @@
-import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import type { LtmMemoryChunk } from "./chunking.js";
-
-export interface LtmGraphEdge {
-  source: string;
-  target: string;
-  relation: string;
-}
-
-export interface LtmGraphIndex {
-  version: 1;
-  nodes: Record<
-    string,
-    { chunkIds: string[]; outgoing: LtmGraphEdge[]; incoming: LtmGraphEdge[] }
-  >;
-}
+import type { LtmGraphIndex, LtmNote, LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 export function buildLtmGraphIndex(
   notes: LtmNote[],
@@ -79,6 +64,7 @@ export function expandLtmGraph(
     topK?: number;
     maxVisited?: number;
     maxCandidates?: number;
+    allowedNoteIds?: Set<string>;
   } = {},
 ) {
   const maxHops = options.maxHops ?? 2;
@@ -87,7 +73,7 @@ export function expandLtmGraph(
     1,
     options.maxCandidates ?? options.topK ?? 50,
   );
-  const boundedSeeds = seedNoteIds.slice(0, maxVisited);
+  const boundedSeeds = seedNoteIds.filter((id) => !options.allowedNoteIds || options.allowedNoteIds.has(id)).slice(0, maxVisited);
   const visited = new Set(boundedSeeds);
   const queue = boundedSeeds.map((noteId) => ({ noteId, distance: 0 }));
   const scores = new Map<
@@ -108,6 +94,7 @@ export function expandLtmGraph(
     ].sort((a, b) => a.localeCompare(b));
 
     for (const neighbor of neighbors) {
+      if (options.allowedNoteIds && !options.allowedNoteIds.has(neighbor)) continue;
       const distance = current.distance + 1;
       if (!visited.has(neighbor) && visited.size < maxVisited) {
         visited.add(neighbor);

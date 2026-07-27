@@ -16,6 +16,20 @@ import { randomUUID } from "node:crypto";
 async function main() {
   const source =
     "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
+  const { requestAllNotes } = await import(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts"
+  );
+  const originalFetch = globalThis.fetch;
+  const requestedOffsets: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url, "http://localhost");
+    requestedOffsets.push(url.searchParams.get("offset") ?? "");
+    const offset = Number(url.searchParams.get("offset"));
+    return new Response(JSON.stringify(offset === 0 ? Array.from({ length: 500 }, (_, id) => id) : [500]));
+  }) as typeof fetch;
+  assert.equal((await requestAllNotes<number>("/notes?includeGlobal=true")).length, 501);
+  assert.deepEqual(requestedOffsets, ["0", "500"]);
+  globalThis.fetch = originalFetch;
   const { configurePackageRuntime } = await import(
     `${source}/package-runtime.ts`
   );
@@ -41,6 +55,9 @@ async function main() {
   const { ltmSettingsPath } = await import(`${source}/settings.ts`);
   const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(
     `${source}/mutation-transaction.ts`
+  );
+  const { readLtmNoteSummary, writeLtmNoteSummary } = await import(
+    `${source}/index-state.ts`
   );
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
   const { renderSectionContributions } = await import(
@@ -77,6 +94,9 @@ async function main() {
     },
   };
 
+  let first: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null = null;
+  let restarted: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null = null;
+  let primaryFailure = false;
   try {
     const freshStorage = new LongTermMemoryStorage(freshRoot);
     await freshStorage.initializeLtmStore();
@@ -138,7 +158,7 @@ async function main() {
         version: 1,
       })}\n`,
     );
-    const first = await activateLongTermMemoryStorage(root);
+    first = await activateLongTermMemoryStorage(root);
     assert.equal(await first.storage.getNote("source_turn_legacy"), null);
     assert.equal(
       (await first.storage.getNote("source_valid_import"))?.id,
@@ -155,60 +175,54 @@ async function main() {
     );
     await first.storage.createNote(noteInput);
     await first.cleanup();
-    const restarted = await activateLongTermMemoryStorage(root);
+    first = null;
+    restarted = await activateLongTermMemoryStorage(root);
     assert.equal(
       (await restarted.storage.getNote(noteInput.id))?.sections.facts?.text,
       "This note survives runtime restart.",
     );
 
-    const interruptedId = randomUUID();
-    const interruptedPath = notePathForId("world_interrupted", "world", root);
-    const interruptedNote = {
+    const interruptedNotes = ["world_interrupted_a", "world_interrupted_b"].map((id, index) => ({
       ...noteInput,
-      id: "world_interrupted",
-      title: "Interrupted",
-      status: "active",
+      id,
+      title: `Interrupted ${index + 1}`,
+      status: "active" as const,
       createdAt: timestamp,
       updatedAt: timestamp,
       version: 1,
-    };
-    const transaction = ltmMutationTransactionSchema.parse({
-      version: 1,
-      id: interruptedId,
-      createdAt: timestamp,
-      status: "committed",
-      files: [
-        {
-          path: "vault/world/world_interrupted.json",
+    }));
+    const interruptedIds = interruptedNotes.map(() => randomUUID());
+    for (const [index, interruptedNote] of interruptedNotes.entries()) {
+      const transaction = ltmMutationTransactionSchema.parse({
+        version: 1,
+        id: interruptedIds[index],
+        createdAt: new Date(Date.parse(timestamp) + index).toISOString(),
+        status: "committed",
+        files: [{
+          path: `vault/world/${interruptedNote.id}.json`,
           before: null,
           after: interruptedNote,
-        },
-      ],
-      events: [],
-    });
-    await writeFile(
-      join(
-        getLongTermMemoryDirectories(root).transactions,
-        `${interruptedId}.json`,
-      ),
-      `${JSON.stringify(transaction)}\n`,
-    );
+        }],
+        events: [],
+      });
+      await writeFile(notePathForId(interruptedNote.id, "world", root), `${JSON.stringify(interruptedNote)}\n`);
+      await writeFile(
+        join(getLongTermMemoryDirectories(root).transactions, `${transaction.id}.json`),
+        `${JSON.stringify(transaction)}\n`,
+      );
+    }
+    const notesBeforeRecovery = await restarted.storage.listNotes();
+    await writeLtmNoteSummary(root, notesBeforeRecovery);
     await recoverLtmMutations(root);
-    assert.equal(
-      JSON.parse(await readFile(interruptedPath, "utf8")).id,
-      "world_interrupted",
-    );
-    await assert.rejects(
-      stat(
-        join(
-          getLongTermMemoryDirectories(root).transactions,
-          `${interruptedId}.json`,
-        ),
-      ),
-    );
+    assert.equal((await readLtmNoteSummary(root)).total, notesBeforeRecovery.length);
+    for (const [index, interruptedNote] of interruptedNotes.entries()) {
+      assert.equal(JSON.parse(await readFile(notePathForId(interruptedNote.id, "world", root), "utf8")).id, interruptedNote.id);
+      await assert.rejects(stat(join(getLongTermMemoryDirectories(root).transactions, `${interruptedIds[index]}.json`)));
+    }
 
     await writeFile(ltmSettingsPath(root), '{"version":1,"unknown":true}\n');
     await restarted.cleanup();
+    restarted = null;
     await assert.rejects(
       activateLongTermMemoryStorage(root),
       /unrecognized|unknown/i,
@@ -1369,9 +1383,31 @@ async function main() {
     process.stdout.write(
       "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",
     );
+  } catch (error) {
+    primaryFailure = true;
+    throw error;
   } finally {
-    releaseHost();
-    await rm(dataDir, { recursive: true, force: true });
+    let cleanupError: unknown = null;
+    for (const cleanupStep of [
+      () => restarted?.cleanup(),
+      () => first?.cleanup(),
+      () => releaseHost(),
+    ]) {
+      try {
+        await cleanupStep();
+      } catch (error) {
+        cleanupError ??= error;
+      }
+    }
+    try {
+      await rm(dataDir, { recursive: true, force: true });
+    } catch (error) {
+      cleanupError ??= error;
+    }
+    if (cleanupError) {
+      if (primaryFailure) console.error("LTM storage cleanup failed after the primary failure", cleanupError);
+      else throw cleanupError;
+    }
   }
 }
 

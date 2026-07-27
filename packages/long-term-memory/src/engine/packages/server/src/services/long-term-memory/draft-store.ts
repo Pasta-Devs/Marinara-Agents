@@ -34,6 +34,7 @@ export interface StoreLtmDraftOptions extends CreateLtmExtractionDraftInput {
   diagnostics?: LtmExtractionDiagnostic[];
   outcome?: LtmExtractionOutcome;
   accounting?: LtmExtractionAccounting;
+  reviewRequired?: boolean;
 }
 
 export type LtmDraftListFilter = {
@@ -124,6 +125,7 @@ export class LongTermMemoryDraftStore {
           createdAt: timestamp,
           updatedAt: timestamp,
           operationId: options.operationId ?? randomUUID(),
+          reviewRequired: options.reviewRequired ?? false,
           source,
           scope: options.scope ?? {},
           modes: options.modes,

@@ -20,6 +20,7 @@ import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 import { isLtmSourceExtractionFingerprintCurrent } from "./source-hash.js";
 import { LongTermMemoryStorage } from "./storage.js";
+import { LtmServiceError } from "./service-error.js";
 
 export interface ApplyLtmDraftOptions {
   root?: string;
@@ -40,13 +41,13 @@ export interface ApplyLtmDraftResult {
     | { status: "succeeded" }
     | { status: "failed"; error: string };
 }
-export class LtmDraftApplyError extends Error {
+export class LtmDraftApplyError extends LtmServiceError {
   constructor(
     message: string,
     readonly statusCode: number,
     readonly code: string,
   ) {
-    super(message);
+    super(message, statusCode, code);
     this.name = "LtmDraftApplyError";
   }
 }
@@ -351,6 +352,14 @@ async function applyInner(
           ? "ltm_draft_superseded"
           : "ltm_draft_not_pending",
       );
+    if (draft.reviewRequired && options.autoApplyLowRiskOnly)
+      return {
+        draft,
+        appliedMutationIds: [],
+        skippedMutationIds: draft.mutations.map((mutation) => mutation.id),
+        autoIncludedMutationIds: [],
+        indexRebuild: { status: "not_requested" },
+      };
     const duplicateIds = draft.mutations
       .map((mutation) => mutation.id)
       .filter((item, index, all) => all.indexOf(item) !== index);

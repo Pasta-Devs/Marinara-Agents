@@ -72,15 +72,25 @@ class LongTermMemoryElement extends HTMLElement {
   capabilityProps?: CapabilityElement["capabilityProps"];
   capabilityRuntimeError?: string | null;
 
-  connectedCallback() {
-    if (!this.__root) this.__root = createRoot(this);
-    this.__root.render(
+  static observedAttributes = ["view"];
+
+  attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
+    if (name === "view" && oldValue !== newValue && this.__root) this.render();
+  }
+
+  render() {
+    this.__root?.render(
       <QueryClientProvider client={queryClient}>
         <CapabilityClientErrorBoundary element={this}>
           <CapabilityRoot element={this} />
         </CapabilityClientErrorBoundary>
       </QueryClientProvider>,
     );
+  }
+
+  connectedCallback() {
+    if (!this.__root) this.__root = createRoot(this);
+    this.render();
   }
 
   disconnectedCallback() {

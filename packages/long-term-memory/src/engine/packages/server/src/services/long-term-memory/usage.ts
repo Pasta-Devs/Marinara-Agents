@@ -1,15 +1,16 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename } from "node:path";
+import { ltmUsageSchema, type LtmUsage } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import type { LtmBudgetedChunk } from "./budget.js";
 import { isEnoent } from "./ltm-utils.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { withKeyedLock } from "./package-runtime.js";
-type ChunkUsage = { chunkId: string; noteId: string; sectionKey: string; lastRetrievedAt: string; lastInjectedAt: string; retrievalCount: number; injectionCount: number; totalInjectedTokens: number };
-type Usage = { version: 2; chats: Record<string, { chunks: Record<string, ChunkUsage> }>; acceptedReceipts?: Record<string, string | true> };
+import { withLtmVaultLock } from "./vault-lock.js";
+type Usage = LtmUsage;
 const empty = (): Usage => ({ version: 2, chats: {} });
-function parseUsage(value: unknown): Usage { if (!value || typeof value !== "object" || (value as any).version !== 2 || !(value as any).chats || typeof (value as any).chats !== "object") throw new Error("Malformed long-term memory usage index."); return value as Usage; }
+function parseUsage(value: unknown): Usage { return ltmUsageSchema.parse(value); }
 export const longTermMemoryUsagePath = (root = getLongTermMemoryRoot()) => safeJoin(getLongTermMemoryDirectories(root).indexes, "usage.json");
 export const longTermMemoryInjectionReceiptPath = (chatId: string, root = getLongTermMemoryRoot()) => safeJoin(getLongTermMemoryDirectories(root).receipts, `${createHash("sha256").update(chatId).digest("hex")}.json`);
 export function parseLongTermMemoryInjectionReceipt(value: unknown) { const v = value as any; if (!v || v.version !== 1 || typeof v.chatId !== "string" || !v.chatId || typeof v.dispatchedAt !== "string" || !Number.isFinite(Date.parse(v.dispatchedAt)) || !Number.isInteger(v.serializedTokenCount) || !Array.isArray(v.chunks)) throw new Error("Malformed long-term memory injection receipt."); return v; }
@@ -27,8 +28,8 @@ export async function recordLongTermMemoryInjection(
   const chatId = input.chatId.trim();
   const chunks = Array.from(new Map(input.chunks.map((item) => [item.chunk.id, item])).values());
   if (!chatId || chunks.length === 0) return null;
-  return withKeyedLock(usageLocks, longTermMemoryUsagePath(root), async () => {
-    const usage = await readLongTermMemoryUsage(root).catch(() => empty());
+  return withLtmVaultLock(root, () => withKeyedLock(usageLocks, longTermMemoryUsagePath(root), async () => {
+    const usage = await readLongTermMemoryUsage(root);
     if (input.accountingId && usage.acceptedReceipts?.[input.accountingId]) return null;
     const chat = usage.chats[chatId] ?? { chunks: {} };
     const now = new Date().toISOString();
@@ -59,5 +60,5 @@ export async function recordLongTermMemoryInjection(
     };
     await writeJsonAtomic(longTermMemoryInjectionReceiptPath(chatId, root), receipt);
     return receipt;
-  });
+  }));
 }

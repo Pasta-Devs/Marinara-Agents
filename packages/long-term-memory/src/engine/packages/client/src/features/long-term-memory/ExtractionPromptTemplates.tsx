@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE,
   type LtmMode,
@@ -66,7 +66,16 @@ export function ExtractionPromptTemplates({
       ? (value.promptTemplates.find(
           (template) => template.id === selected.id,
         ) ?? null)
-      : null;
+       : null;
+  useEffect(() => {
+    if (selected.kind === "custom" && !selectedTemplate) {
+      setSelected(
+        value.promptTemplates[0]
+          ? { kind: "custom", id: value.promptTemplates[0].id }
+          : { kind: "default", mode: "conversation" },
+      );
+    }
+  }, [selected, selectedTemplate, value.promptTemplates]);
   const selectedBuiltInPrompt =
     selected.kind === "default"
       ? DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[selected.mode]

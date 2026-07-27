@@ -42,6 +42,7 @@ type ImportContract = {
   sourceIds: string[];
   scope?: LtmScope;
   mode?: LtmMode;
+  chatId?: string;
   selectionKey: string;
 };
 
@@ -645,6 +646,7 @@ export default function SourcesWorkspace({
               }
             : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+          ...(props.chatId ? { chatId: props.chatId } : {}),
           selectionKey: selectionKeyOverride ?? selectionKey,
         };
     setImporting(true);
@@ -660,9 +662,10 @@ export default function SourcesWorkspace({
           source: Source;
           sourceIds: string[];
           limit: number;
-          extract: boolean;
-          scope?: LtmScope;
-          mode?: LtmMode;
+           extract: boolean;
+           scope?: LtmScope;
+           mode?: LtmMode;
+           chatId?: string;
         }
       >(
         "/import/source-notes",
@@ -674,6 +677,7 @@ export default function SourcesWorkspace({
           extract: action !== "refresh",
           ...(contract.scope ? { scope: contract.scope } : {}),
           ...(contract.mode ? { mode: contract.mode } : {}),
+          ...(contract.chatId ? { chatId: contract.chatId } : {}),
         },
         controller.signal,
       );
@@ -770,7 +774,7 @@ export default function SourcesWorkspace({
 
   const applyTransfer = async () => {
     const readyIds = transferPreview?.buckets.ready ?? [];
-    if (!props.chatId || readyIds.length === 0 || transferBusy) return;
+    if (!props.chatId || readyIds.length === 0 || transferBusy || !transferPreview) return;
     setTransferBusy("apply");
     setTransferError("");
     try {
@@ -779,10 +783,11 @@ export default function SourcesWorkspace({
         "POST",
         {
           // Do not send no-op or conflicting IDs from the preview back to apply.
-          noteIds: readyIds,
+          requestedNoteIds: transferPreview.selection.requestedNoteIds,
+          derivedNoteIds: transferPreview.selection.derivedNoteIds.filter((id) => readyIds.includes(id)),
+          applyNoteIds: readyIds,
           mode: transferPreview!.mode,
           destinationChatId: props.chatId,
-          includeDerived: transferPreview.selection.includeDerived,
         },
       );
       setTransferResult(result);

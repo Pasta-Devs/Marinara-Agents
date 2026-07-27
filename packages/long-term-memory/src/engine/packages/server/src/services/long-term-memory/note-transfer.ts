@@ -1,6 +1,7 @@
 import type {
   LtmNote,
   LtmNoteTransferApplyResponse,
+  LtmNoteTransferApplyRequest,
   LtmNoteTransferConflict,
   LtmNoteTransferMode,
   LtmNoteTransferPreviewItem,
@@ -19,6 +20,7 @@ import { uniqueStrings } from "./ltm-utils.js";
 import { logger } from "./package-runtime.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { LtmServiceError } from "./service-error.js";
 
 type TransferChat = {
   id: string;
@@ -82,12 +84,12 @@ const STOP_WORDS = new Set([
   "would",
 ]);
 
-export class LtmNoteTransferError extends Error {
+export class LtmNoteTransferError extends LtmServiceError {
   constructor(
     message: string,
     readonly statusCode = 400,
   ) {
-    super(message);
+    super(message, statusCode, "ltm_transfer_failed");
   }
 }
 
@@ -303,7 +305,7 @@ function targetConflictForNotes(
 }
 
 async function buildTransferPlan(
-  request: LtmNoteTransferPreviewRequest,
+  request: LtmNoteTransferPreviewRequest & { derivedNoteIds?: string[] },
   destinationChat: TransferChat,
   options: TransferServiceOptions,
 ): Promise<TransferPlan> {
@@ -311,6 +313,8 @@ async function buildTransferPlan(
   const notes = await storage.listNotes();
   const noteLookup = new Map(notes.map((note) => [note.id, note]));
   const requestedNoteIds = uniqueStrings(request.noteIds);
+  if (requestedNoteIds.length !== request.noteIds.length)
+    throw new LtmNoteTransferError("Transfer note IDs must be unique.", 400);
   const missingNoteIds = requestedNoteIds.filter(
     (noteId) => !noteLookup.has(noteId),
   );
@@ -329,8 +333,13 @@ async function buildTransferPlan(
     notes,
     requestedNoteIds,
   );
-  const derivedNoteIds =
-    request.includeDerived === false ? [] : availableDerivedIds;
+  const derivedNoteIds = request.derivedNoteIds
+    ? uniqueStrings(request.derivedNoteIds)
+    : request.includeDerived === false
+      ? []
+      : availableDerivedIds;
+  if (derivedNoteIds.some((id) => !availableDerivedIds.includes(id)))
+    throw new LtmNoteTransferError("Transfer includes an invalid derived note.", 400);
   const transferNoteIds = uniqueStrings([
     ...requestedNoteIds,
     ...derivedNoteIds,
@@ -471,7 +480,7 @@ export async function previewLtmNoteTransfer(
 }
 
 export async function applyLtmNoteTransfer<TRebuild = unknown>(
-  request: LtmNoteTransferPreviewRequest,
+  request: LtmNoteTransferApplyRequest,
   destinationChat: TransferChat,
   options: ApplyTransferOptions<TRebuild> = {},
 ): Promise<
@@ -479,11 +488,19 @@ export async function applyLtmNoteTransfer<TRebuild = unknown>(
 > {
   const storage = transferStorage(options);
   return withLtmVaultLock(storage.root, async () => {
-    const plan = await buildTransferPlan(request, destinationChat, options);
+    const plan = await buildTransferPlan({
+      noteIds: request.requestedNoteIds,
+      mode: request.mode,
+      destinationChatId: request.destinationChatId,
+      includeDerived: false,
+      derivedNoteIds: request.derivedNoteIds,
+    }, destinationChat, options);
     const updatedNoteIds: string[] = [];
     const skippedNoteIds: string[] = [];
     const derivedNoteIdsTouched: string[] = [];
+    const applyIds = new Set(request.applyNoteIds);
     const conflictingNoteIds = plan.items
+      .filter((item) => applyIds.has(item.noteId))
       .filter((item) => item.classification === "conflict")
       .map((item) => item.noteId);
     if (conflictingNoteIds.length > 0) {
@@ -493,7 +510,7 @@ export async function applyLtmNoteTransfer<TRebuild = unknown>(
       );
     }
 
-    for (const item of plan.items) {
+    for (const item of plan.items.filter((candidate) => applyIds.has(candidate.noteId))) {
       // Apply only items that remain ready after the preview was recomputed.
       if (item.classification !== "ready") {
         skippedNoteIds.push(item.noteId);

@@ -606,7 +606,7 @@ export default function MemorySettings({
       link.href = url;
       link.download = "long-term-memory-backup.json";
       link.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
       setMessage("Memory backup exported.");
     } catch (error) {
       setMessage(errorMessage(error, "Could not export memory data."));
@@ -667,11 +667,25 @@ export default function MemorySettings({
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
       setMessage("Memory backup imported.");
-      await Promise.all([
+      const [globalResult, extractionResult, integrityResult] = await Promise.all([
         global.refetch(),
         extraction.refetch(),
         integrity.refetch(),
       ]);
+      if (!globalResult.isSuccess || !extractionResult.isSuccess || !integrityResult.isSuccess) {
+        setGlobalForm(null);
+        setSavedGlobal(null);
+        setExtractionFormState(null);
+        setSavedExtraction(null);
+        setMessage("Memory backup imported, but settings could not be refreshed.");
+      } else {
+        const nextGlobal = settingsForm(globalResult.data);
+        setGlobalForm(nextGlobal);
+        setSavedGlobal(nextGlobal);
+        const nextExtraction = extractionForm(extractionResult.data);
+        setExtractionFormState(nextExtraction);
+        setSavedExtraction(nextExtraction);
+      }
     } catch (error) {
       setMessage(errorMessage(error, "Could not import memory data."));
     } finally {

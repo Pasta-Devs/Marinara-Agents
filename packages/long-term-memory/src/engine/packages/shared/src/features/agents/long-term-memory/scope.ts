@@ -1,8 +1,5 @@
 import { ltmModeSchema, type LtmMode, type LtmScope } from "./schema.js";
-
-function uniqueStrings(values: Array<string | null | undefined>) {
-  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
-}
+import { uniqueStrings } from "./utils.js";
 
 export type LtmScopeMatcherInput = {
   scope?: LtmScope | null;

@@ -47,24 +47,26 @@ async function readConfig<T>(path: string, schema: { parse(value: unknown): T },
 }
 
 export async function exportLongTermMemoryData(root = getLongTermMemoryRoot()): Promise<LtmBackup> {
-  const storage = new LongTermMemoryStorage(root);
-  await storage.initializeLtmStore();
-  const dirs = getLongTermMemoryDirectories(root);
-  const [notes, drafts, global, extraction, retention, agent] = await Promise.all([
-    storage.listNotes(),
-    new LongTermMemoryDraftStore(root).listDrafts(),
-    getLtmGlobalSettings(root).then((value) => ltmGlobalSettingsSchema.parse(value)),
-    readConfig(ltmExtractionConfigPath(root), ltmExtractionSettingsSchema, { version: 1 }),
-    readConfig(longTermMemoryRetentionConfigPath(root), ltmRetentionConfigSchema, DEFAULT_LTM_RETENTION_CONFIG),
-    readConfig(safeJoin(dirs.config, "agent-settings.json"), ltmAgentSettingsSchema, {}),
-  ]);
-  return ltmBackupSchema.parse({
-    format: backupFormat,
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    notes,
-    drafts,
-    settings: { global, extraction, retention, agent },
+  return withLtmVaultLock(root, async () => {
+    const storage = new LongTermMemoryStorage(root);
+    await storage.initializeLtmStore();
+    const dirs = getLongTermMemoryDirectories(root);
+    const [notes, drafts, global, extraction, retention, agent] = await Promise.all([
+      storage.listNotes(),
+      new LongTermMemoryDraftStore(root).listDrafts(),
+      getLtmGlobalSettings(root).then((value) => ltmGlobalSettingsSchema.parse(value)),
+      readConfig(ltmExtractionConfigPath(root), ltmExtractionSettingsSchema, { version: 1 }),
+      readConfig(longTermMemoryRetentionConfigPath(root), ltmRetentionConfigSchema, DEFAULT_LTM_RETENTION_CONFIG),
+      readConfig(safeJoin(dirs.config, "agent-settings.json"), ltmAgentSettingsSchema, {}),
+    ]);
+    return ltmBackupSchema.parse({
+      format: backupFormat,
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      notes,
+      drafts,
+      settings: { global, extraction, retention, agent },
+    });
   });
 }
 
@@ -123,65 +125,70 @@ export async function replaceLongTermMemoryData(value: unknown, root = getLongTe
     const id = randomUUID();
     const staging = ltmBackupRestoreWorkspacePath(root, "restore-staging", id);
     const previous = ltmBackupRestoreWorkspacePath(root, "restore-previous", id);
-    await rm(staging, { recursive: true, force: true });
-    await rm(previous, { recursive: true, force: true });
-    await writeBackupRoot(staging, backup);
-    const stagedRebuild = await rebuildLongTermMemoryIndexes({ root: staging });
-    const stagedIntegrity = await checkLongTermMemoryIntegrity(staging);
-    if (!stagedIntegrity.ok)
-      throw new Error("Imported Long-Term Memory data failed integrity verification.");
-    const journal = createLtmBackupRestoreJournal(await pathExists(root));
-    await writeLtmBackupRestoreJournal(root, journal);
+    let journal: ReturnType<typeof createLtmBackupRestoreJournal> | undefined;
+    let journalWritten = false;
     try {
+      await rm(staging, { recursive: true, force: true });
+      await rm(previous, { recursive: true, force: true });
+      journal = createLtmBackupRestoreJournal(await pathExists(root));
+      await writeBackupRoot(staging, backup);
+      const stagedRebuild = await rebuildLongTermMemoryIndexes({ root: staging });
+      const stagedIntegrity = await checkLongTermMemoryIntegrity(staging);
+      if (!stagedIntegrity.ok)
+        throw new Error("Imported Long-Term Memory data failed integrity verification.");
+      await writeLtmBackupRestoreJournal(root, journal);
+      journalWritten = true;
       const activeStorage = new LongTermMemoryStorage(root);
       await activeStorage.cleanup();
       if (journal.hadPreviousRoot) await rename(root, previous);
       await writeLtmBackupRestoreJournal(root, { ...journal, phase: "current_root_moved" });
       await rename(staging, root);
-      await writeLtmBackupRestoreJournal(root, { ...journal, phase: "verified" });
+      await writeLtmBackupRestoreJournal(root, { ...journal, phase: "published" });
       const restoredStorage = new LongTermMemoryStorage(root);
       await restoredStorage.initializeLtmStore();
       const integrity = await checkLongTermMemoryIntegrity(root);
       if (!integrity.ok) throw new Error("Imported Long-Term Memory data failed integrity verification.");
+      await writeLtmBackupRestoreJournal(root, { ...journal, phase: "verified" });
       await rm(previous, { recursive: true, force: true });
       await removeLtmBackupRestoreJournal(root);
       return { notes: backup.notes.length, drafts: backup.drafts.length, rebuild: stagedRebuild, integrity };
     } catch (error) {
-      await recoverInterruptedLtmBackupRestore(root).catch(() => {});
+      if (journalWritten && journal) {
+        try {
+          await recoverInterruptedLtmBackupRestore(root);
+        } catch (recoveryError) {
+          throw new AggregateError([error, recoveryError], "Long-Term Memory restore and rollback both failed.");
+        }
+        await new LongTermMemoryStorage(root).cleanup();
+      } else {
+        await Promise.allSettled([
+          rm(staging, { recursive: true, force: true }),
+          rm(previous, { recursive: true, force: true }),
+          removeLtmBackupRestoreJournal(root),
+        ]);
+      }
       throw error;
     }
   }));
 }
 
 export async function deleteAllLongTermMemoryData(root = getLongTermMemoryRoot()) {
-  const backup = await exportLongTermMemoryData(root);
-  return replaceLongTermMemoryData({
-    ...backup,
-    exportedAt: new Date().toISOString(),
-    notes: [],
-    drafts: [],
-  }, root);
+  return withLtmVaultLock(root, async () => {
+    const backup = await exportLongTermMemoryData(root);
+    return replaceLongTermMemoryData({
+      ...backup,
+      exportedAt: new Date().toISOString(),
+      notes: [],
+      drafts: [],
+    }, root);
+  });
 }
 
 export async function resetLongTermMemorySettings(root = getLongTermMemoryRoot()) {
-  const backup = await exportLongTermMemoryData(root);
   return withLtmVaultLock(root, async () => {
+    const backup = await exportLongTermMemoryData(root);
     const dirs = getLongTermMemoryDirectories(root);
-    const extraction = {
-      version: 1,
-      reasoningEffort: DEFAULT_LTM_EXTRACTION_CONFIG.reasoningEffort,
-      verbosity: DEFAULT_LTM_EXTRACTION_CONFIG.verbosity,
-      maxOutputTokens: DEFAULT_LTM_EXTRACTION_CONFIG.maxOutputTokens,
-      temperature: DEFAULT_LTM_EXTRACTION_CONFIG.temperature,
-      maxSourceTokens: DEFAULT_LTM_EXTRACTION_CONFIG.maxSourceTokens,
-      maxExistingNoteTokens: DEFAULT_LTM_EXTRACTION_CONFIG.maxExistingNoteTokens,
-      existingNoteMaxChunks: DEFAULT_LTM_EXTRACTION_CONFIG.existingNoteMaxChunks,
-      existingNoteMaxTokens: DEFAULT_LTM_EXTRACTION_CONFIG.existingNoteMaxTokens,
-      promptTemplates: [],
-      activePromptTemplateIdsByMode: {},
-      aiKeywordExtraction: false,
-      useExtractionAgentOnGameMode: false,
-    };
+    const extraction = ltmExtractionSettingsSchema.parse(DEFAULT_LTM_EXTRACTION_CONFIG);
     await Promise.all([
       writeJsonAtomic(ltmSettingsPath(root), DEFAULT_LTM_GLOBAL_SETTINGS),
       writeJsonAtomic(ltmExtractionConfigPath(root), extraction),

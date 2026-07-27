@@ -12,7 +12,7 @@ export function normalizeLtmChatCharacterIds(value: unknown) {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed)
       ? uniqueStrings(parsed.filter((id): id is string => typeof id === "string"))
-      : [];
+      : value.trim() ? [value.trim()] : [];
   } catch {
     return value.trim() ? [value.trim()] : [];
   }

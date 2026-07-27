@@ -247,6 +247,28 @@ export function NumberField({
   help?: ReactNode;
 }) {
   const id = useId();
+  const [text, setText] = useState(String(value));
+  const committedText = useRef(String(value));
+  const commit = () => {
+    if (!text.trim()) {
+      setText(committedText.current);
+      return;
+    }
+    const next = Number(text);
+    if (!Number.isFinite(next)) {
+      setText(String(value));
+      return;
+    }
+    const clamped = Math.max(min, Math.min(max, next));
+    setText(String(clamped));
+    if (String(clamped) === committedText.current) return;
+    committedText.current = String(clamped);
+    onChange(clamped);
+  };
+  useEffect(() => {
+    setText(String(value));
+    committedText.current = String(value);
+  }, [value]);
   return (
     <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
       <span id={`${id}-label`} className="flex items-center gap-1">
@@ -259,15 +281,21 @@ export function NumberField({
         data-ltm-control="number"
         className={inputClass}
         type="number"
-        value={value}
+        value={text}
         min={min}
         max={max}
         step={step}
         disabled={disabled}
-        onChange={(event) => {
-          const next = Number(event.target.value);
-          if (Number.isFinite(next))
-            onChange(Math.max(min, Math.min(max, next)));
+        onChange={(event) => setText(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            setText(String(value));
+          }
         }}
       />
     </div>
@@ -280,12 +308,14 @@ export function StatusSurface({
   busy = false,
   compact = false,
   className = "",
+  ...props
 }: {
   children: ReactNode;
   tone?: "neutral" | "success" | "danger";
   busy?: boolean;
   compact?: boolean;
-}) {
+  className?: string;
+} & HTMLAttributes<HTMLParagraphElement>) {
   const toneClass = {
     neutral: "border-[var(--border)] text-[var(--muted-foreground)]",
     success: "border-emerald-500/35 text-emerald-600 dark:text-emerald-400",
@@ -296,7 +326,8 @@ export function StatusSurface({
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
-      className={`flex items-center gap-2 rounded-lg border bg-[var(--secondary)]/45 ${compact ? "px-2 py-1.5 text-[0.625rem]" : "min-h-11 px-3 text-xs"} ${toneClass}`}
+      className={`flex items-center gap-2 rounded-lg border bg-[var(--secondary)]/45 ${compact ? "px-2 py-1.5 text-[0.625rem]" : "min-h-11 px-3 text-xs"} ${toneClass} ${className}`}
+      {...props}
     >
       {busy ? (
         <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin" />

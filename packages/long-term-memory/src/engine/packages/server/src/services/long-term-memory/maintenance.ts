@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, rename } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { basename, dirname, relative } from "node:path";
 import {
   ltmEventSchema,
@@ -11,7 +13,6 @@ import {
   type LtmRepairAction,
   type LtmRepairResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { writeJsonAtomic } from "./atomic-json.js";
 import { chunkNotes, stableJsonHash } from "./chunking.js";
 import { ltmIndexStatePath, readLtmIndexState } from "./index-state.js";
 import { isEnoent, nowIso } from "./ltm-utils.js";
@@ -63,9 +64,27 @@ function publicPath(root: string, path: string) {
 async function checkEventLog(root: string, issues: LtmIntegrityIssue[]) {
   const path = getLongTermMemoryDirectories(root).eventLog;
   const displayPath = publicPath(root, path);
-  let content: string;
+  let eventCount = 0;
+  let index = 0;
   try {
-    content = await readFile(path, "utf8");
+    for await (const line of createInterface({ input: createReadStream(path, "utf8"), crlfDelay: Infinity })) {
+      index += 1;
+      if (!line.trim()) continue;
+      try {
+        ltmEventSchema.parse(JSON.parse(line));
+        eventCount += 1;
+      } catch (error) {
+        issues.push({
+          severity: "error",
+          code: "malformed_event",
+          path: displayPath,
+          message:
+            error instanceof Error
+              ? `Line ${index}: ${error.message}`
+              : `Line ${index}: Event failed validation.`,
+        });
+      }
+    }
   } catch (error) {
     if (isEnoent(error)) return 0;
     logger.error(error, "[ltm] Event log unreadable at %s", displayPath);
@@ -75,26 +94,6 @@ async function checkEventLog(root: string, issues: LtmIntegrityIssue[]) {
       path: displayPath,
       message: error instanceof Error ? error.message : "Event log could not be read.",
     });
-    return 0;
-  }
-
-  let eventCount = 0;
-  for (const [index, line] of content.split("\n").entries()) {
-    if (!line.trim()) continue;
-    try {
-      ltmEventSchema.parse(JSON.parse(line));
-      eventCount += 1;
-    } catch (error) {
-      issues.push({
-        severity: "error",
-        code: "malformed_event",
-        path: displayPath,
-        message:
-          error instanceof Error
-            ? `Line ${index + 1}: ${error.message}`
-            : `Line ${index + 1}: Event failed validation.`,
-      });
-    }
   }
   return eventCount;
 }
@@ -194,6 +193,12 @@ async function checkRecallIndex(root: string, notes: LtmNote[], issues: LtmInteg
 
 export async function checkLongTermMemoryIntegrity(
   root = getLongTermMemoryRoot(),
+): Promise<LtmIntegrityResponse> {
+  return withLtmVaultLock(root, () => checkLongTermMemoryIntegrityUnlocked(root));
+}
+
+async function checkLongTermMemoryIntegrityUnlocked(
+  root: string,
 ): Promise<LtmIntegrityResponse> {
   const issues: LtmIntegrityIssue[] = [];
   const notesById = new Map<string, LtmNote>();
@@ -320,48 +325,7 @@ async function quarantineMalformedNotes(root: string) {
 }
 
 async function rebuildCurrentIndexes(root: string) {
-  const startedAt = nowIso();
-  const previous = await readLtmIndexState(root);
-  await writeJsonAtomic(
-    ltmIndexStatePath(root),
-    ltmIndexStateSchema.parse({
-      ...previous,
-      dirty: true,
-      rebuildState: "building",
-      rebuildStartedAt: startedAt,
-      rebuildCompletedAt: undefined,
-      error: undefined,
-    }),
-  );
-  try {
-    const rebuilt = await rebuildLongTermMemoryIndexes({ root });
-    const current = await readLtmIndexState(root);
-    await writeJsonAtomic(
-      ltmIndexStatePath(root),
-      ltmIndexStateSchema.parse({
-        ...current,
-        dirty: false,
-        dirtyAt: undefined,
-        rebuildState: "idle",
-        rebuildCompletedAt: nowIso(),
-        error: undefined,
-      }),
-    );
-    return rebuilt;
-  } catch (error) {
-    const current = await readLtmIndexState(root);
-    await writeJsonAtomic(
-      ltmIndexStatePath(root),
-      ltmIndexStateSchema.parse({
-        ...current,
-        dirty: true,
-        rebuildState: "failed",
-        rebuildCompletedAt: nowIso(),
-        error: error instanceof Error ? error.message.slice(0, 2_000) : "Recall index rebuild failed.",
-      }),
-    );
-    throw error;
-  }
+  return rebuildLongTermMemoryIndexes({ root });
 }
 
 export async function repairLongTermMemory(

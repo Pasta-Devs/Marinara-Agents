@@ -31,6 +31,7 @@ import {
   sourceNoteIdForProvenance,
 } from "./source-identity.js";
 import { LongTermMemoryStorage } from "./storage.js";
+import { LtmServiceError } from "./service-error.js";
 
 type Candidate = {
   sourceId: string;
@@ -419,6 +420,7 @@ async function candidates(
     limit: number;
     scope?: LtmScope;
     mode?: LtmMode;
+    chatId?: string;
   },
   selected?: Set<string>,
 ) {
@@ -459,6 +461,7 @@ async function candidates(
   if (request.source === "chats") {
     const scopeIds = new Set(getLtmScopeChatIds(request.scope));
     for (const chat of await getPackagePersistence().listChats()) {
+      if (request.chatId && chat.id !== request.chatId) continue;
       if (
         request.scope?.groupId
           ? chat.groupId !== request.scope.groupId
@@ -698,6 +701,11 @@ export async function importPackageInterop(
   root: string,
   signal: AbortSignal,
 ): Promise<LtmImportSourceNotesResponse> {
+  const chat = request.chatId
+    ? await getPackagePersistence().getChat(request.chatId)
+    : null;
+  if (request.chatId && !chat)
+    throw new LtmServiceError("Chat not found", 404, "ltm_chat_not_found");
   const operationId = randomUUID(),
     selected = new Set(request.sourceIds),
     rows = await candidates(request, selected),
@@ -711,12 +719,22 @@ export async function importPackageInterop(
       !row.sourceId.includes(":game-session-") ||
       extractionConfig.useExtractionAgentOnGameMode,
   );
-  const resolved = request.extract && useExtractionAgent
-    ? await getPackageLanguageModels().resolveForRequest({
+  let resolved = null;
+  if (request.extract && useExtractionAgent) {
+    try {
+      resolved = await getPackageLanguageModels().resolveForRequest({
         connectionId: request.connectionId,
+        chatConnectionId: chat?.connectionId ?? null,
         model: request.model,
-      })
-    : null;
+      });
+    } catch (error) {
+      throw new LtmServiceError(
+        error instanceof Error ? error.message : "Language model configuration is invalid",
+        400,
+        "ltm_model_configuration",
+      );
+    }
+  }
   throwIfAborted(signal);
   const storage = new LongTermMemoryStorage(root),
     matchExisting = await existingMatcher(storage),
@@ -797,14 +815,15 @@ export async function importPackageInterop(
     ? await processLongTermMemorySourceBatch({
         items: written,
       languageModel: resolved,
-      mode: request.mode,
-      instruction: request.instruction,
-      operationId,
-      signal,
+        mode: request.mode,
+        instruction: request.instruction,
+         operationId,
+         chatId: request.chatId,
+         signal,
       applyLowRisk: request.applyLowRisk,
       concurrency: request.importConcurrency ?? 3,
-      root,
-      directGameMode: !extractionConfig.useExtractionAgentOnGameMode,
+       root,
+       directGameMode: !extractionConfig.useExtractionAgentOnGameMode,
       })
     : written.map((item) => ({
         sourceId: item.sourceId,

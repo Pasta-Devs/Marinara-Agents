@@ -3,10 +3,8 @@ import {
   type LtmRelationshipDimensions,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { RELATIONSHIP_DIMENSIONS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
-import {
-  cleanLongTermMemoryChunkText,
-  type LtmMemoryChunk,
-} from "./chunking.js";
+import { cleanLongTermMemoryChunkText } from "./chunking.js";
+import type { LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 const RELATIONSHIP_DIMENSION_ORDER = new Map(
   RELATIONSHIP_DIMENSIONS.map((dimension, index) => [dimension, index]),

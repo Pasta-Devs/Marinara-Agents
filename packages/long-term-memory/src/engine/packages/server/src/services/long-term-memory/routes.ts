@@ -23,6 +23,7 @@ import {
   ltmNoteTitleSchema,
   ltmNoteTypeSchema,
   ltmNoteTransferApplyResponseSchema,
+  ltmNoteTransferApplyRequestSchema,
   ltmNoteTransferPreviewRequestSchema,
   ltmNoteTransferPreviewResponseSchema,
   ltmIntegrityResponseSchema,
@@ -49,20 +50,18 @@ import {
   exportLtmDebugLog,
   readLtmDebugLog,
 } from "./debug-log.js";
-import { LtmDraftProjectionError } from "./draft-projector.js";
 import { projectLongTermMemoryDraftReview } from "./draft-review.js";
 import {
   getLtmExtractionConfig,
   updateLtmExtractionConfig,
 } from "./extraction-config.js";
-import { countBy, isEnoent } from "./ltm-utils.js";
+import { isEnoent } from "./ltm-utils.js";
 import {
   checkLongTermMemoryIntegrity,
   repairLongTermMemory,
 } from "./maintenance.js";
 import {
   applyLtmNoteTransfer,
-  LtmNoteTransferError,
   previewLtmNoteTransfer,
 } from "./note-transfer.js";
 import {
@@ -76,12 +75,11 @@ import {
   parseLtmRecallIndex,
   rebuildLongTermMemoryIndexes,
 } from "./rebuild.js";
-import { readLtmIndexState } from "./index-state.js";
+import { readLtmIndexState, readLtmNoteSummary } from "./index-state.js";
 import { CURRENT_LTM_CHUNK_FORMAT_VERSION } from "./chunking.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
 import {
   applyLongTermMemoryDraft,
-  LtmDraftApplyError,
 } from "./reconciliation.js";
 import { applyLtmScopeLinksToDerivedNotes } from "./scope-links.js";
 import { getLtmGlobalSettings, updateLtmGlobalSettings } from "./settings.js";
@@ -106,6 +104,7 @@ import {
   previewLtmIdentityRepairs,
 } from "./identity-repair.js";
 import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
+import { LtmServiceError, ltmErrorResponse } from "./service-error.js";
 import {
   deleteAllLongTermMemoryData,
   exportLongTermMemoryData,
@@ -155,6 +154,8 @@ const listNotesQuery = z
     scopeCharacterIds: scopedIds,
     scopePersonaId: z.string().min(1).max(120).optional(),
     includeGlobal: queryBoolean,
+    offset: z.coerce.number().int().min(0).default(0),
+    limit: z.coerce.number().int().min(1).max(500).default(100),
   })
   .strict();
 const scopeTargetsQuery = z
@@ -275,16 +276,21 @@ const debugQuery = z
     phase: ltmDebugPhaseSchema.optional(),
   })
   .strict();
-function extractionErrorStatus(message: string) {
-  if (
-    /(?:language model connection|selected language model|selected connection|no language model|no model|no base URL|random pool|choose a language model|configured)/i.test(
-      message,
-    )
-  )
-    return 400;
-  if (message.includes("not found")) return 404;
-  if (/mode is not enabled/i.test(message)) return 400;
-  return 502;
+function routeError(error: unknown, fallback: string) {
+  if (error instanceof z.ZodError)
+    return { statusCode: 400, body: { error: error.message, code: "ltm_invalid_request" } };
+  if (error instanceof LtmServiceError || (error && typeof error === "object" && "statusCode" in error && "code" in error))
+    return ltmErrorResponse(error, fallback);
+  const message = error instanceof Error ? error.message : fallback;
+  if (/language model.*(?:not found|connection)|selected language model|selected connection|no language model|no model|no base URL|random pool|choose a language model|configured/i.test(message))
+    return { statusCode: 400, body: { error: message, code: "ltm_model_configuration" } };
+  return {
+    statusCode: 500,
+    body: {
+      error: message,
+      code: "ltm_unexpected_failure",
+    },
+  };
 }
 
 export function createLongTermMemoryRoutes(runtime: {
@@ -312,40 +318,50 @@ export function createLongTermMemoryRoutes(runtime: {
     };
     app.get("/status", async () => {
       await storage.initializeLtmStore();
-      const notes = await storage.listNotes();
       const dirs = getLongTermMemoryDirectories(root);
       const events = await stat(dirs.eventLog).then(
         (info) => ({ logAvailable: true, bytes: info.size }),
         () => ({ logAvailable: false, bytes: 0 }),
       );
-      const integrity = await checkLongTermMemoryIntegrity(root);
-      const state = await readLtmIndexState(root);
-      const index = await readFile(longTermMemoryRecallIndexPath(root), "utf8")
-        .then((value) => parseLtmRecallIndex(JSON.parse(value)))
-        .catch(() => null);
+      const [summary, state, indexResult] = await Promise.all([
+        readLtmNoteSummary(root),
+        readLtmIndexState(root),
+        readFile(longTermMemoryRecallIndexPath(root), "utf8")
+          .then((value) => ({ index: parseLtmRecallIndex(JSON.parse(value)), corrupt: false }))
+          .catch((error) => ({ index: null, corrupt: !isEnoent(error) })),
+      ]);
+      const { index } = indexResult;
       const chunks = index ? Object.values(index.metadata.chunks) : [];
       return ltmStatusResponseSchema.parse({
         initialized: true,
         directory: LTM_DIR_NAME,
         notes: {
-          total: notes.length,
-          byType: countBy(notes.map((note) => note.type)),
-          byStatus: countBy(notes.map((note) => note.status)),
+          total: summary.total,
+          byType: summary.byType,
+          byStatus: summary.byStatus,
         },
         events,
         indexes: {
-          health: integrity.health,
+          health: indexResult.corrupt
+            ? "corrupt"
+            : state.rebuildState === "failed"
+            ? "stale"
+            : state.rebuildState === "building"
+              ? "degraded"
+            : index
+              ? state.dirty ? "stale" : "healthy"
+              : "not_built",
           dirty: state.dirty,
           rebuildState: state.rebuildState,
-          errors: integrity.issues
-            .filter((issue) => issue.severity === "error")
-            .map((issue) => ({ index: "recall", code: issue.code })),
-          warnings: integrity.issues
-            .filter((issue) => issue.severity !== "error")
-            .map((issue) => issue.message),
+          errors: indexResult.corrupt
+            ? [{ index: "recall", code: "recall_index_unreadable" }]
+            : state.rebuildState === "failed"
+            ? [{ index: "recall", code: "index_rebuild_failed" }]
+            : [],
+          warnings: state.error ? [state.error] : [],
           generatedAt: index?.generatedAt ?? null,
           sourceHash: index?.sourceHash ?? null,
-          noteCount: index ? notes.length : null,
+          noteCount: index ? summary.total : null,
           chunkCount: index ? chunks.length : null,
           chunkFormatVersion: index ? CURRENT_LTM_CHUNK_FORMAT_VERSION : null,
           embeddingsAvailable: Boolean(index?.embeddings.embeddedChunkCount),
@@ -421,9 +437,12 @@ export function createLongTermMemoryRoutes(runtime: {
         try {
           return await previewLongTermMemoryBackup(request.body, root);
         } catch (error) {
-          return reply.status(400).send({
-            error: error instanceof Error ? error.message : "Invalid backup.",
-          });
+          const result = error instanceof z.ZodError
+            ? { statusCode: 400, body: { error: error.message, code: "ltm_invalid_request" } }
+            : error instanceof LtmServiceError
+              ? ltmErrorResponse(error, "Could not preview backup.")
+              : { statusCode: 500, body: { error: error instanceof Error ? error.message : "Could not preview backup.", code: "ltm_unexpected_failure" } };
+          return reply.status(result.statusCode).send(result.body);
         }
       },
     );
@@ -437,12 +456,12 @@ export function createLongTermMemoryRoutes(runtime: {
             root,
           );
         } catch (error) {
-          return reply.status(400).send({
-            error:
-              error instanceof Error
-                ? error.message
-                : "Could not import backup.",
-          });
+          const result = error instanceof z.ZodError
+            ? { statusCode: 400, body: { error: error.message, code: "ltm_invalid_request" } }
+            : error instanceof LtmServiceError
+              ? ltmErrorResponse(error, "Could not import backup.")
+              : { statusCode: 500, body: { error: error instanceof Error ? error.message : "Could not import backup.", code: "ltm_unexpected_failure" } };
+          return reply.status(result.statusCode).send(result.body);
         }
       },
     );
@@ -471,7 +490,7 @@ export function createLongTermMemoryRoutes(runtime: {
         }
       },
     );
-    app.get<{ Querystring: unknown }>("/notes", async (request) => {
+    app.get<{ Querystring: unknown }>("/notes", async (request, reply) => {
       const query = listNotesQuery.parse(request.query);
       const scope =
         query.scopeChatIds?.length ||
@@ -491,14 +510,20 @@ export function createLongTermMemoryRoutes(runtime: {
                 : {}),
             }
           : undefined;
-      return storage.listNotes({
+      const notes = await storage.listNotes({
         type: query.type,
         status: query.status,
         tag: query.tag,
         scope,
         characterIds: query.scopeCharacterIds,
         includeGlobal: query.includeGlobal,
+        offset: query.offset,
+        limit: query.limit + 1,
       });
+      const hasMore = notes.length > query.limit;
+      reply.header("x-ltm-has-more", String(hasMore));
+      if (hasMore) reply.header("x-ltm-next-offset", String(query.offset + query.limit));
+      return notes.slice(0, query.limit);
     });
     app.get<{ Querystring: unknown }>("/scope-targets", async (request) => {
       const { chatId } = scopeTargetsQuery.parse(request.query);
@@ -634,11 +659,11 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply.status(404).send({ error: "Chat not found" });
         const operationId = randomUUID();
         try {
-          const languageModel = await getPackageLanguageModels().resolveForRequest({
-            connectionId: body.connectionId,
-            chatConnectionId: chat?.connectionId ?? null,
-            model: body.model,
-          });
+            const languageModel = await getPackageLanguageModels().resolveForRequest({
+              connectionId: body.connectionId,
+              chatConnectionId: chat?.connectionId ?? null,
+              model: body.model,
+            });
           return ltmExtractSourceNoteResponseSchema.parse(
             await processLongTermMemorySource({
               sourceNote,
@@ -654,13 +679,9 @@ export function createLongTermMemoryRoutes(runtime: {
             }),
           );
         } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Failed to extract long-term memory from source note";
           logger.error(error, "[ltm] Source note extraction route failed");
-          const status = extractionErrorStatus(message);
-          return reply.status(status).send({ error: message });
+          const result = routeError(error, "Failed to extract long-term memory from source note");
+          return reply.status(result.statusCode).send(result.body);
         }
       },
     );
@@ -706,13 +727,8 @@ export function createLongTermMemoryRoutes(runtime: {
             ),
           );
         } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Failed to import long-term memory sources";
-          return reply
-            .status(extractionErrorStatus(message))
-            .send({ error: message });
+          const result = routeError(error, "Failed to import long-term memory sources");
+          return reply.status(result.statusCode).send(result.body);
         } finally {
           request.raw.off("aborted", abort);
         }
@@ -737,16 +753,8 @@ export function createLongTermMemoryRoutes(runtime: {
             await previewLtmNoteTransfer(body, chat, { root, storage }),
           );
         } catch (error) {
-          return reply
-            .status(
-              error instanceof LtmNoteTransferError ? error.statusCode : 500,
-            )
-            .send({
-              error:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to preview long-term memory transfer",
-            });
+          const result = routeError(error, "Failed to preview long-term memory transfer");
+          return reply.status(result.statusCode).send(result.body);
         }
       },
     );
@@ -754,7 +762,7 @@ export function createLongTermMemoryRoutes(runtime: {
       "/notes/transfer",
       { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
       async (request, reply) => {
-        const body = ltmNoteTransferPreviewRequestSchema.parse(
+        const body = ltmNoteTransferApplyRequestSchema.parse(
           request.body ?? {},
         );
         const chat = await getPackagePersistence().getChat(
@@ -784,16 +792,8 @@ export function createLongTermMemoryRoutes(runtime: {
             }),
           );
         } catch (error) {
-          return reply
-            .status(
-              error instanceof LtmNoteTransferError ? error.statusCode : 500,
-            )
-            .send({
-              error:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to transfer long-term memory notes",
-            });
+          const result = routeError(error, "Failed to transfer long-term memory notes");
+          return reply.status(result.statusCode).send(result.body);
         }
       },
     );
@@ -827,11 +827,8 @@ export function createLongTermMemoryRoutes(runtime: {
           const rebuild = await rebuildAfterMutation();
           return reply.status(201).send({ note, rebuild });
         } catch (error) {
-          if (
-            error instanceof Error &&
-            error.message.includes("already exists")
-          )
-            return reply.status(409).send({ error: error.message });
+          if (error instanceof LtmServiceError)
+            return reply.status(error.statusCode).send({ error: error.message, code: error.code });
           throw error;
         }
       },
@@ -865,11 +862,8 @@ export function createLongTermMemoryRoutes(runtime: {
         try {
           note = await storage.updateNote(id, patch);
         } catch (error) {
-          if (
-            error instanceof Error &&
-            error.message.includes("would make this memory global")
-          )
-            return reply.status(400).send({ error: error.message });
+          if (error instanceof LtmServiceError)
+            return reply.status(error.statusCode).send({ error: error.message, code: error.code });
           throw error;
         }
         const rebuild = await rebuildAfterMutation();
@@ -936,9 +930,8 @@ export function createLongTermMemoryRoutes(runtime: {
             chatIds: [chatId],
           });
         } catch (error) {
-          if (error instanceof Error && error.message.includes("not found"))
-            return reply.status(404).send({ error: error.message });
-          throw error;
+          const result = routeError(error, "Could not remove memory from scope");
+          return reply.status(result.statusCode).send(result.body);
         }
         const rebuild = result.changed ? await rebuildAfterMutation() : null;
         return result.deleted
@@ -963,9 +956,8 @@ export function createLongTermMemoryRoutes(runtime: {
             removeScopeBody.parse(request.body ?? {}),
           );
         } catch (error) {
-          if (error instanceof Error && error.message.includes("not found"))
-            return reply.status(404).send({ error: error.message });
-          throw error;
+          const result = routeError(error, "Could not remove memory from scope");
+          return reply.status(result.statusCode).send(result.body);
         }
         const rebuild = result.changed ? await rebuildAfterMutation() : null;
         return result.deleted
@@ -1101,27 +1093,8 @@ export function createLongTermMemoryRoutes(runtime: {
             operationId: randomUUID(),
           });
         } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Failed to apply long-term memory draft";
-          const status =
-            error instanceof LtmDraftApplyError
-              ? error.statusCode
-              : error instanceof LtmDraftProjectionError
-                ? 409
-                : message.includes("not found")
-                  ? 404
-                  : message.includes("not pending")
-                    ? 409
-                    : 400;
-          const code =
-            error instanceof LtmDraftApplyError
-              ? error.code
-              : error instanceof LtmDraftProjectionError
-                ? error.code
-                : "ltm_draft_apply_failed";
-          return reply.status(status).send({ error: message, code });
+          const result = routeError(error, "Failed to apply long-term memory draft");
+          return reply.status(result.statusCode).send(result.body);
         }
       },
     );

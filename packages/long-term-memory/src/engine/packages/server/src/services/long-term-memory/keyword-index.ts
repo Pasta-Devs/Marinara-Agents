@@ -1,17 +1,5 @@
-import type { LtmMemoryChunk } from "./chunking.js";
+import type { LtmKeywordIndex, LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { normalizeKeywordTerms } from "./keyword-extract.js";
-
-export interface LtmKeywordIndex {
-  version: 1;
-  byKeyword: Record<string, string[]>;
-  byChunkId: Record<string, string[]>;
-}
-
-export type LtmKeywordSearchHit = {
-  chunkId: string;
-  score: number;
-  reasons: string[];
-};
 
 function addKeyword(map: Record<string, string[]>, key: string, value: string) {
   const bucket = map[key] ?? [];
@@ -73,7 +61,6 @@ export function searchLtmKeywordIndex(
 
   const add = (chunkId: string, keyword: string, score: number, reason: string) => {
     if (options.allowedChunks && !options.allowedChunks.has(chunkId)) return;
-    if (!hits.has(chunkId) && hits.size >= maxCandidates) return;
     const existing = hits.get(chunkId) ?? { score: 0, reasons: [], matchedKeywords: new Set<string>() };
     const dedupeKey = `${keyword}\0${reason}`;
     if (existing.matchedKeywords.has(dedupeKey)) return;

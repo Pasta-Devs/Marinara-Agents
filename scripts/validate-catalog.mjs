@@ -16,7 +16,8 @@ import {
   createCatalogLanes,
   readCatalogFamily,
 } from "./catalog-lanes.mjs";
-import { assertPackagePrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
+import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
+import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -36,47 +37,44 @@ for (const [major, expectedCatalog] of expectedCatalogsByMajor) {
 if (JSON.stringify(legacyCatalog) !== JSON.stringify(catalogsByMajor.get(LEGACY_CATALOG_MAJOR))) {
   throw new Error(`catalog/catalog.json must remain an exact alias of catalog/v${LEGACY_CATALOG_MAJOR}/catalog.json`);
 }
-const packageOwnedFeatures = [
-  {
-    id: "hierarchical-maps",
-    name: "Hierarchical Maps",
-    ownedSourcePaths: [
-      "packages/server/src/routes/spatial-context.routes.ts",
-      "packages/server/src/services/spatial-context",
-      "packages/server/src/services/storage/spatial-context.storage.ts",
-      "packages/client/src/features/spatial-context",
-      "packages/client/src/hooks/use-spatial-context.ts",
-      "packages/client/src/components/game/GameWorldMap.tsx",
-    ],
-  },
-  {
-    id: "long-term-memory",
-    name: "Long-Term Memory",
-    capabilityApi: { major: 1, minor: 6 },
-    ownedSourcePaths: [
-      "packages/shared/src/features/agents/long-term-memory",
-      "packages/server/src/services/long-term-memory",
-      "packages/client/src/features/long-term-memory",
-    ],
-  },
+const hierarchicalMapsBoundary = await assertHierarchicalMapsPrivateImportBoundary();
+
+const hierarchicalMapsOwnedSourcePaths = [
+  "packages/server/src/routes/spatial-context.routes.ts",
+  "packages/server/src/services/spatial-context",
+  "packages/server/src/services/storage/spatial-context.storage.ts",
+  "packages/client/src/features/spatial-context",
+  "packages/client/src/hooks/use-spatial-context.ts",
+  "packages/client/src/components/game/GameWorldMap.tsx",
 ];
-const packageBoundaries = new Map();
-for (const feature of packageOwnedFeatures) {
-  const sourceRoot = join(repoRoot, `packages/${feature.id}/src/engine`);
-  const boundary = await assertPackagePrivateImportBoundary({
-    sourceRoot,
-    boundaryPath: join(repoRoot, `packages/${feature.id}/engine-boundary.json`),
-    displayName: feature.name,
-    capabilityApi: feature.capabilityApi,
-  });
-  packageBoundaries.set(feature.id, boundary);
-  for (const relativePath of feature.ownedSourcePaths) {
-    if (!existsSync(join(sourceRoot, relativePath))) {
-      throw new Error(`${feature.name} package source is missing: ${relativePath}`);
-    }
-    if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
-      throw new Error(`${feature.name} source must not be captured as generic Engine material: ${relativePath}`);
-    }
+for (const relativePath of hierarchicalMapsOwnedSourcePaths) {
+  const packageOwnedPath = join(repoRoot, "packages/hierarchical-maps/src/engine", relativePath);
+  const capturedEnginePath = join(repoRoot, "sources/engine", relativePath);
+  if (!existsSync(packageOwnedPath)) {
+    throw new Error(`Hierarchical Maps package source is missing: ${relativePath}`);
+  }
+  if (existsSync(capturedEnginePath)) {
+    throw new Error(`Hierarchical Maps source must not be captured as generic Engine material: ${relativePath}`);
+  }
+}
+
+const longTermMemorySourceRoot = join(repoRoot, "packages/long-term-memory/src/engine");
+const longTermMemoryBoundary = await assertPackagePrivateImportBoundary({
+  sourceRoot: longTermMemorySourceRoot,
+  boundaryPath: join(repoRoot, "packages/long-term-memory/engine-boundary.json"),
+  displayName: "Long-Term Memory",
+  capabilityApi: { major: 1, minor: 6 },
+});
+for (const relativePath of [
+  "packages/shared/src/features/agents/long-term-memory",
+  "packages/server/src/services/long-term-memory",
+  "packages/client/src/features/long-term-memory",
+]) {
+  if (!existsSync(join(longTermMemorySourceRoot, relativePath))) {
+    throw new Error(`Long-Term Memory package source is missing: ${relativePath}`);
+  }
+  if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
+    throw new Error(`Long-Term Memory source must not be captured as generic Engine material: ${relativePath}`);
   }
 }
 
@@ -156,6 +154,25 @@ const expectedCategories = new Map([
   ["hierarchical-maps", "tracker"],
 ]);
 
+function readZip(args, { packageId, artifactPath, member = null, purpose }) {
+  const result = spawnSync("unzip", args, {
+    encoding: member ? undefined : "utf8",
+    maxBuffer: 120 * 1024 * 1024,
+  });
+  if (result.error?.code === "ENOENT") {
+    throw new Error(
+      `Cannot ${purpose} ${packageId} artifact ${artifactPath}: unzip executable was not found; install unzip and retry`,
+    );
+  }
+  if (result.status !== 0) {
+    const detail = result.stderr?.toString().trim() || result.error?.message || `exit status ${result.status}`;
+    throw new Error(
+      `Could not ${purpose} ${member ? `member ${member} from ` : ""}${packageId} artifact ${artifactPath}: ${detail}`,
+    );
+  }
+  return result;
+}
+
 async function validateTurnGameRuntime(manifest, packageRoot) {
   const serverPath = join(packageRoot, manifest.entrypoints.server);
   const runtime = await import(`${pathToFileURL(serverPath).href}?validation=${Date.now()}`);
@@ -226,16 +243,26 @@ for (const entry of catalog.packages) {
   if (manifest.id === "about-me-keeper") {
     throw new Error("About Me is a core Conversation feature and must not appear in the agent catalog");
   }
-  const packageBoundary = packageBoundaries.get(manifest.id);
-  if (packageBoundary) {
+  if (manifest.id === "hierarchical-maps") {
     if (manifest.schemaVersion !== 2) {
-      throw new Error(`${manifest.name} must use capability package manifest v2`);
+      throw new Error("Hierarchical Maps must use capability package manifest v2");
     }
-    if (JSON.stringify(manifest.capabilityApi) !== JSON.stringify(packageBoundary.capabilityApi)) {
-      throw new Error(`${manifest.name} capability API does not match engine-boundary.json`);
+    if (JSON.stringify(manifest.capabilityApi) !== JSON.stringify(hierarchicalMapsBoundary.capabilityApi)) {
+      throw new Error("Hierarchical Maps capability API does not match engine-boundary.json");
     }
-    if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(packageBoundary.builtAgainst)) {
-      throw new Error(`${manifest.name} build provenance does not match engine-boundary.json`);
+    if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(hierarchicalMapsBoundary.builtAgainst)) {
+      throw new Error("Hierarchical Maps build provenance does not match engine-boundary.json");
+    }
+  }
+  if (manifest.id === "long-term-memory") {
+    if (manifest.schemaVersion !== 2) {
+      throw new Error("Long-Term Memory must use capability package manifest v2");
+    }
+    if (JSON.stringify(manifest.capabilityApi) !== JSON.stringify(longTermMemoryBoundary.capabilityApi)) {
+      throw new Error("Long-Term Memory capability API does not match engine-boundary.json");
+    }
+    if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(longTermMemoryBoundary.builtAgainst)) {
+      throw new Error("Long-Term Memory build provenance does not match engine-boundary.json");
     }
   }
   ids.add(manifest.id);
@@ -300,20 +327,23 @@ for (const entry of catalog.packages) {
   if (createHash("sha256").update(archive).digest("hex") !== artifact.sha256) {
     throw new Error(`Artifact checksum mismatch for ${manifest.id}`);
   }
-  const listed = spawnSync("unzip", ["-Z1", artifactPath], { encoding: "utf8" });
-  if (listed.status !== 0) throw new Error(listed.stderr || `Could not inspect ${manifest.id}`);
+  const listed = readZip(["-Z1", artifactPath], {
+    packageId: manifest.id,
+    artifactPath,
+    purpose: "inspect",
+  });
   const actualFiles = listed.stdout.trim().split("\n").filter(Boolean).sort();
   const declaredFiles = ["manifest.json", ...manifest.files.map((file) => file.path)].sort();
   if (JSON.stringify(actualFiles) !== JSON.stringify(declaredFiles)) {
     throw new Error(`Artifact file list mismatch for ${manifest.id}`);
   }
 
-  const archivedManifest = spawnSync("unzip", ["-p", artifactPath, "manifest.json"], {
-    maxBuffer: 120 * 1024 * 1024,
+  const archivedManifest = readZip(["-p", artifactPath, "manifest.json"], {
+    packageId: manifest.id,
+    artifactPath,
+    member: "manifest.json",
+    purpose: "read",
   });
-  if (archivedManifest.status !== 0) {
-    throw new Error(archivedManifest.stderr?.toString() || `Could not read archived manifest for ${manifest.id}`);
-  }
   if (JSON.stringify(JSON.parse(archivedManifest.stdout.toString("utf8"))) !== JSON.stringify(manifest)) {
     throw new Error(`Archived manifest does not match the catalog for ${manifest.id}`);
   }
@@ -326,12 +356,12 @@ for (const entry of catalog.packages) {
   }
   for (const declared of manifest.files) {
     const sourcePayload = await readFile(join(packageRoot, declared.path));
-    const archivedPayload = spawnSync("unzip", ["-p", artifactPath, declared.path], {
-      maxBuffer: 120 * 1024 * 1024,
+    const archivedPayload = readZip(["-p", artifactPath, declared.path], {
+      packageId: manifest.id,
+      artifactPath,
+      member: declared.path,
+      purpose: "read",
     });
-    if (archivedPayload.status !== 0) {
-      throw new Error(archivedPayload.stderr?.toString() || `Could not read ${declared.path} from ${manifest.id}`);
-    }
     for (const [location, payload] of [
       ["source", sourcePayload],
       ["artifact", archivedPayload.stdout],

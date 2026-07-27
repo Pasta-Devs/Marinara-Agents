@@ -1,16 +1,14 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
-import {
-  assertHierarchicalMapsPrivateImportBoundary,
-  assertPackagePrivateImportBoundary,
-} from "./hierarchical-maps-boundary.mjs";
+import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
+import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -53,17 +51,25 @@ const featureSource = (relativePath, buildRoot = sourceRoot) => {
 };
 
 async function prepareFeatureBuildRoot(feature) {
-  const packageSourceRoot = feature.id === "hierarchical-maps"
-    ? hierarchicalMapsSourceRoot
-    : feature.packageSourceRoot;
-  if (!packageSourceRoot) {
+  if (feature.id === "long-term-memory") {
+    if (!existsSync(feature.packageSourceRoot)) {
+      throw new Error(`Missing package-owned ${feature.name} source`);
+    }
+    const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
+    await cp(feature.packageSourceRoot, buildRoot, { recursive: true, force: true });
+    return {
+      buildRoot,
+      cleanup: () => rm(buildRoot, { recursive: true, force: true }),
+    };
+  }
+  if (feature.id !== "hierarchical-maps") {
     return { buildRoot: sourceRoot, cleanup: async () => {} };
   }
-  if (!existsSync(packageSourceRoot)) {
-    throw new Error(`Missing package-owned ${feature.name} source`);
+  if (!existsSync(hierarchicalMapsSourceRoot)) {
+    throw new Error("Missing package-owned Hierarchical Maps source");
   }
-  const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
-  await cp(packageSourceRoot, buildRoot, { recursive: true, force: true });
+  const buildRoot = await mkdtemp(join(tmpdir(), "marinara-hierarchical-maps-source-"));
+  await cp(hierarchicalMapsSourceRoot, buildRoot, { recursive: true, force: true });
   return {
     buildRoot,
     cleanup: () => rm(buildRoot, { recursive: true, force: true }),
@@ -79,6 +85,25 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
     const relative = absolute.slice(normalizedBuildRoot.length + 1);
     if (excludedPaths.some((path) => relative === path || relative.startsWith(`${path}/`))) continue;
     const destination = join(sourcesRoot, relative);
+    if (absolute === destination) continue;
+    await mkdir(dirname(destination), { recursive: true });
+    await copyFile(absolute, destination);
+  }
+}
+
+async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
+  const metafile = JSON.parse(await readFile(metafilePath, "utf8"));
+  const normalizedBuildRoot = resolve(buildRoot);
+  for (const input of Object.keys(metafile.inputs || {})) {
+    const absolute = resolve(engineRoot, input);
+    let realAbsolute;
+    try { realAbsolute = realpathSync(absolute); } catch { continue; }
+    if (!realAbsolute.startsWith(`${normalizedBuildRoot}${sep}`) || realAbsolute.includes(`${sep}node_modules${sep}`)) continue;
+    const relativePath = relative(normalizedBuildRoot, realAbsolute);
+    if (!relativePath || relativePath.startsWith(`..${sep}`) || relativePath === "..") continue;
+    const normalizedRelativePath = relativePath.split(sep).join("/");
+    if (excludedPaths.some((path) => normalizedRelativePath === path || normalizedRelativePath.startsWith(`${path}/`))) continue;
+    const destination = join(sourcesRoot, relativePath);
     if (absolute === destination) continue;
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(absolute, destination);
@@ -287,7 +312,8 @@ export async function selfCheck() {
       "--bundle", "--platform=node", "--format=esm", "--target=node22", "--minify",
       "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
       "--external:@huggingface/transformers", "--external:onnxruntime-node", "--external:onnxruntime-web", "--external:sharp",
-      "--external:pino", "--external:pino-pretty", "--external:zod",
+      "--external:pino", "--external:pino-pretty",
+      ...(feature.id === "long-term-memory" ? ["--external:zod"] : []),
       `--alias:@marinara-engine/shared=${packageSharedEntry}`,
       `--metafile=${metafile}`,
       `--outfile=${output}`,
@@ -299,13 +325,15 @@ export async function selfCheck() {
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
     }
-    await captureEngineSources(
-      metafile,
-      prepared.buildRoot,
-      feature.id === "hierarchical-maps"
-        ? hierarchicalMapsOwnedSourcePaths
-        : feature.ownedSourcePaths ?? [],
-    );
+    if (feature.id === "long-term-memory") {
+      await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
+    } else {
+      await captureEngineSources(
+        metafile,
+        prepared.buildRoot,
+        feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+      );
+    }
   } finally {
     await rm(temporary, { recursive: true, force: true });
     await prepared.cleanup();
@@ -756,13 +784,15 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
     const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
     if (result.status !== 0) throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
-    await captureEngineSources(
-      metafile,
-      prepared.buildRoot,
-      feature.id === "hierarchical-maps"
-        ? hierarchicalMapsOwnedSourcePaths
-        : feature.ownedSourcePaths ?? [],
-    );
+    if (feature.id === "long-term-memory") {
+      await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
+    } else {
+      await captureEngineSources(
+        metafile,
+        prepared.buildRoot,
+        feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+      );
+    }
   } finally {
     await rm(temporary, { recursive: true, force: true });
     await prepared.cleanup();

@@ -2,7 +2,7 @@ import {
   ltmMetadataIndexSchema,
   type LtmMetadataIndex,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import type { LtmMemoryChunk } from "./chunking.js";
+import type { LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 export type { LtmMetadataIndex } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 

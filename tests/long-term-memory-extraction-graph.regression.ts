@@ -751,12 +751,12 @@ async function main() {
       } as any,
     ],
   );
-  assert.equal(dedupResult.deduplicated.length, 7);
+  assert.equal(dedupResult.deduplicated.length, 6);
   assert.equal(
     dedupResult.diagnostics.filter(
       (diagnostic) => diagnostic.code === "deduplicated_evidence_unit",
     ).length,
-    3,
+    4,
     "dedup must characterize same-batch, existing-note, threshold, and exact matches",
   );
 

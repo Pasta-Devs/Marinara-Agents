@@ -65,7 +65,9 @@ function readRecallStyle(
 }
 
 function readRecallPreamble(value: unknown) {
-  return typeof value === "string" ? value : undefined;
+  if (typeof value !== "string") return undefined;
+  const preamble = value.trim();
+  return preamble.length > 0 && preamble.length <= 500 ? preamble : undefined;
 }
 
 function readWeight(value: unknown, fallback: number) {

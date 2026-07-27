@@ -64,7 +64,9 @@ function importSpecifiers(source) {
   return [...specifiers];
 }
 
-export async function findPackagePrivateEngineImports(sourceRoot) {
+export async function findHierarchicalMapsPrivateEngineImports(
+  sourceRoot = hierarchicalMapsSourceRoot,
+) {
   const imports = [];
   for (const file of await listSourceFiles(sourceRoot)) {
     const source = await readFile(file, "utf8");
@@ -84,21 +86,17 @@ export async function findPackagePrivateEngineImports(sourceRoot) {
   );
 }
 
-export function findHierarchicalMapsPrivateEngineImports(
-  sourceRoot = hierarchicalMapsSourceRoot,
-) {
-  return findPackagePrivateEngineImports(sourceRoot);
-}
-
-export async function readPackageEngineBoundary({ boundaryPath, displayName, capabilityApi = { major: 1, minor: 3 } }) {
-  const boundary = JSON.parse(await readFile(boundaryPath, "utf8"));
+export async function readHierarchicalMapsBoundary() {
+  const boundary = JSON.parse(
+    await readFile(hierarchicalMapsBoundaryPath, "utf8"),
+  );
   if (boundary.schemaVersion !== 1)
-    throw new Error(`Unsupported ${displayName} boundary schema`);
+    throw new Error("Unsupported Hierarchical Maps boundary schema");
   if (
-    boundary.capabilityApi?.major !== capabilityApi.major ||
-    boundary.capabilityApi?.minor !== capabilityApi.minor
+    boundary.capabilityApi?.major !== 1 ||
+    boundary.capabilityApi?.minor !== 3
   ) {
-    throw new Error(`${displayName} must target capability API ${capabilityApi.major}.${capabilityApi.minor}`);
+    throw new Error("Hierarchical Maps must target capability API 1.3");
   }
   if (
     !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(
@@ -106,41 +104,31 @@ export async function readPackageEngineBoundary({ boundaryPath, displayName, cap
     )
   ) {
     throw new Error(
-      `${displayName} boundary is missing a valid Engine version`,
+      "Hierarchical Maps boundary is missing a valid Engine version",
     );
   }
   if (!/^[a-f0-9]{40}$/u.test(boundary.builtAgainst?.engineCommit ?? "")) {
-    throw new Error(`${displayName} boundary is missing a full Engine commit`);
+    throw new Error(
+      "Hierarchical Maps boundary is missing a full Engine commit",
+    );
   }
   if (!Array.isArray(boundary.privateEngineImports)) {
     throw new Error(
-      `${displayName} boundary is missing its private Engine import inventory`,
+      "Hierarchical Maps boundary is missing its private Engine import inventory",
     );
   }
   return boundary;
 }
 
-export function readHierarchicalMapsBoundary() {
-  return readPackageEngineBoundary({
-    boundaryPath: hierarchicalMapsBoundaryPath,
-    displayName: "Hierarchical Maps",
-  });
-}
-
-export async function assertPackagePrivateImportBoundary({
-  sourceRoot,
-  boundaryPath,
-  displayName,
-  capabilityApi,
-}) {
+export async function assertHierarchicalMapsPrivateImportBoundary() {
   const [boundary, actual] = await Promise.all([
-    readPackageEngineBoundary({ boundaryPath, displayName, capabilityApi }),
-    findPackagePrivateEngineImports(sourceRoot),
+    readHierarchicalMapsBoundary(),
+    findHierarchicalMapsPrivateEngineImports(),
   ]);
   const expected = boundary.privateEngineImports;
   if (expected.length > 0) {
     throw new Error(
-      `${displayName} must not record private Engine imports after package isolation`,
+      "Hierarchical Maps must not record private Engine imports after package isolation",
     );
   }
   if (JSON.stringify(actual) === JSON.stringify(expected)) return boundary;
@@ -155,16 +143,8 @@ export async function assertPackagePrivateImportBoundary({
     ...removed.map((entry) => `removed ${entry.source}: ${entry.specifier}`),
   ].join("\n");
   throw new Error(
-    `${displayName} private Engine imports changed. New imports are forbidden; removals must update engine-boundary.json.\n${detail}`,
+    `Hierarchical Maps private Engine imports changed. New imports are forbidden; removals must update engine-boundary.json.\n${detail}`,
   );
-}
-
-export async function assertHierarchicalMapsPrivateImportBoundary() {
-  return assertPackagePrivateImportBoundary({
-    sourceRoot: hierarchicalMapsSourceRoot,
-    boundaryPath: hierarchicalMapsBoundaryPath,
-    displayName: "Hierarchical Maps",
-  });
 }
 
 if (

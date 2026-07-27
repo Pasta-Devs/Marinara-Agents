@@ -8,7 +8,7 @@ import type {
   LtmImportance,
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, queryKeys, request } from "./api";
+import { invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
 import { humanizeLabel } from "./display-labels";
 import {
   Button,
@@ -579,6 +579,7 @@ function ExtractionDetails({
 }
 
 export default function ReviewQueue({
+  props,
   onDirtyChange,
   onOpenMemory,
   onRecoverCandidate,
@@ -591,15 +592,15 @@ export default function ReviewQueue({
     [reviewSourceNoteId],
   );
   const review = useQuery({
-    queryKey: [...queryKeys.review, sourceNoteId],
+    queryKey: [...queryKeys.review, props.chatId, sourceNoteId],
     queryFn: () =>
       request<LtmDraftReviewResponse>(
-        `/drafts/review?status=pending${sourceNoteId ? `&sourceNoteId=${encodeURIComponent(sourceNoteId)}` : ""}`,
+        `/drafts/review?status=pending${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}${sourceNoteId ? `&sourceNoteId=${encodeURIComponent(sourceNoteId)}` : ""}`,
       ),
   });
   const notes = useQuery({
     queryKey: queryKeys.notes,
-    queryFn: () => request<LtmNote[]>("/notes?includeGlobal=true"),
+    queryFn: () => requestAllNotes<LtmNote>("/notes?includeGlobal=true"),
   });
   const noteById = new Map((notes.data ?? []).map((note) => [note.id, note]));
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -609,6 +610,11 @@ export default function ReviewQueue({
   const [running, setRunning] = useState<"accept" | "skip" | null>(null);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [result, setResult] = useState<BatchResult | null>(null);
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setEditedById(new Map());
+    setResult(null);
+  }, [props.chatId]);
 
   const rowByMutationId = new Map<string, ReviewRow>();
   for (const source of review.data?.sources ?? []) {

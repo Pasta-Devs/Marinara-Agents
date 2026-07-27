@@ -11,7 +11,7 @@ import { buildLtmMetadataIndex } from "./metadata-index.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { getPackageEmbeddingAdapter } from "./package-runtime.js";
-import { markLtmIndexesClean } from "./index-state.js";
+import { markLtmIndexesBuilding, markLtmIndexesClean, markLtmIndexesFailed, writeLtmNoteSummary } from "./index-state.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 
 const autoUpgradeFailures = new Set<string>();
@@ -97,9 +97,12 @@ export async function rebuildLongTermMemoryIndexes(
 ) {
   const root = options.root ?? getLongTermMemoryRoot();
   return withLtmVaultLock(root,async()=>{
+    await markLtmIndexesBuilding(root);
+    try {
     const embeddingAdapter = options.embeddingAdapter ?? getPackageEmbeddingAdapter();
     clearAutoUpgradeFailure(root, embeddingAdapter ?? null);
     const notes = await new LongTermMemoryStorage(root).listNotes();
+    await writeLtmNoteSummary(root, notes);
     const chunks = chunkNotes(notes, { includeSourceNotes: false });
     const vectors = await embedLongTermMemoryTexts(chunks.map((chunk) => chunk.text), {
       ...options,
@@ -135,9 +138,13 @@ export async function rebuildLongTermMemoryIndexes(
       keywords: buildLtmKeywordIndex(chunks),
       embeddings,
     };
-    await writeJsonAtomic(longTermMemoryRecallIndexPath(root), index);
-    await markLtmIndexesClean(root);
-    return { root,generatedAt:index.generatedAt,noteCount: notes.length, chunkCount: chunks.length,embeddedChunkCount:usableVectors?.length??0, embeddingsAvailable: Boolean(usableVectors) };
+      await writeJsonAtomic(longTermMemoryRecallIndexPath(root), index);
+      await markLtmIndexesClean(root);
+      return { root,generatedAt:index.generatedAt,noteCount: notes.length, chunkCount: chunks.length,embeddedChunkCount:usableVectors?.length??0, embeddingsAvailable: Boolean(usableVectors) };
+    } catch (error) {
+      await markLtmIndexesFailed(root, error);
+      throw error;
+    }
   });
 }
 

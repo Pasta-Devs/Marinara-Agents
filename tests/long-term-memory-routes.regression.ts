@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
@@ -35,30 +35,22 @@ async function main() {
   );
   const app = Fastify();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-routes-"));
+  const packageManifest = JSON.parse(
+    await readFile(
+      join(dirname(fileURLToPath(import.meta.url)), "../packages/long-term-memory/manifest.json"),
+      "utf8",
+    ),
+  );
   const installed = {
     id: "long-term-memory",
-    version: "1.0.0",
+    version: packageManifest.version,
     installedAt: "2026-07-17T00:00:00.000Z",
     status: "active",
     error: null,
     readiness: "pending",
     readinessError: null,
     legacy: false,
-    manifest: {
-      schemaVersion: 2,
-      capabilityApi: { major: 1, minor: 4 },
-      builtAgainst: { engineVersion: "2.3.2", engineCommit: "a".repeat(40) },
-      id: "long-term-memory",
-      name: "Long-Term Memory",
-      version: "1.0.0",
-      description: "fixture",
-      engine: { min: "2.3.2", maxExclusive: "2.4.0" },
-      kind: ["agent"],
-      entrypoints: { server: "server.mjs", agents: "agents.json" },
-      files: [{ path: "server.mjs", sha256: "0".repeat(64), bytes: 1 }],
-      permissions: ["agent-runtime", "chat-read", "routes", "storage"],
-      restartRequired: true,
-    },
+    manifest: packageManifest,
   };
   const previousSecret = process.env.ADMIN_SECRET;
   const previousRequireSecret =
@@ -84,8 +76,10 @@ async function main() {
     assert.deepEqual(installed.manifest.permissions, [
       "agent-runtime",
       "chat-read",
+      "chat-write",
       "routes",
       "storage",
+      "ui",
     ]);
     assert.equal(installed.manifest.permissions.includes("network"), false);
     await assert.rejects(
@@ -737,8 +731,10 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/notes/transfer",
       headers,
-      payload: {
-        noteIds: ["world_route_fixture"],
+        payload: {
+          requestedNoteIds: ["world_route_fixture"],
+          derivedNoteIds: [],
+          applyNoteIds: ["world_route_fixture"],
         mode: "copy",
         destinationChatId: "chat-b",
       },
@@ -756,8 +752,10 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/notes/transfer",
       headers,
-      payload: {
-        noteIds: ["world_route_fixture"],
+        payload: {
+          requestedNoteIds: ["world_route_fixture"],
+          derivedNoteIds: [],
+          applyNoteIds: ["world_route_fixture"],
         mode: "copy",
         destinationChatId: "chat-b",
       },
@@ -798,8 +796,10 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/notes/transfer",
       headers,
-      payload: {
-        noteIds: ["world_persona_transfer"],
+        payload: {
+          requestedNoteIds: ["world_persona_transfer"],
+          derivedNoteIds: [],
+          applyNoteIds: ["world_persona_transfer"],
         mode: "copy",
         destinationChatId: "chat-persona-b",
       },
@@ -990,7 +990,8 @@ async function main() {
       headers,
       payload: { chatId: "chat-a" },
     });
-    assert.equal(trimmedContext.statusCode, 502, trimmedContext.body);
+    assert.equal(trimmedContext.statusCode, 400, trimmedContext.body);
+    assert.equal(trimmedContext.json().code, "ltm_model_context_capacity");
     assert.match(trimmedContext.json().error, /source is too large/);
     fitContextMode = "normal";
     assert.equal(
@@ -1071,6 +1072,54 @@ async function main() {
       transferWithoutDerived.json().selection.includedDerivedCount,
       0,
     );
+    await storageService.storage.createNote({
+      id: "source_transfer_noop_root",
+      title: "No-op transfer root",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      provenance: { kind: "lorebook", sourceId: "transfer-fixture", entryId: "root" },
+      sections: { source: { text: "Transfer root", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await storageService.storage.createNote({
+      id: "world_transfer_ready_derived",
+      title: "Ready derived transfer",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: [],
+      links: [{ target: "source_transfer_noop_root", relation: "extracted_from" }],
+      sections: { facts: { text: "Ready derived transfer", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    const derivedOnlyPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer-preview",
+      headers,
+      payload: { noteIds: ["source_transfer_noop_root"], mode: "copy", destinationChatId: "chat-b", includeDerived: true },
+    });
+    assert.equal(derivedOnlyPreview.statusCode, 200, derivedOnlyPreview.body);
+    assert.deepEqual(derivedOnlyPreview.json().buckets.noOp, ["source_transfer_noop_root"]);
+    assert.deepEqual(derivedOnlyPreview.json().buckets.ready, ["world_transfer_ready_derived"]);
+    const derivedOnlyApply = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer",
+      headers,
+      payload: {
+        requestedNoteIds: ["source_transfer_noop_root"],
+        derivedNoteIds: ["world_transfer_ready_derived"],
+        applyNoteIds: ["world_transfer_ready_derived"],
+        mode: "copy",
+        destinationChatId: "chat-b",
+      },
+    });
+    assert.equal(derivedOnlyApply.statusCode, 200, derivedOnlyApply.body);
+    assert.deepEqual(derivedOnlyApply.json().updatedNoteIds, ["world_transfer_ready_derived"]);
     const extractionActivity = (
       await app.inject({
         method: "GET",
@@ -1787,7 +1836,8 @@ async function main() {
               modelCalls += 1;
               completionOptions.push(options);
               if (failGameRefine) throw new Error("Fixture refine failure");
-              const payload = JSON.parse(messages.at(-1).content);
+              const payload = JSON.parse(messages.at(-1).content) as Record<string, unknown>;
+              assert.ok(payload);
               return {
                 content: JSON.stringify({
                   summary: "Extracted Moon Vault discovery.",

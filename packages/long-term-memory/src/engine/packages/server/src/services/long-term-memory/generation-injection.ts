@@ -104,7 +104,7 @@ export async function prepareGenerationLongTermMemory(input: {
         selected: retrieval.chunks.map((candidate) => ({
           noteId: candidate.chunk.noteId,
           sectionKey: candidate.chunk.sectionKey,
-          score: candidate.finalNormalizedScore ?? candidate.normalizedScore ?? candidate.score,
+          score: candidate.relevanceScore,
           lanes: candidate.lanes,
           reasons: candidate.reasons,
           estimatedTokens: candidate.estimatedTokens,
@@ -112,7 +112,7 @@ export async function prepareGenerationLongTermMemory(input: {
         rejected: retrieval.rejected.map((candidate) => ({
           noteId: candidate.noteId,
           sectionKey: candidate.sectionKey,
-          score: candidate.finalNormalizedScore ?? candidate.normalizedScore ?? candidate.score,
+          score: candidate.relevanceScore,
           lanes: candidate.lanes,
           reasons: candidate.reasons,
           rejectionReason: candidate.rejectionReason,

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import {
   ltmBulkNoteRequestSchema,
@@ -38,7 +39,8 @@ import {
   safeJoin,
   vaultFolderForNoteType,
 } from "./paths.js";
-import { recoverInterruptedLtmBackupRestore } from "./restore-recovery.js";
+import { isLtmBackupRestoreActive, recoverInterruptedLtmBackupRestore } from "./restore-recovery.js";
+import { readLtmNoteSummary } from "./index-state.js";
 import {
   longTermMemoryRetentionConfigPath,
   runLongTermMemoryRetention,
@@ -46,6 +48,7 @@ import {
 import { longTermMemoryUsagePath, readLongTermMemoryUsage } from "./usage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { LtmServiceError } from "./service-error.js";
 import { quarantineLegacyCapturedTurnSources } from "./legacy-source-quarantine.js";
 import { isAdditiveLtmSection } from "./draft-projector.js";
 import {
@@ -60,6 +63,16 @@ import {
 export type UpdateLtmNotePatch = Partial<
   Omit<LtmNote, "id" | "createdAt" | "updatedAt" | "version">
 >;
+export type ListLtmNotesOptions = {
+  type?: LtmNoteType;
+  status?: LtmNote["status"];
+  tag?: string;
+  scope?: LtmScope;
+  characterIds?: string[];
+  includeGlobal?: boolean;
+  offset?: number;
+  limit?: number;
+};
 
 function rewriteDraftMutationNoteIds(
   mutation: unknown,
@@ -133,8 +146,12 @@ export class LongTermMemoryStorage {
   constructor(readonly root = getLongTermMemoryRoot()) {}
   async initializeLtmStore() {
     return withLtmVaultLock(this.root, async () => {
-      if (initialized.has(this.root)) return;
-      await recoverInterruptedLtmBackupRestore(this.root);
+      const rootKey = resolve(this.root);
+      if (initialized.has(rootKey)) {
+        await runLongTermMemoryRetention({ root: this.root }).catch(() => {});
+        return;
+      }
+      if (!isLtmBackupRestoreActive(this.root)) await recoverInterruptedLtmBackupRestore(this.root);
       const dirs = getLongTermMemoryDirectories(this.root);
       await Promise.all([
         mkdir(dirs.events, { recursive: true }),
@@ -149,6 +166,7 @@ export class LongTermMemoryStorage {
       ]);
       await recoverLtmMutations(this.root);
       await quarantineLegacyCapturedTurnSources(this.root);
+      await readLtmNoteSummary(this.root);
       const configs = [
         [
           longTermMemoryRetentionConfigPath(this.root),
@@ -165,72 +183,90 @@ export class LongTermMemoryStorage {
         const parsed = schema.parse(await readJsonFile(path, fallback));
         await writeJsonAtomic(path, parsed);
       }
-      initialized.add(this.root);
+      initialized.add(rootKey);
       await runLongTermMemoryRetention({ root: this.root }).catch(() => {});
     });
   }
-  async listNotes(
-    filter: {
-      type?: LtmNoteType;
-      status?: LtmNote["status"];
-      tag?: string;
-      scope?: LtmScope;
-      characterIds?: string[];
-      includeGlobal?: boolean;
-    } = {},
-  ) {
-    await this.initializeLtmStore();
-    const notes: LtmNote[] = [];
-    const dirs = getLongTermMemoryDirectories(this.root);
-    const folders = filter.type
-      ? [vaultFolderForNoteType(filter.type)]
-      : LTM_VAULT_FOLDERS;
-    for (const folder of folders)
-      for (const entry of await readdir(safeJoin(dirs.vault, folder), {
-        withFileTypes: true,
-      }))
-        if (entry.isFile() && entry.name.endsWith(".json")) {
-          const note = parseStoredLtmNote(
-            JSON.parse(
-              await readFile(
-                safeJoin(dirs.vault, `${folder}/${entry.name}`),
-                "utf8",
-              ),
-            ),
+  async listNotes(filter: ListLtmNotesOptions = {}) {
+    return withLtmVaultLock(this.root, async () => {
+      await this.initializeLtmStore();
+      const notes: LtmNote[] = [];
+      const dirs = getLongTermMemoryDirectories(this.root);
+      const folders = filter.type
+        ? [vaultFolderForNoteType(filter.type)]
+        : LTM_VAULT_FOLDERS;
+      const files = (
+        await Promise.all(
+          folders.map(async (folder) =>
+            (await readdir(safeJoin(dirs.vault, folder), { withFileTypes: true }))
+              .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+              .map((entry) => ({ folder, name: entry.name })),
+          ),
+        )
+      ).flat().sort((left, right) => left.name.localeCompare(right.name) || left.folder.localeCompare(right.folder));
+      const offset = filter.offset ?? 0;
+      let matched = 0;
+      for (const file of files) {
+        const note = parseStoredLtmNote(
+          JSON.parse(await readFile(safeJoin(dirs.vault, `${file.folder}/${file.name}`), "utf8")),
+        );
+        if (vaultFolderForNoteType(note.type) !== file.folder)
+          throw new Error(
+            `Long-term memory note ${note.id} has type ${note.type} but is stored in ${file.folder}.`,
           );
-          if (vaultFolderForNoteType(note.type) !== folder)
-            throw new Error(
-              `Long-term memory note ${note.id} has type ${note.type} but is stored in ${folder}.`,
-            );
-          if (filter.status && note.status !== filter.status) continue;
-          if (filter.tag && !note.tags.includes(filter.tag)) continue;
-          if (
-            (filter.scope ||
-              filter.characterIds?.length ||
-              filter.includeGlobal === false) &&
-            !matchesLtmScope(note, {
-              scope: filter.scope,
-              characterIds: filter.characterIds,
-              includeGlobal: filter.includeGlobal,
-            })
-          )
-            continue;
-          notes.push(note);
-        }
-    return notes.sort((a, b) => a.id.localeCompare(b.id));
+        if (filter.status && note.status !== filter.status) continue;
+        if (filter.tag && !note.tags.includes(filter.tag)) continue;
+        if (
+          (filter.scope || filter.characterIds?.length || filter.includeGlobal === false) &&
+          !matchesLtmScope(note, {
+            scope: filter.scope,
+            characterIds: filter.characterIds,
+            includeGlobal: filter.includeGlobal,
+          })
+        ) continue;
+        if (matched++ < offset) continue;
+        notes.push(note);
+        if (filter.limit !== undefined && notes.length >= filter.limit) break;
+      }
+      return filter.limit === undefined ? notes.sort((a, b) => a.id.localeCompare(b.id)) : notes;
+    });
   }
   async getNote(id: string) {
     const wanted = ltmNoteIdSchema.parse(id);
-    return (await this.listNotes()).find((n) => n.id === wanted) ?? null;
+    await this.initializeLtmStore();
+    return withLtmVaultLock(this.root, async () => {
+      return this.readNoteByIdUnlocked(wanted);
+    });
   }
   async getNotesByIds(ids: string[]) {
     const wanted = new Set(ids.map((id) => ltmNoteIdSchema.parse(id)));
     if (!wanted.size) return new Map<string, LtmNote>();
-    return new Map(
-      (await this.listNotes())
-        .filter((note) => wanted.has(note.id))
-        .map((note) => [note.id, note]),
-    );
+    await this.initializeLtmStore();
+    return withLtmVaultLock(this.root, async () => {
+      const notes = new Map<string, LtmNote>();
+      for (const id of wanted) {
+        const note = await this.readNoteByIdUnlocked(id);
+        if (note) notes.set(note.id, note);
+      }
+      return notes;
+    });
+  }
+  private async readNoteByIdUnlocked(id: string) {
+    const dirs = getLongTermMemoryDirectories(this.root);
+    for (const folder of LTM_VAULT_FOLDERS) {
+      const path = safeJoin(dirs.vault, `${folder}/${id}.json`);
+      try {
+        const note = parseStoredLtmNote(JSON.parse(await readFile(path, "utf8")));
+        if (vaultFolderForNoteType(note.type) !== folder)
+          throw new Error(
+            `Long-term memory note ${note.id} has type ${note.type} but is stored in ${folder}.`,
+          );
+        return note;
+      } catch (error) {
+        if (!isEnoent(error)) throw error;
+      }
+    }
+    return null;
   }
   async createNote(input: unknown) {
     await this.initializeLtmStore();
@@ -257,7 +293,7 @@ export class LongTermMemoryStorage {
     });
     return withLtmVaultLock(this.root, async () => {
       if (await this.getNote(note.id))
-        throw new Error(`Long-term memory note already exists: ${note.id}`);
+        throw new LtmServiceError(`Long-term memory note already exists: ${note.id}`, 409, "ltm_note_already_exists");
       const event = ltmEventSchema.parse({
         id: randomUUID(),
         ts: nowIso(),
@@ -324,7 +360,7 @@ export class LongTermMemoryStorage {
     await this.initializeLtmStore();
     return withLtmVaultLock(this.root, async () => {
       const current = await this.getNote(id);
-      if (!current) throw new Error(`Long-term memory note not found: ${id}`);
+      if (!current) throw new LtmServiceError(`Long-term memory note not found: ${id}`, 404, "ltm_note_not_found");
       if (patch.type && patch.type !== current.type)
         throw new Error(
           "Changing long-term memory note type is not supported by this package version.",
@@ -334,13 +370,15 @@ export class LongTermMemoryStorage {
         !isGlobalLtmScope(current.scope) &&
         isGlobalLtmScope(patch.scope)
       )
-        throw new Error(
+        throw new LtmServiceError(
           "Clearing every scope would make this memory global. Remove scope links with the scope-removal action instead; it safely deletes the memory when no explicit scope remains.",
+          400,
+          "ltm_scope_removal_unsafe",
         );
       const sections =
         patch.sections && current.type !== "source"
           ? Object.fromEntries(
-              Object.entries(patch.sections).map(([key, section]) => {
+              Object.entries({ ...current.sections, ...patch.sections }).map(([key, section]) => {
                 const previous = current.sections[key];
                 const { contributions: _previousContributions, ...previousFields } =
                   previous ?? {};
@@ -537,8 +575,10 @@ export class LongTermMemoryStorage {
     if (from === to) return { rewrittenNoteCount: 0, rewrittenDraftCount: 0 };
     return withLtmVaultLock(this.root, async () => {
       if (!(await this.getNote(to)))
-        throw new Error(
+        throw new LtmServiceError(
           `Long-term memory replacement note does not exist: ${to}`,
+          404,
+          "ltm_note_not_found",
         );
       const timestamp = nowIso(),
         notes = await this.listNotes(),
@@ -639,10 +679,10 @@ export class LongTermMemoryStorage {
     return withLtmVaultLock(this.root, async () => {
       const notes = await this.listNotes(),
         current = notes.find((note) => note.id === currentId);
-      if (!current)
-        throw new Error(`Long-term memory note not found: ${currentId}`);
-      if (notes.some((note) => note.id === targetId))
-        throw new Error(`Long-term memory note already exists: ${targetId}`);
+       if (!current)
+         throw new LtmServiceError(`Long-term memory note not found: ${currentId}`, 404, "ltm_note_not_found");
+       if (notes.some((note) => note.id === targetId))
+         throw new LtmServiceError(`Long-term memory note already exists: ${targetId}`, 409, "ltm_note_already_exists");
       const timestamp = nowIso(),
         renamed = ltmNoteSchema.parse({
           ...current,
@@ -777,8 +817,8 @@ export class LongTermMemoryStorage {
   }
   async archiveSourceNoteWithDerived(id: string) {
     return withLtmVaultLock(this.root, async () => {
-      const source = await this.getNote(id);
-      if (!source) throw new Error(`Long-term memory note not found: ${id}`);
+       const source = await this.getNote(id);
+       if (!source) throw new LtmServiceError(`Long-term memory note not found: ${id}`, 404, "ltm_note_not_found");
       const notes = await this.listNotes();
       const targets = [
         source,
@@ -962,8 +1002,8 @@ export class LongTermMemoryStorage {
   ) {
     await this.initializeLtmStore();
     return withLtmVaultLock(this.root, async () => {
-      const note = await this.getNote(id);
-      if (!note) throw new Error(`Long-term memory note not found: ${id}`);
+       const note = await this.getNote(id);
+       if (!note) throw new LtmServiceError(`Long-term memory note not found: ${id}`, 404, "ltm_note_not_found");
       const removedChatIds = new Set(input.chatIds ?? []);
       const removedCharacterIds = new Set(input.characterIds ?? []);
       const existingChatIds = getLtmScopeChatIds(note.scope);
@@ -1003,6 +1043,6 @@ export class LongTermMemoryStorage {
     });
   }
   async cleanup() {
-    initialized.delete(this.root);
+    initialized.delete(resolve(this.root));
   }
 }

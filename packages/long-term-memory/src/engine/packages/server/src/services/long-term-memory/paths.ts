@@ -15,7 +15,7 @@ export const LTM_VAULT_FOLDERS = ["sources", "timeline", "characters", "relation
 export function getLongTermMemoryRoot(dataDir = getPackageDataDir()) { return join(dataDir, LTM_DIR_NAME); }
 export function getLongTermMemoryDirectories(root = getLongTermMemoryRoot()) {
   return {
-    root, vault: join(root, "vault"), events: join(root, "events"), debug: join(root, "debug"),
+    root, vault: join(root, LTM_VAULT_DIR), events: join(root, "events"), debug: join(root, "debug"),
     indexes: join(root, "indexes"), config: join(root, "config"), drafts: join(root, "drafts"),
     transactions: join(root, "transactions"), receipts: join(root, "events", "receipts"),
     eventLog: join(root, "events", "log.jsonl"), debugLog: join(root, "debug", "log.jsonl"),

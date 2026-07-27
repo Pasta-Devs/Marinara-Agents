@@ -1,17 +1,8 @@
-import type { LtmMemoryChunk } from "./chunking.js";
-
-export interface LtmBm25Posting {
-  chunkId: string;
-  count: number;
-}
-
-export interface LtmBm25Index {
-  version: 1;
-  chunkCount: number;
-  avgDocLength: number;
-  documents: Record<string, { length: number }>;
-  terms: Record<string, { documentFrequency: number; postings: LtmBm25Posting[] }>;
-}
+import type {
+  LtmBm25Index,
+  LtmBm25Posting,
+  LtmMemoryChunk,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 const TOKEN_PATTERN = /[\p{L}\p{N}_]+/gu;
 const K1 = 1.2;
@@ -70,7 +61,6 @@ export function searchLtmBm25(
 
   const scores = new Map<string, number>();
   const queryTerms = new Set(tokenizeLtmText(query));
-  const maxPostingsPerTerm = Math.max(1, options.maxPostingsPerTerm ?? 128);
   const maxCandidates = Math.max(1, options.maxCandidates ?? options.topK ?? 50);
 
   for (const term of queryTerms) {
@@ -78,9 +68,8 @@ export function searchLtmBm25(
     if (!entry) continue;
 
     const idf = Math.log(1 + (index.chunkCount - entry.documentFrequency + 0.5) / (entry.documentFrequency + 0.5));
-    for (const posting of entry.postings.slice(0, maxPostingsPerTerm)) {
-      if (options.allowedChunks && !options.allowedChunks.has(posting.chunkId)) continue;
-      if (!scores.has(posting.chunkId) && scores.size >= maxCandidates) continue;
+    const postings = entry.postings.filter((posting) => !options.allowedChunks || options.allowedChunks.has(posting.chunkId));
+    for (const posting of (options.maxPostingsPerTerm ? postings.slice(0, Math.max(1, options.maxPostingsPerTerm)) : postings)) {
       const document = index.documents[posting.chunkId];
       if (!document) continue;
       const denominator = posting.count + K1 * (1 - B + B * (document.length / index.avgDocLength));

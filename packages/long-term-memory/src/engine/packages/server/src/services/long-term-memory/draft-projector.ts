@@ -15,6 +15,7 @@ import { stableStringify } from "./chunking.js";
 import { uniqueStrings } from "./ltm-utils.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 import { subjectsEqual } from "./subject-identity.js";
+import { LtmServiceError } from "./service-error.js";
 import {
   renderSectionContributions,
   sectionContributions,
@@ -27,8 +28,11 @@ export type LtmProjectedChange = { kind: "section" | "link" | "keywords" | "stat
 export type LtmMutationProjection = { mutationId: string; noteId: string; disposition: LtmMutationDisposition; changes: LtmProjectedChange[] };
 export type LtmProjectedNoteMutationGroup = { noteId: string; before: LtmNote | null; after: LtmNote; changed: boolean; mutations: LtmMutationProjection[] };
 
-export class LtmDraftProjectionError extends Error {
-  constructor(message: string, readonly code: string) { super(message); this.name = "LtmDraftProjectionError"; }
+export class LtmDraftProjectionError extends LtmServiceError {
+  constructor(message: string, readonly code: string) {
+    super(message, 409, code);
+    this.name = "LtmDraftProjectionError";
+  }
 }
 
 export function noteIdForLtmDraftMutation(mutation: LtmDraftMutation) {

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -31,37 +31,42 @@ const onboardingSteps = [
   {
     label: "How it works",
     title: "How Long-Term Memory Works",
-    sprite: "Mari_wave.png",
+    mobileSprite: "Mari_wave.png",
+    desktopSprite: "Mari_wave.png",
+    mobileFlip: false,
     alt: "",
-    spriteClass: "h-24 justify-self-end md:h-40 md:justify-self-auto",
   },
   {
     label: "Activate",
     title: "Activate For A Chat",
-    sprite: "Mari_point_up_left.png",
+    mobileSprite: "Mari_point_up_left.png",
+    desktopSprite: "Mari_point_up_left.png",
+    mobileFlip: true,
     alt: "",
-    spriteClass: "h-28 justify-self-end md:h-44 md:justify-self-auto",
   },
   {
     label: "Import",
     title: "Import Sources",
-    sprite: "Mari_point_middle_left.png",
+    mobileSprite: "Mari_point_down_left.png",
+    desktopSprite: "Mari_point_middle_left.png",
     alt: "",
-    spriteClass: "h-28 justify-self-end md:h-44 md:justify-self-auto",
+    mobileFlip: true,
   },
   {
     label: "Review",
     title: "Review Proposed Memories",
-    sprite: "Mari_point_down_left.png",
+    mobileSprite: "Mari_point_down_left.png",
+    desktopSprite: "Mari_point_up_left.png",
+    mobileFlip: false,
     alt: "",
-    spriteClass: "h-28 justify-self-end md:h-44 md:justify-self-auto",
   },
   {
     label: "Recall",
     title: "Save And Recall",
-    sprite: "Mari_explaining.png",
+    mobileSprite: "Mari_explaining.png",
+    desktopSprite: "Mari_explaining.png",
+    mobileFlip: false,
     alt: "",
-    spriteClass: "h-24 justify-self-end md:h-40 md:justify-self-auto",
   },
 ] as const;
 
@@ -71,6 +76,12 @@ const destinations = {
   sources: lazy(() => import("./SourcesWorkspace")),
   settings: lazy(() => import("./MemorySettings")),
 } as const;
+const destinationLabels: Record<LongTermMemoryDestination, string> = {
+  vault: "Memory Vault",
+  review: "Review Queue",
+  sources: "Sources",
+  settings: "Memory Settings",
+};
 
 export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const status = useQuery({
@@ -86,6 +97,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement>(null);
   const [createMemoryRequest, setCreateMemoryRequest] = useState<number | null>(
     null,
   );
@@ -99,6 +111,22 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const Destination = destinations[destination];
+
+  useEffect(() => {
+    if (!addOpen) return;
+    const close = (event: PointerEvent) => {
+      if (!addMenuRef.current?.contains(event.target as Node)) setAddOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAddOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [addOpen]);
 
   useEffect(() => {
     props.onDirtyChange?.(destinationDirty);
@@ -134,7 +162,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   };
   const selectDestination = async (next: LongTermMemoryDestination) => {
     if (next === destination) return;
-    if (!(await confirmDestinationChange(next))) return;
+    if (!(await confirmDestinationChange(destinationLabels[next]))) return;
     if (onboardingOpen) completeOnboarding();
     setDestinationDirty(false);
     if (next === "review") setReviewSourceNoteId(null);
@@ -299,7 +327,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             </div>
           ) : null}
           {destination === "vault" ? (
-            <div className="relative">
+            <div ref={addMenuRef} className="relative">
               <Button
                 primary
                 className="max-sm:min-h-8 min-h-8 min-w-8 px-2 sm:min-h-9 sm:min-w-0 sm:px-3"
@@ -410,6 +438,46 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               data-ltm-surface="onboarding"
               className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--secondary)]/45"
             >
+              <style>{`
+                [data-ltm-onboarding-body] {
+                  display: grid;
+                  grid-template-columns: minmax(0, 1fr);
+                  align-items: center;
+                  gap: 1.25rem;
+                }
+                [data-ltm-onboarding-sprite-wrap] {
+                  display: flex;
+                  min-height: 7rem;
+                  align-items: center;
+                  justify-content: flex-end;
+                }
+                [data-ltm-onboarding-sprite] {
+                  display: block;
+                  width: auto;
+                  height: 7rem;
+                  max-width: 100%;
+                  object-fit: contain;
+                }
+                [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
+                  transform: scaleX(-1);
+                }
+                @media (min-width: 768px) {
+                  [data-ltm-onboarding-body] {
+                    grid-template-columns: minmax(0, 1fr) 12rem;
+                  }
+                  [data-ltm-onboarding-sprite-wrap] {
+                    min-height: 11rem;
+                    justify-content: center;
+                  }
+                  [data-ltm-onboarding-sprite] {
+                    height: 11rem;
+                    max-width: 12rem;
+                  }
+                  [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
+                    transform: none;
+                  }
+                }
+              `}</style>
               <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
                 <img
                   src="/sprites/mari/chibi-professor-mari.png"
@@ -428,7 +496,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   {onboardingSteps[onboardingStep].label}
                 </p>
               </div>
-              <div className="grid items-center gap-5 p-4 sm:p-6 md:grid-cols-[minmax(0,1fr)_12rem]">
+              <div data-ltm-onboarding-body className="p-4 sm:p-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <h2
@@ -497,21 +565,31 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     You can replay this guide with the help button above.
                   </p>
                 </div>
-                <img
-                  src={`/sprites/mari/${onboardingSteps[onboardingStep].sprite}`}
-                  alt={onboardingSteps[onboardingStep].alt}
-                  draggable={false}
-                  data-ltm-onboarding-sprite={
-                    onboardingSteps[onboardingStep].sprite
-                  }
-                  className={`order-first w-full max-w-[42%] object-contain md:order-last md:max-w-none ${onboardingSteps[onboardingStep].spriteClass}`}
-                />
+                <div data-ltm-onboarding-sprite-wrap>
+                  <picture>
+                    <source
+                      media="(min-width: 768px)"
+                      srcSet={`/sprites/mari/${onboardingSteps[onboardingStep].desktopSprite}`}
+                    />
+                    <img
+                      src={`/sprites/mari/${onboardingSteps[onboardingStep].mobileSprite}`}
+                      alt={onboardingSteps[onboardingStep].alt}
+                      draggable={false}
+                      data-ltm-onboarding-sprite={
+                        onboardingSteps[onboardingStep].mobileSprite
+                      }
+                      data-ltm-onboarding-mobile-flip={
+                        onboardingSteps[onboardingStep].mobileFlip || undefined
+                      }
+                    />
+                  </picture>
+                </div>
               </div>
             </section>
           ) : null}
           <Suspense
             fallback={
-              <StatusSurface busy>Loading {destination}...</StatusSurface>
+              <StatusSurface busy>Loading {destinationLabels[destination]}...</StatusSurface>
             }
           >
             <Destination

@@ -586,6 +586,36 @@ export const ltmSectionKeySchema = z
     "Section key must be lowercase snake_case.",
   );
 
+const ltmUsageChunkSchema = z
+  .object({
+    chunkId: z.string().min(1).max(240),
+    noteId: ltmNoteIdSchema,
+    sectionKey: ltmSectionKeySchema,
+    lastRetrievedAt: ltmIsoTimestampSchema,
+    lastInjectedAt: ltmIsoTimestampSchema,
+    retrievalCount: z.number().int().min(0),
+    injectionCount: z.number().int().min(0),
+    totalInjectedTokens: z.number().int().min(0),
+  })
+  .strict();
+
+export const ltmUsageSchema = z
+  .object({
+    version: z.literal(2),
+    chats: z.record(
+      z.string().min(1).max(120),
+      z.object({
+        chunks: z.record(z.string().min(1).max(240), ltmUsageChunkSchema),
+      }).strict(),
+    ),
+    acceptedReceipts: z
+      .record(z.string().min(1).max(240), z.union([ltmIsoTimestampSchema, z.literal(true)]))
+      .optional(),
+  })
+  .strict();
+
+export type LtmUsage = z.infer<typeof ltmUsageSchema>;
+
 export const ltmScopeSchema = z
   .object({
     chatId: z.string().min(1).max(120).optional(),
@@ -687,6 +717,26 @@ export const ltmNoteTransferPreviewResponseSchema = z
   })
   .strict();
 
+export const ltmNoteTransferApplyRequestSchema = z
+  .object({
+    requestedNoteIds: z.array(ltmNoteIdSchema).min(1).max(500).refine((ids) => new Set(ids).size === ids.length, "Requested note IDs must be unique."),
+    derivedNoteIds: z.array(ltmNoteIdSchema).max(500).default([]).refine((ids) => new Set(ids).size === ids.length, "Derived note IDs must be unique."),
+    applyNoteIds: z.array(ltmNoteIdSchema).min(1).max(500).refine((ids) => new Set(ids).size === ids.length, "Applied note IDs must be unique."),
+    mode: ltmNoteTransferModeSchema,
+    destinationChatId: z.string().min(1).max(120),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const requested = new Set(value.requestedNoteIds);
+    if (value.requestedNoteIds.length + value.derivedNoteIds.length > 500)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Transfer selection cannot exceed 500 notes." });
+    if (value.derivedNoteIds.some((id) => requested.has(id)))
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Requested and derived transfer IDs must be disjoint." });
+    const available = new Set([...value.requestedNoteIds, ...value.derivedNoteIds]);
+    if (value.applyNoteIds.some((id) => !available.has(id)))
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Applied note IDs must be part of the transfer selection." });
+  });
+
 export const ltmSourceDerivedMemorySchema = z
   .object({
     id: ltmNoteIdSchema,
@@ -755,9 +805,20 @@ export const ltmRelationshipDimensionsSchema = z
   })
   .strict();
 
-export const ltmRelationshipDimensionChangesSchema = z.record(
-  z.number().int().min(-100).max(100),
-);
+export const ltmRelationshipDimensionChangesSchema = z
+  .object({
+    trust: z.number().int().min(-100).max(100).optional(),
+    respect: z.number().int().min(-100).max(100).optional(),
+    loyalty: z.number().int().min(-100).max(100).optional(),
+    intimacy: z.number().int().min(-100).max(100).optional(),
+    tension: z.number().int().min(-100).max(100).optional(),
+    hostility: z.number().int().min(-100).max(100).optional(),
+    dependency: z.number().int().min(-100).max(100).optional(),
+    affection: z.number().int().min(-100).max(100).optional(),
+    lust: z.number().int().min(-100).max(100).optional(),
+    protectiveness: z.number().int().min(-100).max(100).optional(),
+  })
+  .strict();
 
 export const ltmEvidenceUnitSchema = z
   .object({
@@ -1859,7 +1920,7 @@ export const ltmDraftRiskSchema = z.enum(["low", "medium", "high"]);
 export const ltmDraftSourceSchema = z
   .object({
     chatId: z.string().min(1).max(120).optional(),
-    sourceNoteId: ltmNoteIdSchema.optional(),
+    sourceNoteId: ltmNoteIdSchema,
     summaryEntryId: z.string().min(1).max(120).optional(),
     sourceHash: z
       .string()
@@ -1867,10 +1928,7 @@ export const ltmDraftSourceSchema = z
       .optional(),
     extractionFingerprint: ltmExtractionFingerprintSchema.optional(),
   })
-  .refine((value) => Boolean(value.sourceNoteId), {
-    message: "Long-term memory drafts must be tied to a source note.",
-    path: ["sourceNoteId"],
-  });
+  .strict();
 
 export const ltmDraftNoteInputSchema = z
   .object({
@@ -2093,7 +2151,8 @@ export const ltmExtractionDraftSchema = z
     createdAt: ltmIsoTimestampSchema,
     updatedAt: ltmIsoTimestampSchema,
     operationId: z.string().uuid().optional(),
-    source: ltmDraftSourceSchema.default({}),
+    reviewRequired: z.boolean().default(false),
+    source: ltmDraftSourceSchema,
     scope: ltmScopeSchema.default({}),
     modes: z.array(ltmModeSchema).min(1).max(8),
     summary: z.string().max(2_000).default(""),
@@ -2453,6 +2512,7 @@ export const ltmImportSourceNotesRequestSchema = z
     connectionId: z.string().min(1).max(120).optional(),
     model: z.string().min(1).max(240).optional(),
     instruction: z.string().max(2_000).optional(),
+    chatId: z.string().min(1).max(120).optional(),
     applyLowRisk: z.boolean().optional(),
     extract: z.boolean().default(true),
     importConcurrency: z.number().int().min(1).max(10).optional(),
@@ -2705,6 +2765,7 @@ export type LtmNoteTransferPreviewRequest = z.infer<
 export type LtmNoteTransferPreviewResponse = z.infer<
   typeof ltmNoteTransferPreviewResponseSchema
 >;
+export type LtmNoteTransferApplyRequest = z.infer<typeof ltmNoteTransferApplyRequestSchema>;
 export type LtmSourceDerivedMemory = z.infer<
   typeof ltmSourceDerivedMemorySchema
 >;

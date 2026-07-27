@@ -24,7 +24,7 @@ import type {
   LtmStatus,
   LtmSubject,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, queryKeys, request } from "./api";
+import { invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
 import {
   Button,
   ClickSurface,
@@ -110,7 +110,7 @@ type RemoveCurrentChatResponse = {
   note?: LtmNote;
 };
 
-let sessionTarget: Target | null = null;
+const sessionTargets = new Map<string, Target>();
 
 function fingerprint(note: LtmNote | null) {
   return note ? JSON.stringify(note) : "";
@@ -316,7 +316,9 @@ export default function MemoryVault({
   const [targetSearch, setTargetSearch] = useState("");
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [activeTargetIndex, setActiveTargetIndex] = useState(0);
-  const [target, setTarget] = useState<Target | null>(() => sessionTarget);
+  const contextKey = props.chatId ?? "__global__";
+  const [target, setTarget] = useState<Target | null>(() => sessionTargets.get(contextKey) ?? null);
+  const targetContextKey = useRef(contextKey);
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">("all");
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -333,6 +335,8 @@ export default function MemoryVault({
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
   const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
+  const deleteDialogRef = useRef<HTMLDialogElement>(null);
+  const deleteTriggerRef = useRef<HTMLElement | null>(null);
   const [openActionNoteId, setOpenActionNoteId] = useState<string | null>(null);
   const [retractExtracted, setRetractExtracted] = useState(false);
   const [linkTarget, setLinkTarget] = useState("");
@@ -340,6 +344,8 @@ export default function MemoryVault({
     useState<LtmLink["relation"]>("involves");
   const [subjectKey, setSubjectKey] = useState("");
   const [sectionKey, setSectionKey] = useState("");
+  const editorSession = useRef(0);
+  const noteLoadSession = useRef(0);
 
   const scopeTargets = useQuery({
     queryKey: queryKeys.scopeTargets(props.chatId),
@@ -369,8 +375,42 @@ export default function MemoryVault({
       setTarget({ id: "all", label: "All memories" });
   }, [props.chatId, scopeTargets.isSuccess, target]);
   useEffect(() => {
-    if (target) sessionTarget = target;
-  }, [target]);
+    if (target && targetContextKey.current === contextKey)
+      sessionTargets.set(contextKey, target);
+  }, [contextKey, target]);
+  useEffect(() => {
+    setTarget((current) => current?.id === `chat:${props.chatId}`
+      ? { ...current, label: props.chatName ?? "Current chat" }
+      : current);
+  }, [props.chatId, props.chatName]);
+  useEffect(() => {
+    editorSession.current += 1;
+    noteLoadSession.current += 1;
+    targetContextKey.current = contextKey;
+    setTarget(sessionTargets.get(contextKey) ?? (props.chatId ? {
+      id: `chat:${props.chatId}`,
+      label: props.chatName ?? "Current chat",
+      scope: { chatId: props.chatId, chatIds: [props.chatId] },
+    } : null));
+    setDraft(null);
+    setSaved("");
+    setIsNew(false);
+    setBusy("");
+    setError("");
+    setNotice("");
+    setDeleteIds(null);
+    setOpenActionNoteId(null);
+    setRetractExtracted(false);
+    setDetailsOpen(false);
+    setTargetSearch("");
+    setTargetsOpen(false);
+    setLinkTarget("");
+    setLinkRelation("involves");
+    setSubjectKey("");
+    setSectionKey("");
+    setChecked(new Set());
+    setMobilePane("memories");
+  }, [contextKey, props.chatId]);
   useEffect(() => {
     if (
       target?.id === `chat:${props.chatId}` &&
@@ -384,10 +424,10 @@ export default function MemoryVault({
     }
   }, [props.chatId, scopeTargets.data, target?.id]);
   const notes = useQuery({
-    queryKey: [...queryKeys.notes, target?.id, target?.scope],
-    enabled: Boolean(target),
+    queryKey: [...queryKeys.notes, contextKey, target?.id, target?.scope],
+    enabled: Boolean(target) && targetContextKey.current === contextKey,
     queryFn: () =>
-      request<LtmNote[]>(
+      requestAllNotes<LtmNote>(
         `/notes?${new URLSearchParams({
           ...(target?.scope?.chatIds?.length
             ? { scopeChatIds: target.scope.chatIds.join(",") }
@@ -503,14 +543,27 @@ export default function MemoryVault({
     return () => document.removeEventListener("pointerdown", closeScopePicker);
   }, [targetsOpen]);
 
-  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
+  const dirtyRef = useRef(dirty);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   useEffect(() => {
     if (!openedNoteId) return;
+    const loadSession = ++noteLoadSession.current;
+    const requestContext = contextKey;
     void request<LtmNote>(`/notes/${encodeURIComponent(openedNoteId)}`)
-      .then(openNote)
-      .catch(() => setError("The requested memory is no longer available."));
-  }, [openedNoteId]);
+      .then((note) => {
+        if (loadSession !== noteLoadSession.current || requestContext !== targetContextKey.current)
+          return;
+        return openNote(note, requestContext);
+      })
+      .catch(() => {
+        if (loadSession === noteLoadSession.current && requestContext === targetContextKey.current)
+          setError("The requested memory is no longer available.");
+      });
+  }, [openedNoteId, contextKey]);
   useEffect(() => {
     if (!recoveryHandoff) return;
     const next = recoveredNote(recoveryHandoff);
@@ -521,8 +574,28 @@ export default function MemoryVault({
     setNotice("Review the recovered suggestion before saving.");
     setMobilePane("editor");
   }, [recoveryHandoff?.key]);
+  useEffect(() => {
+    if (deleteIds) {
+      const dialog = deleteDialogRef.current;
+      if (!dialog) return;
+      if (!dialog.open) {
+        if (typeof dialog.showModal === "function") dialog.showModal();
+        else dialog.setAttribute("open", "");
+      }
+      dialog
+        .querySelector<HTMLElement>("[data-ltm-delete-cancel]")
+        ?.focus();
+      return;
+    }
+    if (busy) return;
+    const trigger = deleteTriggerRef.current;
+    if (!trigger) return;
+    if (trigger.isConnected) trigger.focus();
+    else detailRef.current?.focus();
+    deleteTriggerRef.current = null;
+  }, [busy, deleteIds]);
   async function confirm(next: string) {
-    if (!dirty) return true;
+    if (!dirtyRef.current) return true;
     const options = {
       title: "Discard unsaved memory changes?",
       message: `Your changes will be lost before ${next}.`,
@@ -535,19 +608,34 @@ export default function MemoryVault({
   }
   async function selectTarget(next: Target) {
     if (!(await confirm(`opening ${next.label}`))) return;
+    editorSession.current += 1;
+    noteLoadSession.current += 1;
     setTarget(next);
     setTargetSearch("");
     setTargetsOpen(false);
     setDraft(null);
     setChecked(new Set());
+    setSaved("");
+    setIsNew(false);
+    setLinkTarget("");
+    setLinkRelation("involves");
+    setSubjectKey("");
+    setSectionKey("");
     setMobilePane("memories");
   }
-  async function openNote(note: LtmNote) {
+  async function openNote(note: LtmNote, expectedContextKey = targetContextKey.current) {
+    if (expectedContextKey !== targetContextKey.current) return;
     if (!(await confirm(`opening ${memoryLabel(note)}`))) return;
+    if (expectedContextKey !== targetContextKey.current) return;
     const next = structuredClone(note);
+    editorSession.current += 1;
     setDraft(next);
     setSaved(fingerprint(next));
     setIsNew(false);
+    setLinkTarget("");
+    setLinkRelation("involves");
+    setSubjectKey("");
+    setSectionKey("");
     setError("");
     setNotice("");
     setDetailsOpen(false);
@@ -562,9 +650,14 @@ export default function MemoryVault({
   async function startNew() {
     if (!(await confirm("creating a new memory"))) return;
     const next = newNote(target?.scope ?? {});
+    editorSession.current += 1;
     setDraft(next);
     setSaved("");
     setIsNew(true);
+    setLinkTarget("");
+    setLinkRelation("involves");
+    setSubjectKey("");
+    setSectionKey("");
     setDetailsOpen(false);
     setMobilePane("editor");
     requestAnimationFrame(() =>
@@ -581,8 +674,14 @@ export default function MemoryVault({
   }, [createMemoryRequest]);
   async function closeDraft() {
     if (!(await confirm("closing this memory"))) return;
+    editorSession.current += 1;
     setDraft(null);
     setSaved("");
+    setIsNew(false);
+    setLinkTarget("");
+    setLinkRelation("involves");
+    setSubjectKey("");
+    setSectionKey("");
     setMobilePane("memories");
   }
   async function invalidate() {
@@ -609,6 +708,8 @@ export default function MemoryVault({
       );
       return;
     }
+    const session = editorSession.current;
+    const submittedFingerprint = fingerprint(draft);
     setBusy("save");
     setError("");
     try {
@@ -640,20 +741,43 @@ export default function MemoryVault({
             ),
           );
       const next = structuredClone(response.note);
-      setDraft(next);
-      setSaved(fingerprint(next));
-      setIsNew(false);
-      setNotice("Memory saved.");
+      if (session !== editorSession.current) return;
+      setDraft((current) => {
+        if (session !== editorSession.current) return current;
+        if (fingerprint(current) === submittedFingerprint) {
+          setSaved(fingerprint(next));
+          setIsNew(false);
+          setNotice("Memory saved.");
+          return next;
+        }
+        setSaved(fingerprint(next));
+        setIsNew(false);
+        setNotice("Memory saved. Your newer edits remain unsaved.");
+        return current
+          ? {
+              ...current,
+              id: next.id,
+              type: next.type,
+              createdAt: next.createdAt,
+              updatedAt: next.updatedAt,
+              version: next.version,
+              ...(next.provenance ? { provenance: next.provenance } : {}),
+              ...(next.extractionFingerprint
+                ? { extractionFingerprint: next.extractionFingerprint }
+                : {}),
+            }
+          : current;
+      });
       await invalidate();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not save memory.",
-      );
+      if (session === editorSession.current)
+        setError(cause instanceof Error ? cause.message : "Could not save memory.");
     } finally {
-      setBusy("");
+      if (session === editorSession.current) setBusy("");
     }
   }
   async function deleteSelected(ids: string[], retract = false) {
+    const session = editorSession.current;
     setBusy("delete");
     try {
       const result = await request<{ deletedIds: string[] }>(
@@ -661,6 +785,7 @@ export default function MemoryVault({
         "POST",
         { ids, retractExtracted: retract },
       );
+      if (session !== editorSession.current) return;
       setChecked((current) => {
         const next = new Set(current);
         result.deletedIds.forEach((id) => next.delete(id));
@@ -678,11 +803,10 @@ export default function MemoryVault({
       );
       await invalidate();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not update memories.",
-      );
+      if (session === editorSession.current)
+        setError(cause instanceof Error ? cause.message : "Could not update memories.");
     } finally {
-      setBusy("");
+      if (session === editorSession.current) setBusy("");
     }
   }
   async function runBatchForIds(
@@ -691,10 +815,15 @@ export default function MemoryVault({
     options?: { preserveSelection?: boolean },
   ) {
     if (!ids.length) return;
+    const session = editorSession.current;
     const includesSource = ids.some(
       (id) => allNotes.find((note) => note.id === id)?.type === "source",
     );
     if (action === "delete" && includesSource) {
+      deleteTriggerRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
       setRetractExtracted(false);
       setDeleteIds(ids);
       return;
@@ -723,6 +852,7 @@ export default function MemoryVault({
         ...(action === "status" ? { status: bulkStatus } : {}),
         ...(action === "modes" ? { modes: bulkModes } : {}),
       });
+      if (session !== editorSession.current) return;
       const unresolved = new Set([
         ...result.skippedNoteIds,
         ...result.failedNoteIds,
@@ -751,11 +881,10 @@ export default function MemoryVault({
       }
       await invalidate();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not update memories.",
-      );
+      if (session === editorSession.current)
+        setError(cause instanceof Error ? cause.message : "Could not update memories.");
     } finally {
-      setBusy("");
+      if (session === editorSession.current) setBusy("");
     }
   }
   async function batch(action: "status" | "modes" | "archive" | "delete") {
@@ -782,6 +911,7 @@ export default function MemoryVault({
   };
   async function removeFromCurrentChat() {
     if (!draft || !props.chatId) return;
+    const session = editorSession.current;
     const unsavedWarning = dirty
       ? " Your unsaved edits will also be lost."
       : "";
@@ -807,6 +937,7 @@ export default function MemoryVault({
       >(`/notes/${encodeURIComponent(draft.id)}/scope/current-chat`, "DELETE", {
         chatId: props.chatId,
       });
+      if (session !== editorSession.current) return;
       if (result.deleted) {
         setDraft(null);
         setSaved("");
@@ -824,13 +955,10 @@ export default function MemoryVault({
       }
       await invalidate();
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not remove memory from this chat.",
-      );
+      if (session === editorSession.current)
+        setError(cause instanceof Error ? cause.message : "Could not remove memory from this chat.");
     } finally {
-      setBusy("");
+      if (session === editorSession.current) setBusy("");
     }
   }
   const update = <K extends keyof LtmNote>(key: K, value: LtmNote[K]) =>
@@ -1242,11 +1370,38 @@ export default function MemoryVault({
         </section>
       ) : null}
       {deleteIds ? (
-        <div
-          role="dialog"
+        <dialog
+          ref={deleteDialogRef}
           aria-modal="true"
           aria-labelledby="ltm-delete-title"
-          className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+          onCancel={(event) => {
+            event.preventDefault();
+            if (!busy) setDeleteIds(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setDeleteIds(null);
+              return;
+            }
+            if (event.key !== "Tab") return;
+            const focusable = Array.from(
+              event.currentTarget.querySelectorAll<HTMLElement>(
+                'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
+              ),
+            );
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }}
+          className="fixed inset-0 z-50 m-0 grid h-full w-full place-items-center bg-black/50 p-4"
         >
           <section className="w-full max-w-md space-y-4 rounded-md border border-[var(--border)] bg-[var(--background)] p-5 shadow-xl">
             <div className="space-y-1">
@@ -1271,6 +1426,7 @@ export default function MemoryVault({
             </label>
             <div className="flex justify-end gap-2">
               <Button
+                data-ltm-delete-cancel
                 disabled={Boolean(busy)}
                 onClick={() => setDeleteIds(null)}
               >
@@ -1286,7 +1442,7 @@ export default function MemoryVault({
               </Button>
             </div>
           </section>
-        </div>
+        </dialog>
       ) : null}
       <div
         data-ltm-vault-workspace

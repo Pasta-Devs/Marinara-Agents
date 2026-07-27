@@ -1,28 +1,36 @@
 import { readdir, readFile, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { ltmRetentionConfigSchema } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { DEFAULT_LTM_RETENTION_CONFIG } from "./default-config.js";
 import { readJsonFile, writeJsonAtomic, writeTextAtomic } from "./atomic-json.js";
 import { isEnoent } from "./ltm-utils.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { readLongTermMemoryUsage, longTermMemoryUsagePath } from "./usage.js";
+import { withLtmVaultLock } from "./vault-lock.js";
+
+const lastRetentionRun = new Map<string, number>();
+const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export const longTermMemoryRetentionConfigPath = (root = getLongTermMemoryRoot()) =>
   safeJoin(getLongTermMemoryDirectories(root).config, "retention.json");
 
-export async function runLongTermMemoryRetention({
+async function runLongTermMemoryRetentionUnsafe({
   root = getLongTermMemoryRoot(),
   now = new Date(),
   force = false,
 } = {}) {
   const dirs = getLongTermMemoryDirectories(root);
+  const key = resolve(root);
+  const lastRun = lastRetentionRun.get(key);
+  if (!force && lastRun !== undefined && now.getTime() - lastRun < RETENTION_INTERVAL_MS)
+    return { ran: false, skippedThrottled: true, skippedPendingRecovery: false, quarantineArtifacts: 0 };
 
   const tx = await readdir(dirs.transactions).catch((e) => {
     if (isEnoent(e)) return [];
     throw e;
   });
   if (tx.some((x) => x.endsWith(".json"))) {
-    return { ran: true, skippedPendingRecovery: true, quarantineArtifacts: 0 };
+    return { ran: false, skippedPendingRecovery: true, quarantineArtifacts: 0 };
   }
 
   const config = ltmRetentionConfigSchema.parse(
@@ -161,8 +169,9 @@ export async function runLongTermMemoryRetention({
     }
   }
 
+  lastRetentionRun.set(key, now.getTime());
   return {
-    ran: force || true,
+    ran: true,
     skippedPendingRecovery: false,
     quarantineArtifacts,
     usageChatsPruned,
@@ -170,4 +179,10 @@ export async function runLongTermMemoryRetention({
     eventsRemoved,
     incompleteReceiptsRemoved,
   };
+}
+
+export function runLongTermMemoryRetention(options: Parameters<typeof runLongTermMemoryRetentionUnsafe>[0] = {}) {
+  return withLtmVaultLock(options.root ?? getLongTermMemoryRoot(), () =>
+    runLongTermMemoryRetentionUnsafe(options),
+  );
 }

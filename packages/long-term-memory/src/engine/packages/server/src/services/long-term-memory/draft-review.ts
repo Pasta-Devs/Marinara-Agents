@@ -26,6 +26,7 @@ export async function projectLongTermMemoryDraftReview(options: ProjectLtmDraftR
   const storage = new LongTermMemoryStorage(options.root);
   const drafts = (await store.listDrafts({ status: options.status ?? "pending", chatId: options.chatId })).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const overlay = await storage.getNotesByIds(uniqueStrings(drafts.flatMap((draft) => draft.mutations.map(noteIdForLtmDraftMutation))));
+  const sourceNotes = await storage.getNotesByIds(uniqueStrings(drafts.map((draft) => draft.source.sourceNoteId)));
   const sources = new Map<string, MutableSource>();
   for (const draft of drafts) {
     const sourceNoteId = draft.source.sourceNoteId;
@@ -33,7 +34,7 @@ export async function projectLongTermMemoryDraftReview(options: ProjectLtmDraftR
     const included = !options.sourceNoteId || sourceNoteId === options.sourceNoteId;
     const source = included ? (sources.get(sourceNoteId) ?? { sourceNoteId, modes: new Set(), drafts: [], targets: new Map() }) : null;
     if (source) { sources.set(sourceNoteId, source); for (const mode of draft.modes) source.modes.add(mode); }
-    const freshness = draftFreshness(draft, await storage.getNote(sourceNoteId));
+    const freshness = draftFreshness(draft, sourceNotes.get(sourceNoteId) ?? null);
     const blockReasons = blockReasonsForDraft(draft, freshness);
     const mutationIds = new Set(draft.mutations.map((mutation) => mutation.id));
     const rowDiagnostics = new Map<string, LtmExtractionDiagnostic[]>();

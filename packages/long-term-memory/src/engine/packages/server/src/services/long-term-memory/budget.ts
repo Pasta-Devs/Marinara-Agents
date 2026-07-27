@@ -1,4 +1,4 @@
-import type { LtmMemoryChunk } from "./chunking.js";
+import type { LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { formatLtmChunkPromptText } from "./prompt-text.js";
 import type { LtmRankedCandidate } from "./ranking.js";
 
@@ -7,6 +7,7 @@ export interface LtmBudgetedChunk {
   score: number;
   normalizedScore?: number;
   finalNormalizedScore?: number;
+  relevanceScore: number;
   reasons: string[];
   lanes: string[];
   laneScores?: Record<string, number>;
@@ -19,7 +20,7 @@ export interface LtmBudgetedChunk {
 export interface LtmBudgetOptions {
   maxChunks: number;
   maxTokens: number;
-  normalizedScoreThreshold?: number;
+  relevanceScoreThreshold?: number;
   explain?: boolean;
   rejectedLimit?: number;
   dedupeExactText?: boolean;
@@ -32,6 +33,7 @@ export interface LtmBudgetRejectedCandidate {
   score: number;
   normalizedScore?: number;
   finalNormalizedScore?: number;
+  relevanceScore: number;
   reasons: string[];
   lanes: string[];
   laneScores?: Record<string, number>;
@@ -82,6 +84,7 @@ function pushRejected(
     score: candidate.score,
     normalizedScore: candidate.normalizedScore,
     finalNormalizedScore: candidate.finalNormalizedScore,
+    relevanceScore: candidate.relevanceScore,
     reasons: candidate.reasons,
     lanes: candidate.lanes,
     laneScores: candidate.laneScores,
@@ -102,11 +105,11 @@ export function applyLtmBudget(
   const selectedText = new Set<string>();
   const rejected: LtmBudgetRejectedCandidate[] = [];
   const rejectedLimit = Math.max(0, options.rejectedLimit ?? 20);
-  const scoreThreshold = Math.max(0, Math.min(1, options.normalizedScoreThreshold ?? 0));
+  const scoreThreshold = Math.max(0, Math.min(1, options.relevanceScoreThreshold ?? 0));
   let usedTokens = 0;
 
   for (const candidate of candidates) {
-    const comparableScore = candidate.finalNormalizedScore ?? candidate.normalizedScore ?? 0;
+    const comparableScore = candidate.relevanceScore;
     if (scoreThreshold > 0 && comparableScore < scoreThreshold) {
       if (options.explain && rejected.length < rejectedLimit) {
         const chunk = chunksById.get(candidate.chunkId);
@@ -153,6 +156,7 @@ export function applyLtmBudget(
       score: candidate.score,
       normalizedScore: candidate.normalizedScore,
       finalNormalizedScore: candidate.finalNormalizedScore,
+      relevanceScore: candidate.relevanceScore,
       reasons: candidate.reasons,
       lanes: candidate.lanes,
       laneScores: candidate.laneScores,
