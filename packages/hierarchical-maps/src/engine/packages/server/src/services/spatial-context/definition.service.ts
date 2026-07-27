@@ -134,12 +134,15 @@ async function resolveLoreReferenceWarnings(
   definition: SpatialContextDefinition,
   persistence: Pick<CapabilityPersistenceSession, "listExistingLorebookEntryIds">,
 ): Promise<SpatialContextResponse["warnings"]> {
+  const activeLocations = definition.locations.flatMap((location, locationIndex) =>
+    location.status === "active" ? [{ location, locationIndex }] : [],
+  );
   const entryIds = Array.from(
-    new Set(definition.locations.flatMap((location) => location.lorebookEntryIds ?? [])),
+    new Set(activeLocations.flatMap(({ location }) => location.lorebookEntryIds ?? [])),
   );
   if (entryIds.length === 0) return [];
   const existingIds = new Set(await persistence.listExistingLorebookEntryIds(entryIds));
-  return definition.locations.flatMap((location, locationIndex) =>
+  return activeLocations.flatMap(({ location, locationIndex }) =>
     (location.lorebookEntryIds ?? []).flatMap((entryId, entryIndex) =>
       existingIds.has(entryId)
         ? []

@@ -1885,17 +1885,31 @@ async function main() {
 
     const definitionWithLocationLore = {
       ...definition,
-      locations: definition.locations.map((location) =>
-        location.id === "lifecycle_harbor"
-          ? {
-              ...location,
-              lorebookEntryIds: [
-                ...(location.lorebookEntryIds ?? []),
-                locationLoreEntry.id,
-              ],
-            }
-          : location,
-      ),
+      locations: [
+        ...definition.locations.map((location) =>
+          location.id === "lifecycle_harbor"
+            ? {
+                ...location,
+                lorebookEntryIds: [
+                  ...(location.lorebookEntryIds ?? []),
+                  locationLoreEntry.id,
+                ],
+              }
+            : location,
+        ),
+        {
+          id: "lifecycle_archived_region",
+          parentId: null,
+          name: "Lifecycle Archived Region",
+          kind: "region",
+          description: "A retired region retained only for campaign history.",
+          childPresentation: "list",
+          links: [],
+          lorebookEntryIds: ["missing-archived-lifecycle-lore-entry"],
+          status: "archived",
+          sortOrder: 1,
+        },
+      ],
     };
 
     await expectJson(app, {
@@ -1952,6 +1966,14 @@ async function main() {
           warning.locationId === "lifecycle_harbor",
       ),
       "Definition reads must report missing lore links through the host persistence facade",
+    );
+    assert.ok(
+      saved.warnings.some(
+        (warning) =>
+          warning.code === "lorebook_entry_missing" &&
+          warning.locationId === "lifecycle_archived_region",
+      ),
+      "The prior artifact must reproduce archived-location lore warnings before update",
     );
     const ownerTurn = (await expectJson(app, {
       method: "POST",
@@ -2233,6 +2255,27 @@ async function main() {
     catalogOnline = false;
     await app.close();
     app = await buildApp();
+    const upgradedBranchSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as { warnings: Array<{ code: string; locationId?: string }> };
+    assert.ok(
+      upgradedBranchSpatial.warnings.some(
+        (warning) =>
+          warning.code === "lorebook_entry_missing" &&
+          warning.locationId === "lifecycle_harbor",
+      ),
+      "The updated artifact must keep warning for an active location's missing lore link",
+    );
+    assert.equal(
+      upgradedBranchSpatial.warnings.some(
+        (warning) =>
+          warning.code === "lorebook_entry_missing" &&
+          warning.locationId === "lifecycle_archived_region",
+      ),
+      false,
+      "The updated artifact must ignore missing lore links retained only on archived locations",
+    );
     const narratedPrompt = (await expectJson(app, {
       method: "POST",
       url: `/api/chats/${branch.id}/peek-prompt`,
