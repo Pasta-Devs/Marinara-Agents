@@ -1776,19 +1776,45 @@ test("Map editor fills missing location artwork with one image per location", as
   const generatedRequests: Array<{
     prompt: string;
     title: string;
+    mapsArtworkContext?: {
+      locationName: string;
+      locationDescription: string;
+      locationType: string;
+      parentLocationName: string;
+      parentLocationDescription: string;
+      locationPath: string;
+    };
     promptOverride?: string;
     negativePromptOverride?: string;
   }> = [];
-  const previewRequests: Array<{ id: string; title: string; prompt: string }> = [];
+  const previewRequests: Array<{
+    id: string;
+    title: string;
+    prompt: string;
+    mapsArtworkContext?: {
+      locationName: string;
+      locationDescription: string;
+      locationType: string;
+      parentLocationName: string;
+      parentLocationDescription: string;
+      locationPath: string;
+    };
+  }> = [];
   try {
     await page.route(`**/api/gallery/${chat.id}/generate-image/preview`, async (route) => {
       const payload = route.request().postDataJSON() as {
-        items?: Array<{ id?: unknown; title?: unknown; prompt?: unknown }>;
+        items?: Array<{
+          id?: unknown;
+          title?: unknown;
+          prompt?: unknown;
+          mapsArtworkContext?: (typeof previewRequests)[number]["mapsArtworkContext"];
+        }>;
       };
       const items = (payload.items ?? []).map((item) => ({
         id: typeof item.id === "string" ? item.id : "",
         title: typeof item.title === "string" ? item.title : "",
         prompt: typeof item.prompt === "string" ? item.prompt : "",
+        mapsArtworkContext: item.mapsArtworkContext,
       }));
       previewRequests.push(...items);
       await route.fulfill({
@@ -1823,6 +1849,7 @@ test("Map editor fills missing location artwork with one image per location", as
       const payload = route.request().postDataJSON() as {
         prompt?: unknown;
         title?: unknown;
+        mapsArtworkContext?: (typeof generatedRequests)[number]["mapsArtworkContext"];
         promptOverride?: unknown;
         negativePromptOverride?: unknown;
       };
@@ -1831,7 +1858,13 @@ test("Map editor fills missing location artwork with one image per location", as
       const promptOverride = typeof payload.promptOverride === "string" ? payload.promptOverride : undefined;
       const negativePromptOverride =
         typeof payload.negativePromptOverride === "string" ? payload.negativePromptOverride : undefined;
-      generatedRequests.push({ prompt, title, promptOverride, negativePromptOverride });
+      generatedRequests.push({
+        prompt,
+        title,
+        mapsArtworkContext: payload.mapsArtworkContext,
+        promptOverride,
+        negativePromptOverride,
+      });
       const id = `generated-map-art-${generatedRequests.length}`;
       await route.fulfill({
         status: 200,
@@ -1877,12 +1910,28 @@ test("Map editor fills missing location artwork with one image per location", as
     await fillArtwork.click();
     await expect(fillArtwork).toHaveCount(0);
     expect(previewRequests).toHaveLength(2);
+    expect(previewRequests.find((request) => request.title === "Shrouded Coast")?.mapsArtworkContext).toEqual({
+      locationName: "Shrouded Coast",
+      locationDescription: "A coast hidden beneath sea fog.",
+      locationType: "Region",
+      parentLocationName: "",
+      parentLocationDescription: "",
+      locationPath: "Shrouded Coast",
+    });
+    expect(previewRequests.find((request) => request.title === "Gloam Harbor")?.mapsArtworkContext).toEqual({
+      locationName: "Gloam Harbor",
+      locationDescription: "A busy harbor of black piers.",
+      locationType: "Settlement",
+      parentLocationName: "Shrouded Coast",
+      parentLocationDescription: "A coast hidden beneath sea fog.",
+      locationPath: "Shrouded Coast > Gloam Harbor",
+    });
     expect(generatedRequests).toHaveLength(0);
     await expect(workspace).toContainText("Review 2 image requests");
     await expect(workspace).toContainText("Maps Art Connection");
     await expect(workspace).toContainText("test-art-model");
     await expect(workspace).toContainText("Velvet Campaign");
-    await expect(workspace).toContainText("Genre + art style");
+    await expect(workspace).toContainText("Campaign art style");
     await expect(workspace).toContainText("Scene instructions");
     await expect(workspace).toContainText("Included");
     await expect(workspace).toContainText("1280 × 768");
@@ -1902,6 +1951,9 @@ test("Map editor fills missing location artwork with one image per location", as
     expect(generatedRequestsByTitle.get("Gloam Harbor")!.prompt).toContain("Gloam Harbor");
     expect(generatedRequestsByTitle.get("Shrouded Coast")!.promptOverride).toBe(editedPositive);
     expect(generatedRequestsByTitle.get("Shrouded Coast")!.negativePromptOverride).toBe(editedNegative);
+    expect(generatedRequestsByTitle.get("Shrouded Coast")!.mapsArtworkContext).toEqual(
+      previewRequests.find((request) => request.title === "Shrouded Coast")!.mapsArtworkContext,
+    );
     expect(generatedRequestsByTitle.get("Gloam Harbor")!.promptOverride).toBe(
       `Engine campaign style. ${generatedRequestsByTitle.get("Gloam Harbor")!.prompt}`,
     );

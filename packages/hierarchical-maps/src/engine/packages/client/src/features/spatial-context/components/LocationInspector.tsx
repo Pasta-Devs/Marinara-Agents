@@ -10,9 +10,12 @@ import type {
   SpatialLinkState,
 } from "@marinara-engine/shared";
 import { cn } from "../package-utils";
-import { getSpatialDescendantIds } from "@marinara-engine/shared";
+import { getSpatialDescendantIds, resolveSpatialBreadcrumb } from "@marinara-engine/shared";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
-import type { SpatialHierarchyProfile } from "../../../../../maps-shared/src/maps-model";
+import {
+  hierarchyTypeForLocation,
+  type SpatialHierarchyProfile,
+} from "../../../../../maps-shared/src/maps-model";
 import {
   useGenerateSpatialGalleryImage,
   useSpatialGalleryImages,
@@ -160,6 +163,27 @@ export function defaultLocationReferencePrompt(location: SpatialLocation): strin
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+export function locationArtworkContext(
+  definition: SpatialContextDefinition,
+  hierarchyProfile: SpatialHierarchyProfile,
+  location: SpatialLocation,
+) {
+  const parent = location.parentId
+    ? definition.locations.find((candidate) => candidate.id === location.parentId) ?? null
+    : null;
+  return {
+    locationName: location.name.trim() || "this location",
+    locationDescription: location.description.trim(),
+    locationType: hierarchyTypeForLocation(hierarchyProfile, location).label,
+    parentLocationName: parent?.name.trim() ?? "",
+    parentLocationDescription: parent?.description.trim() ?? "",
+    locationPath: resolveSpatialBreadcrumb(definition, location.id)
+      .map((entry) => entry.name.trim())
+      .filter(Boolean)
+      .join(" > "),
+  };
 }
 
 interface LocationInspectorProps {
@@ -551,7 +575,11 @@ export function LocationInspector({
                 onClick={() => {
                   setGeneratedReferenceImage(null);
                   generateReferenceImage.mutate(
-                    { prompt: referenceGenerationPrompt.trim(), debugMode },
+                    {
+                      prompt: referenceGenerationPrompt.trim(),
+                      mapsArtworkContext: locationArtworkContext(definition, hierarchyProfile, location),
+                      debugMode,
+                    },
                     { onSuccess: setGeneratedReferenceImage },
                   );
                 }}

@@ -57,6 +57,15 @@ export interface SpatialGalleryImagePromptPreview {
   items: SpatialGalleryImagePromptPreviewItem[];
 }
 
+export interface SpatialMapsArtworkContext {
+  locationName: string;
+  locationDescription: string;
+  locationType: string;
+  parentLocationName: string;
+  parentLocationDescription: string;
+  locationPath: string;
+}
+
 export function useSpatialChat(chatId: string | null) {
   return useQuery({
     queryKey: spatialResourceKeys.chat(chatId ?? ""),
@@ -89,6 +98,7 @@ export function useGenerateSpatialGalleryImage(chatId: string) {
     mutationFn: (input: {
       prompt: string;
       title?: string;
+      mapsArtworkContext?: SpatialMapsArtworkContext;
       promptOverride?: string;
       negativePromptOverride?: string;
       debugMode?: boolean;
@@ -106,7 +116,12 @@ export function useGenerateSpatialGalleryImage(chatId: string) {
 export function usePreviewSpatialGalleryImages(chatId: string) {
   return useMutation({
     mutationFn: (input: {
-      items: Array<{ id: string; title: string; prompt: string }>;
+      items: Array<{
+        id: string;
+        title: string;
+        prompt: string;
+        mapsArtworkContext?: SpatialMapsArtworkContext;
+      }>;
       debugMode?: boolean;
     }) =>
       packageApi.post<SpatialGalleryImagePromptPreview>(`/gallery/${chatId}/generate-image/preview`, input),

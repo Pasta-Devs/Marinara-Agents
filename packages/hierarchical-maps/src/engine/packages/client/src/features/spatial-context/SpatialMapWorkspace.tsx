@@ -44,7 +44,11 @@ import { cn } from "./package-utils";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
 import { LocalMapCanvas } from "./components/LocalMapCanvas";
-import { defaultLocationReferencePrompt, LocationInspector } from "./components/LocationInspector";
+import {
+  defaultLocationReferencePrompt,
+  locationArtworkContext,
+  LocationInspector,
+} from "./components/LocationInspector";
 import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
 import {
   addSpatialLocation,
@@ -438,7 +442,14 @@ export function SpatialMapWorkspace({
   ).length;
   const artworkPreviewSignature = missingArtworkLocations
     .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
-    .map((location) => `${location.id}\u0000${location.name}\u0000${defaultLocationReferencePrompt(location)}`)
+    .map((location) =>
+      [
+        location.id,
+        location.name,
+        defaultLocationReferencePrompt(location),
+        JSON.stringify(locationArtworkContext(draft!, draftHierarchyProfile, location)),
+      ].join("\u0000"),
+    )
     .join("\u0001");
   const canEnable =
     !!draft?.startingLocationId &&
@@ -523,6 +534,7 @@ export function SpatialMapWorkspace({
           const image = await generateGalleryImage.mutateAsync({
             prompt: reviewed?.sourcePrompt ?? defaultLocationReferencePrompt(target),
             title: target.name,
+            mapsArtworkContext: locationArtworkContext(draft, draftHierarchyProfile, target),
             ...(reviewed
               ? {
                   promptOverride: reviewed.prompt,
@@ -574,6 +586,7 @@ export function SpatialMapWorkspace({
     artworkProgress,
     debugMode,
     draft,
+    draftHierarchyProfile,
     generateGalleryImage,
     missingArtworkLocations,
   ]);
@@ -586,6 +599,7 @@ export function SpatialMapWorkspace({
         id: location.id,
         title: location.name,
         prompt: defaultLocationReferencePrompt(location),
+        mapsArtworkContext: locationArtworkContext(draft!, draftHierarchyProfile, location),
       }));
     try {
       const preview = await previewGalleryImages.mutateAsync({ items, debugMode });
@@ -593,7 +607,7 @@ export function SpatialMapWorkspace({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not prepare the image request preview.");
     }
-  }, [artworkImagesToGenerate, artworkProgress, debugMode, missingArtworkLocations, previewGalleryImages]);
+  }, [artworkImagesToGenerate, artworkProgress, debugMode, draft, draftHierarchyProfile, missingArtworkLocations, previewGalleryImages]);
 
   const flushBackgroundMove = useCallback(() => {
     backgroundMoveFrameRef.current = null;
@@ -1671,13 +1685,9 @@ export function SpatialMapWorkspace({
                   </dd>
                 </div>
                 <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
-                  <dt className="text-[var(--marinara-editor-muted)]">Campaign settings</dt>
+                  <dt className="text-[var(--marinara-editor-muted)]">Campaign art style</dt>
                   <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
-                    {artworkPreview.campaign.included
-                      ? artworkPreview.campaign.artStyleIncluded
-                        ? "Genre + art style"
-                        : "Genre context"
-                      : "No saved context"}
+                    {artworkPreview.campaign.artStyleIncluded ? "Included" : "Off"}
                   </dd>
                 </div>
                 <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
