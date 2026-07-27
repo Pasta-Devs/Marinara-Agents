@@ -25,6 +25,7 @@ interface SpatialMapLibraryProps {
   enabledForChat?: boolean;
   onClose: () => void;
   onAppliedToChat?: () => void;
+  onSelectForSetup?: (template: SpatialMapTemplateRecord) => void;
   onOpenLorebook?: (lorebookId: string) => void;
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
 }
@@ -52,6 +53,7 @@ export function SpatialMapLibrary({
   enabledForChat = false,
   onClose,
   onAppliedToChat,
+  onSelectForSetup,
   onOpenLorebook,
   onEnabledForChatChange,
 }: SpatialMapLibraryProps) {
@@ -158,6 +160,16 @@ export function SpatialMapLibrary({
   };
 
   const applyToChat = async (template: SpatialMapTemplateRecord) => {
+    if (onSelectForSetup) {
+      const confirmed = await ask({
+        title: "Use this map template?",
+        message: `Create a Game-owned working copy of “${template.name}” for review? The saved template will stay unchanged.`,
+        confirmLabel: "Use template",
+        tone: "accent",
+      });
+      if (confirmed) onSelectForSetup(template);
+      return;
+    }
     if (!supportedChat || !chatId || !spatial.data) return;
     const existing = spatial.data.definition;
     const confirmed = await ask({
@@ -319,13 +331,13 @@ export function SpatialMapLibrary({
                   </div>
                   <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
                     <button type="button" onClick={() => setEditingId(template.id)} className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs"><PencilLine size="0.75rem" /> Edit</button>
-                    {supportedChat ? (
-                      <button type="button" onClick={() => void applyToChat(template)} disabled={updateSpatial.isPending || spatial.isLoading || template.data.definition.locations.length === 0 || !template.data.definition.startingLocationId} className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"><Plus size="0.75rem" /> Add to chat</button>
+                    {supportedChat || onSelectForSetup ? (
+                      <button type="button" onClick={() => void applyToChat(template)} disabled={updateSpatial.isPending || (!onSelectForSetup && spatial.isLoading) || template.data.definition.locations.length === 0 || !template.data.definition.startingLocationId} className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"><Plus size="0.75rem" /> {onSelectForSetup ? "Use template" : "Add to chat"}</button>
                     ) : (
                       <button type="button" onClick={() => void removeTemplate(template)} disabled={deleteTemplate.isPending} className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs text-[var(--destructive)] disabled:opacity-45"><Trash2 size="0.75rem" /> Delete</button>
                     )}
                   </div>
-                  {supportedChat && <button type="button" onClick={() => void removeTemplate(template)} disabled={deleteTemplate.isPending} className="mt-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:opacity-45"><Trash2 size="0.75rem" /> Delete template</button>}
+                  {(supportedChat || onSelectForSetup) && <button type="button" onClick={() => void removeTemplate(template)} disabled={deleteTemplate.isPending} className="mt-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:opacity-45"><Trash2 size="0.75rem" /> Delete template</button>}
                 </article>
               ))}
             </div>

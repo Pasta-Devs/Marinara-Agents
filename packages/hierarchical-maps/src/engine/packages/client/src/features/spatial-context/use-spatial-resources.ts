@@ -86,7 +86,13 @@ export function useSpatialGalleryImages(chatId: string, enabled = true) {
 export function useGenerateSpatialGalleryImage(chatId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { prompt: string; title?: string; debugMode?: boolean }) =>
+    mutationFn: (input: {
+      prompt: string;
+      title?: string;
+      promptOverride?: string;
+      negativePromptOverride?: string;
+      debugMode?: boolean;
+    }) =>
       packageApi.post<SpatialGalleryImage>(`/gallery/${chatId}/generate-image`, input),
     onSuccess: (image) => {
       queryClient.setQueryData<SpatialGalleryImage[]>(spatialResourceKeys.gallery(chatId), (current = []) => [

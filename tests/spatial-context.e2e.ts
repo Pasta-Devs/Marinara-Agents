@@ -577,7 +577,11 @@ async function expectAiBuilderLayout(page: Page, mobile: boolean) {
   }
 }
 
-async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
+async function openGameSetupMapDraftReview(
+  page: Page,
+  testInfo: TestInfo,
+  planMode: "ai" | "template" = "ai",
+) {
   const suffix = `${testInfo.project.name}-${Date.now()}`;
   const chatResponse = await page.request.post("/api/chats", {
     data: {
@@ -589,6 +593,22 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   expect(chatResponse.ok()).toBeTruthy();
   const chat = (await chatResponse.json()) as Record<string, unknown> & { id: string };
   await activateHierarchicalMaps(page, chat.id);
+  let template: { id: string; revision: number; name: string } | null = null;
+  if (planMode === "template") {
+    const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(spatialResponse.ok(), await spatialResponse.text()).toBeTruthy();
+    const spatial = (await spatialResponse.json()) as { hierarchyProfile: unknown };
+    const templateResponse = await page.request.post("/api/chats/spatial-context/templates", {
+      data: {
+        name: `Setup Template ${suffix}`,
+        description: "A reusable Game setup template fixture.",
+        definition: { ...gameGeneratedDefinition, ownerMode: "roleplay", enabled: false, revision: 0 },
+        hierarchyProfile: spatial.hierarchyProfile,
+      },
+    });
+    expect(templateResponse.ok(), await templateResponse.text()).toBeTruthy();
+    template = (await templateResponse.json()) as { id: string; revision: number; name: string };
+  }
   const connection = {
     id: `e2-connection-${suffix}`,
     name: `E2 Setup Connection ${suffix}`,
@@ -659,6 +679,7 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
     });
   });
   await page.route(`**/api/chats/${chat.id}/spatial-context/generate`, async (route) => {
+    expect(planMode).toBe("ai");
     expect(setupPersisted).toBe(true);
     const request = route.request().postDataJSON() as {
       operation: string;
@@ -718,11 +739,28 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   await wizard.getByRole("button", { name: "Next" }).click();
   await expect(wizard.getByRole("heading", { name: "Features", exact: true })).toBeVisible();
   await wizard.getByRole("button", { name: /Enable Agents/ }).click();
-  await wizard.getByRole("button", { name: /Draft with AI/ }).click();
-  await wizard.getByRole("button", { name: /Small About 8 places/ }).click();
+  if (planMode === "template") {
+    await expect(wizard.getByRole("button", { name: /Draft with AI/ })).toBeVisible();
+    await expect(wizard.getByRole("button", { name: /Create manually/ })).toBeVisible();
+    await wizard.getByRole("button", { name: /Use a template/ }).click();
+  } else {
+    await wizard.getByRole("button", { name: /Draft with AI/ }).click();
+    await wizard.getByRole("button", { name: /Small About 8 places/ }).click();
+  }
   await wizard.getByRole("button", { name: "Next" }).click();
   await expect(wizard.getByRole("heading", { name: "GM", exact: true })).toBeVisible();
   await wizard.getByRole("button", { name: "Start Game" }).click();
+
+  if (planMode === "template") {
+    const library = page.locator("[data-marinara-map-template-library]");
+    await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
+    const card = library.getByRole("heading", { name: template!.name }).locator("xpath=ancestor::article");
+    await card.getByRole("button", { name: "Use template", exact: true }).click();
+    const confirm = page.getByRole("dialog").filter({ hasText: "Use this map template?" });
+    await confirm.getByRole("button", { name: "Use template", exact: true }).click();
+    await expect(page.locator("[data-marinara-maps-workspace-root]")).toBeVisible();
+    return { chat, template };
+  }
 
   await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
   await expect(page.getByText(/Your game world is ready/)).toBeVisible();
@@ -732,7 +770,7 @@ async function openGameSetupMapDraftReview(page: Page, testInfo: TestInfo) {
   await expect(page.getByRole("button", { name: "Continue to editor" })).toBeVisible();
   await expectAiBuilderLayout(page, testInfo.project.name.includes("mobile"));
 
-  return { chat };
+  return { chat, template };
 }
 
 test("Hierarchical Maps activates inside its Tracker Agents entry", async ({ page }, testInfo) => {
@@ -1419,7 +1457,20 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       .getByRole("heading", { name: "Reusable Test World" })
       .locator("xpath=ancestor::article");
     await expect(reusableTemplateCard).toBeVisible();
-    await reusableTemplateCard.getByRole("button", { name: "Add to chat" }).click();
+    await library.getByRole("button", { name: "Back to Maps" }).click();
+    await home.getByRole("button", { name: "Back to Agents" }).click();
+    await page.locator('[data-tour="panel-agents"]').click();
+    await page.getByRole("button", { name: "Chat Settings" }).click();
+    const { agentEntry } = await openHierarchicalMapsAgentControls(page);
+    await agentEntry.getByRole("button", { name: "Create hierarchical map" }).click();
+    await workspace.getByRole("button", { name: "Add a saved map template" }).click();
+
+    const chatSettingsLibrary = page.locator("[data-marinara-map-template-library]");
+    const chatSettingsTemplateCard = chatSettingsLibrary
+      .getByRole("heading", { name: "Reusable Test World" })
+      .locator("xpath=ancestor::article");
+    await expect(chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" })).toBeVisible();
+    await chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" }).click();
     const confirm = page.getByRole("dialog").filter({ hasText: "Add map template to this chat?" });
     await confirm.getByRole("button", { name: "Add to chat", exact: true }).click();
     await expect
@@ -1722,7 +1773,12 @@ test("Map editor fills missing location artwork with one image per location", as
   });
   expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
 
-  const generatedRequests: Array<{ prompt: string; title: string }> = [];
+  const generatedRequests: Array<{
+    prompt: string;
+    title: string;
+    promptOverride?: string;
+    negativePromptOverride?: string;
+  }> = [];
   const previewRequests: Array<{ id: string; title: string; prompt: string }> = [];
   try {
     await page.route(`**/api/gallery/${chat.id}/generate-image/preview`, async (route) => {
@@ -1764,10 +1820,18 @@ test("Map editor fills missing location artwork with one image per location", as
       });
     });
     await page.route(`**/api/gallery/${chat.id}/generate-image`, async (route) => {
-      const payload = route.request().postDataJSON() as { prompt?: unknown; title?: unknown };
+      const payload = route.request().postDataJSON() as {
+        prompt?: unknown;
+        title?: unknown;
+        promptOverride?: unknown;
+        negativePromptOverride?: unknown;
+      };
       const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
       const title = typeof payload.title === "string" ? payload.title : "";
-      generatedRequests.push({ prompt, title });
+      const promptOverride = typeof payload.promptOverride === "string" ? payload.promptOverride : undefined;
+      const negativePromptOverride =
+        typeof payload.negativePromptOverride === "string" ? payload.negativePromptOverride : undefined;
+      generatedRequests.push({ prompt, title, promptOverride, negativePromptOverride });
       const id = `generated-map-art-${generatedRequests.length}`;
       await route.fulfill({
         status: 200,
@@ -1818,12 +1882,17 @@ test("Map editor fills missing location artwork with one image per location", as
     await expect(workspace).toContainText("Maps Art Connection");
     await expect(workspace).toContainText("test-art-model");
     await expect(workspace).toContainText("Velvet Campaign");
-    await expect(workspace).toContainText("World + art style");
+    await expect(workspace).toContainText("Genre + art style");
     await expect(workspace).toContainText("Scene instructions");
     await expect(workspace).toContainText("Included");
     await expect(workspace).toContainText("1280 × 768");
     await expect(workspace).toContainText("Engine campaign style. Wide establishing image of Shrouded Coast");
     await expect(workspace).toContainText("global negative, campaign hard negative");
+
+    const editedPositive = "Exact reviewed coast prompt, no tower, fog over black piers.";
+    const editedNegative = "tower, text, UI, watermark";
+    await workspace.getByLabel("Positive prompt for Shrouded Coast").fill(editedPositive);
+    await workspace.getByLabel("Negative prompt for Shrouded Coast").fill(editedNegative);
 
     await workspace.locator("[data-marinara-confirm-map-artwork]").click();
     await expect.poll(() => generatedRequests.length).toBe(2);
@@ -1831,6 +1900,14 @@ test("Map editor fills missing location artwork with one image per location", as
     expect([...generatedRequestsByTitle.keys()].sort()).toEqual(["Gloam Harbor", "Shrouded Coast"]);
     expect(generatedRequestsByTitle.get("Shrouded Coast")!.prompt).toContain("Shrouded Coast");
     expect(generatedRequestsByTitle.get("Gloam Harbor")!.prompt).toContain("Gloam Harbor");
+    expect(generatedRequestsByTitle.get("Shrouded Coast")!.promptOverride).toBe(editedPositive);
+    expect(generatedRequestsByTitle.get("Shrouded Coast")!.negativePromptOverride).toBe(editedNegative);
+    expect(generatedRequestsByTitle.get("Gloam Harbor")!.promptOverride).toBe(
+      `Engine campaign style. ${generatedRequestsByTitle.get("Gloam Harbor")!.prompt}`,
+    );
+    expect(generatedRequestsByTitle.get("Gloam Harbor")!.negativePromptOverride).toBe(
+      "global negative, campaign hard negative",
+    );
 
     const beforeSaveResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     const beforeSave = (await beforeSaveResponse.json()) as {
@@ -2763,6 +2840,44 @@ test("AI map expansion preserves a campaign map and its current location", async
       await expect(mobileMusicLayer.locator(".fixed")).toBeVisible();
     }
   } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+  }
+});
+
+test("Game setup stages a saved map template as a Game-owned working copy", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The setup template handoff is shared across viewports.");
+  test.setTimeout(120_000);
+  const { chat, template } = await openGameSetupMapDraftReview(page, testInfo, "template");
+
+  try {
+    await expect(page.getByRole("region", { name: "First map setup" })).toContainText(
+      "4 locations · 2 levels · Working draft, not saved",
+    );
+    const beforeSaveResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(beforeSaveResponse.ok(), await beforeSaveResponse.text()).toBeTruthy();
+    expect(((await beforeSaveResponse.json()) as { definition: unknown }).definition).toBeNull();
+
+    await expect(page.getByRole("button", { name: "Enable and save map", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Enable and save map", exact: true }).click();
+    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+
+    const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    const stored = (await storedResponse.json()) as {
+      definition: { ownerMode: string; enabled: boolean; locations: Array<{ id: string }> };
+    };
+    expect(stored.definition.ownerMode).toBe("game");
+    expect(stored.definition.enabled).toBe(true);
+    expect(stored.definition.locations.map((location) => location.id)).toEqual(
+      gameGeneratedDefinition.locations.map((location) => location.id),
+    );
+  } finally {
+    if (template) {
+      const deleteTemplateResponse = await page.request.delete(
+        `/api/chats/spatial-context/templates/${template.id}`,
+        { data: { expectedRevision: template.revision } },
+      );
+      expect(deleteTemplateResponse.ok(), await deleteTemplateResponse.text()).toBeTruthy();
+    }
     await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
 });

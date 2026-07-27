@@ -74,6 +74,7 @@ import {
   defaultGenerationPreferences,
   defaultHierarchyProfile,
   hierarchyTypeForLocation,
+  instantiateSpatialMapTemplate,
   normalizeHierarchyProfile,
   withLocationHierarchyType,
   type SpatialHierarchyProfile,
@@ -109,6 +110,7 @@ type MapConfirmationOptions = {
 interface SpatialMapWorkspaceProps {
   chatId: string | null;
   template?: SpatialMapTemplateRecord;
+  stagedTemplate?: SpatialMapTemplateRecord | null;
   debugMode?: boolean;
   pendingDraftReview?: { chatId: string; result: GenerateSpatialMapDraftResponse } | null;
   onClearPendingDraftReview?: () => void;
@@ -154,6 +156,7 @@ function statusCopy(options: {
 export function SpatialMapWorkspace({
   chatId,
   template,
+  stagedTemplate = null,
   debugMode = false,
   pendingDraftReview = null,
   onClearPendingDraftReview,
@@ -332,7 +335,7 @@ export function SpatialMapWorkspace({
     setArtworkProgress(null);
     setTemplateName(template?.name ?? "");
     setBaseTemplateName(template?.name ?? "");
-  }, [chatId, resolveConfirmation, template?.id]);
+  }, [chatId, resolveConfirmation, stagedTemplate?.id, template?.id]);
 
   useEffect(() => {
     if (initialized) return;
@@ -351,6 +354,28 @@ export function SpatialMapWorkspace({
     }
     if (!spatial.isSuccess) return;
     const server = spatial.data.definition;
+    if (stagedTemplate) {
+      const instantiated = instantiateSpatialMapTemplate(stagedTemplate.data, ownerMode);
+      const nextDraft = {
+        ...instantiated.definition,
+        enabled: true,
+        revision: server?.revision ?? 0,
+      };
+      const baseProfile = normalizeHierarchyProfile(
+        spatial.data.hierarchyProfile,
+        server ?? createEmptySpatialDefinition(ownerMode),
+      );
+      setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
+      setDraft(nextDraft);
+      setBaseHierarchyProfile(baseProfile);
+      setDraftHierarchyProfile(normalizeHierarchyProfile(instantiated.hierarchyProfile, nextDraft));
+      setSelectedId(nextDraft.startingLocationId ?? nextDraft.locations[0]?.id ?? null);
+      setEnteredParentId(null);
+      setServerIssues(spatial.data.warnings);
+      setInitialized(true);
+      toast.success(`Loaded “${stagedTemplate.name}” as a Game working copy. Review it, then save.`);
+      return;
+    }
     const nextDraft = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
     setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
     setDraft(nextDraft);
@@ -361,7 +386,7 @@ export function SpatialMapWorkspace({
     setEnteredParentId(null);
     setServerIssues(spatial.data.warnings);
     setInitialized(true);
-  }, [initialized, ownerMode, spatial.data, spatial.isSuccess, template, templateMode]);
+  }, [initialized, ownerMode, spatial.data, spatial.isSuccess, stagedTemplate, template, templateMode]);
 
   useEffect(() => {
     if (!initialized || !pendingSetupReview) return;
@@ -480,6 +505,7 @@ export function SpatialMapWorkspace({
     let next = draft;
     let updatedLocations = 0;
     let failedImages = 0;
+    const reviewedItems = new globalThis.Map(artworkPreview?.items.map((item) => [item.id, item]) ?? []);
     setArtworkPreview(null);
     setArtworkProgress({ completed: 0, total: missingArtworkLocations.length, currentName: "" });
 
@@ -493,9 +519,16 @@ export function SpatialMapWorkspace({
       let imageId = target.referenceImageId ?? target.mapBackgroundImageId ?? null;
       if (!imageId) {
         try {
+          const reviewed = reviewedItems.get(target.id);
           const image = await generateGalleryImage.mutateAsync({
-            prompt: defaultLocationReferencePrompt(target),
+            prompt: reviewed?.sourcePrompt ?? defaultLocationReferencePrompt(target),
             title: target.name,
+            ...(reviewed
+              ? {
+                  promptOverride: reviewed.prompt,
+                  negativePromptOverride: reviewed.negativePrompt,
+                }
+              : {}),
             debugMode,
           });
           imageId = image.id;
@@ -537,6 +570,7 @@ export function SpatialMapWorkspace({
     setArtworkProgress(null);
   }, [
     applyDraft,
+    artworkPreview,
     artworkProgress,
     debugMode,
     draft,
@@ -1641,8 +1675,8 @@ export function SpatialMapWorkspace({
                   <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
                     {artworkPreview.campaign.included
                       ? artworkPreview.campaign.artStyleIncluded
-                        ? "World + art style"
-                        : "World context"
+                        ? "Genre + art style"
+                        : "Genre context"
                       : "No saved context"}
                   </dd>
                 </div>
@@ -1668,20 +1702,65 @@ export function SpatialMapWorkspace({
                     </summary>
                     <div className="grid gap-2 border-t border-white/10 px-3 py-2.5">
                       <div>
-                        <p className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]">
+                        <label
+                          htmlFor={`map-artwork-positive-${item.id}`}
+                          className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]"
+                        >
                           Prompt sent to provider
-                        </p>
-                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-black/15 p-2 font-mono text-[0.625rem] leading-relaxed text-[var(--marinara-editor-title)]">
-                          {item.prompt}
-                        </pre>
+                        </label>
+                        <textarea
+                          id={`map-artwork-positive-${item.id}`}
+                          aria-label={`Positive prompt for ${item.title}`}
+                          value={item.prompt}
+                          maxLength={200_000}
+                          rows={5}
+                          onChange={(event) =>
+                            setArtworkPreview((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    items: current.items.map((candidate) =>
+                                      candidate.id === item.id
+                                        ? { ...candidate, prompt: event.target.value }
+                                        : candidate,
+                                    ),
+                                  }
+                                : current,
+                            )
+                          }
+                          className="mari-editor-field mt-1 max-h-40 min-h-24 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
+                        />
                       </div>
                       <div>
-                        <p className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]">
+                        <label
+                          htmlFor={`map-artwork-negative-${item.id}`}
+                          className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]"
+                        >
                           Negative prompt
-                        </p>
-                        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-black/15 p-2 font-mono text-[0.625rem] leading-relaxed text-[var(--marinara-editor-title)]">
-                          {item.negativePrompt || "None"}
-                        </pre>
+                        </label>
+                        <textarea
+                          id={`map-artwork-negative-${item.id}`}
+                          aria-label={`Negative prompt for ${item.title}`}
+                          value={item.negativePrompt}
+                          maxLength={200_000}
+                          rows={3}
+                          placeholder="None"
+                          onChange={(event) =>
+                            setArtworkPreview((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    items: current.items.map((candidate) =>
+                                      candidate.id === item.id
+                                        ? { ...candidate, negativePrompt: event.target.value }
+                                        : candidate,
+                                    ),
+                                  }
+                                : current,
+                            )
+                          }
+                          className="mari-editor-field mt-1 max-h-32 min-h-20 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
+                        />
                       </div>
                     </div>
                   </details>
