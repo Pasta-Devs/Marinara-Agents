@@ -563,11 +563,13 @@ function Root({ element }) {
   const chatId = typeof props.chatId === "string" ? props.chatId : "";
   const view = element.getAttribute("view");
   const setupTemplatePending = props.pendingDraftReview?.mode === "template";
+  const pendingSetupTemplate = setupTemplatePending && props.pendingDraftReview?.selection?.payload && typeof props.pendingDraftReview.selection.payload === "object" ? props.pendingDraftReview.selection.payload : null;
+  const setupTemplateNeedsSelection = setupTemplatePending && !pendingSetupTemplate;
   useEffect(() => {
-    if (!chatId || !setupTemplatePending) return;
+    if (!chatId || !setupTemplateNeedsSelection) return;
     setWorkspaceOpen(false);
     setLibraryOpen(true);
-  }, [chatId, setupTemplatePending]);
+  }, [chatId, setupTemplateNeedsSelection]);
   useEffect(() => {
     if (!chatId) return;
     const previous = previousPendingRef.current;
@@ -590,7 +592,7 @@ function Root({ element }) {
     setWorkspaceOpen(true);
   };
   const closeLibrary = () => {
-    if (setupTemplatePending) {
+    if (setupTemplateNeedsSelection) {
       props.onClearPendingDraftReview?.();
       props.onClose?.();
       return;
@@ -598,19 +600,25 @@ function Root({ element }) {
     setLibraryOpen(false);
   };
   const selectTemplateForSetup = (template) => {
+    if (view === "setup") {
+      props.onSelect?.({ id: template.id, label: template.name, payload: template });
+      props.onClose?.();
+      return;
+    }
     setStagedTemplate(template);
     props.onClearPendingDraftReview?.();
     setLibraryOpen(false);
     setWorkspaceOpen(true);
   };
-  if (libraryOpen) return <LibraryOverlay chatId={chatId} props={props} setupSelection={setupTemplatePending} onSelectForSetup={selectTemplateForSetup} onClose={closeLibrary} onAppliedToChat={() => { setLibraryOpen(false); setWorkspaceOpen(true); }} />;
-  if (workspaceOpen && chatId) return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate} onClose={closeWorkspace} onOpenTemplates={() => setLibraryOpen(true)} />;
+  if (view === "setup") return <LibraryOverlay chatId="" props={props} setupSelection onSelectForSetup={selectTemplateForSetup} onClose={() => props.onClose?.()} />;
+  if (libraryOpen) return <LibraryOverlay chatId={chatId} props={props} setupSelection={setupTemplateNeedsSelection} onSelectForSetup={selectTemplateForSetup} onClose={closeLibrary} onAppliedToChat={() => { setLibraryOpen(false); setWorkspaceOpen(true); }} />;
+  if (workspaceOpen && chatId) return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={() => setLibraryOpen(true)} />;
   if (worldMapOpen && chatId) return <WorldMapOverlay chatId={chatId} props={props} onClose={() => setWorldMapOpen(false)} onOpenEditor={editFromWorldMap} />;
   if (view === "detail") return <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} agentInfo={props.agent || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenMap={() => setWorldMapOpen(true)} onOpenEditor={() => setWorkspaceOpen(true)} onOpenLibrary={() => setLibraryOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} confirmAction={typeof props.confirmAction === "function" ? props.confirmAction : undefined} onDirtyChange={typeof props.onDirtyChange === "function" ? props.onDirtyChange : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /><Toaster richColors /></>;
   if (!chatId) return null;
   if (view === "runtime") return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><style data-marinara-maps-runtime-styles>{runtimeStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>;
   if (view === "world-map") return <WorldMapView props={props} chatId={chatId} onOpenEditor={() => setWorkspaceOpen(true)} />;
-  if (view === "workspace") return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate} onClose={closeWorkspace} onOpenTemplates={() => setLibraryOpen(true)} />;
+  if (view === "workspace") return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={() => setLibraryOpen(true)} />;
   return <><SpatialContextSettingsSection chatId={chatId} style={props.style} enabledForChat={props.enabledForChat === true} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenEditor={() => setWorkspaceOpen(true)} /><Toaster richColors /></>;
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><CapabilityClientErrorBoundary element={this}><Root element={this} /></CapabilityClientErrorBoundary></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }

@@ -617,6 +617,7 @@ async function openGameSetupMapDraftReview(
     isDefault: false,
   };
   let setupPersisted = false;
+  let createRequestCount = 0;
 
   await page.route("**/api/connections", async (route) => {
     await route.fulfill({
@@ -626,6 +627,7 @@ async function openGameSetupMapDraftReview(
     });
   });
   await page.route("**/api/game/create", async (route) => {
+    createRequestCount += 1;
     const request = route.request().postDataJSON() as {
       chatId: string;
       connectionId?: string;
@@ -743,6 +745,16 @@ async function openGameSetupMapDraftReview(
     await expect(wizard.getByRole("button", { name: /Draft with AI/ })).toBeVisible();
     await expect(wizard.getByRole("button", { name: /Create manually/ })).toBeVisible();
     await wizard.getByRole("button", { name: /Use a template/ }).click();
+    expect(createRequestCount).toBe(0);
+    const library = page.locator("[data-marinara-map-template-library]");
+    await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
+    const card = library.getByRole("heading", { name: template!.name }).locator("xpath=ancestor::article");
+    await card.getByRole("button", { name: "Use template", exact: true }).click();
+    const confirm = page.getByRole("dialog").filter({ hasText: "Use this map template?" });
+    await confirm.getByRole("button", { name: "Use template", exact: true }).click();
+    await expect(library).toHaveCount(0);
+    await expect(wizard).toContainText(`Selected map template: ${template!.name}`);
+    expect(createRequestCount).toBe(0);
   } else {
     await wizard.getByRole("button", { name: /Draft with AI/ }).click();
     await wizard.getByRole("button", { name: /Small About 8 places/ }).click();
@@ -752,12 +764,7 @@ async function openGameSetupMapDraftReview(
   await wizard.getByRole("button", { name: "Start Game" }).click();
 
   if (planMode === "template") {
-    const library = page.locator("[data-marinara-map-template-library]");
-    await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
-    const card = library.getByRole("heading", { name: template!.name }).locator("xpath=ancestor::article");
-    await card.getByRole("button", { name: "Use template", exact: true }).click();
-    const confirm = page.getByRole("dialog").filter({ hasText: "Use this map template?" });
-    await confirm.getByRole("button", { name: "Use template", exact: true }).click();
+    await expect(page.locator("[data-marinara-map-template-library]")).toHaveCount(0);
     await expect(page.locator("[data-marinara-maps-workspace-root]")).toBeVisible();
     return { chat, template };
   }
@@ -2921,6 +2928,34 @@ test("Game setup stages a saved map template as a Game-owned working copy", asyn
     expect(stored.definition.enabled).toBe(true);
     expect(stored.definition.locations.map((location) => location.id)).toEqual(
       gameGeneratedDefinition.locations.map((location) => location.id),
+    );
+
+    const beforeStartChatResponse = await page.request.get(`/api/chats/${chat.id}`);
+    expect(beforeStartChatResponse.ok(), await beforeStartChatResponse.text()).toBeTruthy();
+    const beforeStartChat = (await beforeStartChatResponse.json()) as { metadata: unknown };
+    const beforeStartMetadata =
+      typeof beforeStartChat.metadata === "string"
+        ? (JSON.parse(beforeStartChat.metadata) as Record<string, unknown>)
+        : (beforeStartChat.metadata as Record<string, unknown>);
+    expect((beforeStartMetadata.gameInitialMapFallback as { id?: string } | null)?.id).toBe(
+      acceptedGameSetupMap.id,
+    );
+
+    const startResponse = await page.request.post("/api/game/start", { data: { chatId: chat.id } });
+    expect(startResponse.ok(), await startResponse.text()).toBeTruthy();
+    const startedChatResponse = await page.request.get(`/api/chats/${chat.id}`);
+    expect(startedChatResponse.ok(), await startedChatResponse.text()).toBeTruthy();
+    const startedChat = (await startedChatResponse.json()) as { metadata: unknown };
+    const startedMetadata =
+      typeof startedChat.metadata === "string"
+        ? (JSON.parse(startedChat.metadata) as Record<string, unknown>)
+        : (startedChat.metadata as Record<string, unknown>);
+    expect(startedMetadata.gameInitialMapFallback).toBeNull();
+    expect(startedMetadata.gameMap).toBeNull();
+    expect(startedMetadata.gameMaps).toEqual([]);
+    expect(startedMetadata.activeGameMapId).toBeNull();
+    expect((startedMetadata.gameSetupConfig as { gameWorldMapMode?: string }).gameWorldMapMode).toBe(
+      "hierarchical",
     );
   } finally {
     if (template) {
