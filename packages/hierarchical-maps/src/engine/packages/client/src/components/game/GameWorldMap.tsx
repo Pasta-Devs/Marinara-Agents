@@ -325,8 +325,8 @@ export function GameWorldMap({
                 type="button"
                 onClick={onOpenEditor}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
-                aria-label="Edit hierarchical map"
-                title="Edit hierarchical map"
+                aria-label="Edit world map"
+                title="Edit world map"
               >
                 <PencilLine size="1rem" />
               </button>

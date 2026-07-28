@@ -40,7 +40,7 @@ interface LibraryConfirmationOptions {
 
 function importedTemplateName(fileName: string): string {
   return fileName
-    .replace(/\.hierarchical-map\.json$/iu, "")
+    .replace(/\.(?:world-map|hierarchical-map)\.json$/iu, "")
     .replace(/\.json$/iu, "")
     .replace(/[-_]+/gu, " ")
     .trim() || "Imported map";

@@ -656,7 +656,7 @@ export function SpatialMapsHome({
     try {
       await onEnabledForChatChange(!enabledForChat);
     } catch (error) {
-      setActivationError(error instanceof Error ? error.message : "Hierarchical Maps could not be updated for this chat.");
+      setActivationError(error instanceof Error ? error.message : "World Maps could not be updated for this chat.");
     } finally {
       setActivationPending(false);
     }
@@ -690,7 +690,7 @@ export function SpatialMapsHome({
       setAgentFieldsSaved(true);
     } catch (error) {
       setAgentFieldsError(
-        error instanceof Error ? error.message : "Hierarchical Maps settings could not be saved.",
+        error instanceof Error ? error.message : "World Maps settings could not be saved.",
       );
     }
   };
@@ -700,13 +700,13 @@ export function SpatialMapsHome({
       const discard = confirmAction
         ? await confirmAction({
             title: "Discard agent changes?",
-            message: "You have unsaved Hierarchical Maps agent changes. Leave the editor and discard them?",
+            message: "You have unsaved World Maps agent changes. Leave the editor and discard them?",
             confirmLabel: "Discard changes",
             cancelLabel: "Keep editing",
             tone: "destructive",
           })
         : window.confirm(
-            "You have unsaved Hierarchical Maps agent changes. Leave the editor and discard them?",
+            "You have unsaved World Maps agent changes. Leave the editor and discard them?",
           );
       if (!discard) return;
     }
@@ -737,7 +737,7 @@ export function SpatialMapsHome({
           </span>
           <div className="min-w-0 flex-1">
             <h1 id="hierarchical-maps-home-title" className="mari-editor-title truncate">
-              {agentInfo?.name?.trim() || "Hierarchical Maps"}
+              {agentInfo?.name?.trim() || "World Maps"}
             </h1>
             <p className="mari-editor-meta mt-0.5">
               {agentAuthor || agentInfo?.author?.trim() || "Pasta Devs"}
@@ -859,7 +859,7 @@ export function SpatialMapsHome({
               })}
             </div>
             <p className="mt-1.5 text-[0.625rem] text-[var(--marinara-editor-muted)]">
-              Hierarchical Maps runs before generation so its saved location can ground the main AI response.
+              World Maps runs before generation so its saved location can ground the main AI response.
               This feature-owned phase is fixed.
             </p>
           </MapsFieldGroup>
@@ -942,7 +942,7 @@ export function SpatialMapsHome({
             </div>
           ) : !supportedChat ? (
             <div className="px-4 py-5 text-sm text-[var(--marinara-editor-muted)]">
-              Hierarchical Maps supports Roleplay and Game. The current {modeLabel(chatMode)} chat is unchanged.
+              World Maps supports Roleplay and Game. The current {modeLabel(chatMode)} chat is unchanged.
             </div>
           ) : (
             <div className="space-y-4 p-4">
@@ -959,7 +959,7 @@ export function SpatialMapsHome({
                 }`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium">Enable Hierarchical Maps</span>
+                  <span className="block text-xs font-medium">Enable World Maps</span>
                   <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                     {enabledForChat
                       ? "Active in this chat. Saved map context can participate in turns."
@@ -982,7 +982,7 @@ export function SpatialMapsHome({
 
               {activationPending && (
                 <p role="status" aria-live="polite" className="text-[0.6875rem] text-[var(--marinara-editor-muted)]">
-                  Updating Hierarchical Maps…
+                  Updating World Maps…
                 </p>
               )}
               {activationError && (

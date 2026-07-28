@@ -140,7 +140,7 @@ const features = [
     version: "1.2.0",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: "3.0.0",
-    name: "Hierarchical Maps",
+    name: "World Maps",
     description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
     category: "tracker",
     kind: ["agent", "maps"],
@@ -271,16 +271,16 @@ export async function activate({ app, api }) {
   }
 }
 export async function selfCheck({ api }) {
-  if (!readinessStorage) throw new Error("Hierarchical Maps storage did not initialize");
-  if (typeof api.runtime.resources?.listCharacters !== "function") throw new Error("Hierarchical Maps character resources are unavailable");
-  if (typeof api.runtime.resources?.listEligibleLorebookEntries !== "function") throw new Error("Hierarchical Maps lore resources are unavailable");
-  if (typeof api.runtime.languageModels?.resolve !== "function") throw new Error("Hierarchical Maps language model host is unavailable");
-  if (typeof api.runtime.json?.parseJsonish !== "function") throw new Error("Hierarchical Maps JSON parser is unavailable");
+  if (!readinessStorage) throw new Error("World Maps storage did not initialize");
+  if (typeof api.runtime.resources?.listCharacters !== "function") throw new Error("World Maps character resources are unavailable");
+  if (typeof api.runtime.resources?.listEligibleLorebookEntries !== "function") throw new Error("World Maps lore resources are unavailable");
+  if (typeof api.runtime.languageModels?.resolve !== "function") throw new Error("World Maps language model host is unavailable");
+  if (typeof api.runtime.json?.parseJsonish !== "function") throw new Error("World Maps JSON parser is unavailable");
   await readinessStorage.listForChat("__marinara_capability_self_check__");
   await api.runtime.resources.listCharacters([]);
   await api.runtime.resources.listEligibleLorebookEntries({ lorebookIds: [], entryIds: [] });
   const parsed = api.runtime.json.parseJsonish('Preface\\n{"ready":true}');
-  if (!parsed || typeof parsed !== "object" || parsed.ready !== true) throw new Error("Hierarchical Maps JSON parser self-check failed");
+  if (!parsed || typeof parsed !== "object" || parsed.ready !== true) throw new Error("World Maps JSON parser self-check failed");
 }\n`
       : feature.id === "conversation-calls"
       ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
@@ -576,7 +576,7 @@ class CapabilityClientErrorBoundary extends React.Component {
     const message = error instanceof Error && error.message ? error.message : "Capability client runtime failed";
     this.props.element.capabilityRuntimeError = message;
     this.props.element.dispatchEvent(new CustomEvent("marinara-capability-runtime-error", { detail: { message }, bubbles: true }));
-    console.error("Hierarchical Maps client capability stopped", error, info);
+    console.error("World Maps client capability stopped", error, info);
   }
   retry() {
     this.props.element.capabilityRuntimeError = null;
@@ -584,7 +584,7 @@ class CapabilityClientErrorBoundary extends React.Component {
   }
   render() {
     if (!this.state.error) return this.props.children;
-    return <div role="alert" className="m-3 flex items-start gap-3 rounded-lg border border-[var(--destructive)]/25 bg-[var(--destructive)]/10 p-3"><span className="min-w-0 flex-1 text-xs text-[var(--foreground)]">Hierarchical Maps stopped.</span><button type="button" onClick={() => this.retry()} className="min-h-11 min-w-11 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 text-xs font-medium text-[var(--foreground)]">Try again</button></div>;
+    return <div role="alert" className="m-3 flex items-start gap-3 rounded-lg border border-[var(--destructive)]/25 bg-[var(--destructive)]/10 p-3"><span className="min-w-0 flex-1 text-xs text-[var(--foreground)]">World Maps stopped.</span><button type="button" onClick={() => this.retry()} className="min-h-11 min-w-11 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 text-xs font-medium text-[var(--foreground)]">Try again</button></div>;
   }
   static getDerivedStateFromError(error) { return { error }; }
 }
@@ -592,10 +592,10 @@ window.addEventListener("marinara-capability-server-event", (event) => { if (eve
 function PendingBridge({ chatId, onChange, disabled }) { const pending = usePendingSpatialTransition(chatId); const onChangeRef = useRef(onChange); const wasDisabledRef = useRef(disabled === true); useEffect(() => { onChangeRef.current = onChange; }, [onChange]); useEffect(() => { if (typeof onChangeRef.current === "function") onChangeRef.current(pending); }, [pending]); useEffect(() => { const turnFinished = wasDisabledRef.current && disabled !== true; wasDisabledRef.current = disabled === true; if (!turnFinished || !pending) return; let cancelled = false; void packageApi.get("/chats/" + encodeURIComponent(chatId) + "/spatial-context").then((spatial) => { const currentPending = getPendingSpatialTransition(chatId); if (cancelled || !spatial || currentPending?.transition.commandId !== pending.transition.commandId) return; client.setQueryData(["spatial-context", chatId], spatial); if (getSpatialRoutePlan(chatId)) reconcileSpatialRoutePlan(chatId, spatial); else if (spatial.currentLocationId === pending.transition.destinationId) clearPendingSpatialTransition(chatId, pending.transition.commandId); else setPendingSpatialTransitionStatus(chatId, "needs_review"); }).catch(() => { const currentPending = getPendingSpatialTransition(chatId); if (!cancelled && currentPending?.transition.commandId === pending.transition.commandId) setPendingSpatialTransitionStatus(chatId, "needs_review"); }); return () => { cancelled = true; }; }, [chatId, disabled, pending]); return null; }
 function WorldMapView({ props, chatId, onOpenEditor, useParentScroll = false }) {
   const spatial = useSpatialContext(chatId);
-  if (spatial.isLoading) return <div className="h-full min-h-32 space-y-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-3" aria-label="Loading hierarchical world map"><span role="status" className="sr-only">Loading hierarchical world map</span><div className="h-3 w-28 animate-pulse rounded bg-[var(--muted)]" /><div className="h-24 animate-pulse rounded-lg bg-[var(--muted)]/55" /></div>;
-  if (spatial.isError) return <div role="alert" className="flex min-h-32 items-center gap-3 rounded-lg border border-[var(--destructive)]/25 bg-[var(--destructive)]/10 p-3 text-xs"><span className="min-w-0 flex-1">The hierarchical world map could not be loaded.</span><button type="button" onClick={() => void spatial.refetch()} className="min-h-11 rounded-lg px-3 font-semibold text-[var(--destructive)] hover:bg-[var(--destructive)]/10">Retry</button></div>;
-  if (!spatial.data?.definition) return <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-[var(--marinara-chat-chrome-panel-border)] px-4 text-center text-xs text-[var(--marinara-chat-chrome-accent)]">No hierarchical map yet. Create one from Agents → Hierarchical Maps.</div>;
-  if (!spatial.data.definition.enabled) return <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-[var(--marinara-chat-chrome-panel-border)] px-4 text-center text-xs text-[var(--marinara-chat-chrome-accent)]">Hierarchical map disabled. Its saved hierarchy and history are preserved.</div>;
+  if (spatial.isLoading) return <div className="h-full min-h-32 space-y-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-3" aria-label="Loading world map"><span role="status" className="sr-only">Loading world map</span><div className="h-3 w-28 animate-pulse rounded bg-[var(--muted)]" /><div className="h-24 animate-pulse rounded-lg bg-[var(--muted)]/55" /></div>;
+  if (spatial.isError) return <div role="alert" className="flex min-h-32 items-center gap-3 rounded-lg border border-[var(--destructive)]/25 bg-[var(--destructive)]/10 p-3 text-xs"><span className="min-w-0 flex-1">The world map could not be loaded.</span><button type="button" onClick={() => void spatial.refetch()} className="min-h-11 rounded-lg px-3 font-semibold text-[var(--destructive)] hover:bg-[var(--destructive)]/10">Retry</button></div>;
+  if (!spatial.data?.definition) return <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-[var(--marinara-chat-chrome-panel-border)] px-4 text-center text-xs text-[var(--marinara-chat-chrome-accent)]">No world map yet. Create one from Agents → World Maps.</div>;
+  if (!spatial.data.definition.enabled) return <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-[var(--marinara-chat-chrome-panel-border)] px-4 text-center text-xs text-[var(--marinara-chat-chrome-accent)]">World map disabled. Its saved hierarchy and history are preserved.</div>;
   return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><GameWorldMap chatId={chatId} spatial={spatial.data} disabled={props.disabled === true} compact={props.compact === true} useParentScroll={useParentScroll} onOpenEditor={onOpenEditor} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>;
 }
 function WorkspaceOverlay({ chatId, props, stagedTemplate, onClose, onOpenTemplates }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} debugMode={props.debugMode === true} stagedTemplate={stagedTemplate} pendingDraftReview={props.pendingDraftReview?.mode === "template" ? null : props.pendingDraftReview || null} onClearPendingDraftReview={() => props.onClearPendingDraftReview?.()} onDirtyChange={(dirty) => props.onDirtyChange?.(dirty)} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onOpenTemplates={onOpenTemplates} onClose={onClose} /><Toaster richColors /></div>, document.body); }
@@ -608,7 +608,7 @@ function WorldMapOverlay({ chatId, props, onClose, onOpenEditor }) {
   }, [onClose]);
   return createPortal(<div data-chat-floating-panel data-marinara-maps-world-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }}>
     <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--background)] px-3 sm:px-5">
-      <button type="button" onClick={onClose} className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-[var(--marinara-chat-chrome-accent)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]" aria-label="Back to Hierarchical Maps">Back</button>
+      <button type="button" onClick={onClose} className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-[var(--marinara-chat-chrome-accent)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]" aria-label="Back to World Maps">Back</button>
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-sm font-semibold">World map</h1>
         <p className="truncate text-[0.625rem] text-[var(--marinara-chat-chrome-accent)]">{typeof props.chatName === "string" ? props.chatName : "Current story"}</p>

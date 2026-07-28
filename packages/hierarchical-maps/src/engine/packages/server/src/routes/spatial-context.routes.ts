@@ -124,7 +124,7 @@ const spatialMapTemplateDataSchema = z
 function readSpatialMapTemplate(document: CapabilityDocumentRecord): SpatialMapTemplateRecord | null {
   const data = spatialMapTemplateDataSchema.safeParse(document.data);
   if (!data.success) {
-    logger.warn("Ignored invalid Hierarchical Maps template document %s", document.id);
+    logger.warn("Ignored invalid World Maps template document %s", document.id);
     return null;
   }
   return {
@@ -454,7 +454,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     const patch = spatialAgentConfigurationUpdateSchema.safeParse(request.body);
     if (!patch.success) {
       return reply.status(400).send({
-        error: patch.error.issues[0]?.message ?? "The Hierarchical Maps agent configuration is invalid.",
+        error: patch.error.issues[0]?.message ?? "The World Maps agent configuration is invalid.",
         code: "spatial_agent_configuration_invalid",
         issues: patch.error.issues,
       });
@@ -839,7 +839,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       throw new SpatialMapPromptRequestError(
         409,
         "spatial_ai_map_already_exists",
-        "This chat already has a hierarchical map. Expand it, or replace it before campaign history begins.",
+        "This chat already has a world map. Expand it, or replace it before campaign history begins.",
       );
     }
     if (operation === "replace" && !hasExistingMap) {
@@ -1073,7 +1073,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     const parsed = updateSpatialContextRequestSchema.safeParse(withoutKeys(body, ["hierarchyProfile"]));
     if (!parsed.success) {
       return reply.status(400).send({
-        error: parsed.error.issues[0]?.message ?? "Invalid hierarchical map.",
+        error: parsed.error.issues[0]?.message ?? "Invalid world map.",
         code: "spatial_request_invalid",
         issues: parsed.error.issues,
       });
@@ -1147,7 +1147,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     try {
       const agentConnectionId = await getPackageAgentConnectionId("hierarchical-maps").catch((error) => {
         logger.warn(
-          "Could not read the Hierarchical Maps connection override; using the chat connection: %s",
+          "Could not read the World Maps connection override; using the chat connection: %s",
           error instanceof Error ? error.message : String(error),
         );
         return null;

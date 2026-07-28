@@ -92,6 +92,21 @@ export function useSpatialGalleryImages(chatId: string, enabled = true) {
   });
 }
 
+export function uploadSpatialGalleryImage(
+  chatId: string,
+  file: File,
+  metadata: Pick<SpatialGalleryImage, "prompt" | "provider" | "model" | "width" | "height">,
+): Promise<SpatialGalleryImage> {
+  const body = new FormData();
+  body.append("prompt", metadata.prompt);
+  body.append("provider", metadata.provider);
+  body.append("model", metadata.model);
+  if (metadata.width !== null) body.append("width", String(metadata.width));
+  if (metadata.height !== null) body.append("height", String(metadata.height));
+  body.append("file", file);
+  return packageApi.upload<SpatialGalleryImage>(`/gallery/${chatId}/upload`, body);
+}
+
 export function useGenerateSpatialGalleryImage(chatId: string) {
   const queryClient = useQueryClient();
   return useMutation({

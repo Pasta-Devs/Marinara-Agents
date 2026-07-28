@@ -72,7 +72,7 @@ function assertSupportedMode(mode: string | null): asserts mode is "roleplay" | 
   if (mode !== "roleplay" && mode !== "game") {
     throw new SpatialContextServiceError(
       "spatial_mode_unsupported",
-      "Hierarchical maps are available only in Roleplay and Game chats.",
+      "World maps are available only in Roleplay and Game chats.",
       400,
     );
   }
@@ -98,7 +98,7 @@ function buildResponse(
         ? [
             {
               code: "stored_definition_invalid",
-              message: "The stored hierarchical map is invalid and has been disabled.",
+              message: "The stored world map is invalid and has been disabled.",
               path: [METADATA_KEY],
             },
           ]
@@ -236,7 +236,7 @@ export function createSpatialContextService() {
       if (stored.corrupt || !stored.definition) {
         throw new SpatialContextServiceError(
           "spatial_game_map_reconciliation_unavailable",
-          "Save the hierarchical map before reviewing existing Game map matches.",
+          "Save the world map before reviewing existing Game map matches.",
           409,
         );
       }
@@ -265,14 +265,14 @@ export function createSpatialContextService() {
         if (stored.corrupt || !stored.definition) {
           throw new SpatialContextServiceError(
             "spatial_game_map_reconciliation_unavailable",
-            "Save the hierarchical map before reviewing existing Game map matches.",
+            "Save the world map before reviewing existing Game map matches.",
             409,
           );
         }
         if (stored.definition.revision !== input.expectedDefinitionRevision) {
           throw new SpatialContextServiceError(
             "spatial_game_map_reconciliation_stale",
-            "The hierarchical map changed. Review existing Game map matches again.",
+            "The world map changed. Review existing Game map matches again.",
             409,
           );
         }
@@ -315,7 +315,7 @@ export function createSpatialContextService() {
         if (stored.corrupt) {
           throw new SpatialContextServiceError(
             "spatial_definition_corrupt",
-            "The stored hierarchical map is invalid and must be repaired before it can be updated.",
+            "The stored world map is invalid and must be repaired before it can be updated.",
             409,
           );
         }
@@ -324,7 +324,7 @@ export function createSpatialContextService() {
         if (input.expectedRevision !== currentRevision) {
           throw new SpatialContextServiceError(
             "spatial_definition_stale",
-            "The hierarchical map changed. Reload it before saving.",
+            "The world map changed. Reload it before saving.",
             409,
           );
         }
@@ -352,7 +352,7 @@ export function createSpatialContextService() {
         if (!parsedDefinition.success) {
           throw new SpatialContextServiceError(
             "spatial_replacement_invalid",
-            parsedDefinition.error.issues[0]?.message ?? "The hierarchical map is invalid.",
+            parsedDefinition.error.issues[0]?.message ?? "The world map is invalid.",
             400,
           );
         }

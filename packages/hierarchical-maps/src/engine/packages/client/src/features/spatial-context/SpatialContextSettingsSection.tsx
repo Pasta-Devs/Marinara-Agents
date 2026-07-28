@@ -31,7 +31,7 @@ export function SpatialContextSettingsSection({
     try {
       await onEnabledForChatChange(!enabledForChat);
     } catch (error) {
-      setActivationError(error instanceof Error ? error.message : "Hierarchical Maps could not be updated for this chat.");
+      setActivationError(error instanceof Error ? error.message : "World Maps could not be updated for this chat.");
     } finally {
       setActivationPending(false);
     }
@@ -53,10 +53,10 @@ export function SpatialContextSettingsSection({
           }`}
         >
           <span className="min-w-0 flex-1">
-            <span className="block text-xs font-medium text-[var(--foreground)]">Enable Hierarchical Maps</span>
+            <span className="block text-xs font-medium text-[var(--foreground)]">Enable World Maps</span>
             <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
               {enabledForChat
-                ? "Hierarchical Maps can provide location context during generation."
+                ? "World Maps can provide location context during generation."
                 : "Turn on Maps here before creating or editing this chat's map."}
             </span>
           </span>
@@ -75,7 +75,7 @@ export function SpatialContextSettingsSection({
         </button>
         {activationPending && (
           <p role="status" aria-live="polite" className="px-1 text-[0.625rem] text-[var(--marinara-chat-chrome-accent)]">
-            Updating Hierarchical Maps…
+            Updating World Maps…
           </p>
         )}
         {activationError && (
@@ -88,11 +88,11 @@ export function SpatialContextSettingsSection({
         <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--secondary)]/35 px-3 py-4 text-center">
           <p className="text-xs font-medium text-[var(--foreground)]">Maps is ready to add</p>
           <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
-            Turn on “Enable Hierarchical Maps” above to create a map or return to an existing one.
+            Turn on “Enable World Maps” above to create a map or return to an existing one.
           </p>
         </div>
       ) : spatial.isLoading ? (
-        <div className="space-y-2" aria-label="Loading hierarchical map summary">
+        <div className="space-y-2" aria-label="Loading world map summary">
           <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
           <div className="h-12 animate-pulse rounded-lg bg-[var(--muted)]" />
         </div>
@@ -141,7 +141,7 @@ export function SpatialContextSettingsSection({
             onClick={onOpenEditor}
             className="flex min-h-11 w-full items-center justify-between rounded-lg border border-[var(--border)] px-3 text-xs font-medium transition-colors duration-200 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           >
-            {definition ? "Edit hierarchical map" : "Create hierarchical map"}
+            {definition ? "Edit world map" : "Create world map"}
             <ChevronRight size="0.8125rem" />
           </button>
         </div>

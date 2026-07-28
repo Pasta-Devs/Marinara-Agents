@@ -1,8 +1,8 @@
 # Capability integration tests
 
-`spatial-context.e2e.ts` is the Hierarchical Maps package's browser integration suite. It was moved with the feature so the lightweight Engine smoke suite does not require optional routes or UI to exist.
+`spatial-context.e2e.ts` is the World Maps package's browser integration suite. It was moved with the feature so the lightweight Engine smoke suite does not require optional routes or UI to exist.
 
-Run it against a Marinara Engine checkout that has the local Hierarchical Maps package installed and active, using the Engine Playwright configuration:
+Run it against a Marinara Engine checkout that has the local World Maps package installed and active, using the Engine Playwright configuration:
 
 ```bash
 cd ../Marinara-Engine

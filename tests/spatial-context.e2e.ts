@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 type CapturedOpenAiRequest = {
@@ -392,7 +393,7 @@ async function openHierarchicalMapsAgentCategory(page: Page) {
   const drawer = page.locator(".mari-chat-settings-drawer");
   await expect(drawer).toBeVisible();
   await expect(
-    drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Hierarchical map/ }),
+    drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^World map/ }),
   ).toHaveCount(0);
   await drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents/ }).click();
   const enableAgents = drawer.getByRole("checkbox", { name: /^Enable Agents/ });
@@ -780,7 +781,7 @@ async function openGameSetupMapDraftReview(
   return { chat, template };
 }
 
-test("Hierarchical Maps activates inside its Tracker Agents entry", async ({ page }, testInfo) => {
+test("World Maps activates inside its Tracker Agents entry", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const response = await page.request.post("/api/chats", {
     data: {
@@ -826,18 +827,18 @@ test("Hierarchical Maps activates inside its Tracker Agents entry", async ({ pag
       await page.getByRole("button", { name: "Chat Settings" }).click();
     }
     const drawer = await openHierarchicalMapsAgentCategory(page);
-    await drawer.getByRole("button").filter({ hasText: /^Hierarchical Maps/ }).click();
-    const addDialog = page.getByRole("dialog", { name: "Add Hierarchical Maps" });
+    await drawer.getByRole("button").filter({ hasText: /^World Maps/ }).click();
+    const addDialog = page.getByRole("dialog", { name: "Add World Maps" });
     await expect(addDialog).toBeVisible();
     await addDialog.getByRole("button", { name: "Add", exact: true }).click();
 
     const agentEntry = drawer.locator('[data-chat-agent-entry="hierarchical-maps"]');
     await expect(agentEntry).toBeVisible();
-    const activation = agentEntry.getByRole("switch", { name: /Enable Hierarchical Maps/ });
+    const activation = agentEntry.getByRole("switch", { name: /Enable World Maps/ });
     await expect(activation).toHaveAttribute("aria-checked", "true");
     const activationHeight = await activation.evaluate((element) => element.getBoundingClientRect().height);
     expect(activationHeight).toBeGreaterThanOrEqual(44);
-    await expect(agentEntry.getByRole("button", { name: "Create hierarchical map" })).toBeVisible();
+    await expect(agentEntry.getByRole("button", { name: "Create world map" })).toBeVisible();
 
     await expect
       .poll(async () => {
@@ -858,7 +859,7 @@ test("Hierarchical Maps activates inside its Tracker Agents entry", async ({ pag
   }
 });
 
-test("global Hierarchical Maps home activates and opens the current chat map", async ({ page }, testInfo) => {
+test("global World Maps home activates and opens the current chat map", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const response = await page.request.post("/api/chats", {
     data: {
@@ -948,9 +949,9 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
       mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
     );
     await expect(agentsPanel).toBeVisible();
-    const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
+    const mapsCard = agentsPanel.locator('[data-agent-name="World Maps"]');
     await expect(mapsCard).toBeVisible();
-    await mapsCard.getByText("Hierarchical Maps", { exact: true }).click();
+    await mapsCard.getByText("World Maps", { exact: true }).click();
 
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
@@ -959,7 +960,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(home.locator(":scope > .mari-editor-header .mari-editor-header-main")).toBeVisible();
     await expect(home.getByRole("heading", { name: "Installed package", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Current chat", exact: true })).toBeVisible();
-    await expect(home.getByRole("heading", { name: "Hierarchical Maps", exact: true })).toBeVisible();
+    await expect(home.getByRole("heading", { name: "World Maps", exact: true })).toBeVisible();
     await expect(home.locator(".mari-editor-header")).toContainText("v1.2.0");
     await expect(home.getByRole("heading", { name: "Description", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Pipeline Phase", exact: true })).toBeVisible();
@@ -977,7 +978,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await expect(home).toContainText("Installed in Marinara, but not active in this chat yet.");
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
 
-    const activation = home.getByRole("switch", { name: /Enable Hierarchical Maps/ });
+    const activation = home.getByRole("switch", { name: /Enable World Maps/ });
     const createMap = home.getByRole("button", { name: "Create map", exact: true });
     await expect(activation).toHaveAttribute("aria-checked", "false");
     await expect(createMap).toBeDisabled();
@@ -1250,8 +1251,8 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
         mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
       );
       await secondaryAgentsPanel
-        .locator('[data-agent-name="Hierarchical Maps"]')
-        .getByText("Hierarchical Maps", { exact: true })
+        .locator('[data-agent-name="World Maps"]')
+        .getByText("World Maps", { exact: true })
         .click();
       const secondaryHome = secondaryPage.locator("[data-marinara-maps-home]");
       await expect(secondaryHome).toContainText("Maps Global Library");
@@ -1271,7 +1272,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
         });
       });
       await secondaryHome.getByRole("button", { name: "Create map", exact: true }).click();
-      await expect(secondaryPage.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+      await expect(secondaryPage.getByRole("heading", { name: "World map", exact: true })).toBeVisible();
       await secondaryPage.getByRole("button", { name: "Draft with AI", exact: true }).click();
       await secondaryPage.getByRole("button", { name: "Generate draft", exact: true }).click();
       await expect
@@ -1382,7 +1383,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
       .toEqual({ enableAgents: true, activeAgentIds: ["hierarchical-maps"] });
 
     await createMap.click();
-    await expect(page.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "World map", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Back to chat" }).click();
     const discardDialog = page.getByRole("dialog", { name: "Discard map changes?" });
     if (await discardDialog.isVisible({ timeout: 1_000 }).catch(() => false)) {
@@ -1393,7 +1394,7 @@ test("global Hierarchical Maps home activates and opens the current chat map", a
     await home.getByRole("button", { name: "Back to Agents" }).click();
     await expect(home).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Story location" })).toContainText(
-      "No map yet. Create one from Agents → Hierarchical Maps; your message draft is unchanged.",
+      "No map yet. Create one from Agents → World Maps; your message draft is unchanged.",
     );
   } finally {
     const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
@@ -1441,8 +1442,8 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await dismissOnboardingTutorial(page);
     await page.locator('[data-tour="panel-agents"]').click();
     const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
-    const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
-    await mapsCard.getByText("Hierarchical Maps", { exact: true }).click();
+    const mapsCard = agentsPanel.locator('[data-agent-name="World Maps"]');
+    await mapsCard.getByText("World Maps", { exact: true }).click();
 
     const home = page.locator("[data-marinara-maps-home]");
     await home.getByRole("button", { name: "Open map templates" }).click();
@@ -1469,7 +1470,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await page.locator('[data-tour="panel-agents"]').click();
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-    await agentEntry.getByRole("button", { name: "Create hierarchical map" }).click();
+    await agentEntry.getByRole("button", { name: "Create world map" }).click();
     await workspace.getByRole("button", { name: "Add a saved map template" }).click();
 
     const chatSettingsLibrary = page.locator("[data-marinara-map-template-library]");
@@ -1521,7 +1522,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
   }
 });
 
-test("global Hierarchical Maps home protects templates after a settings load failure", async ({ page }, testInfo) => {
+test("global World Maps home protects templates after a settings load failure", async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   const response = await page.request.post("/api/chats", {
     data: {
@@ -1554,7 +1555,7 @@ test("global Hierarchical Maps home protects templates after a settings load fai
     const agentsPanel = page.locator(
       mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
     );
-    const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
+    const mapsCard = agentsPanel.locator('[data-agent-name="World Maps"]');
     await expect(mapsCard).toBeVisible();
     await page.route("**/api/agents", async (route) => {
       if (route.request().method() !== "GET") return route.continue();
@@ -1564,7 +1565,7 @@ test("global Hierarchical Maps home protects templates after a settings load fai
         body: JSON.stringify({ error: "Settings temporarily unavailable" }),
       });
     });
-    await mapsCard.getByText("Hierarchical Maps", { exact: true }).click();
+    await mapsCard.getByText("World Maps", { exact: true }).click();
 
     const home = page.locator("[data-marinara-maps-home]");
     await expect(
@@ -1583,7 +1584,7 @@ test("global Hierarchical Maps home protects templates after a settings load fai
   }
 });
 
-test("global Hierarchical Maps home edits the current map location types", async ({ page }, testInfo) => {
+test("global World Maps home edits the current map location types", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const agentsBeforeResponse = await page.request.get("/api/agents");
   expect(agentsBeforeResponse.ok(), await agentsBeforeResponse.text()).toBeTruthy();
@@ -1647,7 +1648,7 @@ test("global Hierarchical Maps home edits the current map location types", async
     const agentsPanel = page.locator(
       mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
     );
-    await agentsPanel.locator('[data-agent-name="Hierarchical Maps"]').getByText("Hierarchical Maps", { exact: true }).click();
+    await agentsPanel.locator('[data-agent-name="World Maps"]').getByText("World Maps", { exact: true }).click();
 
     const home = page.locator("[data-marinara-maps-home]");
     const homeHeadings = await home.getByRole("heading", { level: 2 }).allTextContents();
@@ -1731,7 +1732,7 @@ test("global Hierarchical Maps home edits the current map location types", async
     await expect(worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u })).toBeVisible();
     await worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u }).click();
     await expect(worldMap.getByRole("button", { name: "Set destination: Gloam Harbor" })).toBeVisible();
-    await worldMapOverlay.getByRole("button", { name: "Back to Hierarchical Maps" }).click();
+    await worldMapOverlay.getByRole("button", { name: "Back to World Maps" }).click();
     await expect(home).toBeVisible();
 
     await home.getByRole("button", { name: "Open map", exact: true }).click();
@@ -2190,8 +2191,8 @@ test("missing location lore explains the problem without exposing opaque entry I
         : '[data-component="RightPanelDesktop"]',
     );
     await agentsPanel
-      .locator('[data-agent-name="Hierarchical Maps"]')
-      .getByText("Hierarchical Maps", { exact: true })
+      .locator('[data-agent-name="World Maps"]')
+      .getByText("World Maps", { exact: true })
       .click();
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
@@ -2409,11 +2410,11 @@ test("Map loading retry and stale-write recovery preserve the working copy", asy
     });
     await page.goto("/");
     await dismissOnboardingTutorial(page);
-    await expect(page.getByLabel("Loading hierarchical map editor")).toBeVisible();
+    await expect(page.getByLabel("Loading world map editor")).toBeVisible();
 
     releaseInitialRead?.();
-    await expect(page.getByRole("heading", { name: "Hierarchical map unavailable" })).toBeVisible();
-    const recovery = page.getByRole("region", { name: "Hierarchical map recovery" });
+    await expect(page.getByRole("heading", { name: "World map unavailable" })).toBeVisible();
+    const recovery = page.getByRole("region", { name: "World map recovery" });
     const retry = recovery.getByRole("button", { name: "Retry", exact: true });
     const back = recovery.getByRole("button", { name: "Back", exact: true });
     await expectMinimumInteractiveSize(retry, "Map retry control");
@@ -2421,7 +2422,7 @@ test("Map loading retry and stale-write recovery preserve the working copy", asy
     allowSuccessfulRead = true;
     await retry.click();
 
-    await expect(page.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "World map", exact: true })).toBeVisible();
     const localName = "Local unsaved harbor name";
     const serverName = "Server-updated harbor name";
     const nameInput = page.locator('section[aria-label^="Details for "]:visible').getByLabel("Name", { exact: true });
@@ -2532,7 +2533,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
       const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-      await agentEntry.getByRole("button", { name: "Create hierarchical map" }).click();
+      await agentEntry.getByRole("button", { name: "Create world map" }).click();
     }
 
     await expectWorkspaceFillsOverlay(page);
@@ -2662,8 +2663,8 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       await expect(mobileActions).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Expand with AI", exact: true })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Add a saved map template" })).toBeVisible();
-      await expect(mobileActions.getByRole("button", { name: "Export hierarchical map" })).toBeVisible();
-      await expect(mobileActions.getByRole("button", { name: "Import hierarchical map" })).toBeVisible();
+      await expect(mobileActions.getByRole("button", { name: "Export world map" })).toBeVisible();
+      await expect(mobileActions.getByRole("button", { name: "Import world map" })).toBeVisible();
       await expectMinimumInteractiveSize(
         mobileActions.getByRole("button", { name: "Expand with AI", exact: true }),
         "Mobile AI map action",
@@ -2761,6 +2762,39 @@ test("AI map expansion preserves a campaign map and its current location", async
     }),
   };
 
+  const artworkUpload = await page.request.post(`/api/gallery/${chat.id}/upload`, {
+    multipart: {
+      prompt: "A fogbound anime harbor.",
+      provider: "world-map-e2e",
+      model: "fixture",
+      width: "1",
+      height: "1",
+      file: {
+        name: "gloam-harbor.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2SIAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      },
+    },
+  });
+  expect(artworkUpload.ok(), await artworkUpload.text()).toBeTruthy();
+  const uploadedArtwork = (await artworkUpload.json()) as { id: string };
+  const definitionWithArtwork = {
+    ...hierarchyPickerDefinition,
+    locations: hierarchyPickerDefinition.locations.map((location) =>
+      location.id === "ai_harbor"
+        ? {
+            ...location,
+            referenceImageId: uploadedArtwork.id,
+            useReferenceImage: true,
+            mapBackgroundImageId: uploadedArtwork.id,
+          }
+        : location,
+    ),
+  };
+
   const anchorResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
     data: {
       role: "assistant",
@@ -2772,7 +2806,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     data: {
       expectedRevision: 0,
       expectedCurrentLocationId: null,
-      definition: { ...hierarchyPickerDefinition, enabled: true },
+      definition: { ...definitionWithArtwork, enabled: true },
     },
   });
   expect(initialSave.ok()).toBeTruthy();
@@ -2840,7 +2874,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
       const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-      await agentEntry.getByRole("button", { name: "Edit hierarchical map" }).click();
+      await agentEntry.getByRole("button", { name: "Edit world map" }).click();
     } else {
       const mobileMusicLayer = page.locator('[data-component="MobileMusicWidgetLayer"]');
       const mobileMusicWidget = mobileMusicLayer.locator(".fixed");
@@ -2855,10 +2889,55 @@ test("AI map expansion preserves a campaign map and its current location", async
     }
 
     await expectAuthoringWorkspaceLayout(page, mobile);
-    const exportMap = page.getByRole("button", { name: "Export hierarchical map" });
-    const importMap = page.getByRole("button", { name: "Import hierarchical map" });
+    const exportMap = page.getByRole("button", { name: "Export world map" });
+    const importMap = page.getByRole("button", { name: "Import world map" });
     await expect(exportMap.locator("svg")).toHaveClass(/lucide-upload/);
     await expect(importMap.locator("svg")).toHaveClass(/lucide-download/);
+    if (!mobile) {
+      await expect(page.getByRole("checkbox", { name: "Include map artwork" })).toBeChecked();
+      const downloadPromise = page.waitForEvent("download");
+      await exportMap.click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toMatch(/\.world-map\.json$/u);
+      const downloadPath = await download.path();
+      expect(downloadPath).not.toBeNull();
+      const exportedMapText = await readFile(downloadPath!, "utf8");
+      const exportedMap = JSON.parse(exportedMapText) as {
+        format: string;
+        formatVersion: number;
+        artwork: Array<{ sourceImageId: string; filename: string; data: string }>;
+      };
+      expect(exportedMap).toMatchObject({
+        format: "marinara-hierarchical-map",
+        formatVersion: 3,
+      });
+      expect(exportedMap.artwork).toHaveLength(1);
+      expect(exportedMap.artwork[0]).toMatchObject({
+        sourceImageId: uploadedArtwork.id,
+        filename: expect.stringMatching(/\.png$/u),
+        data: expect.stringMatching(/^data:image\/png;base64,/u),
+      });
+      await page.locator("[data-marinara-map-import-input]").setInputFiles({
+        name: download.suggestedFilename(),
+        mimeType: "application/json",
+        buffer: Buffer.from(exportedMapText),
+      });
+      await expect(page.getByText("1 artwork file was restored to this chat's Gallery.")).toBeVisible();
+      await expect
+        .poll(async () => {
+          const galleryResponse = await page.request.get(`/api/gallery/${chat.id}`);
+          const images = (await galleryResponse.json()) as Array<{ id: string }>;
+          return images.map((image) => image.id);
+        })
+        .toEqual(expect.arrayContaining([uploadedArtwork.id]));
+      await expect
+        .poll(async () => {
+          const galleryResponse = await page.request.get(`/api/gallery/${chat.id}`);
+          const images = (await galleryResponse.json()) as Array<{ id: string }>;
+          return images.length;
+        })
+        .toBe(2);
+    }
     await page.locator("[data-marinara-map-import-input]").setInputFiles({
       name: "replacement-with-missing-ids.json",
       mimeType: "application/json",
@@ -3423,7 +3502,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
         status: 409,
         contentType: "application/json",
         body: JSON.stringify({
-          error: "The hierarchical map changed. Review the available destinations.",
+          error: "The world map changed. Review the available destinations.",
           code: "spatial_transition_stale_definition",
           currentRevision: saved.definition.revision + 1,
           currentLocationId: "ai_harbor",
@@ -3539,10 +3618,10 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
       await expect(roleplayMap).toBeVisible();
     }
-    const editMap = roleplayMap.getByRole("button", { name: "Edit hierarchical map" });
+    const editMap = roleplayMap.getByRole("button", { name: "Edit world map" });
     await expectMinimumInteractiveSize(editMap, "Roleplay minimap edit control");
     await editMap.click();
-    await expect(page.getByRole("heading", { name: "Hierarchical map", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "World map", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Back to chat" }).click();
     await storyLocation.getByRole("button", { name: "Open story map" }).click();
     roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });

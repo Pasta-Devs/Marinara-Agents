@@ -68,14 +68,17 @@ import {
 } from "./editor-state";
 import {
   getSpatialExcludedLorebookIds,
+  uploadSpatialGalleryImage,
   useGenerateSpatialGalleryImage,
   usePreviewSpatialGalleryImages,
   useSpatialChat,
   useSpatialGalleryImages,
   useSpatialLorebookEntries,
   useSpatialLorebooks,
+  type SpatialGalleryImage,
   type SpatialGalleryImagePromptPreview,
 } from "./use-spatial-resources";
+import { packageApi } from "./package-api";
 import {
   defaultGenerationPreferences,
   defaultHierarchyProfile,
@@ -104,6 +107,96 @@ type ArtworkProgress = {
   total: number;
   currentName: string;
 };
+
+type SpatialMapArtworkExport = Pick<
+  SpatialGalleryImage,
+  "prompt" | "provider" | "model" | "width" | "height"
+> & {
+  sourceImageId: string;
+  filename: string;
+  data: string;
+};
+
+const ARTWORK_MIME_EXTENSIONS = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/gif", "gif"],
+  ["image/webp", "webp"],
+  ["image/avif", "avif"],
+]);
+
+function referencedArtworkIds(definition: SpatialContextDefinition): string[] {
+  return Array.from(
+    new Set(
+      definition.locations.flatMap((location) =>
+        [location.referenceImageId, location.mapBackgroundImageId].filter(
+          (imageId): imageId is string => typeof imageId === "string" && imageId.length > 0,
+        ),
+      ),
+    ),
+  );
+}
+
+function artworkFilename(image: SpatialGalleryImage, mimeType: string): string | null {
+  const extension = ARTWORK_MIME_EXTENSIONS.get(mimeType.toLowerCase());
+  if (!extension) return null;
+  const sourceName = image.filePath.split(/[\\/]/u).at(-1) ?? `map-artwork-${image.id}`;
+  const stem = sourceName
+    .replace(/\.[^.]+$/u, "")
+    .replace(/[^a-z0-9._-]+/giu, "-")
+    .replace(/^-+|-+$/gu, "") || `map-artwork-${image.id}`;
+  return `${stem}.${extension}`;
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Artwork could not be read."));
+    reader.onerror = () => reject(reader.error ?? new Error("Artwork could not be read."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function parseBundledArtwork(value: unknown): SpatialMapArtworkExport[] {
+  if (!Array.isArray(value)) return [];
+  const deduplicated = new Map<string, SpatialMapArtworkExport>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const sourceImageId = typeof record.sourceImageId === "string" ? record.sourceImageId.trim() : "";
+    const filename = typeof record.filename === "string" ? record.filename.trim() : "";
+    const data = typeof record.data === "string" ? record.data : "";
+    if (!sourceImageId || !filename || !/^data:image\/(?:jpeg|png|gif|webp|avif);base64,/iu.test(data)) continue;
+    deduplicated.set(sourceImageId, {
+      sourceImageId,
+      filename,
+      data,
+      prompt: typeof record.prompt === "string" ? record.prompt : "",
+      provider: typeof record.provider === "string" ? record.provider : "",
+      model: typeof record.model === "string" ? record.model : "",
+      width: typeof record.width === "number" && Number.isFinite(record.width) ? record.width : null,
+      height: typeof record.height === "number" && Number.isFinite(record.height) ? record.height : null,
+    });
+  }
+  return [...deduplicated.values()];
+}
+
+function bundledArtworkFile(artwork: SpatialMapArtworkExport): File {
+  const match = /^data:(image\/(?:jpeg|png|gif|webp|avif));base64,(.+)$/isu.exec(artwork.data);
+  if (!match) throw new Error("Bundled artwork is not a supported image.");
+  const mimeType = match[1].toLowerCase();
+  const extension = ARTWORK_MIME_EXTENSIONS.get(mimeType);
+  if (!extension) throw new Error("Bundled artwork is not a supported image.");
+  const binary = atob(match[2].replace(/\s+/gu, ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const stem = artwork.filename
+    .replace(/\.[^.]+$/u, "")
+    .replace(/[^a-z0-9._-]+/giu, "-")
+    .replace(/^-+|-+$/gu, "") || "map-artwork";
+  return new File([bytes], `${stem}.${extension}`, { type: mimeType });
+}
 
 type MapConfirmationOptions = {
   title: string;
@@ -220,6 +313,9 @@ export function SpatialMapWorkspace({
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
   const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
+  const [includeArtworkInExport, setIncludeArtworkInExport] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
   const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
   const backgroundMoveFrameRef = useRef<number | null>(null);
@@ -810,39 +906,96 @@ export function SpatialMapWorkspace({
     spatial.data?.hasCommittedSpatialHistory,
   ]);
 
-  const handleExport = useCallback(() => {
-    if (!draft) return;
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            format: "marinara-hierarchical-map",
-            formatVersion: 2,
-            definition: draft,
-            hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
-          },
-          null,
-          2,
-        ),
-      ],
-      { type: "application/json" },
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const safeName = (templateMode ? templateName : (chat?.name ?? "hierarchical-map"))
-      .replace(/[^a-z0-9._-]+/gi, "-")
-      .replace(/^-+|-+$/g, "") || "hierarchical-map";
-    link.href = url;
-    link.download = `${safeName}.hierarchical-map.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }, [chat?.name, draft, draftHierarchyProfile, templateMode, templateName]);
+  const handleExport = useCallback(async () => {
+    if (!draft || isExporting) return;
+    setIsExporting(true);
+    try {
+      const shouldIncludeArtwork = !templateMode && includeArtworkInExport;
+      const artwork: SpatialMapArtworkExport[] = [];
+      let missingArtworkCount = 0;
+      if (shouldIncludeArtwork) {
+        const images = galleryImages.data ?? (await galleryImages.refetch()).data ?? [];
+        const imagesById = new Map(images.map((image) => [image.id, image]));
+        for (const imageId of referencedArtworkIds(draft)) {
+          const image = imagesById.get(imageId);
+          if (!image) {
+            missingArtworkCount += 1;
+            continue;
+          }
+          try {
+            const imageBlob = await packageApi.blob(image.url);
+            const filename = artworkFilename(image, imageBlob.type);
+            if (!filename) throw new Error("Unsupported artwork type");
+            artwork.push({
+              sourceImageId: image.id,
+              filename,
+              data: await blobToDataUrl(imageBlob),
+              prompt: image.prompt,
+              provider: image.provider,
+              model: image.model,
+              width: image.width,
+              height: image.height,
+            });
+          } catch {
+            missingArtworkCount += 1;
+          }
+        }
+      }
+
+      const exportBlob = new Blob(
+        [
+          JSON.stringify(
+            {
+              format: "marinara-hierarchical-map",
+              formatVersion: shouldIncludeArtwork ? 3 : 2,
+              definition: draft,
+              hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+              ...(shouldIncludeArtwork ? { artwork } : {}),
+            },
+            null,
+            2,
+          ),
+        ],
+        { type: "application/json" },
+      );
+      const url = URL.createObjectURL(exportBlob);
+      const link = document.createElement("a");
+      const safeName = (templateMode ? templateName : (chat?.name ?? "world-map"))
+        .replace(/[^a-z0-9._-]+/gi, "-")
+        .replace(/^-+|-+$/g, "") || "world-map";
+      link.href = url;
+      link.download = `${safeName}.world-map.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      if (shouldIncludeArtwork) {
+        const includedCopy = `${artwork.length} artwork file${artwork.length === 1 ? "" : "s"} included`;
+        const missingCopy = missingArtworkCount > 0
+          ? `; ${missingArtworkCount} missing artwork link${missingArtworkCount === 1 ? " was" : "s were"} skipped`
+          : "";
+        toast.success(`World map exported: ${includedCopy}${missingCopy}.`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The world map could not be exported.");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [
+    chat?.name,
+    draft,
+    draftHierarchyProfile,
+    galleryImages,
+    includeArtworkInExport,
+    isExporting,
+    templateMode,
+    templateName,
+  ]);
 
   const handleImport = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       event.target.value = "";
-      if (!file || !draft) return;
+      if (!file || !draft || isImporting) return;
+      setIsImporting(true);
       try {
         const raw = JSON.parse(await file.text()) as unknown;
         const rawRecord = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
@@ -852,7 +1005,7 @@ export function SpatialMapWorkspace({
             : raw;
         const parsed = spatialContextDefinitionSchema.safeParse(candidate);
         if (!parsed.success) {
-          throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid hierarchical map.");
+          throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid world map.");
         }
         const importedIds = new Set(parsed.data.locations.map((location) => location.id));
         const missing = (baseDefinition?.locations ?? [])
@@ -864,8 +1017,34 @@ export function SpatialMapWorkspace({
             `Campaign history uses ${missing.length} location ID${missing.length === 1 ? "" : "s"} missing from this file. Review the repair steps shown in the editor.`,
           );
         }
+        const bundledArtwork = parseBundledArtwork(rawRecord?.artwork);
+        const referencedIds = new Set(referencedArtworkIds(parsed.data));
+        const applicableArtwork = bundledArtwork.filter((artwork) => referencedIds.has(artwork.sourceImageId));
+        const artworkIdMap = new Map<string, string>();
+        let failedArtworkCount = 0;
+        if (!templateMode && chatId) {
+          for (const artwork of applicableArtwork) {
+            try {
+              const uploaded = await uploadSpatialGalleryImage(chatId, bundledArtworkFile(artwork), artwork);
+              artworkIdMap.set(artwork.sourceImageId, uploaded.id);
+            } catch {
+              failedArtworkCount += 1;
+            }
+          }
+          if (artworkIdMap.size > 0) await galleryImages.refetch();
+        }
+        const importedLocations = parsed.data.locations.map((location) => ({
+          ...location,
+          referenceImageId: location.referenceImageId
+            ? (artworkIdMap.get(location.referenceImageId) ?? location.referenceImageId)
+            : location.referenceImageId,
+          mapBackgroundImageId: location.mapBackgroundImageId
+            ? (artworkIdMap.get(location.mapBackgroundImageId) ?? location.mapBackgroundImageId)
+            : location.mapBackgroundImageId,
+        }));
         const imported: SpatialContextDefinition = {
           ...parsed.data,
+          locations: importedLocations,
           ownerMode,
           enabled: draft.enabled,
           revision: baseDefinition?.revision ?? 0,
@@ -880,14 +1059,26 @@ export function SpatialMapWorkspace({
         setMobilePane("hierarchy");
         toast.success(
           templateMode
-            ? "Map imported into this template. Review it, then Save template."
-            : "Map imported into the working copy. Review it, then Save.",
+            ? `World map imported into this template. Review it, then Save template.${applicableArtwork.length > 0 ? " Bundled artwork stays chat-specific and was not imported." : ""}`
+            : `World map imported into the working copy. Review it, then Save.${artworkIdMap.size > 0 ? ` ${artworkIdMap.size} artwork file${artworkIdMap.size === 1 ? " was" : "s were"} restored to this chat's Gallery.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
         );
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "The map could not be imported.");
+        toast.error(error instanceof Error ? error.message : "The world map could not be imported.");
+      } finally {
+        setIsImporting(false);
       }
     },
-    [applyDraft, baseDefinition, draft, ownerMode, spatial.data?.hasCommittedSpatialHistory, templateMode],
+    [
+      applyDraft,
+      baseDefinition,
+      chatId,
+      draft,
+      galleryImages,
+      isImporting,
+      ownerMode,
+      spatial.data?.hasCommittedSpatialHistory,
+      templateMode,
+    ],
   );
 
   const saveAsTemplate = useCallback(async () => {
@@ -919,7 +1110,7 @@ export function SpatialMapWorkspace({
         title: templateMode ? "Discard template changes?" : "Discard map changes?",
         message: templateMode
           ? "You have unsaved map template changes. Return to the library and discard them?"
-          : "You have unsaved hierarchical map changes. Leave the editor and discard them?",
+          : "You have unsaved world map changes. Leave the editor and discard them?",
         confirmLabel: "Discard changes",
         tone: "destructive",
       });
@@ -997,7 +1188,7 @@ export function SpatialMapWorkspace({
         });
       }
       onDirtyChange?.(false);
-      toast.success(completingFirstMap ? "Map ready for turns." : "Hierarchical map saved.");
+      toast.success(completingFirstMap ? "Map ready for turns." : "World map saved.");
     } catch (error) {
       const problem = getSpatialContextProblem(error);
       setServerIssues(problem.issues);
@@ -1054,7 +1245,7 @@ export function SpatialMapWorkspace({
       const generated = session.result.definition;
       const parsedGenerated = spatialContextDefinitionSchema.safeParse(generated);
       if (!parsedGenerated.success) {
-        toast.error(parsedGenerated.error.issues[0]?.message ?? "The AI draft was not a valid hierarchical map.");
+        toast.error(parsedGenerated.error.issues[0]?.message ?? "The AI draft was not a valid world map.");
         return;
       }
       const normalizedGenerated = parsedGenerated.data;
@@ -1150,7 +1341,7 @@ export function SpatialMapWorkspace({
     return (
       <div
         className="mari-editor-shell flex flex-1 flex-col overflow-hidden"
-        aria-label="Loading hierarchical map editor"
+        aria-label="Loading world map editor"
       >
         <div className="mari-editor-header">
           <div className="h-9 w-9 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />
@@ -1174,11 +1365,11 @@ export function SpatialMapWorkspace({
       <div
         className="mari-editor-shell flex flex-1 items-center justify-center p-6"
         role="region"
-        aria-label="Hierarchical map recovery"
+        aria-label="World map recovery"
       >
         <div className="max-w-sm text-center">
           <AlertCircle className="mx-auto text-[var(--destructive)]" />
-          <h1 className="mt-3 text-base font-semibold">Hierarchical map unavailable</h1>
+          <h1 className="mt-3 text-base font-semibold">World map unavailable</h1>
           <p className="mt-1 text-sm text-[var(--marinara-editor-muted)]">
             {getSpatialContextProblem(spatial.error).message}
           </p>
@@ -1502,7 +1693,7 @@ export function SpatialMapWorkspace({
             </label>
           ) : (
             <>
-              <h1 className="truncate text-sm font-semibold text-[var(--marinara-editor-title)]">Hierarchical map</h1>
+              <h1 className="truncate text-sm font-semibold text-[var(--marinara-editor-title)]">World map</h1>
               <p className="truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">{chat?.name ?? "Chat"}</p>
             </>
           )}
@@ -1529,20 +1720,35 @@ export function SpatialMapWorkspace({
             )}
             <button
               type="button"
-              onClick={handleExport}
-              className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
-              aria-label="Export hierarchical map"
+              onClick={() => void handleExport()}
+              disabled={isExporting}
+              className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              aria-label="Export world map"
             >
-              <Upload size="0.8125rem" /> Export
+              {isExporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Upload size="0.8125rem" />} Export
             </button>
+            {!templateMode && (
+              <label
+                className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs"
+                title="Bundle referenced location and map background images. This makes the export file larger."
+              >
+                <input
+                  type="checkbox"
+                  checked={includeArtworkInExport}
+                  disabled={isExporting}
+                  onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
+                />
+                <span>Include map artwork</span>
+              </label>
+            )}
             <button
               type="button"
               onClick={() => importInputRef.current?.click()}
-              disabled={conflict || updateSpatial.isPending}
+              disabled={conflict || updateSpatial.isPending || isImporting}
               className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-              aria-label="Import hierarchical map"
+              aria-label="Import world map"
             >
-              <Download size="0.8125rem" /> Import
+              {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />} Import
             </button>
             {!templateMode && onOpenTemplates && (
               <button
@@ -1685,12 +1891,13 @@ export function SpatialMapWorkspace({
               type="button"
               onClick={() => {
                 setMobileActionsOpen(false);
-                handleExport();
+                void handleExport();
               }}
-              className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs"
-              aria-label="Export hierarchical map"
+              disabled={isExporting}
+              className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              aria-label="Export world map"
             >
-              <Upload size="0.8125rem" /> Export
+              {isExporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Upload size="0.8125rem" />} Export
             </button>
             <button
               type="button"
@@ -1698,12 +1905,26 @@ export function SpatialMapWorkspace({
                 setMobileActionsOpen(false);
                 importInputRef.current?.click();
               }}
-              disabled={conflict || updateSpatial.isPending}
+              disabled={conflict || updateSpatial.isPending || isImporting}
               className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
-              aria-label="Import hierarchical map"
+              aria-label="Import world map"
             >
-              <Download size="0.8125rem" /> Import
+              {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />} Import
             </button>
+            {!templateMode && (
+              <label
+                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs"
+                title="Bundle referenced location and map background images. This makes the export file larger."
+              >
+                <span>Include map artwork</span>
+                <input
+                  type="checkbox"
+                  checked={includeArtworkInExport}
+                  disabled={isExporting}
+                  onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
+                />
+              </label>
+            )}
             {!templateMode && onOpenTemplates && (
               <button
                 type="button"
