@@ -11,6 +11,18 @@ pnpm exec playwright test ../Marinara-Agents/tests/spatial-context.e2e.ts -c pla
 
 The package must be installed in the test data directory before launching the Playwright web server.
 
+The Long-Term Memory regressions cover storage, extraction, runtime recall,
+privileged routes, debug logging, and the exact release artifact lifecycle:
+
+```bash
+cd ../Marinara-Engine
+ set -e
+ for test in storage extraction-graph runtime routes debug-log lifecycle; do
+  MARINARA_ENGINE_ROOT="$PWD" pnpm --filter @marinara-engine/server exec tsx \
+    "$PWD/../Marinara-Agents/tests/long-term-memory-${test}.regression.ts"
+done
+```
+
 ## Exact-artifact lifecycle regression
 
 `hierarchical-maps-lifecycle.regression.ts` installs an immutable prior Maps

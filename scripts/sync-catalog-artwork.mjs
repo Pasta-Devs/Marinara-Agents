@@ -1,11 +1,12 @@
 import { access, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   catalogArtworkRelativePath,
   catalogArtworkUrl,
 } from "./catalog-artwork.mjs";
 
-const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
 const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
 

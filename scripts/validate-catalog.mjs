@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   CATALOG_ARTWORK_SIZE,
   catalogArtworkRelativePath,
@@ -17,9 +17,10 @@ import {
   readCatalogFamily,
 } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
+import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 
-const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { catalog, catalogsByMajor, legacyCatalog } = await readCatalogFamily(repoRoot);
 const MIN_ENGINE_VERSION = "2.3.0";
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
@@ -54,6 +55,26 @@ for (const relativePath of hierarchicalMapsOwnedSourcePaths) {
   }
   if (existsSync(capturedEnginePath)) {
     throw new Error(`Hierarchical Maps source must not be captured as generic Engine material: ${relativePath}`);
+  }
+}
+
+const longTermMemorySourceRoot = join(repoRoot, "packages/long-term-memory/src/engine");
+const longTermMemoryBoundary = await assertPackagePrivateImportBoundary({
+  sourceRoot: longTermMemorySourceRoot,
+  boundaryPath: join(repoRoot, "packages/long-term-memory/engine-boundary.json"),
+  displayName: "Long-Term Memory",
+  capabilityApi: { major: 1, minor: 6 },
+});
+for (const relativePath of [
+  "packages/shared/src/features/agents/long-term-memory",
+  "packages/server/src/services/long-term-memory",
+  "packages/client/src/features/long-term-memory",
+]) {
+  if (!existsSync(join(longTermMemorySourceRoot, relativePath))) {
+    throw new Error(`Long-Term Memory package source is missing: ${relativePath}`);
+  }
+  if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
+    throw new Error(`Long-Term Memory source must not be captured as generic Engine material: ${relativePath}`);
   }
 }
 
@@ -132,6 +153,25 @@ const expectedCategories = new Map([
   ["card-evolution-auditor", "writer"],
   ["hierarchical-maps", "tracker"],
 ]);
+
+function readZip(args, { packageId, artifactPath, member = null, purpose }) {
+  const result = spawnSync("unzip", args, {
+    encoding: member ? undefined : "utf8",
+    maxBuffer: 120 * 1024 * 1024,
+  });
+  if (result.error?.code === "ENOENT") {
+    throw new Error(
+      `Cannot ${purpose} ${packageId} artifact ${artifactPath}: unzip executable was not found; install unzip and retry`,
+    );
+  }
+  if (result.status !== 0) {
+    const detail = result.stderr?.toString().trim() || result.error?.message || `exit status ${result.status}`;
+    throw new Error(
+      `Could not ${purpose} ${member ? `member ${member} from ` : ""}${packageId} artifact ${artifactPath}: ${detail}`,
+    );
+  }
+  return result;
+}
 
 async function validateTurnGameRuntime(manifest, packageRoot) {
   const serverPath = join(packageRoot, manifest.entrypoints.server);
@@ -214,6 +254,17 @@ for (const entry of catalog.packages) {
       throw new Error("Hierarchical Maps build provenance does not match engine-boundary.json");
     }
   }
+  if (manifest.id === "long-term-memory") {
+    if (manifest.schemaVersion !== 2) {
+      throw new Error("Long-Term Memory must use capability package manifest v2");
+    }
+    if (JSON.stringify(manifest.capabilityApi) !== JSON.stringify(longTermMemoryBoundary.capabilityApi)) {
+      throw new Error("Long-Term Memory capability API does not match engine-boundary.json");
+    }
+    if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(longTermMemoryBoundary.builtAgainst)) {
+      throw new Error("Long-Term Memory build provenance does not match engine-boundary.json");
+    }
+  }
   ids.add(manifest.id);
   const readmePackageLink = `](packages/${manifest.id}/manifest.json)`;
   if (!readme.includes(readmePackageLink)) {
@@ -276,20 +327,23 @@ for (const entry of catalog.packages) {
   if (createHash("sha256").update(archive).digest("hex") !== artifact.sha256) {
     throw new Error(`Artifact checksum mismatch for ${manifest.id}`);
   }
-  const listed = spawnSync("unzip", ["-Z1", artifactPath], { encoding: "utf8" });
-  if (listed.status !== 0) throw new Error(listed.stderr || `Could not inspect ${manifest.id}`);
+  const listed = readZip(["-Z1", artifactPath], {
+    packageId: manifest.id,
+    artifactPath,
+    purpose: "inspect",
+  });
   const actualFiles = listed.stdout.trim().split("\n").filter(Boolean).sort();
   const declaredFiles = ["manifest.json", ...manifest.files.map((file) => file.path)].sort();
   if (JSON.stringify(actualFiles) !== JSON.stringify(declaredFiles)) {
     throw new Error(`Artifact file list mismatch for ${manifest.id}`);
   }
 
-  const archivedManifest = spawnSync("unzip", ["-p", artifactPath, "manifest.json"], {
-    maxBuffer: 120 * 1024 * 1024,
+  const archivedManifest = readZip(["-p", artifactPath, "manifest.json"], {
+    packageId: manifest.id,
+    artifactPath,
+    member: "manifest.json",
+    purpose: "read",
   });
-  if (archivedManifest.status !== 0) {
-    throw new Error(archivedManifest.stderr?.toString() || `Could not read archived manifest for ${manifest.id}`);
-  }
   if (JSON.stringify(JSON.parse(archivedManifest.stdout.toString("utf8"))) !== JSON.stringify(manifest)) {
     throw new Error(`Archived manifest does not match the catalog for ${manifest.id}`);
   }
@@ -302,12 +356,12 @@ for (const entry of catalog.packages) {
   }
   for (const declared of manifest.files) {
     const sourcePayload = await readFile(join(packageRoot, declared.path));
-    const archivedPayload = spawnSync("unzip", ["-p", artifactPath, declared.path], {
-      maxBuffer: 120 * 1024 * 1024,
+    const archivedPayload = readZip(["-p", artifactPath, declared.path], {
+      packageId: manifest.id,
+      artifactPath,
+      member: declared.path,
+      purpose: "read",
     });
-    if (archivedPayload.status !== 0) {
-      throw new Error(archivedPayload.stderr?.toString() || `Could not read ${declared.path} from ${manifest.id}`);
-    }
     for (const [location, payload] of [
       ["source", sourcePayload],
       ["artifact", archivedPayload.stdout],
@@ -440,8 +494,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 
 const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 29 || agentOnly !== 21 || features !== 8) {
-  throw new Error(`Expected 21 agents and 8 features, found ${agentOnly} and ${features}`);
+if (catalog.packages.length !== 30 || agentOnly !== 21 || features !== 9) {
+  throw new Error(`Expected 21 agents and 9 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 console.log(

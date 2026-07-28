@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 6
+  },
+  "builtAgainst": {
+    "engineVersion": "2.3.5",
+    "engineCommit": "4e651e9c63722b40ebd5b785cbf22541e3095f39"
+  },
+  "id": "long-term-memory",
+  "name": "Long-Term Memory",
+  "version": "1.0.0",
+  "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
+  "engine": {
+    "min": "2.3.5",
+    "maxExclusive": "2.4.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "agentDetail": {
+      "agentIds": [
+        "long-term-memory"
+      ]
+    },
+    "slots": [
+      "chat-settings"
+    ]
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "0adc78f6b6bae09cdecbff6b266fe5940c2f420410f1fe551d7ec123e2c36987",
+      "bytes": 710
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "4bd5dff9f485304910c72a49f8ac8ce94c3f8c268e3c2677b202e2b773378da7",
+      "bytes": 342038
+    },
+    {
+      "path": "client.js",
+      "sha256": "0eee179bcfd8be6dbfa800855f89ee70467fe11ff60f4b1eec20771f04ee71ed",
+      "bytes": 519123
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "chat-write",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}
