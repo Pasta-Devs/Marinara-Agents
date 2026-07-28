@@ -10,7 +10,7 @@ import {
   ImageIcon,
   List,
   Loader2,
-  Map,
+  Map as MapIcon,
   MoreHorizontal,
   Move,
   Plus,
@@ -1461,7 +1461,7 @@ export function SpatialMapWorkspace({
             </h2>
           </div>
           <span className="flex items-center gap-1 rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-2 py-1 text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
-            {localPresentation === "map" ? <Map size="0.6875rem" /> : <List size="0.6875rem" />}
+            {localPresentation === "map" ? <MapIcon size="0.6875rem" /> : <List size="0.6875rem" />}
             {localPresentation}
           </span>
         </div>
@@ -1673,7 +1673,7 @@ export function SpatialMapWorkspace({
           <ArrowLeft size="1.125rem" />
         </button>
         <div className="mari-editor-icon-tile">
-          <Map size="1.125rem" />
+          <MapIcon size="1.125rem" />
         </div>
         <div className="min-w-0 flex-1">
           {templateMode ? (
@@ -1758,7 +1758,7 @@ export function SpatialMapWorkspace({
                 className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
                 aria-label="Add a saved map template"
               >
-                <Map size="0.8125rem" /> Templates
+                <MapIcon size="0.8125rem" /> Templates
               </button>
             )}
             {!templateMode && draft.locations.length > 0 && (
@@ -1936,7 +1936,7 @@ export function SpatialMapWorkspace({
                 className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
                 aria-label="Add a saved map template"
               >
-                <Map size="0.8125rem" /> Templates
+                <MapIcon size="0.8125rem" /> Templates
               </button>
             )}
             {!templateMode && draft.locations.length > 0 && (
@@ -2445,7 +2445,7 @@ export function SpatialMapWorkspace({
         <div className="flex min-h-0 flex-1 items-center justify-center p-6">
           <div className="max-w-md text-center">
             <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-accent)]">
-              <Map size="1.25rem" />
+              <MapIcon size="1.25rem" />
             </span>
             <h2 className="mt-4 text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
               {templateMode ? "Create a map template" : "Create a starting location"}
