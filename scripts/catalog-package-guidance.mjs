@@ -95,6 +95,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["roleplay", "game"],
     activation: "Add the Agent in Chat Settings → Agents → Misc Agents/Lorebook Keeper for Roleplay and Game modes.",
   },
+  "long-term-memory": {
+    modes: ["conversation", "roleplay", "visual_novel", "game"],
+    activation: "Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
+  },
   spotify: {
     modes: ["conversation", "roleplay", "game"],
     activation: "Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",

@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **29 first-party packages** for **Marinara Engine v2.3.0+**: 6 Writer Agents, 8 Tracker Agents, and 15 Misc Agents. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **30 first-party packages** for **Marinara Engine v2.3.0+**: 6 Writer Agents, 8 Tracker Agents, and 16 Misc Agents. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -46,6 +46,7 @@ Across its Engine compatibility lanes, the catalog currently contains **29 first
 | Illustrator | [`illustrator`](packages/illustrator/manifest.json) | Creates images and videos, with optional automatic Roleplay backgrounds for new scene locations. |
 | Immersive HTML | [`html`](packages/html/manifest.json) | Adds diegetic HTML/CSS/JS visual artifacts without changing story meaning. |
 | Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Creates and updates durable lorebook entries from important story facts. |
+| Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Extracts durable memories from chat summaries, character records, and lorebooks, with scoped vault browsing, review, source management, recall controls, and preset-marker placement for Roleplay and Visual Novel. |
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
@@ -78,7 +79,7 @@ node scripts/build-feature-packages.mjs
 node scripts/validate-catalog.mjs
 ```
 
-The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, Hierarchical Maps source lives under `packages/hierarchical-maps/src/engine/` and is overlaid on those generic dependencies during its build.
+The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, Hierarchical Maps and Long-Term Memory source live under their respective `packages/<id>/src/engine/` trees and are overlaid on those generic dependencies during each build.
 
 ---
 
