@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **30 first-party packages** for **Marinara Engine v2.3.0+**: 6 Writer Agents, 8 Tracker Agents, and 16 Misc Agents. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **31 first-party packages** for **Marinara Engine v2.3.0+**: 6 Writer Agents, 8 Tracker Agents, and 17 Misc Agents. Storyboard requires **Marinara Engine v2.3.5** and supports versions below **v3.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -50,6 +50,7 @@ Across its Engine compatibility lanes, the catalog currently contains **30 first
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
+| Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game storyboards with provider-tuned prompt chains. |
 | Tic-Tac-Toe | [`tic-tac-toe`](packages/tic-tac-toe/manifest.json) | Adds one-on-one Conversation matches and the `/tictactoe` command. |
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
 

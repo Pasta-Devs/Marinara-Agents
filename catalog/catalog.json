@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-28T14:58:10.673Z",
+  "generatedAt": "2026-07-28T15:11:18.155Z",
   "packages": [
     {
       "manifest": {
@@ -678,7 +678,7 @@
           },
           {
             "path": "client.js",
-            "sha256": "4c4fea958d792ab8c67c779dbe57dfccff8dc9e3f8eb0e3d4de51ef5b24b9ad4",
+            "sha256": "343eeab6ec8e1849fd15786035d5b3a8b06924f7c5e0b17f5bb9bdce9425fe5e",
             "bytes": 858887
           }
         ],
@@ -698,8 +698,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.0.zip",
-        "sha256": "04d3164f076da284ce00ae1ce82a1ccfc113dfbe1fd6ac5463e81db251a7c9c1",
-        "bytes": 315253
+        "sha256": "146d11446f8d6aea59a536a823e95adfd77ea22a599b6eb43841a0e8c54c85cf",
+        "bytes": 315255
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },
@@ -1333,6 +1333,48 @@
         "bytes": 188798
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "storyboard",
+        "name": "Storyboard",
+        "version": "1.0.0",
+        "description": "Plans and generates still or animated Game storyboards through provider-tuned planner, image, and video prompt chains. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Game mode.",
+        "engine": {
+          "min": "2.3.5",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "8e649ab18362ed05b4dc1d2578526e0a248d8bdb37b6ca85e2d1357ae3729779",
+            "bytes": 60746
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.0.0.zip",
+        "sha256": "6567efeaae17838a92562e77daf13cde910f88932569899cc120cd8176875fea",
+        "bytes": 11958
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
     },
     {
       "manifest": {
