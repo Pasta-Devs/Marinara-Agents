@@ -22,7 +22,7 @@ import {
   StatusSurface,
 } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
-import { useLtmTranslation } from "./localization";
+import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 
 type ReviewRow = {
   draftId: string;
@@ -791,7 +791,15 @@ export default function ReviewQueue({
         autoIncluded: 0,
         indexRebuildFailures: [],
         messages: [
-          `Fix invalid edited mutation${invalidEditIds.length === 1 ? "" : "s"} before accepting: ${invalidEditIds.join(", ")}.`,
+          localizeUi(
+            selectLtmPluralForm(locale, invalidEditIds.length) === "one"
+              ? "ui.longTermMemory.reviewqueue.invalidEditedMutationOne"
+              : "ui.longTermMemory.reviewqueue.invalidEditedMutationOther",
+            {
+              count: invalidEditIds.length,
+              ids: invalidEditIds.join(", "),
+            },
+          ),
         ],
         cascadeMutationIds: [],
       });
@@ -1304,7 +1312,7 @@ export default function ReviewQueue({
                 <h3 className="text-sm font-semibold">
                   {localizeUi("ui.longTermMemory.reviewqueue.source_922acd2")}{" "}
                   {noteById.get(source.sourceNoteId)?.title ||
-                    "Untitled memory"}
+                    localizeUi("ui.longTermMemory.reviewqueue.untitledMemory")}
                 </h3>
                 <p className="text-xs text-[var(--muted-foreground)]">
                   {localizeUi("ui.longTermMemory.reviewqueue.modes")}{" "}
@@ -1347,7 +1355,10 @@ export default function ReviewQueue({
                         <p className="text-xs text-[var(--muted-foreground)]">
                           {localizeUi("ui.longTermMemory.memoryvault.created")}{" "}
                           {formatTimestamp(item.draft.createdAt, locale)}.{" "}
-                          {item.draft.summary || "No draft summary."}
+                          {item.draft.summary ||
+                            localizeUi(
+                              "ui.longTermMemory.reviewqueue.noDraftSummary",
+                            )}
                         </p>
                       </div>
                       <span
@@ -1458,7 +1469,7 @@ export default function ReviewQueue({
                   (created?.kind === "create_note"
                     ? created.note.title
                     : undefined) ||
-                  "Unprojected target";
+                  localizeUi("ui.longTermMemory.reviewqueue.unprojectedTarget");
                 const type =
                   note?.type ||
                   (created?.kind === "create_note"

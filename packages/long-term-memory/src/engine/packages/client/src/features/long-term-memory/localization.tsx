@@ -23,9 +23,23 @@ const catalogs: Record<string, TranslationCatalog> = {
     ),
   ) as TranslationCatalog,
 };
+const pluralRulesByLocale = new Map<string, Intl.PluralRules>();
 
 function normalizeLocale(locale?: string) {
   return locale?.trim().replaceAll("_", "-") || "en";
+}
+
+export function selectLtmPluralForm(locale: string, count: number) {
+  let rules = pluralRulesByLocale.get(locale);
+  if (!rules) {
+    try {
+      rules = new Intl.PluralRules(locale);
+    } catch {
+      rules = new Intl.PluralRules("en");
+    }
+    pluralRulesByLocale.set(locale, rules);
+  }
+  return rules.select(count) === "one" ? ("one" as const) : ("other" as const);
 }
 
 function catalogForLocale(locale: string) {

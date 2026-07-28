@@ -31,6 +31,7 @@ import {
   StatusSurface,
   inputClass,
 } from "./shared-controls";
+import { humanizeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 
@@ -72,6 +73,18 @@ const flatPanelTabs: Array<{ id: FlatPanel; labelKey: string }> = [
     labelKey: "ui.longTermMemory.sourcesworkspace.alreadyImported",
   },
 ];
+const importStatusLabelKeys: Record<string, string> = {
+  created: "ui.longTermMemory.sourcesworkspace.statusCreated",
+  refreshed: "ui.longTermMemory.sourcesworkspace.statusRefreshed",
+  failed: "ui.longTermMemory.sourcesworkspace.statusFailed",
+  succeeded: "ui.longTermMemory.sourcesworkspace.statusSucceeded",
+  cancelled: "ui.longTermMemory.sourcesworkspace.statusCancelled",
+  not_started: "ui.longTermMemory.sourcesworkspace.statusNotStarted",
+  success: "ui.longTermMemory.sourcesworkspace.statusSuccess",
+  partial_success: "ui.longTermMemory.sourcesworkspace.statusPartialSuccess",
+  no_suggestions_created:
+    "ui.longTermMemory.sourcesworkspace.statusNoSuggestionsCreated",
+};
 
 type ScopeTargets = { currentScope: LtmScope | null };
 
@@ -84,6 +97,11 @@ function resultTone(status: string) {
     : status === "failed" || status === "cancelled"
       ? "danger"
       : "neutral";
+}
+
+function importStatusLabel(status: string, localizeUi: LtmTranslationFunction) {
+  const key = importStatusLabelKeys[status];
+  return key ? localizeUi(key) : humanizeLabel(status);
 }
 
 function freshnessLabel(
@@ -1210,8 +1228,8 @@ export default function SourcesWorkspace({
               <RefreshCw size="0.75rem" />
               {localizeUi(
                 "ui.longTermMemory.sourcesworkspace.retryOriginalSelection",
+                { count: cancelledImport.sourceIds.length },
               )}
-              {cancelledImport.sourceIds.length})
             </Button>
           ) : null}
         </StatusSurface>
@@ -1290,9 +1308,11 @@ export default function SourcesWorkspace({
                 }}
                 data-ltm-lorebook-pane={pane}
                 data-active={lorebookMobilePane === pane}
-                className="mari-editor-tab min-h-11 rounded-md px-2 text-xs font-semibold capitalize disabled:opacity-40"
+                className="mari-editor-tab min-h-11 rounded-md px-2 text-xs font-semibold disabled:opacity-40"
               >
-                {pane}
+                {pane === "lorebooks"
+                  ? localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks")
+                  : localizeUi("ui.longTermMemory.sourcesworkspace.entries")}
               </button>
             ))}
           </div>
@@ -1967,19 +1987,19 @@ export default function SourcesWorkspace({
                   data-ltm-source-write-status={item.sourceWriteStatus}
                   className={`rounded-full px-2 py-0.5 ${resultTone(item.sourceWriteStatus) === "success" ? "bg-[var(--marinara-editor-accent)]/15" : "bg-[var(--secondary)]"}`}
                 >
-                  {item.sourceWriteStatus}
+                  {importStatusLabel(item.sourceWriteStatus, localizeUi)}
                 </span>
                 <span
                   data-ltm-extraction-status={item.extractionStatus}
                   className="rounded-full bg-[var(--secondary)] px-2 py-0.5"
                 >
-                  {item.extractionStatus}
+                  {importStatusLabel(item.extractionStatus, localizeUi)}
                 </span>
                 <span
                   data-ltm-extraction-outcome={item.outcome.state}
                   className="rounded-full bg-[var(--secondary)] px-2 py-0.5"
                 >
-                  {item.outcome.state}
+                  {importStatusLabel(item.outcome.state, localizeUi)}
                 </span>
               </div>
               {item.extractionStatus === "failed" ||
@@ -2034,8 +2054,9 @@ export default function SourcesWorkspace({
               data-ltm-source-write-failure={failure.sourceId}
             >
               <CircleAlert size="0.875rem" /> {failure.title}:{" "}
-              {failure.error.message} ({failure.sourceWriteStatus},{" "}
-              {failure.extractionStatus})
+              {failure.error.message} (
+              {importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
+              {importStatusLabel(failure.extractionStatus, localizeUi)})
             </StatusSurface>
           ))}
           {importResult.missingSourceIds.map((id) => (

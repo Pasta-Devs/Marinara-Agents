@@ -1,6 +1,6 @@
 import type { LtmLastInjectionResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { StatusSurface } from "./shared-controls";
-import { useLtmTranslation } from "./localization";
+import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 
 export function LastInjectionSummary({
   data,
@@ -27,17 +27,11 @@ export function LastInjectionSummary({
               )
             : data?.memoryCount
               ? localizeUi(
-                  "ui.longTermMemory.lastinjectionsummary.value1Value2Injected",
+                  selectLtmPluralForm(locale, data.memoryCount) === "one"
+                    ? "ui.longTermMemory.lastinjectionsummary.injectedOne"
+                    : "ui.longTermMemory.lastinjectionsummary.injectedOther",
                   {
-                    value1: data.memoryCount,
-                    value2:
-                      data.memoryCount === 1
-                        ? localizeUi(
-                            "ui.longTermMemory.lastinjectionsummary.memory",
-                          )
-                        : localizeUi(
-                            "ui.longTermMemory.lastinjectionsummary.memories",
-                          ),
+                    count: data.memoryCount,
                   },
                 )
               : error

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -34,6 +34,10 @@ import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 type DebugLogResponse = { events: LtmDebugEvent[] };
 type DebugOperation = { operationId: string; events: LtmDebugEvent[] };
 type ActivityFilter = "all" | "errors" | LtmDebugEvent["phase"];
+type DebugTextLookup = {
+  pattern: RegExp;
+  titlesByNormalizedId: ReadonlyMap<string, string>;
+};
 
 const debugPhases: LtmDebugEvent["phase"][] = [
   "import",
@@ -65,23 +69,19 @@ function formatTimestamp(timestamp: string, locale: string) {
 
 function humanizeDebugText(
   text: string,
-  noteTitles: ReadonlyMap<string, string>,
+  lookup: DebugTextLookup,
   internalRecordLabel: string,
 ) {
-  const ids = [...noteTitles.keys()].sort(
-    (left, right) => right.length - left.length,
-  );
-  const escaped = ids.map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const pattern = [...escaped, "\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b"].join("|");
-  return text.replace(
-    new RegExp(pattern, "gi"),
-    (id) => noteTitles.get(id) ?? internalRecordLabel,
-  );
+  return text.replace(lookup.pattern, (id) => {
+    return (
+      lookup.titlesByNormalizedId.get(id.toLowerCase()) ?? internalRecordLabel
+    );
+  });
 }
 
 function describeEvent(
   event: LtmDebugEvent,
-  noteTitles: ReadonlyMap<string, string>,
+  debugTextLookup: DebugTextLookup,
   localizeUi: LtmTranslationFunction,
 ) {
   const internalRecordLabel = localizeUi(
@@ -90,16 +90,24 @@ function describeEvent(
   if (event.error)
     return humanizeDebugText(
       event.error.message,
-      noteTitles,
+      debugTextLookup,
       internalRecordLabel,
     );
   if (event.message)
-    return humanizeDebugText(event.message, noteTitles, internalRecordLabel);
+    return humanizeDebugText(
+      event.message,
+      debugTextLookup,
+      internalRecordLabel,
+    );
   if (event.uiSummary)
-    return humanizeDebugText(event.uiSummary, noteTitles, internalRecordLabel);
+    return humanizeDebugText(
+      event.uiSummary,
+      debugTextLookup,
+      internalRecordLabel,
+    );
   const summary = event.details?.summary;
   if (typeof summary === "string")
-    return humanizeDebugText(summary, noteTitles, internalRecordLabel);
+    return humanizeDebugText(summary, debugTextLookup, internalRecordLabel);
   const reason = event.details?.reason;
   if (typeof reason === "string")
     return localizeUi("ui.longTermMemory.activityview.eventDescription", {
@@ -308,12 +316,32 @@ export default function ActivityView({
     queryKey: queryKeys.notes,
     queryFn: () => requestAllNotes<LtmNote>("/notes?includeGlobal=true"),
   });
-  const noteTitles = new Map(
-    (notes.data ?? []).map((note) => [
-      note.id,
-      note.title || localizeUi("ui.longTermMemory.activityview.untitledMemory"),
-    ]),
+  const noteTitles = useMemo(
+    () =>
+      new Map(
+        (notes.data ?? []).map((note) => [
+          note.id,
+          note.title ||
+            localizeUi("ui.longTermMemory.activityview.untitledMemory"),
+        ]),
+      ),
+    [localizeUi, notes.data],
   );
+  const debugTextLookup = useMemo<DebugTextLookup>(() => {
+    const titlesByNormalizedId = new Map(
+      [...noteTitles].map(([id, title]) => [id.toLowerCase(), title]),
+    );
+    const escapedIds = [...titlesByNormalizedId.keys()]
+      .sort((left, right) => right.length - left.length)
+      .map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    return {
+      titlesByNormalizedId,
+      pattern: new RegExp(
+        [...escapedIds, "\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b"].join("|"),
+        "gi",
+      ),
+    };
+  }, [noteTitles]);
   const operations = groupOperations(activity.data?.events ?? []);
   const recallEvents =
     filter === "all"
@@ -785,7 +813,11 @@ export default function ActivityView({
                         {sourceNoteId && noteTitles.has(sourceNoteId)
                           ? noteTitles.get(sourceNoteId)
                           : compactSummary(
-                              describeEvent(lastEvent, noteTitles, localizeUi),
+                              describeEvent(
+                                lastEvent,
+                                debugTextLookup,
+                                localizeUi,
+                              ),
                             )}
                       </span>
                       <span className="mt-1 block text-[0.6875rem] text-[var(--muted-foreground)]">
@@ -832,7 +864,7 @@ export default function ActivityView({
                             </span>
                           </div>
                           <p className="mt-1 leading-relaxed">
-                            {describeEvent(event, noteTitles, localizeUi)}
+                            {describeEvent(event, debugTextLookup, localizeUi)}
                           </p>
                           <p className="mt-1 text-[0.6875rem] text-[var(--muted-foreground)]">
                             {formatTimestamp(event.ts, locale)}
@@ -885,7 +917,7 @@ export default function ActivityView({
                                 <pre className="overflow-x-auto text-[0.6875rem] text-[var(--muted-foreground)]">
                                   {humanizeDebugText(
                                     JSON.stringify(metadata, null, 2),
-                                    noteTitles,
+                                    debugTextLookup,
                                     localizeUi(
                                       "ui.longTermMemory.activityview.anInternalRecord",
                                     ),

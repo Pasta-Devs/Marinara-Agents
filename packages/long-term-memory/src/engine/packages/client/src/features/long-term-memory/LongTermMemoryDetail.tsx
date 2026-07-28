@@ -280,7 +280,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         ? "bg-[var(--marinara-editor-accent)]"
         : health === "corrupt" || health === "failed"
           ? "bg-[var(--destructive)]"
-          : "bg-[var(--marinara-editor-accent)]";
+          : "bg-[var(--marinara-editor-accent)] opacity-50";
 
   return (
     <main
@@ -370,13 +370,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               {addOpen ? (
                 <div
                   id="ltm-add-menu"
-                  aria-label={localizeUi(
-                    "ui.longTermMemory.longtermmemorydetail.addMemories",
-                  )}
+                  role="group"
+                  aria-labelledby="ltm-add-menu-title"
                   className="mari-editor-panel absolute right-0 z-30 mt-2 w-72 p-2 text-[var(--marinara-editor-text)] shadow-lg"
                 >
                   <div className="px-2 py-1">
-                    <h2 className="text-sm font-semibold">
+                    <h2
+                      id="ltm-add-menu-title"
+                      className="text-sm font-semibold"
+                    >
                       {localizeUi(
                         "ui.longTermMemory.longtermmemorydetail.addMemories",
                       )}

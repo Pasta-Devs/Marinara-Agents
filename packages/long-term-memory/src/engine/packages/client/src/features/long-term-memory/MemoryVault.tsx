@@ -46,7 +46,11 @@ import {
   noteTypeLabel,
   scopeTargetLabel,
 } from "./display-labels";
-import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
+import {
+  selectLtmPluralForm,
+  useLtmTranslation,
+  type LtmTranslationFunction,
+} from "./localization";
 
 const noteTypes: readonly LtmNoteType[] = [
   "timeline_event",
@@ -476,7 +480,10 @@ export default function MemoryVault({
     setSectionKey("");
     setChecked(new Set());
     setMobilePane("memories");
-  }, [contextKey, localizeUi, props.chatId, props.chatName]);
+    // Context switches are the only reset boundary. Dedicated effects above
+    // update chat labels without discarding an open draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextKey]);
   useEffect(() => {
     if (
       target?.id === `chat:${props.chatId}` &&
@@ -933,13 +940,12 @@ export default function MemoryVault({
         setMobilePane("memories");
       }
       setNotice(
-        localizeUi("ui.longTermMemory.memoryvault.memoriesDeleted", {
-          count: result.deletedIds.length,
-          noun:
-            result.deletedIds.length === 1
-              ? localizeUi("ui.longTermMemory.memoryvault.memory")
-              : localizeUi("ui.longTermMemory.memoryvault.memories"),
-        }),
+        localizeUi(
+          selectLtmPluralForm(locale, result.deletedIds.length) === "one"
+            ? "ui.longTermMemory.memoryvault.memoryDeletedOne"
+            : "ui.longTermMemory.memoryvault.memoryDeletedOther",
+          { count: result.deletedIds.length },
+        ),
       );
       await invalidate();
     } catch (cause) {
@@ -1023,10 +1029,24 @@ export default function MemoryVault({
       } else {
         setChecked(unresolved);
       }
-      const unresolvedLabel = unresolved.size
-        ? `; ${result.skippedNoteIds.length} skipped, ${result.failedNoteIds.length} failed`
-        : "";
-      const message = `${result.updatedNoteIds.length} ${result.updatedNoteIds.length === 1 ? "memory" : "memories"} updated${unresolvedLabel}.`;
+      const updatedForm = selectLtmPluralForm(
+        locale,
+        result.updatedNoteIds.length,
+      );
+      const message = localizeUi(
+        unresolved.size
+          ? updatedForm === "one"
+            ? "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOne"
+            : "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOther"
+          : updatedForm === "one"
+            ? "ui.longTermMemory.memoryvault.batchUpdatedOne"
+            : "ui.longTermMemory.memoryvault.batchUpdatedOther",
+        {
+          updated: result.updatedNoteIds.length,
+          skipped: result.skippedNoteIds.length,
+          failed: result.failedNoteIds.length,
+        },
+      );
       setOpenActionNoteId(null);
       if (unresolved.size) {
         setNotice("");
@@ -1298,9 +1318,15 @@ export default function MemoryVault({
               setMobilePane(pane);
               if (pane !== "details") setDetailsOpen(false);
             }}
-            className={`min-h-11 rounded-md px-2 text-xs font-semibold capitalize disabled:opacity-40 ${mobilePane === pane ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
+            className={`min-h-11 rounded-md px-2 text-xs font-semibold disabled:opacity-40 ${mobilePane === pane ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
           >
-            {pane}
+            {localizeUi(
+              {
+                memories: "ui.longTermMemory.longtermmemorynavigation.memories",
+                editor: "ui.longTermMemory.memoryvault.memoryEditor",
+                details: "ui.longTermMemory.memoryvault.memoryDetails",
+              }[pane],
+            )}
           </button>
         ))}
       </div>

@@ -1736,8 +1736,8 @@ export default function MemorySettings({
             >
               {localizeUi(
                 "ui.longTermMemory.memorysettings.applySelectedRepairs",
+                { count: selectedIdentityCount },
               )}
-              {selectedIdentityCount})
             </Button>
           </div>
           {identityPreview ? (
@@ -1925,9 +1925,10 @@ export default function MemorySettings({
                       }
                     >
                       <legend className="font-medium">
-                        {localizeUi("ui.longTermMemory.memorysettings.choose")}{" "}
-                        {conflict.sectionKey}{" "}
-                        {localizeUi("ui.longTermMemory.memorysettings.content")}
+                        {localizeUi(
+                          "ui.longTermMemory.memorysettings.chooseSectionContent",
+                          { sectionKey: conflict.sectionKey },
+                        )}
                       </legend>
                       {conflict.options.map((option) => {
                         const included = new Set([
