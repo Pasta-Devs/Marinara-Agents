@@ -1250,7 +1250,11 @@ export default function MemoryVault({
       aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryVault")}
     >
       <style>{`
-        @media (min-width: 1280px) {
+        [data-ltm-note-inspector] [data-ltm-inspector-tokens],
+        [data-ltm-note-inspector] [data-ltm-inspector-fields] {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        @container ltm-destination (min-width: 64rem) {
           [data-ltm-surface="vault"] {
             display: grid;
             grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
@@ -1288,13 +1292,23 @@ export default function MemoryVault({
           [data-ltm-note-editor] {
             display: block !important;
           }
-          [data-ltm-note-inspector] {
+        }
+        @container ltm-note-workbench (min-width: 48rem) {
+          [data-ltm-note-layout][data-details-open="true"] {
+            display: flex;
+            column-gap: 1rem;
+          }
+          [data-ltm-note-layout][data-details-open="true"]
+            > [data-ltm-note-editor] {
+            min-width: 0;
+            flex: 1 1 0%;
+          }
+          [data-ltm-note-layout][data-details-open="true"]
+            > [data-ltm-note-inspector] {
+            min-width: 16rem;
+            flex: 0 0 18rem;
             border-left: 1px solid var(--border);
             padding-left: 1rem;
-          }
-          [data-ltm-inspector-tokens],
-          [data-ltm-inspector-fields] {
-            grid-template-columns: minmax(0, 1fr);
           }
           [data-ltm-inspector-tokens] {
             border-top: 0;
@@ -1910,6 +1924,10 @@ export default function MemoryVault({
           tabIndex={-1}
           data-ltm-note-workbench
           className={`${mobilePane === "memories" ? "hidden" : "block"} min-w-0 scroll-mt-20 rounded-lg border border-[var(--border)] p-3 md:block`}
+          style={{
+            containerName: "ltm-note-workbench",
+            containerType: "inline-size",
+          }}
           aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryEditor")}
         >
           {!draft ? (
@@ -1970,8 +1988,8 @@ export default function MemoryVault({
               </header>
               <div
                 data-ltm-note-layout
-                className={`min-w-0 ${detailsOpen ? "md:flex" : ""}`}
-                style={detailsOpen ? { columnGap: "1rem" } : undefined}
+                data-details-open={detailsOpen}
+                className="min-w-0"
               >
                 <div
                   data-ltm-note-editor
@@ -1979,9 +1997,6 @@ export default function MemoryVault({
                     mobilePane === "details"
                       ? "hidden space-y-4 md:block"
                       : "space-y-4"
-                  }
-                  style={
-                    detailsOpen ? { flex: "1 1 0%", minWidth: 0 } : undefined
                   }
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -2189,7 +2204,6 @@ export default function MemoryVault({
                   aria-label={localizeUi(
                     "ui.longTermMemory.memoryvault.memoryInspector",
                   )}
-                  style={detailsOpen ? { flex: "0 0 18rem" } : undefined}
                   className={
                     detailsOpen || mobilePane === "details"
                       ? mobilePane === "editor"

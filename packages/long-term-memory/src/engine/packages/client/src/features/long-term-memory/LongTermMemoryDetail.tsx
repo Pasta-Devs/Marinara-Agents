@@ -473,7 +473,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         </div>
       </header>
       <div className="mari-editor-content max-md:p-4">
-        <div className="mari-editor-content-inner mari-editor-content-inner--wide space-y-5">
+        <div
+          className="mari-editor-content-inner mari-editor-content-inner--wide space-y-5"
+          style={{ maxWidth: "90rem" }}
+        >
           <section
             data-ltm-surface="overview"
             aria-label={localizeUi(
@@ -528,7 +531,14 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 review: pendingDrafts.data?.count,
               }}
             />
-            <div className="min-w-0 flex-1 space-y-5">
+            <div
+              data-ltm-destination-content
+              className="min-w-0 flex-1 space-y-5"
+              style={{
+                containerName: "ltm-destination",
+                containerType: "inline-size",
+              }}
+            >
               {activationError ? (
                 <StatusSurface tone="danger">{activationError}</StatusSurface>
               ) : null}
