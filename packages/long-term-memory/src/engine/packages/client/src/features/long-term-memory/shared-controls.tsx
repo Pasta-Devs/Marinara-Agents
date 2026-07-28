@@ -10,34 +10,34 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Info, Loader2, type LucideIcon } from "lucide-react";
+import { useLtmTranslation } from "./localization";
 
 let activePopover: { id: string; close: () => void } | null = null;
 
-export const inputClass =
-  "min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]";
+export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
 
-export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
-  children: ReactNode;
-  primary?: boolean;
-  destructive?: boolean;
-}>(function Button({
-  children,
-  primary = false,
-  destructive = false,
-  className = "",
-  ...props
-}, ref) {
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & {
+    children: ReactNode;
+    primary?: boolean;
+    destructive?: boolean;
+  }
+>(function Button(
+  { children, primary = false, destructive = false, className = "", ...props },
+  ref,
+) {
   const tone = primary
-    ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
+    ? "mari-editor-action--primary"
     : destructive
-      ? "border-[var(--destructive)]/35 text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
-      : "border-[var(--border)] bg-[var(--secondary)] text-[var(--foreground)] hover:bg-[var(--accent)]";
+      ? "mari-editor-action--danger"
+      : "";
   return (
     <button
       ref={ref}
       type="button"
       data-ltm-control="button"
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50 ${tone} ${className}`}
+      className={`mari-editor-action min-h-11 px-3 ${tone} ${className}`}
       {...props}
     >
       {children}
@@ -62,7 +62,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       data-ltm-control="icon-button"
-      className={`inline-grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50 ${destructive ? "border-[var(--destructive)]/35 text-[var(--destructive)] hover:bg-[var(--destructive)]/10" : "border-[var(--border)] bg-[var(--secondary)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"} ${className}`}
+      className={`mari-editor-action h-8 min-h-8 w-8 min-w-8 shrink-0 p-0 ${destructive ? "mari-editor-action--danger" : ""} ${className}`}
       {...props}
     >
       <Icon aria-hidden="true" size="0.875rem" />
@@ -91,6 +91,7 @@ export function InfoPopover({
   content: ReactNode;
   wide?: boolean;
 }) {
+  const { t: localizeUi } = useLtmTranslation();
   const id = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -184,7 +185,9 @@ export function InfoPopover({
       <button
         ref={triggerRef}
         type="button"
-        aria-label={`About ${label}`}
+        aria-label={localizeUi("ui.longTermMemory.infopopover.aboutValue1", {
+          value1: label,
+        })}
         aria-expanded={open}
         aria-controls={open ? `${id}-panel` : undefined}
         aria-describedby={open ? `${id}-panel` : undefined}
@@ -319,8 +322,9 @@ export function StatusSurface({
   className?: string;
 } & HTMLAttributes<HTMLParagraphElement>) {
   const toneClass = {
-    neutral: "border-[var(--border)] text-[var(--muted-foreground)]",
-    success: "border-emerald-500/35 text-emerald-600 dark:text-emerald-400",
+    neutral: "text-[var(--marinara-editor-muted)]",
+    success:
+      "border-[var(--marinara-editor-accent)]/35 text-[var(--marinara-editor-accent)]",
     danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
   }[tone];
   return (
@@ -328,7 +332,7 @@ export function StatusSurface({
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
-      className={`flex items-center gap-2 rounded-lg border bg-[var(--secondary)]/45 ${compact ? "px-2 py-1.5 text-[0.625rem]" : "min-h-11 px-3 text-xs"} ${toneClass} ${className}`}
+      className={`mari-editor-panel mari-editor-panel--soft flex items-center gap-2 ${compact ? "px-2 py-1.5 text-[0.625rem]" : "min-h-11 px-3 text-xs"} ${toneClass} ${className}`}
       {...props}
     >
       {busy ? (

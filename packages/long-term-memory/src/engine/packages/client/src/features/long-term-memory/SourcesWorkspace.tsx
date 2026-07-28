@@ -32,6 +32,7 @@ import {
   inputClass,
 } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
+import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 
 type Source = "characters" | "lorebooks" | "chats";
 type FlatPanel = "available" | "imported";
@@ -46,15 +47,30 @@ type ImportContract = {
   selectionKey: string;
 };
 
-const sourceTabs: Array<{ id: Source; label: string }> = [
-  { id: "chats", label: "Chat Summaries" },
-  { id: "characters", label: "Characters" },
-  { id: "lorebooks", label: "Lorebooks" },
+const sourceTabs: Array<{ id: Source; labelKey: string }> = [
+  {
+    id: "chats",
+    labelKey: "ui.longTermMemory.sourcesworkspace.chatSummaries",
+  },
+  {
+    id: "characters",
+    labelKey: "ui.longTermMemory.sourcesworkspace.characters",
+  },
+  {
+    id: "lorebooks",
+    labelKey: "ui.longTermMemory.sourcesworkspace.lorebooks",
+  },
 ];
 
-const flatPanelTabs: Array<{ id: FlatPanel; label: string }> = [
-  { id: "available", label: "Ready to Import" },
-  { id: "imported", label: "Already Imported" },
+const flatPanelTabs: Array<{ id: FlatPanel; labelKey: string }> = [
+  {
+    id: "available",
+    labelKey: "ui.longTermMemory.sourcesworkspace.readyToImport",
+  },
+  {
+    id: "imported",
+    labelKey: "ui.longTermMemory.sourcesworkspace.alreadyImported",
+  },
 ];
 
 type ScopeTargets = { currentScope: LtmScope | null };
@@ -70,23 +86,42 @@ function resultTone(status: string) {
       : "neutral";
 }
 
-function freshnessLabel(freshness: LorebookCandidate["freshness"]) {
-  if (freshness === "source_updated") return "Update available";
-  if (freshness === "context_updated") return "Context changed";
-  if (freshness === "extraction_incomplete") return "Extraction incomplete";
-  if (freshness === "current") return "Current";
-  return "New";
+function freshnessLabel(
+  freshness: LorebookCandidate["freshness"],
+  localizeUi: LtmTranslationFunction,
+) {
+  if (freshness === "source_updated")
+    return localizeUi("ui.longTermMemory.sourcesworkspace.updateAvailable");
+  if (freshness === "context_updated")
+    return localizeUi("ui.longTermMemory.sourcesworkspace.contextChanged");
+  if (freshness === "extraction_incomplete")
+    return localizeUi(
+      "ui.longTermMemory.sourcesworkspace.extractionIncomplete",
+    );
+  if (freshness === "current")
+    return localizeUi("ui.longTermMemory.sourcesworkspace.current");
+  return localizeUi("ui.longTermMemory.sourcesworkspace.new");
 }
 
-function sourceStatusLabel(row: PreviewRow) {
-  return freshnessLabel(row.freshness);
+function sourceStatusLabel(
+  row: PreviewRow,
+  localizeUi: LtmTranslationFunction,
+) {
+  return freshnessLabel(row.freshness, localizeUi);
 }
 
-function entryStatusLabel(entry: LtmLorebookPreviewEntry) {
+function entryStatusLabel(
+  entry: LtmLorebookPreviewEntry,
+  localizeUi: LtmTranslationFunction,
+) {
   const labels = new Set(
-    entry.candidates.map((candidate) => freshnessLabel(candidate.freshness)),
+    entry.candidates.map((candidate) =>
+      freshnessLabel(candidate.freshness, localizeUi),
+    ),
   );
-  return labels.size === 1 ? [...labels][0] : "Mixed";
+  return labels.size === 1
+    ? [...labels][0]
+    : localizeUi("ui.longTermMemory.sourcesworkspace.mixed");
 }
 
 function handleTabKey<T extends string>(
@@ -128,6 +163,7 @@ function EntrySelect({
   indeterminate: boolean;
   onChange: (checked: boolean) => void;
 }) {
+  const { t: localizeUi } = useLtmTranslation();
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.indeterminate = indeterminate;
@@ -138,7 +174,9 @@ function EntrySelect({
       type="checkbox"
       checked={checked}
       onChange={(event) => onChange(event.target.checked)}
-      aria-label={`Select ${entry.name}`}
+      aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
+        value1: entry.name,
+      })}
       data-ltm-lorebook-entry-select={entry.id}
     />
   );
@@ -171,28 +209,37 @@ function TransferWorkbench({
   onPreview: () => void;
   onApply: () => void;
 }) {
+  const { t: localizeUi } = useLtmTranslation();
   return (
     <div
       data-ltm-source-transfer
       className="space-y-3 border-b border-[var(--border)] bg-[var(--secondary)]/20 p-3"
     >
       <div className="flex items-center gap-1">
-        <h2 className="text-sm font-semibold">Transfer memories</h2>
+        <h2 className="text-sm font-semibold">
+          {localizeUi("ui.longTermMemory.transferworkbench.transferMemories")}
+        </h2>
         <InfoPopover
-          label="Transfer memories"
+          label={localizeUi(
+            "ui.longTermMemory.transferworkbench.transferMemories",
+          )}
           wide
-          content="Preview a copy or move into the current chat. Copy keeps the original scopes. Move transfers applicability to the current chat according to the preview. Attached durable memories are included only when selected. The preview shows which memories are ready, conflicting, or already applicable."
+          content={localizeUi(
+            "ui.longTermMemory.transferworkbench.previewACopyOrMoveIntoTheCurrentChat",
+          )}
         />
       </div>
       {!chatId ? (
         <StatusSurface tone="danger">
-          Open Long-Term Memory from a chat before transferring memories.
+          {localizeUi(
+            "ui.longTermMemory.transferworkbench.openLongTermMemoryFromAChatBeforeTransferring",
+          )}
         </StatusSurface>
       ) : null}
       {noteCount ? (
         <>
           <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            Mode
+            {localizeUi("ui.longTermMemory.transferworkbench.mode")}
             <select
               value={mode}
               onChange={(event) =>
@@ -201,8 +248,16 @@ function TransferWorkbench({
               className={inputClass}
               data-ltm-transfer-mode
             >
-              <option value="copy">Copy to current chat</option>
-              <option value="move">Move to current chat</option>
+              <option value="copy">
+                {localizeUi(
+                  "ui.longTermMemory.transferworkbench.copyToCurrentChat",
+                )}
+              </option>
+              <option value="move">
+                {localizeUi(
+                  "ui.longTermMemory.transferworkbench.moveToCurrentChat",
+                )}
+              </option>
             </select>
           </label>
           <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
@@ -212,7 +267,9 @@ function TransferWorkbench({
               onChange={(event) => onIncludeDerivedChange(event.target.checked)}
               data-ltm-transfer-include-derived
             />
-            Include attached durable memories
+            {localizeUi(
+              "ui.longTermMemory.transferworkbench.includeAttachedDurableMemories",
+            )}
           </label>
         </>
       ) : null}
@@ -228,16 +285,21 @@ function TransferWorkbench({
           ) : (
             <Send size="0.75rem" />
           )}
-          Preview transfer ({noteCount})
+          {localizeUi(
+            "ui.longTermMemory.transferworkbench.previewTransferCount",
+            { count: noteCount },
+          )}
         </Button>
       ) : null}
       {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
       {preview ? (
         <div data-ltm-transfer-preview className="space-y-2 text-xs">
           <p role="status">
-            {preview.buckets.ready.length} ready,{" "}
-            {preview.buckets.conflict.length} conflicts,{" "}
-            {preview.buckets.noOp.length} already applicable.
+            {localizeUi("ui.longTermMemory.transferworkbench.previewSummary", {
+              ready: preview.buckets.ready.length,
+              conflicts: preview.buckets.conflict.length,
+              alreadyApplicable: preview.buckets.noOp.length,
+            })}
           </p>
           {preview.items.map((item) => (
             <p
@@ -246,7 +308,11 @@ function TransferWorkbench({
               className="rounded bg-[var(--secondary)]/45 p-2"
             >
               <strong>{item.title}</strong>: {item.classification}
-              {item.reason ? ` - ${item.reason}` : ""}
+              {item.reason
+                ? localizeUi("ui.longTermMemory.transferworkbench.value1", {
+                    value1: item.reason,
+                  })
+                : ""}
             </p>
           ))}
           <Button
@@ -261,18 +327,29 @@ function TransferWorkbench({
             ) : (
               <Check size="0.75rem" />
             )}
-            {preview.mode === "move" ? "Move" : "Copy"}{" "}
-            {preview.buckets.ready.length} memor
-            {preview.buckets.ready.length === 1 ? "y" : "ies"}
+            {localizeUi(
+              preview.mode === "move"
+                ? "ui.longTermMemory.transferworkbench.moveMemoryCount"
+                : "ui.longTermMemory.transferworkbench.copyMemoryCount",
+              {
+                count: preview.buckets.ready.length,
+                memory:
+                  preview.buckets.ready.length === 1
+                    ? localizeUi("ui.longTermMemory.memoryvault.memory")
+                    : localizeUi("ui.longTermMemory.memoryvault.memories"),
+              },
+            )}
           </Button>
         </div>
       ) : null}
       {result ? (
         <div data-ltm-transfer-result={result.mode}>
           <StatusSurface tone="success">
-            Updated {result.updatedNoteIds.length}; skipped{" "}
-            {result.skippedNoteIds.length}; derived touched{" "}
-            {result.derivedNoteIdsTouched.length}.
+            {localizeUi("ui.longTermMemory.transferworkbench.resultSummary", {
+              updated: result.updatedNoteIds.length,
+              skipped: result.skippedNoteIds.length,
+              derivedTouched: result.derivedNoteIdsTouched.length,
+            })}
           </StatusSurface>
         </div>
       ) : null}
@@ -285,6 +362,7 @@ export default function SourcesWorkspace({
   onOpenMemory,
   onOpenReview,
 }: LongTermMemoryDestinationProps) {
+  const { t: localizeUi } = useLtmTranslation();
   const importScopeLabelId = useId();
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -624,7 +702,11 @@ export default function SourcesWorkspace({
     const ids = Array.from(new Set(sourceIds));
     if (ids.length === 0 || importing) return;
     if (ids.length > 100) {
-      setImportError("Select up to 100 source parts per import.");
+      setImportError(
+        localizeUi(
+          "ui.longTermMemory.sourcesworkspace.selectUpTo100SourceParts",
+        ),
+      );
       return;
     }
     const contract: ImportContract = retryContract
@@ -662,10 +744,10 @@ export default function SourcesWorkspace({
           source: Source;
           sourceIds: string[];
           limit: number;
-           extract: boolean;
-           scope?: LtmScope;
-           mode?: LtmMode;
-           chatId?: string;
+          extract: boolean;
+          scope?: LtmScope;
+          mode?: LtmMode;
+          chatId?: string;
         }
       >(
         "/import/source-notes",
@@ -702,17 +784,23 @@ export default function SourcesWorkspace({
       ).catch(() => undefined);
       if (action === "refresh")
         setReviewMessage(
-          "Source synced. Re-run extraction when you want a new draft.",
+          localizeUi(
+            "ui.longTermMemory.sourcesworkspace.sourceSyncedRerunExtraction",
+          ),
         );
     } catch (error) {
       const cancelled = controller.signal.aborted;
       if (cancelled) setCancelledImport(contract);
       setImportError(
         cancelled
-          ? "Import transport was cancelled before results were received. Some sources may have completed; the original selection is retained, and retry will use its original source, scope, and mode."
+          ? localizeUi(
+              "ui.longTermMemory.sourcesworkspace.importCancelledSelectionRetained",
+            )
           : error instanceof Error
             ? error.message
-            : "Sources could not be imported.",
+            : localizeUi(
+                "ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported",
+              ),
       );
     } finally {
       if (importControllerRef.current === controller)
@@ -731,13 +819,19 @@ export default function SourcesWorkspace({
         "POST",
         props.chatId ? { chatId: props.chatId } : {},
       );
-      setReviewMessage("Extraction completed. Related draft review is ready.");
+      setReviewMessage(
+        localizeUi(
+          "ui.longTermMemory.sourcesworkspace.extractionCompletedReviewReady",
+        ),
+      );
       await invalidateAfterMutation();
     } catch (error) {
       setImportError(
         error instanceof Error
           ? error.message
-          : "Source memory could not be re-extracted.",
+          : localizeUi(
+              "ui.longTermMemory.sourcesworkspace.sourceCouldNotBeReextracted",
+            ),
       );
     } finally {
       setExtractingId(null);
@@ -765,7 +859,9 @@ export default function SourcesWorkspace({
       setTransferError(
         error instanceof Error
           ? error.message
-          : "Transfer preview could not load.",
+          : localizeUi(
+              "ui.longTermMemory.sourcesworkspace.transferPreviewCouldNotLoad",
+            ),
       );
     } finally {
       setTransferBusy(null);
@@ -774,7 +870,13 @@ export default function SourcesWorkspace({
 
   const applyTransfer = async () => {
     const readyIds = transferPreview?.buckets.ready ?? [];
-    if (!props.chatId || readyIds.length === 0 || transferBusy || !transferPreview) return;
+    if (
+      !props.chatId ||
+      readyIds.length === 0 ||
+      transferBusy ||
+      !transferPreview
+    )
+      return;
     setTransferBusy("apply");
     setTransferError("");
     try {
@@ -784,7 +886,9 @@ export default function SourcesWorkspace({
         {
           // Do not send no-op or conflicting IDs from the preview back to apply.
           requestedNoteIds: transferPreview.selection.requestedNoteIds,
-          derivedNoteIds: transferPreview.selection.derivedNoteIds.filter((id) => readyIds.includes(id)),
+          derivedNoteIds: transferPreview.selection.derivedNoteIds.filter(
+            (id) => readyIds.includes(id),
+          ),
           applyNoteIds: readyIds,
           mode: transferPreview!.mode,
           destinationChatId: props.chatId,
@@ -805,7 +909,9 @@ export default function SourcesWorkspace({
       setTransferError(
         error instanceof Error
           ? error.message
-          : "Transfer could not be applied.",
+          : localizeUi(
+              "ui.longTermMemory.sourcesworkspace.transferCouldNotBeApplied",
+            ),
       );
     } finally {
       setTransferBusy(null);
@@ -833,7 +939,10 @@ export default function SourcesWorkspace({
       <div className="hidden items-start gap-1 opacity-0 transition-opacity pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
         <IconButton
           icon={extractingId === noteId ? Loader2 : Sparkles}
-          label={`Re-extract ${title}`}
+          label={localizeUi(
+            "ui.longTermMemory.sourcesworkspace.reExtractValue1",
+            { value1: title },
+          )}
           disabled={extractingId !== null}
           onClick={(event) => {
             stopRowAction(event);
@@ -845,7 +954,10 @@ export default function SourcesWorkspace({
         />
         <IconButton
           icon={BookOpen}
-          label={`Review drafts for ${title}`}
+          label={localizeUi(
+            "ui.longTermMemory.sourcesworkspace.reviewDraftsForValue1",
+            { value1: title },
+          )}
           onClick={(event) => {
             stopRowAction(event);
             setOpenSourceActionId(null);
@@ -859,7 +971,7 @@ export default function SourcesWorkspace({
           <>
             <IconButton
               icon={extractingId === noteId ? Loader2 : Sparkles}
-              label="Re-extract"
+              label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
               disabled={extractingId !== null}
               onClick={(event) => {
                 stopRowAction(event);
@@ -870,7 +982,9 @@ export default function SourcesWorkspace({
             />
             <IconButton
               icon={BookOpen}
-              label="Review drafts"
+              label={localizeUi(
+                "ui.longTermMemory.sourcesworkspace.reviewDrafts",
+              )}
               onClick={(event) => {
                 stopRowAction(event);
                 setOpenSourceActionId(null);
@@ -881,7 +995,10 @@ export default function SourcesWorkspace({
         ) : null}
         <IconButton
           icon={Ellipsis}
-          label={`More actions for ${title}`}
+          label={localizeUi(
+            "ui.longTermMemory.memoryvault.moreActionsForValue1",
+            { value1: title },
+          )}
           aria-expanded={openSourceActionId === noteId}
           onClick={(event) => toggleSourceActions(event, noteId)}
         />
@@ -899,9 +1016,11 @@ export default function SourcesWorkspace({
       className="space-y-4"
     >
       <div
-        className="flex flex-wrap gap-2"
+        className="mari-editor-tab-rail flex flex-wrap gap-1 rounded-lg border p-1"
         role="tablist"
-        aria-label="Import sources"
+        aria-label={localizeUi(
+          "ui.longTermMemory.longtermmemorydetail.importSources",
+        )}
       >
         {sourceTabs.map((tab) => (
           <button
@@ -923,22 +1042,29 @@ export default function SourcesWorkspace({
                 "data-ltm-source-tab",
               )
             }
-            className={`min-h-11 rounded-lg border px-3 text-xs font-semibold ${source === tab.id ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] bg-[var(--secondary)]"}`}
+            data-active={source === tab.id}
+            className="mari-editor-tab min-h-11 rounded-lg border px-3 text-xs font-semibold"
           >
-            {tab.label}
+            {localizeUi(tab.labelKey)}
           </button>
         ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3">
         <div className="flex min-h-11 items-center gap-2 text-xs font-medium">
-          <span id={importScopeLabelId}>Import scope</span>
+          <span id={importScopeLabelId}>
+            {localizeUi("ui.longTermMemory.sourcesworkspace.importScope")}
+          </span>
           <InfoPopover
-            label="Import scope"
+            label={localizeUi("ui.longTermMemory.sourcesworkspace.importScope")}
             content={
               effectiveImportScope === "all"
-                ? "Search every available character, lorebook, chat, and branch."
-                : "Limit imports to this chat and its related scope."
+                ? localizeUi(
+                    "ui.longTermMemory.sourcesworkspace.searchEveryAvailableCharacterLorebookChatAndBranch",
+                  )
+                : localizeUi(
+                    "ui.longTermMemory.sourcesworkspace.limitImportsToThisChatAndItsRelatedScope",
+                  )
             }
           />
           <select
@@ -951,9 +1077,11 @@ export default function SourcesWorkspace({
             data-ltm-import-scope
           >
             <option value="current" disabled={!props.chatId}>
-              Current chat
+              {localizeUi("ui.longTermMemory.sourcesworkspace.currentChat")}
             </option>
-            <option value="all">All Available</option>
+            <option value="all">
+              {localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable")}
+            </option>
           </select>
         </div>
       </div>
@@ -967,28 +1095,58 @@ export default function SourcesWorkspace({
         >
           {source === "lorebooks"
             ? lorebookPreview.data
-              ? `${lorebookPreview.data.counts.books} lorebooks, ${lorebookPreview.data.counts.entries} entries, ${lorebookPreview.data.counts.imported} imported`
-              : "Loading lorebooks..."
+              ? localizeUi(
+                  "ui.longTermMemory.sourcesworkspace.value1LorebooksValue2EntriesValue3Imported",
+                  {
+                    value1: lorebookPreview.data.counts.books,
+                    value2: lorebookPreview.data.counts.entries,
+                    value3: lorebookPreview.data.counts.imported,
+                  },
+                )
+              : localizeUi(
+                  "ui.longTermMemory.sourcesworkspace.loadingLorebooks",
+                )
             : preview.data
-              ? `${preview.data.scanned} scanned, ${preview.data.draftable} pending, ${preview.data.importedCount} imported`
-              : "Loading source preview..."}
+              ? localizeUi(
+                  "ui.longTermMemory.sourcesworkspace.value1ScannedValue2PendingValue3Imported",
+                  {
+                    value1: preview.data.scanned,
+                    value2: preview.data.draftable,
+                    value3: preview.data.importedCount,
+                  },
+                )
+              : localizeUi(
+                  "ui.longTermMemory.sourcesworkspace.loadingSourcePreview",
+                )}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
-            Mode
+            {localizeUi("ui.longTermMemory.transferworkbench.mode")}
             <select
               className={`${inputClass} w-36`}
               value={modeFilter}
               onChange={(event) =>
                 changeModeFilter(event.target.value as LtmMode | "all")
               }
-              aria-label="Filter sources by mode"
+              aria-label={localizeUi(
+                "ui.longTermMemory.sourcesworkspace.filterSourcesByMode",
+              )}
             >
-              <option value="all">All</option>
-              <option value="game">Game</option>
-              <option value="conversation">Conversation</option>
-              <option value="roleplay">Roleplay</option>
-              <option value="visual_novel">Visual Novel</option>
+              <option value="all">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.all")}
+              </option>
+              <option value="game">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.game")}
+              </option>
+              <option value="conversation">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.conversation")}
+              </option>
+              <option value="roleplay">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.roleplay")}
+              </option>
+              <option value="visual_novel">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.visualNovel")}
+              </option>
             </select>
           </label>
           <Button
@@ -1013,7 +1171,7 @@ export default function SourcesWorkspace({
             ) : (
               <RefreshCw size="0.75rem" />
             )}
-            Refresh preview
+            {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
           </Button>
         </div>
       </div>
@@ -1026,8 +1184,12 @@ export default function SourcesWorkspace({
             ? (source === "lorebooks" ? lorebookPreview.error : preview.error)
                 .message
             : source === "lorebooks"
-              ? "Lorebooks could not load."
-              : "Source preview could not load."}
+              ? localizeUi(
+                  "ui.longTermMemory.sourcesworkspace.lorebooksCouldNotLoad",
+                )
+              : localizeUi(
+                  "ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad",
+                )}
         </StatusSurface>
       ) : null}
       {importError ? (
@@ -1046,7 +1208,10 @@ export default function SourcesWorkspace({
               data-ltm-source-action="retry-cancelled"
             >
               <RefreshCw size="0.75rem" />
-              Retry original selection ({cancelledImport.sourceIds.length})
+              {localizeUi(
+                "ui.longTermMemory.sourcesworkspace.retryOriginalSelection",
+              )}
+              {cancelledImport.sourceIds.length})
             </Button>
           ) : null}
         </StatusSurface>
@@ -1056,8 +1221,9 @@ export default function SourcesWorkspace({
       ) : null}
       {!reviewMessage && !importResult && !importError ? (
         <StatusSurface>
-          Importing saves source material first. Extract proposed memories, then
-          review and accept the ones you want to keep.
+          {localizeUi(
+            "ui.longTermMemory.sourcesworkspace.importingSavesSourceMaterialFirstExtractProposedMemoriesThen",
+          )}
         </StatusSurface>
       ) : null}
 
@@ -1084,8 +1250,10 @@ export default function SourcesWorkspace({
           `}</style>
           <div
             role="tablist"
-            aria-label="Lorebook workspace"
-            className="grid grid-cols-2 rounded-lg border border-[var(--border)] p-1 xl:hidden"
+            aria-label={localizeUi(
+              "ui.longTermMemory.sourcesworkspace.lorebookWorkspace",
+            )}
+            className="mari-editor-tab-rail grid grid-cols-2 rounded-lg border p-1 xl:hidden"
           >
             {(["lorebooks", "entries"] as const).map((pane) => (
               <button
@@ -1121,7 +1289,8 @@ export default function SourcesWorkspace({
                   );
                 }}
                 data-ltm-lorebook-pane={pane}
-                className={`min-h-11 rounded-md px-2 text-xs font-semibold capitalize disabled:opacity-40 ${lorebookMobilePane === pane ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
+                data-active={lorebookMobilePane === pane}
+                className="mari-editor-tab min-h-11 rounded-md px-2 text-xs font-semibold capitalize disabled:opacity-40"
               >
                 {pane}
               </button>
@@ -1132,12 +1301,16 @@ export default function SourcesWorkspace({
             <section
               id="ltm-lorebook-lorebooks-panel"
               role="tabpanel"
-              aria-label="Lorebooks"
+              aria-label={localizeUi(
+                "ui.longTermMemory.sourcesworkspace.lorebooks",
+              )}
               data-ltm-lorebook-list
               className={`${lorebookMobilePane === "lorebooks" ? "block" : "hidden"} overflow-hidden rounded-lg border border-[var(--border)] xl:block xl:max-h-[calc(100vh-20rem)] xl:overflow-y-auto`}
             >
               <div className="flex min-h-11 items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2">
-                <h2 className="text-sm font-semibold">Lorebooks</h2>
+                <h2 className="text-sm font-semibold">
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks")}
+                </h2>
                 <span className="text-xs text-[var(--muted-foreground)]">
                   {lorebookPreview.data?.books.length ?? 0}
                 </span>
@@ -1165,8 +1338,14 @@ export default function SourcesWorkspace({
                         {book.name}
                       </span>
                       <span className="block text-xs text-[var(--muted-foreground)]">
-                        {book.category} · {book.counts.entries} entries ·{" "}
-                        {book.counts.imported} imported
+                        {book.category} · {book.counts.entries}{" "}
+                        {localizeUi(
+                          "ui.longTermMemory.sourcesworkspace.entries",
+                        )}{" "}
+                        {book.counts.imported}{" "}
+                        {localizeUi(
+                          "ui.longTermMemory.sourcesworkspace.imported",
+                        )}
                       </span>
                     </span>
                     <ChevronRight
@@ -1178,7 +1357,9 @@ export default function SourcesWorkspace({
                 {!lorebookPreview.isLoading &&
                 lorebookPreview.data?.books.length === 0 ? (
                   <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                    No lorebooks are available in this scope.
+                    {localizeUi(
+                      "ui.longTermMemory.sourcesworkspace.noLorebooksAreAvailableInThisScope",
+                    )}
                   </p>
                 ) : null}
               </div>
@@ -1187,7 +1368,9 @@ export default function SourcesWorkspace({
             <section
               id="ltm-lorebook-entries-panel"
               role="tabpanel"
-              aria-label="Lorebook entries"
+              aria-label={localizeUi(
+                "ui.longTermMemory.sourcesworkspace.lorebookEntries",
+              )}
               data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
               className={`${lorebookMobilePane === "entries" ? "block" : "hidden"} mt-3 overflow-hidden rounded-lg border border-[var(--border)] xl:mt-0 xl:block xl:max-h-[calc(100vh-14rem)] xl:overflow-y-auto`}
             >
@@ -1201,8 +1384,14 @@ export default function SourcesWorkspace({
                         </h2>
                         <p className="text-xs text-[var(--muted-foreground)]">
                           {selectedLorebook.category} ·{" "}
-                          {selectedLorebook.counts.entries} entries ·{" "}
-                          {selectedLorebook.counts.candidates} source parts
+                          {selectedLorebook.counts.entries}{" "}
+                          {localizeUi(
+                            "ui.longTermMemory.sourcesworkspace.entries",
+                          )}{" "}
+                          {selectedLorebook.counts.candidates}{" "}
+                          {localizeUi(
+                            "ui.longTermMemory.sourcesworkspace.sourceParts",
+                          )}
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -1221,8 +1410,11 @@ export default function SourcesWorkspace({
                           }
                           data-ltm-lorebook-action="import-selected"
                         >
-                          <Check size="0.75rem" /> Import selected (
-                          {selectedBookImportIds.length})
+                          <Check size="0.75rem" />{" "}
+                          {localizeUi(
+                            "ui.longTermMemory.sourcesworkspace.importSelectedCount",
+                            { count: selectedBookImportIds.length },
+                          )}
                         </Button>
                         <Button
                           disabled={
@@ -1238,8 +1430,11 @@ export default function SourcesWorkspace({
                           }
                           data-ltm-lorebook-action="refresh-selected"
                         >
-                          <RefreshCw size="0.75rem" /> Sync selected (
-                          {selectedBookRefreshIds.length})
+                          <RefreshCw size="0.75rem" />{" "}
+                          {localizeUi(
+                            "ui.longTermMemory.sourcesworkspace.syncSelectedCount",
+                            { count: selectedBookRefreshIds.length },
+                          )}
                         </Button>
                         {selectedLorebookTransferNoteIds.size ? (
                           <Button
@@ -1248,8 +1443,13 @@ export default function SourcesWorkspace({
                             aria-expanded={transferOpen}
                             data-ltm-lorebook-action="transfer-selected"
                           >
-                            <Send size="0.75rem" /> Transfer selected (
-                            {selectedLorebookTransferNoteIds.size})
+                            <Send size="0.75rem" />{" "}
+                            {localizeUi(
+                              "ui.longTermMemory.sourcesworkspace.transferSelectedCount",
+                              {
+                                count: selectedLorebookTransferNoteIds.size,
+                              },
+                            )}
                           </Button>
                         ) : null}
                         {importing ? (
@@ -1258,7 +1458,7 @@ export default function SourcesWorkspace({
                             onClick={() => importControllerRef.current?.abort()}
                             data-ltm-lorebook-action="cancel-import"
                           >
-                            Cancel
+                            {localizeUi("ui.longTermMemory.memoryvault.cancel")}
                           </Button>
                         ) : null}
                       </div>
@@ -1342,11 +1542,14 @@ export default function SourcesWorkspace({
                                   {entry.name}
                                 </h3>
                                 <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase">
-                                  {entryStatusLabel(entry)}
+                                  {entryStatusLabel(entry, localizeUi)}
                                 </span>
                                 {entry.candidateCount > 1 ? (
                                   <span className="text-xs text-[var(--muted-foreground)]">
-                                    {entry.candidateCount} parts
+                                    {entry.candidateCount}{" "}
+                                    {localizeUi(
+                                      "ui.longTermMemory.sourcesworkspace.parts",
+                                    )}
                                   </span>
                                 ) : null}
                               </div>
@@ -1373,13 +1576,19 @@ export default function SourcesWorkspace({
                                   data-ltm-source-memory-id={
                                     candidate.existingNoteId
                                   }
-                                  aria-label={`Open source memory: ${candidate.existingNoteTitle}`}
+                                  aria-label={localizeUi(
+                                    "ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1",
+                                    { value1: candidate.existingNoteTitle },
+                                  )}
                                   className="inline-flex min-h-11 flex-1 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
                                   onClick={() =>
                                     onOpenMemory?.(candidate.existingNoteId)
                                   }
                                 >
-                                  Source memory: {candidate.existingNoteTitle}
+                                  {localizeUi(
+                                    "ui.longTermMemory.sourcesworkspace.sourceMemory",
+                                  )}{" "}
+                                  {candidate.existingNoteTitle}
                                 </button>
                                 {sourceInlineActions(
                                   candidate.existingNoteId,
@@ -1393,14 +1602,18 @@ export default function SourcesWorkspace({
                     })}
                     {selectedLorebook.entries.length === 0 ? (
                       <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                        This lorebook has no importable entries.
+                        {localizeUi(
+                          "ui.longTermMemory.sourcesworkspace.thisLorebookHasNoImportableEntries",
+                        )}
                       </p>
                     ) : null}
                   </div>
                 </>
               ) : (
                 <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                  Select a lorebook to inspect its entries.
+                  {localizeUi(
+                    "ui.longTermMemory.sourcesworkspace.selectALorebookToInspectItsEntries",
+                  )}
                 </p>
               )}
             </section>
@@ -1414,8 +1627,10 @@ export default function SourcesWorkspace({
         >
           <div
             role="tablist"
-            aria-label="Source status"
-            className="flex border-b border-[var(--border)] bg-[var(--secondary)]/45 p-1"
+            aria-label={localizeUi(
+              "ui.longTermMemory.sourcesworkspace.sourceStatus",
+            )}
+            className="mari-editor-tab-rail flex border-b p-1"
           >
             {flatPanelTabs.map((tab) => {
               const count =
@@ -1442,9 +1657,10 @@ export default function SourcesWorkspace({
                       "data-ltm-source-section",
                     )
                   }
-                  className={`min-h-11 flex-1 rounded-md px-3 text-xs font-semibold ${flatPanel === tab.id ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
+                  data-active={flatPanel === tab.id}
+                  className="mari-editor-tab min-h-11 flex-1 rounded-md px-3 text-xs font-semibold"
                 >
-                  {tab.label} ({count})
+                  {localizeUi(tab.labelKey)} ({count})
                 </button>
               );
             })}
@@ -1462,7 +1678,19 @@ export default function SourcesWorkspace({
                     : selectAllImportedRef
                 }
                 type="checkbox"
-                aria-label={`Select all ${flatPanel === "available" ? "ready to import" : "already imported"}`}
+                aria-label={localizeUi(
+                  "ui.longTermMemory.sourcesworkspace.selectAllValue1",
+                  {
+                    value1:
+                      flatPanel === "available"
+                        ? localizeUi(
+                            "ui.longTermMemory.sourcesworkspace.readyToImport",
+                          )
+                        : localizeUi(
+                            "ui.longTermMemory.sourcesworkspace.alreadyImported",
+                          ),
+                  },
+                )}
                 checked={activeFlatAllSelected}
                 disabled={activeFlatRows.length === 0}
                 onChange={(event) =>
@@ -1477,7 +1705,10 @@ export default function SourcesWorkspace({
                 }
                 data-ltm-source-select-all={flatPanel}
               />
-              <span>{activeFlatSelectedIds.length} selected</span>
+              <span>
+                {activeFlatSelectedIds.length}{" "}
+                {localizeUi("ui.longTermMemory.memoryvault.selected")}
+              </span>
               {flatPanel === "available" ? (
                 <Button
                   primary
@@ -1491,7 +1722,9 @@ export default function SourcesWorkspace({
                   ) : (
                     <Check size="0.75rem" />
                   )}
-                  Import selected
+                  {localizeUi(
+                    "ui.longTermMemory.sourcesworkspace.importSelected_7fb57e8",
+                  )}
                 </Button>
               ) : (
                 <>
@@ -1505,7 +1738,10 @@ export default function SourcesWorkspace({
                       activeFlatSelectedIds.length
                     }
                   >
-                    <RefreshCw size="0.75rem" /> Sync selected
+                    <RefreshCw size="0.75rem" />{" "}
+                    {localizeUi(
+                      "ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb",
+                    )}
                   </Button>
                   {transferNoteIds.size ? (
                     <Button
@@ -1514,8 +1750,11 @@ export default function SourcesWorkspace({
                       aria-expanded={transferOpen}
                       data-ltm-source-action="transfer-selected"
                     >
-                      <Send size="0.75rem" /> Transfer selected (
-                      {transferNoteIds.size})
+                      <Send size="0.75rem" />{" "}
+                      {localizeUi(
+                        "ui.longTermMemory.sourcesworkspace.transferSelectedCount",
+                        { count: transferNoteIds.size },
+                      )}
                     </Button>
                   ) : null}
                 </>
@@ -1526,7 +1765,7 @@ export default function SourcesWorkspace({
                   onClick={() => importControllerRef.current?.abort()}
                   data-ltm-source-action="cancel-import"
                 >
-                  Cancel
+                  {localizeUi("ui.longTermMemory.memoryvault.cancel")}
                 </Button>
               ) : null}
             </div>
@@ -1574,7 +1813,10 @@ export default function SourcesWorkspace({
                   <div className="flex items-start gap-3">
                     <input
                       type="checkbox"
-                      aria-label={`Select ${row.title}`}
+                      aria-label={localizeUi(
+                        "ui.longTermMemory.memoryvault.selectValue1",
+                        { value1: row.title },
+                      )}
                       checked={activeFlatSelection.has(row.sourceId)}
                       onChange={(event) =>
                         flatPanel === "available"
@@ -1593,7 +1835,7 @@ export default function SourcesWorkspace({
                           data-ltm-source-status={row.status}
                           className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
                         >
-                          {sourceStatusLabel(row)}
+                          {sourceStatusLabel(row, localizeUi)}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -1618,11 +1860,17 @@ export default function SourcesWorkspace({
                       <button
                         type="button"
                         data-ltm-source-memory-id={row.existingNoteId}
-                        aria-label={`Open source memory: ${row.existingNoteTitle}`}
+                        aria-label={localizeUi(
+                          "ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1",
+                          { value1: row.existingNoteTitle },
+                        )}
                         className="inline-flex min-h-11 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
                         onClick={() => onOpenMemory?.(row.existingNoteId)}
                       >
-                        Source memory: {row.existingNoteTitle}
+                        {localizeUi(
+                          "ui.longTermMemory.sourcesworkspace.sourceMemory",
+                        )}{" "}
+                        {row.existingNoteTitle}
                       </button>
                     </div>
                   ) : null}
@@ -1631,8 +1879,12 @@ export default function SourcesWorkspace({
               {!preview.isLoading && activeFlatRows.length === 0 ? (
                 <p className="p-4 text-xs text-[var(--muted-foreground)]">
                   {flatPanel === "available"
-                    ? "No new or retryable sources are ready to import."
-                    : "No sources have been imported in this scope."}
+                    ? localizeUi(
+                        "ui.longTermMemory.sourcesworkspace.noNewOrRetryableSourcesAreReadyToImport",
+                      )
+                    : localizeUi(
+                        "ui.longTermMemory.sourcesworkspace.noSourcesHaveBeenImportedInThisScope",
+                      )}
                 </p>
               ) : null}
             </div>
@@ -1645,11 +1897,16 @@ export default function SourcesWorkspace({
           data-ltm-source-import-result={importResult.batchStatus}
           className="space-y-3 rounded-lg border border-[var(--border)] p-3"
         >
-          <h2 className="text-sm font-semibold">Source import complete</h2>
+          <h2 className="text-sm font-semibold">
+            {localizeUi(
+              "ui.longTermMemory.sourcesworkspace.sourceImportComplete",
+            )}
+          </h2>
           {pendingDraftsProduced ? (
             <p className="text-xs text-[var(--muted-foreground)]">
-              Proposed memories are ready for review. They are not saved
-              memories until you accept them.
+              {localizeUi(
+                "ui.longTermMemory.sourcesworkspace.proposedMemoriesAreReadyForReviewTheyAreNot",
+              )}
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2">
@@ -1667,7 +1924,10 @@ export default function SourcesWorkspace({
                 data-ltm-source-action="retry-failed"
               >
                 <RefreshCw size="0.75rem" />
-                Retry failed ({retryableIds.length})
+                {localizeUi(
+                  "ui.longTermMemory.sourcesworkspace.retryFailedCount",
+                  { count: retryableIds.length },
+                )}
               </Button>
             ) : null}
             {pendingDraftsProduced ? (
@@ -1675,17 +1935,25 @@ export default function SourcesWorkspace({
                 onClick={() => onOpenReview?.()}
                 data-ltm-source-action="review-imported-drafts"
               >
-                Review proposed memories
+                {localizeUi(
+                  "ui.longTermMemory.sourcesworkspace.reviewProposedMemories",
+                )}
               </Button>
             ) : null}
           </div>
           <p className="text-xs text-[var(--muted-foreground)]">
-            Requested {importResult.counts.requested}; wrote{" "}
-            {importResult.counts.sourceNotesWritten}; succeeded{" "}
-            {importResult.counts.succeeded}; failed {importResult.counts.failed}
-            ; cancelled {importResult.counts.cancelled}; missing{" "}
-            {importResult.counts.missing}; write failures{" "}
-            {importResult.counts.sourceWriteFailed}.
+            {localizeUi(
+              "ui.longTermMemory.sourcesworkspace.importResultSummary",
+              {
+                requested: importResult.counts.requested,
+                wrote: importResult.counts.sourceNotesWritten,
+                succeeded: importResult.counts.succeeded,
+                failed: importResult.counts.failed,
+                cancelled: importResult.counts.cancelled,
+                missing: importResult.counts.missing,
+                writeFailures: importResult.counts.sourceWriteFailed,
+              },
+            )}
           </p>
           {importResult.imported.map((item) => (
             <article
@@ -1697,7 +1965,7 @@ export default function SourcesWorkspace({
                 <strong>{item.title}</strong>
                 <span
                   data-ltm-source-write-status={item.sourceWriteStatus}
-                  className={`rounded-full px-2 py-0.5 ${resultTone(item.sourceWriteStatus) === "success" ? "bg-emerald-500/15" : "bg-[var(--secondary)]"}`}
+                  className={`rounded-full px-2 py-0.5 ${resultTone(item.sourceWriteStatus) === "success" ? "bg-[var(--marinara-editor-accent)]/15" : "bg-[var(--secondary)]"}`}
                 >
                   {item.sourceWriteStatus}
                 </span>
@@ -1724,11 +1992,16 @@ export default function SourcesWorkspace({
                 <button
                   type="button"
                   data-ltm-source-memory-id={item.note.id}
-                  aria-label={`Open source memory: ${item.title}`}
+                  aria-label={localizeUi(
+                    "ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1",
+                    { value1: item.title },
+                  )}
                   className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
                   onClick={() => onOpenMemory?.(item.note.id)}
                 >
-                  Open source memory
+                  {localizeUi(
+                    "ui.longTermMemory.sourcesworkspace.openSourceMemory",
+                  )}
                 </button>
                 <Button
                   disabled={extractingId !== null}
@@ -1741,13 +2014,15 @@ export default function SourcesWorkspace({
                   ) : (
                     <Sparkles size="0.75rem" />
                   )}
-                  Re-extract
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
                 </Button>
                 <Button
                   onClick={() => onOpenReview?.(item.note.id)}
                   data-ltm-review-query={item.note.id}
                 >
-                  Review related drafts
+                  {localizeUi(
+                    "ui.longTermMemory.memoryvault.reviewRelatedDrafts",
+                  )}
                 </Button>
               </div>
             </article>
@@ -1765,7 +2040,10 @@ export default function SourcesWorkspace({
           ))}
           {importResult.missingSourceIds.map((id) => (
             <StatusSurface key={id} tone="danger" data-ltm-source-missing={id}>
-              <CircleAlert size="0.875rem" /> Missing source memory
+              <CircleAlert size="0.875rem" />{" "}
+              {localizeUi(
+                "ui.longTermMemory.sourcesworkspace.missingSourceMemory",
+              )}
             </StatusSurface>
           ))}
         </section>

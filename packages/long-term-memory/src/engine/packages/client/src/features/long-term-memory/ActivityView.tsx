@@ -13,11 +13,23 @@ import type {
   LtmLastInjectionResponse,
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { API_ROOT, invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
-import { Button, InfoPopover, StatusSurface } from "./shared-controls";
+import {
+  API_ROOT,
+  invalidateLtmQueries,
+  queryKeys,
+  request,
+  requestAllNotes,
+} from "./api";
+import {
+  Button,
+  InfoPopover,
+  StatusSurface,
+  inputClass,
+} from "./shared-controls";
 import { humanizeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
+import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 
 type DebugLogResponse = { events: LtmDebugEvent[] };
 type DebugOperation = { operationId: string; events: LtmDebugEvent[] };
@@ -39,41 +51,65 @@ const debugPhases: LtmDebugEvent["phase"][] = [
   "diagnostic",
 ];
 
-const actionLabels: Record<string, string> = {
-  evidence_unit_response: "AI extraction",
-  evidence_unit_json_parse: "Read extraction result",
-  recall_explanation: "Memory recall",
+const actionLabelKeys: Record<string, string> = {
+  evidence_unit_response: "ui.longTermMemory.activityview.actionAiExtraction",
+  evidence_unit_json_parse:
+    "ui.longTermMemory.activityview.actionReadExtractionResult",
+  recall_explanation: "ui.longTermMemory.activityview.actionMemoryRecall",
 };
 
-function formatTimestamp(timestamp: string) {
+function formatTimestamp(timestamp: string, locale: string) {
   const date = new Date(timestamp);
-  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString(locale);
 }
 
 function humanizeDebugText(
   text: string,
   noteTitles: ReadonlyMap<string, string>,
+  internalRecordLabel: string,
 ) {
-  const ids = [...noteTitles.keys()].sort((left, right) => right.length - left.length);
+  const ids = [...noteTitles.keys()].sort(
+    (left, right) => right.length - left.length,
+  );
   const escaped = ids.map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const pattern = [...escaped, "\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b"].join("|");
-  return text.replace(new RegExp(pattern, "gi"), (id) => noteTitles.get(id) ?? "an internal record");
+  return text.replace(
+    new RegExp(pattern, "gi"),
+    (id) => noteTitles.get(id) ?? internalRecordLabel,
+  );
 }
 
 function describeEvent(
   event: LtmDebugEvent,
   noteTitles: ReadonlyMap<string, string>,
+  localizeUi: LtmTranslationFunction,
 ) {
-  if (event.error) return humanizeDebugText(event.error.message, noteTitles);
-  if (event.message) return humanizeDebugText(event.message, noteTitles);
-  if (event.uiSummary) return humanizeDebugText(event.uiSummary, noteTitles);
+  const internalRecordLabel = localizeUi(
+    "ui.longTermMemory.activityview.anInternalRecord",
+  );
+  if (event.error)
+    return humanizeDebugText(
+      event.error.message,
+      noteTitles,
+      internalRecordLabel,
+    );
+  if (event.message)
+    return humanizeDebugText(event.message, noteTitles, internalRecordLabel);
+  if (event.uiSummary)
+    return humanizeDebugText(event.uiSummary, noteTitles, internalRecordLabel);
   const summary = event.details?.summary;
   if (typeof summary === "string")
-    return humanizeDebugText(summary, noteTitles);
+    return humanizeDebugText(summary, noteTitles, internalRecordLabel);
   const reason = event.details?.reason;
   if (typeof reason === "string")
-    return `${actionLabel(event.action)}: ${humanizeLabel(reason)}.`;
-  return `${actionLabel(event.action)}: ${humanizeLabel(event.status)}.`;
+    return localizeUi("ui.longTermMemory.activityview.eventDescription", {
+      action: actionLabel(event.action, localizeUi),
+      detail: humanizeLabel(reason),
+    });
+  return localizeUi("ui.longTermMemory.activityview.eventDescription", {
+    action: actionLabel(event.action, localizeUi),
+    detail: humanizeLabel(event.status),
+  });
 }
 
 function compactSummary(value: string) {
@@ -83,8 +119,9 @@ function compactSummary(value: string) {
     : singleLine;
 }
 
-function actionLabel(action: string) {
-  return actionLabels[action] ?? humanizeLabel(action);
+function actionLabel(action: string, localizeUi: LtmTranslationFunction) {
+  const key = actionLabelKeys[action];
+  return key ? localizeUi(key) : humanizeLabel(action);
 }
 
 function groupOperations(events: LtmDebugEvent[]): DebugOperation[] {
@@ -106,7 +143,10 @@ function groupOperations(events: LtmDebugEvent[]): DebugOperation[] {
     );
 }
 
-function operationStatus(events: LtmDebugEvent[]) {
+function operationStatus(
+  events: LtmDebugEvent[],
+  localizeUi: LtmTranslationFunction,
+) {
   const started = events.find((event) => event.status === "started");
   const terminal = started
     ? events.findLast(
@@ -118,16 +158,19 @@ function operationStatus(events: LtmDebugEvent[]) {
     : events.at(-1);
   const status = terminal?.status ?? (started ? "started" : "warning");
   if (status === "ok" && events.some((event) => event.status === "warning")) {
-    return { status: "warning", label: "Completed with warnings" } as const;
+    return {
+      status: "warning",
+      label: localizeUi("ui.longTermMemory.activityview.completedWithWarnings"),
+    } as const;
   }
   return {
     status,
     label: {
-      started: "Running",
-      ok: "Completed",
-      skipped: "Skipped",
-      warning: "Warning",
-      error: "Failed",
+      started: localizeUi("ui.longTermMemory.activityview.running"),
+      ok: localizeUi("ui.longTermMemory.activityview.completed"),
+      skipped: localizeUi("ui.longTermMemory.activityview.skipped"),
+      warning: localizeUi("ui.longTermMemory.activityview.warning"),
+      error: localizeUi("ui.longTermMemory.activityview.failed"),
     }[status],
   };
 }
@@ -152,7 +195,11 @@ function eventMetadata(event: LtmDebugEvent) {
     : metadata;
 }
 
-function summarizeCounts(events: LtmDebugEvent[]) {
+function summarizeCounts(
+  events: LtmDebugEvent[],
+  localizeUi: LtmTranslationFunction,
+  locale: string,
+) {
   const counts = new Map<string, number>();
   for (const event of events)
     for (const [label, count] of Object.entries(event.counts ?? {}))
@@ -163,9 +210,17 @@ function summarizeCounts(events: LtmDebugEvent[]) {
   const responseTokens =
     counts.get("completionTokens") ?? counts.get("responseTokens");
   if (promptTokens != null)
-    summary.push(`Prompt: ${promptTokens.toLocaleString()} Tokens`);
+    summary.push(
+      localizeUi("ui.longTermMemory.activityview.promptTokens", {
+        count: promptTokens.toLocaleString(locale),
+      }),
+    );
   if (responseTokens != null)
-    summary.push(`Response: ${responseTokens.toLocaleString()} Tokens`);
+    summary.push(
+      localizeUi("ui.longTermMemory.activityview.responseTokens", {
+        count: responseTokens.toLocaleString(locale),
+      }),
+    );
   summary.push(
     ...[...counts.entries()]
       .filter(
@@ -176,15 +231,17 @@ function summarizeCounts(events: LtmDebugEvent[]) {
           label !== "responseTokens",
       )
       .slice(0, 3 - summary.length)
-      .map(
-        ([label, count]) =>
-          `${count.toLocaleString()} ${humanizeLabel(label).toLowerCase()}`,
+      .map(([label, count]) =>
+        localizeUi("ui.longTermMemory.activityview.countWithLabel", {
+          count: count.toLocaleString(locale),
+          label: humanizeLabel(label).toLocaleLowerCase(locale),
+        }),
       ),
   );
   return summary.join(" | ");
 }
 
-function latestRecallEvent(events: LtmDebugEvent[], chatId?: string) {
+function latestRecallEvent(events: LtmDebugEvent[], chatId?: string | null) {
   return events
     .filter(
       (event) =>
@@ -224,6 +281,7 @@ export default function ActivityView({
   props,
   onOpenMemory,
 }: LongTermMemoryDestinationProps) {
+  const { t: localizeUi, locale } = useLtmTranslation();
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<"clear" | "export" | null>(null);
   const [actionError, setActionError] = useState("");
@@ -253,7 +311,7 @@ export default function ActivityView({
   const noteTitles = new Map(
     (notes.data ?? []).map((note) => [
       note.id,
-      note.title || "Untitled memory",
+      note.title || localizeUi("ui.longTermMemory.activityview.untitledMemory"),
     ]),
   );
   const operations = groupOperations(activity.data?.events ?? []);
@@ -287,9 +345,11 @@ export default function ActivityView({
     if (
       !(await confirm(
         props,
-        "Clear activity log?",
-        "This permanently removes the recorded Long-Term Memory debug events.",
-        "Clear log",
+        localizeUi("ui.longTermMemory.activityview.clearActivityLog"),
+        localizeUi(
+          "ui.longTermMemory.activityview.clearActivityLogDescription",
+        ),
+        localizeUi("ui.longTermMemory.activityview.clearLog"),
       ))
     )
       return;
@@ -303,7 +363,9 @@ export default function ActivityView({
       ]);
     } catch (error) {
       setActionError(
-        error instanceof Error ? error.message : "Could not clear activity.",
+        error instanceof Error
+          ? error.message
+          : localizeUi("ui.longTermMemory.activityview.couldNotClearActivity"),
       );
     } finally {
       setPending(null);
@@ -318,7 +380,10 @@ export default function ActivityView({
         cache: "no-store",
       });
       if (!response.ok)
-        throw new Error(response.statusText || "Could not export activity.");
+        throw new Error(
+          response.statusText ||
+            localizeUi("ui.longTermMemory.activityview.couldNotExportActivity"),
+        );
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -330,7 +395,9 @@ export default function ActivityView({
       window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
     } catch (error) {
       setActionError(
-        error instanceof Error ? error.message : "Could not export activity.",
+        error instanceof Error
+          ? error.message
+          : localizeUi("ui.longTermMemory.activityview.couldNotExportActivity"),
       );
     } finally {
       setPending(null);
@@ -360,7 +427,10 @@ export default function ActivityView({
         textarea.focus();
         textarea.select();
         textarea.setSelectionRange(0, text.length);
-        if (!document.execCommand("copy")) throw new Error("Copy failed");
+        if (!document.execCommand("copy"))
+          throw new Error(
+            localizeUi("ui.longTermMemory.activityview.copyFailed"),
+          );
         copied = true;
       } catch {
         copied = false;
@@ -369,7 +439,11 @@ export default function ActivityView({
       }
     }
     if (!copied) {
-      setActionError("Could not copy technical details.");
+      setActionError(
+        localizeUi(
+          "ui.longTermMemory.activityview.couldNotCopyTechnicalDetails",
+        ),
+      );
       return;
     }
     setCopiedEventId(eventId);
@@ -385,10 +459,12 @@ export default function ActivityView({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h4 className="flex items-center gap-1 text-xs font-semibold">
-            Debug Activity
+            {localizeUi("ui.longTermMemory.activityview.debugActivity")}
             <InfoPopover
-              label="Debug Activity"
-              content="Trace imports, extraction, draft actions, recall, and maintenance."
+              label={localizeUi("ui.longTermMemory.activityview.debugActivity")}
+              content={localizeUi(
+                "ui.longTermMemory.activityview.traceImportsExtractionDraftActionsRecallAndMaintenance",
+              )}
             />
           </h4>
         </div>
@@ -401,30 +477,37 @@ export default function ActivityView({
                 : Promise.all([activity.refetch(), recallActivity.refetch()]))
             }
           >
-            <RotateCw aria-hidden="true" size="0.875rem" /> Refresh
+            <RotateCw aria-hidden="true" size="0.875rem" />{" "}
+            {localizeUi("ui.longTermMemory.activityview.refresh")}
           </Button>
           <Button disabled={pending !== null} onClick={() => void exportLog()}>
-            <Download aria-hidden="true" size="0.875rem" /> Export
+            <Download aria-hidden="true" size="0.875rem" />{" "}
+            {localizeUi("ui.longTermMemory.activityview.export")}
           </Button>
           <Button
             destructive
             disabled={pending !== null}
             onClick={() => void clear()}
           >
-            <Trash2 aria-hidden="true" size="0.875rem" /> Clear
+            <Trash2 aria-hidden="true" size="0.875rem" />{" "}
+            {localizeUi("ui.longTermMemory.activityview.clear")}
           </Button>
         </div>
       </div>
 
       <label className="block max-w-xs space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-        <span>Show events</span>
+        <span>{localizeUi("ui.longTermMemory.activityview.showEvents")}</span>
         <select
-          className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[var(--foreground)]"
+          className={inputClass}
           value={filter}
           onChange={(event) => setFilter(event.target.value as ActivityFilter)}
         >
-          <option value="all">All phases</option>
-          <option value="errors">Errors only</option>
+          <option value="all">
+            {localizeUi("ui.longTermMemory.activityview.allPhases")}
+          </option>
+          <option value="errors">
+            {localizeUi("ui.longTermMemory.activityview.errorsOnly")}
+          </option>
           {debugPhases.map((phase) => (
             <option key={phase} value={phase}>
               {humanizeLabel(phase)}
@@ -448,46 +531,65 @@ export default function ActivityView({
         onToggle={(event) => setRecallOpen(event.currentTarget.open)}
       >
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
-          <span>Latest recall workflow</span>
+          <span>
+            {localizeUi("ui.longTermMemory.activityview.latestRecallWorkflow")}
+          </span>
           {recallEvent?.counts ? (
             <span className="shrink-0 text-[0.6875rem] font-normal text-[var(--muted-foreground)]">
-              {recallEvent.counts.selected ?? 0} selected ·{" "}
-              {recallEvent.counts.rejected ?? 0} rejected
+              {recallEvent.counts.selected ?? 0}{" "}
+              {localizeUi("ui.longTermMemory.activityview.selected")}{" "}
+              {recallEvent.counts.rejected ?? 0}{" "}
+              {localizeUi("ui.longTermMemory.activityview.rejected")}
             </span>
           ) : null}
         </summary>
         <div className="space-y-3 border-t border-[var(--border)] px-3 py-3 text-xs">
           {recallLoading ? (
-            <StatusSurface busy>Loading recall workflow.</StatusSurface>
+            <StatusSurface busy>
+              {localizeUi(
+                "ui.longTermMemory.activityview.loadingRecallWorkflow",
+              )}
+            </StatusSurface>
           ) : recallError ? (
             <StatusSurface tone="danger">
-              The recall workflow could not load.
+              {localizeUi(
+                "ui.longTermMemory.activityview.theRecallWorkflowCouldNotLoad",
+              )}
             </StatusSurface>
           ) : !recallEvent || !recallWorkflow ? (
             <p className="text-[var(--muted-foreground)]">
-              No recall workflow has been recorded. Enable debug activity to
-              record future recalls.
+              {localizeUi(
+                "ui.longTermMemory.activityview.noRecallWorkflowHasBeenRecordedEnableDebugActivity",
+              )}
             </p>
           ) : (
             <>
               <div className="grid gap-1 text-[var(--muted-foreground)] sm:grid-cols-2">
-                <span>Recent context was used for recall.</span>
                 <span>
-                  Limits: {String(recallWorkflow.maxChunks ?? "--")} chunks ·{" "}
-                  {Number(recallWorkflow.maxTokens ?? 0).toLocaleString()}{" "}
-                  tokens
+                  {localizeUi(
+                    "ui.longTermMemory.activityview.recentContextWasUsedForRecall",
+                  )}
                 </span>
                 <span>
-                  Threshold: {String(recallWorkflow.scoreThreshold ?? 0)}
+                  {localizeUi("ui.longTermMemory.activityview.limits")}{" "}
+                  {String(recallWorkflow.maxChunks ?? "--")}{" "}
+                  {localizeUi("ui.longTermMemory.activityview.chunks")}{" "}
+                  {Number(recallWorkflow.maxTokens ?? 0).toLocaleString(locale)}{" "}
+                  {localizeUi("ui.longTermMemory.activityview.tokens")}
                 </span>
                 <span>
-                  Used: {(recallEvent.counts?.usedTokens ?? 0).toLocaleString()}{" "}
-                  tokens
+                  {localizeUi("ui.longTermMemory.activityview.threshold")}{" "}
+                  {String(recallWorkflow.scoreThreshold ?? 0)}
+                </span>
+                <span>
+                  {localizeUi("ui.longTermMemory.activityview.used")}{" "}
+                  {(recallEvent.counts?.usedTokens ?? 0).toLocaleString(locale)}{" "}
+                  {localizeUi("ui.longTermMemory.activityview.tokens")}
                 </span>
               </div>
               {recallWorkflow.weights ? (
                 <p className="text-[var(--muted-foreground)]">
-                  Weights:{" "}
+                  {localizeUi("ui.longTermMemory.activityview.weights")}{" "}
                   {Object.entries(recallWorkflow.weights)
                     .map(([name, value]) => `${humanizeLabel(name)} ${value}`)
                     .join(" · ")}
@@ -495,7 +597,11 @@ export default function ActivityView({
               ) : null}
               {recallWorkflow.selected?.length ? (
                 <div>
-                  <h4 className="mb-1 font-semibold">Selected chunks</h4>
+                  <h4 className="mb-1 font-semibold">
+                    {localizeUi(
+                      "ui.longTermMemory.activityview.selectedChunks",
+                    )}
+                  </h4>
                   <ul className="space-y-1 text-[var(--muted-foreground)]">
                     {recallWorkflow.selected.map((candidate, index) => {
                       const noteId =
@@ -514,14 +620,22 @@ export default function ActivityView({
                           <span>
                             {noteId && noteTitles.get(noteId)
                               ? noteTitles.get(noteId)
-                              : (noteId ?? "Unknown memory")}{" "}
+                              : (noteId ??
+                                localizeUi(
+                                  "ui.longTermMemory.activityview.unknownMemory",
+                                ))}{" "}
                             · {String(candidate.sectionKey ?? "chunk")}
                           </span>
                           <span>
-                            Relevance:{" "}
+                            {localizeUi(
+                              "ui.longTermMemory.activityview.relevance",
+                            )}{" "}
                             {score == null
                               ? "--"
-                              : `${Math.round(score * 100)}%`}{" "}
+                              : localizeUi(
+                                  "ui.longTermMemory.activityview.value1",
+                                  { value1: Math.round(score * 100) },
+                                )}{" "}
                             ·{" "}
                             {Array.isArray(candidate.lanes)
                               ? candidate.lanes.join(", ")
@@ -535,7 +649,11 @@ export default function ActivityView({
               ) : null}
               {recallWorkflow.rejected?.length ? (
                 <div>
-                  <h4 className="mb-1 font-semibold">Rejected candidates</h4>
+                  <h4 className="mb-1 font-semibold">
+                    {localizeUi(
+                      "ui.longTermMemory.activityview.rejectedCandidates",
+                    )}
+                  </h4>
                   <ul className="space-y-1 text-[var(--muted-foreground)]">
                     {recallWorkflow.rejected.map((candidate, index) => {
                       const noteId =
@@ -554,14 +672,22 @@ export default function ActivityView({
                           <span>
                             {noteId && noteTitles.get(noteId)
                               ? noteTitles.get(noteId)
-                              : (noteId ?? "Unknown memory")}{" "}
+                              : (noteId ??
+                                localizeUi(
+                                  "ui.longTermMemory.activityview.unknownMemory",
+                                ))}{" "}
                             · {String(candidate.sectionKey ?? "chunk")}
                           </span>
                           <span>
-                            Relevance:{" "}
+                            {localizeUi(
+                              "ui.longTermMemory.activityview.relevance",
+                            )}{" "}
                             {score == null
                               ? "--"
-                              : `${Math.round(score * 100)}%`}{" "}
+                              : localizeUi(
+                                  "ui.longTermMemory.activityview.value1",
+                                  { value1: Math.round(score * 100) },
+                                )}{" "}
                             ·{" "}
                             {humanizeLabel(
                               String(candidate.rejectionReason ?? "rejected"),
@@ -582,37 +708,52 @@ export default function ActivityView({
         <StatusSurface tone="danger">{actionError}</StatusSurface>
       ) : null}
       {activity.isLoading ? (
-        <StatusSurface busy>Loading activity.</StatusSurface>
+        <StatusSurface busy>
+          {localizeUi("ui.longTermMemory.activityview.loadingActivity")}
+        </StatusSurface>
       ) : null}
       {activity.isError ? (
         <StatusSurface tone="danger">
-          Could not load activity.{" "}
+          {localizeUi("ui.longTermMemory.activityview.couldNotLoadActivity")}{" "}
           <button
             type="button"
             className="underline"
             onClick={() => void activity.refetch()}
           >
-            Retry
+            {localizeUi("ui.longTermMemory.activityview.retry")}
           </button>
         </StatusSurface>
       ) : null}
       {activity.data?.events.length === 0 ? (
         <StatusSurface>
           {filter === "all"
-            ? "No activity has been recorded yet."
-            : "No activity matches this filter."}
+            ? localizeUi(
+                "ui.longTermMemory.activityview.noActivityHasBeenRecordedYet",
+              )
+            : localizeUi(
+                "ui.longTermMemory.activityview.noActivityMatchesThisFilter",
+              )}
         </StatusSurface>
       ) : null}
       {operations.length ? (
-        <ol className="space-y-2" aria-label="Long-Term Memory activity log">
+        <ol
+          className="space-y-2"
+          aria-label={localizeUi(
+            "ui.longTermMemory.activityview.longTermMemoryActivityLog",
+          )}
+        >
           {operations.map((operation) => {
             const firstEvent = operation.events[0];
             const lastEvent = operation.events.at(-1)!;
-            const status = operationStatus(operation.events);
+            const status = operationStatus(operation.events, localizeUi);
             const sourceNoteId = operation.events.find(
               (event) => event.sourceNoteId,
             )?.sourceNoteId;
-            const countSummary = summarizeCounts(operation.events);
+            const countSummary = summarizeCounts(
+              operation.events,
+              localizeUi,
+              locale,
+            );
             return (
               <li
                 key={operation.operationId}
@@ -628,7 +769,7 @@ export default function ActivityView({
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center justify-between gap-2 text-xs">
                         <span className="font-semibold">
-                          {actionLabel(firstEvent.action)}
+                          {actionLabel(firstEvent.action, localizeUi)}
                         </span>
                         <span
                           className={
@@ -644,15 +785,26 @@ export default function ActivityView({
                         {sourceNoteId && noteTitles.has(sourceNoteId)
                           ? noteTitles.get(sourceNoteId)
                           : compactSummary(
-                              describeEvent(lastEvent, noteTitles),
+                              describeEvent(lastEvent, noteTitles, localizeUi),
                             )}
                       </span>
                       <span className="mt-1 block text-[0.6875rem] text-[var(--muted-foreground)]">
-                        {formatTimestamp(lastEvent.ts)}
+                        {formatTimestamp(lastEvent.ts, locale)}
                         {lastEvent.durationMs != null
-                          ? ` | ${lastEvent.durationMs.toLocaleString()} ms`
+                          ? localizeUi(
+                              "ui.longTermMemory.activityview.value1Ms",
+                              {
+                                value1:
+                                  lastEvent.durationMs.toLocaleString(locale),
+                              },
+                            )
                           : ""}
-                        {countSummary ? ` | ${countSummary}` : ""}
+                        {countSummary
+                          ? localizeUi(
+                              "ui.longTermMemory.activityview.value1_9a93137",
+                              { value1: countSummary },
+                            )
+                          : ""}
                       </span>
                     </span>
                   </summary>
@@ -667,7 +819,7 @@ export default function ActivityView({
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="font-medium">
                               {humanizeLabel(event.phase)} /{" "}
-                              {actionLabel(event.action)}
+                              {actionLabel(event.action, localizeUi)}
                             </span>
                             <span
                               className={
@@ -676,27 +828,43 @@ export default function ActivityView({
                                   : "text-[var(--muted-foreground)]"
                               }
                             >
-                              {operationStatus([event]).label}
+                              {operationStatus([event], localizeUi).label}
                             </span>
                           </div>
                           <p className="mt-1 leading-relaxed">
-                            {describeEvent(event, noteTitles)}
+                            {describeEvent(event, noteTitles, localizeUi)}
                           </p>
                           <p className="mt-1 text-[0.6875rem] text-[var(--muted-foreground)]">
-                            {formatTimestamp(event.ts)}
+                            {formatTimestamp(event.ts, locale)}
                             {event.durationMs != null
-                              ? ` | ${event.durationMs.toLocaleString()} ms`
+                              ? localizeUi(
+                                  "ui.longTermMemory.activityview.value1Ms",
+                                  {
+                                    value1:
+                                      event.durationMs.toLocaleString(locale),
+                                  },
+                                )
                               : ""}
                           </p>
                           {Object.keys(metadata).length ? (
                             <details className="mt-2 rounded bg-[var(--background)]">
                               <summary className="min-h-11 cursor-pointer px-2 py-3 font-medium">
-                                Technical details
+                                {localizeUi(
+                                  "ui.longTermMemory.activityview.technicalDetails",
+                                )}
                               </summary>
                               <div className="border-t border-[var(--border)] p-2">
                                 <Button
                                   className="mb-2"
-                                  aria-label={`Copy raw JSON for ${actionLabel(event.action)}`}
+                                  aria-label={localizeUi(
+                                    "ui.longTermMemory.activityview.copyRawJsonForValue1",
+                                    {
+                                      value1: actionLabel(
+                                        event.action,
+                                        localizeUi,
+                                      ),
+                                    },
+                                  )}
                                   onClick={() =>
                                     void copyJson(event.id, metadata)
                                   }
@@ -707,13 +875,20 @@ export default function ActivityView({
                                     <Copy aria-hidden="true" size="0.875rem" />
                                   )}
                                   {copiedEventId === event.id
-                                    ? "Copied"
-                                    : "Copy JSON"}
+                                    ? localizeUi(
+                                        "ui.longTermMemory.activityview.copied",
+                                      )
+                                    : localizeUi(
+                                        "ui.longTermMemory.activityview.copyJson",
+                                      )}
                                 </Button>
                                 <pre className="overflow-x-auto text-[0.6875rem] text-[var(--muted-foreground)]">
                                   {humanizeDebugText(
                                     JSON.stringify(metadata, null, 2),
                                     noteTitles,
+                                    localizeUi(
+                                      "ui.longTermMemory.activityview.anInternalRecord",
+                                    ),
                                   )}
                                 </pre>
                               </div>

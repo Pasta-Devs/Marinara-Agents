@@ -3,6 +3,11 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatSettings } from "./ChatSettings";
 import { LongTermMemoryDetail } from "./LongTermMemoryDetail";
+import {
+  LtmLocalizationProvider,
+  translateLtm,
+  useLtmTranslation,
+} from "./localization";
 import type { CapabilityElement } from "./types";
 
 const queryClient = new QueryClient({
@@ -20,7 +25,12 @@ class CapabilityClientErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error) {
-    const message = error.message || "Long-Term Memory interface stopped";
+    const message =
+      error.message ||
+      translateLtm(
+        this.props.element.capabilityProps?.localization,
+        "errors.interfaceStopped",
+      );
     this.props.element.capabilityRuntimeError = message;
     this.props.element.dispatchEvent(
       new CustomEvent("marinara-capability-runtime-error", {
@@ -34,24 +44,33 @@ class CapabilityClientErrorBoundary extends React.Component<
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div role="alert" className="m-4 space-y-3 rounded-lg border border-[var(--destructive)] p-4 text-sm">
-        <p className="font-semibold">Long-Term Memory stopped.</p>
-        <button
-          type="button"
-          className="min-h-11 rounded-lg border border-[var(--border)] px-3 font-semibold"
-          onClick={() => {
-            this.props.element.capabilityRuntimeError = null;
-            this.setState({ error: null });
-          }}
-        >
-          Try again
-        </button>
-      </div>
+      <CapabilityClientErrorState
+        onRetry={() => {
+          this.props.element.capabilityRuntimeError = null;
+          this.setState({ error: null });
+        }}
+      />
     );
   }
 }
 
-function CapabilityRoot({ element }: { element: CapabilityElement }) {
+function CapabilityClientErrorState({ onRetry }: { onRetry: () => void }) {
+  const { t } = useLtmTranslation();
+  return (
+    <div role="alert" className="mari-editor-panel m-4 space-y-3 p-4 text-sm">
+      <p className="font-semibold">{t("errors.interfaceStoppedMessage")}</p>
+      <button
+        type="button"
+        className="mari-editor-action min-h-11 px-3 font-semibold"
+        onClick={onRetry}
+      >
+        {t("errors.tryAgain")}
+      </button>
+    </div>
+  );
+}
+
+function LocalizedCapabilityRoot({ element }: { element: CapabilityElement }) {
   const [, redraw] = useState(0);
   useEffect(() => {
     const update = () => redraw((value) => value + 1);
@@ -60,6 +79,17 @@ function CapabilityRoot({ element }: { element: CapabilityElement }) {
       element.removeEventListener("marinara-capability-props", update);
   }, [element]);
 
+  const props = element.capabilityProps ?? {};
+  return (
+    <LtmLocalizationProvider localization={props.localization}>
+      <CapabilityClientErrorBoundary element={element}>
+        <CapabilityRoot element={element} />
+      </CapabilityClientErrorBoundary>
+    </LtmLocalizationProvider>
+  );
+}
+
+function CapabilityRoot({ element }: { element: CapabilityElement }) {
   const props = element.capabilityProps ?? {};
   if (element.getAttribute("view") === "settings")
     return <ChatSettings props={props} />;
@@ -74,16 +104,18 @@ class LongTermMemoryElement extends HTMLElement {
 
   static observedAttributes = ["view"];
 
-  attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
+  attributeChangedCallback(
+    name: string,
+    oldValue: string | null,
+    newValue: string | null,
+  ) {
     if (name === "view" && oldValue !== newValue && this.__root) this.render();
   }
 
   render() {
     this.__root?.render(
       <QueryClientProvider client={queryClient}>
-        <CapabilityClientErrorBoundary element={this}>
-          <CapabilityRoot element={this} />
-        </CapabilityClientErrorBoundary>
+        <LocalizedCapabilityRoot element={this} />
       </QueryClientProvider>,
     );
   }

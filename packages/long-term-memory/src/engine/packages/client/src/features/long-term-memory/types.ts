@@ -4,6 +4,7 @@ import type {
   LtmMode,
   LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type { LtmLocalizationContext } from "./localization";
 
 export type CapabilityProps = {
   package?: {
@@ -12,6 +13,13 @@ export type CapabilityProps = {
     readiness?: string;
     status?: string;
   };
+  agent?: {
+    id?: string;
+    name?: string;
+    description?: string;
+    author?: string | null;
+  };
+  localization?: LtmLocalizationContext;
   chatId?: string | null;
   chatName?: string | null;
   enabledForChat?: boolean;

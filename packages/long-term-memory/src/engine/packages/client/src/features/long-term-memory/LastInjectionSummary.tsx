@@ -1,5 +1,6 @@
 import type { LtmLastInjectionResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { StatusSurface } from "./shared-controls";
+import { useLtmTranslation } from "./localization";
 
 export function LastInjectionSummary({
   data,
@@ -12,6 +13,7 @@ export function LastInjectionSummary({
   error?: boolean;
   onOpenMemory?: (noteId: string) => void;
 }) {
+  const { t: localizeUi, locale } = useLtmTranslation();
   return (
     <details
       data-ltm-last-injection
@@ -20,26 +22,52 @@ export function LastInjectionSummary({
       <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
         <span>
           {loading
-            ? "Loading last injection"
+            ? localizeUi(
+                "ui.longTermMemory.lastinjectionsummary.loadingLastInjection",
+              )
             : data?.memoryCount
-              ? `${data.memoryCount} ${data.memoryCount === 1 ? "memory" : "memories"} injected`
+              ? localizeUi(
+                  "ui.longTermMemory.lastinjectionsummary.value1Value2Injected",
+                  {
+                    value1: data.memoryCount,
+                    value2:
+                      data.memoryCount === 1
+                        ? localizeUi(
+                            "ui.longTermMemory.lastinjectionsummary.memory",
+                          )
+                        : localizeUi(
+                            "ui.longTermMemory.lastinjectionsummary.memories",
+                          ),
+                  },
+                )
               : error
-                ? "Last injection unavailable"
-                : "No memories injected yet"}
+                ? localizeUi(
+                    "ui.longTermMemory.lastinjectionsummary.lastInjectionUnavailable",
+                  )
+                : localizeUi(
+                    "ui.longTermMemory.lastinjectionsummary.noMemoriesInjectedYet",
+                  )}
         </span>
         {data ? (
           <span className="shrink-0 text-[0.6875rem] font-normal text-[var(--muted-foreground)]">
-            {data.tokenCount.toLocaleString()} tokens
+            {data.tokenCount.toLocaleString(locale)}{" "}
+            {localizeUi("ui.longTermMemory.activityview.tokens")}
           </span>
         ) : null}
       </summary>
       <div className="border-t border-[var(--border)] px-3 py-2">
         {loading ? (
-          <StatusSurface busy>Loading recalled memories.</StatusSurface>
+          <StatusSurface busy>
+            {localizeUi(
+              "ui.longTermMemory.lastinjectionsummary.loadingRecalledMemories",
+            )}
+          </StatusSurface>
         ) : null}
         {error ? (
           <StatusSurface tone="danger">
-            The last recall could not load.
+            {localizeUi(
+              "ui.longTermMemory.lastinjectionsummary.theLastRecallCouldNotLoad",
+            )}
           </StatusSurface>
         ) : null}
         {!loading && !error && data?.memories.length ? (
@@ -62,7 +90,8 @@ export function LastInjectionSummary({
                   <span className="min-w-0 truncate">{memory.title}</span>
                 )}
                 <span className="shrink-0 text-[0.6875rem]">
-                  {memory.tokenCount.toLocaleString()} tokens
+                  {memory.tokenCount.toLocaleString(locale)}{" "}
+                  {localizeUi("ui.longTermMemory.activityview.tokens")}
                 </span>
               </li>
             ))}
@@ -70,7 +99,9 @@ export function LastInjectionSummary({
         ) : null}
         {!loading && !error && !data?.memories.length ? (
           <p className="text-xs text-[var(--muted-foreground)]">
-            No memories were injected in the last recall.
+            {localizeUi(
+              "ui.longTermMemory.lastinjectionsummary.noMemoriesWereInjectedInTheLastRecall",
+            )}
           </p>
         ) : null}
       </div>

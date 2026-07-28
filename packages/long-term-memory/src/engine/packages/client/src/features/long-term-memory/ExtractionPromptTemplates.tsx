@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
-import {
-  DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE,
-  type LtmMode,
-} from "../../../../shared/src/features/agents/long-term-memory/constants.js";
-import type { LtmExtractionSettingsPatch } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
+import type {
+  LtmExtractionSettingsPatch,
+  LtmMode,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   Button,
   InfoPopover,
   StatusSurface,
   inputClass,
 } from "./shared-controls";
+import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 
 type ExtractionForm = Omit<
   Required<LtmExtractionSettingsPatch>,
@@ -17,11 +18,11 @@ type ExtractionForm = Omit<
 >;
 type Mode = LtmMode;
 const modes: Mode[] = ["conversation", "roleplay", "visual_novel", "game"];
-const modeLabels: Record<Mode, string> = {
-  conversation: "Conversation",
-  roleplay: "Roleplay",
-  visual_novel: "Visual Novel",
-  game: "Game",
+const modeLabelKeys: Record<Mode, string> = {
+  conversation: "ui.longTermMemory.extractionprompttemplates.conversation",
+  roleplay: "ui.longTermMemory.extractionprompttemplates.roleplay",
+  visual_novel: "ui.longTermMemory.extractionprompttemplates.visualNovel",
+  game: "ui.longTermMemory.extractionprompttemplates.game",
 };
 type PromptSelection =
   | { kind: "default"; mode: Mode }
@@ -41,11 +42,21 @@ function selectionKey(selection: PromptSelection) {
     : `custom:${selection.id}`;
 }
 
-function selectionLabel(selection: PromptSelection, templateName?: string) {
+function selectionLabel(
+  selection: PromptSelection,
+  localizeUi: LtmTranslationFunction,
+  templateName?: string,
+) {
   if (selection.kind === "default") {
-    return `Built-in Default (${modeLabels[selection.mode]})`;
+    return localizeUi(
+      "ui.longTermMemory.extractionprompttemplates.builtInDefaultForMode",
+      { mode: localizeUi(modeLabelKeys[selection.mode]) },
+    );
   }
-  return templateName ?? "Template";
+  return (
+    templateName ??
+    localizeUi("ui.longTermMemory.extractionprompttemplates.template")
+  );
 }
 
 export function ExtractionPromptTemplates({
@@ -61,6 +72,7 @@ export function ExtractionPromptTemplates({
     confirmLabel: string,
   ) => Promise<boolean>;
 }) {
+  const { t: localizeUi } = useLtmTranslation();
   const [selected, setSelected] = useState<PromptSelection>(
     value.promptTemplates[0]
       ? { kind: "custom", id: value.promptTemplates[0].id }
@@ -71,7 +83,7 @@ export function ExtractionPromptTemplates({
       ? (value.promptTemplates.find(
           (template) => template.id === selected.id,
         ) ?? null)
-       : null;
+      : null;
   useEffect(() => {
     if (selected.kind === "custom" && !selectedTemplate) {
       setSelected(
@@ -102,8 +114,12 @@ export function ExtractionPromptTemplates({
     if (value.promptTemplates.length >= 50) return;
     const template = {
       id: newId(value.promptTemplates),
-      name: "New template",
-      prompt: "Describe only durable information that should be retained.",
+      name: localizeUi(
+        "ui.longTermMemory.extractionprompttemplates.newTemplate",
+      ),
+      prompt: localizeUi(
+        "ui.longTermMemory.extractionprompttemplates.defaultCustomPrompt",
+      ),
     };
     onChange({
       ...value,
@@ -117,13 +133,17 @@ export function ExtractionPromptTemplates({
       selected.kind === "custom"
         ? selectedTemplate
         : {
-            name: selectionLabel(selected),
+            name: selectionLabel(selected, localizeUi),
             prompt: selectedBuiltInPrompt,
           };
-    if (!prompt || typeof prompt.prompt !== "string" || !prompt.prompt.trim()) return;
+    if (!prompt || typeof prompt.prompt !== "string" || !prompt.prompt.trim())
+      return;
     const template = {
       id: newId(value.promptTemplates),
-      name: `${prompt.name} copy`,
+      name: localizeUi(
+        "ui.longTermMemory.extractionprompttemplates.templateCopy",
+        { template: prompt.name },
+      ),
       prompt: prompt.prompt,
     };
     onChange({
@@ -137,9 +157,16 @@ export function ExtractionPromptTemplates({
       selected.kind !== "custom" ||
       !selectedTemplate ||
       !(await confirmAction(
-        "Delete template?",
-        `Delete ${selectedTemplate.name}? Modes using it will return to the built-in prompt.`,
-        "Delete template",
+        localizeUi(
+          "ui.longTermMemory.extractionprompttemplates.deleteTemplate",
+        ),
+        localizeUi(
+          "ui.longTermMemory.extractionprompttemplates.deleteTemplateDescription",
+          { template: selectedTemplate.name },
+        ),
+        localizeUi(
+          "ui.longTermMemory.extractionprompttemplates.deleteTemplateAction",
+        ),
       ))
     )
       return;
@@ -177,15 +204,23 @@ export function ExtractionPromptTemplates({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h4 className="flex items-center gap-1 text-xs font-semibold">
-            Prompt templates
+            {localizeUi(
+              "ui.longTermMemory.extractionprompttemplates.promptTemplates",
+            )}
             <InfoPopover
-              label="Prompt templates"
-              content="Custom templates can be activated independently for Conversation, Roleplay, Visual Novel, and Game."
+              label={localizeUi(
+                "ui.longTermMemory.extractionprompttemplates.promptTemplates",
+              )}
+              content={localizeUi(
+                "ui.longTermMemory.extractionprompttemplates.customTemplatesCanBeActivatedIndependentlyForConversationRoleplay",
+              )}
             />
           </h4>
         </div>
         <Button disabled={value.promptTemplates.length >= 50} onClick={create}>
-          Create template
+          {localizeUi(
+            "ui.longTermMemory.extractionprompttemplates.createTemplate",
+          )}
         </Button>
       </div>
       <div className="grid gap-2 sm:grid-cols-3">
@@ -196,20 +231,35 @@ export function ExtractionPromptTemplates({
           >
             <span>
               <span className="flex items-center gap-1">
-                {modeLabels[mode]} active template
+                {localizeUi(modeLabelKeys[mode])}{" "}
+                {localizeUi(
+                  "ui.longTermMemory.extractionprompttemplates.activeTemplate",
+                )}
                 <InfoPopover
-                  label={`${modeLabels[mode]} active template`}
-                  content="Selects the extraction prompt used for this mode. Built-in default uses the package-provided prompt."
+                  label={localizeUi(
+                    "ui.longTermMemory.extractionprompttemplates.value1ActiveTemplate",
+                    { value1: localizeUi(modeLabelKeys[mode]) },
+                  )}
+                  content={localizeUi(
+                    "ui.longTermMemory.extractionprompttemplates.selectsTheExtractionPromptUsedForThisModeBuilt",
+                  )}
                 />
               </span>
             </span>
             <select
-              aria-label={`${modeLabels[mode]} active template`}
+              aria-label={localizeUi(
+                "ui.longTermMemory.extractionprompttemplates.value1ActiveTemplate",
+                { value1: localizeUi(modeLabelKeys[mode]) },
+              )}
               className={inputClass}
               value={value.activePromptTemplateIdsByMode[mode] ?? ""}
               onChange={(event) => setActive(mode, event.target.value || null)}
             >
-              <option value="">Built-in default</option>
+              <option value="">
+                {localizeUi(
+                  "ui.longTermMemory.extractionprompttemplates.builtInDefault",
+                )}
+              </option>
               {value.promptTemplates.map((template) => (
                 <option key={template.id} value={template.id}>
                   {template.name}
@@ -221,27 +271,39 @@ export function ExtractionPromptTemplates({
               className="text-[0.6875rem] underline"
               onClick={() => setActive(mode, null)}
             >
-              Reset to default
+              {localizeUi(
+                "ui.longTermMemory.extractionprompttemplates.resetToDefault",
+              )}
             </button>
           </div>
         ))}
       </div>
       {value.promptTemplates.length === 0 ? (
         <StatusSurface>
-          No custom templates. Built-in defaults remain active.
+          {localizeUi(
+            "ui.longTermMemory.extractionprompttemplates.noCustomTemplatesBuiltInDefaultsRemainActive",
+          )}
         </StatusSurface>
       ) : null}
       <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
         <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
           <span className="flex items-center gap-1">
-            Prompt template
+            {localizeUi(
+              "ui.longTermMemory.extractionprompttemplates.promptTemplate",
+            )}
             <InfoPopover
-              label="Prompt template"
-              content="Chooses which built-in or custom template is shown in the editor below."
+              label={localizeUi(
+                "ui.longTermMemory.extractionprompttemplates.promptTemplate",
+              )}
+              content={localizeUi(
+                "ui.longTermMemory.extractionprompttemplates.choosesWhichBuiltInOrCustomTemplateIsShown",
+              )}
             />
           </span>
           <select
-            aria-label="Prompt template"
+            aria-label={localizeUi(
+              "ui.longTermMemory.extractionprompttemplates.promptTemplate",
+            )}
             className={inputClass}
             value={selectionKey(selected)}
             onChange={(event) => {
@@ -262,7 +324,7 @@ export function ExtractionPromptTemplates({
                 key={mode}
                 value={selectionKey({ kind: "default", mode })}
               >
-                {selectionLabel({ kind: "default", mode })}
+                {selectionLabel({ kind: "default", mode }, localizeUi)}
               </option>
             ))}
             {value.promptTemplates.map((template) => (
@@ -278,24 +340,34 @@ export function ExtractionPromptTemplates({
         {selected.kind === "default" ? (
           <div className="space-y-2">
             <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-              <span>Name</span>
+              <span>
+                {localizeUi("ui.longTermMemory.extractionprompttemplates.name")}
+              </span>
               <input
                 className={inputClass}
                 readOnly
                 maxLength={120}
-                value={selectionLabel(selected)}
+                value={selectionLabel(selected, localizeUi)}
               />
             </label>
             <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
               <span className="flex items-center gap-1">
-                Template prompt
+                {localizeUi(
+                  "ui.longTermMemory.extractionprompttemplates.templatePrompt",
+                )}
                 <InfoPopover
-                  label="Template prompt"
-                  content="Instructions added to the extraction request. The package's required schema and safety rules still apply."
+                  label={localizeUi(
+                    "ui.longTermMemory.extractionprompttemplates.templatePrompt",
+                  )}
+                  content={localizeUi(
+                    "ui.longTermMemory.extractionprompttemplates.instructionsAddedToTheExtractionRequestThePackageS",
+                  )}
                 />
               </span>
               <textarea
-                aria-label="Template prompt"
+                aria-label={localizeUi(
+                  "ui.longTermMemory.extractionprompttemplates.templatePrompt",
+                )}
                 className={`${inputClass} min-h-48 py-2`}
                 readOnly
                 maxLength={20000}
@@ -307,14 +379,18 @@ export function ExtractionPromptTemplates({
                 disabled={value.promptTemplates.length >= 50}
                 onClick={duplicate}
               >
-                Duplicate
+                {localizeUi(
+                  "ui.longTermMemory.extractionprompttemplates.duplicate",
+                )}
               </Button>
             </div>
           </div>
         ) : selectedTemplate ? (
           <div className="space-y-2">
             <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-              <span>Name</span>
+              <span>
+                {localizeUi("ui.longTermMemory.extractionprompttemplates.name")}
+              </span>
               <input
                 className={inputClass}
                 maxLength={120}
@@ -326,14 +402,22 @@ export function ExtractionPromptTemplates({
             </label>
             <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
               <span className="flex items-center gap-1">
-                Template prompt
+                {localizeUi(
+                  "ui.longTermMemory.extractionprompttemplates.templatePrompt",
+                )}
                 <InfoPopover
-                  label="Template prompt"
-                  content="Instructions added to the extraction request. The package's required schema and safety rules still apply."
+                  label={localizeUi(
+                    "ui.longTermMemory.extractionprompttemplates.templatePrompt",
+                  )}
+                  content={localizeUi(
+                    "ui.longTermMemory.extractionprompttemplates.instructionsAddedToTheExtractionRequestThePackageS",
+                  )}
                 />
               </span>
               <textarea
-                aria-label="Template prompt"
+                aria-label={localizeUi(
+                  "ui.longTermMemory.extractionprompttemplates.templatePrompt",
+                )}
                 className={`${inputClass} min-h-48 py-2`}
                 maxLength={20000}
                 value={selectedTemplate.prompt}
@@ -347,10 +431,14 @@ export function ExtractionPromptTemplates({
                 disabled={value.promptTemplates.length >= 50}
                 onClick={duplicate}
               >
-                Duplicate
+                {localizeUi(
+                  "ui.longTermMemory.extractionprompttemplates.duplicate",
+                )}
               </Button>
               <Button destructive onClick={() => void remove()}>
-                Delete
+                {localizeUi(
+                  "ui.longTermMemory.extractionprompttemplates.delete",
+                )}
               </Button>
             </div>
           </div>

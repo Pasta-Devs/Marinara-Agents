@@ -19,6 +19,7 @@ import {
 import type { LongTermMemoryDestinationProps } from "./types";
 import ActivityView from "./ActivityView";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
+import { useLtmTranslation } from "./localization";
 
 type GlobalForm = {
   version: 1;
@@ -27,11 +28,7 @@ type GlobalForm = {
   longTermMemoryScoreThreshold: number;
   longTermMemoryRecallContextMessages: number;
   longTermMemoryRecallStyle:
-    | "balanced"
-    | "exact"
-    | "broad"
-    | "story"
-    | "custom";
+    "balanced" | "exact" | "broad" | "story" | "custom";
   longTermMemorySemanticWeight: number;
   longTermMemoryLexicalWeight: number;
   longTermMemoryGraphWeight: number;
@@ -50,32 +47,47 @@ type RepairAction =
   | "backfill_imported_source_titles";
 type SettingsTab = "recall" | "extraction" | "maintenance" | "debug";
 
-const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
-  { id: "recall", label: "Recall" },
-  { id: "extraction", label: "Extraction" },
-  { id: "maintenance", label: "Maintenance" },
-  { id: "debug", label: "Debug" },
+const settingsTabs: Array<{ id: SettingsTab; labelKey: string }> = [
+  {
+    id: "recall",
+    labelKey: "ui.longTermMemory.memorysettings.recall",
+  },
+  {
+    id: "extraction",
+    labelKey: "ui.longTermMemory.memorysettings.extraction",
+  },
+  {
+    id: "maintenance",
+    labelKey: "ui.longTermMemory.memorysettings.maintenance",
+  },
+  {
+    id: "debug",
+    labelKey: "ui.longTermMemory.memorysettings.debug",
+  },
 ];
 
 const repairActions: Array<{
   id: RepairAction;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
 }> = [
   {
     id: "rebuild_indexes",
-    label: "Reindex recall data",
-    description: "Rebuild the recall index from saved notes.",
+    labelKey: "ui.longTermMemory.memorysettings.reindexRecallData",
+    descriptionKey:
+      "ui.longTermMemory.memorysettings.rebuildRecallIndexFromSavedNotes",
   },
   {
     id: "quarantine_malformed_notes",
-    label: "Quarantine malformed notes",
-    description: "Move invalid stored notes out of the active vault.",
+    labelKey: "ui.longTermMemory.memorysettings.quarantineMalformedNotes",
+    descriptionKey:
+      "ui.longTermMemory.memorysettings.moveInvalidStoredNotesOutOfActiveVault",
   },
   {
     id: "backfill_imported_source_titles",
-    label: "Backfill source titles",
-    description: "Restore missing titles on imported source notes.",
+    labelKey: "ui.longTermMemory.memorysettings.backfillSourceTitles",
+    descriptionKey:
+      "ui.longTermMemory.memorysettings.restoreMissingTitlesOnImportedSourceNotes",
   },
 ];
 
@@ -245,6 +257,7 @@ export default function MemorySettings({
   onDirtyChange,
   onOpenMemory,
 }: LongTermMemoryDestinationProps) {
+  const { t: localizeUi, locale } = useLtmTranslation();
   const recallStyleLabelId = useId();
   const recallPreambleLabelId = useId();
   const reasoningEffortLabelId = useId();
@@ -270,7 +283,13 @@ export default function MemorySettings({
     null,
   );
   const [pending, setPending] = useState("");
-  const [message, setMessage] = useState("");
+  const [messageState, setMessageState] = useState<{
+    text: string;
+    tone: "success" | "danger";
+  }>({ text: "", tone: "success" });
+  const message = messageState.text;
+  const setMessage = (text: string, tone: "success" | "danger" = "success") =>
+    setMessageState({ text, tone });
   const [activeTab, setActiveTab] = useState<SettingsTab>("recall");
   const [selectedActions, setSelectedActions] = useState<RepairAction[]>([]);
   const [identityPreview, setIdentityPreview] =
@@ -349,9 +368,19 @@ export default function MemorySettings({
         setSavedExtraction(saved);
         await invalidateLtmQueries(queryClient, [queryKeys.extractionSettings]);
       }
-      setMessage("Memory settings saved.");
+      setMessage(
+        localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"),
+      );
     } catch (error) {
-      setMessage(errorMessage(error, "Could not save memory settings."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi(
+            "ui.longTermMemory.memorysettings.couldNotSaveMemorySettings",
+          ),
+        ),
+        "danger",
+      );
     } finally {
       setPending("");
     }
@@ -362,9 +391,11 @@ export default function MemorySettings({
       !dirty ||
       (await confirm(
         props,
-        "Discard unsaved changes?",
-        "Your recall and extraction edits will be lost.",
-        "Discard",
+        localizeUi("ui.longTermMemory.memorysettings.discardUnsavedChanges"),
+        localizeUi(
+          "ui.longTermMemory.memorysettings.recallAndExtractionEditsWillBeLost",
+        ),
+        localizeUi("ui.longTermMemory.memorysettings.discard"),
         true,
       ))
     ) {
@@ -378,9 +409,11 @@ export default function MemorySettings({
     if (
       !(await confirm(
         props,
-        "Run maintenance?",
-        "Selected maintenance actions may rewrite indexes or quarantine invalid notes.",
-        "Run maintenance",
+        localizeUi("ui.longTermMemory.memorysettings.runMaintenance"),
+        localizeUi(
+          "ui.longTermMemory.memorysettings.selectedMaintenanceMayRewriteData",
+        ),
+        localizeUi("ui.longTermMemory.memorysettings.runMaintenanceAction"),
         true,
       ))
     )
@@ -408,7 +441,13 @@ export default function MemorySettings({
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
     } catch (error) {
-      setMessage(errorMessage(error, "Maintenance failed."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi("ui.longTermMemory.memorysettings.maintenanceFailed"),
+        ),
+        "danger",
+      );
     } finally {
       setPending("");
     }
@@ -440,7 +479,15 @@ export default function MemorySettings({
       );
       setIdentityCanonicalNoteIds({});
     } catch (error) {
-      setMessage(errorMessage(error, "Could not preview identity repairs."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi(
+            "ui.longTermMemory.memorysettings.couldNotPreviewIdentityRepairs",
+          ),
+        ),
+        "danger",
+      );
     } finally {
       setPending("");
     }
@@ -471,7 +518,13 @@ export default function MemorySettings({
       }));
     } catch (error) {
       setMessage(
-        errorMessage(error, "Could not refresh the canonical memory preview."),
+        errorMessage(
+          error,
+          localizeUi(
+            "ui.longTermMemory.memorysettings.couldNotRefreshCanonicalPreview",
+          ),
+        ),
+        "danger",
       );
     } finally {
       setPending("");
@@ -536,7 +589,10 @@ export default function MemorySettings({
     );
     if (includedDuplicateCount === 0) {
       setMessage(
-        "Include at least one duplicate note before applying identity repairs.",
+        localizeUi(
+          "ui.longTermMemory.memorysettings.includeDuplicateBeforeApplyingRepairs",
+        ),
+        "danger",
       );
       return;
     }
@@ -546,13 +602,35 @@ export default function MemorySettings({
     try {
       confirmed = await confirm(
         props,
-        "Apply identity repairs?",
-        `${repairs.length} selected identity repair${repairs.length === 1 ? "" : "s"} will be applied. ${includedDuplicateCount} explicitly included duplicate note${includedDuplicateCount === 1 ? "" : "s"} will be archived; excluded duplicates will be preserved. A backup is created first.`,
-        `Apply ${repairs.length} repair${repairs.length === 1 ? "" : "s"}`,
+        localizeUi("ui.longTermMemory.memorysettings.applyIdentityRepairs"),
+        localizeUi(
+          "ui.longTermMemory.memorysettings.applyIdentityRepairsDescription",
+          {
+            repairCount: repairs.length,
+            repairSuffix: repairs.length === 1 ? "" : "s",
+            duplicateCount: includedDuplicateCount,
+            duplicateSuffix: includedDuplicateCount === 1 ? "" : "s",
+          },
+        ),
+        localizeUi(
+          "ui.longTermMemory.memorysettings.applyIdentityRepairsAction",
+          {
+            count: repairs.length,
+            suffix: repairs.length === 1 ? "" : "s",
+          },
+        ),
         true,
       );
     } catch (error) {
-      setMessage(errorMessage(error, "Could not confirm identity repairs."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi(
+            "ui.longTermMemory.memorysettings.couldNotConfirmIdentityRepairs",
+          ),
+        ),
+        "danger",
+      );
     }
     if (!confirmed) {
       setPending("");
@@ -568,7 +646,9 @@ export default function MemorySettings({
         repairs,
       });
       setMessage(
-        `Applied ${result.repairs.length} identity repair(s). A backup was created.`,
+        localizeUi("ui.longTermMemory.memorysettings.appliedIdentityRepairs", {
+          count: result.repairs.length,
+        }),
       );
       setIdentityPreview(null);
       setSelectedIdentityCandidates([]);
@@ -585,7 +665,15 @@ export default function MemorySettings({
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
     } catch (error) {
-      setMessage(errorMessage(error, "Could not apply identity repairs."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi(
+            "ui.longTermMemory.memorysettings.couldNotApplyIdentityRepairs",
+          ),
+        ),
+        "danger",
+      );
     } finally {
       setPending("");
     }
@@ -599,7 +687,12 @@ export default function MemorySettings({
         cache: "no-store",
       });
       if (!response.ok)
-        throw new Error(response.statusText || "Could not export memory data.");
+        throw new Error(
+          response.statusText ||
+            localizeUi(
+              "ui.longTermMemory.memorysettings.couldNotExportMemoryData",
+            ),
+        );
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -607,9 +700,19 @@ export default function MemorySettings({
       link.download = "long-term-memory-backup.json";
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
-      setMessage("Memory backup exported.");
+      setMessage(
+        localizeUi("ui.longTermMemory.memorysettings.memoryBackupExported"),
+      );
     } catch (error) {
-      setMessage(errorMessage(error, "Could not export memory data."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi(
+            "ui.longTermMemory.memorysettings.couldNotExportMemoryData",
+          ),
+        ),
+        "danger",
+      );
     } finally {
       setPending("");
     }
@@ -626,11 +729,19 @@ export default function MemorySettings({
       }>("/backup/preview", "POST", backup);
       setBackupPreview({ ...preview, backup });
       setMessage(
-        "Backup validated. Review the replacement counts before importing.",
+        localizeUi(
+          "ui.longTermMemory.memorysettings.backupValidatedReviewCounts",
+        ),
       );
     } catch (error) {
       setBackupPreview(null);
-      setMessage(errorMessage(error, "Could not validate this backup."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi("ui.longTermMemory.memorysettings.couldNotValidateBackup"),
+        ),
+        "danger",
+      );
     } finally {
       setPending("");
       if (backupInput.current) backupInput.current.value = "";
@@ -642,9 +753,19 @@ export default function MemorySettings({
     if (
       !(await confirm(
         props,
-        "Replace Long-Term Memory data?",
-        `This replaces ${backupPreview.current.notes} current memories and ${backupPreview.current.drafts} drafts with ${backupPreview.incoming.notes} memories and ${backupPreview.incoming.drafts} drafts.`,
-        "Replace data",
+        localizeUi(
+          "ui.longTermMemory.memorysettings.replaceLongTermMemoryData",
+        ),
+        localizeUi(
+          "ui.longTermMemory.memorysettings.replaceLongTermMemoryDataDescription",
+          {
+            currentNotes: backupPreview.current.notes,
+            currentDrafts: backupPreview.current.drafts,
+            incomingNotes: backupPreview.incoming.notes,
+            incomingDrafts: backupPreview.incoming.drafts,
+          },
+        ),
+        localizeUi("ui.longTermMemory.memorysettings.replaceData"),
         true,
       ))
     )
@@ -666,18 +787,29 @@ export default function MemorySettings({
         queryKeys.activity,
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
-      setMessage("Memory backup imported.");
-      const [globalResult, extractionResult, integrityResult] = await Promise.all([
-        global.refetch(),
-        extraction.refetch(),
-        integrity.refetch(),
-      ]);
-      if (!globalResult.isSuccess || !extractionResult.isSuccess || !integrityResult.isSuccess) {
+      setMessage(
+        localizeUi("ui.longTermMemory.memorysettings.memoryBackupImported"),
+      );
+      const [globalResult, extractionResult, integrityResult] =
+        await Promise.all([
+          global.refetch(),
+          extraction.refetch(),
+          integrity.refetch(),
+        ]);
+      if (
+        !globalResult.isSuccess ||
+        !extractionResult.isSuccess ||
+        !integrityResult.isSuccess
+      ) {
         setGlobalForm(null);
         setSavedGlobal(null);
         setExtractionFormState(null);
         setSavedExtraction(null);
-        setMessage("Memory backup imported, but settings could not be refreshed.");
+        setMessage(
+          localizeUi(
+            "ui.longTermMemory.memorysettings.backupImportedSettingsNotRefreshed",
+          ),
+        );
       } else {
         const nextGlobal = settingsForm(globalResult.data);
         setGlobalForm(nextGlobal);
@@ -687,7 +819,15 @@ export default function MemorySettings({
         setSavedExtraction(nextExtraction);
       }
     } catch (error) {
-      setMessage(errorMessage(error, "Could not import memory data."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi(
+            "ui.longTermMemory.memorysettings.couldNotImportMemoryData",
+          ),
+        ),
+        "danger",
+      );
     } finally {
       setPending("");
     }
@@ -697,9 +837,11 @@ export default function MemorySettings({
     if (
       !(await confirm(
         props,
-        "Reset memory settings?",
-        "All Long-Term Memory settings will return to their built-in defaults. Memories will be kept.",
-        "Reset settings",
+        localizeUi("ui.longTermMemory.memorysettings.resetMemorySettings"),
+        localizeUi(
+          "ui.longTermMemory.memorysettings.resetMemorySettingsDescription",
+        ),
+        localizeUi("ui.longTermMemory.memorysettings.resetSettings"),
         true,
       ))
     )
@@ -718,9 +860,21 @@ export default function MemorySettings({
         queryKeys.chatDefaults,
       ]);
       await Promise.all([global.refetch(), extraction.refetch()]);
-      setMessage("Memory settings reset to defaults.");
+      setMessage(
+        localizeUi(
+          "ui.longTermMemory.memorysettings.memorySettingsResetToDefaults",
+        ),
+      );
     } catch (error) {
-      setMessage(errorMessage(error, "Could not reset memory settings."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi(
+            "ui.longTermMemory.memorysettings.couldNotResetMemorySettings",
+          ),
+        ),
+        "danger",
+      );
     } finally {
       setPending("");
     }
@@ -730,9 +884,11 @@ export default function MemorySettings({
     if (
       !(await confirm(
         props,
-        "Delete all memory data?",
-        "This permanently deletes every saved memory, pending draft, activity record, and derived index. Settings will be kept.",
-        "Delete everything",
+        localizeUi("ui.longTermMemory.memorysettings.deleteAllMemoryData"),
+        localizeUi(
+          "ui.longTermMemory.memorysettings.deleteAllMemoryDataDescription",
+        ),
+        localizeUi("ui.longTermMemory.memorysettings.deleteEverything"),
         true,
       ))
     )
@@ -753,9 +909,19 @@ export default function MemorySettings({
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
       await integrity.refetch();
-      setMessage("All memory data deleted. Settings were kept.");
+      setMessage(
+        localizeUi("ui.longTermMemory.memorysettings.allMemoryDataDeleted"),
+      );
     } catch (error) {
-      setMessage(errorMessage(error, "Could not delete memory data."));
+      setMessage(
+        errorMessage(
+          error,
+          localizeUi(
+            "ui.longTermMemory.memorysettings.couldNotDeleteMemoryData",
+          ),
+        ),
+        "danger",
+      );
     } finally {
       setPending("");
     }
@@ -764,7 +930,9 @@ export default function MemorySettings({
   if (global.isError || extraction.isError)
     return (
       <StatusSurface tone="danger">
-        Could not load memory settings.{" "}
+        {localizeUi(
+          "ui.longTermMemory.memorysettings.couldNotLoadMemorySettings",
+        )}{" "}
         <button
           type="button"
           className="underline"
@@ -773,7 +941,7 @@ export default function MemorySettings({
             void extraction.refetch();
           }}
         >
-          Retry
+          {localizeUi("ui.longTermMemory.activityview.retry")}
         </button>
       </StatusSurface>
     );
@@ -783,7 +951,11 @@ export default function MemorySettings({
     !globalForm ||
     !extractionFormState
   )
-    return <StatusSurface busy>Loading memory settings.</StatusSurface>;
+    return (
+      <StatusSurface busy>
+        {localizeUi("ui.longTermMemory.memorysettings.loadingMemorySettings")}
+      </StatusSurface>
+    );
 
   const selectedIdentityCount = selectedIdentityCandidates.length;
   const identitySelectionUnresolved = Boolean(
@@ -814,7 +986,9 @@ export default function MemorySettings({
     <section data-ltm-surface="memory-settings" className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold">Memory Settings</h2>
+          <h2 className="text-sm font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.memorySettings")}
+          </h2>
         </div>
         {dirty ? (
           <div className="flex flex-wrap gap-2">
@@ -823,26 +997,29 @@ export default function MemorySettings({
               disabled={pending !== ""}
               onClick={() => void saveSettings()}
             >
-              Save settings
+              {localizeUi("ui.longTermMemory.memorysettings.saveSettings")}
             </Button>
             <Button
               destructive
               disabled={pending !== ""}
               onClick={() => void discard()}
             >
-              Discard changes
+              {localizeUi("ui.longTermMemory.memorysettings.discardChanges")}
             </Button>
           </div>
         ) : null}
       </div>
       <StatusSurface>
-        Most users can keep the recommended defaults. Change these settings only
-        when recall or extraction needs tuning.
+        {localizeUi(
+          "ui.longTermMemory.memorysettings.mostUsersCanKeepTheRecommendedDefaultsChangeThese",
+        )}
       </StatusSurface>
       <div
         role="tablist"
-        aria-label="Memory settings sections"
-        className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-1 sm:grid-cols-4"
+        aria-label={localizeUi(
+          "ui.longTermMemory.memorysettings.memorySettingsSections",
+        )}
+        className="mari-editor-tab-rail grid grid-cols-2 gap-1 rounded-lg border p-1 sm:grid-cols-4"
       >
         {settingsTabs.map((tab, index) => (
           <button
@@ -869,18 +1046,15 @@ export default function MemorySettings({
                 .getElementById(`settings-tab-${settingsTabs[next].id}`)
                 ?.focus();
             }}
-            className={`min-h-10 rounded-md border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${activeTab === tab.id ? "border-[var(--primary)]/35 bg-[var(--primary)]/10 text-[var(--foreground)]" : "border-transparent text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
+            data-active={activeTab === tab.id}
+            className="mari-editor-tab min-h-10 rounded-md px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
           >
-            {tab.label}
+            {localizeUi(tab.labelKey)}
           </button>
         ))}
       </div>
       {message ? (
-        <StatusSurface
-          tone={/could not|failed/i.test(message) ? "danger" : "success"}
-        >
-          {message}
-        </StatusSurface>
+        <StatusSurface tone={messageState.tone}>{message}</StatusSurface>
       ) : null}
 
       <section
@@ -892,17 +1066,25 @@ export default function MemorySettings({
       >
         <div>
           <h3 className="flex items-center gap-1 text-sm font-semibold">
-            Global Recall
+            {localizeUi("ui.longTermMemory.memorysettings.globalRecall")}
             <InfoPopover
-              label="Global Recall"
-              content="Defaults used by every chat unless that chat overrides them."
+              label={localizeUi(
+                "ui.longTermMemory.memorysettings.globalRecall",
+              )}
+              content={localizeUi(
+                "ui.longTermMemory.memorysettings.defaultsUsedByEveryChatUnlessThatChatOverrides",
+              )}
             />
           </h3>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <Toggle
-            label="Include resolved memories"
-            help="Allows resolved memories to participate in recall. Archived memories remain excluded."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.includeResolvedMemories",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.allowsResolvedMemoriesToParticipateInRecallArchivedMemories",
+            )}
             checked={globalForm.longTermMemoryIncludeResolved}
             onChange={(value) =>
               setGlobalForm({
@@ -913,10 +1095,12 @@ export default function MemorySettings({
           />
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
             <span id={recallStyleLabelId} className="flex items-center gap-1">
-              Recall style
+              {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
               <InfoPopover
-                label="Recall style"
-                content="Chooses the overall matching strategy used to find relevant memories."
+                label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
+                content={localizeUi(
+                  "ui.longTermMemory.memorysettings.choosesTheOverallMatchingStrategyUsedToFindRelevant",
+                )}
               />
             </span>
             <select
@@ -933,16 +1117,30 @@ export default function MemorySettings({
                 )
               }
             >
-              <option value="balanced">Balanced</option>
-              <option value="exact">Exact</option>
-              <option value="broad">Broad</option>
-              <option value="story">Story</option>
-              <option value="custom">Custom</option>
+              <option value="balanced">
+                {localizeUi("ui.longTermMemory.chatsettings.balanced")}
+              </option>
+              <option value="exact">
+                {localizeUi("ui.longTermMemory.chatsettings.exact")}
+              </option>
+              <option value="broad">
+                {localizeUi("ui.longTermMemory.chatsettings.broad")}
+              </option>
+              <option value="story">
+                {localizeUi("ui.longTermMemory.chatsettings.story")}
+              </option>
+              <option value="custom">
+                {localizeUi("ui.longTermMemory.chatsettings.custom")}
+              </option>
             </select>
           </div>
           <NumberField
-            label="Recall budget tokens"
-            help="Maximum token budget available for memories added to a model request."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.recallBudgetTokens",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumTokenBudgetAvailableForMemoriesAddedToA",
+            )}
             value={globalForm.longTermMemoryBudgetTokens}
             min={128}
             max={16384}
@@ -955,8 +1153,12 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Maximum recalled memories"
-            help="Maximum number of memories that may be included in one recall."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumRecalledMemories",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumNumberOfMemoriesThatMayBeIncludedIn",
+            )}
             value={globalForm.longTermMemoryMaxChunks}
             min={1}
             max={100}
@@ -965,8 +1167,12 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Score threshold"
-            help="Excludes candidates whose combined retrieval score falls below this value. Higher values return fewer, stronger matches."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.scoreThreshold",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.excludesCandidatesWhoseCombinedRetrievalScoreFallsBelowThis",
+            )}
             value={globalForm.longTermMemoryScoreThreshold}
             min={0}
             max={1}
@@ -979,8 +1185,12 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Recent messages for recall"
-            help="Number of recent chat messages used to build the query that searches memory."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.recentMessagesForRecall",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.numberOfRecentChatMessagesUsedToBuildThe",
+            )}
             value={globalForm.longTermMemoryRecallContextMessages}
             min={1}
             max={20}
@@ -992,8 +1202,10 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Meaning match"
-            help="Weight given to semantic similarity between the current chat and a saved memory."
+            label={localizeUi("ui.longTermMemory.memorysettings.meaningMatch")}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.weightGivenToSemanticSimilarityBetweenTheCurrentChat",
+            )}
             value={globalForm.longTermMemorySemanticWeight}
             min={0}
             max={1}
@@ -1009,8 +1221,12 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Exact words match"
-            help="Weight given to matching words and phrases."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.exactWordsMatch",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.weightGivenToMatchingWordsAndPhrases",
+            )}
             value={globalForm.longTermMemoryLexicalWeight}
             min={0}
             max={1}
@@ -1026,8 +1242,10 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Graph weight"
-            help="Weight given to relationships between linked memories."
+            label={localizeUi("ui.longTermMemory.memorysettings.graphWeight")}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.weightGivenToRelationshipsBetweenLinkedMemories",
+            )}
             value={globalForm.longTermMemoryGraphWeight}
             min={0}
             max={1}
@@ -1043,8 +1261,10 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Keyword weight"
-            help="Weight given to matching stored keywords."
+            label={localizeUi("ui.longTermMemory.memorysettings.keywordWeight")}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.weightGivenToMatchingStoredKeywords",
+            )}
             value={globalForm.longTermMemoryKeywordWeight}
             min={0}
             max={1}
@@ -1062,10 +1282,16 @@ export default function MemorySettings({
         </div>
         <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
           <span id={recallPreambleLabelId} className="flex items-center gap-1">
-            Memory context instructions
+            {localizeUi(
+              "ui.longTermMemory.memorysettings.memoryContextInstructions",
+            )}
             <InfoPopover
-              label="Memory context instructions"
-              content="Instructions placed before recalled memory context when it is sent to the model."
+              label={localizeUi(
+                "ui.longTermMemory.memorysettings.memoryContextInstructions",
+              )}
+              content={localizeUi(
+                "ui.longTermMemory.memorysettings.instructionsPlacedBeforeRecalledMemoryContextWhenItIs",
+              )}
             />
           </span>
           <textarea
@@ -1091,7 +1317,9 @@ export default function MemorySettings({
         className="space-y-3 rounded-lg border border-[var(--border)] p-3"
       >
         <div>
-          <h3 className="text-sm font-semibold">Extraction</h3>
+          <h3 className="text-sm font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.extraction")}
+          </h3>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
@@ -1099,10 +1327,14 @@ export default function MemorySettings({
               id={reasoningEffortLabelId}
               className="flex items-center gap-1"
             >
-              Reasoning effort
+              {localizeUi("ui.longTermMemory.memorysettings.reasoningEffort")}
               <InfoPopover
-                label="Reasoning effort"
-                content="Requests this amount of model reasoning during extraction. Unsupported settings may be reduced by the selected model."
+                label={localizeUi(
+                  "ui.longTermMemory.memorysettings.reasoningEffort",
+                )}
+                content={localizeUi(
+                  "ui.longTermMemory.memorysettings.requestsThisAmountOfModelReasoningDuringExtractionUnsupported",
+                )}
               />
             </span>
             <select
@@ -1117,18 +1349,28 @@ export default function MemorySettings({
                 })
               }
             >
-              <option value="none">Off</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              <option value="none">
+                {localizeUi("ui.longTermMemory.memorysettings.off")}
+              </option>
+              <option value="low">
+                {localizeUi("ui.longTermMemory.memorysettings.low")}
+              </option>
+              <option value="medium">
+                {localizeUi("ui.longTermMemory.memorysettings.medium")}
+              </option>
+              <option value="high">
+                {localizeUi("ui.longTermMemory.memorysettings.high")}
+              </option>
             </select>
           </div>
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
             <span id={verbosityLabelId} className="flex items-center gap-1">
-              Verbosity
+              {localizeUi("ui.longTermMemory.memorysettings.verbosity")}
               <InfoPopover
-                label="Verbosity"
-                content="Requests the selected response detail level from the extraction model. The response must still follow the structured extraction format."
+                label={localizeUi("ui.longTermMemory.memorysettings.verbosity")}
+                content={localizeUi(
+                  "ui.longTermMemory.memorysettings.requestsTheSelectedResponseDetailLevelFromTheExtraction",
+                )}
               />
             </span>
             <select
@@ -1142,15 +1384,27 @@ export default function MemorySettings({
                 })
               }
             >
-              <option value="none">Off</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              <option value="none">
+                {localizeUi("ui.longTermMemory.memorysettings.off")}
+              </option>
+              <option value="low">
+                {localizeUi("ui.longTermMemory.memorysettings.low")}
+              </option>
+              <option value="medium">
+                {localizeUi("ui.longTermMemory.memorysettings.medium")}
+              </option>
+              <option value="high">
+                {localizeUi("ui.longTermMemory.memorysettings.high")}
+              </option>
             </select>
           </div>
           <NumberField
-            label="Maximum output tokens"
-            help="Maximum tokens the model may produce for one extraction response, capped by the selected model's own limit."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumOutputTokens",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumTokensTheModelMayProduceForOneExtraction",
+            )}
             value={extractionFormState.maxOutputTokens}
             min={512}
             max={32768}
@@ -1163,8 +1417,10 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Temperature"
-            help="Controls extraction variability. Lower values are more deterministic; higher values may produce more varied results."
+            label={localizeUi("ui.longTermMemory.memorysettings.temperature")}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.controlsExtractionVariabilityLowerValuesAreMoreDeterministicHigher",
+            )}
             value={extractionFormState.temperature}
             min={0}
             max={2}
@@ -1177,8 +1433,12 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Maximum source tokens"
-            help="Rejects a source when its estimated size exceeds this limit."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumSourceTokens",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.rejectsASourceWhenItsEstimatedSizeExceedsThis",
+            )}
             value={extractionFormState.maxSourceTokens}
             min={128}
             max={65536}
@@ -1191,8 +1451,12 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Maximum existing-note tokens"
-            help="Maximum existing-memory context made available while the model prepares an extraction."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumExistingNoteTokens",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumExistingMemoryContextMadeAvailableWhileTheModel",
+            )}
             value={extractionFormState.maxExistingNoteTokens}
             min={128}
             max={32768}
@@ -1205,8 +1469,12 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Existing-note chunks"
-            help="Maximum number of existing memory chunks considered while checking context and possible overlap."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.existingNoteChunks",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumNumberOfExistingMemoryChunksConsideredWhileChecking",
+            )}
             value={extractionFormState.existingNoteMaxChunks}
             min={1}
             max={100}
@@ -1218,8 +1486,12 @@ export default function MemorySettings({
             }
           />
           <NumberField
-            label="Existing-note token budget"
-            help="Maximum tokens from those existing chunks included in the extraction request."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.existingNoteTokenBudget",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.maximumTokensFromThoseExistingChunksIncludedInThe",
+            )}
             value={extractionFormState.existingNoteMaxTokens}
             min={128}
             max={32768}
@@ -1232,8 +1504,12 @@ export default function MemorySettings({
             }
           />
           <Toggle
-            label="AI keyword extraction"
-            help="Asks the model to generate concise keywords for extracted memories instead of relying only on deterministic keywords."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.aiKeywordExtraction",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.asksTheModelToGenerateConciseKeywordsForExtracted",
+            )}
             checked={extractionFormState.aiKeywordExtraction}
             onChange={(value) =>
               setExtractionFormState({
@@ -1243,8 +1519,12 @@ export default function MemorySettings({
             }
           />
           <Toggle
-            label="Use Extraction Agent on Game Mode"
-            help="Routes Game-mode imports through the extraction agent instead of the direct Game-mode extraction path."
+            label={localizeUi(
+              "ui.longTermMemory.memorysettings.useExtractionAgentOnGameMode",
+            )}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.routesGameModeImportsThroughTheExtractionAgentInstead",
+            )}
             checked={extractionFormState.useExtractionAgentOnGameMode}
             onChange={(value) =>
               setExtractionFormState({
@@ -1271,17 +1551,24 @@ export default function MemorySettings({
         className="space-y-3 rounded-lg border border-[var(--border)] p-3"
       >
         <div>
-          <h3 className="text-sm font-semibold">Vault Maintenance</h3>
+          <h3 className="text-sm font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.vaultMaintenance")}
+          </h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Integrity state: {integrity.data?.health ?? "loading"}.
+            {localizeUi("ui.longTermMemory.memorysettings.integrityState")}{" "}
+            {integrity.data?.health ?? "loading"}.
           </p>
         </div>
         <div className="border-t border-[var(--border)] pt-3">
           <h4 className="flex items-center gap-1 text-xs font-semibold">
-            Backup and Reset
+            {localizeUi("ui.longTermMemory.memorysettings.backupAndReset")}
             <InfoPopover
-              label="Backup and Reset"
-              content="Export or replace the package-owned memory vault and settings."
+              label={localizeUi(
+                "ui.longTermMemory.memorysettings.backupAndReset",
+              )}
+              content={localizeUi(
+                "ui.longTermMemory.memorysettings.exportOrReplaceThePackageOwnedMemoryVaultAnd",
+              )}
             />
           </h4>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -1289,13 +1576,15 @@ export default function MemorySettings({
               disabled={pending !== ""}
               onClick={() => void exportBackup()}
             >
-              <Download aria-hidden="true" size="0.875rem" /> Export backup
+              <Download aria-hidden="true" size="0.875rem" />{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.exportBackup")}
             </Button>
             <Button
               disabled={pending !== ""}
               onClick={() => backupInput.current?.click()}
             >
-              <Upload aria-hidden="true" size="0.875rem" /> Choose backup
+              <Upload aria-hidden="true" size="0.875rem" />{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.chooseBackup")}
             </Button>
             <input
               ref={backupInput}
@@ -1311,52 +1600,73 @@ export default function MemorySettings({
               disabled={pending !== ""}
               onClick={() => void resetSettings()}
             >
-              <RotateCcw aria-hidden="true" size="0.875rem" /> Reset settings
+              <RotateCcw aria-hidden="true" size="0.875rem" />{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.resetSettings")}
             </Button>
             <Button
               destructive
               disabled={pending !== ""}
               onClick={() => void deleteAll()}
             >
-              <Trash2 aria-hidden="true" size="0.875rem" /> Delete all data
+              <Trash2 aria-hidden="true" size="0.875rem" />{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.deleteAllData")}
             </Button>
           </div>
           {backupPreview ? (
             <div className="mt-2 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3 text-xs">
-              <p className="font-semibold">Validated backup ready to import</p>
+              <p className="font-semibold">
+                {localizeUi(
+                  "ui.longTermMemory.memorysettings.validatedBackupReadyToImport",
+                )}
+              </p>
               <p className="text-[var(--muted-foreground)]">
-                Current: {backupPreview.current.notes} memories,{" "}
-                {backupPreview.current.drafts} drafts. Incoming:{" "}
-                {backupPreview.incoming.notes} memories,{" "}
-                {backupPreview.incoming.drafts} drafts.
+                {localizeUi("ui.longTermMemory.memorysettings.current")}{" "}
+                {backupPreview.current.notes}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.memories")}{" "}
+                {backupPreview.current.drafts}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.draftsIncoming")}{" "}
+                {backupPreview.incoming.notes}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.memories")}{" "}
+                {backupPreview.incoming.drafts}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.drafts")}
               </p>
               <Button
                 primary
                 disabled={pending !== ""}
                 onClick={() => void importBackup()}
               >
-                Replace with this backup
+                {localizeUi(
+                  "ui.longTermMemory.memorysettings.replaceWithThisBackup",
+                )}
               </Button>
             </div>
           ) : null}
         </div>
         {integrity.isError ? (
           <StatusSurface tone="danger">
-            Integrity check could not load.{" "}
+            {localizeUi(
+              "ui.longTermMemory.memorysettings.integrityCheckCouldNotLoad",
+            )}{" "}
             <button
               type="button"
               className="underline"
               onClick={() => void integrity.refetch()}
             >
-              Retry
+              {localizeUi("ui.longTermMemory.activityview.retry")}
             </button>
           </StatusSurface>
         ) : null}
         {integrity.data ? (
           <StatusSurface tone={integrity.data.ok ? "success" : "danger"}>
             {integrity.data.ok
-              ? `Integrity check passed for ${integrity.data.noteCount} notes.`
-              : `${integrity.data.issues.length} integrity issue(s) found.`}
+              ? localizeUi(
+                  "ui.longTermMemory.memorysettings.integrityCheckPassedForValue1Notes",
+                  { value1: integrity.data.noteCount },
+                )
+              : localizeUi(
+                  "ui.longTermMemory.memorysettings.value1IntegrityIssueSFound",
+                  { value1: integrity.data.issues.length },
+                )}
           </StatusSurface>
         ) : null}
         {integrity.data?.issues.length ? (
@@ -1372,8 +1682,8 @@ export default function MemorySettings({
           {repairActions.map((action) => (
             <Toggle
               key={action.id}
-              label={action.label}
-              help={action.description}
+              label={localizeUi(action.labelKey)}
+              help={localizeUi(action.descriptionKey)}
               checked={selectedActions.includes(action.id)}
               onChange={(checked) =>
                 setSelectedActions(
@@ -1390,14 +1700,20 @@ export default function MemorySettings({
           disabled={pending !== "" || !selectedActions.length}
           onClick={() => void runRepair()}
         >
-          Run selected maintenance
+          {localizeUi(
+            "ui.longTermMemory.memorysettings.runSelectedMaintenance",
+          )}
         </Button>
         <div className="border-t border-[var(--border)] pt-3">
           <h4 className="flex items-center gap-1 text-xs font-semibold">
-            Identity repair
+            {localizeUi("ui.longTermMemory.memorysettings.identityRepair")}
             <InfoPopover
-              label="Identity repair"
-              content="Preview duplicate trusted identities before merging and archiving duplicates."
+              label={localizeUi(
+                "ui.longTermMemory.memorysettings.identityRepair",
+              )}
+              content={localizeUi(
+                "ui.longTermMemory.memorysettings.previewDuplicateTrustedIdentitiesBeforeMergingAndArchivingDuplicates",
+              )}
             />
           </h4>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -1405,7 +1721,9 @@ export default function MemorySettings({
               disabled={pending !== ""}
               onClick={() => void previewIdentities()}
             >
-              Preview identity repairs
+              {localizeUi(
+                "ui.longTermMemory.memorysettings.previewIdentityRepairs",
+              )}
             </Button>
             <Button
               destructive
@@ -1416,15 +1734,21 @@ export default function MemorySettings({
               }
               onClick={() => void applyIdentities()}
             >
-              Apply selected repairs ({selectedIdentityCount})
+              {localizeUi(
+                "ui.longTermMemory.memorysettings.applySelectedRepairs",
+              )}
+              {selectedIdentityCount})
             </Button>
           </div>
           {identityPreview ? (
             <div className="mt-3 space-y-2 text-xs">
               <p>
-                {identityPreview.counts.candidateCount} candidate group(s),{" "}
-                {identityPreview.counts.duplicateNotes} duplicate note(s),{" "}
-                {identityPreview.counts.unresolvedNotes} unresolved.
+                {identityPreview.counts.candidateCount}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.candidateGroupS")}{" "}
+                {identityPreview.counts.duplicateNotes}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.duplicateNoteS")}{" "}
+                {identityPreview.counts.unresolvedNotes}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.unresolved")}
               </p>
               {identityPreview.candidates.map((candidate) => (
                 <div
@@ -1455,9 +1779,15 @@ export default function MemorySettings({
                       </span>
                       <span className="block text-[var(--muted-foreground)]">
                         {candidate.noteType === "relationship"
-                          ? "Relationship"
-                          : "Character"}{" "}
-                        match via{" "}
+                          ? localizeUi(
+                              "ui.longTermMemory.memorysettings.relationship",
+                            )
+                          : localizeUi(
+                              "ui.longTermMemory.memorysettings.character",
+                            )}{" "}
+                        {localizeUi(
+                          "ui.longTermMemory.memorysettings.matchVia",
+                        )}{" "}
                         {candidate.matchBasis.join(", ").replaceAll("_", " ")}.
                       </span>
                     </span>
@@ -1496,7 +1826,9 @@ export default function MemorySettings({
                               }
                             />
                             <span className="font-medium text-[var(--foreground)]">
-                              Keep as canonical
+                              {localizeUi(
+                                "ui.longTermMemory.memorysettings.keepAsCanonical",
+                              )}
                             </span>
                           </label>
                           <label className="flex min-w-0 flex-1 items-start gap-2">
@@ -1533,16 +1865,32 @@ export default function MemorySettings({
                             <span>
                               <span className="block font-medium text-[var(--foreground)]">
                                 {canonical
-                                  ? "Canonical memory"
-                                  : "Include duplicate in merge and archive"}
+                                  ? localizeUi(
+                                      "ui.longTermMemory.memorysettings.canonicalMemory",
+                                    )
+                                  : localizeUi(
+                                      "ui.longTermMemory.memorysettings.includeDuplicateInMergeAndArchive",
+                                    )}
                                 : {note.title}
                               </span>
                               <span className="block">
                                 {note.basis.replaceAll("_", " ")}
-                                {note.alreadyBound ? ", already bound" : ""}
-                                {note.exactFullName ? ", exact full name" : ""};
-                                created{" "}
-                                {new Date(note.createdAt).toLocaleDateString()}
+                                {note.alreadyBound
+                                  ? localizeUi(
+                                      "ui.longTermMemory.memorysettings.alreadyBound",
+                                    )
+                                  : ""}
+                                {note.exactFullName
+                                  ? localizeUi(
+                                      "ui.longTermMemory.memorysettings.exactFullName",
+                                    )
+                                  : ""}
+                                {localizeUi(
+                                  "ui.longTermMemory.memorysettings.created",
+                                )}{" "}
+                                {new Date(note.createdAt).toLocaleDateString(
+                                  locale,
+                                )}
                               </span>
                             </span>
                           </label>
@@ -1552,7 +1900,11 @@ export default function MemorySettings({
                   </div>
                   {candidate.additiveContent.length ? (
                     <div className="space-y-1">
-                      <p className="font-medium">Content to add</p>
+                      <p className="font-medium">
+                        {localizeUi(
+                          "ui.longTermMemory.memorysettings.contentToAdd",
+                        )}
+                      </p>
                       {candidate.additiveContent.map((content) => (
                         <p
                           key={content.sectionKey}
@@ -1573,7 +1925,9 @@ export default function MemorySettings({
                       }
                     >
                       <legend className="font-medium">
-                        Choose {conflict.sectionKey} content
+                        {localizeUi("ui.longTermMemory.memorysettings.choose")}{" "}
+                        {conflict.sectionKey}{" "}
+                        {localizeUi("ui.longTermMemory.memorysettings.content")}
                       </legend>
                       {conflict.options.map((option) => {
                         const included = new Set([
@@ -1644,8 +1998,12 @@ export default function MemorySettings({
         className="space-y-3 rounded-lg border border-[var(--border)] p-3"
       >
         <Toggle
-          label="Record debug activity"
-          help="Records Long-Term Memory operations for troubleshooting. Activity may include technical metadata and can be exported or cleared here."
+          label={localizeUi(
+            "ui.longTermMemory.memorysettings.recordDebugActivity",
+          )}
+          help={localizeUi(
+            "ui.longTermMemory.memorysettings.recordsLongTermMemoryOperationsForTroubleshootingActivityMay",
+          )}
           checked={globalForm.longTermMemoryDebug}
           onChange={(value) =>
             setGlobalForm({ ...globalForm, longTermMemoryDebug: value })

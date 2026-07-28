@@ -8,7 +8,12 @@ import type {
   LtmImportance,
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
+import {
+  invalidateLtmQueries,
+  queryKeys,
+  request,
+  requestAllNotes,
+} from "./api";
 import { humanizeLabel } from "./display-labels";
 import {
   Button,
@@ -17,6 +22,7 @@ import {
   StatusSurface,
 } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
+import { useLtmTranslation } from "./localization";
 
 type ReviewRow = {
   draftId: string;
@@ -59,30 +65,30 @@ const importanceOptions: LtmImportance[] = [
 ];
 
 const freshnessLabel: Record<string, string> = {
-  fresh: "Fresh",
-  hashless: "Context unbound",
-  stale: "Stale",
-  missing: "Source missing",
-  invalid: "Source invalid",
-  superseded: "Superseded",
-  not_pending: "Not pending",
+  fresh: "ui.longTermMemory.reviewqueue.fresh",
+  hashless: "ui.longTermMemory.reviewqueue.contextUnbound",
+  stale: "ui.longTermMemory.reviewqueue.stale",
+  missing: "ui.longTermMemory.reviewqueue.sourceMissing",
+  invalid: "ui.longTermMemory.reviewqueue.sourceInvalid",
+  superseded: "ui.longTermMemory.reviewqueue.superseded",
+  not_pending: "ui.longTermMemory.reviewqueue.notPending",
 };
 
 const mutationLabels: Record<LtmDraftMutation["kind"], string> = {
-  create_note: "Create memory",
-  append_section: "Add to section",
-  update_section: "Update section",
-  add_link: "Add link",
-  set_keywords: "Replace keywords",
-  set_status: "Change status",
-  set_subjects: "Update subjects",
+  create_note: "ui.longTermMemory.reviewqueue.createMemory",
+  append_section: "ui.longTermMemory.reviewqueue.addToSection",
+  update_section: "ui.longTermMemory.reviewqueue.updateSection",
+  add_link: "ui.longTermMemory.reviewqueue.addLink",
+  set_keywords: "ui.longTermMemory.reviewqueue.replaceKeywords",
+  set_status: "ui.longTermMemory.reviewqueue.changeStatus",
+  set_subjects: "ui.longTermMemory.reviewqueue.updateSubjects",
 };
 
 const dispositionLabels: Record<ReviewRow["disposition"], string> = {
-  new: "New memory",
-  merge: "Merge into memory",
-  rewrite: "Rewrite memory",
-  unavailable: "Preview unavailable",
+  new: "ui.longTermMemory.reviewqueue.newMemory",
+  merge: "ui.longTermMemory.reviewqueue.mergeIntoMemory",
+  rewrite: "ui.longTermMemory.reviewqueue.rewriteMemory",
+  unavailable: "ui.longTermMemory.reviewqueue.previewUnavailable",
 };
 
 function mutationTarget(mutation: LtmDraftMutation) {
@@ -201,9 +207,11 @@ function boundedTrim(value: string, max: number) {
   return value.trim().slice(0, max);
 }
 
-function formatTimestamp(timestamp: string) {
+function formatTimestamp(timestamp: string, locale: string) {
   const date = new Date(timestamp);
-  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleDateString();
+  return Number.isNaN(date.getTime())
+    ? timestamp
+    : date.toLocaleDateString(locale);
 }
 
 function recoveryLabel(
@@ -265,17 +273,20 @@ function ImportanceField({
   value: LtmImportance | undefined;
   onChange: (value: LtmImportance | undefined) => void;
 }) {
+  const { t: localizeUi } = useLtmTranslation();
   return (
     <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
       <span className="flex items-center gap-1">
-        Importance
+        {localizeUi("ui.longTermMemory.memoryvault.importance")}
         <InfoPopover
-          label="Importance"
-          content="Durability and consequence category: critical, major, moderate, or minor."
+          label={localizeUi("ui.longTermMemory.memoryvault.importance")}
+          content={localizeUi(
+            "ui.longTermMemory.memoryvault.durabilityAndConsequenceCategoryCriticalMajorModerateOrMinor",
+          )}
         />
       </span>
       <select
-        aria-label="Importance"
+        aria-label={localizeUi("ui.longTermMemory.memoryvault.importance")}
         className={inputClass}
         value={value ?? ""}
         onChange={(event) =>
@@ -284,7 +295,9 @@ function ImportanceField({
           )
         }
       >
-        <option value="">Not specified</option>
+        <option value="">
+          {localizeUi("ui.longTermMemory.importancefield.notSpecified")}
+        </option>
         {importanceOptions.map((importance) => (
           <option key={importance} value={importance}>
             {humanizeLabel(importance)}
@@ -304,6 +317,7 @@ function MutationEditor({
   canEditTitle: boolean;
   onChange: (mutation: LtmDraftMutation) => void;
 }) {
+  const { t: localizeUi } = useLtmTranslation();
   if (mutation.kind === "create_note") {
     return (
       <div
@@ -312,7 +326,9 @@ function MutationEditor({
       >
         {canEditTitle ? (
           <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            <span>Memory title</span>
+            <span>
+              {localizeUi("ui.longTermMemory.mutationeditor.memoryTitle")}
+            </span>
             <input
               className={inputClass}
               maxLength={240}
@@ -409,7 +425,10 @@ function MutationEditor({
         className="grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
       >
         <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span>{humanizeLabel(mutation.sectionKey)} text</span>
+          <span>
+            {humanizeLabel(mutation.sectionKey)}{" "}
+            {localizeUi("ui.longTermMemory.mutationeditor.text")}
+          </span>
           <textarea
             className={`${inputClass} min-h-24 py-2`}
             maxLength={20_000}
@@ -443,7 +462,10 @@ function MutationEditor({
         className="grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
       >
         <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span>{humanizeLabel(mutation.sectionKey)} text</span>
+          <span>
+            {humanizeLabel(mutation.sectionKey)}{" "}
+            {localizeUi("ui.longTermMemory.mutationeditor.text")}
+          </span>
           <textarea
             className={`${inputClass} min-h-24 py-2`}
             maxLength={20_000}
@@ -493,6 +515,7 @@ function ExtractionDetails({
     candidate: LtmDraftReviewDraft["candidateRejections"][number],
   ) => void;
 }) {
+  const { t: localizeUi } = useLtmTranslation();
   const accounting = item.draft.accounting;
   const hasDetails =
     Boolean(accounting) ||
@@ -507,24 +530,47 @@ function ExtractionDetails({
       className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs"
     >
       <summary className="cursor-pointer font-medium">
-        Extraction details
+        {localizeUi("ui.longTermMemory.extractiondetails.extractionDetails")}
         {accounting
-          ? ` | ${accounting.keptUnits} kept | ${accounting.parserRejections + accounting.validationRejections} rejected | ${accounting.deduplications} deduplicated`
+          ? localizeUi(
+              "ui.longTermMemory.extractiondetails.value1KeptValue2RejectedValue3Deduplicated",
+              {
+                value1: accounting.keptUnits,
+                value2:
+                  accounting.parserRejections + accounting.validationRejections,
+                value3: accounting.deduplications,
+              },
+            )
           : ""}
       </summary>
       <div className="mt-3 space-y-3 text-[var(--muted-foreground)]">
         {accounting ? (
           <p data-ltm-extraction-accounting>
-            {accounting.providerCandidates} provider candidates +{" "}
-            {accounting.normalizedAdditions} normalized additions ={" "}
-            {accounting.keptUnits} kept, {accounting.parserRejections} parser
-            rejected, {accounting.validationRejections} validation rejected, and{" "}
-            {accounting.deduplications} deduplicated.
+            {accounting.providerCandidates}{" "}
+            {localizeUi(
+              "ui.longTermMemory.extractiondetails.providerCandidates",
+            )}{" "}
+            {accounting.normalizedAdditions}{" "}
+            {localizeUi(
+              "ui.longTermMemory.extractiondetails.normalizedAdditions",
+            )}{" "}
+            {accounting.keptUnits}{" "}
+            {localizeUi("ui.longTermMemory.extractiondetails.kept")}{" "}
+            {accounting.parserRejections}{" "}
+            {localizeUi("ui.longTermMemory.extractiondetails.parserRejected")}{" "}
+            {accounting.validationRejections}{" "}
+            {localizeUi(
+              "ui.longTermMemory.extractiondetails.validationRejectedAnd",
+            )}{" "}
+            {accounting.deduplications}{" "}
+            {localizeUi("ui.longTermMemory.extractiondetails.deduplicated")}
           </p>
         ) : null}
         {item.diagnostics.length ? (
           <div data-ltm-draft-diagnostics className="space-y-1">
-            <p className="font-medium text-[var(--foreground)]">Diagnostics</p>
+            <p className="font-medium text-[var(--foreground)]">
+              {localizeUi("ui.longTermMemory.extractiondetails.diagnostics")}
+            </p>
             {item.diagnostics.map((diagnostic, index) => (
               <p key={`${diagnostic.code}-${index}`}>
                 {humanizeLabel(diagnostic.code)}: {diagnostic.message}
@@ -535,7 +581,9 @@ function ExtractionDetails({
         {item.candidateRejections.length ? (
           <div data-ltm-candidate-rejections className="space-y-2">
             <p className="font-medium text-[var(--foreground)]">
-              Candidate rejections
+              {localizeUi(
+                "ui.longTermMemory.extractiondetails.candidateRejections",
+              )}
             </p>
             {item.candidateRejections.map((rejection) => (
               <div
@@ -545,16 +593,31 @@ function ExtractionDetails({
                 <p>
                   {humanizeLabel(rejection.reason)}: {rejection.message}
                 </p>
-                {rejection.snippet ? <p>Snippet: {rejection.snippet}</p> : null}
+                {rejection.snippet ? (
+                  <p>
+                    {localizeUi("ui.longTermMemory.extractiondetails.snippet")}{" "}
+                    {rejection.snippet}
+                  </p>
+                ) : null}
                 {rejection.issues?.map((issue) => (
-                  <p key={issue}>Issue: {issue}</p>
+                  <p key={issue}>
+                    {localizeUi("ui.longTermMemory.extractiondetails.issue")}{" "}
+                    {issue}
+                  </p>
                 ))}
                 {rejection.recovery ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p>Recovery: {recoveryLabel(rejection.recovery)}</p>
+                    <p>
+                      {localizeUi(
+                        "ui.longTermMemory.extractiondetails.recovery",
+                      )}{" "}
+                      {recoveryLabel(rejection.recovery)}
+                    </p>
                     {onRecoverCandidate ? (
                       <Button onClick={() => onRecoverCandidate(rejection)}>
-                        Recover as memory
+                        {localizeUi(
+                          "ui.longTermMemory.extractiondetails.recoverAsMemory",
+                        )}
                       </Button>
                     ) : null}
                   </div>
@@ -566,7 +629,7 @@ function ExtractionDetails({
         {item.deduplications.length ? (
           <div data-ltm-deduplications className="space-y-1">
             <p className="font-medium text-[var(--foreground)]">
-              Deduplications
+              {localizeUi("ui.longTermMemory.extractiondetails.deduplications")}
             </p>
             {item.deduplications.map((diagnostic, index) => (
               <p key={`${diagnostic.code}-${index}`}>{diagnostic.message}</p>
@@ -585,6 +648,7 @@ export default function ReviewQueue({
   onRecoverCandidate,
   reviewSourceNoteId,
 }: LongTermMemoryDestinationProps) {
+  const { t: localizeUi, locale } = useLtmTranslation();
   const queryClient = useQueryClient();
   const [sourceNoteId, setSourceNoteId] = useState(reviewSourceNoteId ?? null);
   useEffect(
@@ -799,7 +863,12 @@ export default function ReviewQueue({
         } catch (error) {
           mutationIds.forEach((id) => failedIds.add(id));
           messages.push(
-            `Draft action failed: ${error instanceof Error ? error.message : "Request failed"}`,
+            localizeUi("ui.longTermMemory.reviewqueue.draftActionFailed", {
+              message:
+                error instanceof Error
+                  ? error.message
+                  : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+            }),
           );
         }
       }
@@ -861,7 +930,12 @@ export default function ReviewQueue({
         autoIncluded: 0,
         indexRebuildFailures: [],
         messages: [
-          `Report dismissal failed: ${error instanceof Error ? error.message : "Request failed"}`,
+          localizeUi("ui.longTermMemory.reviewqueue.reportDismissalFailed", {
+            message:
+              error instanceof Error
+                ? error.message
+                : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+          }),
         ],
         cascadeMutationIds: [],
       });
@@ -871,14 +945,20 @@ export default function ReviewQueue({
   };
 
   if (review.isLoading) {
-    return <StatusSurface busy>Loading pending review drafts.</StatusSurface>;
+    return (
+      <StatusSurface busy>
+        {localizeUi("ui.longTermMemory.reviewqueue.loadingPendingReviewDrafts")}
+      </StatusSurface>
+    );
   }
   if (review.isError) {
     return (
       <StatusSurface tone="danger">
         {review.error instanceof Error
           ? review.error.message
-          : "Pending review drafts could not load."}
+          : localizeUi(
+              "ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad",
+            )}
       </StatusSurface>
     );
   }
@@ -903,7 +983,9 @@ export default function ReviewQueue({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <SelectionCheckbox
             checked={selectedIds.has(row.mutation.id)}
-            label={`Select ${mutationLabels[row.mutation.kind].toLowerCase()}`}
+            label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
+              value1: localizeUi(mutationLabels[row.mutation.kind]),
+            })}
             onChange={() => toggleSelection(row.mutation.id)}
           />
           <p
@@ -911,10 +993,12 @@ export default function ReviewQueue({
             data-ltm-disposition={row.disposition}
             className="text-right text-xs font-semibold"
           >
-            {mutationLabels[row.mutation.kind]} |{" "}
-            {dispositionLabels[row.disposition]} |{" "}
-            {humanizeLabel(row.mutation.risk)} risk |{" "}
-            {Math.round(row.mutation.confidence * 100)}% confidence
+            {localizeUi(mutationLabels[row.mutation.kind])} |{" "}
+            {localizeUi(dispositionLabels[row.disposition])} |{" "}
+            {humanizeLabel(row.mutation.risk)}{" "}
+            {localizeUi("ui.longTermMemory.reviewqueue.risk")}{" "}
+            {Math.round(row.mutation.confidence * 100)}
+            {localizeUi("ui.longTermMemory.reviewqueue.confidence")}
           </p>
         </div>
         <p className="text-xs text-[var(--muted-foreground)]">
@@ -922,12 +1006,20 @@ export default function ReviewQueue({
         </p>
         <details data-ltm-review-preview className="text-xs">
           <summary className="cursor-pointer font-medium">
-            Evidence and preview | {row.mutation.evidence.length} evidence
-            {previewChanges.length ? ` | ${previewChanges.length} changes` : ""}
+            {localizeUi("ui.longTermMemory.reviewqueue.evidenceAndPreview")}{" "}
+            {row.mutation.evidence.length}{" "}
+            {localizeUi("ui.longTermMemory.reviewqueue.evidence")}
+            {previewChanges.length
+              ? localizeUi("ui.longTermMemory.reviewqueue.value1Changes", {
+                  value1: previewChanges.length,
+                })
+              : ""}
           </summary>
           <div className="mt-2 space-y-2">
             <div data-ltm-review-evidence>
-              <span className="font-medium">Evidence:</span>{" "}
+              <span className="font-medium">
+                {localizeUi("ui.longTermMemory.reviewqueue.evidence_3ef3540")}
+              </span>{" "}
               {row.mutation.evidence.join(" | ")}
             </div>
             {previewChanges.length ? (
@@ -937,7 +1029,11 @@ export default function ReviewQueue({
                     <span className="font-medium">
                       {humanizeLabel(change.kind)} {humanizeLabel(change.key)}:
                     </span>{" "}
-                    {change.before ? `${change.before} -> ` : ""}
+                    {change.before
+                      ? localizeUi("ui.longTermMemory.reviewqueue.value1", {
+                          value1: change.before,
+                        })
+                      : ""}
                     {change.after}
                   </p>
                 ))}
@@ -963,8 +1059,9 @@ export default function ReviewQueue({
             role="status"
             className="text-xs text-[var(--muted-foreground)]"
           >
-            Projection preview is stale because this target has edited
-            mutations. Accept will re-project the edited values.
+            {localizeUi(
+              "ui.longTermMemory.reviewqueue.projectionPreviewIsStaleBecauseThisTargetHasEdited",
+            )}
           </p>
         ) : null}
         <MutationEditor
@@ -974,7 +1071,9 @@ export default function ReviewQueue({
         />
         {!valid ? (
           <p role="alert" className="text-xs text-[var(--destructive)]">
-            Section text cannot be empty.
+            {localizeUi(
+              "ui.longTermMemory.reviewqueue.sectionTextCannotBeEmpty",
+            )}
           </p>
         ) : null}
         <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-2">
@@ -985,14 +1084,14 @@ export default function ReviewQueue({
             }
             onClick={() => void runBatch("accept", [row])}
           >
-            Accept
+            {localizeUi("ui.longTermMemory.reviewqueue.accept")}
           </Button>
           <Button
             destructive
             disabled={running !== null}
             onClick={() => void runBatch("skip", [row])}
           >
-            Skip
+            {localizeUi("ui.longTermMemory.longtermmemorydetail.skip")}
           </Button>
         </div>
       </article>
@@ -1003,22 +1102,30 @@ export default function ReviewQueue({
     <section data-ltm-surface="review-queue" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3">
         <div>
-          <h2 className="text-sm font-semibold">Review queue</h2>
+          <h2 className="text-sm font-semibold">
+            {localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
+          </h2>
           <p
             data-ltm-review-summary
             className="text-xs text-[var(--muted-foreground)]"
           >
-            {review.data?.counts.sources ?? 0} source
-            {review.data?.counts.sources === 1 ? "" : "s"} |{" "}
-            {review.data?.counts.mutations ?? 0} pending | {eligibleIds.size}{" "}
-            ready | {review.data?.counts.blockedDrafts ?? 0} blocked
+            {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
+              sources: review.data?.counts.sources ?? 0,
+              source:
+                review.data?.counts.sources === 1
+                  ? localizeUi("ui.longTermMemory.reviewqueue.source")
+                  : localizeUi("ui.longTermMemory.reviewqueue.sources"),
+              pending: review.data?.counts.mutations ?? 0,
+              ready: eligibleIds.size,
+              blocked: review.data?.counts.blockedDrafts ?? 0,
+            })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SelectionCheckbox
             checked={allSelected}
             indeterminate={someSelected}
-            label="Select all"
+            label={localizeUi("ui.longTermMemory.reviewqueue.selectAll")}
             onChange={() =>
               allSelected
                 ? setSelectedIds((current) => {
@@ -1044,7 +1151,7 @@ export default function ReviewQueue({
                 disabled={running !== null}
                 onClick={() => setSelectedIds(new Set())}
               >
-                Clear
+                {localizeUi("ui.longTermMemory.activityview.clear")}
               </Button>
               <Button
                 primary
@@ -1056,8 +1163,11 @@ export default function ReviewQueue({
                 onClick={() => void runBatch("accept")}
               >
                 {running === "accept"
-                  ? "Accepting..."
-                  : `Accept eligible (${eligibleSelectedRows.length})`}
+                  ? localizeUi("ui.longTermMemory.reviewqueue.accepting")
+                  : localizeUi(
+                      "ui.longTermMemory.reviewqueue.acceptEligibleValue1",
+                      { value1: eligibleSelectedRows.length },
+                    )}
               </Button>
               <Button
                 destructive
@@ -1065,8 +1175,11 @@ export default function ReviewQueue({
                 onClick={() => void runBatch("skip")}
               >
                 {running === "skip"
-                  ? "Skipping..."
-                  : `Skip selected (${selectedRows.length})`}
+                  ? localizeUi("ui.longTermMemory.reviewqueue.skipping")
+                  : localizeUi(
+                      "ui.longTermMemory.reviewqueue.skipSelectedValue1",
+                      { value1: selectedRows.length },
+                    )}
               </Button>
             </div>
           ) : null}
@@ -1074,13 +1187,13 @@ export default function ReviewQueue({
       </div>
       {sourceNoteId ? (
         <StatusSurface>
-          Filtered to this source.{" "}
+          {localizeUi("ui.longTermMemory.reviewqueue.filteredToThisSource")}{" "}
           <button
             type="button"
             className="underline"
             onClick={() => setSourceNoteId(null)}
           >
-            Show all
+            {localizeUi("ui.longTermMemory.reviewqueue.showAll")}
           </button>
         </StatusSurface>
       ) : null}
@@ -1092,28 +1205,75 @@ export default function ReviewQueue({
               : "success"
           }
         >
-          {result.action === "accepted" ? "Applied" : "Skipped"}{" "}
-          {result.completed} mutation
-          {result.completed === 1 ? "" : "s"}; {result.failed} failed.
+          {localizeUi("ui.longTermMemory.reviewqueue.batchResultSummary", {
+            action:
+              result.action === "accepted"
+                ? localizeUi("ui.longTermMemory.reviewqueue.applied")
+                : localizeUi("ui.longTermMemory.reviewqueue.skipped"),
+            completed: result.completed,
+            mutation:
+              result.completed === 1
+                ? localizeUi("ui.longTermMemory.reviewqueue.mutation")
+                : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
+            failed: result.failed,
+          })}
           {result.remaining
-            ? ` ${result.remaining} other mutation${result.remaining === 1 ? " remains" : "s remain"} pending.`
+            ? localizeUi(
+                "ui.longTermMemory.reviewqueue.otherMutationsPending",
+                {
+                  count: result.remaining,
+                  mutation:
+                    result.remaining === 1
+                      ? localizeUi("ui.longTermMemory.reviewqueue.mutation")
+                      : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
+                },
+              )
             : ""}
           {result.autoIncluded
-            ? ` ${result.autoIncluded} dependenc${result.autoIncluded === 1 ? "y was" : "ies were"} included automatically.`
+            ? localizeUi(
+                "ui.longTermMemory.reviewqueue.dependenciesIncludedAutomatically",
+                {
+                  count: result.autoIncluded,
+                  dependency:
+                    result.autoIncluded === 1
+                      ? localizeUi("ui.longTermMemory.reviewqueue.dependency")
+                      : localizeUi(
+                          "ui.longTermMemory.reviewqueue.dependencies",
+                        ),
+                },
+              )
             : ""}
           {result.indexRebuildFailures.length
-            ? ` Changes were saved, but the index rebuild failed: ${result.indexRebuildFailures.join(" ")}`
+            ? localizeUi(
+                "ui.longTermMemory.reviewqueue.changesWereSavedButTheIndexRebuildFailedValue1",
+                { value1: result.indexRebuildFailures.join(" ") },
+              )
             : ""}
-          {result.messages.length ? ` ${result.messages.join(" ")}` : ""}
+          {result.messages.length
+            ? localizeUi("ui.longTermMemory.reviewqueue.value1_5cb90a9", {
+                value1: result.messages.join(" "),
+              })
+            : ""}
           {result.cascadeMutationIds.length
-            ? ` Cascade skipped ${result.cascadeMutationIds.length} dependent mutation${result.cascadeMutationIds.length === 1 ? "" : "s"}: ${result.cascadeMutationIds.join(", ")}.`
+            ? localizeUi(
+                "ui.longTermMemory.reviewqueue.cascadeSkippedMutations",
+                {
+                  count: result.cascadeMutationIds.length,
+                  mutation:
+                    result.cascadeMutationIds.length === 1
+                      ? localizeUi("ui.longTermMemory.reviewqueue.mutation")
+                      : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
+                  ids: result.cascadeMutationIds.join(", "),
+                },
+              )
             : ""}
         </StatusSurface>
       ) : null}
       {!review.data?.sources.length ? (
         <StatusSurface>
-          No proposed memories need review yet. Import a source, then choose
-          Extract to review.
+          {localizeUi(
+            "ui.longTermMemory.reviewqueue.noProposedMemoriesNeedReviewYetImportASource",
+          )}
         </StatusSurface>
       ) : null}
       {review.data?.sources.map((source) => {
@@ -1142,17 +1302,18 @@ export default function ReviewQueue({
             <header className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <h3 className="text-sm font-semibold">
-                  Source:{" "}
+                  {localizeUi("ui.longTermMemory.reviewqueue.source_922acd2")}{" "}
                   {noteById.get(source.sourceNoteId)?.title ||
                     "Untitled memory"}
                 </h3>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Modes: {source.modes.map(humanizeLabel).join(", ")}
+                  {localizeUi("ui.longTermMemory.reviewqueue.modes")}{" "}
+                  {source.modes.map(humanizeLabel).join(", ")}
                 </p>
               </div>
               {onOpenMemory ? (
                 <Button onClick={() => onOpenMemory(source.sourceNoteId)}>
-                  Open source
+                  {localizeUi("ui.longTermMemory.reviewqueue.openSource")}
                 </Button>
               ) : null}
             </header>
@@ -1169,19 +1330,23 @@ export default function ReviewQueue({
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="text-xs font-semibold">
-                            Draft {index + 1}
+                            {localizeUi("ui.longTermMemory.reviewqueue.draft")}{" "}
+                            {index + 1}
                           </h4>
                           {diagnosticsOnly ? (
                             <span
                               data-ltm-diagnostics-only
                               className="rounded-full border border-[var(--border)] px-2 py-1 text-xs font-medium"
                             >
-                              Diagnostics only
+                              {localizeUi(
+                                "ui.longTermMemory.reviewqueue.diagnosticsOnly",
+                              )}
                             </span>
                           ) : null}
                         </div>
                         <p className="text-xs text-[var(--muted-foreground)]">
-                          Created {formatTimestamp(item.draft.createdAt)}.{" "}
+                          {localizeUi("ui.longTermMemory.memoryvault.created")}{" "}
+                          {formatTimestamp(item.draft.createdAt, locale)}.{" "}
                           {item.draft.summary || "No draft summary."}
                         </p>
                       </div>
@@ -1189,7 +1354,7 @@ export default function ReviewQueue({
                         data-ltm-freshness={item.freshness}
                         className="rounded-full border border-[var(--border)] px-2 py-1 text-xs font-medium"
                       >
-                        {freshnessLabel[item.freshness]}
+                        {localizeUi(freshnessLabel[item.freshness])}
                       </span>
                     </div>
                     {item.blockReasons.length ? (
@@ -1224,8 +1389,12 @@ export default function ReviewQueue({
                         onClick={() => void dismissReport(item.draft.id)}
                       >
                         {dismissingId === item.draft.id
-                          ? "Dismissing..."
-                          : "Dismiss report"}
+                          ? localizeUi(
+                              "ui.longTermMemory.reviewqueue.dismissing",
+                            )
+                          : localizeUi(
+                              "ui.longTermMemory.reviewqueue.dismissReport",
+                            )}
                       </Button>
                     ) : null}
                   </section>
@@ -1249,8 +1418,12 @@ export default function ReviewQueue({
                           {noteById.get(target.noteId)?.title ||
                             (!projectionEdited ? target.title : null) ||
                             (projectionEdited
-                              ? "Edited projection pending"
-                              : "Untitled memory")}
+                              ? localizeUi(
+                                  "ui.longTermMemory.reviewqueue.editedProjectionPending",
+                                )
+                              : localizeUi(
+                                  "ui.longTermMemory.reviewqueue.untitledMemory",
+                                ))}
                         </h4>
                         <p className="text-xs text-[var(--muted-foreground)]">
                           {humanizeLabel(target.noteType)}
@@ -1258,7 +1431,9 @@ export default function ReviewQueue({
                       </div>
                       {onOpenMemory && noteById.has(target.noteId) ? (
                         <Button onClick={() => onOpenMemory(target.noteId)}>
-                          Open memory
+                          {localizeUi(
+                            "ui.longTermMemory.reviewqueue.openMemory",
+                          )}
                         </Button>
                       ) : null}
                     </header>
@@ -1300,12 +1475,18 @@ export default function ReviewQueue({
                       <div>
                         <h4 className="text-sm font-semibold">{title}</h4>
                         <p className="text-xs text-[var(--muted-foreground)]">
-                          {type ? humanizeLabel(type) : "Preview unavailable"}
+                          {type
+                            ? humanizeLabel(type)
+                            : localizeUi(
+                                "ui.longTermMemory.reviewqueue.previewUnavailable",
+                              )}
                         </p>
                       </div>
                       {onOpenMemory && note ? (
                         <Button onClick={() => onOpenMemory(targetId)}>
-                          Open memory
+                          {localizeUi(
+                            "ui.longTermMemory.reviewqueue.openMemory",
+                          )}
                         </Button>
                       ) : null}
                     </header>
