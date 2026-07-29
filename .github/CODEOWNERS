@@ -1,6 +1,7 @@
 # Agent packages are executable code loaded by Marinara Engine. Keep the
 # publishing pipeline, package payloads, and generated trust metadata under
 # explicit maintainer review.
+* @Pasta-Devs/developers
 /.github/CODEOWNERS @Pasta-Devs/developers
 /.github/workflows/ @Pasta-Devs/developers
 /scripts/ @Pasta-Devs/developers
