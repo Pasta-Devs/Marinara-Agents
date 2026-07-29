@@ -23,7 +23,7 @@ git pull
 git checkout -b feature/short-description
 ```
 
-Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Every ready PR must pass the catalog check and complete CodeRabbit review. Pasta-Devs members in `@Pasta-Devs/developers` may then merge into `staging` without a separate human approval; outside and first-time contributors also require at least one approving review from that team. Only `SpicyMarinara` may promote `staging` into `main`.
+Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Every ready PR must pass the catalog check and complete CodeRabbit review. Pasta-Devs members in `@Pasta-Devs/developers` may then merge into `staging` without a separate human approval; outside and first-time contributors also require at least one approving review from that team. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
 
 Marinara Engine automatically follows the matching Agent channel: Engine `staging` reads this repository's `staging` catalog and artifacts, while stable Engine builds read `main`. Test package installs and updates from an Engine staging checkout before promotion.
 

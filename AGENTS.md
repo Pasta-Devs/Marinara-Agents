@@ -30,4 +30,4 @@ This file is a thin maintainer note for contributors using coding agents. Canoni
 - Explain why the package or repository change is needed, not only which files changed.
 - Link the issue, target `staging`, leave drafts unreviewed by CodeRabbit until they are marked ready, and address actionable review feedback before merge.
 - Required checks and CodeRabbit must complete before every `staging` merge. Pasta-Devs developers may then merge without another human approval; outside and first-time contributors require approval from `@Pasta-Devs/developers`.
-- Only `SpicyMarinara` may promote `staging` into `main`.
+- Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
