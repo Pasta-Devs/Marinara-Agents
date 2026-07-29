@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-29T11:50:50.160Z",
+  "generatedAt": "2026-07-29T19:18:23.843Z",
   "packages": [
     {
       "manifest": {
@@ -545,7 +545,7 @@
         "schemaVersion": 1,
         "id": "expression",
         "name": "Expression Engine",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Detects character emotions and selects VN sprites/expressions. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -560,8 +560,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "6bb5461c5d58ae4ffa0e1b66ee72a9c5cf04ed3ba6aa673a7f129037cf77da0f",
-            "bytes": 1962
+            "sha256": "2122c5e12c01762de6937558184d7077f0f266282abfd96ebf1cafee71f4da36",
+            "bytes": 1934
           }
         ],
         "permissions": [
@@ -576,9 +576,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/expression.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.1.zip",
-        "sha256": "3e3378c90e8a3708baf479ae9286a16e02bba9c9ac54367256359df321e39683",
-        "bytes": 1595
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.2.zip",
+        "sha256": "b4077f505ce125bae469581231d37e6e63dcee921fef12c38c86e1cd2ec8b695",
+        "bytes": 1590
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine"
     },
