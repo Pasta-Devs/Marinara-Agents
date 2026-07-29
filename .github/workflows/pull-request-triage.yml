@@ -9,6 +9,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  branch-policy:
+    name: Branch policy check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate pull request target
+        env:
+          AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ "$BASE_REF" = "staging" ]; then
+            exit 0
+          fi
+
+          if [ "$BASE_REF" = "main" ] && [ "$AUTHOR_LOGIN" = "SpicyMarinara" ]; then
+            exit 0
+          fi
+
+          echo "::error::Contributions must target staging. Only SpicyMarinara may open a release promotion or hotfix PR to main."
+          exit 1
+
   label:
     name: Auto-label
     runs-on: ubuntu-latest
