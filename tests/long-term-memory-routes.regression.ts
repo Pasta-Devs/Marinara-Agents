@@ -964,6 +964,40 @@ async function main() {
     );
     assert.equal(modelRequests.at(-1)?.chatConnectionId, "connection-a");
     await storageService.storage.createNote({
+      id: "source_route_extract_unknown_chat",
+      title: "Unknown source chat fixture",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "missing-chat",
+        entryId: "route-extract-unknown",
+      },
+      sections: {
+        source: {
+          text: "This source keeps its existing scope.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const unknownInferredChatExtraction = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/source_route_extract_unknown_chat/extract",
+      headers,
+      payload: {},
+    });
+    assert.equal(
+      unknownInferredChatExtraction.statusCode,
+      200,
+      unknownInferredChatExtraction.body,
+    );
+    assert.equal(modelRequests.at(-1)?.chatConnectionId, null);
+    await storageService.storage.createNote({
       id: "source_delete_keep",
       title: "Keep source fixture",
       type: "source",

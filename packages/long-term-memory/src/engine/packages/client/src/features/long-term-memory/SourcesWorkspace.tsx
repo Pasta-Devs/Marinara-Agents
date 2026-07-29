@@ -1,4 +1,11 @@
-import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -36,6 +43,14 @@ import {
 import { humanizeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
+import {
+  buildScopeIndexes,
+  deriveScopeBranches,
+  deriveScopeConversations,
+  type ScopeTargetCharacter,
+  type ScopeTargetChat,
+  type ScopeTargetGroup,
+} from "./scope-targets";
 
 type Source = "characters" | "lorebooks" | "chats";
 type FlatPanel = "available" | "imported";
@@ -88,18 +103,11 @@ const importStatusLabelKeys: Record<string, string> = {
     "ui.longTermMemory.sourcesworkspace.statusNoSuggestionsCreated",
 };
 
-type ScopeTargetChat = {
-  id: string;
-  label: string;
-  mode: LtmMode;
-  groupId: string | null;
-  characterIds: string[];
-};
 type ScopeTargets = {
   currentScope: LtmScope | null;
   chats: ScopeTargetChat[];
-  groups: Array<{ id: string; label: string; chatIds: string[] }>;
-  characters: Array<{ id: string; label: string }>;
+  groups: ScopeTargetGroup[];
+  characters: ScopeTargetCharacter[];
 };
 
 function resultTone(status: string) {
@@ -242,6 +250,7 @@ function TransferWorkbench({
   result,
   onModeChange,
   onIncludeDerivedChange,
+  onDestinationChange,
   onPreview,
   onApply,
 }: {
@@ -495,52 +504,69 @@ export default function SourcesWorkspace({
         `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
       ),
   });
-  const importTargets = [
-    ...(props.chatId
-      ? [
-          {
-            id: `chat:${props.chatId}`,
-            label:
-              props.chatName ??
-              localizeUi("ui.longTermMemory.sourcesworkspace.currentChat"),
-            scope: scopeTargets.data?.currentScope ?? {
-              chatId: props.chatId,
-              chatIds: [props.chatId],
-            },
+  const scopeIndexes = useMemo(
+    () => buildScopeIndexes(scopeTargets.data?.chats ?? []),
+    [scopeTargets.data?.chats],
+  );
+  const importTargets = useMemo(
+    () =>
+      [
+        ...(props.chatId
+          ? [
+              {
+                id: `chat:${props.chatId}`,
+                label:
+                  props.chatName ??
+                  localizeUi("ui.longTermMemory.sourcesworkspace.currentChat"),
+                scope: scopeTargets.data?.currentScope ?? {
+                  chatId: props.chatId,
+                  chatIds: [props.chatId],
+                },
+              },
+            ]
+          : []),
+        ...(scopeTargets.data?.chats ?? []).map((chat) => ({
+          id: `chat:${chat.id}`,
+          label: chat.label,
+          scope: { chatId: chat.id, chatIds: [chat.id] },
+        })),
+        ...(scopeTargets.data?.groups ?? []).map((group) => ({
+          id: `group:${group.id}`,
+          label: group.label,
+          scope: {
+            groupId: group.id,
+            chatIds: group.chatIds,
           },
-        ]
-      : []),
-    ...(scopeTargets.data?.chats ?? []).map((chat) => ({
-      id: `chat:${chat.id}`,
-      label: chat.label,
-      scope: { chatId: chat.id, chatIds: [chat.id] },
-    })),
-    ...(scopeTargets.data?.groups ?? []).map((group) => ({
-      id: `group:${group.id}`,
-      label: group.label,
-      scope: {
-        groupId: group.id,
-        chatIds: group.chatIds,
-      },
-    })),
-    ...(scopeTargets.data?.characters ?? []).map((character) => ({
-      id: `character:${character.id}`,
-      label: character.label,
-      scope: {
-        characterIds: [character.id],
-        chatIds: (scopeTargets.data?.chats ?? [])
-          .filter((chat) => chat.characterIds.includes(character.id))
-          .map((chat) => chat.id),
-      },
-    })),
-    {
-      id: "all",
-      label: localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable"),
-      scope: undefined,
-    },
-  ].filter(
-    (target, index, targets) =>
-      targets.findIndex((item) => item.id === target.id) === index,
+        })),
+        ...(scopeTargets.data?.characters ?? []).map((character) => ({
+          id: `character:${character.id}`,
+          label: character.label,
+          scope: {
+            characterIds: [character.id],
+            chatIds: (
+              scopeIndexes.chatsByCharacterId.get(character.id) ?? []
+            ).map((chat) => chat.id),
+          },
+        })),
+        {
+          id: "all",
+          label: localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable"),
+          scope: undefined,
+        },
+      ].filter(
+        (target, index, targets) =>
+          targets.findIndex((item) => item.id === target.id) === index,
+      ),
+    [
+      localizeUi,
+      props.chatId,
+      props.chatName,
+      scopeIndexes.chatsByCharacterId,
+      scopeTargets.data?.characters,
+      scopeTargets.data?.chats,
+      scopeTargets.data?.currentScope,
+      scopeTargets.data?.groups,
+    ],
   );
   const importTarget =
     importTargets.find((target) => target.id === importTargetId) ??
@@ -549,9 +575,7 @@ export default function SourcesWorkspace({
   const effectiveImportScope = importTarget.id;
   const selectedImportChat =
     importTarget.id.startsWith("chat:") && sourceScope?.chatIds?.length === 1
-      ? scopeTargets.data?.chats.find(
-          (chat) => chat.id === sourceScope.chatIds![0],
-        )
+      ? scopeIndexes.chatsById.get(sourceScope.chatIds[0])
       : undefined;
   const selectedImportGroupId =
     sourceScope?.groupId ?? selectedImportChat?.groupId ?? "";
@@ -562,34 +586,28 @@ export default function SourcesWorkspace({
     : selectedImportChat
       ? `chat:${selectedImportChat.id}`
       : "";
-  const importConversations = [
-    ...(scopeTargets.data?.groups ?? []).map((group) => ({
-      id: `group:${group.id}`,
-      label: group.label,
-      chatIds: group.chatIds,
-    })),
-    ...(scopeTargets.data?.chats ?? [])
-      .filter((chat) => !chat.groupId)
-      .map((chat) => ({
-        id: `chat:${chat.id}`,
-        label: chat.label,
-        chatIds: [chat.id],
-      })),
-  ].filter(
-    (conversation) =>
-      !selectedImportCharacterId ||
-      conversation.chatIds.some((id) =>
-        scopeTargets.data?.chats
-          .find((chat) => chat.id === id)
-          ?.characterIds.includes(selectedImportCharacterId),
+  const importConversations = useMemo(
+    () =>
+      deriveScopeConversations(
+        scopeTargets.data?.chats ?? [],
+        scopeTargets.data?.groups ?? [],
+        selectedImportCharacterId,
+        scopeIndexes,
       ),
+    [
+      scopeIndexes,
+      scopeTargets.data?.chats,
+      scopeTargets.data?.groups,
+      selectedImportCharacterId,
+    ],
   );
   const selectedImportConversation = importConversations.find(
     (item) => item.id === selectedImportConversationId,
   );
-  const importBranches = (selectedImportConversation?.chatIds ?? [])
-    .map((id) => scopeTargets.data?.chats.find((chat) => chat.id === id))
-    .filter((chat): chat is ScopeTargetChat => Boolean(chat));
+  const importBranches = useMemo(
+    () => deriveScopeBranches(selectedImportConversation, scopeIndexes),
+    [scopeIndexes, selectedImportConversation],
+  );
   const preview = useQuery({
     queryKey: [...queryKeys.preview, source, sourceScope, modeFilter],
     queryFn: () =>

@@ -748,6 +748,7 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply
             .status(400)
             .send({ error: "Long-term memory note is not a source note" });
+        const explicitChatId = body.chatId;
         const chatId =
           body.chatId ??
           (sourceNote.provenance?.kind === "chat_summary"
@@ -756,7 +757,7 @@ export function createLongTermMemoryRoutes(runtime: {
         const chat = chatId
           ? await getPackagePersistence().getChat(chatId)
           : null;
-        if (chatId && !chat)
+        if (explicitChatId && !chat)
           return reply.status(404).send({ error: "Chat not found" });
         const operationId = randomUUID();
         try {

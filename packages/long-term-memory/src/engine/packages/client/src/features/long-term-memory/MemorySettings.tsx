@@ -240,10 +240,10 @@ function Toggle({
 }) {
   const inputId = useId();
   return (
-    <div className="flex flex-col justify-end">
+    <div className="flex min-h-11 items-end gap-2">
       <label
         htmlFor={inputId}
-        className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 px-3 text-xs font-semibold text-[var(--foreground)]"
+        className="flex min-h-11 flex-1 cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 px-3 text-xs font-semibold text-[var(--foreground)]"
       >
         <input
           id={inputId}
@@ -252,8 +252,8 @@ function Toggle({
           onChange={(event) => onChange(event.target.checked)}
         />
         <span>{label}</span>
-        {help ? <InfoPopover label={label} content={help} /> : null}
       </label>
+      {help ? <InfoPopover label={label} content={help} /> : null}
     </div>
   );
 }
@@ -1357,8 +1357,9 @@ export default function MemorySettings({
               <option value="">
                 {localizeUi("ui.longTermMemory.sourcesworkspace.automatic")}
               </option>
-              {extractionFormState.connectionId &&
-              !connections.data?.some(
+              {connections.isSuccess &&
+              extractionFormState.connectionId &&
+              !connections.data.some(
                 (connection) =>
                   connection.id === extractionFormState.connectionId,
               ) ? (
@@ -1368,7 +1369,7 @@ export default function MemorySettings({
                   )}
                 </option>
               ) : null}
-              {(connections.data ?? [])
+              {(connections.isSuccess ? connections.data : [])
                 .filter(
                   (connection) =>
                     connection.provider !== "image_generation" &&

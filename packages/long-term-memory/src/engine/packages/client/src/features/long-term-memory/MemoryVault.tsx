@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -51,6 +51,14 @@ import {
   useLtmTranslation,
   type LtmTranslationFunction,
 } from "./localization";
+import {
+  buildScopeIndexes,
+  deriveScopeBranches,
+  deriveScopeConversations,
+  type ScopeTargetChat,
+  type ScopeTargetCharacter,
+  type ScopeTargetGroup,
+} from "./scope-targets";
 
 const noteTypes: readonly LtmNoteType[] = [
   "timeline_event",
@@ -127,15 +135,9 @@ const prefixes: Record<LtmNoteType, string> = {
 
 type ScopeTargets = {
   currentScope: LtmScope | null;
-  chats: Array<{
-    id: string;
-    label: string;
-    mode: LtmMode;
-    groupId: string | null;
-    characterIds: string[];
-  }>;
-  groups: Array<{ id: string; label: string; chatIds: string[] }>;
-  characters: Array<{ id: string; label: string }>;
+  chats: ScopeTargetChat[];
+  groups: ScopeTargetGroup[];
+  characters: ScopeTargetCharacter[];
 };
 type Target = { id: string; label: string; scope?: LtmScope };
 type NoteResponse = { note: LtmNote };
@@ -576,11 +578,13 @@ export default function MemoryVault({
     (candidate, index, items) =>
       items.findIndex((item) => item.id === candidate.id) === index,
   );
+  const scopeIndexes = useMemo(
+    () => buildScopeIndexes(scopeTargets.data?.chats ?? []),
+    [scopeTargets.data?.chats],
+  );
   const selectedChat =
     target?.id.startsWith("chat:") && target.scope?.chatIds?.length === 1
-      ? scopeTargets.data?.chats.find(
-          (chat) => chat.id === target.scope!.chatIds![0],
-        )
+      ? scopeIndexes.chatsById.get(target.scope.chatIds[0])
       : undefined;
   const selectedGroupId = target?.scope?.groupId ?? selectedChat?.groupId ?? "";
   const selectedCharacterId =
@@ -592,34 +596,41 @@ export default function MemoryVault({
     : selectedChat
       ? `chat:${selectedChat.id}`
       : "";
-  const conversations = [
-    ...(scopeTargets.data?.groups ?? []).map((group) => ({
-      id: `group:${group.id}`,
-      label: group.label,
-      chatIds: group.chatIds,
-    })),
-    ...(scopeTargets.data?.chats ?? [])
-      .filter((chat) => !chat.groupId)
-      .map((chat) => ({
-        id: `chat:${chat.id}`,
-        label: chat.label,
-        chatIds: [chat.id],
-      })),
-  ].filter(
-    (conversation) =>
-      !selectedCharacterId ||
-      conversation.chatIds.some((id) =>
-        scopeTargets.data?.chats
-          .find((chat) => chat.id === id)
-          ?.characterIds.includes(selectedCharacterId),
+  const { conversations, branches, selectedConversation } = useMemo(() => {
+    const conversations = deriveScopeConversations(
+      scopeTargets.data?.chats ?? [],
+      scopeTargets.data?.groups ?? [],
+      selectedCharacterId,
+      scopeIndexes,
+      (group) =>
+        localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
+          group: group.label,
+        }),
+    );
+    const selectedConversationId = selectedGroupId
+      ? `group:${selectedGroupId}`
+      : selectedChat
+        ? `chat:${selectedChat.id}`
+        : "";
+    return {
+      conversations,
+      selectedConversation: conversations.find(
+        (item) => item.id === selectedConversationId,
       ),
-  );
-  const selectedConversation = conversations.find(
-    (item) => item.id === selectedConversationId,
-  );
-  const branches = (selectedConversation?.chatIds ?? [])
-    .map((id) => scopeTargets.data?.chats.find((chat) => chat.id === id))
-    .filter((chat): chat is ScopeTargets["chats"][number] => Boolean(chat));
+      branches: deriveScopeBranches(
+        conversations.find((item) => item.id === selectedConversationId),
+        scopeIndexes,
+      ),
+    };
+  }, [
+    localizeUi,
+    scopeIndexes,
+    scopeTargets.data?.chats,
+    scopeTargets.data?.groups,
+    selectedCharacterId,
+    selectedChat,
+    selectedGroupId,
+  ]);
   const referenceLabel = (value: string) => {
     const [kind, id] = value.split(/:(.+)/, 2);
     if (!id) return humanizeLabel(value);
