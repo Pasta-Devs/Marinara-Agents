@@ -1,7 +1,7 @@
 # Agent packages are executable code loaded by Marinara Engine. Keep the
 # publishing pipeline, package payloads, and generated trust metadata under
-# explicit owner review for outside contributions. Active Pasta-Devs organization
-# members and owners retain a staging-only ruleset bypass for internal pull requests.
+# explicit owner review for outside contributions. The staging approval gate
+# exempts active Pasta-Devs organization members and owners.
 * @SpicyMarinara
 /.github/CODEOWNERS @SpicyMarinara
 /.github/workflows/ @SpicyMarinara

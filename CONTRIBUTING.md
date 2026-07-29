@@ -123,7 +123,7 @@ A new package must include:
 
 Security-sensitive permissions and executable client/server entrypoints must be narrowly scoped and justified in the PR description.
 
-Package hashes are integrity checks, not independent publisher signatures. A contributor who can change both an artifact and its catalog entry can also change the recorded hash. For that reason, paths map to `SpicyMarinara` in `.github/CODEOWNERS`. Maintainers must keep owner approval and stale-approval dismissal enabled for outside contributions to `staging`, while active Pasta-Devs organization members and owners use the staging-only review bypass for internal PRs. `main` must remain owner-only; see [SECURITY.md](SECURITY.md) for the full repository ruleset.
+Package hashes are integrity checks, not independent publisher signatures. A contributor who can change both an artifact and its catalog entry can also change the recorded hash. For that reason, paths map to `SpicyMarinara` in `.github/CODEOWNERS`. Maintainers must keep the required staging approval check fail-closed: it exempts active Pasta-Devs organization members and owners, while every outside contributor needs a current-head approval from `SpicyMarinara`. `main` must remain owner-only; see [SECURITY.md](SECURITY.md) for the full repository ruleset.
 
 ## AI Agent Workflow
 
