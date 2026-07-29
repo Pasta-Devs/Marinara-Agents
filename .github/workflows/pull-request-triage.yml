@@ -12,23 +12,28 @@ jobs:
   branch-policy:
     name: Branch policy check
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    permissions: {}
     steps:
       - name: Validate pull request target
         env:
           AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           if [ "$BASE_REF" = "staging" ]; then
             exit 0
           fi
 
-          if [ "$BASE_REF" = "main" ] && [ "$AUTHOR_LOGIN" = "SpicyMarinara" ]; then
+          if [ "$BASE_REF" = "main" ] &&
+             [ "$AUTHOR_LOGIN" = "SpicyMarinara" ] &&
+             [ "$HEAD_REPO" = "$REPOSITORY" ] &&
+             [ "$HEAD_REF" = "staging" ]; then
             exit 0
           fi
 
-          echo "::error::Contributions must target staging. Only SpicyMarinara may open a release promotion or hotfix PR to main."
+          echo "::error::Contributions must target staging. Main accepts only SpicyMarinara's promotion from this repository's staging branch."
           exit 1
 
   label:
