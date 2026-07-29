@@ -3,7 +3,7 @@ name: Issue Status From Pull Requests
 on:
   pull_request_target:
     types: [opened, reopened, edited, synchronize, ready_for_review, closed]
-    branches: [main]
+    branches: [staging, main]
 
 concurrency:
   group: issue-status-from-pr-${{ github.event.pull_request.number }}
@@ -22,11 +22,17 @@ jobs:
         with:
           script: |
             const labels = {
-              'in-pr': { color: '1d76db', description: 'Has an open pull request targeting main' },
+              'in-pr': { color: '1d76db', description: 'Has an open pull request targeting staging' },
+              'fixed-in-staging': {
+                color: '0e8a16',
+                description: 'Already fixed in staging and is pending closure when staging is promoted to main',
+              },
             };
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const pr = context.payload.pull_request;
+            const targetsStaging = pr.base?.ref === 'staging';
+            const targetsMain = pr.base?.ref === 'main';
 
             function linkedIssueNumbers(body) {
               const numbers = new Set();
@@ -69,25 +75,43 @@ jobs:
               }
             }
 
-            async function openMainPrIssues() {
-              const pulls = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', base: 'main', per_page: 100 });
+            async function openStagingPrIssues() {
+              const pulls = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', base: 'staging', per_page: 100 });
               return new Set(pulls.flatMap((pull) => linkedIssueNumbers(pull.body)));
             }
 
+            const activeStagingPrIssues = await openStagingPrIssues();
+
             for (const issueNumber of linkedIssueNumbers(pr.body)) {
-              const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber }).catch(() => null);
+              const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber }).catch((error) => {
+                if (error.status === 404) return null;
+                throw error;
+              });
               if (!issue || issue.data.pull_request) continue;
+
+              if (targetsMain) {
+                if (pr.state === 'closed' && pr.merged) {
+                  await removeLabel(issueNumber, 'fixed-in-staging');
+                  await removeLabel(issueNumber, 'in-pr');
+                }
+                continue;
+              }
+
+              if (!targetsStaging) continue;
+
               if (pr.state === 'closed') {
-                const active = await openMainPrIssues();
-                if (!active.has(issueNumber)) await removeLabel(issueNumber, 'in-pr');
+                if (pr.merged && issue.data.state === 'open') {
+                  await addLabel(issueNumber, 'fixed-in-staging');
+                }
+                if (!activeStagingPrIssues.has(issueNumber)) await removeLabel(issueNumber, 'in-pr');
               } else if (issue.data.state === 'open') {
                 await addLabel(issueNumber, 'in-pr');
               }
             }
 
             await ensureLabel('in-pr');
-            const active = await openMainPrIssues();
+            await ensureLabel('fixed-in-staging');
             const labeled = await github.paginate(github.rest.issues.listForRepo, { owner, repo, state: 'all', labels: 'in-pr', per_page: 100 });
             for (const issue of labeled) {
-              if (!issue.pull_request && !active.has(issue.number)) await removeLabel(issue.number, 'in-pr');
+              if (!issue.pull_request && !activeStagingPrIssues.has(issue.number)) await removeLabel(issue.number, 'in-pr');
             }

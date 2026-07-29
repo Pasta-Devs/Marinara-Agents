@@ -1,4 +1,5 @@
-<!-- Target branch: `main`. -->
+> [!IMPORTANT]
+> Contributions target `staging`. Only `SpicyMarinara` may open or merge release-promotion PRs to `main`.
 <!-- Open as a draft while implementation is in progress. Mark Ready for review only after validation and self-review. -->
 
 ## Linked issue
