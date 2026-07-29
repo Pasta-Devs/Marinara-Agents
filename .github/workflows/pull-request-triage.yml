@@ -3,6 +3,10 @@ name: Pull Request Triage
 on:
   pull_request_target:
     types: [opened, reopened, edited, synchronize, ready_for_review]
+    branches: [staging, main]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+    branches: [staging, main]
 
 concurrency:
   group: pull-request-triage-${{ github.event.pull_request.number }}
@@ -35,6 +39,42 @@ jobs:
 
           echo "::error::Contributions must target staging. Main accepts only SpicyMarinara's promotion from this repository's staging branch."
           exit 1
+
+  external-contributor-approval:
+    name: Owner approval for outside contributors
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Require owner approval for outside staging contributions
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (pr.base?.ref !== 'staging') return;
+
+            if (pr.author_association === 'OWNER' || pr.author_association === 'MEMBER') {
+              core.notice(`Internal ${pr.author_association.toLowerCase()} contribution; owner approval is not required.`);
+              return;
+            }
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            const ownerReviews = reviews
+              .filter((review) => review.user?.login?.toLowerCase() === 'spicymarinara')
+              .sort((left, right) => left.id - right.id);
+            const latestOwnerReview = ownerReviews.at(-1);
+
+            if (latestOwnerReview?.state === 'APPROVED' && latestOwnerReview.commit_id === pr.head?.sha) {
+              core.notice('Outside contribution approved by SpicyMarinara.');
+              return;
+            }
+
+            core.setFailed('Outside and first-time contributions to staging require an approving review from SpicyMarinara.');
 
   label:
     name: Auto-label
