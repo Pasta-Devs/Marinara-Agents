@@ -9,7 +9,7 @@ This file is a thin maintainer note for contributors using coding agents. Canoni
 
 ## Preferred Workflow
 
-- Start from `main` and open an issue before implementation.
+- Start from `staging` and open an issue before implementation.
 - Open a draft PR when issue work begins so ownership is visible, then mark it ready only after validation and self-review are complete.
 - Run `node scripts/test-catalog-lanes.mjs` and `node scripts/validate-catalog.mjs` as the baseline validation commands.
 - Rebuild the affected package and catalog entry whenever source payloads, manifests, Engine snapshots, or generated bundles change.
@@ -28,4 +28,6 @@ This file is a thin maintainer note for contributors using coding agents. Canoni
 
 - Never auto-check validation or test-plan checkboxes. They are a human verification list, not proof.
 - Explain why the package or repository change is needed, not only which files changed.
-- Link the issue, target `main`, leave drafts unreviewed by CodeRabbit until they are marked ready, and address actionable review feedback before merge.
+- Link the issue, target `staging`, leave drafts unreviewed by CodeRabbit until they are marked ready, and address actionable review feedback before merge.
+- Required checks and CodeRabbit must complete before every `staging` merge. Pasta-Devs developers may then merge internal PRs without another human approval; outside and first-time contributors require an approving review from `SpicyMarinara`.
+- Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.

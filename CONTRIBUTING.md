@@ -6,23 +6,26 @@ Thank you for helping improve the official downloadable packages for [Marinara E
 
 1. Open an issue or check the [issue tracker](https://github.com/Pasta-Devs/Marinara-Agents/issues) before implementing a new package or material behavior change. This lets maintainers agree on scope and prevents duplicate work.
 2. Check for an issue-linked branch, open or draft PR, and visible owner before beginning work.
-3. Base changes on `main`, the protected branch containing the published catalog consumed by Marinara Engine.
+3. Base changes on `staging`, the protected testing branch consumed by Marinara Engine staging users.
 
 ## Branches
 
 | Branch | Role |
 | --- | --- |
-| `main` | Protected development and release branch. Package, catalog, documentation, and CI pull requests target this branch. |
+| `staging` | Active development and Agent testing. This is the only target for package, catalog, documentation, and CI pull requests. |
+| `main` | Stable published catalog. Only `SpicyMarinara` may promote tested work from `staging`. |
 
-Create a focused feature branch from current main:
+Create a focused feature branch from current staging:
 
 ```bash
-git checkout main
+git checkout staging
 git pull
 git checkout -b feature/short-description
 ```
 
-Open a draft PR as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Ready PRs receive an automatic CodeRabbit review and require at least one approving review before merge.
+Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Every ready PR must pass the catalog check and complete CodeRabbit review. Pasta-Devs members in `@Pasta-Devs/developers` may then merge internal PRs into `staging` without a separate human approval; outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another team member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
+
+Marinara Engine automatically follows the matching Agent channel: Engine `staging` reads this repository's `staging` catalog and artifacts, while stable Engine builds read `main`. Test package installs and updates from an Engine staging checkout before promotion.
 
 ## Requirements and Setup
 
@@ -97,11 +100,11 @@ Also manually install or update affected packages through **Agents → Download 
 ## Pull Request Expectations
 
 - Link the issue with `Closes #<number>`, `Fixes #<number>`, or `Resolves #<number>`.
-- Target `main`.
+- Target `staging`; contributions to `main` are not accepted.
 - Keep the PR focused and explain the user-facing reason for the change.
 - Mark the PR ready for review only after local validation and self-review.
 - Let CodeRabbit review the ready PR and address actionable findings.
-- Obtain at least one approving review before merge.
+- Outside and first-time contributors must obtain an approving review from `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Team members may merge internal PRs after the required automated gates pass.
 - Update the README and linked Engine documentation when catalog membership, compatibility, setup, or user-visible behavior changes.
 - Include the generated package and catalog outputs when payloads change.
 - Never commit credentials, private user data, local model files, or unreviewed executable archives.
@@ -120,7 +123,7 @@ A new package must include:
 
 Security-sensitive permissions and executable client/server entrypoints must be narrowly scoped and justified in the PR description.
 
-Package hashes are integrity checks, not independent publisher signatures. A contributor who can change both an artifact and its catalog entry can also change the recorded hash. For that reason, changes under `packages/`, `sources/`, `artifacts/`, `catalog/`, `scripts/`, or `.github/workflows/` require the code-owner review configured in `.github/CODEOWNERS`. Maintainers must keep **Require review from Code Owners** and stale-approval dismissal enabled for `main`; see [SECURITY.md](SECURITY.md) for the full repository ruleset.
+Package hashes are integrity checks, not independent publisher signatures. A contributor who can change both an artifact and its catalog entry can also change the recorded hash. For that reason, paths map to `SpicyMarinara` in `.github/CODEOWNERS`. Maintainers must keep owner approval and stale-approval dismissal enabled for outside contributions to `staging`, while team members use the staging-only review bypass for internal PRs. `main` must remain owner-only; see [SECURITY.md](SECURITY.md) for the full repository ruleset.
 
 ## AI Agent Workflow
 
