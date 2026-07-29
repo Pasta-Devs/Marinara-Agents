@@ -20,6 +20,8 @@ reviews:
       instructions: "Treat package construction, archive paths, catalog integrity, checksums, and generated payload handling as security-sensitive."
     - path: "catalog/catalog.json"
       instructions: "Verify catalog entries match package manifests and artifacts. Canonical catalog URLs remain on main; Engine staging securely maps official artifacts to this repository's staging branch for testing."
+    - path: "catalog/v*/catalog.json"
+      instructions: "Verify every Engine-major catalog lane matches package manifests and artifacts. Canonical catalog URLs remain on main; Engine staging securely maps official artifacts to this repository's staging branch for testing."
   auto_review:
     enabled: true
     drafts: false
