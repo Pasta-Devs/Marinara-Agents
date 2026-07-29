@@ -2,6 +2,7 @@
 
 > [!IMPORTANT]
 > Contributions target `staging`. Only `SpicyMarinara` may promote this repository's `staging` branch to `main`.
+> Outside and first-time contributors also require an approving review from `SpicyMarinara`.
 
 <!-- Open as a draft while implementation is in progress. Mark Ready for review only after validation and self-review. -->
 
