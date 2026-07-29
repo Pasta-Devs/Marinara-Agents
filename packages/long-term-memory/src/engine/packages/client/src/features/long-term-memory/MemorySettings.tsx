@@ -28,7 +28,11 @@ type GlobalForm = {
   longTermMemoryScoreThreshold: number;
   longTermMemoryRecallContextMessages: number;
   longTermMemoryRecallStyle:
-    "balanced" | "exact" | "broad" | "story" | "custom";
+    | "balanced"
+    | "exact"
+    | "broad"
+    | "story"
+    | "custom";
   longTermMemorySemanticWeight: number;
   longTermMemoryLexicalWeight: number;
   longTermMemoryGraphWeight: number;
@@ -40,6 +44,12 @@ type GlobalForm = {
 type ExtractionForm = Required<LtmExtractionSettingsPatch> & {
   systemPrompt?: string;
   activePromptTemplateId?: string | null;
+};
+type LanguageConnection = {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
 };
 type RepairAction =
   | "rebuild_indexes"
@@ -186,6 +196,7 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
   };
   return {
     version: 1,
+    connectionId: resolved.connectionId ?? null,
     reasoningEffort: resolved.reasoningEffort ?? "medium",
     verbosity: resolved.verbosity ?? "medium",
     maxOutputTokens: resolved.maxOutputTokens ?? 4096,
@@ -229,25 +240,20 @@ function Toggle({
 }) {
   const inputId = useId();
   return (
-    <div className="flex min-h-11 items-stretch rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 text-xs">
+    <div className="flex flex-col justify-end">
       <label
         htmlFor={inputId}
-        className="flex min-h-11 flex-1 cursor-pointer items-start gap-2 px-3 py-2"
+        className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 px-3 text-xs font-semibold text-[var(--foreground)]"
       >
         <input
           id={inputId}
-          className="mt-0.5"
           type="checkbox"
           checked={checked}
           onChange={(event) => onChange(event.target.checked)}
         />
-        <span className="font-semibold">{label}</span>
+        <span>{label}</span>
+        {help ? <InfoPopover label={label} content={help} /> : null}
       </label>
-      {help ? (
-        <span className="p-1.5">
-          <InfoPopover label={label} content={help} />
-        </span>
-      ) : null}
     </div>
   );
 }
@@ -262,6 +268,7 @@ export default function MemorySettings({
   const recallPreambleLabelId = useId();
   const reasoningEffortLabelId = useId();
   const verbosityLabelId = useId();
+  const extractionConnectionLabelId = useId();
   const queryClient = useQueryClient();
   const global = useQuery({
     queryKey: queryKeys.settings,
@@ -270,6 +277,14 @@ export default function MemorySettings({
   const extraction = useQuery({
     queryKey: queryKeys.extractionSettings,
     queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
+  });
+  const connections = useQuery({
+    queryKey: ["long-term-memory", "language-connections"],
+    queryFn: async () => {
+      const response = await fetch("/api/connections", { cache: "no-store" });
+      if (!response.ok) throw new Error("Could not load language connections");
+      return (await response.json()) as LanguageConnection[];
+    },
   });
   const integrity = useQuery({
     queryKey: queryKeys.integrity,
@@ -1322,6 +1337,51 @@ export default function MemorySettings({
           </h3>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={extractionConnectionLabelId}>
+              {localizeUi(
+                "ui.longTermMemory.memorysettings.extractionConnection",
+              )}
+            </span>
+            <select
+              aria-labelledby={extractionConnectionLabelId}
+              className={inputClass}
+              value={extractionFormState.connectionId ?? ""}
+              onChange={(event) =>
+                setExtractionFormState({
+                  ...extractionFormState,
+                  connectionId: event.target.value || null,
+                })
+              }
+            >
+              <option value="">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.automatic")}
+              </option>
+              {extractionFormState.connectionId &&
+              !connections.data?.some(
+                (connection) =>
+                  connection.id === extractionFormState.connectionId,
+              ) ? (
+                <option value={extractionFormState.connectionId}>
+                  {localizeUi(
+                    "ui.longTermMemory.memorysettings.unavailableSavedConnection",
+                  )}
+                </option>
+              ) : null}
+              {(connections.data ?? [])
+                .filter(
+                  (connection) =>
+                    connection.provider !== "image_generation" &&
+                    connection.provider !== "video_generation",
+                )
+                .map((connection) => (
+                  <option key={connection.id} value={connection.id}>
+                    {connection.name || connection.provider}
+                    {connection.model ? ` - ${connection.model}` : ""}
+                  </option>
+                ))}
+            </select>
+          </div>
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
             <span
               id={reasoningEffortLabelId}
