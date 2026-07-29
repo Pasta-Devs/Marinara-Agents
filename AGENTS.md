@@ -29,5 +29,5 @@ This file is a thin maintainer note for contributors using coding agents. Canoni
 - Never auto-check validation or test-plan checkboxes. They are a human verification list, not proof.
 - Explain why the package or repository change is needed, not only which files changed.
 - Link the issue, target `staging`, leave drafts unreviewed by CodeRabbit until they are marked ready, and address actionable review feedback before merge.
-- Required checks and CodeRabbit must complete before every `staging` merge. Pasta-Devs developers may then merge internal PRs without another human approval; outside and first-time contributors require an approving review from `SpicyMarinara`.
+- Required checks and CodeRabbit must complete before every `staging` merge. PRs from active Pasta-Devs organization members and owners do not require another human approval; outside and first-time contributors require an approving review from `SpicyMarinara`. Organization members with repository merge permission may merge internal PRs after those gates pass.
 - Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
