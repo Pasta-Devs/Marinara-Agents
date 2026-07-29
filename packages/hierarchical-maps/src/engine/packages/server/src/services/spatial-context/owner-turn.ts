@@ -91,7 +91,7 @@ export async function commitSpatialOwnerTurn(
       if (!definition) {
         throw new SpatialOwnerTurnError(
           "spatial_definition_invalid",
-          "The hierarchical map must be repaired before moving.",
+          "The world map must be repaired before moving.",
           400,
         );
       }

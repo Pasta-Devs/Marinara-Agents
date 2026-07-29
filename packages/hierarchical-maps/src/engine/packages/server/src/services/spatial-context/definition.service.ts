@@ -72,7 +72,7 @@ function assertSupportedMode(mode: string | null): asserts mode is "roleplay" | 
   if (mode !== "roleplay" && mode !== "game") {
     throw new SpatialContextServiceError(
       "spatial_mode_unsupported",
-      "Hierarchical maps are available only in Roleplay and Game chats.",
+      "World maps are available only in Roleplay and Game chats.",
       400,
     );
   }
@@ -98,7 +98,7 @@ function buildResponse(
         ? [
             {
               code: "stored_definition_invalid",
-              message: "The stored hierarchical map is invalid and has been disabled.",
+              message: "The stored world map is invalid and has been disabled.",
               path: [METADATA_KEY],
             },
           ]
@@ -134,19 +134,22 @@ async function resolveLoreReferenceWarnings(
   definition: SpatialContextDefinition,
   persistence: Pick<CapabilityPersistenceSession, "listExistingLorebookEntryIds">,
 ): Promise<SpatialContextResponse["warnings"]> {
+  const activeLocations = definition.locations.flatMap((location, locationIndex) =>
+    location.status === "active" ? [{ location, locationIndex }] : [],
+  );
   const entryIds = Array.from(
-    new Set(definition.locations.flatMap((location) => location.lorebookEntryIds ?? [])),
+    new Set(activeLocations.flatMap(({ location }) => location.lorebookEntryIds ?? [])),
   );
   if (entryIds.length === 0) return [];
   const existingIds = new Set(await persistence.listExistingLorebookEntryIds(entryIds));
-  return definition.locations.flatMap((location, locationIndex) =>
+  return activeLocations.flatMap(({ location, locationIndex }) =>
     (location.lorebookEntryIds ?? []).flatMap((entryId, entryIndex) =>
       existingIds.has(entryId)
         ? []
         : [
             {
               code: "lorebook_entry_missing" as const,
-              message: `Linked lore entry ${entryId} no longer exists. Detach it or import the missing lorebook.`,
+              message: `“${location.name}” links to a lore entry that was deleted or is unavailable. Open Linked lore for this location and detach the missing entry, or restore/import its lorebook.`,
               path: ["locations", locationIndex, "lorebookEntryIds", entryIndex],
               locationId: location.id,
             },
@@ -233,7 +236,7 @@ export function createSpatialContextService() {
       if (stored.corrupt || !stored.definition) {
         throw new SpatialContextServiceError(
           "spatial_game_map_reconciliation_unavailable",
-          "Save the hierarchical map before reviewing existing Game map matches.",
+          "Save the world map before reviewing existing Game map matches.",
           409,
         );
       }
@@ -262,14 +265,14 @@ export function createSpatialContextService() {
         if (stored.corrupt || !stored.definition) {
           throw new SpatialContextServiceError(
             "spatial_game_map_reconciliation_unavailable",
-            "Save the hierarchical map before reviewing existing Game map matches.",
+            "Save the world map before reviewing existing Game map matches.",
             409,
           );
         }
         if (stored.definition.revision !== input.expectedDefinitionRevision) {
           throw new SpatialContextServiceError(
             "spatial_game_map_reconciliation_stale",
-            "The hierarchical map changed. Review existing Game map matches again.",
+            "The world map changed. Review existing Game map matches again.",
             409,
           );
         }
@@ -312,7 +315,7 @@ export function createSpatialContextService() {
         if (stored.corrupt) {
           throw new SpatialContextServiceError(
             "spatial_definition_corrupt",
-            "The stored hierarchical map is invalid and must be repaired before it can be updated.",
+            "The stored world map is invalid and must be repaired before it can be updated.",
             409,
           );
         }
@@ -321,7 +324,7 @@ export function createSpatialContextService() {
         if (input.expectedRevision !== currentRevision) {
           throw new SpatialContextServiceError(
             "spatial_definition_stale",
-            "The hierarchical map changed. Reload it before saving.",
+            "The world map changed. Reload it before saving.",
             409,
           );
         }
@@ -349,7 +352,7 @@ export function createSpatialContextService() {
         if (!parsedDefinition.success) {
           throw new SpatialContextServiceError(
             "spatial_replacement_invalid",
-            parsedDefinition.error.issues[0]?.message ?? "The hierarchical map is invalid.",
+            parsedDefinition.error.issues[0]?.message ?? "The world map is invalid.",
             400,
           );
         }

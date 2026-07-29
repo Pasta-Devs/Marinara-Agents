@@ -2,18 +2,18 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 3
+    "minor": 4
   },
   "builtAgainst": {
-    "engineVersion": "2.3.3",
-    "engineCommit": "858cfa431e07f6f558aa1e8826a2c9b024269ab7"
+    "engineVersion": "2.3.5",
+    "engineCommit": "b3a60e335c9eaadd04c52d2286382767f21b595f"
   },
   "id": "hierarchical-maps",
-  "name": "Hierarchical Maps",
-  "version": "1.1.10",
+  "name": "World Maps",
+  "version": "1.2.0",
   "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
   "engine": {
-    "min": "2.3.3",
+    "min": "2.3.5",
     "maxExclusive": "3.0.0"
   },
   "kind": [
@@ -41,18 +41,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "fc329c5372292892d649cdfb4174ef44e8f4702b8cc19b0b2d32ae4020729dad",
-      "bytes": 613
+      "sha256": "5d77eee57b2dbd401c89ef4b96114b1ea48c8776380eb5d2bcb089f3b238419b",
+      "bytes": 606
     },
     {
       "path": "server.mjs",
-      "sha256": "6dc8cf91e91e8704eacea0c7e185efb14a857ba474cd42e6c9b992887268fff5",
-      "bytes": 319983
+      "sha256": "422fa0b468d37a38a4fb06b60f181185b3afe96ef9146cb2e22c1e73557dae89",
+      "bytes": 331711
     },
     {
       "path": "client.js",
-      "sha256": "10b54430bdd732b5b3bf05dc7dc802d8e847e17cbe1948c1578d7d1d0559804d",
-      "bytes": 804356
+      "sha256": "8edc8a89d4c80780f151abbd14e2b3a2d964ba8a33d66ffcaccd589a156ea14d",
+      "bytes": 864110
     }
   ],
   "permissions": [

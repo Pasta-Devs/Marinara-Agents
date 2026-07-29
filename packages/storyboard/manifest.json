@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "storyboard",
+  "name": "Storyboard",
+  "version": "1.0.0",
+  "description": "Plans and generates still or animated Game storyboards through provider-tuned planner, image, and video prompt chains. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Game mode.",
+  "engine": {
+    "min": "2.3.5",
+    "maxExclusive": "3.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "8e649ab18362ed05b4dc1d2578526e0a248d8bdb37b6ca85e2d1357ae3729779",
+      "bytes": 60746
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

@@ -4,9 +4,67 @@ import { PackageApiError, packageApi } from "./package-api";
 
 export const spatialResourceKeys = {
   chat: (chatId: string) => ["hierarchical-maps", "chat", chatId] as const,
+  gallery: (chatId: string) => ["hierarchical-maps", "gallery", chatId] as const,
   lorebooks: ["hierarchical-maps", "lorebooks"] as const,
   lorebookEntries: (lorebookId: string) => ["hierarchical-maps", "lorebooks", lorebookId, "entries"] as const,
 };
+
+export interface SpatialGalleryImage {
+  id: string;
+  chatId: string;
+  filePath: string;
+  prompt: string;
+  provider: string;
+  model: string;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+  url: string;
+}
+
+export interface SpatialGalleryImagePromptPreviewItem {
+  id: string;
+  kind: "background";
+  title: string;
+  sourcePrompt: string;
+  prompt: string;
+  negativePrompt: string;
+  width: number;
+  height: number;
+}
+
+export interface SpatialGalleryImagePromptPreview {
+  requestCount: number;
+  connection: {
+    id: string;
+    name: string;
+    model: string;
+    source: string;
+  };
+  styleProfile: {
+    id: string;
+    name: string;
+  };
+  campaign: {
+    included: boolean;
+    artStyleIncluded: boolean;
+  };
+  chatSettings: {
+    imageInstructionsIncluded: boolean;
+  };
+  width: number;
+  height: number;
+  items: SpatialGalleryImagePromptPreviewItem[];
+}
+
+export interface SpatialMapsArtworkContext {
+  locationName: string;
+  locationDescription: string;
+  locationType: string;
+  parentLocationName: string;
+  parentLocationDescription: string;
+  locationPath: string;
+}
 
 export function useSpatialChat(chatId: string | null) {
   return useQuery({
@@ -18,6 +76,70 @@ export function useSpatialChat(chatId: string | null) {
       if (error instanceof PackageApiError && error.status >= 400 && error.status < 500) return false;
       return failureCount < 3;
     },
+  });
+}
+
+export function useSpatialGalleryImages(chatId: string, enabled = true) {
+  return useQuery({
+    queryKey: spatialResourceKeys.gallery(chatId),
+    queryFn: () => packageApi.get<SpatialGalleryImage[]>(`/gallery/${chatId}`),
+    enabled: enabled && chatId.length > 0,
+    staleTime: 60_000,
+    retry: (failureCount, error) => {
+      if (error instanceof PackageApiError && error.status >= 400 && error.status < 500) return false;
+      return failureCount < 3;
+    },
+  });
+}
+
+export function uploadSpatialGalleryImage(
+  chatId: string,
+  file: File,
+  metadata: Pick<SpatialGalleryImage, "prompt" | "provider" | "model" | "width" | "height">,
+): Promise<SpatialGalleryImage> {
+  const body = new FormData();
+  body.append("prompt", metadata.prompt);
+  body.append("provider", metadata.provider);
+  body.append("model", metadata.model);
+  if (metadata.width !== null) body.append("width", String(metadata.width));
+  if (metadata.height !== null) body.append("height", String(metadata.height));
+  body.append("file", file);
+  return packageApi.upload<SpatialGalleryImage>(`/gallery/${chatId}/upload`, body);
+}
+
+export function useGenerateSpatialGalleryImage(chatId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      prompt: string;
+      title?: string;
+      mapsArtworkContext?: SpatialMapsArtworkContext;
+      promptOverride?: string;
+      negativePromptOverride?: string;
+      debugMode?: boolean;
+    }) =>
+      packageApi.post<SpatialGalleryImage>(`/gallery/${chatId}/generate-image`, input),
+    onSuccess: (image) => {
+      queryClient.setQueryData<SpatialGalleryImage[]>(spatialResourceKeys.gallery(chatId), (current = []) => [
+        image,
+        ...current.filter((candidate) => candidate.id !== image.id),
+      ]);
+    },
+  });
+}
+
+export function usePreviewSpatialGalleryImages(chatId: string) {
+  return useMutation({
+    mutationFn: (input: {
+      items: Array<{
+        id: string;
+        title: string;
+        prompt: string;
+        mapsArtworkContext?: SpatialMapsArtworkContext;
+      }>;
+      debugMode?: boolean;
+    }) =>
+      packageApi.post<SpatialGalleryImagePromptPreview>(`/gallery/${chatId}/generate-image/preview`, input),
   });
 }
 
