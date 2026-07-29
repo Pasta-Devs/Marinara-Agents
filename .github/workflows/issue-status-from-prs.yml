@@ -33,6 +33,13 @@ jobs:
             const pr = context.payload.pull_request;
             const targetsStaging = pr.base?.ref === 'staging';
             const targetsMain = pr.base?.ref === 'main';
+            const isTrustedMainPromotion =
+              targetsMain &&
+              pr.state === 'closed' &&
+              pr.merged &&
+              pr.user?.login === 'SpicyMarinara' &&
+              pr.head?.repo?.full_name === `${owner}/${repo}` &&
+              pr.head?.ref === 'staging';
 
             function linkedIssueNumbers(body) {
               const numbers = new Set();
@@ -82,6 +89,21 @@ jobs:
 
             const activeStagingPrIssues = await openStagingPrIssues();
 
+            if (isTrustedMainPromotion) {
+              const fixedInStaging = await github.paginate(github.rest.issues.listForRepo, {
+                owner,
+                repo,
+                state: 'all',
+                labels: 'fixed-in-staging',
+                per_page: 100,
+              });
+              for (const issue of fixedInStaging) {
+                if (issue.pull_request) continue;
+                await removeLabel(issue.number, 'fixed-in-staging');
+                await removeLabel(issue.number, 'in-pr');
+              }
+            }
+
             for (const issueNumber of linkedIssueNumbers(pr.body)) {
               const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber }).catch((error) => {
                 if (error.status === 404) return null;
@@ -90,10 +112,6 @@ jobs:
               if (!issue || issue.data.pull_request) continue;
 
               if (targetsMain) {
-                if (pr.state === 'closed' && pr.merged) {
-                  await removeLabel(issueNumber, 'fixed-in-staging');
-                  await removeLabel(issueNumber, 'in-pr');
-                }
                 continue;
               }
 
