@@ -23,7 +23,7 @@ git pull
 git checkout -b feature/short-description
 ```
 
-Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Every ready PR must pass the catalog check and complete CodeRabbit review. Pasta-Devs members in `@Pasta-Devs/developers` may then merge internal PRs into `staging` without a separate human approval; outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another team member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
+Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Every ready PR must pass the catalog check and complete CodeRabbit review. PRs from active Pasta-Devs organization members and owners do not require a separate human approval; organization members with repository merge permission may merge internal PRs into `staging` after those gates pass. Outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
 
 Marinara Engine automatically follows the matching Agent channel: Engine `staging` reads this repository's `staging` catalog and artifacts, while stable Engine builds read `main`. Test package installs and updates from an Engine staging checkout before promotion.
 
@@ -104,7 +104,7 @@ Also manually install or update affected packages through **Agents → Download 
 - Keep the PR focused and explain the user-facing reason for the change.
 - Mark the PR ready for review only after local validation and self-review.
 - Let CodeRabbit review the ready PR and address actionable findings.
-- Outside and first-time contributors must obtain an approving review from `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Team members may merge internal PRs after the required automated gates pass.
+- Outside and first-time contributors must obtain an approving review from `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Active organization members and owners do not require separate owner approval; those with repository merge permission may merge internal PRs after the required automated gates pass.
 - Update the README and linked Engine documentation when catalog membership, compatibility, setup, or user-visible behavior changes.
 - Include the generated package and catalog outputs when payloads change.
 - Never commit credentials, private user data, local model files, or unreviewed executable archives.
@@ -123,7 +123,7 @@ A new package must include:
 
 Security-sensitive permissions and executable client/server entrypoints must be narrowly scoped and justified in the PR description.
 
-Package hashes are integrity checks, not independent publisher signatures. A contributor who can change both an artifact and its catalog entry can also change the recorded hash. For that reason, paths map to `SpicyMarinara` in `.github/CODEOWNERS`. Maintainers must keep owner approval and stale-approval dismissal enabled for outside contributions to `staging`, while team members use the staging-only review bypass for internal PRs. `main` must remain owner-only; see [SECURITY.md](SECURITY.md) for the full repository ruleset.
+Package hashes are integrity checks, not independent publisher signatures. A contributor who can change both an artifact and its catalog entry can also change the recorded hash. For that reason, paths map to `SpicyMarinara` in `.github/CODEOWNERS`. Maintainers must keep the required staging approval check fail-closed: it exempts active Pasta-Devs organization members and owners, while every outside contributor needs a current-head approval from `SpicyMarinara`. `main` must remain owner-only; see [SECURITY.md](SECURITY.md) for the full repository ruleset.
 
 ## AI Agent Workflow
 
