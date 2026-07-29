@@ -3,7 +3,7 @@ name: Issue Status From Pull Requests
 on:
   pull_request_target:
     types: [opened, reopened, edited, synchronize, ready_for_review, closed]
-    branches: [staging]
+    branches: [staging, main]
 
 concurrency:
   group: issue-status-from-pr-${{ github.event.pull_request.number }}
@@ -31,6 +31,8 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const pr = context.payload.pull_request;
+            const targetsStaging = pr.base?.ref === 'staging';
+            const targetsMain = pr.base?.ref === 'main';
 
             function linkedIssueNumbers(body) {
               const numbers = new Set();
@@ -78,15 +80,30 @@ jobs:
               return new Set(pulls.flatMap((pull) => linkedIssueNumbers(pull.body)));
             }
 
+            const activeStagingPrIssues = await openStagingPrIssues();
+
             for (const issueNumber of linkedIssueNumbers(pr.body)) {
-              const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber }).catch(() => null);
+              const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber }).catch((error) => {
+                if (error.status === 404) return null;
+                throw error;
+              });
               if (!issue || issue.data.pull_request) continue;
+
+              if (targetsMain) {
+                if (pr.state === 'closed' && pr.merged) {
+                  await removeLabel(issueNumber, 'fixed-in-staging');
+                  await removeLabel(issueNumber, 'in-pr');
+                }
+                continue;
+              }
+
+              if (!targetsStaging) continue;
+
               if (pr.state === 'closed') {
                 if (pr.merged && issue.data.state === 'open') {
                   await addLabel(issueNumber, 'fixed-in-staging');
                 }
-                const active = await openStagingPrIssues();
-                if (!active.has(issueNumber)) await removeLabel(issueNumber, 'in-pr');
+                if (!activeStagingPrIssues.has(issueNumber)) await removeLabel(issueNumber, 'in-pr');
               } else if (issue.data.state === 'open') {
                 await addLabel(issueNumber, 'in-pr');
               }
@@ -94,8 +111,7 @@ jobs:
 
             await ensureLabel('in-pr');
             await ensureLabel('fixed-in-staging');
-            const active = await openStagingPrIssues();
             const labeled = await github.paginate(github.rest.issues.listForRepo, { owner, repo, state: 'all', labels: 'in-pr', per_page: 100 });
             for (const issue of labeled) {
-              if (!issue.pull_request && !active.has(issue.number)) await removeLabel(issue.number, 'in-pr');
+              if (!issue.pull_request && !activeStagingPrIssues.has(issue.number)) await removeLabel(issue.number, 'in-pr');
             }
