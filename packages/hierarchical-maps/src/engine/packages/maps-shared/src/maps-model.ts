@@ -12,6 +12,7 @@ export const GENERATION_PREFERENCES_VERSION = 3 as const;
 export const GENERATION_PROMPT_LIBRARIES_VERSION = 1 as const;
 export const TURN_PROMPT_TEMPLATES_VERSION = 1 as const;
 export const SPATIAL_MAP_TEMPLATE_VERSION = 1 as const;
+export const GLOBAL_GALLERY_SPATIAL_REFERENCE_PREFIX = "global-gallery:";
 export const DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID = "default";
 export const SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY = "spatialMapGenerationPromptLibraries";
 export const SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY = "spatialMapTurnPromptTemplates";
@@ -189,11 +190,25 @@ export interface SpatialHierarchyProfile {
   locationTypeIds: Record<string, string>;
 }
 
-/** Reusable hierarchy content. Campaign state and chat-owned artwork are intentionally excluded. */
+/** Reusable hierarchy content. Campaign state and chat-only artwork are excluded; Global Gallery references remain shared. */
 export interface SpatialMapTemplateData {
   version: typeof SPATIAL_MAP_TEMPLATE_VERSION;
   definition: SpatialContextDefinition;
   hierarchyProfile: SpatialHierarchyProfile;
+}
+
+export function globalGallerySpatialReferenceId(imageId: string): string {
+  return `${GLOBAL_GALLERY_SPATIAL_REFERENCE_PREFIX}${imageId.trim()}`;
+}
+
+export function parseGlobalGallerySpatialReferenceId(referenceImageId: string | null | undefined): string | null {
+  const normalized = referenceImageId?.trim() ?? "";
+  if (!normalized.startsWith(GLOBAL_GALLERY_SPATIAL_REFERENCE_PREFIX)) return null;
+  return normalized.slice(GLOBAL_GALLERY_SPATIAL_REFERENCE_PREFIX.length).trim() || null;
+}
+
+export function isGlobalGallerySpatialReferenceId(referenceImageId: string | null | undefined): boolean {
+  return parseGlobalGallerySpatialReferenceId(referenceImageId) !== null;
 }
 
 export interface SpatialMapTemplateRecord {
@@ -808,19 +823,22 @@ export function createSpatialMapTemplateData(
   definition: SpatialContextDefinition,
   hierarchyProfile: SpatialHierarchyProfile,
 ): SpatialMapTemplateData {
+  // Chat Gallery IDs belong to one chat and cannot travel with a template. Global Gallery references are account-wide.
   const portableDefinition: SpatialContextDefinition = {
     ...definition,
     ownerMode: "roleplay",
     enabled: false,
     revision: 0,
     locations: definition.locations.map(
-      ({
-        referenceImageId: _referenceImageId,
-        useReferenceImage: _useReferenceImage,
-        mapBackgroundImageId: _mapBackgroundImageId,
-        mapBackgroundPosition: _mapBackgroundPosition,
-        ...location
-      }) => location,
+      ({ referenceImageId, useReferenceImage, mapBackgroundImageId, mapBackgroundPosition, ...location }) => ({
+        ...location,
+        ...(isGlobalGallerySpatialReferenceId(referenceImageId)
+          ? { referenceImageId, useReferenceImage }
+          : {}),
+        ...(isGlobalGallerySpatialReferenceId(mapBackgroundImageId)
+          ? { mapBackgroundImageId, mapBackgroundPosition }
+          : {}),
+      }),
     ),
   };
   return {

@@ -17,8 +17,12 @@ import {
   type SpatialHierarchyProfile,
 } from "../../../../../maps-shared/src/maps-model";
 import {
+  resolveSpatialArtworkImage,
+  spatialArtworkImages,
   useGenerateSpatialGalleryImage,
   useSpatialGalleryImages,
+  useSpatialGlobalGalleryImages,
+  type SpatialArtworkImage,
   type SpatialGalleryImage,
 } from "../use-spatial-resources";
 
@@ -62,7 +66,7 @@ function GalleryImagePicker({
   onClose,
 }: {
   title: string;
-  images: SpatialGalleryImage[];
+  images: SpatialArtworkImage[];
   selectedId: string | null;
   isLoading: boolean;
   isError: boolean;
@@ -105,18 +109,18 @@ function GalleryImagePicker({
         <div className="px-4 py-8 text-center text-xs text-red-400">The Gallery could not be loaded.</div>
       ) : images.length === 0 ? (
         <div className="px-4 py-8 text-center text-xs leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-          This chat&apos;s Gallery is empty. Upload an image from Gallery, then refresh this picker.
+          No artwork is available. Add an image to this chat&apos;s Gallery or the shared Global Gallery, then refresh.
         </div>
       ) : (
         <div className="grid max-h-80 grid-cols-2 gap-2 overflow-y-auto p-2 sm:grid-cols-3">
           {images.map((image) => {
-            const selected = image.id === selectedId;
+            const selected = image.referenceId === selectedId;
             return (
               <button
-                key={image.id}
+                key={image.referenceId}
                 type="button"
                 aria-pressed={selected}
-                onClick={() => onSelect(image.id)}
+                onClick={() => onSelect(image.referenceId)}
                 title={image.prompt || "Gallery image"}
                 className={cn(
                   "group relative min-h-24 overflow-hidden rounded-lg border bg-[var(--marinara-chat-chrome-panel-bg)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]",
@@ -126,6 +130,9 @@ function GalleryImagePicker({
                 )}
               >
                 <img src={image.url} alt="" loading="lazy" className="h-24 w-full object-cover" />
+                <span className="absolute bottom-1.5 left-1.5 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)]/90 px-2 py-0.5 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-panel-text)] shadow-sm">
+                  {image.source === "global" ? "Shared" : "This chat"}
+                </span>
                 {selected && (
                   <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm">
                     <Check size="0.75rem" />
@@ -189,6 +196,7 @@ export function locationArtworkContext(
 interface LocationInspectorProps {
   chatId: string;
   artworkEnabled?: boolean;
+  allowChatArtwork?: boolean;
   debugMode?: boolean;
   definition: SpatialContextDefinition;
   location: SpatialLocation | null;
@@ -215,6 +223,7 @@ interface LocationInspectorProps {
 export function LocationInspector({
   chatId,
   artworkEnabled = true,
+  allowChatArtwork = true,
   debugMode = false,
   definition,
   location,
@@ -240,22 +249,37 @@ export function LocationInspector({
   const [referenceGeneratorOpen, setReferenceGeneratorOpen] = useState(false);
   const [referenceGenerationPrompt, setReferenceGenerationPrompt] = useState("");
   const [generatedReferenceImage, setGeneratedReferenceImage] = useState<SpatialGalleryImage | null>(null);
-  const galleryImages = useSpatialGalleryImages(chatId, artworkEnabled);
+  const galleryImages = useSpatialGalleryImages(chatId, artworkEnabled && allowChatArtwork && chatId.length > 0);
+  const globalGalleryImages = useSpatialGlobalGalleryImages(artworkEnabled);
+  const artworkImages = useMemo(
+    () => spatialArtworkImages(galleryImages.data, globalGalleryImages.data),
+    [galleryImages.data, globalGalleryImages.data],
+  );
   const galleryPickerLoading =
-    galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined);
+    globalGalleryImages.isLoading ||
+    (globalGalleryImages.isFetching && globalGalleryImages.data === undefined) ||
+    (allowChatArtwork && (galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined)));
+  const galleryPickerError =
+    artworkImages.length === 0 && (globalGalleryImages.isError || (allowChatArtwork && galleryImages.isError));
   const generateReferenceImage = useGenerateSpatialGalleryImage(chatId);
   const referenceImage = useMemo(
-    () => galleryImages.data?.find((image) => image.id === location?.referenceImageId) ?? null,
-    [galleryImages.data, location?.referenceImageId],
+    () => resolveSpatialArtworkImage(location?.referenceImageId, galleryImages.data, globalGalleryImages.data),
+    [galleryImages.data, globalGalleryImages.data, location?.referenceImageId],
   );
   const referenceImageMissing =
-    Boolean(location?.referenceImageId) && galleryImages.isSuccess && referenceImage === null;
+    Boolean(location?.referenceImageId) &&
+    globalGalleryImages.isSuccess &&
+    (!allowChatArtwork || galleryImages.isSuccess) &&
+    referenceImage === null;
   const mapBackgroundImage = useMemo(
-    () => galleryImages.data?.find((image) => image.id === location?.mapBackgroundImageId) ?? null,
-    [galleryImages.data, location?.mapBackgroundImageId],
+    () => resolveSpatialArtworkImage(location?.mapBackgroundImageId, galleryImages.data, globalGalleryImages.data),
+    [galleryImages.data, globalGalleryImages.data, location?.mapBackgroundImageId],
   );
   const mapBackgroundImageMissing =
-    Boolean(location?.mapBackgroundImageId) && galleryImages.isSuccess && mapBackgroundImage === null;
+    Boolean(location?.mapBackgroundImageId) &&
+    globalGalleryImages.isSuccess &&
+    (!allowChatArtwork || galleryImages.isSuccess) &&
+    mapBackgroundImage === null;
   const descendants = useMemo(
     () => (location ? getSpatialDescendantIds(definition, location.id) : new Set<string>()),
     [definition, location],
@@ -314,7 +338,8 @@ export function LocationInspector({
       target === "reference" ? location?.referenceImageId ?? null : location?.mapBackgroundImageId ?? null,
     );
     setGalleryPickerTarget(target);
-    void galleryImages.refetch();
+    if (allowChatArtwork) void galleryImages.refetch();
+    void globalGalleryImages.refetch();
   };
 
   const confirmGallerySelection = () => {
@@ -459,7 +484,7 @@ export function LocationInspector({
             </h3>
           </div>
           <p className="mb-3 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-            Choose a reviewed Gallery image or create an establishing image with AI. One image anchors this location&apos;s look.
+            Choose a reviewed image from this chat or the shared Global Gallery. One image anchors this location&apos;s look.
           </p>
 
           <div className="overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
@@ -472,14 +497,14 @@ export function LocationInspector({
               />
             ) : (
               <div className="flex min-h-32 items-center justify-center px-4 text-center text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
-                {galleryImages.isLoading && location.referenceImageId ? (
+                {galleryPickerLoading && location.referenceImageId ? (
                   <span className="flex items-center gap-2">
                     <Loader2 size="0.75rem" className="animate-spin" /> Loading reference image…
                   </span>
                 ) : referenceImageMissing ? (
                   "This Gallery image is no longer available. Choose a replacement or remove the link."
-                ) : galleryImages.isError ? (
-                  "The Gallery could not be loaded."
+                ) : galleryPickerError ? (
+                  "Available artwork could not be loaded."
                 ) : (
                   "No reference image yet."
                 )}
@@ -487,27 +512,29 @@ export function LocationInspector({
             )}
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className={cn("mt-3 grid gap-2", allowChatArtwork ? "grid-cols-2" : "grid-cols-1")}>
             <button
               type="button"
               onClick={() => openGalleryPicker("reference")}
               className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
             >
-              <ImageIcon size="0.75rem" /> Choose from Gallery
+              <ImageIcon size="0.75rem" /> Choose artwork
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setGalleryPickerTarget(null);
-                setGeneratedReferenceImage(null);
-                setReferenceGenerationPrompt(defaultLocationReferencePrompt(location));
-                setReferenceGeneratorOpen(true);
-                generateReferenceImage.reset();
-              }}
-              className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
-            >
-              <Sparkles size="0.75rem" /> Create with AI
-            </button>
+            {allowChatArtwork && (
+              <button
+                type="button"
+                onClick={() => {
+                  setGalleryPickerTarget(null);
+                  setGeneratedReferenceImage(null);
+                  setReferenceGenerationPrompt(defaultLocationReferencePrompt(location));
+                  setReferenceGeneratorOpen(true);
+                  generateReferenceImage.reset();
+                }}
+                className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+              >
+                <Sparkles size="0.75rem" /> Create with AI
+              </button>
+            )}
           </div>
           {location.referenceImageId && (
             <button
@@ -522,13 +549,16 @@ export function LocationInspector({
           {galleryPickerTarget === "reference" && (
             <GalleryImagePicker
               title="Choose location reference"
-              images={galleryImages.data ?? []}
+              images={artworkImages}
               selectedId={pendingGalleryImageId}
               isLoading={galleryPickerLoading}
-              isError={galleryImages.isError}
+              isError={galleryPickerError}
               onSelect={setPendingGalleryImageId}
               onConfirm={confirmGallerySelection}
-              onRefresh={() => void galleryImages.refetch()}
+              onRefresh={() => {
+                if (allowChatArtwork) void galleryImages.refetch();
+                void globalGalleryImages.refetch();
+              }}
               onClose={() => {
                 setGalleryPickerTarget(null);
                 setPendingGalleryImageId(null);
@@ -845,14 +875,14 @@ export function LocationInspector({
                     />
                   ) : (
                     <div className="flex min-h-24 items-center justify-center px-4 text-center text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
-                      {galleryImages.isLoading && location.mapBackgroundImageId ? (
+                      {galleryPickerLoading && location.mapBackgroundImageId ? (
                         <span className="flex items-center gap-2">
                           <Loader2 size="0.75rem" className="animate-spin" /> Loading map background…
                         </span>
                       ) : mapBackgroundImageMissing ? (
                         "This Gallery image is no longer available."
-                      ) : galleryImages.isError ? (
-                        "The Gallery could not be loaded."
+                      ) : galleryPickerError ? (
+                        "Available artwork could not be loaded."
                       ) : (
                         "The map grid is used until you choose a Gallery background."
                       )}
@@ -865,7 +895,7 @@ export function LocationInspector({
                     onClick={() => openGalleryPicker("background")}
                     className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
                   >
-                    <ImageIcon size="0.75rem" /> Choose from Gallery
+                    <ImageIcon size="0.75rem" /> Choose artwork
                   </button>
                   <button
                     type="button"
@@ -879,13 +909,16 @@ export function LocationInspector({
                 {galleryPickerTarget === "background" && (
                   <GalleryImagePicker
                     title="Choose child map background"
-                    images={galleryImages.data ?? []}
+                    images={artworkImages}
                     selectedId={pendingGalleryImageId}
                     isLoading={galleryPickerLoading}
-                    isError={galleryImages.isError}
+                    isError={galleryPickerError}
                     onSelect={setPendingGalleryImageId}
                     onConfirm={confirmGallerySelection}
-                    onRefresh={() => void galleryImages.refetch()}
+                    onRefresh={() => {
+                      if (allowChatArtwork) void galleryImages.refetch();
+                      void globalGalleryImages.refetch();
+                    }}
                     onClose={() => {
                       setGalleryPickerTarget(null);
                       setPendingGalleryImageId(null);

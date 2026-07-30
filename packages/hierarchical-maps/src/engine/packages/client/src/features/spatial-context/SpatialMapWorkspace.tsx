@@ -68,22 +68,29 @@ import {
 } from "./editor-state";
 import {
   getSpatialExcludedLorebookIds,
+  reuseOrUploadSpatialGlobalGalleryImage,
+  spatialArtworkImages,
   uploadSpatialGalleryImage,
   useGenerateSpatialGalleryImage,
   usePreviewSpatialGalleryImages,
   useSpatialChat,
   useSpatialGalleryImages,
+  useSpatialGlobalGalleryImages,
   useSpatialLorebookEntries,
   useSpatialLorebooks,
+  type SpatialArtworkImage,
   type SpatialGalleryImage,
+  type SpatialGlobalGalleryImage,
   type SpatialGalleryImagePromptPreview,
 } from "./use-spatial-resources";
 import { packageApi } from "./package-api";
 import {
   defaultGenerationPreferences,
   defaultHierarchyProfile,
+  globalGallerySpatialReferenceId,
   hierarchyTypeForLocation,
   instantiateSpatialMapTemplate,
+  isGlobalGallerySpatialReferenceId,
   normalizeHierarchyProfile,
   withLocationHierarchyType,
   type SpatialHierarchyProfile,
@@ -137,7 +144,7 @@ function referencedArtworkIds(definition: SpatialContextDefinition): string[] {
   );
 }
 
-function artworkFilename(image: SpatialGalleryImage, mimeType: string): string | null {
+function artworkFilename(image: SpatialArtworkImage, mimeType: string): string | null {
   const extension = ARTWORK_MIME_EXTENSIONS.get(mimeType.toLowerCase());
   if (!extension) return null;
   const sourceName = image.filePath.split(/[\\/]/u).at(-1) ?? `map-artwork-${image.id}`;
@@ -146,6 +153,72 @@ function artworkFilename(image: SpatialGalleryImage, mimeType: string): string |
     .replace(/[^a-z0-9._-]+/giu, "-")
     .replace(/^-+|-+$/gu, "") || `map-artwork-${image.id}`;
   return `${stem}.${extension}`;
+}
+
+function remapArtworkReferences(
+  definition: SpatialContextDefinition,
+  references: ReadonlyMap<string, string>,
+): SpatialContextDefinition {
+  return {
+    ...definition,
+    locations: definition.locations.map((location) => ({
+      ...location,
+      referenceImageId: location.referenceImageId
+        ? (references.get(location.referenceImageId) ?? location.referenceImageId)
+        : location.referenceImageId,
+      mapBackgroundImageId: location.mapBackgroundImageId
+        ? (references.get(location.mapBackgroundImageId) ?? location.mapBackgroundImageId)
+        : location.mapBackgroundImageId,
+    })),
+  };
+}
+
+function artworkFile(image: SpatialArtworkImage, blob: Blob): File {
+  const filename = artworkFilename(image, blob.type);
+  if (!filename) throw new Error("Unsupported artwork type");
+  return new File([blob], filename, { type: blob.type });
+}
+
+async function promoteSpatialArtworkToGlobalGallery(
+  definition: SpatialContextDefinition,
+  chatImages: SpatialGalleryImage[],
+  initialGlobalImages: SpatialGlobalGalleryImage[],
+): Promise<{ definition: SpatialContextDefinition; promoted: number; reused: number; missing: number }> {
+  const chatImagesById = new Map(chatImages.map((image) => [image.id, image]));
+  const globalImages = [...initialGlobalImages];
+  const references = new Map<string, string>();
+  let promoted = 0;
+  let reused = 0;
+  let missing = 0;
+
+  for (const referenceId of referencedArtworkIds(definition)) {
+    if (isGlobalGallerySpatialReferenceId(referenceId)) continue;
+    const image = chatImagesById.get(referenceId);
+    if (!image) {
+      missing += 1;
+      continue;
+    }
+    try {
+      const file = artworkFile(
+        { ...image, referenceId: image.id, source: "chat" },
+        await packageApi.blob(image.url),
+      );
+      const result = await reuseOrUploadSpatialGlobalGalleryImage(file, image, globalImages);
+      references.set(referenceId, globalGallerySpatialReferenceId(result.image.id));
+      if (!globalImages.some((candidate) => candidate.id === result.image.id)) globalImages.push(result.image);
+      if (result.reused) reused += 1;
+      else promoted += 1;
+    } catch {
+      missing += 1;
+    }
+  }
+
+  return {
+    definition: remapArtworkReferences(definition, references),
+    promoted,
+    reused,
+    missing,
+  };
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -271,6 +344,11 @@ export function SpatialMapWorkspace({
   const createTemplate = useCreateSpatialMapTemplate();
   const { data: chat } = useSpatialChat(templateMode ? null : chatId);
   const galleryImages = useSpatialGalleryImages(chatId ?? "", !templateMode);
+  const globalGalleryImages = useSpatialGlobalGalleryImages();
+  const availableArtworkImages = useMemo(
+    () => spatialArtworkImages(galleryImages.data, globalGalleryImages.data),
+    [galleryImages.data, globalGalleryImages.data],
+  );
   const generateGalleryImage = useGenerateSpatialGalleryImage(chatId ?? "");
   const previewGalleryImages = usePreviewSpatialGalleryImages(chatId ?? "");
   const pendingSetupReview = !templateMode && pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
@@ -516,10 +594,12 @@ export function SpatialMapWorkspace({
   const currentContextId = currentContext?.id ?? null;
   const localPresentation = currentContext?.childPresentation ?? "list";
   const localMapBackgroundImageUrl = currentContext?.mapBackgroundImageId
-    ? galleryImages.data?.find((image) => image.id === currentContext.mapBackgroundImageId)?.url
+    ? availableArtworkImages.find((image) => image.referenceId === currentContext.mapBackgroundImageId)?.url
     : undefined;
   const galleryImagesInitiallyLoading =
-    galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined);
+    globalGalleryImages.isLoading ||
+    (globalGalleryImages.isFetching && globalGalleryImages.data === undefined) ||
+    (!templateMode && (galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined)));
   const effectiveLayoutEditingMode =
     layoutEditingMode === "background" &&
     (localPresentation !== "map" || !localMapBackgroundImageUrl)
@@ -910,12 +990,17 @@ export function SpatialMapWorkspace({
     if (!draft || isExporting) return;
     setIsExporting(true);
     try {
-      const shouldIncludeArtwork = !templateMode && includeArtworkInExport;
+      const shouldIncludeArtwork = includeArtworkInExport;
       const artwork: SpatialMapArtworkExport[] = [];
       let missingArtworkCount = 0;
       if (shouldIncludeArtwork) {
-        const images = galleryImages.data ?? (await galleryImages.refetch()).data ?? [];
-        const imagesById = new Map(images.map((image) => [image.id, image]));
+        const chatArtwork = templateMode
+          ? []
+          : (galleryImages.data ?? (await galleryImages.refetch()).data ?? []);
+        const globalArtwork = globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [];
+        const imagesById = new Map(
+          spatialArtworkImages(chatArtwork, globalArtwork).map((image) => [image.referenceId, image]),
+        );
         for (const imageId of referencedArtworkIds(draft)) {
           const image = imagesById.get(imageId);
           if (!image) {
@@ -927,7 +1012,7 @@ export function SpatialMapWorkspace({
             const filename = artworkFilename(image, imageBlob.type);
             if (!filename) throw new Error("Unsupported artwork type");
             artwork.push({
-              sourceImageId: image.id,
+              sourceImageId: image.referenceId,
               filename,
               data: await blobToDataUrl(imageBlob),
               prompt: image.prompt,
@@ -984,6 +1069,7 @@ export function SpatialMapWorkspace({
     draft,
     draftHierarchyProfile,
     galleryImages,
+    globalGalleryImages,
     includeArtworkInExport,
     isExporting,
     templateMode,
@@ -1021,30 +1107,38 @@ export function SpatialMapWorkspace({
         const referencedIds = new Set(referencedArtworkIds(parsed.data));
         const applicableArtwork = bundledArtwork.filter((artwork) => referencedIds.has(artwork.sourceImageId));
         const artworkIdMap = new Map<string, string>();
+        const currentGlobalImages = [
+          ...(globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? []),
+        ];
+        let sharedArtworkAdded = 0;
+        let sharedArtworkReused = 0;
+        let chatArtworkRestored = 0;
         let failedArtworkCount = 0;
-        if (!templateMode && chatId) {
-          for (const artwork of applicableArtwork) {
-            try {
-              const uploaded = await uploadSpatialGalleryImage(chatId, bundledArtworkFile(artwork), artwork);
+        for (const artwork of applicableArtwork) {
+          try {
+            const file = bundledArtworkFile(artwork);
+            if (templateMode || isGlobalGallerySpatialReferenceId(artwork.sourceImageId)) {
+              const result = await reuseOrUploadSpatialGlobalGalleryImage(file, artwork, currentGlobalImages);
+              artworkIdMap.set(artwork.sourceImageId, globalGallerySpatialReferenceId(result.image.id));
+              if (!currentGlobalImages.some((candidate) => candidate.id === result.image.id)) {
+                currentGlobalImages.push(result.image);
+              }
+              if (result.reused) sharedArtworkReused += 1;
+              else sharedArtworkAdded += 1;
+            } else if (chatId) {
+              const uploaded = await uploadSpatialGalleryImage(chatId, file, artwork);
               artworkIdMap.set(artwork.sourceImageId, uploaded.id);
-            } catch {
-              failedArtworkCount += 1;
+              chatArtworkRestored += 1;
             }
+          } catch {
+            failedArtworkCount += 1;
           }
-          if (artworkIdMap.size > 0) await galleryImages.refetch();
         }
-        const importedLocations = parsed.data.locations.map((location) => ({
-          ...location,
-          referenceImageId: location.referenceImageId
-            ? (artworkIdMap.get(location.referenceImageId) ?? location.referenceImageId)
-            : location.referenceImageId,
-          mapBackgroundImageId: location.mapBackgroundImageId
-            ? (artworkIdMap.get(location.mapBackgroundImageId) ?? location.mapBackgroundImageId)
-            : location.mapBackgroundImageId,
-        }));
+        if (chatArtworkRestored > 0) await galleryImages.refetch();
+        if (sharedArtworkAdded > 0) await globalGalleryImages.refetch();
+        const remappedDefinition = remapArtworkReferences(parsed.data, artworkIdMap);
         const imported: SpatialContextDefinition = {
-          ...parsed.data,
-          locations: importedLocations,
+          ...remappedDefinition,
           ownerMode,
           enabled: draft.enabled,
           revision: baseDefinition?.revision ?? 0,
@@ -1059,8 +1153,8 @@ export function SpatialMapWorkspace({
         setMobilePane("hierarchy");
         toast.success(
           templateMode
-            ? `World map imported into this template. Review it, then Save template.${applicableArtwork.length > 0 ? " Bundled artwork stays chat-specific and was not imported." : ""}`
-            : `World map imported into the working copy. Review it, then Save.${artworkIdMap.size > 0 ? ` ${artworkIdMap.size} artwork file${artworkIdMap.size === 1 ? " was" : "s were"} restored to this chat's Gallery.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
+            ? `World map imported into this template. Review it, then Save template.${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`
+            : `World map imported into the working copy. Review it, then Save.${chatArtworkRestored > 0 ? ` ${chatArtworkRestored} artwork file${chatArtworkRestored === 1 ? " was" : "s were"} restored to this chat's Gallery.` : ""}${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} shared artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
         );
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "The world map could not be imported.");
@@ -1074,6 +1168,7 @@ export function SpatialMapWorkspace({
       chatId,
       draft,
       galleryImages,
+      globalGalleryImages,
       isImporting,
       ownerMode,
       spatial.data?.hasCommittedSpatialHistory,
@@ -1087,22 +1182,37 @@ export function SpatialMapWorkspace({
     const confirmed = await confirmAction({
       title: "Save map as a template?",
       message:
-        `Save a reusable copy named “${name}” to Agents → Maps? Campaign history, current location, Game bindings, and chat Gallery images are not copied.`,
+        `Save a reusable copy named “${name}” to Agents → Maps? Referenced chat artwork will be added to or reused from Global Gallery. Campaign history, current location, and Game bindings are not copied.`,
       confirmLabel: "Save template",
     });
     if (!confirmed) return;
     try {
+      const chatArtwork = galleryImages.data ?? (await galleryImages.refetch()).data ?? [];
+      const globalArtwork = globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [];
+      const promotion = await promoteSpatialArtworkToGlobalGallery(draft, chatArtwork, globalArtwork);
+      if (promotion.promoted > 0) await globalGalleryImages.refetch();
       await createTemplate.mutateAsync({
         name,
         description: "",
-        definition: draft,
-        hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+        definition: promotion.definition,
+        hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, promotion.definition),
       });
-      toast.success("Map template saved. You can edit it from Agents → Maps.");
+      toast.success(
+        `Map template saved.${promotion.promoted > 0 ? ` ${promotion.promoted} artwork file${promotion.promoted === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${promotion.reused > 0 ? ` ${promotion.reused} existing shared image${promotion.reused === 1 ? " was" : "s were"} reused.` : ""}${promotion.missing > 0 ? ` ${promotion.missing} missing artwork link${promotion.missing === 1 ? " was" : "s were"} omitted.` : ""}`,
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The map template could not be saved.");
     }
-  }, [chat?.name, confirmAction, createTemplate, draft, draftHierarchyProfile, templateMode]);
+  }, [
+    chat?.name,
+    confirmAction,
+    createTemplate,
+    draft,
+    draftHierarchyProfile,
+    galleryImages,
+    globalGalleryImages,
+    templateMode,
+  ]);
 
   const handleClose = useCallback(async () => {
     if (dirty) {
@@ -1572,7 +1682,8 @@ export function SpatialMapWorkspace({
   const inspector = (
     <LocationInspector
       chatId={chatId ?? ""}
-      artworkEnabled={!templateMode}
+      artworkEnabled
+      allowChatArtwork={!templateMode}
       debugMode={debugMode}
       definition={draft}
       location={selected}
@@ -1727,20 +1838,18 @@ export function SpatialMapWorkspace({
             >
               {isExporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Upload size="0.8125rem" />} Export
             </button>
-            {!templateMode && (
-              <label
-                className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs"
-                title="Bundle referenced location and map background images. This makes the export file larger."
-              >
-                <input
-                  type="checkbox"
-                  checked={includeArtworkInExport}
-                  disabled={isExporting}
-                  onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
-                />
-                <span>Include map artwork</span>
-              </label>
-            )}
+            <label
+              className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs"
+              title="Bundle referenced location and map background images. This makes the export file larger."
+            >
+              <input
+                type="checkbox"
+                checked={includeArtworkInExport}
+                disabled={isExporting}
+                onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
+              />
+              <span>Include map artwork</span>
+            </label>
             <button
               type="button"
               onClick={() => importInputRef.current?.click()}
@@ -1911,20 +2020,18 @@ export function SpatialMapWorkspace({
             >
               {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />} Import
             </button>
-            {!templateMode && (
-              <label
-                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs"
-                title="Bundle referenced location and map background images. This makes the export file larger."
-              >
-                <span>Include map artwork</span>
-                <input
-                  type="checkbox"
-                  checked={includeArtworkInExport}
-                  disabled={isExporting}
-                  onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
-                />
-              </label>
-            )}
+            <label
+              className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs"
+              title="Bundle referenced location and map background images. This makes the export file larger."
+            >
+              <span>Include map artwork</span>
+              <input
+                type="checkbox"
+                checked={includeArtworkInExport}
+                disabled={isExporting}
+                onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
+              />
+            </label>
             {!templateMode && onOpenTemplates && (
               <button
                 type="button"

@@ -961,7 +961,7 @@ test("global World Maps home activates and opens the current chat map", async ({
     await expect(home.getByRole("heading", { name: "Installed package", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Current chat", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "World Maps", exact: true })).toBeVisible();
-    await expect(home.locator(".mari-editor-header")).toContainText("v1.2.0");
+    await expect(home.locator(".mari-editor-header")).toContainText("v1.2.1");
     await expect(home.getByRole("heading", { name: "Description", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Pipeline Phase", exact: true })).toBeVisible();
     await expect(home.getByRole("button", { name: "Pre-Generation", exact: true })).toHaveAttribute(
@@ -1423,6 +1423,25 @@ test("Map templates are created outside chats and copied into Roleplay", async (
   expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
   const chat = (await chatResponse.json()) as { id: string };
   await activateHierarchicalMaps(page, chat.id);
+  const sharedArtworkResponse = await page.request.post("/api/global-gallery/upload", {
+    multipart: {
+      prompt: "Shared map template artwork",
+      provider: "world-map-e2e",
+      model: "fixture",
+      width: "1",
+      height: "1",
+      file: {
+        name: "shared-template-art.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2SIAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      },
+    },
+  });
+  expect(sharedArtworkResponse.ok(), await sharedArtworkResponse.text()).toBeTruthy();
+  const sharedArtwork = (await sharedArtworkResponse.json()) as { id: string };
 
   try {
     await page.addInitScript((chatId) => {
@@ -1449,7 +1468,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await home.getByRole("button", { name: "Open map templates" }).click();
     const library = page.locator("[data-marinara-map-template-library]");
     await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
-    await expect(library).toContainText("chat Gallery artwork is not copied");
+    await expect(library).toContainText("shared Global Gallery artwork");
     await library.getByRole("button", { name: "New map template" }).first().click();
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
@@ -1457,6 +1476,11 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await expect(workspace.getByRole("button", { name: "Create with AI" })).toBeVisible();
     await workspace.getByRole("button", { name: "Build manually" }).click();
     await workspace.getByLabel("Map template name").fill("Reusable Test World");
+    await workspace.getByRole("button", { name: "Choose artwork" }).click();
+    const sharedArtworkOption = workspace.getByTitle("Shared map template artwork");
+    await expect(sharedArtworkOption.getByText("Shared", { exact: true })).toBeVisible();
+    await sharedArtworkOption.click();
+    await workspace.getByRole("button", { name: "Use selected" }).click();
     await workspace.getByRole("button", { name: "Save template", exact: true }).click();
     await expect(workspace).toContainText("Saved");
     await workspace.getByRole("button", { name: "Back to map templates" }).click();
@@ -1498,14 +1522,19 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       .poll(async () => {
         const response = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
         const body = (await response.json()) as {
-          definition?: { ownerMode?: string; locations?: Array<unknown> } | null;
+          definition?: { ownerMode?: string; locations?: Array<{ referenceImageId?: string }> } | null;
         };
         return {
           ownerMode: body.definition?.ownerMode,
           locationCount: body.definition?.locations?.length,
+          referenceImageId: body.definition?.locations?.[0]?.referenceImageId,
         };
       })
-      .toEqual({ ownerMode: "roleplay", locationCount: 1 });
+      .toEqual({
+        ownerMode: "roleplay",
+        locationCount: 1,
+        referenceImageId: `global-gallery:${sharedArtwork.id}`,
+      });
   } finally {
     const templatesResponse = await page.request.get("/api/chats/spatial-context/templates");
     if (templatesResponse.ok()) {
@@ -1518,6 +1547,8 @@ test("Map templates are created outside chats and copied into Roleplay", async (
         expect(response.ok(), await response.text()).toBeTruthy();
       }
     }
+    const deleteSharedArtworkResponse = await page.request.delete(`/api/global-gallery/${sharedArtwork.id}`);
+    expect(deleteSharedArtworkResponse.ok(), await deleteSharedArtworkResponse.text()).toBeTruthy();
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });

@@ -328,7 +328,7 @@ export function SpatialMapLibrary({
         <div className="mari-editor-icon-tile"><Map size="1.125rem" /></div>
         <div className="min-w-0 flex-1">
           <h1 className="text-sm font-semibold text-[var(--marinara-editor-title)]">Map templates</h1>
-          <p className="text-[0.625rem] text-[var(--marinara-editor-muted)]">Reusable maps for Roleplay and Game; chat Gallery artwork is not copied</p>
+          <p className="text-[0.625rem] text-[var(--marinara-editor-muted)]">Reusable maps for Roleplay and Game with shared Global Gallery artwork</p>
         </div>
         <div className="mari-editor-actions flex max-sm:w-full max-sm:border-t max-sm:border-[var(--marinara-editor-divider)] max-sm:pt-2">
           <button type="button" onClick={() => importInputRef.current?.click()} className="mari-editor-action inline-flex min-h-11 px-3 text-xs">

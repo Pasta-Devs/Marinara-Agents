@@ -19,7 +19,11 @@ import {
   type SpatialLocation,
 } from "@marinara-engine/shared";
 import { cn, generateClientId } from "../../features/spatial-context/package-utils";
-import { useSpatialGalleryImages } from "../../features/spatial-context/use-spatial-resources";
+import {
+  resolveSpatialArtworkImage,
+  useSpatialGalleryImages,
+  useSpatialGlobalGalleryImages,
+} from "../../features/spatial-context/use-spatial-resources";
 import {
   cancelSpatialRoute,
   findSpatialRoute,
@@ -101,13 +105,16 @@ export function GameWorldMap({
     chatId,
     definition?.enabled === true && activeLocations.some((location) => Boolean(location.mapBackgroundImageId)),
   );
+  const globalGalleryImages = useSpatialGlobalGalleryImages(
+    definition?.enabled === true && activeLocations.some((location) => Boolean(location.mapBackgroundImageId)),
+  );
   const locationById = useMemo(
     () => new Map(activeLocations.map((location) => [location.id, location])),
     [activeLocations],
   );
   const viewLocation = viewLocationId ? (locationById.get(viewLocationId) ?? null) : null;
   const mapBackgroundImageUrl = viewLocation?.mapBackgroundImageId
-    ? galleryImages.data?.find((image) => image.id === viewLocation.mapBackgroundImageId)?.url
+    ? resolveSpatialArtworkImage(viewLocation.mapBackgroundImageId, galleryImages.data, globalGalleryImages.data)?.url
     : undefined;
   const mapBackgroundPosition = viewLocation?.mapBackgroundPosition ?? { x: 50, y: 50 };
   const visibleLocations = useMemo(

@@ -137,7 +137,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.0",
+    version: "1.2.1",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: "3.0.0",
     name: "World Maps",
