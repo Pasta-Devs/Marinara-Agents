@@ -19,7 +19,11 @@ import {
   type SpatialLocation,
 } from "@marinara-engine/shared";
 import { cn, generateClientId } from "../../features/spatial-context/package-utils";
-import { useSpatialGalleryImages } from "../../features/spatial-context/use-spatial-resources";
+import {
+  resolveSpatialArtworkImage,
+  useSpatialGalleryImages,
+  useSpatialGlobalGalleryImages,
+} from "../../features/spatial-context/use-spatial-resources";
 import {
   cancelSpatialRoute,
   findSpatialRoute,
@@ -31,6 +35,7 @@ import {
   setPendingSpatialTransition,
   usePendingSpatialTransition,
 } from "../../features/spatial-context/pending-spatial-transitions";
+import { hierarchyTypeForLocation } from "../../../../maps-shared/src/maps-model";
 
 interface GameWorldMapProps {
   chatId: string;
@@ -101,13 +106,16 @@ export function GameWorldMap({
     chatId,
     definition?.enabled === true && activeLocations.some((location) => Boolean(location.mapBackgroundImageId)),
   );
+  const globalGalleryImages = useSpatialGlobalGalleryImages(
+    definition?.enabled === true && activeLocations.some((location) => Boolean(location.mapBackgroundImageId)),
+  );
   const locationById = useMemo(
     () => new Map(activeLocations.map((location) => [location.id, location])),
     [activeLocations],
   );
   const viewLocation = viewLocationId ? (locationById.get(viewLocationId) ?? null) : null;
   const mapBackgroundImageUrl = viewLocation?.mapBackgroundImageId
-    ? galleryImages.data?.find((image) => image.id === viewLocation.mapBackgroundImageId)?.url
+    ? resolveSpatialArtworkImage(viewLocation.mapBackgroundImageId, galleryImages.data, globalGalleryImages.data)?.url
     : undefined;
   const mapBackgroundPosition = viewLocation?.mapBackgroundPosition ?? { x: 50, y: 50 };
   const visibleLocations = useMemo(
@@ -277,7 +285,9 @@ export function GameWorldMap({
             {location.name}
           </span>
           <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
-            {layer ? `Layer ${location.layerOrder ?? 0}` : location.kind}
+            {layer
+              ? `Layer ${location.layerOrder ?? 0}`
+              : hierarchyTypeForLocation(spatial.hierarchyProfile, location).label}
             {isCurrent ? " · You are here" : isPending ? " · Pending" : ""}
           </span>
         </span>
@@ -491,15 +501,17 @@ export function GameWorldMap({
                   className="absolute z-10 flex w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-lg p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                   style={{ left: `${displayCoordinate(placement.x)}%`, top: `${displayCoordinate(placement.y)}%` }}
                   aria-label={`Inspect ${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
+                  aria-pressed={isSelected}
                 >
                   <span
                     className={cn(
                       "relative flex h-11 w-11 items-center justify-center rounded-full border bg-[var(--marinara-chat-chrome-panel-bg)] text-xl shadow-md transition-[border-color,transform,background-color] duration-200",
                       isSelected
-                        ? "scale-105 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]"
+                        ? "scale-105 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--background)]"
                         : "border-[var(--marinara-chat-chrome-panel-border)] hover:border-[var(--marinara-chat-chrome-button-border-hover)]",
                       isCurrent && "ring-2 ring-[var(--marinara-chat-chrome-focus-ring)] ring-offset-1 ring-offset-[var(--background)]",
                     )}
+                    data-marinara-map-selected-location={isSelected ? "true" : undefined}
                     aria-hidden="true"
                   >
                     {location.icon || "⌖"}
@@ -539,7 +551,8 @@ export function GameWorldMap({
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-[var(--marinara-chat-chrome-panel-title)]">{selected.name}</p>
               <p className="line-clamp-2 text-[0.6875rem] leading-4 text-[var(--marinara-chat-chrome-panel-muted)]">
-                {selected.description || `A ${selected.kind} in this world.`}
+                {selected.description ||
+                  `A ${hierarchyTypeForLocation(spatial.hierarchyProfile, selected).label} in this world.`}
               </p>
             </div>
           </div>

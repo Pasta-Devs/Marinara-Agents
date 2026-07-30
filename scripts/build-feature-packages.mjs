@@ -137,11 +137,11 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.0",
+    version: "1.2.1",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: "3.0.0",
     name: "World Maps",
-    description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
+    description: "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, and movement to Roleplay and Game.",
     category: "tracker",
     kind: ["agent", "maps"],
     modes: ["roleplay", "game"],
@@ -428,6 +428,9 @@ async function bundleSpecialClient(feature, output) {
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+  isolation: isolate;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 [data-marinara-maps-workspace-overlay] > .mari-editor-shell,
@@ -437,6 +440,13 @@ async function bundleSpecialClient(feature, output) {
   min-width: 0;
   min-height: 0;
   flex: 1 1 0%;
+  pointer-events: auto;
+}
+
+[data-marinara-maps-workspace-overlay] .mari-editor-header,
+[data-marinara-maps-workspace-overlay] .mari-editor-header button {
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 [data-marinara-maps-workspace-overlay] .mari-editor-action,
@@ -445,13 +455,101 @@ async function bundleSpecialClient(feature, output) {
   min-height: 2.75rem;
 }
 
+[data-marinara-maps-workspace-overlay] [data-marinara-map-selected-location="true"] {
+  border-color: var(--marinara-chat-chrome-accent) !important;
+  background: color-mix(in srgb, var(--marinara-chat-chrome-accent) 16%, var(--background) 84%) !important;
+  color: var(--marinara-chat-chrome-panel-title) !important;
+  box-shadow:
+    0 0 0 0.125rem var(--background),
+    0 0 0 0.25rem var(--marinara-chat-chrome-accent),
+    0 0.5rem 1.25rem rgba(0, 0, 0, 0.32);
+}
+
+[data-marinara-maps-runtime-popover] [data-marinara-map-selected-location="true"] {
+  border-color: var(--marinara-chat-chrome-accent) !important;
+  background-color: Canvas !important;
+  background-color: rgb(from var(--background) r g b) !important;
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--marinara-chat-chrome-accent) 16%, transparent),
+    color-mix(in srgb, var(--marinara-chat-chrome-accent) 16%, transparent)
+  ) !important;
+  color: var(--marinara-chat-chrome-panel-title) !important;
+  box-shadow:
+    0 0 0 0.125rem Canvas,
+    0 0 0 0.25rem var(--marinara-chat-chrome-accent),
+    0 0.5rem 1.25rem rgba(0, 0, 0, 0.32);
+}
+
+@media (max-width: 47.999rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-header-actions] {
+    display: contents;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-more-control] {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-more-control] > button {
+    position: relative;
+    width: 2.75rem;
+    padding-inline: 0;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-more-label],
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-more-chevron],
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-save-label] {
+    display: none !important;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-notice-count] {
+    position: absolute;
+    top: -0.3125rem;
+    right: -0.3125rem;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-header-status] {
+    flex: 0 0 auto;
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 21.25rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-header-title] {
+    display: none !important;
+  }
+}
+
+@media (max-width: 79.999rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-status-label] {
+    display: none !important;
+  }
+}
+
 @media (min-width: 64rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-compact-only],
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-notice-count] {
+    display: none !important;
+  }
+
   .mari-maps-workspace-grid {
     grid-template-columns: minmax(15rem, 18rem) minmax(20rem, 1fr) minmax(18rem, 22rem);
   }
 
   .mari-maps-ai-grid {
     grid-template-columns: minmax(20rem, 0.9fr) minmax(22rem, 1.1fr);
+  }
+}
+
+@media (min-width: 64rem) and (max-width: 79.999rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-wide-only] {
+    display: none !important;
+  }
+}
+
+@media (min-width: 80rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-mid-overflow] {
+    display: none !important;
   }
 }
 `;
@@ -598,8 +696,9 @@ function WorldMapView({ props, chatId, onOpenEditor, useParentScroll = false }) 
   if (!spatial.data.definition.enabled) return <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-[var(--marinara-chat-chrome-panel-border)] px-4 text-center text-xs text-[var(--marinara-chat-chrome-accent)]">World map disabled. Its saved hierarchy and history are preserved.</div>;
   return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><GameWorldMap chatId={chatId} spatial={spatial.data} disabled={props.disabled === true} compact={props.compact === true} useParentScroll={useParentScroll} onOpenEditor={onOpenEditor} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>;
 }
-function WorkspaceOverlay({ chatId, props, stagedTemplate, onClose, onOpenTemplates }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} debugMode={props.debugMode === true} stagedTemplate={stagedTemplate} pendingDraftReview={props.pendingDraftReview?.mode === "template" ? null : props.pendingDraftReview || null} onClearPendingDraftReview={() => props.onClearPendingDraftReview?.()} onDirtyChange={(dirty) => props.onDirtyChange?.(dirty)} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onOpenTemplates={onOpenTemplates} onClose={onClose} /><Toaster richColors /></div>, document.body); }
-function LibraryOverlay({ chatId, props, setupSelection, onClose, onAppliedToChat, onSelectForSetup }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onClose={onClose} /><Toaster richColors /></div>, document.body); }
+function stopOverlayEvent(event) { event.stopPropagation(); }
+function WorkspaceOverlay({ chatId, props, stagedTemplate, onClose, onOpenTemplates }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} debugMode={props.debugMode === true} stagedTemplate={stagedTemplate} pendingDraftReview={props.pendingDraftReview?.mode === "template" ? null : props.pendingDraftReview || null} onClearPendingDraftReview={() => props.onClearPendingDraftReview?.()} onDirtyChange={(dirty) => props.onDirtyChange?.(dirty)} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onOpenTemplates={onOpenTemplates} onClose={onClose} /><Toaster richColors /></div>, document.body); }
+function LibraryOverlay({ chatId, props, setupSelection, onClose, onAppliedToChat, onSelectForSetup }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onClose={onClose} /><Toaster richColors /></div>, document.body); }
 function WorldMapOverlay({ chatId, props, onClose, onOpenEditor }) {
   useEffect(() => {
     const closeOnEscape = (event) => { if (event.key === "Escape") onClose(); };

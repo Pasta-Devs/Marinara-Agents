@@ -1,7 +1,8 @@
-import { Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { SpatialContextDefinition, SpatialLocationKind } from "@marinara-engine/shared";
 import {
   hierarchyTypeId,
+  moveSpatialHierarchyType,
   normalizeHierarchyProfile,
   type SpatialHierarchyProfile,
 } from "../../../../../maps-shared/src/maps-model";
@@ -58,7 +59,7 @@ export function SpatialHierarchyProfileFields({
         {profile.types.map((type, index) => (
           <div
             key={type.id}
-            className="grid grid-cols-[minmax(0,1fr)_8rem_2.75rem] gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-2"
+            className="grid grid-cols-[minmax(0,1fr)_8rem] gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-2"
           >
             <input
               aria-label={`Location type ${index + 1} label`}
@@ -108,25 +109,45 @@ export function SpatialHierarchyProfileFields({
                 <option key={kind} value={kind}>{kind}</option>
               ))}
             </select>
-            {editable ? (
-              <button
-                type="button"
-                disabled={disabled || profile.types.length === 1 || assignedTypeIds.has(type.id)}
-                onClick={() =>
-                  applyProfile({
-                    ...profile,
-                    mode: "custom",
-                    types: profile.types.filter((candidate) => candidate.id !== type.id),
-                  })
-                }
-                className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
-                aria-label={`Remove ${type.label || "location type"}`}
-                title={assignedTypeIds.has(type.id) ? "Reassign locations before removing this type." : undefined}
-              >
-                <Trash2 size="0.75rem" />
-              </button>
-            ) : (
-              <span aria-hidden="true" className="h-11 w-11" />
+            {editable && (
+              <div className="col-span-2 flex items-center justify-end gap-1" aria-label={`Order ${type.label || "location type"}`}>
+                <button
+                  type="button"
+                  disabled={disabled || index === 0}
+                  onClick={() => applyProfile(moveSpatialHierarchyType(profile, type.id, -1))}
+                  className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                  aria-label={`Move ${type.label || "location type"} up`}
+                  title="Move up"
+                >
+                  <ArrowUp size="0.75rem" />
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || index === profile.types.length - 1}
+                  onClick={() => applyProfile(moveSpatialHierarchyType(profile, type.id, 1))}
+                  className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                  aria-label={`Move ${type.label || "location type"} down`}
+                  title="Move down"
+                >
+                  <ArrowDown size="0.75rem" />
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || profile.types.length === 1 || assignedTypeIds.has(type.id)}
+                  onClick={() =>
+                    applyProfile({
+                      ...profile,
+                      mode: "custom",
+                      types: profile.types.filter((candidate) => candidate.id !== type.id),
+                    })
+                  }
+                  className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                  aria-label={`Remove ${type.label || "location type"}`}
+                  title={assignedTypeIds.has(type.id) ? "Reassign locations before removing this type." : "Remove type"}
+                >
+                  <Trash2 size="0.75rem" />
+                </button>
+              </div>
             )}
           </div>
         ))}

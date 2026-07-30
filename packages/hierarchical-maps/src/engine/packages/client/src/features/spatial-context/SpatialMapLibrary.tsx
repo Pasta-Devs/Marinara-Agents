@@ -1,22 +1,50 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { ArrowLeft, Download, Loader2, Map, PencilLine, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  GitFork,
+  Link2,
+  Loader2,
+  Map,
+  PencilLine,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { spatialContextDefinitionSchema, type SpatialOwnerMode } from "@marinara-engine/shared";
 import {
   useCreateSpatialMapTemplate,
+  useCreateSpatialSharedWorld,
+  useDeleteSpatialSharedWorld,
   useDeleteSpatialMapTemplate,
+  useLinkSpatialSharedWorld,
+  useReplaceWithIndependentSpatialWorld,
   useSpatialContext,
   useSpatialMapTemplates,
+  useSpatialSharedWorlds,
   useUpdateSpatialContext,
 } from "../../hooks/use-spatial-context";
 import {
   defaultHierarchyProfile,
+  globalGallerySpatialReferenceId,
+  instantiateSpatialSharedWorld,
   instantiateSpatialMapTemplate,
   normalizeHierarchyProfile,
   type SpatialMapTemplateRecord,
+  type SpatialSharedWorldRecord,
 } from "../../../../maps-shared/src/maps-model";
 import { createEmptySpatialDefinition } from "./editor-state";
-import { SpatialMapWorkspace } from "./SpatialMapWorkspace";
+import {
+  bundledArtworkFile,
+  parseBundledArtwork,
+  referencedArtworkIds,
+  remapArtworkReferences,
+  SpatialMapWorkspace,
+} from "./SpatialMapWorkspace";
+import { reuseOrUploadSpatialGlobalGalleryImage, useSpatialGlobalGalleryImages } from "./use-spatial-resources";
+import { cn } from "./package-utils";
 
 interface SpatialMapLibraryProps {
   chatId: string | null;
@@ -39,11 +67,13 @@ interface LibraryConfirmationOptions {
 }
 
 function importedTemplateName(fileName: string): string {
-  return fileName
-    .replace(/\.(?:world-map|hierarchical-map)\.json$/iu, "")
-    .replace(/\.json$/iu, "")
-    .replace(/[-_]+/gu, " ")
-    .trim() || "Imported map";
+  return (
+    fileName
+      .replace(/\.(?:world-map|hierarchical-map)\.json$/iu, "")
+      .replace(/\.json$/iu, "")
+      .replace(/[-_]+/gu, " ")
+      .trim() || "Imported map"
+  );
 }
 
 export function SpatialMapLibrary({
@@ -58,24 +88,38 @@ export function SpatialMapLibrary({
   onEnabledForChatChange,
 }: SpatialMapLibraryProps) {
   const templates = useSpatialMapTemplates();
+  const sharedWorlds = useSpatialSharedWorlds();
   const createTemplate = useCreateSpatialMapTemplate();
+  const createSharedWorld = useCreateSpatialSharedWorld();
   const deleteTemplate = useDeleteSpatialMapTemplate();
+  const deleteSharedWorld = useDeleteSpatialSharedWorld();
+  const linkSharedWorld = useLinkSpatialSharedWorld();
+  const replaceWithIndependentWorld = useReplaceWithIndependentSpatialWorld();
+  const globalGalleryImages = useSpatialGlobalGalleryImages();
   const spatial = useSpatialContext(chatId);
   const updateSpatial = useUpdateSpatialContext();
   const importInputRef = useRef<HTMLInputElement>(null);
+  const importTargetRef = useRef<"template" | "shared-world">("template");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingSharedWorldId, setEditingSharedWorldId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [pendingConfirmation, setPendingConfirmation] = useState<LibraryConfirmationOptions | null>(null);
   const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const confirmationDialogRef = useRef<HTMLDivElement>(null);
   const confirmationCancelRef = useRef<HTMLButtonElement>(null);
   const editingTemplate = templates.data?.find((template) => template.id === editingId) ?? null;
+  const editingSharedWorld = sharedWorlds.data?.find((world) => world.id === editingSharedWorldId) ?? null;
   const supportedChat = !!chatId && (chatMode === "roleplay" || chatMode === "game");
   const visibleTemplates = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     if (!normalized) return templates.data ?? [];
     return (templates.data ?? []).filter((template) => template.name.toLocaleLowerCase().includes(normalized));
   }, [query, templates.data]);
+  const visibleSharedWorlds = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    if (!normalized) return sharedWorlds.data ?? [];
+    return (sharedWorlds.data ?? []).filter((world) => world.name.toLocaleLowerCase().includes(normalized));
+  }, [query, sharedWorlds.data]);
 
   const resolveConfirmation = useCallback((confirmed: boolean) => {
     const resolve = confirmationResolverRef.current;
@@ -157,30 +201,80 @@ export function SpatialMapLibrary({
     }
   };
 
+  const createBlankSharedWorld = async () => {
+    if (createSharedWorld.isPending) return;
+    const definition = createEmptySpatialDefinition("roleplay");
+    try {
+      const created = await createSharedWorld.mutateAsync({
+        name: "Untitled shared world",
+        description: "",
+        definition,
+        hierarchyProfile: defaultHierarchyProfile(definition),
+      });
+      setEditingSharedWorldId(created.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The shared world could not be created.");
+    }
+  };
+
   const importTemplate = async (event: ChangeEvent<HTMLInputElement>) => {
+    const importTarget = importTargetRef.current;
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     try {
       const raw = JSON.parse(await file.text()) as unknown;
-      const record = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
-      const data = record?.data && typeof record.data === "object" && !Array.isArray(record.data)
-        ? record.data as Record<string, unknown>
-        : record;
+      const record = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+      const data =
+        record?.data && typeof record.data === "object" && !Array.isArray(record.data)
+          ? (record.data as Record<string, unknown>)
+          : record;
       const candidate = data && "definition" in data ? data.definition : raw;
       const parsed = spatialContextDefinitionSchema.safeParse(candidate);
       if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "This is not a valid map file.");
-      const hierarchyProfile = normalizeHierarchyProfile(data?.hierarchyProfile, parsed.data);
-      const created = await createTemplate.mutateAsync({
-        name: typeof record?.name === "string" && record.name.trim()
-          ? record.name.trim()
-          : importedTemplateName(file.name),
+      const bundledArtwork = parseBundledArtwork(record?.artwork);
+      const referencedIds = new Set(referencedArtworkIds(parsed.data));
+      const currentGlobalImages = [...(globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [])];
+      const artworkIdMap = new globalThis.Map<string, string>();
+      let sharedArtworkAdded = 0;
+      let sharedArtworkReused = 0;
+      let failedArtworkCount = 0;
+      for (const artwork of bundledArtwork.filter((entry) => referencedIds.has(entry.sourceImageId))) {
+        try {
+          const result = await reuseOrUploadSpatialGlobalGalleryImage(
+            bundledArtworkFile(artwork),
+            artwork,
+            currentGlobalImages,
+          );
+          artworkIdMap.set(artwork.sourceImageId, globalGallerySpatialReferenceId(result.image.id));
+          if (!currentGlobalImages.some((candidate) => candidate.id === result.image.id)) {
+            currentGlobalImages.push(result.image);
+          }
+          if (result.reused) sharedArtworkReused += 1;
+          else sharedArtworkAdded += 1;
+        } catch {
+          failedArtworkCount += 1;
+        }
+      }
+      if (sharedArtworkAdded > 0) await globalGalleryImages.refetch();
+      const importedDefinition = remapArtworkReferences(parsed.data, artworkIdMap);
+      const hierarchyProfile = normalizeHierarchyProfile(data?.hierarchyProfile, importedDefinition);
+      const createInput = {
+        name:
+          typeof record?.name === "string" && record.name.trim() ? record.name.trim() : importedTemplateName(file.name),
         description: "",
-        definition: parsed.data,
+        definition: importedDefinition,
         hierarchyProfile,
-      });
-      toast.success("Map added to your templates.");
-      setEditingId(created.id);
+      };
+      const created =
+        importTarget === "shared-world"
+          ? await createSharedWorld.mutateAsync(createInput)
+          : await createTemplate.mutateAsync(createInput);
+      toast.success(
+        `Map added to your ${importTarget === "shared-world" ? "shared worlds" : "templates"}.${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
+      );
+      if (importTarget === "shared-world") setEditingSharedWorldId(created.id);
+      else setEditingId(created.id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The map template could not be imported.");
     }
@@ -195,10 +289,135 @@ export function SpatialMapLibrary({
     });
     if (!confirmed) return;
     try {
-      await deleteTemplate.mutateAsync({ id: template.id, expectedRevision: template.revision });
+      await deleteTemplate.mutateAsync({
+        id: template.id,
+        expectedRevision: template.revision,
+      });
       toast.success("Map template deleted.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The map template could not be deleted.");
+    }
+  };
+
+  const createSharedWorldFromTemplate = async (template: SpatialMapTemplateRecord) => {
+    const confirmed = await ask({
+      title: "Create a shared world?",
+      message: `Create one canonical shared world from “${template.name}”? The original template remains available for independent copies.`,
+      confirmLabel: "Create shared world",
+      tone: "accent",
+    });
+    if (!confirmed) return;
+    try {
+      const created = await createSharedWorld.mutateAsync({
+        name: template.name,
+        description: template.description,
+        definition: template.data.definition,
+        hierarchyProfile: template.data.hierarchyProfile,
+      });
+      toast.success("Shared world created. Link chats to it or edit the canonical definition.");
+      setEditingSharedWorldId(created.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The shared world could not be created.");
+    }
+  };
+
+  const removeSharedWorld = async (world: SpatialSharedWorldRecord) => {
+    if (world.linkedChatCount > 0) {
+      toast.error(
+        `This world is linked to ${world.linkedChatCount} chat${world.linkedChatCount === 1 ? "" : "s"}. Fork or relink them before deleting it.`,
+      );
+      return;
+    }
+    const confirmed = await ask({
+      title: "Delete shared world?",
+      message: `Delete “${world.name}”? Shared Global Gallery images remain available because templates or other worlds may still use them.`,
+      confirmLabel: "Delete shared world",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    try {
+      await deleteSharedWorld.mutateAsync({
+        id: world.id,
+        expectedRevision: world.revision,
+      });
+      toast.success("Shared world deleted. Reusable Global Gallery artwork was kept.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The shared world could not be deleted.");
+    }
+  };
+
+  const linkWorldToChat = async (world: SpatialSharedWorldRecord) => {
+    if (!supportedChat || !chatId || !spatial.data) return;
+    const current = spatial.data.definition;
+    const confirmed = await ask({
+      title: "Link this chat to the shared world?",
+      message: `Link ${chatName || "this chat"} to “${world.name}”? The world definition and artwork stay account-owned. This chat keeps its own current location, route history, snapshots, and Game bindings. Story discoveries remain unpublished until reviewed.`,
+      confirmLabel: "Link shared world",
+      tone: "accent",
+    });
+    if (!confirmed) return;
+    const enablementChanged = !enabledForChat && Boolean(onEnabledForChatChange);
+    try {
+      if (enablementChanged) await onEnabledForChatChange?.(true);
+      await linkSharedWorld.mutateAsync({
+        chatId,
+        worldId: world.id,
+        expectedRevision: current?.revision ?? 0,
+        expectedCurrentLocationId: spatial.data.currentLocationId,
+      });
+      toast.success(`Linked ${chatName || "the chat"} to “${world.name}”.`);
+      onAppliedToChat?.();
+    } catch (error) {
+      if (enablementChanged) {
+        try {
+          await onEnabledForChatChange?.(false);
+        } catch {
+          // Preserve the original linking error.
+        }
+      }
+      toast.error(error instanceof Error ? error.message : "The shared world could not be linked.");
+    }
+  };
+
+  const copyWorldToChat = async (world: SpatialSharedWorldRecord) => {
+    if (!supportedChat || !chatId || !spatial.data) return;
+    const existing = spatial.data.definition;
+    const confirmed = await ask({
+      title: existing ? "Replace with an independent copy?" : "Add an independent copy?",
+      message: `Copy “${world.name}” into ${chatName || "this chat"}? Future edits to the shared world will not appear here. Shared artwork references remain account-wide.`,
+      confirmLabel: "Use independent copy",
+      tone: existing ? "destructive" : "accent",
+    });
+    if (!confirmed) return;
+    const ownerMode: SpatialOwnerMode = chatMode === "game" ? "game" : "roleplay";
+    const instantiated = instantiateSpatialSharedWorld(world.data, ownerMode, existing?.revision ?? 0);
+    const enablementChanged = !enabledForChat && Boolean(onEnabledForChatChange);
+    try {
+      if (enablementChanged) await onEnabledForChatChange?.(true);
+      await replaceWithIndependentWorld.mutateAsync({
+        chatId,
+        expectedRevision: existing?.revision ?? 0,
+        expectedCurrentLocationId: spatial.data.currentLocationId,
+        ...(spatial.data.currentLocationId &&
+        !instantiated.definition.locations.some((location) => location.id === spatial.data.currentLocationId)
+          ? {
+              replacementCurrentLocationId: instantiated.definition.startingLocationId,
+            }
+          : {}),
+        definition: instantiated.definition,
+        hierarchyProfile: instantiated.hierarchyProfile,
+      });
+      toast.success(`Added an independent copy of “${world.name}”.`);
+      onAppliedToChat?.();
+    } catch (error) {
+      if (enablementChanged) {
+        try {
+          await onEnabledForChatChange?.(false);
+        } catch {
+          // Preserve the original apply error.
+        }
+      }
+      toast.error(error instanceof Error ? error.message : "The independent map copy could not be added.");
     }
   };
 
@@ -235,7 +454,9 @@ export function SpatialMapLibrary({
         expectedCurrentLocationId: spatial.data.currentLocationId,
         ...(spatial.data.currentLocationId &&
         !instantiated.definition.locations.some((location) => location.id === spatial.data.currentLocationId)
-          ? { replacementCurrentLocationId: instantiated.definition.startingLocationId }
+          ? {
+              replacementCurrentLocationId: instantiated.definition.startingLocationId,
+            }
           : {}),
         definition: {
           ...instantiated.definition,
@@ -258,6 +479,17 @@ export function SpatialMapLibrary({
       toast.error(error instanceof Error ? error.message : "The map template could not be added to this chat.");
     }
   };
+
+  if (editingSharedWorld) {
+    return (
+      <SpatialMapWorkspace
+        chatId={null}
+        sharedWorld={editingSharedWorld}
+        onOpenLorebook={onOpenLorebook}
+        onClose={() => setEditingSharedWorldId(null)}
+      />
+    );
+  }
 
   if (editingTemplate) {
     return (
@@ -322,23 +554,79 @@ export function SpatialMapLibrary({
         </div>
       )}
       <header className="mari-editor-header">
-        <button type="button" onClick={onClose} className="mari-editor-action inline-flex min-h-11 min-w-11" aria-label="Back to Maps">
+        <button
+          type="button"
+          onClick={onClose}
+          className="mari-editor-action inline-flex min-h-11 min-w-11"
+          aria-label="Back to Maps"
+        >
           <ArrowLeft size="1.125rem" />
         </button>
-        <div className="mari-editor-icon-tile"><Map size="1.125rem" /></div>
+        <div className="mari-editor-icon-tile">
+          <Map size="1.125rem" />
+        </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-semibold text-[var(--marinara-editor-title)]">Map templates</h1>
-          <p className="text-[0.625rem] text-[var(--marinara-editor-muted)]">Reusable maps for Roleplay and Game; chat Gallery artwork is not copied</p>
+          <h1 className="text-sm font-semibold text-[var(--marinara-editor-title)]">World map library</h1>
+          <p className="text-[0.625rem] text-[var(--marinara-editor-muted)]">
+            Link one durable world across chats or create independent template copies
+          </p>
         </div>
         <div className="mari-editor-actions flex max-sm:w-full max-sm:border-t max-sm:border-[var(--marinara-editor-divider)] max-sm:pt-2">
-          <button type="button" onClick={() => importInputRef.current?.click()} className="mari-editor-action inline-flex min-h-11 px-3 text-xs">
-            <Download size="0.8125rem" /> Import JSON
+          <button
+            type="button"
+            onClick={() => {
+              importTargetRef.current = "shared-world";
+              importInputRef.current?.click();
+            }}
+            className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+          >
+            <Download size="0.8125rem" /> Import shared
           </button>
-          <button type="button" onClick={() => void createBlank()} disabled={createTemplate.isPending} className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-3 text-xs disabled:opacity-45">
-            {createTemplate.isPending ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Plus size="0.8125rem" />}
+          <button
+            type="button"
+            onClick={() => void createBlankSharedWorld()}
+            disabled={createSharedWorld.isPending}
+            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+          >
+            {createSharedWorld.isPending ? (
+              <Loader2 size="0.8125rem" className="animate-spin" />
+            ) : (
+              <Link2 size="0.8125rem" />
+            )}
+            New shared world
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              importTargetRef.current = "template";
+              importInputRef.current?.click();
+            }}
+            className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+          >
+            <Download size="0.8125rem" /> Import template
+          </button>
+          <button
+            type="button"
+            onClick={() => void createBlank()}
+            disabled={createTemplate.isPending}
+            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+          >
+            {createTemplate.isPending ? (
+              <Loader2 size="0.8125rem" className="animate-spin" />
+            ) : (
+              <Plus size="0.8125rem" />
+            )}
             New map template
           </button>
-          <input ref={importInputRef} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => void importTemplate(event)} />
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden="true"
+            onChange={(event) => void importTemplate(event)}
+          />
         </div>
       </header>
 
@@ -346,46 +634,279 @@ export function SpatialMapLibrary({
         <div className="mx-auto w-full max-w-5xl">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <label className="relative min-w-0 flex-1">
-              <span className="sr-only">Search map templates</span>
-              <Search size="0.875rem" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--marinara-editor-muted)]" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search map templates" className="mari-editor-field min-h-11 w-full pl-9 pr-3 text-sm" />
+              <span className="sr-only">Search world maps</span>
+              <Search
+                size="0.875rem"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--marinara-editor-muted)]"
+              />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search shared worlds and templates"
+                className="mari-editor-field min-h-11 w-full pl-9 pr-3 text-sm"
+              />
             </label>
-            <button type="button" onClick={() => void templates.refetch()} disabled={templates.isFetching} className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45">
-              <RefreshCw size="0.8125rem" className={templates.isFetching ? "animate-spin" : ""} /> Refresh
+            <button
+              type="button"
+              onClick={() => {
+                void templates.refetch();
+                void sharedWorlds.refetch();
+              }}
+              disabled={templates.isFetching || sharedWorlds.isFetching}
+              className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+            >
+              <RefreshCw
+                size="0.8125rem"
+                className={templates.isFetching || sharedWorlds.isFetching ? "animate-spin" : ""}
+              />{" "}
+              Refresh
             </button>
           </div>
 
+          <section className="mb-8" aria-labelledby="shared-worlds-heading">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2 border-b border-[var(--marinara-editor-divider)] pb-3">
+              <div>
+                <h2 id="shared-worlds-heading" className="text-sm font-semibold text-[var(--marinara-editor-title)]">
+                  Shared worlds
+                </h2>
+                <p className="mt-1 max-w-2xl text-xs text-[var(--marinara-editor-muted)]">
+                  One canonical definition and Global Gallery artwork set. Each linked chat keeps separate travel
+                  history and unpublished discoveries.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void createBlankSharedWorld()}
+                disabled={createSharedWorld.isPending}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              >
+                <Plus size="0.75rem" /> New shared world
+              </button>
+            </div>
+            {sharedWorlds.isLoading ? (
+              <div className="flex min-h-36 items-center justify-center gap-2 text-sm text-[var(--marinara-editor-muted)]">
+                <Loader2 className="animate-spin" /> Loading shared worlds…
+              </div>
+            ) : sharedWorlds.isError ? (
+              <div role="alert" className="mari-editor-panel p-5 text-sm text-[var(--destructive)]">
+                Shared worlds could not be loaded.
+              </div>
+            ) : visibleSharedWorlds.length === 0 ? (
+              <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] px-6 text-center">
+                <Link2 size="1.5rem" className="text-[var(--marinara-editor-muted)]" />
+                <h3 className="mt-3 text-sm font-semibold">
+                  {query.trim() ? "No matching shared worlds" : "No shared worlds yet"}
+                </h3>
+                <p className="mt-1 max-w-md text-xs text-[var(--marinara-editor-muted)]">
+                  {query.trim()
+                    ? "Try a different search."
+                    : "Create one directly, or promote an existing template below."}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {visibleSharedWorlds.map((world) => {
+                  const linkedHere = spatial.data?.sharedWorld.worldId === world.id;
+                  return (
+                    <article key={world.id} className="mari-editor-panel flex min-h-52 flex-col p-4">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-accent)]">
+                          <Link2 size="1rem" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate text-sm font-semibold">{world.name}</h3>
+                          <p className="mt-1 text-[0.6875rem] text-[var(--marinara-editor-muted)]">
+                            {world.data.definition.locations.length}{" "}
+                            {world.data.definition.locations.length === 1 ? "location" : "locations"} · revision{" "}
+                            {world.revision}
+                          </p>
+                          <p className="mt-1 text-[0.6875rem] text-[var(--marinara-editor-muted)]">
+                            {world.linkedChatCount} linked chat
+                            {world.linkedChatCount === 1 ? "" : "s"}
+                            {linkedHere ? " · linked here" : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
+                        <button
+                          type="button"
+                          onClick={() => setEditingSharedWorldId(world.id)}
+                          className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs"
+                        >
+                          <PencilLine size="0.75rem" /> Edit canonical
+                        </button>
+                        {supportedChat ? (
+                          <button
+                            type="button"
+                            onClick={() => void linkWorldToChat(world)}
+                            disabled={
+                              linkSharedWorld.isPending ||
+                              spatial.isLoading ||
+                              linkedHere ||
+                              world.data.definition.locations.length === 0 ||
+                              !world.data.definition.startingLocationId
+                            }
+                            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                          >
+                            <Link2 size="0.75rem" /> {linkedHere ? "Linked" : "Link to chat"}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void removeSharedWorld(world)}
+                            disabled={deleteSharedWorld.isPending || world.linkedChatCount > 0}
+                            className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
+                          >
+                            <Trash2 size="0.75rem" /> Delete
+                          </button>
+                        )}
+                      </div>
+                      {supportedChat && (
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void copyWorldToChat(world)}
+                            disabled={
+                              replaceWithIndependentWorld.isPending ||
+                              spatial.isLoading ||
+                              world.data.definition.locations.length === 0 ||
+                              !world.data.definition.startingLocationId
+                            }
+                            className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                          >
+                            <GitFork size="0.75rem" /> Independent copy
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void removeSharedWorld(world)}
+                            disabled={deleteSharedWorld.isPending || world.linkedChatCount > 0}
+                            title={
+                              world.linkedChatCount > 0
+                                ? "Fork or relink every attached chat before deleting this world."
+                                : undefined
+                            }
+                            className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
+                          >
+                            <Trash2 size="0.75rem" /> Delete
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <div className="mb-3 border-b border-[var(--marinara-editor-divider)] pb-3">
+            <h2 className="text-sm font-semibold text-[var(--marinara-editor-title)]">Independent templates</h2>
+            <p className="mt-1 max-w-2xl text-xs text-[var(--marinara-editor-muted)]">
+              Apply a fresh copy when each scenario should diverge safely. Shared Global Gallery artwork is reused
+              without duplicating image files.
+            </p>
+          </div>
+
           {templates.isLoading ? (
-            <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-[var(--marinara-editor-muted)]"><Loader2 className="animate-spin" /> Loading map templates…</div>
+            <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-[var(--marinara-editor-muted)]">
+              <Loader2 className="animate-spin" /> Loading map templates…
+            </div>
           ) : templates.isError ? (
-            <div role="alert" className="mari-editor-panel p-5 text-sm text-[var(--destructive)]">Map templates could not be loaded.</div>
+            <div role="alert" className="mari-editor-panel p-5 text-sm text-[var(--destructive)]">
+              Map templates could not be loaded.
+            </div>
           ) : visibleTemplates.length === 0 ? (
             <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] px-6 text-center">
               <Map size="1.5rem" className="text-[var(--marinara-editor-muted)]" />
-              <h2 className="mt-3 text-base font-semibold">{query.trim() ? "No matching maps" : "No map templates yet"}</h2>
-              <p className="mt-1 max-w-md text-sm text-[var(--marinara-editor-muted)]">{query.trim() ? "Try a different search." : "Create one with AI, build it manually, or import an existing map JSON."}</p>
-              {!query.trim() && <button type="button" onClick={() => void createBlank()} className="mari-editor-action mari-editor-action--primary mt-4 inline-flex min-h-11 px-4 text-sm"><Plus size="0.875rem" /> New map template</button>}
+              <h2 className="mt-3 text-base font-semibold">
+                {query.trim() ? "No matching maps" : "No map templates yet"}
+              </h2>
+              <p className="mt-1 max-w-md text-sm text-[var(--marinara-editor-muted)]">
+                {query.trim()
+                  ? "Try a different search."
+                  : "Create one with AI, build it manually, or import an existing map JSON."}
+              </p>
+              {!query.trim() && (
+                <button
+                  type="button"
+                  onClick={() => void createBlank()}
+                  className="mari-editor-action mari-editor-action--primary mt-4 inline-flex min-h-11 px-4 text-sm"
+                >
+                  <Plus size="0.875rem" /> New map template
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {visibleTemplates.map((template) => (
                 <article key={template.id} className="mari-editor-panel flex min-h-44 flex-col p-4">
                   <div className="flex min-w-0 items-start gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-accent)]"><Map size="1rem" /></span>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-accent)]">
+                      <Map size="1rem" />
+                    </span>
                     <div className="min-w-0 flex-1">
                       <h2 className="truncate text-sm font-semibold">{template.name}</h2>
-                      <p className="mt-1 text-[0.6875rem] text-[var(--marinara-editor-muted)]">{template.data.definition.locations.length} {template.data.definition.locations.length === 1 ? "location" : "locations"}</p>
+                      <p className="mt-1 text-[0.6875rem] text-[var(--marinara-editor-muted)]">
+                        {template.data.definition.locations.length}{" "}
+                        {template.data.definition.locations.length === 1 ? "location" : "locations"}
+                      </p>
                     </div>
                   </div>
                   <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
-                    <button type="button" onClick={() => setEditingId(template.id)} className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs"><PencilLine size="0.75rem" /> Edit</button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(template.id)}
+                      className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs"
+                    >
+                      <PencilLine size="0.75rem" /> Edit
+                    </button>
                     {supportedChat || onSelectForSetup ? (
-                      <button type="button" onClick={() => void applyToChat(template)} disabled={updateSpatial.isPending || (!onSelectForSetup && spatial.isLoading) || template.data.definition.locations.length === 0 || !template.data.definition.startingLocationId} className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"><Plus size="0.75rem" /> {onSelectForSetup ? "Use template" : "Add to chat"}</button>
+                      <button
+                        type="button"
+                        onClick={() => void applyToChat(template)}
+                        disabled={
+                          updateSpatial.isPending ||
+                          (!onSelectForSetup && spatial.isLoading) ||
+                          template.data.definition.locations.length === 0 ||
+                          !template.data.definition.startingLocationId
+                        }
+                        className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                      >
+                        <Plus size="0.75rem" /> {onSelectForSetup ? "Use template" : "Add to chat"}
+                      </button>
                     ) : (
-                      <button type="button" onClick={() => void removeTemplate(template)} disabled={deleteTemplate.isPending} className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs text-[var(--destructive)] disabled:opacity-45"><Trash2 size="0.75rem" /> Delete</button>
+                      <button
+                        type="button"
+                        onClick={() => void createSharedWorldFromTemplate(template)}
+                        disabled={createSharedWorld.isPending}
+                        className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                      >
+                        <Link2 size="0.75rem" /> Make shared
+                      </button>
                     )}
                   </div>
-                  {(supportedChat || onSelectForSetup) && <button type="button" onClick={() => void removeTemplate(template)} disabled={deleteTemplate.isPending} className="mt-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:opacity-45"><Trash2 size="0.75rem" /> Delete template</button>}
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {(supportedChat || onSelectForSetup) && (
+                      <button
+                        type="button"
+                        onClick={() => void createSharedWorldFromTemplate(template)}
+                        disabled={createSharedWorld.isPending}
+                        className="mari-editor-action inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                      >
+                        <Link2 size="0.75rem" /> Make shared
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void removeTemplate(template)}
+                      disabled={deleteTemplate.isPending}
+                      className={cn(
+                        "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg text-xs text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:opacity-45",
+                        !(supportedChat || onSelectForSetup) && "col-span-2",
+                      )}
+                    >
+                      <Trash2 size="0.75rem" /> Delete template
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>

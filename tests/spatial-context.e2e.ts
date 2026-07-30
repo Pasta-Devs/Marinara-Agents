@@ -961,7 +961,7 @@ test("global World Maps home activates and opens the current chat map", async ({
     await expect(home.getByRole("heading", { name: "Installed package", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Current chat", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "World Maps", exact: true })).toBeVisible();
-    await expect(home.locator(".mari-editor-header")).toContainText("v1.2.0");
+    await expect(home.locator(".mari-editor-header")).toContainText("v1.2.1");
     await expect(home.getByRole("heading", { name: "Description", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Pipeline Phase", exact: true })).toBeVisible();
     await expect(home.getByRole("button", { name: "Pre-Generation", exact: true })).toHaveAttribute(
@@ -1423,6 +1423,25 @@ test("Map templates are created outside chats and copied into Roleplay", async (
   expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
   const chat = (await chatResponse.json()) as { id: string };
   await activateHierarchicalMaps(page, chat.id);
+  const sharedArtworkResponse = await page.request.post("/api/global-gallery/upload", {
+    multipart: {
+      prompt: "Shared map template artwork",
+      provider: "world-map-e2e",
+      model: "fixture",
+      width: "1",
+      height: "1",
+      file: {
+        name: "shared-template-art.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2SIAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      },
+    },
+  });
+  expect(sharedArtworkResponse.ok(), await sharedArtworkResponse.text()).toBeTruthy();
+  const sharedArtwork = (await sharedArtworkResponse.json()) as { id: string };
 
   try {
     await page.addInitScript((chatId) => {
@@ -1449,7 +1468,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await home.getByRole("button", { name: "Open map templates" }).click();
     const library = page.locator("[data-marinara-map-template-library]");
     await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
-    await expect(library).toContainText("chat Gallery artwork is not copied");
+    await expect(library).toContainText("shared Global Gallery artwork");
     await library.getByRole("button", { name: "New map template" }).first().click();
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
@@ -1457,8 +1476,40 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await expect(workspace.getByRole("button", { name: "Create with AI" })).toBeVisible();
     await workspace.getByRole("button", { name: "Build manually" }).click();
     await workspace.getByLabel("Map template name").fill("Reusable Test World");
+    await workspace.getByRole("button", { name: "Choose artwork" }).click();
+    const sharedArtworkOption = workspace.getByTitle("Shared map template artwork");
+    await expect(sharedArtworkOption.getByText("Shared", { exact: true })).toBeVisible();
+    await sharedArtworkOption.click();
+    await workspace.getByRole("button", { name: "Use selected" }).click();
     await workspace.getByRole("button", { name: "Save template", exact: true }).click();
     await expect(workspace).toContainText("Saved");
+    const globalGalleryBeforeImport = await page.request.get("/api/global-gallery");
+    expect(globalGalleryBeforeImport.ok(), await globalGalleryBeforeImport.text()).toBeTruthy();
+    const globalImageCountBeforeImport = ((await globalGalleryBeforeImport.json()) as Array<unknown>).length;
+    const downloadPromise = page.waitForEvent("download");
+    await workspace.getByRole("button", { name: "Export world map" }).click();
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const exportedTemplate = JSON.parse(await readFile(downloadPath!, "utf8")) as {
+      name?: string;
+      artwork?: Array<{ sourceImageId: string }>;
+    };
+    expect(exportedTemplate.artwork).toEqual([
+      expect.objectContaining({ sourceImageId: `global-gallery:${sharedArtwork.id}` }),
+    ]);
+    await workspace.getByRole("button", { name: "Back to map templates" }).click();
+
+    exportedTemplate.name = "Imported Shared Artwork World";
+    await library.locator('input[type="file"]').setInputFiles({
+      name: "imported-shared-artwork.world-map.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(exportedTemplate)),
+    });
+    await expect(page.getByText("1 existing shared image was reused.")).toBeVisible();
+    const globalGalleryAfterImport = await page.request.get("/api/global-gallery");
+    expect(globalGalleryAfterImport.ok(), await globalGalleryAfterImport.text()).toBeTruthy();
+    expect(((await globalGalleryAfterImport.json()) as Array<unknown>).length).toBe(globalImageCountBeforeImport);
     await workspace.getByRole("button", { name: "Back to map templates" }).click();
 
     const reusableTemplateCard = library
@@ -1475,7 +1526,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
 
     const chatSettingsLibrary = page.locator("[data-marinara-map-template-library]");
     const chatSettingsTemplateCard = chatSettingsLibrary
-      .getByRole("heading", { name: "Reusable Test World" })
+      .getByRole("heading", { name: "Imported Shared Artwork World" })
       .locator("xpath=ancestor::article");
     await expect(chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" })).toBeVisible();
     await chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" }).click();
@@ -1498,14 +1549,19 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       .poll(async () => {
         const response = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
         const body = (await response.json()) as {
-          definition?: { ownerMode?: string; locations?: Array<unknown> } | null;
+          definition?: { ownerMode?: string; locations?: Array<{ referenceImageId?: string }> } | null;
         };
         return {
           ownerMode: body.definition?.ownerMode,
           locationCount: body.definition?.locations?.length,
+          referenceImageId: body.definition?.locations?.[0]?.referenceImageId,
         };
       })
-      .toEqual({ ownerMode: "roleplay", locationCount: 1 });
+      .toEqual({
+        ownerMode: "roleplay",
+        locationCount: 1,
+        referenceImageId: `global-gallery:${sharedArtwork.id}`,
+      });
   } finally {
     const templatesResponse = await page.request.get("/api/chats/spatial-context/templates");
     if (templatesResponse.ok()) {
@@ -1518,6 +1574,8 @@ test("Map templates are created outside chats and copied into Roleplay", async (
         expect(response.ok(), await response.text()).toBeTruthy();
       }
     }
+    const deleteSharedArtworkResponse = await page.request.delete(`/api/global-gallery/${sharedArtwork.id}`);
+    expect(deleteSharedArtworkResponse.ok(), await deleteSharedArtworkResponse.text()).toBeTruthy();
     await expectDeleted(page, `/api/chats/${chat.id}`);
   }
 });
@@ -1697,10 +1755,18 @@ test("global World Maps home edits the current map location types", async ({ pag
 
     await home.getByRole("button", { name: "Edit location types" }).click();
     await home.getByLabel("Profile name").fill("Maritime hierarchy");
+    await home.getByLabel("Location type 1 label").fill("Planet");
     await home.getByLabel("Location type 2 label").fill("City");
     await home.getByRole("button", { name: "Add location type" }).click();
     await home.getByLabel("Location type 7 label").fill("Neighborhood");
     await home.getByLabel("Neighborhood semantic base kind").selectOption("place");
+    const moveNeighborhoodUp = home.getByRole("button", { name: "Move Neighborhood up" });
+    for (let step = 0; step < 6; step += 1) await moveNeighborhoodUp.click();
+    await expect(moveNeighborhoodUp).toBeDisabled();
+    await expectMinimumInteractiveSize(
+      home.getByRole("button", { name: "Move Neighborhood down" }),
+      "Location type reorder control",
+    );
     await expect(home.getByRole("button", { name: "Remove City" })).toBeDisabled();
     await expect(home.getByRole("button", { name: "Remove Neighborhood" })).toBeEnabled();
     await home.getByRole("button", { name: "Save location types" }).click();
@@ -1709,35 +1775,52 @@ test("global World Maps home edits the current map location types", async ({ pag
       .poll(async () => {
         const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
         const payload = (await spatialResponse.json()) as {
-          hierarchyProfile: { name: string; mode: string; types: Array<{ label: string; baseKind: string }> };
+          hierarchyProfile: {
+            name: string;
+            mode: string;
+            types: Array<{ id: string; label: string; baseKind: string }>;
+            locationTypeIds: Record<string, string>;
+          };
         };
         return {
           name: payload.hierarchyProfile.name,
           mode: payload.hierarchyProfile.mode,
+          order: payload.hierarchyProfile.types.slice(0, 3).map((type) => type.label),
           city: payload.hierarchyProfile.types.find((type) => type.label === "City")?.baseKind,
           neighborhood: payload.hierarchyProfile.types.find((type) => type.label === "Neighborhood")?.baseKind,
+          rootType: payload.hierarchyProfile.types.find(
+            (type) => type.id === payload.hierarchyProfile.locationTypeIds.ai_world,
+          )?.label,
         };
       })
       .toEqual({
         name: "Maritime hierarchy",
         mode: "custom",
+        order: ["Neighborhood", "Planet", "City"],
         city: "settlement",
         neighborhood: "place",
+        rootType: "Planet",
       });
 
     await home.getByRole("button", { name: "Open map", exact: true }).click();
     const worldMapOverlay = page.locator("[data-marinara-maps-world-overlay]");
     await expect(worldMapOverlay.getByRole("heading", { name: "World map", exact: true })).toBeVisible();
     const worldMap = worldMapOverlay.getByRole("region", { name: "Hierarchical world map" });
-    await expect(worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u })).toBeVisible();
-    await worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u }).click();
+    const harborRow = worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u });
+    await expect(harborRow).toContainText("City");
+    await harborRow.click();
     await expect(worldMap.getByRole("button", { name: "Set destination: Gloam Harbor" })).toBeVisible();
+    await worldMap.getByRole("button", { name: "Browse up one location" }).click();
+    await expect(worldMap.getByRole("button", { name: /^Inspect Shrouded Coast/u })).toContainText("Planet");
     await worldMapOverlay.getByRole("button", { name: "Back to World Maps" }).click();
     await expect(home).toBeVisible();
 
     await home.getByRole("button", { name: "Open map", exact: true }).click();
     await worldMapOverlay.getByRole("button", { name: "Edit map", exact: true }).click();
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    const hierarchy = workspace.locator('section[aria-label="Location hierarchy"]:visible');
+    await expect(hierarchy.getByRole("button", { name: /Shrouded Coast.*Planet/u })).toBeVisible();
+    await expect(hierarchy.getByRole("button", { name: /Gloam Harbor.*City/u })).toBeVisible();
     await expect(workspace.getByRole("button", { name: "Location types" })).toHaveCount(0);
     await expect(workspace.getByRole("region", { name: "Location type fields" })).toHaveCount(0);
   } finally {
@@ -1926,10 +2009,12 @@ test("Map editor fills missing location artwork with one image per location", as
     await dismissOnboardingTutorial(page);
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
-    const fillArtwork = workspace.locator("[data-marinara-fill-map-artwork]");
-    await expect(workspace).toContainText("Review 2 missing image requests");
+    const fillArtwork = workspace.getByRole("button", { name: "Review artwork for 4 locations" });
+    await expect(workspace.locator("[data-marinara-map-artwork-reminder]")).toHaveCount(0);
+    await expect(fillArtwork).toContainText("2 art requests");
     await fillArtwork.click();
     await expect(fillArtwork).toHaveCount(0);
+    await expect(workspace.getByLabel("Review location artwork image requests")).toBeVisible();
     expect(previewRequests).toHaveLength(2);
     expect(previewRequests.find((request) => request.title === "Shrouded Coast")?.mapsArtworkContext).toEqual({
       locationName: "Shrouded Coast",
@@ -2019,6 +2104,48 @@ test("Map editor fills missing location artwork with one image per location", as
       referenceImageId: "existing-sewers-art",
       useReferenceImage: true,
       mapBackgroundImageId: "existing-sewers-art",
+    });
+
+    const hierarchy = workspace.locator('section[aria-label="Location hierarchy"]:visible');
+    await hierarchy.getByRole("button", { name: "Shrouded Coast region" }).click();
+    const details = workspace.locator('section[aria-label="Location details"]:visible');
+    const uploadReference = details.getByRole("button", { name: "Upload location reference" });
+    await expectMinimumInteractiveSize(uploadReference, "Direct location artwork upload");
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await uploadReference.click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({
+      name: "shrouded-coast-upload.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+    await expect(details.getByRole("img", { name: "Shrouded Coast location reference" })).toBeVisible();
+    await workspace.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(workspace).toContainText("Saved");
+
+    const uploadedMapResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    const uploadedMap = (await uploadedMapResponse.json()) as {
+      definition: { locations: Array<{ id: string; referenceImageId?: string; mapBackgroundImageId?: string }> };
+    };
+    const uploadedWorld = uploadedMap.definition.locations.find((location) => location.id === "ai_world");
+    expect(uploadedWorld?.referenceImageId).toBeTruthy();
+    expect(uploadedWorld?.referenceImageId).not.toBe("generated-map-art-1");
+    expect(uploadedWorld?.mapBackgroundImageId).toBe("generated-map-art-1");
+
+    const galleryResponse = await page.request.get(`/api/gallery/${chat.id}`);
+    const gallery = (await galleryResponse.json()) as Array<{
+      id: string;
+      prompt: string;
+      provider: string;
+      model: string;
+    }>;
+    expect(gallery.find((image) => image.id === uploadedWorld?.referenceImageId)).toMatchObject({
+      prompt: "Uploaded location reference for Shrouded Coast.",
+      provider: "upload",
+      model: "user-upload",
     });
   } finally {
     await page.unroute(`**/api/gallery/${chat.id}/generate-image/preview`);
@@ -2543,6 +2670,16 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expectAiBuilderLayout(page, mobile);
     await page.getByLabel("What should this world include?").fill("A foggy port with a lighthouse and secret sewers.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
+    await page.getByRole("button", { name: /^Custom Edit every type/u }).click();
+    await page.getByRole("button", { name: "Move Region down" }).click();
+    await expect(page.getByLabel("Location type 1 label")).toHaveValue("Settlement");
+    await expect(page.getByLabel("Location type 2 label")).toHaveValue("Region");
+    await expectMinimumInteractiveSize(
+      page.getByRole("button", { name: "Move Region up" }),
+      "AI hierarchy reorder control",
+    );
+    await page.getByRole("button", { name: "Move Region up" }).click();
+    await page.getByRole("button", { name: /^Auto AI fits this world/u }).click();
     await expect(page.getByRole("button", { name: "Preview full prompt" })).toHaveCount(0);
     await page.getByRole("button", { name: "Generate draft", exact: true }).click();
     await expect(page.getByText("Validated", { exact: true })).toBeVisible();
@@ -2638,33 +2775,73 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       "Old Sewers",
     ]);
 
-    let deleteMap = workspace.getByRole("button", { name: "Delete map and start over" });
+    await hierarchy.getByRole("button", { name: "Recharted Coast region" }).click();
+    if (mobile) await page.getByRole("button", { name: "details", exact: true }).click();
+    const details = page.locator('section[aria-label="Location details"]:visible');
+    await expect(details).toContainText(
+      "The starting location is used when a new story begins. The current story location is where this chat is now.",
+    );
+    const correctCurrentLocation = details.getByRole("button", { name: "Set current story location" });
+    await expectMinimumInteractiveSize(correctCurrentLocation, "Correct current story location control");
+    await correctCurrentLocation.click();
+    const currentLocationDialog = page.getByRole("dialog", { name: "Set current story location?" });
+    await expect(currentLocationDialog).toContainText("administrative correction, not narrated travel");
+    await expect(currentLocationDialog).toContainText("does not rewrite earlier messages");
+    await currentLocationDialog.getByRole("button", { name: "Set current location" }).click();
+    await expect(details.getByRole("button", { name: "Current story location" })).toBeDisabled();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const correctedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        return ((await correctedResponse.json()) as { currentLocationId: string }).currentLocationId;
+      })
+      .toBe("ai_world");
+
+    if (mobile) await page.getByRole("button", { name: "hierarchy", exact: true }).click();
+
+    let replaceMap = workspace.getByRole("button", { name: "Replace map or start over" });
     if (mobile) {
       const header = workspace.locator(":scope > .mari-editor-header");
       const moreActions = header.getByRole("button", { name: "More map actions" });
       await expectMinimumInteractiveSize(moreActions, "Mobile map actions control");
+      await expect(workspace.locator("[data-marinara-map-artwork-reminder]")).toBeHidden();
+      await expect(moreActions.locator("[data-marinara-map-notice-count]")).toHaveText("1");
       await expect(workspace.getByRole("button", { name: "Expand with AI", exact: true })).toHaveCount(0);
       const headerGeometry = await header.evaluate((element) => {
         const rect = element.getBoundingClientRect();
         return {
           clientWidth: element.clientWidth,
           scrollWidth: element.scrollWidth,
+          clientHeight: element.clientHeight,
+          scrollHeight: element.scrollHeight,
           left: rect.left,
           right: rect.right,
           viewportWidth: window.innerWidth,
         };
       });
       expect(headerGeometry.scrollWidth).toBeLessThanOrEqual(headerGeometry.clientWidth + 1);
+      expect(headerGeometry.scrollHeight).toBeLessThanOrEqual(headerGeometry.clientHeight + 1);
+      expect(headerGeometry.clientHeight).toBeLessThanOrEqual(80);
+      const mobileTitleWidth = await header
+        .getByRole("heading", { name: "World map" })
+        .evaluate((element) => element.getBoundingClientRect().width);
+      expect(mobileTitleWidth).toBeGreaterThanOrEqual(80);
       expect(headerGeometry.left).toBeGreaterThanOrEqual(-1);
       expect(headerGeometry.right).toBeLessThanOrEqual(headerGeometry.viewportWidth + 1);
 
-      await moreActions.click();
+      const moreActionsBox = await moreActions.boundingBox();
+      expect(moreActionsBox).not.toBeNull();
+      await page.touchscreen.tap(
+        moreActionsBox!.x + moreActionsBox!.width / 2,
+        moreActionsBox!.y + moreActionsBox!.height / 2,
+      );
       const mobileActions = workspace.getByRole("region", { name: "Map actions" });
       await expect(mobileActions).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Expand with AI", exact: true })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Add a saved map template" })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Export world map" })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Import world map" })).toBeVisible();
+      await expect(mobileActions.getByRole("button", { name: "Review artwork for 4 locations" })).toBeVisible();
       await expectMinimumInteractiveSize(
         mobileActions.getByRole("button", { name: "Expand with AI", exact: true }),
         "Mobile AI map action",
@@ -2673,30 +2850,62 @@ test("AI map builder previews a validated local draft before save", async ({ pag
         mobileActions.getByRole("button", { name: "Add a saved map template" }),
         "Mobile map templates action",
       );
-      deleteMap = mobileActions.getByRole("button", { name: "Delete map and start over" });
+      replaceMap = mobileActions.getByRole("button", { name: "Replace map or start over" });
     } else {
-      await expect(workspace.getByRole("button", { name: "More map actions" })).toHaveCount(0);
+      await page.setViewportSize({ width: 1024, height: 900 });
+      const header = workspace.locator(":scope > .mari-editor-header");
+      const headerGeometry = await header.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      }));
+      expect(headerGeometry.scrollWidth).toBeLessThanOrEqual(headerGeometry.clientWidth + 1);
+      expect(headerGeometry.scrollHeight).toBeLessThanOrEqual(headerGeometry.clientHeight + 1);
+      const moreActions = workspace.getByRole("button", { name: "More map actions" });
+      await expectMinimumInteractiveSize(moreActions, "Desktop map actions control");
+      await moreActions.click();
+      const desktopActions = workspace.getByRole("region", { name: "Map actions" });
+      await expect(desktopActions).toBeVisible();
+      await expect(desktopActions.locator("[data-marinara-map-compact-only]:visible")).toHaveCount(0);
+      await expect(desktopActions.getByRole("button", { name: "Export world map" })).toBeVisible();
+      await expect(desktopActions.getByRole("button", { name: "Import world map" })).toBeVisible();
+      await expect(desktopActions.getByRole("button", { name: "Add a saved map template" })).toBeVisible();
+      replaceMap = desktopActions.getByRole("button", { name: "Replace map or start over" });
     }
-    await expectMinimumInteractiveSize(deleteMap, "Delete map control");
-    await deleteMap.click();
+    await expectMinimumInteractiveSize(replaceMap, "Replace map control");
+    await replaceMap.click();
+    await expect(workspace).toBeVisible();
+    const replacePanel = workspace.getByRole("region", { name: "Replace the current map" });
+    await expect(replacePanel).toBeVisible();
+    await expect(replacePanel).toContainText("4 locations");
+    await expect(replacePanel).toContainText("Recharted Coast");
+    await expect(replacePanel.getByRole("button", { name: "Save as template" })).toBeVisible();
+    await expect(replacePanel.getByRole("button", { name: "Export backup" })).toBeVisible();
+    await expect(replacePanel.getByRole("button", { name: "Create with AI" })).toBeVisible();
+    await expect(replacePanel.getByRole("button", { name: "Use template or shared world" })).toBeVisible();
+    await expect(replacePanel.getByRole("button", { name: "Import map file" })).toBeVisible();
+    const startBlank = replacePanel.getByRole("button", { name: "Start blank" });
+    await expectMinimumInteractiveSize(startBlank, "Start blank control");
+    await startBlank.click();
     const deleteDialog = page.getByRole("dialog", { name: "Delete this map and start over?" });
     await expect(deleteDialog).toHaveAttribute("data-marinara-maps-confirmation", "true");
     await expect(deleteDialog).toContainText("Are you sure? This is dangerous.");
     await expect(deleteDialog).toContainText("Deleting replaces 4 saved locations");
     await expect(deleteDialog).toContainText("the deleted map cannot be restored unless you exported a backup");
     const cancelDelete = deleteDialog.getByRole("button", { name: "Go back and backup first", exact: true });
-    const confirmDelete = deleteDialog.getByRole("button", { name: "Delete", exact: true });
+    const confirmDelete = deleteDialog.getByRole("button", { name: "Start blank", exact: true });
     await expect(cancelDelete).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await expect(confirmDelete).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(cancelDelete).toBeFocused();
     await cancelDelete.click();
-    await expect(deleteMap).toBeFocused();
+    await expect(startBlank).toBeFocused();
     await expect(hierarchy.getByRole("button", { name: "Recharted Coast region" })).toBeVisible();
 
-    await deleteMap.click();
-    await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await startBlank.click();
+    await deleteDialog.getByRole("button", { name: "Start blank", exact: true }).click();
     await expect(page.getByText("Fresh map started in the working copy. Review it, then Save.")).toBeVisible();
     await expect(hierarchy.getByRole("button", { name: "New world region" })).toBeVisible();
     await expect(hierarchy.getByRole("button", { name: "Recharted Coast region" })).toHaveCount(0);
@@ -2734,6 +2943,86 @@ test("AI map builder previews a validated local draft before save", async ({ pag
         currentMatchesStart: true,
         statuses: ["active"],
       });
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+  }
+});
+
+test("Roleplay minimap keeps selected locations opaque over map artwork", async ({ page }) => {
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Opaque Map Selection Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const artworkUpload = await page.request.post(`/api/gallery/${chat.id}/upload`, {
+    multipart: {
+      prompt: "A fogbound anime coast.",
+      provider: "world-map-e2e",
+      model: "fixture",
+      width: "1",
+      height: "1",
+      file: {
+        name: "shrouded-coast.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2SIAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      },
+    },
+  });
+  expect(artworkUpload.ok(), await artworkUpload.text()).toBeTruthy();
+  const uploadedArtwork = (await artworkUpload.json()) as { id: string };
+  const definitionWithArtwork = {
+    ...generatedDefinition,
+    enabled: true,
+    locations: generatedDefinition.locations.map((location) =>
+      location.id === "ai_world" ? { ...location, mapBackgroundImageId: uploadedArtwork.id } : location,
+    ),
+  };
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: definitionWithArtwork,
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({ state: { hasCompletedOnboarding: true, sidebarOpen: false }, version: 72 }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    const storyLocation = page.getByRole("region", { name: "Story location" });
+    await storyLocation.getByRole("button", { name: "Open story map" }).click();
+    const roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+    await expect(roleplayMap.locator('img[aria-hidden="true"]')).toBeVisible();
+    const selectedMiniMapLocation = roleplayMap.getByRole("button", { name: /Inspect Blackglass Lighthouse/ });
+    await selectedMiniMapLocation.click();
+    await expect(selectedMiniMapLocation).toHaveAttribute("aria-pressed", "true");
+    const selectedMiniMapMarker = selectedMiniMapLocation.locator('[data-marinara-map-selected-location="true"]');
+    await expect(selectedMiniMapMarker).toBeVisible();
+    await expect
+      .poll(
+        () => computedBackgroundAlpha(selectedMiniMapMarker),
+        { message: "Selected minimap location should remain opaque over map artwork" },
+      )
+      .toBe(1);
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
@@ -2974,7 +3263,27 @@ test("AI map expansion preserves a campaign map and its current location", async
     const [canvasBox, nodeBox] = await Promise.all([arrangedCanvas.boundingBox(), lighthouseNode.boundingBox()]);
     expect(canvasBox).not.toBeNull();
     expect(nodeBox).not.toBeNull();
+    const unselectedBorderColor = await lighthouseNode.evaluate((element) => getComputedStyle(element).borderColor);
     await lighthouseNode.focus();
+    await lighthouseNode.click();
+    await expect(page.locator("[data-marinara-maps-workspace-root]")).toBeVisible();
+    await expect(lighthouseNode).toHaveAttribute("data-marinara-map-selected-location", "true");
+    await expect
+      .poll(async () =>
+        lighthouseNode.evaluate((element) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 1;
+          canvas.height = 1;
+          const context = canvas.getContext("2d");
+          if (!context) return 0;
+          context.fillStyle = getComputedStyle(element).backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          return context.getImageData(0, 0, 1, 1).data[3];
+        }),
+      )
+      .toBe(255);
+    const selectedBorderColor = await lighthouseNode.evaluate((element) => getComputedStyle(element).borderColor);
+    expect(selectedBorderColor).not.toBe(unselectedBorderColor);
     await page.mouse.move(nodeBox!.x + nodeBox!.width / 2, nodeBox!.y + nodeBox!.height / 2);
     await page.mouse.down();
     await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.6, canvasBox!.y + canvasBox!.height * 0.4);
@@ -3052,16 +3361,20 @@ test("AI map expansion preserves a campaign map and its current location", async
       "ai_minnow",
     ]);
 
-    const deleteMap = page.getByRole("button", { name: "Delete map and start over" });
-    await expectMinimumInteractiveSize(deleteMap, "History-safe delete map control");
-    await deleteMap.click();
+    const replaceMap = page.getByRole("button", { name: "Replace map or start over" });
+    await expectMinimumInteractiveSize(replaceMap, "History-safe replace map control");
+    await replaceMap.click();
+    const replacePanel = page.getByRole("region", { name: "Replace the current map" });
+    await expect(replacePanel).toContainText("6 locations");
+    const startBlank = replacePanel.getByRole("button", { name: "Start blank" });
+    await startBlank.click();
     const protectedDeleteDialog = page.getByRole("dialog", { name: "Archive this map and start over?" });
     await expect(protectedDeleteDialog).toHaveAttribute("data-marinara-maps-confirmation", "true");
     await expect(protectedDeleteDialog).toContainText("Are you sure? This is dangerous.");
     await expect(protectedDeleteDialog).toContainText("Campaign history uses this map");
     await expect(protectedDeleteDialog).toContainText("6 saved locations cannot be erased");
     await expect(protectedDeleteDialog).toContainText("preserve its stable ID for older messages");
-    await protectedDeleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await protectedDeleteDialog.getByRole("button", { name: "Start blank", exact: true }).click();
     await expect(
       page.getByText("Fresh map started. Previous locations remain archived for campaign history. Review it, then Save."),
     ).toBeVisible();

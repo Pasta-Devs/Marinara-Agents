@@ -188,11 +188,12 @@ export function LocalMapCanvas({
               }}
               onPointerCancel={() => setDraggingId(null)}
               aria-pressed={selected}
+              data-marinara-map-selected-location={selected ? "true" : undefined}
               aria-description={editing ? "Drag to reposition. Use arrow keys to nudge; hold Shift for five units." : undefined}
               className={cn(
                 "flex min-h-11 w-full items-center gap-2 rounded-xl border bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-2 text-left shadow-md transition-[border-color,background-color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]",
                 selected
-                  ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]"
+                  ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--background)] text-[var(--marinara-chat-chrome-panel-title)]"
                   : "border-[var(--marinara-chat-chrome-panel-border)] hover:border-[var(--marinara-chat-chrome-button-border-hover)]",
                 location.status === "archived" && "opacity-60",
                 editing && "cursor-move touch-none",

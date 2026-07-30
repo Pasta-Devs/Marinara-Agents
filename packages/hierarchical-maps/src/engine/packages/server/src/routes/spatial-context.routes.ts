@@ -55,6 +55,7 @@ import {
   generationPreferencesWithPromptLibrary,
   normalizeHierarchyProfile,
   createSpatialMapTemplateData,
+  createSpatialSharedWorldData,
   parseSpatialGenerationPromptLibraries,
   resolveSpatialGenerationPromptOption,
   SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY,
@@ -65,10 +66,24 @@ import {
   spatialHierarchyProfileSchema,
   spatialTurnPromptTemplatesSchema,
   SPATIAL_MAP_TEMPLATE_VERSION,
+  SPATIAL_SHARED_WORLD_LINK_VERSION,
   type SpatialMapTemplateRecord,
   type SpatialGenerationPromptLibraries,
   type SpatialHierarchyProfile,
 } from "../../../maps-shared/src/maps-model.js";
+import { resolveEffectiveSpatialState } from "../services/spatial-context/state-resolution.js";
+import {
+  SPATIAL_HIERARCHY_PROFILE_METADATA_KEY,
+  SPATIAL_SHARED_WORLD_KIND,
+  SPATIAL_SHARED_WORLD_PACKAGE_ID,
+  getSpatialSharedWorld,
+  linkedChatIdsForSpatialWorld,
+  listSpatialSharedWorlds,
+  readSpatialSharedWorldDocument,
+  resolveSpatialWorldSource,
+  withSpatialSharedWorldLink,
+  withoutSpatialSharedWorldLink,
+} from "../services/spatial-context/shared-world.service.js";
 
 interface ChatSpatialParams {
   chatId: string;
@@ -109,8 +124,30 @@ const spatialMapTemplateUpdateSchema = spatialMapTemplateInputSchema.extend({
   expectedRevision: z.number().int().positive().safe(),
 });
 
-const spatialMapTemplateDeleteSchema = z
-  .object({ expectedRevision: z.number().int().positive().safe() })
+const spatialMapTemplateDeleteSchema = z.object({ expectedRevision: z.number().int().positive().safe() }).strict();
+
+const spatialSharedWorldInputSchema = spatialMapTemplateInputSchema;
+const spatialSharedWorldUpdateSchema = spatialMapTemplateUpdateSchema;
+const spatialSharedWorldDeleteSchema = spatialMapTemplateDeleteSchema;
+const spatialSharedWorldAttachSchema = z
+  .object({
+    worldId: z.string().trim().min(1).max(200),
+    expectedRevision: z.number().int().nonnegative().safe(),
+    expectedCurrentLocationId: z.string().trim().min(1).nullable(),
+  })
+  .strict();
+const spatialSharedWorldDraftActionSchema = z
+  .object({
+    expectedWorldRevision: z.number().int().positive().safe(),
+    definition: spatialContextDefinitionSchema,
+    hierarchyProfile: spatialHierarchyProfileSchema,
+  })
+  .strict();
+const spatialSharedWorldChatActionSchema = z
+  .object({
+    expectedRevision: z.number().int().nonnegative().safe(),
+    expectedCurrentLocationId: z.string().trim().min(1).nullable(),
+  })
   .strict();
 
 const spatialMapTemplateDataSchema = z
@@ -136,6 +173,20 @@ function readSpatialMapTemplate(document: CapabilityDocumentRecord): SpatialMapT
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
   };
+}
+
+function firstRemovedSpatialLocation(
+  current: SpatialContextDefinition,
+  next: SpatialContextDefinition,
+): { id: string; name: string } | null {
+  const nextIds = new Set(next.locations.map((location) => location.id));
+  const removed = current.locations.find((location) => !nextIds.has(location.id));
+  return removed ? { id: removed.id, name: removed.name } : null;
+}
+
+function sameSpatialLocationIds(left: SpatialContextDefinition, right: SpatialContextDefinition): boolean {
+  const leftIds = new Set(left.locations.map((location) => location.id));
+  return leftIds.size === right.locations.length && right.locations.every((location) => leftIds.has(location.id));
 }
 
 function readTrimmedString(value: unknown): string | null {
@@ -463,25 +514,20 @@ export async function spatialContextRoutes(app: FastifyInstance) {
   });
 
   app.put("/spatial-context/global-generation-prompt-libraries/:ownerMode", async (request, reply) => {
-    const ownerMode = z.enum(["roleplay", "game"]).safeParse(
-      (request.params as { ownerMode?: unknown }).ownerMode,
-    );
+    const ownerMode = z.enum(["roleplay", "game"]).safeParse((request.params as { ownerMode?: unknown }).ownerMode);
     const library = spatialGenerationPromptLibrarySchema.safeParse(request.body);
     if (!ownerMode.success || !library.success) {
       return reply.status(400).send({
-        error:
-          library.success
-            ? "Choose Roleplay or Game mode."
-            : library.error.issues[0]?.message ?? "The generation prompt library is invalid.",
+        error: library.success
+          ? "Choose Roleplay or Game mode."
+          : (library.error.issues[0]?.message ?? "The generation prompt library is invalid."),
         code: "spatial_global_generation_prompt_library_invalid",
         ...(!library.success ? { issues: library.error.issues } : {}),
       });
     }
 
     const settings = await updatePackageAgentSettings("hierarchical-maps", (current) => {
-      const existing = parseSpatialGenerationPromptLibraries(
-        current[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
-      );
+      const existing = parseSpatialGenerationPromptLibraries(current[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY]);
       const libraries: SpatialGenerationPromptLibraries = {
         version: GENERATION_PROMPT_LIBRARIES_VERSION,
         ...(existing ?? {}),
@@ -492,9 +538,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         [SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY]: libraries,
       };
     });
-    return parseSpatialGenerationPromptLibraries(
-      settings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
-    );
+    return parseSpatialGenerationPromptLibraries(settings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY]);
   });
 
   app.put("/spatial-context/global-turn-prompt-templates", async (request, reply) => {
@@ -511,9 +555,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       ...current,
       [SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY]: templates.data,
     }));
-    return spatialTurnPromptTemplatesSchema.parse(
-      settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
-    );
+    return spatialTurnPromptTemplatesSchema.parse(settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY]);
   });
 
   app.get("/spatial-context/templates", async () => {
@@ -548,15 +590,17 @@ export async function spatialContextRoutes(app: FastifyInstance) {
   });
 
   app.put("/spatial-context/templates/:templateId", async (request, reply) => {
-    const templateId = z.string().trim().min(1).safeParse(
-      (request.params as { templateId?: unknown }).templateId,
-    );
+    const templateId = z
+      .string()
+      .trim()
+      .min(1)
+      .safeParse((request.params as { templateId?: unknown }).templateId);
     const input = spatialMapTemplateUpdateSchema.safeParse(request.body);
     if (!templateId.success || !input.success) {
       return reply.status(400).send({
         error: input.success
           ? "Choose a map template."
-          : input.error.issues[0]?.message ?? "The map template is invalid.",
+          : (input.error.issues[0]?.message ?? "The map template is invalid."),
         code: "spatial_map_template_invalid",
         ...(!input.success ? { issues: input.error.issues } : {}),
       });
@@ -580,15 +624,17 @@ export async function spatialContextRoutes(app: FastifyInstance) {
   });
 
   app.delete("/spatial-context/templates/:templateId", async (request, reply) => {
-    const templateId = z.string().trim().min(1).safeParse(
-      (request.params as { templateId?: unknown }).templateId,
-    );
+    const templateId = z
+      .string()
+      .trim()
+      .min(1)
+      .safeParse((request.params as { templateId?: unknown }).templateId);
     const input = spatialMapTemplateDeleteSchema.safeParse(request.body);
     if (!templateId.success || !input.success) {
       return reply.status(400).send({
         error: input.success
           ? "Choose a map template."
-          : input.error.issues[0]?.message ?? "The map template revision is invalid.",
+          : (input.error.issues[0]?.message ?? "The map template revision is invalid."),
         code: "spatial_map_template_invalid",
       });
     }
@@ -606,18 +652,392 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
+  app.get("/spatial-context/shared-worlds", async () => listSpatialSharedWorlds(persistence));
+
+  app.post("/spatial-context/shared-worlds", async (request, reply) => {
+    const input = spatialSharedWorldInputSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.status(400).send({
+        error: input.error.issues[0]?.message ?? "The shared world is invalid.",
+        code: "spatial_shared_world_invalid",
+        issues: input.error.issues,
+      });
+    }
+    const timestamp = now();
+    const document = await persistence.documents.create({
+      id: newTimeSortableId(),
+      packageId: SPATIAL_SHARED_WORLD_PACKAGE_ID,
+      kind: SPATIAL_SHARED_WORLD_KIND,
+      name: input.data.name,
+      description: input.data.description,
+      data: createSpatialSharedWorldData(input.data.definition, input.data.hierarchyProfile),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    return reply.status(201).send(readSpatialSharedWorldDocument(document, 0));
+  });
+
+  app.put("/spatial-context/shared-worlds/:worldId", async (request, reply) => {
+    const worldId = z
+      .string()
+      .trim()
+      .min(1)
+      .safeParse((request.params as { worldId?: unknown }).worldId);
+    const input = spatialSharedWorldUpdateSchema.safeParse(request.body);
+    if (!worldId.success || !input.success) {
+      return reply.status(400).send({
+        error: input.success
+          ? "Choose a shared world."
+          : (input.error.issues[0]?.message ?? "The shared world is invalid."),
+        code: "spatial_shared_world_invalid",
+        ...(!input.success ? { issues: input.error.issues } : {}),
+      });
+    }
+    const current = await getSpatialSharedWorld(persistence, worldId.data);
+    if (!current) {
+      return reply.status(404).send({
+        error: "The shared world was removed or is unavailable.",
+        code: "spatial_shared_world_missing",
+      });
+    }
+    if (current.linkedChatCount > 0) {
+      const removed = firstRemovedSpatialLocation(current.data.definition, input.data.definition);
+      if (removed) {
+        return reply.status(409).send({
+          error: `“${removed.name || removed.id}” is used by a linked world. Archive it instead of deleting it.`,
+          code: "spatial_shared_world_location_removal_forbidden",
+        });
+      }
+    }
+    const document = await persistence.documents.update({
+      id: worldId.data,
+      packageId: SPATIAL_SHARED_WORLD_PACKAGE_ID,
+      expectedRevision: input.data.expectedRevision,
+      name: input.data.name,
+      description: input.data.description,
+      data: createSpatialSharedWorldData(input.data.definition, input.data.hierarchyProfile),
+      updatedAt: now(),
+    });
+    if (!document) {
+      return reply.status(409).send({
+        error: "This shared world changed or was removed. Return to the library and open it again.",
+        code: "spatial_shared_world_stale",
+      });
+    }
+    return readSpatialSharedWorldDocument(document, current.linkedChatCount);
+  });
+
+  app.delete("/spatial-context/shared-worlds/:worldId", async (request, reply) => {
+    const worldId = z
+      .string()
+      .trim()
+      .min(1)
+      .safeParse((request.params as { worldId?: unknown }).worldId);
+    const input = spatialSharedWorldDeleteSchema.safeParse(request.body);
+    if (!worldId.success || !input.success) {
+      return reply.status(400).send({
+        error: "Choose a valid shared world revision.",
+        code: "spatial_shared_world_invalid",
+      });
+    }
+    const linkedChatIds = await linkedChatIdsForSpatialWorld(persistence, worldId.data);
+    if (linkedChatIds.length > 0) {
+      return reply.status(409).send({
+        error: `This world is linked to ${linkedChatIds.length} chat${linkedChatIds.length === 1 ? "" : "s"}. Fork or relink those chats before deleting it.`,
+        code: "spatial_shared_world_in_use",
+        linkedChatCount: linkedChatIds.length,
+      });
+    }
+    const removed = await persistence.documents.remove(
+      SPATIAL_SHARED_WORLD_PACKAGE_ID,
+      worldId.data,
+      input.data.expectedRevision,
+    );
+    if (!removed) {
+      return reply.status(409).send({
+        error: "This shared world changed or was already removed. Refresh the library.",
+        code: "spatial_shared_world_stale",
+      });
+    }
+    return reply.status(204).send();
+  });
+
+  app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/shared-world/link", async (request, reply) => {
+    const input = spatialSharedWorldAttachSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.status(400).send({
+        error: input.error.issues[0]?.message ?? "Choose a shared world.",
+        code: "spatial_shared_world_invalid",
+      });
+    }
+    const chat = await persistence.getChat(request.params.chatId);
+    if (!chat) return reply.status(404).send({ error: "Chat not found.", code: "spatial_chat_missing" });
+    if (chat.mode !== "roleplay" && chat.mode !== "game") {
+      return reply.status(400).send({
+        error: "Shared worlds are available only in Roleplay and Game chats.",
+        code: "spatial_mode_unsupported",
+      });
+    }
+    const [current, world] = await Promise.all([
+      service.get(chat.id),
+      getSpatialSharedWorld(persistence, input.data.worldId),
+    ]);
+    if (!world) {
+      return reply.status(404).send({
+        error: "The shared world was removed or is unavailable.",
+        code: "spatial_shared_world_missing",
+      });
+    }
+    if (current.sharedWorld.pendingChanges) {
+      return reply.status(409).send({
+        error: "Publish, discard, or fork this chat's unpublished world changes before linking another shared world.",
+        code: "spatial_shared_world_pending_changes",
+      });
+    }
+    if ((current.definition?.revision ?? 0) !== input.data.expectedRevision) {
+      return reply.status(409).send({
+        error: "This chat's map changed. Reload it before linking a shared world.",
+        code: "spatial_definition_stale",
+      });
+    }
+    if (current.currentLocationId !== input.data.expectedCurrentLocationId) {
+      return reply.status(409).send({
+        error: "The current location changed. Reload before linking a shared world.",
+        code: "spatial_current_location_stale",
+      });
+    }
+    const sharedIds = new Set(world.data.definition.locations.map((location) => location.id));
+    if (current.currentLocationId && !sharedIds.has(current.currentLocationId)) {
+      return reply.status(409).send({
+        error:
+          "The current location does not exist in this shared world. Start from an independent copy or migrate this chat's current map first.",
+        code: "spatial_shared_world_current_location_missing",
+      });
+    }
+    if (current.hasCommittedSpatialHistory && current.definition) {
+      const missingHistoricalLocation = current.definition.locations.find((location) => !sharedIds.has(location.id));
+      if (missingHistoricalLocation) {
+        return reply.status(409).send({
+          error: `Campaign history uses “${missingHistoricalLocation.name || missingHistoricalLocation.id}”, which is not in this shared world. Migrate this map into a new shared world or use an independent copy.`,
+          code: "spatial_shared_world_history_mismatch",
+        });
+      }
+    }
+    const metadata = parseSpatialMetadata(chat.metadata);
+    await persistence.updateChatMetadata({
+      chatId: chat.id,
+      metadata: withSpatialSharedWorldLink(metadata, {
+        version: SPATIAL_SHARED_WORLD_LINK_VERSION,
+        worldId: world.id,
+        linkedAt: now(),
+      }),
+      updatedAt: now(),
+    });
+    return service.get(chat.id);
+  });
+
+  app.post<{ Params: ChatSpatialParams }>(
+    "/:chatId/spatial-context/shared-world/independent-copy",
+    async (request, reply) => {
+      const body = isRecord(request.body) ? request.body : {};
+      const parsed = updateSpatialContextRequestSchema.safeParse(withoutKeys(body, ["hierarchyProfile"]));
+      const parsedHierarchyProfile =
+        body.hierarchyProfile === undefined ? null : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: parsed.error.issues[0]?.message ?? "Invalid independent world map.",
+          code: "spatial_request_invalid",
+          issues: parsed.error.issues,
+        });
+      }
+      if (parsedHierarchyProfile && !parsedHierarchyProfile.success) {
+        return reply.status(400).send({
+          error: parsedHierarchyProfile.error.issues[0]?.message ?? "Invalid hierarchy profile.",
+          code: "spatial_request_invalid",
+          issues: parsedHierarchyProfile.error.issues,
+        });
+      }
+      try {
+        return await service.update(
+          request.params.chatId,
+          {
+            ...parsed.data,
+            ...(parsedHierarchyProfile?.success ? { hierarchyProfile: parsedHierarchyProfile.data } : {}),
+          },
+          { detachSharedWorld: true },
+        );
+      } catch (error) {
+        return sendServiceError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/shared-world/fork", async (request, reply) => {
+    const input = spatialSharedWorldChatActionSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.status(400).send({
+        error: "The map revision is invalid.",
+        code: "spatial_request_invalid",
+      });
+    }
+    const chat = await persistence.getChat(request.params.chatId);
+    if (!chat) return reply.status(404).send({ error: "Chat not found.", code: "spatial_chat_missing" });
+    const source = await resolveSpatialWorldSource(chat, persistence);
+    if (!source.link || !source.definition) {
+      return reply.status(409).send({
+        error: "This chat is not linked to an available shared world.",
+        code: "spatial_shared_world_not_linked",
+      });
+    }
+    const state = await resolveEffectiveSpatialState(chat.id, {}, persistence);
+    if (
+      source.definition.revision !== input.data.expectedRevision ||
+      state.currentLocationId !== input.data.expectedCurrentLocationId
+    ) {
+      return reply.status(409).send({
+        error: "The linked world or current location changed. Reload before forking.",
+        code: "spatial_shared_world_stale",
+      });
+    }
+    const metadata = withoutSpatialSharedWorldLink(parseSpatialMetadata(chat.metadata));
+    await persistence.updateChatMetadata({
+      chatId: chat.id,
+      metadata: {
+        ...metadata,
+        spatialContext: source.definition,
+        [SPATIAL_HIERARCHY_PROFILE_METADATA_KEY]: source.hierarchyProfile,
+      },
+      updatedAt: now(),
+    });
+    return service.get(chat.id);
+  });
+
+  app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/shared-world/discard", async (request, reply) => {
+    const input = spatialSharedWorldChatActionSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.status(400).send({
+        error: "The map revision is invalid.",
+        code: "spatial_request_invalid",
+      });
+    }
+    const chat = await persistence.getChat(request.params.chatId);
+    if (!chat) return reply.status(404).send({ error: "Chat not found.", code: "spatial_chat_missing" });
+    const source = await resolveSpatialWorldSource(chat, persistence);
+    if (!source.link?.draft || !source.world || !source.definition) {
+      return reply.status(409).send({
+        error: "This linked chat has no unpublished map changes.",
+        code: "spatial_shared_world_no_draft",
+      });
+    }
+    const state = await resolveEffectiveSpatialState(chat.id, {}, persistence);
+    if (
+      source.definition.revision !== input.data.expectedRevision ||
+      state.currentLocationId !== input.data.expectedCurrentLocationId
+    ) {
+      return reply.status(409).send({
+        error: "The linked map or current location changed. Reload before discarding changes.",
+        code: "spatial_shared_world_stale",
+      });
+    }
+    const canonicalIds = new Set(source.world.data.definition.locations.map((location) => location.id));
+    if (state.currentLocationId && !canonicalIds.has(state.currentLocationId)) {
+      return reply.status(409).send({
+        error:
+          "The current location exists only in this chat's unpublished changes. Move to a shared location or fork the map before discarding.",
+        code: "spatial_shared_world_current_location_local",
+      });
+    }
+    const { draft: _draft, ...link } = source.link;
+    await persistence.updateChatMetadata({
+      chatId: chat.id,
+      metadata: withSpatialSharedWorldLink(parseSpatialMetadata(chat.metadata), link),
+      updatedAt: now(),
+    });
+    return service.get(chat.id);
+  });
+
+  app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/shared-world/publish", async (request, reply) => {
+    const input = spatialSharedWorldDraftActionSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.status(400).send({
+        error: input.error.issues[0]?.message ?? "The shared-world changes are invalid.",
+        code: "spatial_shared_world_invalid",
+      });
+    }
+    const chat = await persistence.getChat(request.params.chatId);
+    if (!chat) return reply.status(404).send({ error: "Chat not found.", code: "spatial_chat_missing" });
+    const source = await resolveSpatialWorldSource(chat, persistence, {
+      includeLinkedChatCount: true,
+    });
+    if (!source.link?.draft || !source.world) {
+      return reply.status(409).send({
+        error: "This linked chat has no unpublished map changes.",
+        code: "spatial_shared_world_no_draft",
+      });
+    }
+    if (
+      source.world.revision !== input.data.expectedWorldRevision ||
+      source.link.draft.baseWorldRevision !== source.world.revision
+    ) {
+      return reply.status(409).send({
+        error:
+          "The shared world changed after this chat began editing it. Fork this chat or discard its changes before publishing.",
+        code: "spatial_shared_world_conflict",
+      });
+    }
+    if (!sameSpatialLocationIds(source.link.draft.definition, input.data.definition)) {
+      return reply.status(400).send({
+        error: "Published artwork may be remapped, but the submitted locations must match this chat's reviewed draft.",
+        code: "spatial_shared_world_draft_mismatch",
+      });
+    }
+    const removed = firstRemovedSpatialLocation(source.world.data.definition, input.data.definition);
+    if (removed && source.world.linkedChatCount > 0) {
+      return reply.status(409).send({
+        error: `“${removed.name || removed.id}” belongs to a linked world. Archive it instead of deleting it.`,
+        code: "spatial_shared_world_location_removal_forbidden",
+      });
+    }
+    const document = await persistence.documents.update({
+      id: source.world.id,
+      packageId: SPATIAL_SHARED_WORLD_PACKAGE_ID,
+      expectedRevision: source.world.revision,
+      name: source.world.name,
+      description: source.world.description,
+      data: createSpatialSharedWorldData(input.data.definition, input.data.hierarchyProfile),
+      updatedAt: now(),
+    });
+    if (!document) {
+      return reply.status(409).send({
+        error: "The shared world changed while publishing. Reload before trying again.",
+        code: "spatial_shared_world_conflict",
+      });
+    }
+    const { draft: _draft, ...link } = source.link;
+    await persistence.updateChatMetadata({
+      chatId: chat.id,
+      metadata: withSpatialSharedWorldLink(parseSpatialMetadata(chat.metadata), link),
+      updatedAt: now(),
+    });
+    const linkedChatCount = (await linkedChatIdsForSpatialWorld(persistence, source.world.id)).length;
+    return {
+      world: readSpatialSharedWorldDocument(document, linkedChatCount),
+      spatial: await service.get(chat.id),
+    };
+  });
+
   app.post("/spatial-context/templates/generate", async (request, reply) => {
     const body = isRecord(request.body) ? request.body : {};
     const parsed = generateSpatialMapDraftRequestSchema.safeParse(
       withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "generationPreferencesOverride"]),
     );
     const hierarchyMode = z.enum(["auto", "template", "custom"]).safeParse(body.hierarchyMode ?? "auto");
-    const requestedProfile = body.hierarchyProfile === undefined
-      ? null
-      : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
-    const preferenceOverride = body.generationPreferencesOverride === undefined
-      ? null
-      : spatialGenerationPreferencesSchema.safeParse(body.generationPreferencesOverride);
+    const requestedProfile =
+      body.hierarchyProfile === undefined ? null : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
+    const preferenceOverride =
+      body.generationPreferencesOverride === undefined
+        ? null
+        : spatialGenerationPreferencesSchema.safeParse(body.generationPreferencesOverride);
     if (
       !parsed.success ||
       parsed.data.operation !== "create" ||
@@ -749,7 +1169,9 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         ...(provenance ? { provenance } : {}),
         grounding: loreCatalog.grounding,
         hierarchyProfile,
-      } satisfies GenerateSpatialMapDraftResponse & { hierarchyProfile: SpatialHierarchyProfile };
+      } satisfies GenerateSpatialMapDraftResponse & {
+        hierarchyProfile: SpatialHierarchyProfile;
+      };
     } catch (error) {
       logger.error(error, "[spatial/map-template] Generation failed");
       return reply.status(502).send({
@@ -794,8 +1216,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       throw new SpatialMapPromptRequestError(
         400,
         "spatial_ai_prompt_template_override_invalid",
-        generationPreferencesOverride.error.issues[0]?.message ??
-          "The edited generation prompt preference is invalid.",
+        generationPreferencesOverride.error.issues[0]?.message ?? "The edited generation prompt preference is invalid.",
         generationPreferencesOverride.error.issues,
       );
     }
@@ -808,9 +1229,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       );
     }
     const requestedProfileResult =
-      body.hierarchyProfile === undefined
-        ? null
-        : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
+      body.hierarchyProfile === undefined ? null : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
     if (requestedProfileResult && !requestedProfileResult.success) {
       throw new SpatialMapPromptRequestError(
         400,
@@ -869,11 +1288,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         (location) => location.id === parsed.data.targetLocationId && location.status === "active",
       )
     ) {
-      throw new SpatialMapPromptRequestError(
-        400,
-        "spatial_ai_target_invalid",
-        "Choose an active location to expand.",
-      );
+      throw new SpatialMapPromptRequestError(400, "spatial_ai_target_invalid", "Choose an active location to expand.");
     }
 
     const gameMapReference =
@@ -1079,9 +1494,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       });
     }
     const parsedHierarchyProfile =
-      body.hierarchyProfile === undefined
-        ? null
-        : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
+      body.hierarchyProfile === undefined ? null : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
     if (parsedHierarchyProfile && !parsedHierarchyProfile.success) {
       return reply.status(400).send({
         error: parsedHierarchyProfile.error.issues[0]?.message ?? "Invalid hierarchy profile.",

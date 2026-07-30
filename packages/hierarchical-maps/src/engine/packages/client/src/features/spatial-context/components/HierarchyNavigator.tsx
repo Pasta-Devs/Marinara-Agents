@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, ChevronDown, ChevronRight, Copy, CornerDownRight, MapPin, Plus, Split } from "lucide-react";
 import { compareSpatialLocations, type SpatialContextDefinition, type SpatialLocation } from "@marinara-engine/shared";
+import {
+  hierarchyTypeForLocation,
+  type SpatialHierarchyProfile,
+} from "../../../../../maps-shared/src/maps-model";
 import { cn } from "../package-utils";
 
 interface HierarchyNavigatorProps {
   definition: SpatialContextDefinition;
+  hierarchyProfile: SpatialHierarchyProfile;
   selectedId: string | null;
   currentLocationId: string | null;
   expandSelectedChildren?: boolean;
@@ -18,6 +23,7 @@ interface HierarchyNavigatorProps {
 
 export function HierarchyNavigator({
   definition,
+  hierarchyProfile,
   selectedId,
   currentLocationId,
   expandSelectedChildren = false,
@@ -102,7 +108,7 @@ export function HierarchyNavigator({
                 {location.name || "Untitled location"}
               </span>
               <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
-                {location.kind}
+                {hierarchyTypeForLocation(hierarchyProfile, location).label}
                 {location.id === currentLocationId ? " · current" : ""}
                 {location.status === "archived" ? " · archived" : ""}
               </span>
