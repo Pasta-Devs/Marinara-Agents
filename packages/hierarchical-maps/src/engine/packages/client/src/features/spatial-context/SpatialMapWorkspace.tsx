@@ -723,6 +723,11 @@ export function SpatialMapWorkspace({
     artworkProgress === null &&
     artworkReminderSignature.length > 0 &&
     collapsedArtworkSignature === artworkReminderSignature;
+  const linkedSharedWorld =
+    !templateMode && spatial.data?.sharedWorld.mode === "linked" ? spatial.data.sharedWorld : null;
+  const mobileMapNoticeCount =
+    Number(missingArtworkLocations.length > 0) +
+    Number(Boolean(linkedSharedWorld?.missing || linkedSharedWorld?.conflict || linkedSharedWorld?.pendingChanges));
   const artworkPreviewSignature = missingArtworkLocations
     .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
     .map((location) =>
@@ -2303,9 +2308,22 @@ export function SpatialMapWorkspace({
               )}
               aria-expanded={mobileActionsOpen}
               aria-controls="hierarchical-map-mobile-actions"
-              aria-label={mobileActionsOpen ? "Close map actions" : "More map actions"}
+              aria-label={`${mobileActionsOpen ? "Close map actions" : "More map actions"}${
+                mobileMapNoticeCount > 0
+                  ? `, ${mobileMapNoticeCount} ${mobileMapNoticeCount === 1 ? "notice" : "notices"}`
+                  : ""
+              }`}
             >
               <MoreHorizontal size="0.8125rem" /> More
+              {mobileMapNoticeCount > 0 && (
+                <span
+                  data-marinara-map-notice-count
+                  aria-hidden="true"
+                  className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[var(--destructive)] px-1 text-[0.625rem] font-bold leading-none text-white"
+                >
+                  {mobileMapNoticeCount}
+                </span>
+              )}
               <ChevronDown
                 size="0.75rem"
                 className={cn("transition-transform duration-150", mobileActionsOpen && "rotate-180")}
@@ -2379,6 +2397,114 @@ export function SpatialMapWorkspace({
           className="relative z-40 border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)] p-3 lg:hidden"
         >
           <div className="grid grid-cols-2 gap-2">
+            {!templateMode && missingArtworkLocations.length > 0 && !artworkPreview && (
+              <button
+                type="button"
+                data-marinara-fill-map-artwork
+                onClick={() => {
+                  setMobileActionsOpen(false);
+                  void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork());
+                }}
+                disabled={
+                  artworkProgress !== null ||
+                  previewGalleryImages.isPending ||
+                  conflict ||
+                  updateSpatial.isPending
+                }
+                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-between px-3 text-xs disabled:opacity-45"
+                aria-label={`Review artwork for ${missingArtworkLocations.length} ${missingArtworkLocations.length === 1 ? "location" : "locations"}`}
+              >
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  {artworkProgress || previewGalleryImages.isPending ? (
+                    <Loader2 size="0.8125rem" className="shrink-0 animate-spin" />
+                  ) : (
+                    <ImageIcon size="0.8125rem" className="shrink-0" />
+                  )}
+                  <span className="truncate">
+                    {missingArtworkLocations.length} {missingArtworkLocations.length === 1 ? "location needs" : "locations need"} artwork
+                  </span>
+                </span>
+                <span className="shrink-0 font-semibold text-[var(--marinara-chat-chrome-accent)]">Review</span>
+              </button>
+            )}
+            {linkedSharedWorld && (
+              <div
+                data-marinara-mobile-shared-world-status
+                role={linkedSharedWorld.missing || linkedSharedWorld.conflict ? "alert" : "status"}
+                className={cn(
+                  "col-span-2 flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-3 text-xs",
+                  linkedSharedWorld.missing || linkedSharedWorld.conflict
+                    ? "border-red-500/25 bg-red-500/10 text-[var(--destructive)]"
+                    : linkedSharedWorld.pendingChanges
+                      ? "border-amber-500/25 bg-amber-500/10 text-[var(--marinara-editor-title)]"
+                      : "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-editor-title)]",
+                )}
+                title={
+                  linkedSharedWorld.missing
+                    ? "The account-owned world is unavailable."
+                    : linkedSharedWorld.conflict
+                      ? "The canonical world changed after this chat began editing."
+                      : linkedSharedWorld.pendingChanges
+                        ? "This chat has unpublished shared-world changes."
+                        : `Revision ${linkedSharedWorld.worldRevision ?? "?"} · ${linkedSharedWorld.linkedChatCount} linked chat${linkedSharedWorld.linkedChatCount === 1 ? "" : "s"}`
+                }
+              >
+                <Link2 size="0.8125rem" className="shrink-0" />
+                <span className="truncate font-semibold">
+                  {linkedSharedWorld.missing
+                    ? "Shared world unavailable"
+                    : linkedSharedWorld.conflict
+                      ? "Shared world conflict"
+                      : linkedSharedWorld.pendingChanges
+                        ? "Unpublished shared changes"
+                        : `Linked to ${linkedSharedWorld.worldName ?? "shared world"}`}
+                </span>
+              </div>
+            )}
+            {linkedSharedWorld?.pendingChanges && !linkedSharedWorld.conflict && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileActionsOpen(false);
+                  void publishLinkedChanges();
+                }}
+                disabled={dirty || publishSharedWorld.isPending}
+                className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              >
+                {publishSharedWorld.isPending ? (
+                  <Loader2 size="0.75rem" className="animate-spin" />
+                ) : (
+                  <Upload size="0.75rem" />
+                )}
+                Publish changes
+              </button>
+            )}
+            {linkedSharedWorld?.pendingChanges && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileActionsOpen(false);
+                  void discardLinkedChanges();
+                }}
+                disabled={dirty || discardSharedWorldDraft.isPending}
+                className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              >
+                Discard
+              </button>
+            )}
+            {linkedSharedWorld && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileActionsOpen(false);
+                  void forkLinkedWorld();
+                }}
+                disabled={dirty || forkSharedWorld.isPending || linkedSharedWorld.missing}
+                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              >
+                <GitFork size="0.75rem" /> Fork independent
+              </button>
+            )}
             {!templateMode && (
               <button
                 type="button"
@@ -2657,7 +2783,13 @@ export function SpatialMapWorkspace({
       />
 
       {!templateMode && !aiBuilderOpen && missingArtworkLocations.length > 0 && (
-        <section className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3">
+        <section
+          data-marinara-map-artwork-reminder
+          className={cn(
+            "border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3",
+            !artworkPreview && artworkProgress === null && "max-lg:hidden",
+          )}
+        >
           {artworkPreview ? (
             <div
               className="mx-auto flex min-h-0 w-full max-w-5xl flex-col gap-3 overflow-hidden rounded-xl border border-amber-500/35 bg-amber-500/10 p-3"
@@ -3027,7 +3159,7 @@ export function SpatialMapWorkspace({
       {!templateMode && !aiBuilderOpen && spatial.data?.sharedWorld.mode === "linked" && (
         <div
           className={cn(
-            "flex flex-wrap items-center gap-3 border-b px-4 py-3 text-xs",
+            "hidden flex-wrap items-center gap-3 border-b px-4 py-3 text-xs lg:flex",
             spatial.data.sharedWorld.missing || spatial.data.sharedWorld.conflict
               ? "border-red-500/25 bg-red-500/10 text-[var(--destructive)]"
               : spatial.data.sharedWorld.pendingChanges

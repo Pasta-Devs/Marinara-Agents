@@ -2810,6 +2810,8 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       const header = workspace.locator(":scope > .mari-editor-header");
       const moreActions = header.getByRole("button", { name: "More map actions" });
       await expectMinimumInteractiveSize(moreActions, "Mobile map actions control");
+      await expect(workspace.locator("[data-marinara-map-artwork-reminder]")).toBeHidden();
+      await expect(moreActions.locator("[data-marinara-map-notice-count]")).toHaveText("1");
       await expect(workspace.getByRole("button", { name: "Expand with AI", exact: true })).toHaveCount(0);
       const headerGeometry = await header.evaluate((element) => {
         const rect = element.getBoundingClientRect();
@@ -2832,6 +2834,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       await expect(mobileActions.getByRole("button", { name: "Add a saved map template" })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Export world map" })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Import world map" })).toBeVisible();
+      await expect(mobileActions.getByRole("button", { name: "Review artwork for 4 locations" })).toBeVisible();
       await expectMinimumInteractiveSize(
         mobileActions.getByRole("button", { name: "Expand with AI", exact: true }),
         "Mobile AI map action",
