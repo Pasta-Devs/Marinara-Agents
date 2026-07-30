@@ -3183,6 +3183,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     const [canvasBox, nodeBox] = await Promise.all([arrangedCanvas.boundingBox(), lighthouseNode.boundingBox()]);
     expect(canvasBox).not.toBeNull();
     expect(nodeBox).not.toBeNull();
+    const unselectedBorderColor = await lighthouseNode.evaluate((element) => getComputedStyle(element).borderColor);
     await lighthouseNode.focus();
     await lighthouseNode.click();
     await expect(page.locator("[data-marinara-maps-workspace-root]")).toBeVisible();
@@ -3201,6 +3202,8 @@ test("AI map expansion preserves a campaign map and its current location", async
         }),
       )
       .toBe(255);
+    const selectedBorderColor = await lighthouseNode.evaluate((element) => getComputedStyle(element).borderColor);
+    expect(selectedBorderColor).not.toBe(unselectedBorderColor);
     await page.mouse.move(nodeBox!.x + nodeBox!.width / 2, nodeBox!.y + nodeBox!.height / 2);
     await page.mouse.down();
     await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.6, canvasBox!.y + canvasBox!.height * 0.4);

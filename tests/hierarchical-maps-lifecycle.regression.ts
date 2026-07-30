@@ -1570,6 +1570,30 @@ async function main() {
       assert.equal(firstLinked.currentLocationId, "lifecycle_world");
       assert.equal(firstLinked.sharedWorld.mode, "linked");
       assert.equal(secondLinked.sharedWorld.linkedChatCount, 2);
+      const firstLinkedMove = (await expectJson(app, {
+        method: "POST",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context/turn`,
+        headers: csrfHeaders,
+        payload: {
+          content: "I walk from the shared world into Lifecycle Harbor.",
+          transition: {
+            destinationId: "lifecycle_harbor",
+            expectedDefinitionRevision: firstLinked.definition.revision,
+            expectedCurrentLocationId: firstLinked.currentLocationId,
+            commandId: "shared-world-private-runtime-state",
+          },
+        },
+      })) as { spatial: typeof firstLinked };
+      assert.equal(firstLinkedMove.spatial.currentLocationId, "lifecycle_harbor");
+      const secondAfterFirstMove = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context`,
+      })) as typeof secondLinked;
+      assert.equal(
+        secondAfterFirstMove.currentLocationId,
+        "lifecycle_world",
+        "Moving one linked chat must not change another linked chat's private runtime state",
+      );
 
       const firstDraftDefinition = {
         ...firstLinked.definition,
@@ -1588,7 +1612,7 @@ async function main() {
         headers: csrfHeaders,
         payload: {
           expectedRevision: firstLinked.definition.revision,
-          expectedCurrentLocationId: firstLinked.currentLocationId,
+          expectedCurrentLocationId: firstLinkedMove.spatial.currentLocationId,
           definition: firstDraftDefinition,
           hierarchyProfile: firstLinked.hierarchyProfile,
         },
@@ -1642,6 +1666,11 @@ async function main() {
         updatedSecond.definition.locations.find((location) => location.id === "lifecycle_harbor")?.description,
         "A harbor expanded in the first linked chat.",
         "Publishing must update the canonical definition read by every linked chat",
+      );
+      assert.equal(
+        updatedSecond.currentLocationId,
+        "lifecycle_world",
+        "Publishing a shared definition must preserve each linked chat's private runtime state",
       );
 
       const conflictingDraftDefinition = {
@@ -1705,9 +1734,19 @@ async function main() {
         },
       })) as typeof firstLinked;
       assert.equal(forked.sharedWorld.mode, "independent");
+      assert.equal(forked.currentLocationId, "lifecycle_harbor");
       assert.equal(
         forked.definition.locations.find((location) => location.id === "lifecycle_harbor")?.modelMemory,
         "An unpublished local secret.",
+      );
+      const secondAfterFirstFork = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context`,
+      })) as typeof secondLinked;
+      assert.equal(
+        secondAfterFirstFork.currentLocationId,
+        "lifecycle_world",
+        "Forking one linked chat must not change another linked chat's private runtime state",
       );
 
       const inUseDelete = (await expectJson(
