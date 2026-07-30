@@ -38,6 +38,15 @@ export interface StoreLtmDraftOptions extends CreateLtmExtractionDraftInput {
   afterWrite?: (draft: LtmExtractionDraft) => Promise<void>;
 }
 
+class LtmSupersessionError extends Error {
+  constructor(
+    cause: unknown,
+    readonly superseded: LtmExtractionDraft[],
+  ) {
+    super("Long-Term Memory draft supersession failed", { cause });
+  }
+}
+
 export type LtmDraftListFilter = {
   status?: LtmExtractionDraft["status"];
   chatId?: string;
@@ -155,6 +164,7 @@ export class LongTermMemoryDraftStore {
         try {
           superseded = await this.supersedeOlderPendingDrafts(draft);
         } catch (error) {
+          if (error instanceof LtmSupersessionError) superseded = error.superseded;
           const rollback = await Promise.allSettled([
             unlink(draftPathForId(draft.id, this.root)),
             ...superseded.map((previous) =>
@@ -171,8 +181,7 @@ export class LongTermMemoryDraftStore {
         return { draft, afterWrite: options.afterWrite };
       }),
     );
-    if (afterWrite)
-      await afterWrite(draft).catch((error) => logger.error(error, "[ltm] Draft afterWrite callback failed"));
+    if (afterWrite) await afterWrite(draft);
     return draft;
   }
 
@@ -199,10 +208,7 @@ export class LongTermMemoryDraftStore {
       }
       return updated;
     } catch (error) {
-      for (const previous of updated.reverse()) {
-        await writeJsonAtomic(draftPathForId(previous.id, this.root), previous).catch(() => {});
-      }
-      throw error;
+      throw new LtmSupersessionError(error, updated);
     }
   }
 

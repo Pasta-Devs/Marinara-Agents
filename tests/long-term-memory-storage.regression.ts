@@ -332,17 +332,24 @@ async function main() {
         droppedCandidateDetailsTruncated: false,
       },
     } as any;
+    const secondRejectionDraft = {
+      ...rejectionDraft,
+      source: { sourceNoteId: "source_second_import", chatId: "chat-a" },
+    };
     const [firstRejections, secondRejections] = await Promise.all([
       addRejectedSuggestions(rejectionDraft, root),
-      addRejectedSuggestions(rejectionDraft, root),
+      addRejectedSuggestions(secondRejectionDraft, root),
     ]);
     assert.equal(firstRejections.length, 1);
     assert.equal(secondRejections.length, 1);
-    assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 1);
+    assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
     assert.equal(
       (await exportLongTermMemoryData(root)).rejectedSuggestions.length,
-      1,
+      2,
     );
+    await addRejectedSuggestions(rejectionDraft, root);
+    await addRejectedSuggestions(rejectionDraft, root);
+    assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
     const rejectionId = firstRejections[0]!.id;
     assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: true, id: rejectionId });
     assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: false, id: rejectionId });
@@ -454,15 +461,23 @@ async function main() {
       links: [],
     });
     const draftStore = new LongTermMemoryDraftStore(root);
-    const afterWriteFailureDraft = await draftStore.createDraft({
+    let afterWriteRan = false;
+    let afterWriteDraftId = "";
+    await assert.rejects(draftStore.createDraft({
       source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
       scope: legacySource.scope,
       modes: ["roleplay"],
       response: { summary: "After-write failure proof.", mutations: [] },
-      afterWrite: async () => { throw new Error("after-write fixture failure"); },
-    });
-    assert.ok(await draftStore.getDraft(afterWriteFailureDraft.id), "afterWrite failure must not roll back the draft");
-    await draftStore.deleteDraft(afterWriteFailureDraft.id);
+      afterWrite: async (draft) => {
+        afterWriteRan = true;
+        afterWriteDraftId = draft.id;
+        throw new Error("after-write fixture failure");
+      },
+    }), /after-write fixture failure/u);
+    assert.equal(afterWriteRan, true);
+    assert.ok(afterWriteDraftId);
+    assert.ok(await draftStore.getDraft(afterWriteDraftId), "afterWrite failure must not roll back the draft");
+    await draftStore.deleteDraft(afterWriteDraftId);
     const suggestionDraft = await draftStore.createDraft({
       source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
       scope: legacySource.scope,
