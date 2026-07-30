@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   CornerDownRight,
   Download,
   GitFork,
@@ -140,6 +141,31 @@ const ARTWORK_MIME_EXTENSIONS = new Map([
   ["image/webp", "webp"],
   ["image/avif", "avif"],
 ]);
+
+const ARTWORK_REMINDER_STORAGE_PREFIX = "marinara:maps:artwork-reminder-collapsed:";
+
+function artworkReminderStorageKey(chatId: string): string {
+  return `${ARTWORK_REMINDER_STORAGE_PREFIX}${chatId}`;
+}
+
+function readCollapsedArtworkSignature(chatId: string | null): string | null {
+  if (!chatId || typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(artworkReminderStorageKey(chatId));
+  } catch {
+    return null;
+  }
+}
+
+function writeCollapsedArtworkSignature(chatId: string, signature: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (signature) window.localStorage.setItem(artworkReminderStorageKey(chatId), signature);
+    else window.localStorage.removeItem(artworkReminderStorageKey(chatId));
+  } catch {
+    // A private or restricted browser may deny local storage. The current editor session still works.
+  }
+}
 
 export function referencedArtworkIds(definition: SpatialContextDefinition): string[] {
   return Array.from(
@@ -436,6 +462,9 @@ export function SpatialMapWorkspace({
   const [isImporting, setIsImporting] = useState(false);
   const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
   const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
+  const [collapsedArtworkSignature, setCollapsedArtworkSignature] = useState<string | null>(() =>
+    readCollapsedArtworkSignature(chatId),
+  );
   const backgroundMoveFrameRef = useRef<number | null>(null);
   const pendingBackgroundMoveRef = useRef<{
     locationId: string;
@@ -665,6 +694,15 @@ export function SpatialMapWorkspace({
   const artworkImagesToGenerate = missingArtworkLocations.filter(
     (location) => !location.referenceImageId && !location.mapBackgroundImageId,
   ).length;
+  const artworkReminderSignature = missingArtworkLocations
+    .map((location) => location.id)
+    .sort((left, right) => left.localeCompare(right))
+    .join("\u0000");
+  const artworkReminderCollapsed =
+    !artworkPreview &&
+    artworkProgress === null &&
+    artworkReminderSignature.length > 0 &&
+    collapsedArtworkSignature === artworkReminderSignature;
   const artworkPreviewSignature = missingArtworkLocations
     .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
     .map((location) =>
@@ -715,6 +753,10 @@ export function SpatialMapWorkspace({
   useEffect(() => {
     setArtworkPreview(null);
   }, [artworkPreviewSignature]);
+
+  useEffect(() => {
+    setCollapsedArtworkSignature(readCollapsedArtworkSignature(chatId));
+  }, [chatId]);
 
   useEffect(() => {
     if (
@@ -2604,6 +2646,37 @@ export function SpatialMapWorkspace({
                 </button>
               </div>
             </div>
+          ) : artworkReminderCollapsed ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="min-w-0 flex-1 text-xs font-medium text-[var(--marinara-editor-title)]">
+                {missingArtworkLocations.length} {missingArtworkLocations.length === 1 ? "location needs" : "locations need"} artwork
+              </p>
+              <button
+                type="button"
+                data-marinara-fill-map-artwork
+                onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
+                disabled={previewGalleryImages.isPending || conflict || updateSpatial.isPending}
+                className="mari-chrome-control min-h-11 shrink-0 justify-center px-3 text-xs disabled:opacity-45"
+              >
+                {previewGalleryImages.isPending ? (
+                  <Loader2 size="0.8125rem" className="animate-spin" />
+                ) : (
+                  <ImageIcon size="0.8125rem" />
+                )}
+                {previewGalleryImages.isPending ? "Preparing preview" : "Review artwork"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (chatId) writeCollapsedArtworkSignature(chatId, null);
+                  setCollapsedArtworkSignature(null);
+                }}
+                className="mari-chrome-control min-h-11 shrink-0 justify-center px-3 text-xs"
+                aria-label="Expand location artwork reminder"
+              >
+                <ChevronDown size="0.8125rem" /> Expand
+              </button>
+            </div>
           ) : (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1">
@@ -2636,10 +2709,24 @@ export function SpatialMapWorkspace({
                       ? `Review ${artworkImagesToGenerate} request${artworkImagesToGenerate === 1 ? "" : "s"}`
                       : "Apply existing artwork"}
               </button>
-              {artworkProgress?.currentName && (
-                <span className="sr-only" role="status" aria-live="polite">
-                  Creating artwork for {artworkProgress.currentName}
-                </span>
+                {artworkProgress?.currentName && (
+                  <span className="sr-only" role="status" aria-live="polite">
+                    Creating artwork for {artworkProgress.currentName}
+                  </span>
+                )}
+              {!artworkProgress && !previewGalleryImages.isPending && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!chatId || !artworkReminderSignature) return;
+                    writeCollapsedArtworkSignature(chatId, artworkReminderSignature);
+                    setCollapsedArtworkSignature(artworkReminderSignature);
+                  }}
+                  className="mari-chrome-control min-h-11 shrink-0 justify-center px-3 text-xs"
+                  aria-label="Collapse location artwork reminder"
+                >
+                  <ChevronUp size="0.8125rem" /> Collapse
+                </button>
               )}
             </div>
           )}
@@ -3012,6 +3099,7 @@ export function SpatialMapWorkspace({
           <div className="mari-maps-workspace-grid hidden min-h-0 flex-1 divide-x divide-[var(--marinara-chat-chrome-panel-divider)] lg:grid">
             <HierarchyNavigator
               definition={draft}
+              hierarchyProfile={draftHierarchyProfile}
               selectedId={selectedId}
               currentLocationId={currentLocationId}
               expandSelectedChildren={isFirstMapDraft}
@@ -3052,6 +3140,7 @@ export function SpatialMapWorkspace({
               {mobilePane === "hierarchy" ? (
                 <HierarchyNavigator
                   definition={draft}
+                  hierarchyProfile={draftHierarchyProfile}
                   selectedId={selectedId}
                   currentLocationId={currentLocationId}
                   expandSelectedChildren={isFirstMapDraft}

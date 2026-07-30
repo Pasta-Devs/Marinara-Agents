@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   BookOpen,
   Check,
   ChevronDown,
@@ -39,6 +41,7 @@ import {
   generationPreferencesWithPromptLibrary,
   hierarchyTypeForLocation,
   hierarchyTypeId,
+  moveSpatialHierarchyType,
   normalizeHierarchyProfile,
   profileFromTemplate,
   type SpatialGenerationPreferences,
@@ -692,7 +695,10 @@ export function SpatialMapAiBuilder({
                     placeholder="Custom hierarchy name"
                   />
                   {workingHierarchyProfile.types.map((type, index) => (
-                    <div key={type.id} className="grid grid-cols-[minmax(0,1fr)_8rem_2.75rem] gap-2">
+                    <div
+                      key={type.id}
+                      className="grid grid-cols-[minmax(0,1fr)_8rem] gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]/40 p-2"
+                    >
                       <input
                         aria-label={`Location type ${index + 1} label`}
                         value={type.label}
@@ -728,31 +734,60 @@ export function SpatialMapAiBuilder({
                           <option key={kind} value={kind}>{kind}</option>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        disabled={workingHierarchyProfile.types.length === 1}
-                        onClick={() => {
-                          setWorkingHierarchyProfile((current) =>
-                            normalizeHierarchyProfile(
-                              {
-                                ...current,
-                                types: current.types.filter((candidate) => candidate.id !== type.id),
-                                locationTypeIds: Object.fromEntries(
-                                  Object.entries(current.locationTypeIds).filter(
-                                    ([, assignedTypeId]) => assignedTypeId !== type.id,
+                      <div className="col-span-2 flex items-center justify-end gap-1" aria-label={`Order ${type.label || "location type"}`}>
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => {
+                            setWorkingHierarchyProfile((current) => moveSpatialHierarchyType(current, type.id, -1));
+                            resetResult();
+                          }}
+                          className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                          aria-label={`Move ${type.label || "location type"} up`}
+                          title="Move up"
+                        >
+                          <ArrowUp size="0.75rem" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === workingHierarchyProfile.types.length - 1}
+                          onClick={() => {
+                            setWorkingHierarchyProfile((current) => moveSpatialHierarchyType(current, type.id, 1));
+                            resetResult();
+                          }}
+                          className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                          aria-label={`Move ${type.label || "location type"} down`}
+                          title="Move down"
+                        >
+                          <ArrowDown size="0.75rem" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={workingHierarchyProfile.types.length === 1}
+                          onClick={() => {
+                            setWorkingHierarchyProfile((current) =>
+                              normalizeHierarchyProfile(
+                                {
+                                  ...current,
+                                  types: current.types.filter((candidate) => candidate.id !== type.id),
+                                  locationTypeIds: Object.fromEntries(
+                                    Object.entries(current.locationTypeIds).filter(
+                                      ([, assignedTypeId]) => assignedTypeId !== type.id,
+                                    ),
                                   ),
-                                ),
-                              },
-                              definition,
-                            ),
-                          );
-                          resetResult();
-                        }}
-                        className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
-                        aria-label={`Remove ${type.label || "location type"}`}
-                      >
-                        <X size="0.75rem" />
-                      </button>
+                                },
+                                definition,
+                              ),
+                            );
+                            resetResult();
+                          }}
+                          className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                          aria-label={`Remove ${type.label || "location type"}`}
+                          title="Remove type"
+                        >
+                          <X size="0.75rem" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                   <button

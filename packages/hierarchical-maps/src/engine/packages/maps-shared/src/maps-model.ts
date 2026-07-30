@@ -975,6 +975,22 @@ export function hierarchyTypeForLocation(
   return assigned ?? profile.types.find((type) => type.baseKind === location.kind) ?? profile.types[0]!;
 }
 
+export function moveSpatialHierarchyType(
+  profile: SpatialHierarchyProfile,
+  typeId: string,
+  offset: -1 | 1,
+): SpatialHierarchyProfile {
+  const currentIndex = profile.types.findIndex((type) => type.id === typeId);
+  const nextIndex = currentIndex + offset;
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= profile.types.length) return profile;
+
+  const types = [...profile.types];
+  const [moved] = types.splice(currentIndex, 1);
+  if (!moved) return profile;
+  types.splice(nextIndex, 0, moved);
+  return { ...profile, mode: "custom", types };
+}
+
 export function withLocationHierarchyType(
   profile: SpatialHierarchyProfile,
   locationId: string,

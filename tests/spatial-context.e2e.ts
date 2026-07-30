@@ -1755,10 +1755,18 @@ test("global World Maps home edits the current map location types", async ({ pag
 
     await home.getByRole("button", { name: "Edit location types" }).click();
     await home.getByLabel("Profile name").fill("Maritime hierarchy");
+    await home.getByLabel("Location type 1 label").fill("Planet");
     await home.getByLabel("Location type 2 label").fill("City");
     await home.getByRole("button", { name: "Add location type" }).click();
     await home.getByLabel("Location type 7 label").fill("Neighborhood");
     await home.getByLabel("Neighborhood semantic base kind").selectOption("place");
+    const moveNeighborhoodUp = home.getByRole("button", { name: "Move Neighborhood up" });
+    for (let step = 0; step < 6; step += 1) await moveNeighborhoodUp.click();
+    await expect(moveNeighborhoodUp).toBeDisabled();
+    await expectMinimumInteractiveSize(
+      home.getByRole("button", { name: "Move Neighborhood down" }),
+      "Location type reorder control",
+    );
     await expect(home.getByRole("button", { name: "Remove City" })).toBeDisabled();
     await expect(home.getByRole("button", { name: "Remove Neighborhood" })).toBeEnabled();
     await home.getByRole("button", { name: "Save location types" }).click();
@@ -1767,35 +1775,52 @@ test("global World Maps home edits the current map location types", async ({ pag
       .poll(async () => {
         const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
         const payload = (await spatialResponse.json()) as {
-          hierarchyProfile: { name: string; mode: string; types: Array<{ label: string; baseKind: string }> };
+          hierarchyProfile: {
+            name: string;
+            mode: string;
+            types: Array<{ id: string; label: string; baseKind: string }>;
+            locationTypeIds: Record<string, string>;
+          };
         };
         return {
           name: payload.hierarchyProfile.name,
           mode: payload.hierarchyProfile.mode,
+          order: payload.hierarchyProfile.types.slice(0, 3).map((type) => type.label),
           city: payload.hierarchyProfile.types.find((type) => type.label === "City")?.baseKind,
           neighborhood: payload.hierarchyProfile.types.find((type) => type.label === "Neighborhood")?.baseKind,
+          rootType: payload.hierarchyProfile.types.find(
+            (type) => type.id === payload.hierarchyProfile.locationTypeIds.ai_world,
+          )?.label,
         };
       })
       .toEqual({
         name: "Maritime hierarchy",
         mode: "custom",
+        order: ["Neighborhood", "Planet", "City"],
         city: "settlement",
         neighborhood: "place",
+        rootType: "Planet",
       });
 
     await home.getByRole("button", { name: "Open map", exact: true }).click();
     const worldMapOverlay = page.locator("[data-marinara-maps-world-overlay]");
     await expect(worldMapOverlay.getByRole("heading", { name: "World map", exact: true })).toBeVisible();
     const worldMap = worldMapOverlay.getByRole("region", { name: "Hierarchical world map" });
-    await expect(worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u })).toBeVisible();
-    await worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u }).click();
+    const harborRow = worldMap.getByRole("button", { name: /^Inspect Gloam Harbor/u });
+    await expect(harborRow).toContainText("City");
+    await harborRow.click();
     await expect(worldMap.getByRole("button", { name: "Set destination: Gloam Harbor" })).toBeVisible();
+    await worldMap.getByRole("button", { name: "Browse up one location" }).click();
+    await expect(worldMap.getByRole("button", { name: /^Inspect Shrouded Coast/u })).toContainText("Planet");
     await worldMapOverlay.getByRole("button", { name: "Back to World Maps" }).click();
     await expect(home).toBeVisible();
 
     await home.getByRole("button", { name: "Open map", exact: true }).click();
     await worldMapOverlay.getByRole("button", { name: "Edit map", exact: true }).click();
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    const hierarchy = workspace.locator('section[aria-label="Location hierarchy"]:visible');
+    await expect(hierarchy.getByRole("button", { name: /Shrouded Coast.*Planet/u })).toBeVisible();
+    await expect(hierarchy.getByRole("button", { name: /Gloam Harbor.*City/u })).toBeVisible();
     await expect(workspace.getByRole("button", { name: "Location types" })).toHaveCount(0);
     await expect(workspace.getByRole("region", { name: "Location type fields" })).toHaveCount(0);
   } finally {
@@ -1984,8 +2009,16 @@ test("Map editor fills missing location artwork with one image per location", as
     await dismissOnboardingTutorial(page);
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
-    const fillArtwork = workspace.locator("[data-marinara-fill-map-artwork]");
+    let fillArtwork = workspace.locator("[data-marinara-fill-map-artwork]");
     await expect(workspace).toContainText("Review 2 missing image requests");
+    await workspace.getByRole("button", { name: "Collapse location artwork reminder" }).click();
+    await expect(workspace).toContainText("4 locations need artwork");
+    await expect(workspace.getByRole("button", { name: "Review artwork" })).toBeVisible();
+    await page.reload();
+    await dismissOnboardingTutorial(page);
+    await expect(workspace).toContainText("4 locations need artwork");
+    await expect(workspace.getByRole("button", { name: "Expand location artwork reminder" })).toBeVisible();
+    fillArtwork = workspace.locator("[data-marinara-fill-map-artwork]");
     await fillArtwork.click();
     await expect(fillArtwork).toHaveCount(0);
     expect(previewRequests).toHaveLength(2);
@@ -2601,6 +2634,16 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expectAiBuilderLayout(page, mobile);
     await page.getByLabel("What should this world include?").fill("A foggy port with a lighthouse and secret sewers.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
+    await page.getByRole("button", { name: /^Custom Edit every type/u }).click();
+    await page.getByRole("button", { name: "Move Region down" }).click();
+    await expect(page.getByLabel("Location type 1 label")).toHaveValue("Settlement");
+    await expect(page.getByLabel("Location type 2 label")).toHaveValue("Region");
+    await expectMinimumInteractiveSize(
+      page.getByRole("button", { name: "Move Region up" }),
+      "AI hierarchy reorder control",
+    );
+    await page.getByRole("button", { name: "Move Region up" }).click();
+    await page.getByRole("button", { name: /^Auto AI fits this world/u }).click();
     await expect(page.getByRole("button", { name: "Preview full prompt" })).toHaveCount(0);
     await page.getByRole("button", { name: "Generate draft", exact: true }).click();
     await expect(page.getByText("Validated", { exact: true })).toBeVisible();

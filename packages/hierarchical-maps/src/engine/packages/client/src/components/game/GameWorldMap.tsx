@@ -35,6 +35,7 @@ import {
   setPendingSpatialTransition,
   usePendingSpatialTransition,
 } from "../../features/spatial-context/pending-spatial-transitions";
+import { hierarchyTypeForLocation } from "../../../../maps-shared/src/maps-model";
 
 interface GameWorldMapProps {
   chatId: string;
@@ -284,7 +285,9 @@ export function GameWorldMap({
             {location.name}
           </span>
           <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
-            {layer ? `Layer ${location.layerOrder ?? 0}` : location.kind}
+            {layer
+              ? `Layer ${location.layerOrder ?? 0}`
+              : hierarchyTypeForLocation(spatial.hierarchyProfile, location).label}
             {isCurrent ? " · You are here" : isPending ? " · Pending" : ""}
           </span>
         </span>
