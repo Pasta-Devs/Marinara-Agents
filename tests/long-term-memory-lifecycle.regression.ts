@@ -143,6 +143,7 @@ async function main() {
     const rejectedSuggestionId = "2a1b5c7d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
     let savedNote: Record<string, unknown> | null = null;
     let deletedSuggestionId: string | null = null;
+    let healthState: "healthy" | "degraded" = "healthy";
     browserServer = createServer(async (request, response) => {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       const send = (status: number, body: unknown, contentType = "application/json") => {
@@ -161,8 +162,8 @@ async function main() {
           notes: { total: 0, byType: {}, byStatus: {} },
           events: { logAvailable: false, bytes: null },
           indexes: {
-            health: "healthy", dirty: false, rebuildState: "idle", errors: [], warnings: [],
-            generatedAt: null, sourceHash: null, noteCount: 0, chunkCount: 0,
+            health: healthState, dirty: false, rebuildState: "idle", errors: [], warnings: [],
+            generatedAt: null, sourceHash: null, noteCount: 0, chunkCount: 12,
             chunkFormatVersion: 1, embeddingsAvailable: false, embeddedChunkCount: 0,
           },
         });
@@ -210,6 +211,69 @@ async function main() {
     });
     await page.goto(`http://127.0.0.1:${address.port}/`);
     await page.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+    await page.evaluate(() => {
+      const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
+      element.setAttribute("view", "detail");
+      element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version: "1.0.2" } };
+      document.body.append(element);
+    });
+    await page.locator('[data-ltm-surface="detail"]').waitFor();
+    assert.equal(await page.locator('[data-ltm-surface="overview"]').count(), 0);
+    const desktopNavigationLayout = await page
+      .locator('[data-ltm-control="navigation"]').first()
+      .evaluate((element) => {
+        const navigation = element.closest("nav")!;
+        const style = getComputedStyle(navigation);
+        return {
+          display: style.display,
+          flexDirection: style.flexDirection,
+          overflowX: style.overflowX,
+          width: navigation.getBoundingClientRect().width,
+          height: navigation.getBoundingClientRect().height,
+        };
+      });
+    assert.notEqual(desktopNavigationLayout.display, "none");
+    assert.notEqual(desktopNavigationLayout.flexDirection, "column");
+    assert.ok(desktopNavigationLayout.width > 0);
+    assert.ok(desktopNavigationLayout.height > 0);
+    assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
+    assert.deepEqual(
+      await page.locator('[data-ltm-control="navigation"]').evaluateAll((elements) =>
+        [...new Set(elements.map((element) => element.getAttribute("data-ltm-destination")))],
+      ),
+      ["vault", "review", "sources", "settings"],
+    );
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    healthState = "degraded";
+    await page.reload();
+    await page.evaluate(() => {
+      const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
+      element.setAttribute("view", "detail");
+      element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version: "1.0.2" } };
+      document.body.append(element);
+    });
+    await page.locator('[data-ltm-surface="detail"]').waitFor();
+    assert.equal(
+      await page.locator('[data-ltm-control="navigation"]').last().evaluate((element) =>
+        getComputedStyle(element.closest("nav")!).display !== "none",
+      ),
+      true,
+    );
+    await page.locator('[data-ltm-surface="vault-health-warning"]').waitFor();
+    assert.equal(
+      await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').count(),
+      1,
+    );
+    await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').click();
+    const healthInfoPanel = page.locator('[data-ltm-info-panel]').last();
+    await healthInfoPanel.waitFor();
+    assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
+    assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
+
+    healthState = "healthy";
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload();
     await page.evaluate(() => {
       const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
       element.setAttribute("view", "detail");
