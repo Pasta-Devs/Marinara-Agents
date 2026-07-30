@@ -235,6 +235,7 @@ async function main() {
       });
     assert.notEqual(desktopNavigationLayout.display, "none");
     assert.notEqual(desktopNavigationLayout.flexDirection, "column");
+    assert.equal(desktopNavigationLayout.overflowX, "auto");
     assert.ok(desktopNavigationLayout.width > 0);
     assert.ok(desktopNavigationLayout.height > 0);
     assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
@@ -282,6 +283,8 @@ async function main() {
       document.body.append(element);
     });
     await page.locator('[data-ltm-surface="detail"]').waitFor();
+    assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
+    assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
     await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
     await page.locator(`[data-ltm-rejected-suggestion="${rejectedSuggestionId}"]`).waitFor();
     await page.getByRole("button", { name: /^Recover suggestion:/u }).click();

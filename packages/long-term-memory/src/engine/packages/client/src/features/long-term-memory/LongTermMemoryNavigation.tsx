@@ -101,6 +101,7 @@ export function LongTermMemoryNavigation({
           ? "mari-editor-tab-rail flex w-full shrink-0 border-t md:hidden"
           : "mari-editor-tab-rail hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border p-1 md:flex"
       }
+      style={mobile ? undefined : { overflowX: "auto" }}
     >
       {items}
     </nav>
