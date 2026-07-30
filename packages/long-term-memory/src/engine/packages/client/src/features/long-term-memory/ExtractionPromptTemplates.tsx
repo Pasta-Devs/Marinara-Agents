@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import type {
   LtmExtractionSettingsPatch,
@@ -73,6 +73,11 @@ export function ExtractionPromptTemplates({
   ) => Promise<boolean>;
 }) {
   const { t: localizeUi } = useLtmTranslation();
+  const id = useId();
+  const promptTemplatesLabelId = `${id}-prompt-templates-label`;
+  const promptTemplateLabelId = `${id}-prompt-template-label`;
+  const promptNameLabelId = `${id}-prompt-name-label`;
+  const templatePromptLabelId = `${id}-template-prompt-label`;
   const [selected, setSelected] = useState<PromptSelection>(
     value.promptTemplates[0]
       ? { kind: "custom", id: value.promptTemplates[0].id }
@@ -200,10 +205,16 @@ export function ExtractionPromptTemplates({
     });
 
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/20 p-3">
+    <section
+      aria-labelledby={promptTemplatesLabelId}
+      className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/20 p-3"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h4 className="flex items-center gap-1 text-xs font-semibold">
+          <h4
+            id={promptTemplatesLabelId}
+            className="flex items-center gap-1 text-xs font-semibold"
+          >
             {localizeUi(
               "ui.longTermMemory.extractionprompttemplates.promptTemplates",
             )}
@@ -227,9 +238,11 @@ export function ExtractionPromptTemplates({
         {modes.map((mode) => (
           <div
             key={mode}
+            role="group"
+            aria-labelledby={`${id}-${mode}-active-template-label`}
             className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]"
           >
-            <span>
+            <span id={`${id}-${mode}-active-template-label`}>
               <span className="flex items-center gap-1">
                 {localizeUi(modeLabelKeys[mode])}{" "}
                 {localizeUi(
@@ -247,10 +260,7 @@ export function ExtractionPromptTemplates({
               </span>
             </span>
             <select
-              aria-label={localizeUi(
-                "ui.longTermMemory.extractionprompttemplates.value1ActiveTemplate",
-                { value1: localizeUi(modeLabelKeys[mode]) },
-              )}
+              aria-labelledby={`${id}-${mode}-active-template-label`}
               className={inputClass}
               value={value.activePromptTemplateIdsByMode[mode] ?? ""}
               onChange={(event) => setActive(mode, event.target.value || null)}
@@ -287,7 +297,7 @@ export function ExtractionPromptTemplates({
       ) : null}
       <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
         <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span className="flex items-center gap-1">
+          <span id={promptTemplateLabelId} className="flex items-center gap-1">
             {localizeUi(
               "ui.longTermMemory.extractionprompttemplates.promptTemplate",
             )}
@@ -301,9 +311,7 @@ export function ExtractionPromptTemplates({
             />
           </span>
           <select
-            aria-label={localizeUi(
-              "ui.longTermMemory.extractionprompttemplates.promptTemplate",
-            )}
+            aria-labelledby={promptTemplateLabelId}
             className={inputClass}
             value={selectionKey(selected)}
             onChange={(event) => {
@@ -340,7 +348,7 @@ export function ExtractionPromptTemplates({
         {selected.kind === "default" ? (
           <div className="space-y-2">
             <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-              <span>
+              <span id={promptNameLabelId}>
                 {localizeUi("ui.longTermMemory.extractionprompttemplates.name")}
               </span>
               <input
@@ -351,7 +359,7 @@ export function ExtractionPromptTemplates({
               />
             </label>
             <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-              <span className="flex items-center gap-1">
+              <span id={templatePromptLabelId} className="flex items-center gap-1">
                 {localizeUi(
                   "ui.longTermMemory.extractionprompttemplates.templatePrompt",
                 )}
@@ -365,9 +373,7 @@ export function ExtractionPromptTemplates({
                 />
               </span>
               <textarea
-                aria-label={localizeUi(
-                  "ui.longTermMemory.extractionprompttemplates.templatePrompt",
-                )}
+                aria-labelledby={templatePromptLabelId}
                 className={`${inputClass} min-h-48 py-2`}
                 readOnly
                 maxLength={20000}
@@ -388,7 +394,7 @@ export function ExtractionPromptTemplates({
         ) : selectedTemplate ? (
           <div className="space-y-2">
             <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-              <span>
+              <span id={promptNameLabelId}>
                 {localizeUi("ui.longTermMemory.extractionprompttemplates.name")}
               </span>
               <input
@@ -401,7 +407,7 @@ export function ExtractionPromptTemplates({
               />
             </label>
             <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-              <span className="flex items-center gap-1">
+              <span id={templatePromptLabelId} className="flex items-center gap-1">
                 {localizeUi(
                   "ui.longTermMemory.extractionprompttemplates.templatePrompt",
                 )}
@@ -415,9 +421,7 @@ export function ExtractionPromptTemplates({
                 />
               </span>
               <textarea
-                aria-label={localizeUi(
-                  "ui.longTermMemory.extractionprompttemplates.templatePrompt",
-                )}
+                aria-labelledby={templatePromptLabelId}
                 className={`${inputClass} min-h-48 py-2`}
                 maxLength={20000}
                 value={selectedTemplate.prompt}
@@ -444,6 +448,6 @@ export function ExtractionPromptTemplates({
           </div>
         ) : null}
       </div>
-    </div>
+    </section>
   );
 }

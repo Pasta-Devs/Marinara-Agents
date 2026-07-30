@@ -285,6 +285,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   return (
     <main
       data-ltm-surface="detail"
+      aria-labelledby="ltm-detail-title"
       className="mari-editor-shell mari-editor-legacy-bridge flex min-h-0 flex-1 flex-col overflow-hidden"
     >
       <header className="mari-editor-header relative z-20">
@@ -302,7 +303,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             <BrainCircuit aria-hidden="true" size="1.125rem" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="mari-editor-title truncate">
+            <h1 id="ltm-detail-title" className="mari-editor-title truncate">
               {props.agent?.name?.trim() ||
                 localizeUi(
                   "ui.longTermMemory.longtermmemorydetail.longTermMemory",
@@ -355,7 +356,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-0"
                 onClick={() => setAddOpen((value) => !value)}
                 aria-expanded={addOpen}
-                aria-controls="ltm-add-menu"
+                aria-controls={addOpen ? "ltm-add-menu" : undefined}
                 aria-label={localizeUi(
                   "ui.longTermMemory.longtermmemorydetail.addMemories",
                 )}
@@ -372,6 +373,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   id="ltm-add-menu"
                   role="group"
                   aria-labelledby="ltm-add-menu-title"
+                  aria-describedby="ltm-add-menu-description"
                   className="mari-editor-panel absolute right-0 z-30 mt-2 w-72 p-2 text-[var(--marinara-editor-text)] shadow-lg"
                 >
                   <div className="px-2 py-1">
@@ -383,7 +385,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                         "ui.longTermMemory.longtermmemorydetail.addMemories",
                       )}
                     </h2>
-                    <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                    <p
+                      id="ltm-add-menu-description"
+                      className="mt-0.5 text-xs text-[var(--muted-foreground)]"
+                    >
                       {localizeUi(
                         "ui.longTermMemory.longtermmemorydetail.durableContextUsuallyStartsInAnExistingSource",
                       )}
@@ -482,10 +487,14 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             aria-label={localizeUi(
               "ui.longTermMemory.longtermmemorydetail.memoryStatus",
             )}
+            aria-busy={status.isLoading}
             className="mari-editor-panel mari-editor-panel--soft grid gap-3 p-3 text-xs text-[var(--marinara-editor-muted)] sm:grid-cols-3"
           >
             <span className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--marinara-editor-accent)]" />
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 rounded-full bg-[var(--marinara-editor-accent)]"
+              />
               <strong className="text-[var(--marinara-editor-text)]">
                 {status.data ? status.data.notes.total : "--"}
               </strong>{" "}
@@ -500,16 +509,21 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               )}
             </span>
             <span className="flex items-center gap-2">
-              <span className={`h-1.5 w-1.5 rounded-full ${healthTone}`} />
-              {status.isError
-                ? localizeUi(
-                    "ui.longTermMemory.longtermmemorydetail.statusUnavailable",
-                  )
-                : status.data
-                  ? healthLabel
-                  : localizeUi(
-                      "ui.longTermMemory.longtermmemorydetail.loadingStatus",
-                    )}
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 rounded-full ${healthTone}`}
+              />
+              <span aria-live="polite" aria-atomic="true">
+                {status.isError
+                  ? localizeUi(
+                      "ui.longTermMemory.longtermmemorydetail.statusUnavailable",
+                    )
+                  : status.data
+                    ? healthLabel
+                    : localizeUi(
+                        "ui.longTermMemory.longtermmemorydetail.loadingStatus",
+                      )}
+              </span>
               {status.data && needsHealthAttention ? (
                 <InfoPopover
                   label={localizeUi(
@@ -533,6 +547,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             />
             <div
               data-ltm-destination-content
+              role="region"
+              aria-label={destinationLabel(destination)}
               className="min-w-0 flex-1 space-y-5"
               style={{
                 containerName: "ltm-destination",
@@ -552,6 +568,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               {onboardingOpen ? (
                 <section
                   aria-labelledby="ltm-onboarding-title"
+                  aria-describedby="ltm-onboarding-description"
                   data-ltm-surface="onboarding"
                   className="mari-editor-panel mari-editor-panel--soft overflow-hidden"
                 >
@@ -607,10 +624,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                         "ui.longTermMemory.longtermmemorydetail.professorMariSSetupGuide",
                       )}
                     </p>
-                    <p
-                      aria-live="polite"
-                      className="shrink-0 text-xs text-[var(--muted-foreground)]"
-                    >
+                    <p className="shrink-0 text-xs text-[var(--muted-foreground)]">
                       {localizeUi(
                         "ui.longTermMemory.longtermmemorydetail.stepProgress",
                         {
@@ -624,15 +638,22 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     </p>
                   </div>
                   <div data-ltm-onboarding-body className="p-4 sm:p-6">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <h2
-                          id="ltm-onboarding-title"
-                          className="text-lg font-semibold"
+                      <div className="space-y-4">
+                        <div
+                          className="space-y-2"
+                          aria-live="polite"
+                          aria-atomic="true"
+                        >
+                          <h2
+                            id="ltm-onboarding-title"
+                            className="text-lg font-semibold"
                         >
                           {localizeUi(onboardingSteps[onboardingStep].titleKey)}
                         </h2>
-                        <p className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]">
+                        <p
+                          id="ltm-onboarding-description"
+                          className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]"
+                        >
                           {onboardingStep === 0
                             ? localizeUi(
                                 "ui.longTermMemory.longtermmemorydetail.importInformationFromChatsCharactersOrLorebooksLongTerm",

@@ -1084,7 +1084,13 @@ export default function ReviewQueue({
             )}
           </p>
         ) : null}
-        <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-2">
+        <div
+          role="group"
+          aria-label={localizeUi(
+            "ui.longTermMemory.reviewqueue.mutationActions",
+          )}
+          className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-2"
+        >
           <Button
             primary
             disabled={
@@ -1107,7 +1113,11 @@ export default function ReviewQueue({
   };
 
   return (
-    <section data-ltm-surface="review-queue" className="space-y-4">
+    <section
+      data-ltm-surface="review-queue"
+      aria-label={localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
+      className="space-y-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3">
         <div>
           <h2 className="text-sm font-semibold">
@@ -1153,6 +1163,10 @@ export default function ReviewQueue({
           {selectedRows.length ? (
             <div
               data-ltm-review-batch-actions
+              role="group"
+              aria-label={localizeUi(
+                "ui.longTermMemory.reviewqueue.batchActions",
+              )}
               className="flex flex-wrap items-center gap-2"
             >
               <Button

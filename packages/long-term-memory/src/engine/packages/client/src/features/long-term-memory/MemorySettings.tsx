@@ -264,6 +264,7 @@ export default function MemorySettings({
   onOpenMemory,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
+  const memorySettingsTitleId = useId();
   const recallStyleLabelId = useId();
   const recallPreambleLabelId = useId();
   const reasoningEffortLabelId = useId();
@@ -999,10 +1000,14 @@ export default function MemorySettings({
   );
 
   return (
-    <section data-ltm-surface="memory-settings" className="space-y-5">
+    <section
+      aria-labelledby={memorySettingsTitleId}
+      data-ltm-surface="memory-settings"
+      className="space-y-5"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold">
+          <h2 id={memorySettingsTitleId} className="text-sm font-semibold">
             {localizeUi("ui.longTermMemory.memorysettings.memorySettings")}
           </h2>
         </div>
@@ -1659,6 +1664,9 @@ export default function MemorySettings({
             <input
               ref={backupInput}
               type="file"
+              aria-label={localizeUi(
+                "ui.longTermMemory.memorysettings.chooseBackup",
+              )}
               accept="application/json,.json"
               className="sr-only"
               onChange={(event) => {
