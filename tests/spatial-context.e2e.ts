@@ -2875,6 +2875,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     }
     await expectMinimumInteractiveSize(replaceMap, "Replace map control");
     await replaceMap.click();
+    await expect(workspace).toBeVisible();
     const replacePanel = workspace.getByRole("region", { name: "Replace the current map" });
     await expect(replacePanel).toBeVisible();
     await expect(replacePanel).toContainText("4 locations");
@@ -3184,6 +3185,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     expect(nodeBox).not.toBeNull();
     await lighthouseNode.focus();
     await lighthouseNode.click();
+    await expect(page.locator("[data-marinara-maps-workspace-root]")).toBeVisible();
     await expect(lighthouseNode).toHaveAttribute("data-marinara-map-selected-location", "true");
     await expect
       .poll(async () =>

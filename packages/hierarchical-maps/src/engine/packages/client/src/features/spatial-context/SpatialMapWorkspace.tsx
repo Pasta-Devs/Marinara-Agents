@@ -2121,12 +2121,7 @@ export function SpatialMapWorkspace({
         </div>
       )}
 
-      <div
-        className="mari-editor-header relative z-50"
-        onPointerDown={(event) => event.stopPropagation()}
-        onTouchStart={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-      >
+      <div className="mari-editor-header relative z-50">
         <button
           type="button"
           data-marinara-map-header-back
