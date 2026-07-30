@@ -63,6 +63,7 @@ export function LongTermMemoryNavigation({
   const items = destinations.map((item) => {
     const active = item.id === destination;
     const badge = item.badge ? badges?.[item.badge] : undefined;
+    const label = localizeUi(mobile ? item.shortLabelKey : item.labelKey);
     const Icon = item.icon;
     return (
       <button
@@ -80,7 +81,7 @@ export function LongTermMemoryNavigation({
         }`}
       >
         <Icon aria-hidden="true" size={mobile ? "1.125rem" : "0.875rem"} />
-        <span>{localizeUi(mobile ? item.shortLabelKey : item.labelKey)}</span>
+        <span>{label}</span>
         {typeof badge === "number" && badge > 0 ? (
           <span data-ltm-badge className="mari-editor-tab-badge">
             {badge}

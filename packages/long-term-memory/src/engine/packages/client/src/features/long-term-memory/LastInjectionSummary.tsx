@@ -17,6 +17,7 @@ export function LastInjectionSummary({
   return (
     <details
       data-ltm-last-injection
+      aria-busy={loading}
       className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30"
     >
       <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
