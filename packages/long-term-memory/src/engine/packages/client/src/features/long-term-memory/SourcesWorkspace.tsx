@@ -272,11 +272,14 @@ function TransferWorkbench({
   const { t: localizeUi } = useLtmTranslation();
   return (
     <div
+      id="ltm-source-transfer-workbench"
+      role="region"
+      aria-labelledby="ltm-source-transfer-heading"
       data-ltm-source-transfer
       className="space-y-3 border-b border-[var(--border)] bg-[var(--secondary)]/20 p-3"
     >
       <div className="flex items-center gap-1">
-        <h2 className="text-sm font-semibold">
+        <h2 id="ltm-source-transfer-heading" className="text-sm font-semibold">
           {localizeUi("ui.longTermMemory.transferworkbench.transferMemories")}
         </h2>
         <InfoPopover
@@ -363,7 +366,7 @@ function TransferWorkbench({
           {busy === "preview" ? (
             <Loader2 size="0.75rem" className="animate-spin" />
           ) : (
-            <Send size="0.75rem" />
+            <Send aria-hidden="true" size="0.75rem" />
           )}
           {localizeUi(
             "ui.longTermMemory.transferworkbench.previewTransferCount",
@@ -381,20 +384,23 @@ function TransferWorkbench({
               alreadyApplicable: preview.buckets.noOp.length,
             })}
           </p>
-          {preview.items.map((item) => (
-            <p
-              key={item.noteId}
-              data-ltm-transfer-item={item.classification}
-              className="rounded bg-[var(--secondary)]/45 p-2"
-            >
-              <strong>{item.title}</strong>: {item.classification}
-              {item.reason
-                ? localizeUi("ui.longTermMemory.transferworkbench.value1", {
-                    value1: item.reason,
-                  })
-                : ""}
-            </p>
-          ))}
+          <div role="list">
+            {preview.items.map((item) => (
+              <p
+                key={item.noteId}
+                role="listitem"
+                data-ltm-transfer-item={item.classification}
+                className="rounded bg-[var(--secondary)]/45 p-2"
+              >
+                <strong>{item.title}</strong>: {item.classification}
+                {item.reason
+                  ? localizeUi("ui.longTermMemory.transferworkbench.value1", {
+                      value1: item.reason,
+                    })
+                  : ""}
+              </p>
+            ))}
+          </div>
           <Button
             primary
             disabled={busy !== null || preview.buckets.ready.length === 0}
@@ -405,7 +411,7 @@ function TransferWorkbench({
             {busy === "apply" ? (
               <Loader2 size="0.75rem" className="animate-spin" />
             ) : (
-              <Check size="0.75rem" />
+              <Check aria-hidden="true" size="0.75rem" />
             )}
             {localizeUi(
               preview.mode === "move"
@@ -444,6 +450,7 @@ export default function SourcesWorkspace({
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi } = useLtmTranslation();
   const importScopeLabelId = useId();
+  const importResultLabelId = useId();
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
   const selectAllImportedRef = useRef<HTMLInputElement>(null);
@@ -1261,7 +1268,7 @@ export default function SourcesWorkspace({
         <IconButton
           icon={Ellipsis}
           label={localizeUi(
-            "ui.longTermMemory.memoryvault.moreActionsForValue1",
+            "ui.longTermMemory.sourcesworkspace.moreActionsForValue1",
             { value1: title },
           )}
           aria-expanded={openSourceActionId === noteId}
@@ -1296,7 +1303,7 @@ export default function SourcesWorkspace({
         className="mari-editor-tab-rail flex flex-wrap gap-1 rounded-lg border p-1"
         role="tablist"
         aria-label={localizeUi(
-          "ui.longTermMemory.longtermmemorydetail.importSources",
+          "ui.longTermMemory.sourcesworkspace.sourceTypes",
         )}
       >
         {sourceTabs.map((tab) => (
@@ -1307,7 +1314,9 @@ export default function SourcesWorkspace({
             id={`ltm-source-tab-${tab.id}`}
             tabIndex={source === tab.id ? 0 : -1}
             aria-selected={source === tab.id}
-            aria-controls={`ltm-source-preview-${tab.id}`}
+            aria-controls={
+              source === tab.id ? `ltm-source-preview-${tab.id}` : undefined
+            }
             data-ltm-source-tab={tab.id}
             onClick={() => changeSource(tab.id)}
             onKeyDown={(event) =>
@@ -1328,7 +1337,11 @@ export default function SourcesWorkspace({
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3">
-        <div className="flex min-h-11 w-full flex-col gap-2 text-xs font-medium sm:flex-row sm:items-center">
+        <div
+          role="group"
+          aria-labelledby={importScopeLabelId}
+          className="flex min-h-11 w-full flex-col gap-2 text-xs font-medium sm:flex-row sm:items-center"
+        >
           <div className="flex items-center gap-2 sm:shrink-0">
             <span id={importScopeLabelId}>
               {localizeUi("ui.longTermMemory.sourcesworkspace.importScope")}
@@ -1357,9 +1370,6 @@ export default function SourcesWorkspace({
                 {localizeUi("ui.longTermMemory.sourcesworkspace.character")}
               </span>
               <select
-                aria-label={localizeUi(
-                  "ui.longTermMemory.sourcesworkspace.character",
-                )}
                 className={inputClass}
                 value={selectedImportCharacterId}
                 onChange={(event) => {
@@ -1389,9 +1399,6 @@ export default function SourcesWorkspace({
                 {localizeUi("ui.longTermMemory.sourcesworkspace.chat")}
               </span>
               <select
-                aria-label={localizeUi(
-                  "ui.longTermMemory.sourcesworkspace.chat",
-                )}
                 className={inputClass}
                 value={selectedImportConversationId}
                 onChange={(event) => {
@@ -1420,9 +1427,6 @@ export default function SourcesWorkspace({
                 {localizeUi("ui.longTermMemory.sourcesworkspace.branch")}
               </span>
               <select
-                aria-label={localizeUi(
-                  "ui.longTermMemory.sourcesworkspace.branch",
-                )}
                 className={inputClass}
                 value={selectedImportChat?.id ?? ""}
                 disabled={!selectedImportConversation}
@@ -1456,6 +1460,8 @@ export default function SourcesWorkspace({
           data-ltm-source-preview-status={
             source === "lorebooks" ? lorebookPreview.status : preview.status
           }
+          role="status"
+          aria-live="polite"
         >
           {source === "lorebooks"
             ? lorebookPreview.data
@@ -1531,7 +1537,11 @@ export default function SourcesWorkspace({
                 ? lorebookPreview.isFetching
                 : preview.isFetching
             ) ? (
-              <Loader2 size="0.75rem" className="animate-spin" />
+              <Loader2
+                aria-hidden="true"
+                size="0.75rem"
+                className="animate-spin"
+              />
             ) : (
               <RefreshCw size="0.75rem" />
             )}
@@ -1592,9 +1602,11 @@ export default function SourcesWorkspace({
       ) : null}
 
       {source === "lorebooks" ? (
-        <div
-          id="ltm-source-preview-lorebooks"
-          data-ltm-source-preview="lorebooks"
+          <div
+            id="ltm-source-preview-lorebooks"
+            role="tabpanel"
+            aria-labelledby="ltm-source-tab-lorebooks"
+            data-ltm-source-preview="lorebooks"
           data-ltm-lorebook-browser
           className="space-y-3"
         >
@@ -1613,45 +1625,15 @@ export default function SourcesWorkspace({
             }
           `}</style>
           <div
-            role="tablist"
-            aria-label={localizeUi(
-              "ui.longTermMemory.sourcesworkspace.lorebookWorkspace",
-            )}
             className="mari-editor-tab-rail grid grid-cols-2 rounded-lg border p-1 xl:hidden"
           >
             {(["lorebooks", "entries"] as const).map((pane) => (
               <button
                 key={pane}
                 type="button"
-                role="tab"
-                aria-selected={lorebookMobilePane === pane}
-                aria-controls={`ltm-lorebook-${pane}-panel`}
-                tabIndex={lorebookMobilePane === pane ? 0 : -1}
                 disabled={pane === "entries" && !selectedLorebook}
+                aria-pressed={lorebookMobilePane === pane}
                 onClick={() => setLorebookMobilePane(pane)}
-                onKeyDown={(event) => {
-                  if (
-                    event.key !== "ArrowLeft" &&
-                    event.key !== "ArrowRight" &&
-                    event.key !== "Home" &&
-                    event.key !== "End"
-                  )
-                    return;
-                  event.preventDefault();
-                  const next =
-                    event.key === "ArrowRight" || event.key === "End"
-                      ? "entries"
-                      : "lorebooks";
-                  if (next === "entries" && !selectedLorebook) return;
-                  setLorebookMobilePane(next);
-                  requestAnimationFrame(() =>
-                    document
-                      .querySelector<HTMLElement>(
-                        `[data-ltm-lorebook-pane="${next}"]`,
-                      )
-                      ?.focus(),
-                  );
-                }}
                 data-ltm-lorebook-pane={pane}
                 data-active={lorebookMobilePane === pane}
                 className="mari-editor-tab min-h-11 rounded-md px-2 text-xs font-semibold disabled:opacity-40"
@@ -1665,11 +1647,6 @@ export default function SourcesWorkspace({
 
           <div data-ltm-lorebook-layout>
             <section
-              id="ltm-lorebook-lorebooks-panel"
-              role="tabpanel"
-              aria-label={localizeUi(
-                "ui.longTermMemory.sourcesworkspace.lorebooks",
-              )}
               data-ltm-lorebook-list
               className={`${lorebookMobilePane === "lorebooks" ? "block" : "hidden"} overflow-hidden rounded-lg border border-[var(--border)] xl:block xl:max-h-[calc(100vh-20rem)] xl:overflow-y-auto`}
             >
@@ -1683,18 +1660,17 @@ export default function SourcesWorkspace({
               </div>
               <div role="list" className="divide-y divide-[var(--border)]">
                 {(lorebookPreview.data?.books ?? []).map((book) => (
-                  <button
-                    key={book.id}
-                    type="button"
-                    role="listitem"
-                    aria-current={selectedLorebookId === book.id || undefined}
-                    data-ltm-lorebook-id={book.id}
-                    onClick={() => {
-                      setSelectedLorebookId(book.id);
-                      setLorebookMobilePane("entries");
-                    }}
-                    className={`flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--secondary)]/35 ${selectedLorebookId === book.id ? "bg-[var(--primary)]/10" : ""}`}
-                  >
+                  <div key={book.id} role="listitem">
+                    <button
+                      type="button"
+                      aria-current={selectedLorebookId === book.id || undefined}
+                      data-ltm-lorebook-id={book.id}
+                      onClick={() => {
+                        setSelectedLorebookId(book.id);
+                        setLorebookMobilePane("entries");
+                      }}
+                      className={`flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--secondary)]/35 ${selectedLorebookId === book.id ? "bg-[var(--primary)]/10" : ""}`}
+                    >
                     <BookOpen
                       size="1rem"
                       className="shrink-0 text-[var(--muted-foreground)]"
@@ -1718,7 +1694,8 @@ export default function SourcesWorkspace({
                       size="0.875rem"
                       className="shrink-0 text-[var(--muted-foreground)]"
                     />
-                  </button>
+                    </button>
+                  </div>
                 ))}
                 {!lorebookPreview.isLoading &&
                 lorebookPreview.data?.books.length === 0 ? (
@@ -1732,11 +1709,6 @@ export default function SourcesWorkspace({
             </section>
 
             <section
-              id="ltm-lorebook-entries-panel"
-              role="tabpanel"
-              aria-label={localizeUi(
-                "ui.longTermMemory.sourcesworkspace.lorebookEntries",
-              )}
               data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
               className={`${lorebookMobilePane === "entries" ? "block" : "hidden"} mt-3 overflow-hidden rounded-lg border border-[var(--border)] xl:mt-0 xl:block xl:max-h-[calc(100vh-14rem)] xl:overflow-y-auto`}
             >
@@ -1807,6 +1779,11 @@ export default function SourcesWorkspace({
                             primary
                             onClick={() => setTransferOpen((open) => !open)}
                             aria-expanded={transferOpen}
+                            aria-controls={
+                              transferOpen
+                                ? "ltm-source-transfer-workbench"
+                                : undefined
+                            }
                             data-ltm-lorebook-action="transfer-selected"
                           >
                             <Send size="0.75rem" />{" "}
@@ -1927,18 +1904,20 @@ export default function SourcesWorkspace({
                               </p>
                             </div>
                           </div>
-                          {entry.candidates.map((candidate) => (
-                            <ClickSurface
-                              key={candidate.sourceId}
-                              className="group ml-7 space-y-2"
-                              data-ltm-source-existing-note={
-                                candidate.existingNoteId
-                              }
-                              data-ltm-source-actions-open={
-                                openSourceActionId ===
-                                  candidate.existingNoteId || undefined
-                              }
-                            >
+                          <div role="list" className="space-y-2">
+                            {entry.candidates.map((candidate) => (
+                              <ClickSurface
+                                key={candidate.sourceId}
+                                role="listitem"
+                                className="group ml-7 space-y-2"
+                                data-ltm-source-existing-note={
+                                  candidate.existingNoteId
+                                }
+                                data-ltm-source-actions-open={
+                                  openSourceActionId ===
+                                    candidate.existingNoteId || undefined
+                                }
+                              >
                               <div className="flex items-start gap-2">
                                 {candidate.status === "pending" ? (
                                   <IconButton
@@ -1987,8 +1966,9 @@ export default function SourcesWorkspace({
                                   </>
                                 )}
                               </div>
-                            </ClickSurface>
-                          ))}
+                              </ClickSurface>
+                            ))}
+                          </div>
                         </article>
                       );
                     })}
@@ -2014,6 +1994,8 @@ export default function SourcesWorkspace({
       ) : (
         <section
           id={`ltm-source-preview-${source}`}
+          role="tabpanel"
+          aria-labelledby={`ltm-source-tab-${source}`}
           data-ltm-source-preview={source}
           className="overflow-hidden rounded-lg border border-[var(--border)]"
         >
@@ -2037,7 +2019,11 @@ export default function SourcesWorkspace({
                   role="tab"
                   tabIndex={flatPanel === tab.id ? 0 : -1}
                   aria-selected={flatPanel === tab.id}
-                  aria-controls={`ltm-source-panel-${tab.id}`}
+                  aria-controls={
+                    flatPanel === tab.id
+                      ? `ltm-source-panel-${tab.id}`
+                      : undefined
+                  }
                   data-ltm-source-section={tab.id}
                   onClick={() => setFlatPanel(tab.id)}
                   onKeyDown={(event) =>
@@ -2140,6 +2126,11 @@ export default function SourcesWorkspace({
                       primary
                       onClick={() => setTransferOpen((open) => !open)}
                       aria-expanded={transferOpen}
+                      aria-controls={
+                        transferOpen
+                          ? "ltm-source-transfer-workbench"
+                          : undefined
+                      }
                       data-ltm-source-action="transfer-selected"
                     >
                       <Send size="0.75rem" />{" "}
@@ -2308,10 +2299,12 @@ export default function SourcesWorkspace({
 
       {importResult ? (
         <section
+          role="region"
+          aria-labelledby={importResultLabelId}
           data-ltm-source-import-result={importResult.batchStatus}
           className="space-y-3 rounded-lg border border-[var(--border)] p-3"
         >
-          <h2 className="text-sm font-semibold">
+          <h2 id={importResultLabelId} className="text-sm font-semibold">
             {localizeUi(
               "ui.longTermMemory.sourcesworkspace.sourceImportComplete",
             )}
@@ -2337,7 +2330,7 @@ export default function SourcesWorkspace({
                 }
                 data-ltm-source-action="retry-failed"
               >
-                <RefreshCw size="0.75rem" />
+                <RefreshCw aria-hidden="true" size="0.75rem" />
                 {localizeUi(
                   "ui.longTermMemory.sourcesworkspace.retryFailedCount",
                   { count: retryableIds.length },

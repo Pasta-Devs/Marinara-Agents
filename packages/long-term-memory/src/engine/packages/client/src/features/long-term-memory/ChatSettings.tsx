@@ -170,7 +170,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
       </div>
       <LastInjectionSummary
         data={lastInjection.data}
-        loading={lastInjection.isLoading}
+        loading={lastInjection.isFetching}
         error={lastInjection.isError}
       />
       {props.onOpenAgentSettings ? (

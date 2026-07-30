@@ -282,7 +282,7 @@ function Pill({
         })}
         className="grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
       >
-        <X size="0.75rem" />
+        <X aria-hidden="true" size="0.75rem" />
       </button>
     </span>
   );
@@ -339,9 +339,10 @@ function TokenEditor({
             }
           }}
           placeholder={placeholder}
+          aria-label={label}
         />
         <Button onClick={add} disabled={!value.trim()}>
-          <Plus size="0.75rem" />
+          <Plus aria-hidden="true" size="0.75rem" />
           {localizeUi("ui.longTermMemory.tokeneditor.add")}
         </Button>
       </div>
@@ -1342,18 +1343,15 @@ export default function MemoryVault({
         }
       `}</style>
       <div
-        role="tablist"
-        aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryWorkspace")}
         className="grid grid-cols-3 rounded-lg border border-[var(--border)] p-1 md:hidden"
       >
         {(["memories", "editor", "details"] as const).map((pane) => (
           <button
             key={pane}
-            type="button"
-            role="tab"
-            aria-selected={mobilePane === pane}
-            disabled={pane !== "memories" && !draft}
-            onClick={() => {
+             type="button"
+             disabled={pane !== "memories" && !draft}
+             aria-pressed={mobilePane === pane}
+             onClick={() => {
               setMobilePane(pane);
               if (pane !== "details") setDetailsOpen(false);
             }}
@@ -1383,6 +1381,7 @@ export default function MemoryVault({
         </div>
         <label className="relative col-span-2 block">
           <Search
+            aria-hidden="true"
             size="0.875rem"
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
           />
@@ -1406,7 +1405,7 @@ export default function MemoryVault({
               onClick={() => setSearch("")}
               className="absolute right-1 top-1 grid h-9 w-9 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
             >
-              <X size="0.875rem" />
+              <X aria-hidden="true" size="0.875rem" />
             </button>
           ) : null}
         </label>
@@ -1616,6 +1615,7 @@ export default function MemoryVault({
           </label>
           <span
             data-ltm-selection-count
+            id="ltm-selection-count"
             className="text-xs text-[var(--muted-foreground)]"
           >
             {checked.size}{" "}
@@ -1640,6 +1640,7 @@ export default function MemoryVault({
       {checked.size ? (
         <section
           data-ltm-bulk-actions
+          aria-labelledby="ltm-selection-count"
           className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3"
         >
           <>
@@ -1697,7 +1698,7 @@ export default function MemoryVault({
               disabled={Boolean(busy)}
               onClick={() => void batch("archive")}
             >
-              <Archive size="0.875rem" />
+              <Archive aria-hidden="true" size="0.875rem" />
               {localizeUi("ui.longTermMemory.memoryvault.archive")}
             </Button>
             <Button
@@ -1705,7 +1706,7 @@ export default function MemoryVault({
               disabled={Boolean(busy)}
               onClick={() => void batch("delete")}
             >
-              <Trash2 size="0.875rem" />
+              <Trash2 aria-hidden="true" size="0.875rem" />
               {localizeUi("ui.longTermMemory.extractionprompttemplates.delete")}
             </Button>
           </>
@@ -1716,6 +1717,7 @@ export default function MemoryVault({
           ref={deleteDialogRef}
           aria-modal="true"
           aria-labelledby="ltm-delete-title"
+          aria-describedby="ltm-delete-description"
           onCancel={(event) => {
             event.preventDefault();
             if (!busy) setDeleteIds(null);
@@ -1752,7 +1754,10 @@ export default function MemoryVault({
                   "ui.longTermMemory.memoryvault.permanentlyDeleteSelectedMemories",
                 )}
               </h3>
-              <p className="text-sm text-[var(--muted-foreground)]">
+              <p
+                id="ltm-delete-description"
+                className="text-sm text-[var(--muted-foreground)]"
+              >
                 {localizeUi("ui.longTermMemory.memoryvault.thisCannotBeUndone")}
               </p>
             </div>
@@ -1783,7 +1788,7 @@ export default function MemoryVault({
                 disabled={Boolean(busy)}
                 onClick={() => void deleteSelected(deleteIds, retractExtracted)}
               >
-                <Trash2 size="0.875rem" />
+                <Trash2 aria-hidden="true" size="0.875rem" />
                 {localizeUi("ui.longTermMemory.memoryvault.deletePermanently")}
               </Button>
             </div>
@@ -1879,6 +1884,7 @@ export default function MemoryVault({
                               {memoryLabel(note)}
                             </strong>
                             <ChevronRight
+                              aria-hidden="true"
                               size="0.875rem"
                               className="shrink-0"
                             />
@@ -1933,7 +1939,11 @@ export default function MemoryVault({
                               { value1: memoryLabel(note) },
                             )}
                             aria-expanded={openActionNoteId === note.id}
-                            aria-controls={`ltm-note-actions-${note.id}`}
+                            aria-controls={
+                              openActionNoteId === note.id
+                                ? `ltm-note-actions-${note.id}`
+                                : undefined
+                            }
                             onClick={(event) =>
                               toggleNoteActions(event, note.id)
                             }
@@ -1952,7 +1962,7 @@ export default function MemoryVault({
                               void runNoteAction(event, note, "archive")
                             }
                           >
-                            <Archive size="0.875rem" />
+                            <Archive aria-hidden="true" size="0.875rem" />
                             {localizeUi(
                               "ui.longTermMemory.memoryvault.archive",
                             )}
@@ -1965,7 +1975,7 @@ export default function MemoryVault({
                               void runNoteAction(event, note, "delete")
                             }
                           >
-                            <Trash2 size="0.875rem" />
+                            <Trash2 aria-hidden="true" size="0.875rem" />
                             {localizeUi(
                               "ui.longTermMemory.extractionprompttemplates.delete",
                             )}
@@ -2058,7 +2068,7 @@ export default function MemoryVault({
                     disabled={!dirty || busy === "save"}
                     onClick={() => void save()}
                   >
-                    <Check size="0.875rem" />
+                    <Check aria-hidden="true" size="0.875rem" />
                     {busy === "save"
                       ? localizeUi("ui.longTermMemory.memoryvault.saving")
                       : localizeUi("ui.longTermMemory.memoryvault.save")}
@@ -2233,7 +2243,7 @@ export default function MemoryVault({
                               )}
                               className="grid h-8 w-8 place-items-center rounded text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
                             >
-                              <Trash2 size="0.75rem" />
+                              <Trash2 aria-hidden="true" size="0.75rem" />
                             </button>
                           ) : null}
                         </div>
@@ -2544,6 +2554,9 @@ export default function MemoryVault({
                         placeholder={localizeUi(
                           "ui.longTermMemory.memoryvault.addAnotherCharacter",
                         )}
+                        aria-label={localizeUi(
+                          "ui.longTermMemory.memoryvault.addAnotherCharacter",
+                        )}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
                             event.preventDefault();
@@ -2621,6 +2634,9 @@ export default function MemoryVault({
                       <input
                         className={inputClass}
                         value={linkTarget}
+                        aria-label={localizeUi(
+                          "ui.longTermMemory.memoryvault.searchOrEnterAMemory",
+                        )}
                         onChange={(event) => setLinkTarget(event.target.value)}
                         placeholder={localizeUi(
                           "ui.longTermMemory.memoryvault.searchOrEnterAMemory",
@@ -2645,6 +2661,9 @@ export default function MemoryVault({
                       <select
                         className={inputClass}
                         value={linkRelation}
+                        aria-label={localizeUi(
+                          "ui.longTermMemory.memorysettings.relationship",
+                        )}
                         onChange={(event) =>
                           setLinkRelation(
                             event.target.value as LtmLink["relation"],
@@ -2663,7 +2682,7 @@ export default function MemoryVault({
                           !linkTarget.trim() || linkTarget.trim() === draft.id
                         }
                       >
-                        <Link2 size="0.75rem" />
+                        <Link2 aria-hidden="true" size="0.75rem" />
                         {localizeUi("ui.longTermMemory.memoryvault.link")}
                       </Button>
                     </div>
@@ -2704,6 +2723,9 @@ export default function MemoryVault({
                         <input
                           className={inputClass}
                           value={subjectKey}
+                          aria-label={localizeUi(
+                            "ui.longTermMemory.memoryvault.characterIdOrPersonaId",
+                          )}
                           onChange={(event) =>
                             setSubjectKey(event.target.value)
                           }
@@ -2789,7 +2811,7 @@ export default function MemoryVault({
                         disabled={Boolean(busy)}
                         onClick={() => void removeFromCurrentChat()}
                       >
-                        <Trash2 size="0.875rem" />
+                        <Trash2 aria-hidden="true" size="0.875rem" />
                         {busy === "remove-current-chat"
                           ? localizeUi("ui.longTermMemory.memoryvault.removing")
                           : localizeUi(
@@ -2853,7 +2875,11 @@ export default function MemoryVault({
                           {noteTypeLabel(note.type)}
                         </span>
                       </span>
-                      <ChevronRight size="0.875rem" className="shrink-0" />
+                      <ChevronRight
+                        aria-hidden="true"
+                        size="0.875rem"
+                        className="shrink-0"
+                      />
                     </button>
                   ))}
                   {sourceDerivedQuery.isSuccess && !sourceDerived.length ? (
@@ -2899,7 +2925,7 @@ export default function MemoryVault({
                       }
                     }}
                   >
-                    <RefreshCw size="0.875rem" />
+                    <RefreshCw aria-hidden="true" size="0.875rem" />
                     {localizeUi(
                       "ui.longTermMemory.memoryvault.extractToReview",
                     )}

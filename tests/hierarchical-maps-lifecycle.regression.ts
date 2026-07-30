@@ -541,6 +541,11 @@ async function main() {
         ): Promise<string>;
       };
     }>("packages/server/src/services/storage/game-state.storage.ts");
+    const { createGlobalGalleryStorage } = await importEngine<{
+      createGlobalGalleryStorage(db: unknown): {
+        createImage(input: { filePath: string }): Promise<{ id: string } | null>;
+      };
+    }>("packages/server/src/services/storage/global-gallery.storage.ts");
 
     seedInstalledProfile("1.0.6");
     const installedProfile = await capabilityPackageManager.installed();
@@ -1459,7 +1464,11 @@ async function main() {
       204,
     );
     const verifySharedWorldLifecycle = async () => {
-      const sharedWorldArtworkReference = "global-gallery:lifecycle-shared-world-art";
+      const sharedWorldArtwork = await createGlobalGalleryStorage(app.db).createImage({
+        filePath: "global/lifecycle-shared-world-art.png",
+      });
+      assert.ok(sharedWorldArtwork);
+      const sharedWorldArtworkReference = `global-gallery:${sharedWorldArtwork.id}`;
       const sharedWorldDefinition = {
         ...definition,
         locations: definition.locations.map((location, index) =>
@@ -2651,7 +2660,11 @@ async function main() {
       assistantContentBeforeCorrection,
       "Correcting the current visible state must not rewrite message prose",
     );
-    const sharedArtworkReference = "global-gallery:lifecycle-shared-art";
+    const sharedArtwork = await createGlobalGalleryStorage(app.db).createImage({
+      filePath: "global/lifecycle-shared-art.png",
+    });
+    assert.ok(sharedArtwork);
+    const sharedArtworkReference = `global-gallery:${sharedArtwork.id}`;
     const templateWithArtwork = (await expectJson(
       app,
       {

@@ -483,10 +483,17 @@ export default function ActivityView({
   };
 
   return (
-    <section data-ltm-surface="activity" className="space-y-4">
+    <section
+      data-ltm-surface="activity"
+      aria-labelledby="ltm-activity-title"
+      className="space-y-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h4 className="flex items-center gap-1 text-xs font-semibold">
+          <h4
+            id="ltm-activity-title"
+            className="flex items-center gap-1 text-xs font-semibold"
+          >
             {localizeUi("ui.longTermMemory.activityview.debugActivity")}
             <InfoPopover
               label={localizeUi("ui.longTermMemory.activityview.debugActivity")}
@@ -496,7 +503,13 @@ export default function ActivityView({
             />
           </h4>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div
+          role="group"
+          aria-label={localizeUi(
+            "ui.longTermMemory.activityview.debugActivity",
+          )}
+          className="flex flex-wrap gap-2"
+        >
           <Button
             disabled={activity.isFetching || recallActivity.isFetching}
             onClick={() =>
@@ -547,7 +560,7 @@ export default function ActivityView({
       {props.chatId ? (
         <LastInjectionSummary
           data={lastInjection.data}
-          loading={lastInjection.isLoading}
+          loading={lastInjection.isFetching}
           error={lastInjection.isError}
           onOpenMemory={onOpenMemory}
         />
@@ -630,7 +643,12 @@ export default function ActivityView({
                       "ui.longTermMemory.activityview.selectedChunks",
                     )}
                   </h4>
-                  <ul className="space-y-1 text-[var(--muted-foreground)]">
+                  <ul
+                    aria-label={localizeUi(
+                      "ui.longTermMemory.activityview.selectedChunks",
+                    )}
+                    className="space-y-1 text-[var(--muted-foreground)]"
+                  >
                     {recallWorkflow.selected.map((candidate, index) => {
                       const noteId =
                         typeof candidate.noteId === "string"
@@ -682,7 +700,12 @@ export default function ActivityView({
                       "ui.longTermMemory.activityview.rejectedCandidates",
                     )}
                   </h4>
-                  <ul className="space-y-1 text-[var(--muted-foreground)]">
+                  <ul
+                    aria-label={localizeUi(
+                      "ui.longTermMemory.activityview.rejectedCandidates",
+                    )}
+                    className="space-y-1 text-[var(--muted-foreground)]"
+                  >
                     {recallWorkflow.rejected.map((candidate, index) => {
                       const noteId =
                         typeof candidate.noteId === "string"
