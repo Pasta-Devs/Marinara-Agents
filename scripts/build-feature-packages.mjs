@@ -465,6 +465,21 @@ async function bundleSpecialClient(feature, output) {
     0 0.5rem 1.25rem rgba(0, 0, 0, 0.32);
 }
 
+[data-marinara-maps-runtime-popover] [data-marinara-map-selected-location="true"] {
+  border-color: var(--marinara-chat-chrome-accent) !important;
+  background-color: Canvas !important;
+  background-color: rgb(from var(--background) r g b) !important;
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--marinara-chat-chrome-accent) 16%, transparent),
+    color-mix(in srgb, var(--marinara-chat-chrome-accent) 16%, transparent)
+  ) !important;
+  color: var(--marinara-chat-chrome-panel-title) !important;
+  box-shadow:
+    0 0 0 0.125rem Canvas,
+    0 0 0 0.25rem var(--marinara-chat-chrome-accent),
+    0 0.5rem 1.25rem rgba(0, 0, 0, 0.32);
+}
+
 @media (max-width: 47.999rem) {
   [data-marinara-maps-workspace-overlay] [data-marinara-map-header-actions] {
     display: contents;

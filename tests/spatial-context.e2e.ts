@@ -2948,6 +2948,86 @@ test("AI map builder previews a validated local draft before save", async ({ pag
   }
 });
 
+test("Roleplay minimap keeps selected locations opaque over map artwork", async ({ page }) => {
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Opaque Map Selection Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const artworkUpload = await page.request.post(`/api/gallery/${chat.id}/upload`, {
+    multipart: {
+      prompt: "A fogbound anime coast.",
+      provider: "world-map-e2e",
+      model: "fixture",
+      width: "1",
+      height: "1",
+      file: {
+        name: "shrouded-coast.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2SIAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      },
+    },
+  });
+  expect(artworkUpload.ok(), await artworkUpload.text()).toBeTruthy();
+  const uploadedArtwork = (await artworkUpload.json()) as { id: string };
+  const definitionWithArtwork = {
+    ...generatedDefinition,
+    enabled: true,
+    locations: generatedDefinition.locations.map((location) =>
+      location.id === "ai_world" ? { ...location, mapBackgroundImageId: uploadedArtwork.id } : location,
+    ),
+  };
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: definitionWithArtwork,
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({ state: { hasCompletedOnboarding: true, sidebarOpen: false }, version: 72 }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    const storyLocation = page.getByRole("region", { name: "Story location" });
+    await storyLocation.getByRole("button", { name: "Open story map" }).click();
+    const roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
+    await expect(roleplayMap.locator('img[aria-hidden="true"]')).toBeVisible();
+    const selectedMiniMapLocation = roleplayMap.getByRole("button", { name: /Inspect Blackglass Lighthouse/ });
+    await selectedMiniMapLocation.click();
+    await expect(selectedMiniMapLocation).toHaveAttribute("aria-pressed", "true");
+    const selectedMiniMapMarker = selectedMiniMapLocation.locator('[data-marinara-map-selected-location="true"]');
+    await expect(selectedMiniMapMarker).toBeVisible();
+    await expect
+      .poll(
+        () => computedBackgroundAlpha(selectedMiniMapMarker),
+        { message: "Selected minimap location should remain opaque over map artwork" },
+      )
+      .toBe(1);
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+  }
+});
+
 test("AI map expansion preserves a campaign map and its current location", async ({ page }, testInfo) => {
   test.setTimeout(150_000);
   const response = await page.request.post("/api/chats", {

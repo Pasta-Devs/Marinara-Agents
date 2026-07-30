@@ -501,15 +501,17 @@ export function GameWorldMap({
                   className="absolute z-10 flex w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-lg p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                   style={{ left: `${displayCoordinate(placement.x)}%`, top: `${displayCoordinate(placement.y)}%` }}
                   aria-label={`Inspect ${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
+                  aria-pressed={isSelected}
                 >
                   <span
                     className={cn(
                       "relative flex h-11 w-11 items-center justify-center rounded-full border bg-[var(--marinara-chat-chrome-panel-bg)] text-xl shadow-md transition-[border-color,transform,background-color] duration-200",
                       isSelected
-                        ? "scale-105 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]"
+                        ? "scale-105 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--background)]"
                         : "border-[var(--marinara-chat-chrome-panel-border)] hover:border-[var(--marinara-chat-chrome-button-border-hover)]",
                       isCurrent && "ring-2 ring-[var(--marinara-chat-chrome-focus-ring)] ring-offset-1 ring-offset-[var(--background)]",
                     )}
+                    data-marinara-map-selected-location={isSelected ? "true" : undefined}
                     aria-hidden="true"
                   >
                     {location.icon || "⌖"}
