@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  Braces,
   Check,
   ChevronRight,
   Ellipsis,
   Link2,
-  PanelRight,
   Plus,
   RefreshCw,
   Search,
@@ -51,6 +51,14 @@ import {
   useLtmTranslation,
   type LtmTranslationFunction,
 } from "./localization";
+import {
+  buildScopeIndexes,
+  deriveScopeBranches,
+  deriveScopeConversations,
+  type ScopeTargetChat,
+  type ScopeTargetCharacter,
+  type ScopeTargetGroup,
+} from "./scope-targets";
 
 const noteTypes: readonly LtmNoteType[] = [
   "timeline_event",
@@ -127,14 +135,9 @@ const prefixes: Record<LtmNoteType, string> = {
 
 type ScopeTargets = {
   currentScope: LtmScope | null;
-  chats: Array<{
-    id: string;
-    label: string;
-    mode: LtmMode;
-    groupId: string | null;
-  }>;
-  groups: Array<{ id: string; label: string; chatIds: string[] }>;
-  characters: Array<{ id: string; label: string }>;
+  chats: ScopeTargetChat[];
+  groups: ScopeTargetGroup[];
+  characters: ScopeTargetCharacter[];
 };
 type Target = { id: string; label: string; scope?: LtmScope };
 type NoteResponse = { note: LtmNote };
@@ -358,11 +361,7 @@ export default function MemoryVault({
   const { t: localizeUi, locale } = useLtmTranslation();
   const client = useQueryClient();
   const detailRef = useRef<HTMLElement>(null);
-  const scopePickerRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
-  const [targetSearch, setTargetSearch] = useState("");
-  const [targetsOpen, setTargetsOpen] = useState(false);
-  const [activeTargetIndex, setActiveTargetIndex] = useState(0);
   const contextKey = props.chatId ?? "__global__";
   const [target, setTarget] = useState<Target | null>(
     () => sessionTargets.get(contextKey) ?? null,
@@ -370,7 +369,6 @@ export default function MemoryVault({
   const targetContextKey = useRef(contextKey);
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">("all");
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
-  const [selectionMode, setSelectionMode] = useState(false);
   const [mobilePane, setMobilePane] = useState<
     "memories" | "editor" | "details"
   >("memories");
@@ -472,8 +470,6 @@ export default function MemoryVault({
     setOpenActionNoteId(null);
     setRetractExtracted(false);
     setDetailsOpen(false);
-    setTargetSearch("");
-    setTargetsOpen(false);
     setLinkTarget("");
     setLinkRelation("involves");
     setSubjectKey("");
@@ -582,11 +578,53 @@ export default function MemoryVault({
     (candidate, index, items) =>
       items.findIndex((item) => item.id === candidate.id) === index,
   );
-  const matchingTargets = targets.filter((candidate) =>
-    candidate.label
-      .toLocaleLowerCase()
-      .includes(targetSearch.toLocaleLowerCase()),
+  const scopeIndexes = useMemo(
+    () => buildScopeIndexes(scopeTargets.data?.chats ?? []),
+    [scopeTargets.data?.chats],
   );
+  const selectedChat =
+    target?.id.startsWith("chat:") && target.scope?.chatIds?.length === 1
+      ? scopeIndexes.chatsById.get(target.scope.chatIds[0])
+      : undefined;
+  const selectedGroupId = target?.scope?.groupId ?? selectedChat?.groupId ?? "";
+  const selectedCharacterId =
+    target?.scope?.characterIds?.length === 1
+      ? target.scope.characterIds[0]
+      : (selectedChat?.characterIds[0] ?? "");
+  const selectedConversationId = selectedGroupId
+    ? `group:${selectedGroupId}`
+    : selectedChat
+      ? `chat:${selectedChat.id}`
+      : "";
+  const { conversations, branches, selectedConversation } = useMemo(() => {
+    const conversations = deriveScopeConversations(
+      scopeTargets.data?.chats ?? [],
+      scopeTargets.data?.groups ?? [],
+      selectedCharacterId,
+      scopeIndexes,
+      (group) =>
+        localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
+          group: group.label,
+        }),
+    );
+    return {
+      conversations,
+      selectedConversation: conversations.find(
+        (item) => item.id === selectedConversationId,
+      ),
+      branches: deriveScopeBranches(
+        conversations.find((item) => item.id === selectedConversationId),
+        scopeIndexes,
+      ),
+    };
+  }, [
+    localizeUi,
+    scopeIndexes,
+    scopeTargets.data?.chats,
+    scopeTargets.data?.groups,
+    selectedCharacterId,
+    selectedConversationId,
+  ]);
   const referenceLabel = (value: string) => {
     const [kind, id] = value.split(/:(.+)/, 2);
     if (!id) return humanizeLabel(value);
@@ -613,17 +651,6 @@ export default function MemoryVault({
       return scopeTargetLabel("chat", draft.provenance.sourceId, targets);
     return "Lorebook";
   };
-
-  useEffect(() => setActiveTargetIndex(0), [targetSearch]);
-  useEffect(() => {
-    if (!targetsOpen) return;
-    const closeScopePicker = (event: PointerEvent) => {
-      if (!scopePickerRef.current?.contains(event.target as Node))
-        setTargetsOpen(false);
-    };
-    document.addEventListener("pointerdown", closeScopePicker);
-    return () => document.removeEventListener("pointerdown", closeScopePicker);
-  }, [targetsOpen]);
 
   const dirtyRef = useRef(dirty);
   useEffect(() => {
@@ -722,8 +749,6 @@ export default function MemoryVault({
     editorSession.current += 1;
     noteLoadSession.current += 1;
     setTarget(next);
-    setTargetSearch("");
-    setTargetsOpen(false);
     setDraft(null);
     setChecked(new Set());
     setSaved("");
@@ -1385,84 +1410,168 @@ export default function MemoryVault({
             </button>
           ) : null}
         </label>
-        <div ref={scopePickerRef} className="relative min-w-0">
-          <input
-            className={inputClass}
-            value={targetSearch || target?.label || ""}
-            onFocus={() => setTargetsOpen(true)}
-            onChange={(event) => {
-              setTargetSearch(event.target.value);
-              setTargetsOpen(true);
-            }}
-            placeholder={localizeUi(
-              "ui.longTermMemory.memoryvault.chooseScope",
-            )}
-            aria-label={localizeUi(
-              "ui.longTermMemory.memoryvault.chooseMemoryScope",
-            )}
-            role="combobox"
-            aria-expanded={targetsOpen}
-            aria-controls="ltm-scope-targets"
-            aria-activedescendant={
-              targetsOpen && matchingTargets[activeTargetIndex]
-                ? `ltm-scope-target-${activeTargetIndex}`
-                : undefined
-            }
-            aria-autocomplete="list"
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                event.preventDefault();
-                setTargetsOpen(true);
-                setActiveTargetIndex((current) => {
-                  if (!matchingTargets.length) return 0;
-                  if (!targetsOpen)
-                    return event.key === "ArrowDown"
-                      ? 0
-                      : matchingTargets.length - 1;
-                  const step = event.key === "ArrowDown" ? 1 : -1;
-                  return (
-                    (current + step + matchingTargets.length) %
-                    matchingTargets.length
-                  );
-                });
-              } else if (event.key === "Enter" && targetsOpen) {
-                const active = matchingTargets[activeTargetIndex];
-                if (active) {
-                  event.preventDefault();
-                  void selectTarget(active);
-                }
-              } else if (event.key === "Escape") setTargetsOpen(false);
-            }}
-          />
-          {targetsOpen ? (
-            <div
-              id="ltm-scope-targets"
-              role="listbox"
-              className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-1 shadow-lg"
+        <div className="col-span-2 grid min-w-0 grid-cols-1 gap-2">
+          <label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span>{localizeUi("ui.longTermMemory.memoryvault.character")}</span>
+            <select
+              className={inputClass}
+              value={selectedCharacterId}
+              aria-label={localizeUi("ui.longTermMemory.memoryvault.character")}
+              onChange={(event) => {
+                const character = scopeTargets.data?.characters.find(
+                  (item) => item.id === event.target.value,
+                );
+                void selectTarget(
+                  character
+                    ? {
+                        id: `character:${character.id}`,
+                        label: character.label,
+                        scope: {
+                          characterIds: [character.id],
+                          chatIds: (scopeTargets.data?.chats ?? [])
+                            .filter((chat) =>
+                              chat.characterIds.includes(character.id),
+                            )
+                            .map((chat) => chat.id),
+                        },
+                      }
+                    : targets[0]!,
+                );
+              }}
             >
-              {matchingTargets.map((candidate, index) => (
-                <button
-                  key={candidate.id}
-                  id={`ltm-scope-target-${index}`}
-                  role="option"
-                  aria-selected={candidate.id === target?.id}
-                  type="button"
-                  onMouseEnter={() => setActiveTargetIndex(index)}
-                  onClick={() => void selectTarget(candidate)}
-                  className={`block w-full rounded px-3 py-2 text-left text-sm hover:bg-[var(--accent)] ${index === activeTargetIndex ? "bg-[var(--accent)]" : ""}`}
-                >
-                  {candidate.label}
-                </button>
+              <option value="">
+                {localizeUi("ui.longTermMemory.memoryvault.allCharacters")}
+              </option>
+              {(scopeTargets.data?.characters ?? []).map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.label}
+                </option>
               ))}
-              {!matchingTargets.length ? (
-                <p className="p-3 text-xs text-[var(--muted-foreground)]">
-                  {localizeUi(
-                    "ui.longTermMemory.memoryvault.noLinkedMemoryScopesFound",
-                  )}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
+            </select>
+          </label>
+          <label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span>{localizeUi("ui.longTermMemory.memoryvault.chat")}</span>
+            <select
+              className={inputClass}
+              value={selectedConversationId}
+              aria-label={localizeUi("ui.longTermMemory.memoryvault.chat")}
+              onChange={(event) => {
+                const conversation = conversations.find(
+                  (item) => item.id === event.target.value,
+                );
+                if (!conversation) {
+                  const character = scopeTargets.data?.characters.find(
+                    (item) => item.id === selectedCharacterId,
+                  );
+                  void selectTarget(
+                    character
+                      ? {
+                          id: `character:${character.id}`,
+                          label: character.label,
+                          scope: {
+                            characterIds: [character.id],
+                            chatIds: (scopeTargets.data?.chats ?? [])
+                              .filter((chat) =>
+                                chat.characterIds.includes(character.id),
+                              )
+                              .map((chat) => chat.id),
+                          },
+                        }
+                      : targets[0]!,
+                  );
+                  return;
+                }
+                const [kind, id] = conversation.id.split(/:(.+)/, 2);
+                void selectTarget({
+                  id: conversation.id,
+                  label: conversation.label,
+                  scope:
+                    kind === "group"
+                      ? {
+                          groupId: id,
+                          chatIds: conversation.chatIds,
+                          ...(selectedCharacterId
+                            ? { characterIds: [selectedCharacterId] }
+                            : {}),
+                        }
+                      : {
+                          chatId: id,
+                          chatIds: [id],
+                          ...(selectedCharacterId
+                            ? { characterIds: [selectedCharacterId] }
+                            : {}),
+                        },
+                });
+              }}
+            >
+              <option value="">
+                {localizeUi("ui.longTermMemory.memoryvault.allChats")}
+              </option>
+              {conversations.map((conversation) => (
+                <option key={conversation.id} value={conversation.id}>
+                  {conversation.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span>{localizeUi("ui.longTermMemory.memoryvault.branch")}</span>
+            <select
+              className={inputClass}
+              value={selectedChat?.id ?? ""}
+              disabled={!selectedConversation}
+              aria-label={localizeUi("ui.longTermMemory.memoryvault.branch")}
+              onChange={(event) => {
+                const branch = branches.find(
+                  (item) => item.id === event.target.value,
+                );
+                if (branch)
+                  void selectTarget({
+                    id: `chat:${branch.id}`,
+                    label: branch.label,
+                    scope: {
+                      chatId: branch.id,
+                      chatIds: [branch.id],
+                      ...(selectedCharacterId
+                        ? { characterIds: [selectedCharacterId] }
+                        : {}),
+                    },
+                  });
+                else if (selectedConversation) {
+                  const [kind, id] = selectedConversation.id.split(/:(.+)/, 2);
+                  void selectTarget({
+                    id: selectedConversation.id,
+                    label: selectedConversation.label,
+                    scope:
+                      kind === "group"
+                        ? {
+                            groupId: id,
+                            chatIds: selectedConversation.chatIds,
+                            ...(selectedCharacterId
+                              ? { characterIds: [selectedCharacterId] }
+                              : {}),
+                          }
+                        : {
+                            chatId: id,
+                            chatIds: [id],
+                            ...(selectedCharacterId
+                              ? { characterIds: [selectedCharacterId] }
+                              : {}),
+                          },
+                  });
+                }
+              }}
+            >
+              <option value="">
+                {localizeUi("ui.longTermMemory.memoryvault.allBranches")}
+              </option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <select
           className={inputClass}
@@ -1483,9 +1592,7 @@ export default function MemoryVault({
             </option>
           ))}
         </select>
-        <div
-          className={`${selectionMode ? "flex" : "hidden"} col-span-2 flex-wrap items-center gap-3 border-t border-[var(--border)] pt-2 md:flex`}
-        >
+        <div className="col-span-2 flex flex-wrap items-center gap-3 border-t border-[var(--border)] pt-2">
           <label className="flex min-h-9 items-center gap-2 text-xs">
             <input
               type="checkbox"
@@ -1520,28 +1627,7 @@ export default function MemoryVault({
                 )
               : ""}
           </span>
-          <span className="ml-auto md:hidden">
-            <Button
-              className="min-h-9"
-              onClick={() => {
-                setSelectionMode((value) => !value);
-                if (selectionMode) setChecked(new Set());
-              }}
-            >
-              {selectionMode
-                ? localizeUi("ui.longTermMemory.memoryvault.done")
-                : localizeUi("ui.longTermMemory.memoryvault.select")}
-            </Button>
-          </span>
         </div>
-        {!selectionMode ? (
-          <Button
-            className="col-span-2 min-h-9 justify-self-start md:hidden"
-            onClick={() => setSelectionMode(true)}
-          >
-            {localizeUi("ui.longTermMemory.memoryvault.select")}
-          </Button>
-        ) : null}
       </section>
       {error || notice ? (
         <div data-ltm-vault-feedback className="contents">
@@ -1764,9 +1850,7 @@ export default function MemoryVault({
                       className={`group border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
                     >
                       <div className="flex min-w-0 gap-2">
-                        <label
-                          className={`${selectionMode ? "flex" : "hidden"} min-h-11 min-w-8 items-center justify-center md:flex`}
-                        >
+                        <label className="flex min-h-11 min-w-8 items-center justify-center">
                           <input
                             type="checkbox"
                             checked={checked.has(note.id)}
@@ -1816,51 +1900,47 @@ export default function MemoryVault({
                             </span>
                           ) : null}
                         </button>
-                        {!selectionMode ? (
-                          <>
-                            <div className="hidden flex-col items-start gap-1 pt-1 opacity-0 transition-opacity pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
-                              <IconButton
-                                icon={Archive}
-                                label={localizeUi(
-                                  "ui.longTermMemory.memoryvault.archiveValue1",
-                                  { value1: memoryLabel(note) },
-                                )}
-                                disabled={Boolean(busy)}
-                                onClick={(event) =>
-                                  void runNoteAction(event, note, "archive")
-                                }
-                              />
-                              <IconButton
-                                icon={Trash2}
-                                label={localizeUi(
-                                  "ui.longTermMemory.memoryvault.deleteValue1",
-                                  { value1: memoryLabel(note) },
-                                )}
-                                destructive
-                                disabled={Boolean(busy)}
-                                onClick={(event) =>
-                                  void runNoteAction(event, note, "delete")
-                                }
-                              />
-                            </div>
-                            <div className="md:hidden">
-                              <IconButton
-                                icon={Ellipsis}
-                                label={localizeUi(
-                                  "ui.longTermMemory.memoryvault.moreActionsForValue1",
-                                  { value1: memoryLabel(note) },
-                                )}
-                                aria-expanded={openActionNoteId === note.id}
-                                aria-controls={`ltm-note-actions-${note.id}`}
-                                onClick={(event) =>
-                                  toggleNoteActions(event, note.id)
-                                }
-                              />
-                            </div>
-                          </>
-                        ) : null}
+                        <div className="hidden flex-col items-start gap-1 pt-1 opacity-0 transition-opacity pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
+                          <IconButton
+                            icon={Archive}
+                            label={localizeUi(
+                              "ui.longTermMemory.memoryvault.archiveValue1",
+                              { value1: memoryLabel(note) },
+                            )}
+                            disabled={Boolean(busy)}
+                            onClick={(event) =>
+                              void runNoteAction(event, note, "archive")
+                            }
+                          />
+                          <IconButton
+                            icon={Trash2}
+                            label={localizeUi(
+                              "ui.longTermMemory.memoryvault.deleteValue1",
+                              { value1: memoryLabel(note) },
+                            )}
+                            destructive
+                            disabled={Boolean(busy)}
+                            onClick={(event) =>
+                              void runNoteAction(event, note, "delete")
+                            }
+                          />
+                        </div>
+                        <div className="md:hidden">
+                          <IconButton
+                            icon={Ellipsis}
+                            label={localizeUi(
+                              "ui.longTermMemory.memoryvault.moreActionsForValue1",
+                              { value1: memoryLabel(note) },
+                            )}
+                            aria-expanded={openActionNoteId === note.id}
+                            aria-controls={`ltm-note-actions-${note.id}`}
+                            onClick={(event) =>
+                              toggleNoteActions(event, note.id)
+                            }
+                          />
+                        </div>
                       </div>
-                      {!selectionMode && openActionNoteId === note.id ? (
+                      {openActionNoteId === note.id ? (
                         <div
                           id={`ltm-note-actions-${note.id}`}
                           className="flex gap-2 pl-10 pt-2 md:hidden"
@@ -1949,9 +2029,8 @@ export default function MemoryVault({
                   </h3>
                 </div>
                 <div className="flex gap-2">
-                  <IconButton
-                    icon={PanelRight}
-                    label={
+                  <Button
+                    aria-label={
                       detailsOpen
                         ? localizeUi(
                             "ui.longTermMemory.memoryvault.hideMetadata",
@@ -1969,8 +2048,11 @@ export default function MemoryVault({
                     }}
                     aria-pressed={detailsOpen}
                     data-ltm-details-toggle
-                    className="hidden aria-pressed:bg-[var(--accent)] md:inline-grid"
-                  />
+                    className="hidden min-h-11 items-center gap-2 aria-pressed:bg-[var(--accent)] md:inline-flex"
+                  >
+                    <Braces aria-hidden="true" size="0.875rem" />
+                    {localizeUi("ui.longTermMemory.memoryvault.metadata")}
+                  </Button>
                   <Button
                     primary
                     disabled={!dirty || busy === "save"}
@@ -2401,30 +2483,62 @@ export default function MemoryVault({
                       data-ltm-inspector-fields
                       className="grid gap-2 sm:grid-cols-2"
                     >
-                      <input
+                      <select
                         className={inputClass}
-                        placeholder={localizeUi(
+                        defaultValue=""
+                        aria-label={localizeUi(
                           "ui.longTermMemory.memoryvault.addAnotherChat",
                         )}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            const id = event.currentTarget.value.trim();
-                            if (id) {
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (!value) return;
+                          const [kind, id] = value.split(/:(.+)/, 2);
+                          if (kind === "group") {
+                            const group = scopeTargets.data?.groups.find(
+                              (item) => item.id === id,
+                            );
+                            if (group)
                               mutateScope({
-                                chatIds: [
-                                  ...new Set([
-                                    ...(draft.scope.chatIds ?? []),
-                                    id,
-                                  ]),
-                                ],
-                                chatId: draft.scope.chatId ?? id,
+                                groupId: id,
+                                chatIds: group.chatIds,
+                                chatId: group.chatIds[0],
                               });
-                              event.currentTarget.value = "";
-                            }
+                          } else if (kind === "chat" && id) {
+                            mutateScope({
+                              chatIds: [
+                                ...new Set([
+                                  ...(draft.scope.chatId
+                                    ? [draft.scope.chatId]
+                                    : []),
+                                  ...(draft.scope.chatIds ?? []),
+                                  id,
+                                ]),
+                              ],
+                              chatId: draft.scope.chatId ?? id,
+                            });
                           }
+                          event.currentTarget.value = "";
                         }}
-                      />
+                      >
+                        <option value="">
+                          {localizeUi(
+                            "ui.longTermMemory.memoryvault.addAnotherChat",
+                          )}
+                        </option>
+                        {(scopeTargets.data?.chats ?? []).map((chat) => (
+                          <option key={chat.id} value={`chat:${chat.id}`}>
+                            {chat.label}
+                          </option>
+                        ))}
+                        {(scopeTargets.data?.groups ?? []).map((group) => (
+                          <option key={group.id} value={`group:${group.id}`}>
+                            {localizeUi(
+                              "ui.longTermMemory.memoryvault.groupBranches",
+                              { group: group.label },
+                            )}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         className={inputClass}
                         placeholder={localizeUi(
@@ -2761,7 +2875,7 @@ export default function MemoryVault({
                         await request(
                           `/notes/${encodeURIComponent(draft.id)}/extract`,
                           "POST",
-                          props.chatId ? { chatId: props.chatId } : {},
+                          {},
                         );
                         await invalidateLtmQueries(client, [
                           queryKeys.review,

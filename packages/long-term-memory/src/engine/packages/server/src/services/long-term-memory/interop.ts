@@ -723,13 +723,15 @@ export async function importPackageInterop(
   if (request.extract && useExtractionAgent) {
     try {
       resolved = await getPackageLanguageModels().resolveForRequest({
-        connectionId: request.connectionId,
+        connectionId: request.connectionId ?? extractionConfig.connectionId,
         chatConnectionId: chat?.connectionId ?? null,
         model: request.model,
       });
     } catch (error) {
       throw new LtmServiceError(
-        error instanceof Error ? error.message : "Language model configuration is invalid",
+        error instanceof Error
+          ? error.message
+          : "Language model configuration is invalid",
         400,
         "ltm_model_configuration",
       );
@@ -812,49 +814,51 @@ export async function importPackageInterop(
     }
   }
   const results = request.extract
-    ? await processLongTermMemorySourceBatch({
-        items: written,
-      languageModel: resolved,
-        mode: request.mode,
-        instruction: request.instruction,
-         operationId,
-         chatId: request.chatId,
-         signal,
-      applyLowRisk: request.applyLowRisk,
-      concurrency: request.importConcurrency ?? 3,
-       root,
-       directGameMode: !extractionConfig.useExtractionAgentOnGameMode,
-      })
-    : written.map((item) => ({
-        sourceId: item.sourceId,
-        title: item.title,
-        note: item.note,
-        created: item.created,
-        sourceWriteStatus: item.created ? ("created" as const) : ("refreshed" as const),
-        extractionStatus: "not_started" as const,
-        extractionMethod: "none" as const,
-        retryable: false as const,
-        draft: null,
-        diagnostics: [],
-        outcome: {
-          state: "no_suggestions_created" as const,
-          totalCandidates: 0,
-          keptUnits: 0,
-          droppedUnits: 0,
-          droppedCandidates: [],
-          droppedCandidateDetailsTruncated: false,
-        },
-        accounting: {
-          providerCandidates: 0,
-          normalizedAdditions: 0,
-          parserRejections: 0,
-          validationRejections: 0,
-          deduplications: 0,
-          keptUnits: 0,
-        },
-        appliedMutationIds: [],
-        skippedMutationIds: [],
-      })),
+      ? await processLongTermMemorySourceBatch({
+          items: written,
+          languageModel: resolved,
+          mode: request.mode,
+          instruction: request.instruction,
+          operationId,
+          chatId: request.chatId,
+          signal,
+          applyLowRisk: request.applyLowRisk,
+          concurrency: request.importConcurrency ?? 3,
+          root,
+          directGameMode: !extractionConfig.useExtractionAgentOnGameMode,
+        })
+      : written.map((item) => ({
+          sourceId: item.sourceId,
+          title: item.title,
+          note: item.note,
+          created: item.created,
+          sourceWriteStatus: item.created
+            ? ("created" as const)
+            : ("refreshed" as const),
+          extractionStatus: "not_started" as const,
+          extractionMethod: "none" as const,
+          retryable: false as const,
+          draft: null,
+          diagnostics: [],
+          outcome: {
+            state: "no_suggestions_created" as const,
+            totalCandidates: 0,
+            keptUnits: 0,
+            droppedUnits: 0,
+            droppedCandidates: [],
+            droppedCandidateDetailsTruncated: false,
+          },
+          accounting: {
+            providerCandidates: 0,
+            normalizedAdditions: 0,
+            parserRejections: 0,
+            validationRejections: 0,
+            deduplications: 0,
+            keptUnits: 0,
+          },
+          appliedMutationIds: [],
+          skippedMutationIds: [],
+        })),
     cancelled = results.filter(
       (item) => item.extractionStatus === "cancelled",
     ).length,
