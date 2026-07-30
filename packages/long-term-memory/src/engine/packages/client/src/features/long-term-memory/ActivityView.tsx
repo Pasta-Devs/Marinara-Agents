@@ -560,7 +560,7 @@ export default function ActivityView({
       {props.chatId ? (
         <LastInjectionSummary
           data={lastInjection.data}
-          loading={lastInjection.isLoading}
+          loading={lastInjection.isFetching}
           error={lastInjection.isError}
           onOpenMemory={onOpenMemory}
         />

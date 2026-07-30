@@ -487,7 +487,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             aria-label={localizeUi(
               "ui.longTermMemory.longtermmemorydetail.memoryStatus",
             )}
-            aria-busy={status.isLoading}
+            aria-busy={status.isFetching}
             className="mari-editor-panel mari-editor-panel--soft grid gap-3 p-3 text-xs text-[var(--marinara-editor-muted)] sm:grid-cols-3"
           >
             <span className="flex items-center gap-2">
