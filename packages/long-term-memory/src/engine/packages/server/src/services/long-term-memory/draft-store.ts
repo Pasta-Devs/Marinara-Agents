@@ -35,6 +35,7 @@ export interface StoreLtmDraftOptions extends CreateLtmExtractionDraftInput {
   outcome?: LtmExtractionOutcome;
   accounting?: LtmExtractionAccounting;
   reviewRequired?: boolean;
+  afterWrite?: (draft: LtmExtractionDraft) => Promise<void>;
 }
 
 export type LtmDraftListFilter = {
@@ -150,10 +151,22 @@ export class LongTermMemoryDraftStore {
           },
         });
         await writeJsonAtomic(draftPathForId(draft.id, this.root), draft);
+        let superseded: LtmExtractionDraft[] = [];
         try {
-          await this.supersedeOlderPendingDrafts(draft);
+          superseded = await this.supersedeOlderPendingDrafts(draft);
+          await options.afterWrite?.(draft);
         } catch (error) {
-          await unlink(draftPathForId(draft.id, this.root)).catch(() => {});
+          const rollback = await Promise.allSettled([
+            unlink(draftPathForId(draft.id, this.root)),
+            ...superseded.map((previous) =>
+              writeJsonAtomic(draftPathForId(previous.id, this.root), previous),
+            ),
+          ]);
+          const failures = rollback.flatMap((result) =>
+            result.status === "rejected" ? [result.reason] : [],
+          );
+          if (failures.length)
+            throw new AggregateError([error, ...failures], "Long-Term Memory draft creation and rollback both failed.");
           throw error;
         }
         return draft;
@@ -182,6 +195,7 @@ export class LongTermMemoryDraftStore {
           updated.push(current);
         });
       }
+      return updated;
     } catch (error) {
       for (const previous of updated.reverse()) {
         await writeJsonAtomic(draftPathForId(previous.id, this.root), previous).catch(() => {});

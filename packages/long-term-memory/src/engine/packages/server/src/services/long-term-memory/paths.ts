@@ -21,6 +21,9 @@ export function getLongTermMemoryDirectories(root = getLongTermMemoryRoot()) {
     eventLog: join(root, "events", "log.jsonl"), debugLog: join(root, "debug", "log.jsonl"),
   };
 }
+export function ltmRejectedSuggestionsPath(root = getLongTermMemoryRoot()) {
+  return safeJoin(getLongTermMemoryDirectories(root).config, "rejected-suggestions.json");
+}
 export function vaultFolderForNoteType(type: LtmNoteType) { return LTM_NOTE_TYPE_TO_VAULT_FOLDER[type]; }
 export function notePathForId(id: string, type: LtmNoteType, root = getLongTermMemoryRoot()) {
   return join(root, LTM_VAULT_DIR, vaultFolderForNoteType(ltmNoteTypeSchema.parse(type)), `${ltmNoteIdSchema.parse(id)}.json`);

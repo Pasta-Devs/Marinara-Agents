@@ -196,6 +196,7 @@ export async function finalizeLongTermMemoryExtractionDraft(
     accounting?: LtmExtractionAccounting;
     chatId?: string;
     reviewRequired?: boolean;
+    afterWrite?: (draft: import("../../../../shared/src/features/agents/long-term-memory/schema.js").LtmExtractionDraft) => Promise<void>;
   },
   options: { root?: string; overlay?: Map<string, LtmNote> } = {},
 ) {
@@ -263,6 +264,7 @@ export async function finalizeLongTermMemoryExtractionDraft(
     outcome: input.outcome,
     accounting: input.accounting,
     reviewRequired: input.reviewRequired,
+    afterWrite: input.afterWrite,
   });
   if (options.overlay && projected) {
     for (const projection of projected.projections) options.overlay.set(projection.noteId, projection.after);

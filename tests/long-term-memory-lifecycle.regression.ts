@@ -41,6 +41,10 @@ function unzip(args: string[], purpose: string) {
 const artifactManifest = JSON.parse(
   unzip(["-p", artifactPath, "manifest.json"], `read ${artifactPath}/manifest.json`),
 ) as Record<string, unknown>;
+const artifactClient = unzip(
+  ["-p", artifactPath, "client.js"],
+  `read ${artifactPath}/client.js`,
+);
 const originalFetch = globalThis.fetch;
 let catalogOnline = true;
 
@@ -125,6 +129,11 @@ async function main() {
   await runWithSafeCleanup("LTM lifecycle", async () => {
     assert.equal(artifactManifest.id, "long-term-memory");
     assert.equal(artifactManifest.version, packageManifest.version);
+    assert.doesNotMatch(
+      artifactClient,
+      /crypto\.randomUUID/u,
+      "The mobile client must not require secure-context-only crypto.randomUUID",
+    );
     const { capabilityPackageManager } = await importEngine<{
       capabilityPackageManager: {
         install(

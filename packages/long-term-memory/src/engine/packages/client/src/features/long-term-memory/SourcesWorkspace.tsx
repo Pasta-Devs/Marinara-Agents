@@ -804,6 +804,7 @@ export default function SourcesWorkspace({
       queryKeys.integrity,
       queryKeys.review,
       queryKeys.pendingDrafts,
+      queryKeys.rejectedSuggestions,
       queryKeys.preview,
       queryKeys.lorebookPreview,
     ]);

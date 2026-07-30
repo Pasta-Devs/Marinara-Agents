@@ -44,6 +44,7 @@ import {
   ltmStatusSchema,
   ltmSourceDerivedMemoriesResponseSchema,
   ltmSubjectsSchema,
+  ltmRejectedSuggestionsResponseSchema,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   clearLtmDebugLog,
@@ -116,6 +117,10 @@ import {
   replaceLongTermMemoryData,
   resetLongTermMemorySettings,
 } from "./backup-restore.js";
+import {
+  deleteRejectedSuggestion,
+  listRejectedSuggestions,
+} from "./rejected-suggestions.js";
 
 const NOTE_BODY_LIMIT_BYTES = 512 * 1024;
 const DRAFT_BODY_LIMIT_BYTES = 512 * 1024;
@@ -278,6 +283,12 @@ const draftReviewQuery = z
     sourceNoteId: ltmNoteIdSchema.optional(),
     chatId: z.string().min(1).max(120).optional(),
     status: ltmDraftStatusSchema.optional(),
+  })
+  .strict();
+const rejectedSuggestionsQuery = z
+  .object({
+    sourceNoteId: ltmNoteIdSchema.optional(),
+    chatId: z.string().min(1).max(120).optional(),
   })
   .strict();
 const acceptDraftBody = z
@@ -1216,6 +1227,16 @@ export function createLongTermMemoryRoutes(runtime: {
           status: query.status,
         }),
       );
+    });
+    app.get<{ Querystring: unknown }>("/rejected-suggestions", async (request) => {
+      const query = rejectedSuggestionsQuery.parse(request.query);
+      const suggestions = await listRejectedSuggestions(query, root);
+      return ltmRejectedSuggestionsResponseSchema.parse({ suggestions, total: suggestions.length });
+    });
+    app.delete<{ Params: { id: string } }>("/rejected-suggestions/:id", async (request, reply) => {
+      const parsed = z.string().uuid().safeParse(request.params.id);
+      if (!parsed.success) return reply.status(400).send({ error: "Invalid rejected-suggestion ID", code: "ltm_invalid_request" });
+      return deleteRejectedSuggestion(parsed.data, root);
     });
     app.post<{ Params: { id: string }; Body: unknown }>(
       "/drafts/:id/accept",

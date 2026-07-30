@@ -218,10 +218,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   };
   const recoverCandidate: NonNullable<
     LongTermMemoryDestinationProps["onRecoverCandidate"]
-  > = async (candidate, scope, modes) => {
+  > = async (candidate, scope, modes, rejectedSuggestionId) => {
     if (!(await confirmDestinationChange(destinationLabel("vault")))) return;
     setOpenedNoteId(null);
-    setRecoveryHandoff({ key: Date.now(), candidate, scope, modes });
+    setRecoveryHandoff({ key: Date.now(), candidate, scope, modes, rejectedSuggestionId });
     setDestinationDirty(false);
     setDestination("vault");
   };
@@ -477,7 +477,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       </header>
-      <div className="mari-editor-content max-md:p-4">
+      <div className="mari-editor-content max-md:p-4 max-md:pb-24">
         <div
           className="mari-editor-content-inner mari-editor-content-inner--wide space-y-5"
           style={{ maxWidth: "90rem" }}
