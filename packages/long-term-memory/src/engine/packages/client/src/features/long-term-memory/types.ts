@@ -59,6 +59,7 @@ export type LongTermMemoryDestination =
 export type LtmRecoveryHandoff = {
   key: number;
   candidate: LtmExtractionDroppedCandidate;
+  rejectedSuggestionId?: string;
   scope: LtmScope;
   modes: LtmMode[];
 };
@@ -72,6 +73,7 @@ export type LongTermMemoryDestinationProps = {
     candidate: LtmExtractionDroppedCandidate,
     scope: LtmScope,
     modes: LtmMode[],
+    rejectedSuggestionId?: string,
   ) => void;
   openedNoteId?: string | null;
   createMemoryRequest?: number | null;

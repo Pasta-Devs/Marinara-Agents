@@ -2138,6 +2138,19 @@ export const ltmExtractionDroppedCandidateSchema = z
   })
   .strict();
 
+export const ltmRejectedSuggestionSchema = z
+  .object({
+    id: z.string().uuid(),
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    source: ltmDraftSourceSchema,
+    scope: ltmScopeSchema,
+    modes: z.array(ltmModeSchema).min(1).max(8),
+    candidate: ltmExtractionDroppedCandidateSchema,
+    createdAt: ltmIsoTimestampSchema,
+    lastSeenAt: ltmIsoTimestampSchema,
+  })
+  .strict();
+
 export const ltmExtractionOutcomeStateSchema = z.enum([
   "success",
   "partial_success",
@@ -2345,6 +2358,13 @@ export const ltmDraftReviewResponseSchema = z
         deduplications: z.number().int().min(0),
       })
       .strict(),
+  })
+  .strict();
+
+export const ltmRejectedSuggestionsResponseSchema = z
+  .object({
+    suggestions: z.array(ltmRejectedSuggestionSchema).max(10_000),
+    total: z.number().int().min(0).max(10_000),
   })
   .strict();
 
@@ -2968,6 +2988,7 @@ export type LtmExtractionRecoveryHint = z.infer<
 export type LtmExtractionDroppedCandidate = z.infer<
   typeof ltmExtractionDroppedCandidateSchema
 >;
+export type LtmRejectedSuggestion = z.infer<typeof ltmRejectedSuggestionSchema>;
 export type LtmExtractionOutcomeState = z.infer<
   typeof ltmExtractionOutcomeStateSchema
 >;
@@ -2993,6 +3014,9 @@ export type LtmDraftReviewDraft = z.infer<typeof ltmDraftReviewDraftSchema>;
 export type LtmDraftReviewSource = z.infer<typeof ltmDraftReviewSourceSchema>;
 export type LtmDraftReviewResponse = z.infer<
   typeof ltmDraftReviewResponseSchema
+>;
+export type LtmRejectedSuggestionsResponse = z.infer<
+  typeof ltmRejectedSuggestionsResponseSchema
 >;
 export type LtmExtractSourceNoteRequest = z.infer<
   typeof ltmExtractSourceNoteRequestSchema
@@ -3096,6 +3120,7 @@ export const ltmBackupSchema = z
     exportedAt: ltmIsoTimestampSchema,
     notes: z.array(ltmNoteSchema).max(50_000),
     drafts: z.array(ltmExtractionDraftSchema).max(50_000),
+    rejectedSuggestions: z.array(ltmRejectedSuggestionSchema).max(10_000).default([]),
     settings: z
       .object({
         global: ltmGlobalSettingsSchema,

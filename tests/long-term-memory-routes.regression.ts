@@ -27,8 +27,11 @@ async function main() {
   );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
-  const { ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
-    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
+    const { ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
+      await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
+  const { addRejectedSuggestions } = await import(
+    "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts"
+  );
   const app = Fastify();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-routes-"));
   const packageManifest = JSON.parse(
@@ -2737,6 +2740,88 @@ async function main() {
         mutations: [eventMutation, mutation],
       },
     });
+    await addRejectedSuggestions(
+      {
+        ...draft,
+        extractionOutcome: {
+          state: "partial_success",
+          totalCandidates: 3,
+          keptUnits: 2,
+          droppedUnits: 1,
+          droppedCandidates: [
+            {
+              index: 2,
+              reason: "invalid_format",
+              message: "Candidate was not valid memory data.",
+              snippet: "A rejected gate detail.",
+            },
+          ],
+          droppedCandidateDetailsTruncated: false,
+        },
+      } as any,
+      storageService.root,
+    );
+    const rejected = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/rejected-suggestions?sourceNoteId=source_route_review&chatId=chat-a",
+      headers,
+    });
+    assert.equal(rejected.statusCode, 200, rejected.body);
+    assert.equal(rejected.json().total, 1);
+    const rejectedId = rejected.json().suggestions[0].id;
+    const deletedRejected = await app.inject({
+      method: "DELETE",
+      url: `/api/long-term-memory/rejected-suggestions/${rejectedId}`,
+      headers,
+    });
+    assert.deepEqual(deletedRejected.json(), { deleted: true, id: rejectedId });
+    const repeatedRejectedDelete = await app.inject({
+      method: "DELETE",
+      url: `/api/long-term-memory/rejected-suggestions/${rejectedId}`,
+      headers,
+    });
+    assert.deepEqual(repeatedRejectedDelete.json(), { deleted: false, id: rejectedId });
+    await addRejectedSuggestions(
+      {
+        ...draft,
+        extractionOutcome: {
+          state: "partial_success",
+          totalCandidates: 3,
+          keptUnits: 2,
+          droppedUnits: 1,
+          droppedCandidates: [
+            {
+              index: 2,
+              reason: "invalid_format",
+              message: "Candidate was not valid memory data.",
+              snippet: "A rejected gate detail.",
+            },
+          ],
+          droppedCandidateDetailsTruncated: false,
+        },
+      } as any,
+      storageService.root,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/long-term-memory/rejected-suggestions?chatId=chat-b",
+          headers,
+        })
+      ).json().total,
+      0,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/long-term-memory/rejected-suggestions/not-a-uuid",
+          headers,
+        })
+      ).statusCode,
+      400,
+    );
     const review = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/drafts/review?sourceNoteId=source_route_review",
@@ -2794,6 +2879,7 @@ async function main() {
     });
     assert.equal(backup.statusCode, 200, backup.body);
     assert.equal(backup.json().format, "marinara-long-term-memory");
+    assert.equal(backup.json().rejectedSuggestions.length, 1);
     const backupPreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/backup/preview",
@@ -2802,6 +2888,8 @@ async function main() {
     });
     assert.equal(backupPreview.statusCode, 200, backupPreview.body);
     assert.equal(backupPreview.json().incoming.notes > 0, true);
+    assert.equal(backupPreview.json().incoming.rejectedSuggestions, 1);
+    assert.equal(backupPreview.json().current.rejectedSuggestions, 1);
     const replacement = backup.json();
     replacement.notes = replacement.notes.filter(
       (note: any) => note.id === "world_route_fixture",
@@ -2819,12 +2907,28 @@ async function main() {
       ),
       true,
     );
+    assert.equal(
+      (await app.inject({
+        method: "GET",
+        url: "/api/long-term-memory/rejected-suggestions",
+        headers,
+      })).json().total,
+      1,
+    );
     const resetSettings = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/settings/reset",
       headers,
     });
     assert.equal(resetSettings.statusCode, 200, resetSettings.body);
+    assert.equal(
+      (await app.inject({
+        method: "GET",
+        url: "/api/long-term-memory/rejected-suggestions",
+        headers,
+      })).json().total,
+      1,
+    );
     assert.equal(
       (await storageService.storage.getNote("world_route_fixture"))?.id,
       "world_route_fixture",
@@ -2836,6 +2940,14 @@ async function main() {
     });
     assert.equal(deletedAll.statusCode, 200, deletedAll.body);
     assert.equal((await storageService.storage.listNotes()).length, 0);
+    assert.equal(
+      (await app.inject({
+        method: "GET",
+        url: "/api/long-term-memory/rejected-suggestions",
+        headers,
+      })).json().total,
+      0,
+    );
     await cleanup();
     cleanup = undefined;
     assert.equal(

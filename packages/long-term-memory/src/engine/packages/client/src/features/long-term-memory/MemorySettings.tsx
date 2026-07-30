@@ -325,8 +325,8 @@ export default function MemorySettings({
   >({});
   const [backupPreview, setBackupPreview] = useState<{
     backup: unknown;
-    incoming: { notes: number; drafts: number };
-    current: { notes: number; drafts: number };
+    incoming: { notes: number; drafts: number; rejectedSuggestions: number };
+    current: { notes: number; drafts: number; rejectedSuggestions: number };
   } | null>(null);
   const backupInput = useRef<HTMLInputElement>(null);
 
@@ -678,6 +678,7 @@ export default function MemorySettings({
         queryKeys.notes,
         queryKeys.review,
         queryKeys.pendingDrafts,
+        queryKeys.rejectedSuggestions,
         queryKeys.activity,
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
@@ -741,8 +742,8 @@ export default function MemorySettings({
     try {
       const backup = JSON.parse(await file.text());
       const preview = await request<{
-        incoming: { notes: number; drafts: number };
-        current: { notes: number; drafts: number };
+        incoming: { notes: number; drafts: number; rejectedSuggestions: number };
+        current: { notes: number; drafts: number; rejectedSuggestions: number };
       }>("/backup/preview", "POST", backup);
       setBackupPreview({ ...preview, backup });
       setMessage(
@@ -799,6 +800,7 @@ export default function MemorySettings({
         queryKeys.notes,
         queryKeys.review,
         queryKeys.pendingDrafts,
+        queryKeys.rejectedSuggestions,
         queryKeys.integrity,
         queryKeys.status,
         queryKeys.activity,
@@ -920,6 +922,7 @@ export default function MemorySettings({
         queryKeys.notes,
         queryKeys.review,
         queryKeys.pendingDrafts,
+        queryKeys.rejectedSuggestions,
         queryKeys.integrity,
         queryKeys.status,
         queryKeys.activity,
@@ -1706,7 +1709,11 @@ export default function MemorySettings({
                 {backupPreview.incoming.notes}{" "}
                 {localizeUi("ui.longTermMemory.memorysettings.memories")}{" "}
                 {backupPreview.incoming.drafts}{" "}
-                {localizeUi("ui.longTermMemory.memorysettings.drafts")}
+                {localizeUi("ui.longTermMemory.memorysettings.drafts")} {" | "}
+                {backupPreview.current.rejectedSuggestions}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsCurrent")} {" | "}
+                {backupPreview.incoming.rejectedSuggestions}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsIncoming")}
               </p>
               <Button
                 primary

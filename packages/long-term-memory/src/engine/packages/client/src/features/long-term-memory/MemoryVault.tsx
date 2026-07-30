@@ -203,7 +203,7 @@ function preview(note: LtmNote, search: string) {
 function newNote(scope: LtmScope, localizeUi: LtmTranslationFunction): LtmNote {
   const now = new Date().toISOString();
   return {
-    id: `world_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`,
+    id: `world_${randomId()}`,
     title: localizeUi("ui.longTermMemory.memoryvault.untitledMemory"),
     type: "world",
     status: "active",
@@ -225,6 +225,12 @@ function newNote(scope: LtmScope, localizeUi: LtmTranslationFunction): LtmNote {
   };
 }
 
+function randomId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(6)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 function recoveredNote(
   handoff: NonNullable<LongTermMemoryDestinationProps["recoveryHandoff"]>,
   localizeUi: LtmTranslationFunction,
@@ -235,7 +241,7 @@ function recoveredNote(
     recovery?.noteType && recovery.noteType !== "source"
       ? recovery.noteType
       : note.type;
-  const id = `${prefixes[type]}_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const id = `${prefixes[type]}_${randomId()}`;
   const sectionKey = recovery?.sectionKey ?? "facts";
   const suggestedTitle = (recovery?.noteId ?? id)
     .replace(new RegExp(`^${prefixes[type]}_?`), "")
@@ -254,7 +260,7 @@ function recoveredNote(
     scope: handoff.scope,
     sections: {
       [sectionKey]: {
-        text: handoff.candidate.snippet ?? "",
+        text: handoff.candidate.snippet ?? handoff.candidate.message,
         updatedAt: now,
       },
     },
@@ -375,11 +381,14 @@ export default function MemoryVault({
   >("memories");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [draft, setDraft] = useState<LtmNote | null>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const [saved, setSaved] = useState("");
   const [isNew, setIsNew] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [recoverySuggestionId, setRecoverySuggestionId] = useState<string | null>(null);
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
   const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
@@ -690,6 +699,7 @@ export default function MemoryVault({
     setDraft(next);
     setSaved("");
     setIsNew(true);
+    setRecoverySuggestionId(recoveryHandoff.rejectedSuggestionId ?? null);
     setError("");
     setNotice(
       localizeUi("ui.longTermMemory.memoryvault.reviewRecoveredSuggestion"),
@@ -754,6 +764,7 @@ export default function MemoryVault({
     setChecked(new Set());
     setSaved("");
     setIsNew(false);
+    setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
     setSubjectKey("");
@@ -779,6 +790,7 @@ export default function MemoryVault({
     setDraft(next);
     setSaved(fingerprint(next));
     setIsNew(false);
+    setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
     setSubjectKey("");
@@ -806,6 +818,7 @@ export default function MemoryVault({
     setDraft(next);
     setSaved("");
     setIsNew(true);
+    setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
     setSubjectKey("");
@@ -835,6 +848,7 @@ export default function MemoryVault({
     setDraft(null);
     setSaved("");
     setIsNew(false);
+    setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
     setSubjectKey("");
@@ -901,6 +915,7 @@ export default function MemoryVault({
           );
       const next = structuredClone(response.note);
       if (session !== editorSession.current) return;
+      const recoveryComplete = fingerprint(draftRef.current) === submittedFingerprint;
       setDraft((current) => {
         if (session !== editorSession.current) return current;
         if (fingerprint(current) === submittedFingerprint) {
@@ -931,7 +946,33 @@ export default function MemoryVault({
             }
           : current;
       });
-      await invalidate();
+      const rejectedId = recoverySuggestionId;
+      if (rejectedId && recoveryComplete) {
+        try {
+          const cleanup = await request<{ deleted: boolean; id: string }>(
+            `/rejected-suggestions/${encodeURIComponent(rejectedId)}`,
+            "DELETE",
+          );
+          if (
+            typeof cleanup?.deleted !== "boolean" ||
+            cleanup.id !== rejectedId
+          )
+            throw new Error("Rejected suggestion cleanup returned the wrong ID.");
+          setRecoverySuggestionId(null);
+        } catch {
+          setNotice(
+            localizeUi(
+              "ui.longTermMemory.memoryvault.savedButRejectedSuggestionCouldNotBeRemoved",
+            ),
+          );
+        }
+      }
+      await invalidateLtmQueries(client, [
+        queryKeys.notes,
+        queryKeys.status,
+        queryKeys.activity,
+        ...(rejectedId && recoveryComplete ? [queryKeys.rejectedSuggestions] : []),
+      ]).catch(() => {});
     } catch (cause) {
       if (session === editorSession.current)
         setError(
@@ -2129,7 +2170,7 @@ export default function MemoryVault({
                             setDraft({
                               ...draft,
                               type,
-                              id: `${prefixes[type]}_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`,
+                              id: `${prefixes[type]}_${randomId()}`,
                               subjects:
                                 type === "character" || type === "relationship"
                                   ? draft.subjects
@@ -2906,6 +2947,7 @@ export default function MemoryVault({
                         await invalidateLtmQueries(client, [
                           queryKeys.review,
                           queryKeys.pendingDrafts,
+                          queryKeys.rejectedSuggestions,
                         ]);
                         setNotice(
                           localizeUi(

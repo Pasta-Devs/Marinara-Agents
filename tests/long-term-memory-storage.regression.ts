@@ -52,7 +52,7 @@ async function main() {
   const { configurePackageRuntime } = await import(
     `${source}/package-runtime.ts`
   );
-  const { getLongTermMemoryDirectories, getLongTermMemoryRoot, notePathForId } =
+  const { getLongTermMemoryDirectories, getLongTermMemoryRoot, ltmRejectedSuggestionsPath, notePathForId } =
     await import(`${source}/paths.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
   const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
@@ -89,6 +89,11 @@ async function main() {
     resetLongTermMemorySettings,
     parseLongTermMemoryBackup,
   } = await import(`${source}/backup-restore.ts`);
+  const {
+    addRejectedSuggestions,
+    deleteRejectedSuggestion,
+    listRejectedSuggestions,
+  } = await import(`${source}/rejected-suggestions.ts`);
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
@@ -306,6 +311,54 @@ async function main() {
     assert.equal("indexes" in exported, false);
     assert.equal("policies" in exported.settings, false);
     assert.equal("retrieval" in exported.settings, false);
+    const rejectionDraft = {
+      id: randomUUID(),
+      status: "pending",
+      applyState: "not_started",
+      indexRebuildStatus: "not_requested",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      source: { sourceNoteId: "source_valid_import", chatId: "chat-a" },
+      scope: { chatId: "chat-a" },
+      modes: ["roleplay"],
+      summary: "",
+      mutations: [],
+      extractionOutcome: {
+        state: "no_suggestions_created",
+        totalCandidates: 1,
+        keptUnits: 0,
+        droppedUnits: 1,
+        droppedCandidates: [{ index: 0, reason: "invalid_format", message: "Rejected candidate.", snippet: "candidate" }],
+        droppedCandidateDetailsTruncated: false,
+      },
+    } as any;
+    const secondRejectionDraft = {
+      ...rejectionDraft,
+      source: { sourceNoteId: "source_second_import", chatId: "chat-a" },
+    };
+    const [firstRejections, secondRejections] = await Promise.all([
+      addRejectedSuggestions(rejectionDraft, root),
+      addRejectedSuggestions(secondRejectionDraft, root),
+    ]);
+    assert.equal(firstRejections.length, 1);
+    assert.equal(secondRejections.length, 1);
+    assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
+    assert.equal(
+      (await exportLongTermMemoryData(root)).rejectedSuggestions.length,
+      2,
+    );
+    await addRejectedSuggestions(rejectionDraft, root);
+    await addRejectedSuggestions(rejectionDraft, root);
+    assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
+    const rejectionId = firstRejections[0]!.id;
+    assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: true, id: rejectionId });
+    assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: false, id: rejectionId });
+    await writeFile(ltmRejectedSuggestionsPath(root), JSON.stringify([{ malformed: true }]));
+    await assert.rejects(
+      () => listRejectedSuggestions({}, root),
+      /invalid|expected|required|malformed/i,
+    );
+    await rm(ltmRejectedSuggestionsPath(root), { force: true });
     const legacyBackup = parseLongTermMemoryBackup({
       ...exported,
       settings: {
@@ -408,6 +461,23 @@ async function main() {
       links: [],
     });
     const draftStore = new LongTermMemoryDraftStore(root);
+    let afterWriteRan = false;
+    let afterWriteDraftId = "";
+    await assert.rejects(draftStore.createDraft({
+      source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
+      scope: legacySource.scope,
+      modes: ["roleplay"],
+      response: { summary: "After-write failure proof.", mutations: [] },
+      afterWrite: async (draft) => {
+        afterWriteRan = true;
+        afterWriteDraftId = draft.id;
+        throw new Error("after-write fixture failure");
+      },
+    }), /after-write fixture failure/u);
+    assert.equal(afterWriteRan, true);
+    assert.ok(afterWriteDraftId);
+    assert.ok(await draftStore.getDraft(afterWriteDraftId), "afterWrite failure must not roll back the draft");
+    await draftStore.deleteDraft(afterWriteDraftId);
     const suggestionDraft = await draftStore.createDraft({
       source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
       scope: legacySource.scope,
