@@ -272,7 +272,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   );
   const emptyUnbuiltVault =
     health === "not_built" && (status.data?.notes.total ?? 0) === 0;
-  const needsHealthAttention = health !== "healthy" && !emptyUnbuiltVault;
+  const needsHealthAttention = [
+    "building",
+    "degraded",
+    "stale",
+    "corrupt",
+    "failed",
+  ].includes(health ?? "");
   const healthTone =
     !status.data || emptyUnbuiltVault
       ? "bg-[var(--muted-foreground)]"
@@ -281,6 +287,23 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         : health === "corrupt" || health === "failed"
           ? "bg-[var(--destructive)]"
           : "bg-[var(--marinara-editor-accent)] opacity-50";
+  const healthNeedsDangerTone = health === "corrupt" || health === "failed";
+  const indexedChunks = status.data?.indexes.chunkCount ?? "--";
+  const healthInfo = (
+    <div className="space-y-2">
+      <strong className="block text-[var(--marinara-editor-text)]">
+        {healthLabel}
+      </strong>
+      <p>
+        {indexedChunks} {localizeUi("ui.longTermMemory.longtermmemorydetail.indexedChunks")}
+      </p>
+      <p>
+        {localizeUi(
+          "ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData",
+        )}
+      </p>
+    </div>
+  );
 
   return (
     <main
@@ -482,79 +505,86 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           className="mari-editor-content-inner mari-editor-content-inner--wide space-y-5"
           style={{ maxWidth: "90rem" }}
         >
-          <section
-            data-ltm-surface="overview"
-            aria-label={localizeUi(
-              "ui.longTermMemory.longtermmemorydetail.memoryStatus",
-            )}
-            aria-busy={status.isFetching}
-            className="mari-editor-panel mari-editor-panel--soft grid gap-3 p-3 text-xs text-[var(--marinara-editor-muted)] sm:grid-cols-3"
-          >
-            <span className="flex items-center gap-2">
-              <span
-                aria-hidden="true"
-                className="h-1.5 w-1.5 rounded-full bg-[var(--marinara-editor-accent)]"
-              />
-              <strong className="text-[var(--marinara-editor-text)]">
-                {status.data ? status.data.notes.total : "--"}
-              </strong>{" "}
-              {localizeUi("ui.longTermMemory.lastinjectionsummary.memories")}
-            </span>
-            <span>
-              <strong className="text-[var(--marinara-editor-text)]">
-                {status.data ? (status.data.indexes.chunkCount ?? "--") : "--"}
-              </strong>{" "}
-              {localizeUi(
-                "ui.longTermMemory.longtermmemorydetail.indexedChunks",
-              )}
-            </span>
-            <span className="flex items-center gap-2">
-              <span
-                aria-hidden="true"
-                className={`h-1.5 w-1.5 rounded-full ${healthTone}`}
-              />
-              <span aria-live="polite" aria-atomic="true">
-                {status.isError
-                  ? localizeUi(
-                      "ui.longTermMemory.longtermmemorydetail.statusUnavailable",
-                    )
-                  : status.data
-                    ? healthLabel
-                    : localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.loadingStatus",
-                      )}
-              </span>
-              {status.data && needsHealthAttention ? (
-                <InfoPopover
-                  label={localizeUi(
-                    "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
-                  )}
-                  content={localizeUi(
-                    "ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData",
-                  )}
-                />
-              ) : null}
-            </span>
-          </section>
           <div className="flex min-w-0 gap-5">
-            <LongTermMemoryNavigation
-              destination={destination}
-              onDestinationChange={selectDestination}
-              badges={{
-                memories: status.data?.notes.total,
-                review: pendingDrafts.data?.count,
-              }}
-            />
-            <div
-              data-ltm-destination-content
-              role="region"
-              aria-label={destinationLabel(destination)}
-              className="min-w-0 flex-1 space-y-5"
-              style={{
-                containerName: "ltm-destination",
-                containerType: "inline-size",
-              }}
-            >
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="flex min-w-0 items-stretch gap-3">
+                <LongTermMemoryNavigation
+                  destination={destination}
+                  onDestinationChange={selectDestination}
+                  badges={{
+                    memories: status.data?.notes.total,
+                    review: pendingDrafts.data?.count,
+                  }}
+                />
+                {health !== "healthy" ? (
+                  <div
+                    aria-busy={status.isFetching}
+                    data-ltm-surface="vault-health-pill"
+                    className="hidden shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs text-[var(--marinara-editor-muted)] md:flex"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 w-1.5 rounded-full ${healthTone}`}
+                    />
+                    <span aria-live="polite" aria-atomic="true">
+                      {status.isError
+                        ? localizeUi(
+                            "ui.longTermMemory.longtermmemorydetail.statusUnavailable",
+                          )
+                        : status.data
+                          ? healthLabel
+                          : localizeUi(
+                              "ui.longTermMemory.longtermmemorydetail.loadingStatus",
+                            )}
+                    </span>
+                    {needsHealthAttention ? null : (
+                      <InfoPopover
+                        label={localizeUi(
+                          "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
+                        )}
+                        content={healthInfo}
+                      />
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              {needsHealthAttention ? (
+                <StatusSurface
+                  compact
+                  tone={healthNeedsDangerTone ? "danger" : "neutral"}
+                  data-ltm-surface="vault-health-warning"
+                  className="justify-between"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${healthTone}`}
+                    />
+                    <span className="font-semibold">{healthLabel}</span>
+                    <span className="hidden truncate sm:inline">
+                      {localizeUi(
+                        "ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData",
+                      )}
+                    </span>
+                  </span>
+                  <InfoPopover
+                    label={localizeUi(
+                      "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
+                    )}
+                    content={healthInfo}
+                  />
+                </StatusSurface>
+              ) : null}
+              <div
+                data-ltm-destination-content
+                role="region"
+                aria-label={destinationLabel(destination)}
+                className="min-w-0 space-y-5"
+                style={{
+                  containerName: "ltm-destination",
+                  containerType: "inline-size",
+                }}
+              >
               {activationError ? (
                 <StatusSurface tone="danger">{activationError}</StatusSurface>
               ) : null}
@@ -805,6 +835,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   recoveryHandoff={recoveryHandoff}
                 />
               </Suspense>
+              </div>
             </div>
           </div>
         </div>

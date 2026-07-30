@@ -77,7 +77,7 @@ export function LongTermMemoryNavigation({
         className={`mari-editor-tab relative flex items-center gap-2 rounded-lg text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] ${
           mobile
             ? "min-h-14 min-w-0 flex-1 flex-col justify-center gap-1 px-2 text-[0.625rem]"
-            : "min-h-11 shrink-0 justify-start px-3 text-left"
+            : "min-h-10 shrink-0 justify-start whitespace-nowrap px-3 text-left"
         }`}
       >
         <Icon aria-hidden="true" size={mobile ? "1.125rem" : "0.875rem"} />
@@ -99,8 +99,9 @@ export function LongTermMemoryNavigation({
       className={
         mobile
           ? "mari-editor-tab-rail flex w-full shrink-0 border-t md:hidden"
-          : "mari-editor-tab-rail hidden w-48 shrink-0 flex-col gap-1 rounded-xl border p-2 md:flex"
+          : "mari-editor-tab-rail hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border p-1 md:flex"
       }
+      style={mobile ? undefined : { overflowX: "auto" }}
     >
       {items}
     </nav>
