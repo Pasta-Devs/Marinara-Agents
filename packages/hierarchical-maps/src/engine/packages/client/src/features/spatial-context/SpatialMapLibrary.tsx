@@ -11,12 +11,23 @@ import {
 } from "../../hooks/use-spatial-context";
 import {
   defaultHierarchyProfile,
+  globalGallerySpatialReferenceId,
   instantiateSpatialMapTemplate,
   normalizeHierarchyProfile,
   type SpatialMapTemplateRecord,
 } from "../../../../maps-shared/src/maps-model";
 import { createEmptySpatialDefinition } from "./editor-state";
-import { SpatialMapWorkspace } from "./SpatialMapWorkspace";
+import {
+  bundledArtworkFile,
+  parseBundledArtwork,
+  referencedArtworkIds,
+  remapArtworkReferences,
+  SpatialMapWorkspace,
+} from "./SpatialMapWorkspace";
+import {
+  reuseOrUploadSpatialGlobalGalleryImage,
+  useSpatialGlobalGalleryImages,
+} from "./use-spatial-resources";
 
 interface SpatialMapLibraryProps {
   chatId: string | null;
@@ -60,6 +71,7 @@ export function SpatialMapLibrary({
   const templates = useSpatialMapTemplates();
   const createTemplate = useCreateSpatialMapTemplate();
   const deleteTemplate = useDeleteSpatialMapTemplate();
+  const globalGalleryImages = useSpatialGlobalGalleryImages();
   const spatial = useSpatialContext(chatId);
   const updateSpatial = useUpdateSpatialContext();
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -170,16 +182,46 @@ export function SpatialMapLibrary({
       const candidate = data && "definition" in data ? data.definition : raw;
       const parsed = spatialContextDefinitionSchema.safeParse(candidate);
       if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "This is not a valid map file.");
-      const hierarchyProfile = normalizeHierarchyProfile(data?.hierarchyProfile, parsed.data);
+      const bundledArtwork = parseBundledArtwork(record?.artwork);
+      const referencedIds = new Set(referencedArtworkIds(parsed.data));
+      const currentGlobalImages = [
+        ...(globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? []),
+      ];
+      const artworkIdMap = new Map<string, string>();
+      let sharedArtworkAdded = 0;
+      let sharedArtworkReused = 0;
+      let failedArtworkCount = 0;
+      for (const artwork of bundledArtwork.filter((entry) => referencedIds.has(entry.sourceImageId))) {
+        try {
+          const result = await reuseOrUploadSpatialGlobalGalleryImage(
+            bundledArtworkFile(artwork),
+            artwork,
+            currentGlobalImages,
+          );
+          artworkIdMap.set(artwork.sourceImageId, globalGallerySpatialReferenceId(result.image.id));
+          if (!currentGlobalImages.some((candidate) => candidate.id === result.image.id)) {
+            currentGlobalImages.push(result.image);
+          }
+          if (result.reused) sharedArtworkReused += 1;
+          else sharedArtworkAdded += 1;
+        } catch {
+          failedArtworkCount += 1;
+        }
+      }
+      if (sharedArtworkAdded > 0) await globalGalleryImages.refetch();
+      const importedDefinition = remapArtworkReferences(parsed.data, artworkIdMap);
+      const hierarchyProfile = normalizeHierarchyProfile(data?.hierarchyProfile, importedDefinition);
       const created = await createTemplate.mutateAsync({
         name: typeof record?.name === "string" && record.name.trim()
           ? record.name.trim()
           : importedTemplateName(file.name),
         description: "",
-        definition: parsed.data,
+        definition: importedDefinition,
         hierarchyProfile,
       });
-      toast.success("Map added to your templates.");
+      toast.success(
+        `Map added to your templates.${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
+      );
       setEditingId(created.id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The map template could not be imported.");

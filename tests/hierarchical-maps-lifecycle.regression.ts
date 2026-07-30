@@ -2279,6 +2279,82 @@ async function main() {
       false,
       "The updated artifact must ignore missing lore links retained only on archived locations",
     );
+    const sharedArtworkReference = "global-gallery:lifecycle-shared-art";
+    const templateWithArtwork = (await expectJson(
+      app,
+      {
+        method: "POST",
+        url: "/api/chats/spatial-context/templates",
+        headers: csrfHeaders,
+        payload: {
+          name: "Lifecycle shared-art template",
+          description: "Proves account-wide artwork survives reusable template storage.",
+          definition: {
+            ...definition,
+            locations: definition.locations.map((location, index) =>
+              index === 0
+                ? {
+                    ...location,
+                    childPresentation: "map",
+                    referenceImageId: sharedArtworkReference,
+                    useReferenceImage: true,
+                    mapBackgroundImageId: sharedArtworkReference,
+                    mapBackgroundPosition: { x: 24, y: 76 },
+                  }
+                : index === 1
+                  ? {
+                      ...location,
+                      referenceImageId: "chat-only-lifecycle-art",
+                      useReferenceImage: true,
+                      mapBackgroundImageId: "chat-only-lifecycle-art",
+                      mapBackgroundPosition: { x: 50, y: 50 },
+                    }
+                  : location,
+            ),
+          },
+          hierarchyProfile: createdRouteDraft.hierarchyProfile,
+        },
+      },
+      201,
+    )) as {
+      id: string;
+      revision: number;
+      data: {
+        definition: {
+          locations: Array<{
+            id: string;
+            referenceImageId?: string;
+            useReferenceImage?: boolean;
+            mapBackgroundImageId?: string;
+            mapBackgroundPosition?: { x: number; y: number };
+          }>;
+        };
+      };
+    };
+    const sharedTemplateLocation = templateWithArtwork.data.definition.locations.find(
+      (location) => location.id === "lifecycle_world",
+    );
+    assert.equal(sharedTemplateLocation?.referenceImageId, sharedArtworkReference);
+    assert.equal(sharedTemplateLocation?.useReferenceImage, true);
+    assert.equal(sharedTemplateLocation?.mapBackgroundImageId, sharedArtworkReference);
+    assert.deepEqual(sharedTemplateLocation?.mapBackgroundPosition, { x: 24, y: 76 });
+    const chatOnlyTemplateLocation = templateWithArtwork.data.definition.locations.find(
+      (location) => location.id === "lifecycle_harbor",
+    );
+    assert.equal(chatOnlyTemplateLocation?.referenceImageId, undefined);
+    assert.equal(chatOnlyTemplateLocation?.useReferenceImage, undefined);
+    assert.equal(chatOnlyTemplateLocation?.mapBackgroundImageId, undefined);
+    assert.equal(chatOnlyTemplateLocation?.mapBackgroundPosition, undefined);
+    await expectJson(
+      app,
+      {
+        method: "DELETE",
+        url: `/api/chats/spatial-context/templates/${templateWithArtwork.id}`,
+        headers: csrfHeaders,
+        payload: { expectedRevision: templateWithArtwork.revision },
+      },
+      204,
+    );
     const narratedPrompt = (await expectJson(app, {
       method: "POST",
       url: `/api/chats/${branch.id}/peek-prompt`,
@@ -2643,7 +2719,7 @@ async function main() {
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, shared template artwork, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);

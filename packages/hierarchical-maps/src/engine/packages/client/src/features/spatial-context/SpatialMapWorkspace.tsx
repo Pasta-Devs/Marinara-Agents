@@ -115,7 +115,7 @@ type ArtworkProgress = {
   currentName: string;
 };
 
-type SpatialMapArtworkExport = Pick<
+export type SpatialMapArtworkExport = Pick<
   SpatialGalleryImage,
   "prompt" | "provider" | "model" | "width" | "height"
 > & {
@@ -132,7 +132,7 @@ const ARTWORK_MIME_EXTENSIONS = new Map([
   ["image/avif", "avif"],
 ]);
 
-function referencedArtworkIds(definition: SpatialContextDefinition): string[] {
+export function referencedArtworkIds(definition: SpatialContextDefinition): string[] {
   return Array.from(
     new Set(
       definition.locations.flatMap((location) =>
@@ -155,7 +155,7 @@ function artworkFilename(image: SpatialArtworkImage, mimeType: string): string |
   return `${stem}.${extension}`;
 }
 
-function remapArtworkReferences(
+export function remapArtworkReferences(
   definition: SpatialContextDefinition,
   references: ReadonlyMap<string, string>,
 ): SpatialContextDefinition {
@@ -231,7 +231,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-function parseBundledArtwork(value: unknown): SpatialMapArtworkExport[] {
+export function parseBundledArtwork(value: unknown): SpatialMapArtworkExport[] {
   if (!Array.isArray(value)) return [];
   const deduplicated = new Map<string, SpatialMapArtworkExport>();
   for (const entry of value) {
@@ -255,7 +255,7 @@ function parseBundledArtwork(value: unknown): SpatialMapArtworkExport[] {
   return [...deduplicated.values()];
 }
 
-function bundledArtworkFile(artwork: SpatialMapArtworkExport): File {
+export function bundledArtworkFile(artwork: SpatialMapArtworkExport): File {
   const match = /^data:(image\/(?:jpeg|png|gif|webp|avif));base64,(.+)$/isu.exec(artwork.data);
   if (!match) throw new Error("Bundled artwork is not a supported image.");
   const mimeType = match[1].toLowerCase();

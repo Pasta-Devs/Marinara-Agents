@@ -1483,6 +1483,33 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await workspace.getByRole("button", { name: "Use selected" }).click();
     await workspace.getByRole("button", { name: "Save template", exact: true }).click();
     await expect(workspace).toContainText("Saved");
+    const globalGalleryBeforeImport = await page.request.get("/api/global-gallery");
+    expect(globalGalleryBeforeImport.ok(), await globalGalleryBeforeImport.text()).toBeTruthy();
+    const globalImageCountBeforeImport = ((await globalGalleryBeforeImport.json()) as Array<unknown>).length;
+    const downloadPromise = page.waitForEvent("download");
+    await workspace.getByRole("button", { name: "Export world map" }).click();
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const exportedTemplate = JSON.parse(await readFile(downloadPath!, "utf8")) as {
+      name?: string;
+      artwork?: Array<{ sourceImageId: string }>;
+    };
+    expect(exportedTemplate.artwork).toEqual([
+      expect.objectContaining({ sourceImageId: `global-gallery:${sharedArtwork.id}` }),
+    ]);
+    await workspace.getByRole("button", { name: "Back to map templates" }).click();
+
+    exportedTemplate.name = "Imported Shared Artwork World";
+    await library.locator('input[type="file"]').setInputFiles({
+      name: "imported-shared-artwork.world-map.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(exportedTemplate)),
+    });
+    await expect(page.getByText("1 existing shared image was reused.")).toBeVisible();
+    const globalGalleryAfterImport = await page.request.get("/api/global-gallery");
+    expect(globalGalleryAfterImport.ok(), await globalGalleryAfterImport.text()).toBeTruthy();
+    expect(((await globalGalleryAfterImport.json()) as Array<unknown>).length).toBe(globalImageCountBeforeImport);
     await workspace.getByRole("button", { name: "Back to map templates" }).click();
 
     const reusableTemplateCard = library

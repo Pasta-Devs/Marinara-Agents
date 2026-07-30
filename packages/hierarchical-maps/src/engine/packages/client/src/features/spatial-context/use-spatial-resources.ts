@@ -171,10 +171,18 @@ export function uploadSpatialGlobalGalleryImage(
 
 const globalArtworkDigestCache = new Map<string, Promise<string | null>>();
 
-async function sha256Blob(blob: Blob): Promise<string> {
-  if (!globalThis.crypto?.subtle) throw new Error("This browser cannot compare shared artwork safely.");
+async function sha256Blob(blob: Blob): Promise<string | null> {
+  if (!globalThis.crypto?.subtle) return null;
   const digest = await globalThis.crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function blobsHaveSameContent(left: Blob, right: Blob): Promise<boolean> {
+  if (left.size !== right.size) return false;
+  const [leftBytes, rightBytes] = await Promise.all([left.arrayBuffer(), right.arrayBuffer()]);
+  const leftView = new Uint8Array(leftBytes);
+  const rightView = new Uint8Array(rightBytes);
+  return leftView.every((value, index) => value === rightView[index]);
 }
 
 function globalArtworkDigest(image: SpatialGlobalGalleryImage): Promise<string | null> {
@@ -183,7 +191,10 @@ function globalArtworkDigest(image: SpatialGlobalGalleryImage): Promise<string |
   const digest = packageApi
     .blob(image.url)
     .then(sha256Blob)
-    .catch(() => null);
+    .catch(() => {
+      globalArtworkDigestCache.delete(image.id);
+      return null;
+    });
   globalArtworkDigestCache.set(image.id, digest);
   return digest;
 }
@@ -195,10 +206,15 @@ export async function reuseOrUploadSpatialGlobalGalleryImage(
 ): Promise<{ image: SpatialGlobalGalleryImage; reused: boolean }> {
   const sourceDigest = await sha256Blob(file);
   for (const image of globalImages) {
-    if ((await globalArtworkDigest(image)) === sourceDigest) return { image, reused: true };
+    if (sourceDigest) {
+      if ((await globalArtworkDigest(image)) === sourceDigest) return { image, reused: true };
+      continue;
+    }
+    const existing = await packageApi.blob(image.url).catch(() => null);
+    if (existing && (await blobsHaveSameContent(file, existing))) return { image, reused: true };
   }
   const image = await uploadSpatialGlobalGalleryImage(file, metadata);
-  globalArtworkDigestCache.set(image.id, Promise.resolve(sourceDigest));
+  if (sourceDigest) globalArtworkDigestCache.set(image.id, Promise.resolve(sourceDigest));
   return { image, reused: false };
 }
 
