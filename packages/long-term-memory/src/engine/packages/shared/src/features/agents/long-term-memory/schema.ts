@@ -43,7 +43,12 @@ export const ltmEvidenceUnitBucketSchema = z.enum([
 
 export const ltmClaimKindSchema = z.enum(["static", "change"]);
 
-export const ltmModeSchema = z.enum(["roleplay", "conversation", "visual_novel", "game"]);
+export const ltmModeSchema = z.enum([
+  "roleplay",
+  "conversation",
+  "visual_novel",
+  "game",
+]);
 const LTM_EXTRACTION_MODES = ltmModeSchema.options;
 
 export const ltmExtractionReasoningEffortSchema = z.enum([
@@ -53,7 +58,12 @@ export const ltmExtractionReasoningEffortSchema = z.enum([
   "high",
 ]);
 
-export const ltmExtractionVerbositySchema = z.enum(["none", "low", "medium", "high"]);
+export const ltmExtractionVerbositySchema = z.enum([
+  "none",
+  "low",
+  "medium",
+  "high",
+]);
 
 const ltmGlobalSettingsShape = z
   .object({
@@ -143,7 +153,13 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryMaxChunks: z.number().int().min(1).max(100),
     longTermMemoryScoreThreshold: z.number().finite().min(0).max(1),
     longTermMemoryRecallContextMessages: z.number().int().min(1).max(20),
-    longTermMemoryRecallStyle: z.enum(["balanced", "exact", "broad", "story", "custom"]),
+    longTermMemoryRecallStyle: z.enum([
+      "balanced",
+      "exact",
+      "broad",
+      "story",
+      "custom",
+    ]),
     longTermMemorySemanticWeight: z.number().finite().min(0).max(1),
     longTermMemoryLexicalWeight: z.number().finite().min(0).max(1),
     longTermMemoryGraphWeight: z.number().finite().min(0).max(1),
@@ -197,7 +213,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isLtmExtractionMode(
   value: unknown,
 ): value is (typeof LTM_EXTRACTION_MODES)[number] {
-  return value === "roleplay" || value === "conversation" || value === "visual_novel" || value === "game";
+  return (
+    value === "roleplay" ||
+    value === "conversation" ||
+    value === "visual_novel" ||
+    value === "game"
+  );
 }
 
 function stripLegacyPromptTemplateMode(template: unknown) {
@@ -363,6 +384,7 @@ const ltmPromptTemplatesSchema = z
 
 const ltmExtractionSettingsFields = {
   version: z.literal(1).default(1),
+  connectionId: z.string().min(1).max(120).nullable().optional(),
   reasoningEffort: ltmExtractionReasoningEffortSchema.optional(),
   verbosity: ltmExtractionVerbositySchema.optional(),
   maxOutputTokens: z.number().int().min(512).max(32_768).optional(),
@@ -372,7 +394,8 @@ const ltmExtractionSettingsFields = {
   existingNoteMaxChunks: z.number().int().min(1).max(100).optional(),
   existingNoteMaxTokens: z.number().int().min(128).max(32_768).optional(),
   promptTemplates: ltmPromptTemplatesSchema,
-  activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema.optional(),
+  activePromptTemplateIdsByMode:
+    ltmActivePromptTemplateIdsByModeSchema.optional(),
   aiKeywordExtraction: z.boolean().optional(),
   useExtractionAgentOnGameMode: z.boolean().optional(),
 };
@@ -399,9 +422,7 @@ const ltmExtractionSettingsShape = z
 
 export const ltmExtractionSettingsPatchSchema = z.preprocess(
   (value) => normalizeLegacyExtractionSettings(value),
-  z
-    .object(ltmExtractionSettingsFields)
-    .strict(),
+  z.object(ltmExtractionSettingsFields).strict(),
 );
 
 export const ltmExtractionSettingsSchema = z.preprocess((value) => {
@@ -411,6 +432,7 @@ export const ltmExtractionSettingsSchema = z.preprocess((value) => {
 export const ltmResolvedExtractionSettingsSchema = z
   .object({
     version: z.literal(1),
+    connectionId: z.string().min(1).max(120).nullable(),
     systemPrompt: z.string().min(1).max(20_000),
     reasoningEffort: ltmExtractionReasoningEffortSchema,
     verbosity: ltmExtractionVerbositySchema,
@@ -606,12 +628,17 @@ export const ltmUsageSchema = z
     version: z.literal(2),
     chats: z.record(
       z.string().min(1).max(120),
-      z.object({
-        chunks: z.record(z.string().min(1).max(240), ltmUsageChunkSchema),
-      }).strict(),
+      z
+        .object({
+          chunks: z.record(z.string().min(1).max(240), ltmUsageChunkSchema),
+        })
+        .strict(),
     ),
     acceptedReceipts: z
-      .record(z.string().min(1).max(240), z.union([ltmIsoTimestampSchema, z.literal(true)]))
+      .record(
+        z.string().min(1).max(240),
+        z.union([ltmIsoTimestampSchema, z.literal(true)]),
+      )
       .optional(),
   })
   .strict();
@@ -721,9 +748,30 @@ export const ltmNoteTransferPreviewResponseSchema = z
 
 export const ltmNoteTransferApplyRequestSchema = z
   .object({
-    requestedNoteIds: z.array(ltmNoteIdSchema).min(1).max(500).refine((ids) => new Set(ids).size === ids.length, "Requested note IDs must be unique."),
-    derivedNoteIds: z.array(ltmNoteIdSchema).max(500).default([]).refine((ids) => new Set(ids).size === ids.length, "Derived note IDs must be unique."),
-    applyNoteIds: z.array(ltmNoteIdSchema).min(1).max(500).refine((ids) => new Set(ids).size === ids.length, "Applied note IDs must be unique."),
+    requestedNoteIds: z
+      .array(ltmNoteIdSchema)
+      .min(1)
+      .max(500)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Requested note IDs must be unique.",
+      ),
+    derivedNoteIds: z
+      .array(ltmNoteIdSchema)
+      .max(500)
+      .default([])
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Derived note IDs must be unique.",
+      ),
+    applyNoteIds: z
+      .array(ltmNoteIdSchema)
+      .min(1)
+      .max(500)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Applied note IDs must be unique.",
+      ),
     mode: ltmNoteTransferModeSchema,
     destinationChatId: z.string().min(1).max(120),
   })
@@ -731,12 +779,24 @@ export const ltmNoteTransferApplyRequestSchema = z
   .superRefine((value, ctx) => {
     const requested = new Set(value.requestedNoteIds);
     if (value.requestedNoteIds.length + value.derivedNoteIds.length > 500)
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Transfer selection cannot exceed 500 notes." });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Transfer selection cannot exceed 500 notes.",
+      });
     if (value.derivedNoteIds.some((id) => requested.has(id)))
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Requested and derived transfer IDs must be disjoint." });
-    const available = new Set([...value.requestedNoteIds, ...value.derivedNoteIds]);
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Requested and derived transfer IDs must be disjoint.",
+      });
+    const available = new Set([
+      ...value.requestedNoteIds,
+      ...value.derivedNoteIds,
+    ]);
     if (value.applyNoteIds.some((id) => !available.has(id)))
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Applied note IDs must be part of the transfer selection." });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Applied note IDs must be part of the transfer selection.",
+      });
   });
 
 export const ltmSourceDerivedMemorySchema = z
@@ -1445,7 +1505,8 @@ export const ltmEmbeddingIndexSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["spaceId"],
-        message: "Embedding spaceId must be omitted when no vectors are stored.",
+        message:
+          "Embedding spaceId must be omitted when no vectors are stored.",
       });
     }
     if (vectorCount > 0 && !index.spaceId) {
@@ -1578,7 +1639,8 @@ const ltmIndexStateShape = z
     rebuildStartedAt: ltmIsoTimestampSchema.optional(),
     rebuildCompletedAt: ltmIsoTimestampSchema.optional(),
     error: z.string().min(1).max(2_000).optional(),
-  }).strict();
+  })
+  .strict();
 
 export const ltmIndexStateSchema = z.preprocess((value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -2107,7 +2169,12 @@ export const ltmExtractionDiagnosticSchema = z
   .object({
     severity: z.enum(["warning", "error"]),
     code: z.string().min(1).max(120),
-    candidateIndex: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES).optional(),
+    candidateIndex: z
+      .number()
+      .int()
+      .min(0)
+      .max(LTM_EXTRACTION_MAX_CANDIDATES)
+      .optional(),
     mutationId: z.string().uuid().optional(),
     noteId: ltmNoteIdSchema.optional(),
     message: z.string().min(1).max(2_000),
@@ -2117,10 +2184,26 @@ export const ltmExtractionDiagnosticSchema = z
 
 export const ltmExtractionAccountingSchema = z
   .object({
-    providerCandidates: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    normalizedAdditions: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    parserRejections: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    validationRejections: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    providerCandidates: z
+      .number()
+      .int()
+      .min(0)
+      .max(LTM_EXTRACTION_MAX_CANDIDATES),
+    normalizedAdditions: z
+      .number()
+      .int()
+      .min(0)
+      .max(LTM_EXTRACTION_MAX_CANDIDATES),
+    parserRejections: z
+      .number()
+      .int()
+      .min(0)
+      .max(LTM_EXTRACTION_MAX_CANDIDATES),
+    validationRejections: z
+      .number()
+      .int()
+      .min(0)
+      .max(LTM_EXTRACTION_MAX_CANDIDATES),
     deduplications: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
     keptUnits: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
   })
@@ -2693,7 +2776,10 @@ export const ltmImportSourceNotesResponseSchema = z
 export const ltmEvidenceUnitExtractionResponseSchema = z
   .object({
     summary: z.string().max(2_000).default(""),
-    units: z.array(ltmEvidenceUnitSchema).max(LTM_EXTRACTION_MAX_CANDIDATES).default([]),
+    units: z
+      .array(ltmEvidenceUnitSchema)
+      .max(LTM_EXTRACTION_MAX_CANDIDATES)
+      .default([]),
   })
   .strict();
 
@@ -2767,7 +2853,9 @@ export type LtmNoteTransferPreviewRequest = z.infer<
 export type LtmNoteTransferPreviewResponse = z.infer<
   typeof ltmNoteTransferPreviewResponseSchema
 >;
-export type LtmNoteTransferApplyRequest = z.infer<typeof ltmNoteTransferApplyRequestSchema>;
+export type LtmNoteTransferApplyRequest = z.infer<
+  typeof ltmNoteTransferApplyRequestSchema
+>;
 export type LtmSourceDerivedMemory = z.infer<
   typeof ltmSourceDerivedMemorySchema
 >;
