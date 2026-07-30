@@ -428,6 +428,9 @@ async function bundleSpecialClient(feature, output) {
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+  isolation: isolate;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 [data-marinara-maps-workspace-overlay] > .mari-editor-shell,
@@ -437,6 +440,13 @@ async function bundleSpecialClient(feature, output) {
   min-width: 0;
   min-height: 0;
   flex: 1 1 0%;
+  pointer-events: auto;
+}
+
+[data-marinara-maps-workspace-overlay] .mari-editor-header,
+[data-marinara-maps-workspace-overlay] .mari-editor-header button {
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 [data-marinara-maps-workspace-overlay] .mari-editor-action,
@@ -445,13 +455,86 @@ async function bundleSpecialClient(feature, output) {
   min-height: 2.75rem;
 }
 
+[data-marinara-maps-workspace-overlay] [data-marinara-map-selected-location="true"] {
+  border-color: var(--marinara-chat-chrome-accent) !important;
+  background: color-mix(in srgb, var(--marinara-chat-chrome-accent) 16%, var(--background) 84%) !important;
+  color: var(--marinara-chat-chrome-panel-title) !important;
+  box-shadow:
+    0 0 0 0.125rem var(--background),
+    0 0 0 0.25rem var(--marinara-chat-chrome-accent),
+    0 0.5rem 1.25rem rgba(0, 0, 0, 0.32);
+}
+
+@media (max-width: 47.999rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-header-actions] {
+    display: contents;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-more-control] {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-more-control] > button {
+    position: relative;
+    width: 2.75rem;
+    padding-inline: 0;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-more-label],
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-more-chevron],
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-save-label] {
+    display: none !important;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-notice-count] {
+    position: absolute;
+    top: -0.3125rem;
+    right: -0.3125rem;
+  }
+
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-header-status] {
+    flex: 0 0 auto;
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 21.25rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-header-title] {
+    display: none !important;
+  }
+}
+
+@media (max-width: 79.999rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-status-label] {
+    display: none !important;
+  }
+}
+
 @media (min-width: 64rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-compact-only],
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-notice-count] {
+    display: none !important;
+  }
+
   .mari-maps-workspace-grid {
     grid-template-columns: minmax(15rem, 18rem) minmax(20rem, 1fr) minmax(18rem, 22rem);
   }
 
   .mari-maps-ai-grid {
     grid-template-columns: minmax(20rem, 0.9fr) minmax(22rem, 1.1fr);
+  }
+}
+
+@media (min-width: 64rem) and (max-width: 79.999rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-wide-only] {
+    display: none !important;
+  }
+}
+
+@media (min-width: 80rem) {
+  [data-marinara-maps-workspace-overlay] [data-marinara-map-mid-overflow] {
+    display: none !important;
   }
 }
 `;

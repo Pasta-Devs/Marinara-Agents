@@ -2009,18 +2009,12 @@ test("Map editor fills missing location artwork with one image per location", as
     await dismissOnboardingTutorial(page);
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
-    let fillArtwork = workspace.locator("[data-marinara-fill-map-artwork]");
-    await expect(workspace).toContainText("Review 2 missing image requests");
-    await workspace.getByRole("button", { name: "Collapse location artwork reminder" }).click();
-    await expect(workspace).toContainText("4 locations need artwork");
-    await expect(workspace.getByRole("button", { name: "Review artwork" })).toBeVisible();
-    await page.reload();
-    await dismissOnboardingTutorial(page);
-    await expect(workspace).toContainText("4 locations need artwork");
-    await expect(workspace.getByRole("button", { name: "Expand location artwork reminder" })).toBeVisible();
-    fillArtwork = workspace.locator("[data-marinara-fill-map-artwork]");
+    const fillArtwork = workspace.getByRole("button", { name: "Review artwork for 4 locations" });
+    await expect(workspace.locator("[data-marinara-map-artwork-reminder]")).toHaveCount(0);
+    await expect(fillArtwork).toContainText("2 art requests");
     await fillArtwork.click();
     await expect(fillArtwork).toHaveCount(0);
+    await expect(workspace.getByLabel("Review location artwork image requests")).toBeVisible();
     expect(previewRequests).toHaveLength(2);
     expect(previewRequests.find((request) => request.title === "Shrouded Coast")?.mapsArtworkContext).toEqual({
       locationName: "Shrouded Coast",
@@ -2818,16 +2812,29 @@ test("AI map builder previews a validated local draft before save", async ({ pag
         return {
           clientWidth: element.clientWidth,
           scrollWidth: element.scrollWidth,
+          clientHeight: element.clientHeight,
+          scrollHeight: element.scrollHeight,
           left: rect.left,
           right: rect.right,
           viewportWidth: window.innerWidth,
         };
       });
       expect(headerGeometry.scrollWidth).toBeLessThanOrEqual(headerGeometry.clientWidth + 1);
+      expect(headerGeometry.scrollHeight).toBeLessThanOrEqual(headerGeometry.clientHeight + 1);
+      expect(headerGeometry.clientHeight).toBeLessThanOrEqual(80);
+      const mobileTitleWidth = await header
+        .getByRole("heading", { name: "World map" })
+        .evaluate((element) => element.getBoundingClientRect().width);
+      expect(mobileTitleWidth).toBeGreaterThanOrEqual(80);
       expect(headerGeometry.left).toBeGreaterThanOrEqual(-1);
       expect(headerGeometry.right).toBeLessThanOrEqual(headerGeometry.viewportWidth + 1);
 
-      await moreActions.click();
+      const moreActionsBox = await moreActions.boundingBox();
+      expect(moreActionsBox).not.toBeNull();
+      await page.touchscreen.tap(
+        moreActionsBox!.x + moreActionsBox!.width / 2,
+        moreActionsBox!.y + moreActionsBox!.height / 2,
+      );
       const mobileActions = workspace.getByRole("region", { name: "Map actions" });
       await expect(mobileActions).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Expand with AI", exact: true })).toBeVisible();
@@ -2845,7 +2852,26 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       );
       replaceMap = mobileActions.getByRole("button", { name: "Replace map or start over" });
     } else {
-      await expect(workspace.getByRole("button", { name: "More map actions" })).toHaveCount(0);
+      await page.setViewportSize({ width: 1024, height: 900 });
+      const header = workspace.locator(":scope > .mari-editor-header");
+      const headerGeometry = await header.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      }));
+      expect(headerGeometry.scrollWidth).toBeLessThanOrEqual(headerGeometry.clientWidth + 1);
+      expect(headerGeometry.scrollHeight).toBeLessThanOrEqual(headerGeometry.clientHeight + 1);
+      const moreActions = workspace.getByRole("button", { name: "More map actions" });
+      await expectMinimumInteractiveSize(moreActions, "Desktop map actions control");
+      await moreActions.click();
+      const desktopActions = workspace.getByRole("region", { name: "Map actions" });
+      await expect(desktopActions).toBeVisible();
+      await expect(desktopActions.locator("[data-marinara-map-compact-only]:visible")).toHaveCount(0);
+      await expect(desktopActions.getByRole("button", { name: "Export world map" })).toBeVisible();
+      await expect(desktopActions.getByRole("button", { name: "Import world map" })).toBeVisible();
+      await expect(desktopActions.getByRole("button", { name: "Add a saved map template" })).toBeVisible();
+      replaceMap = desktopActions.getByRole("button", { name: "Replace map or start over" });
     }
     await expectMinimumInteractiveSize(replaceMap, "Replace map control");
     await replaceMap.click();
@@ -3157,6 +3183,22 @@ test("AI map expansion preserves a campaign map and its current location", async
     expect(canvasBox).not.toBeNull();
     expect(nodeBox).not.toBeNull();
     await lighthouseNode.focus();
+    await lighthouseNode.click();
+    await expect(lighthouseNode).toHaveAttribute("data-marinara-map-selected-location", "true");
+    await expect
+      .poll(async () =>
+        lighthouseNode.evaluate((element) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 1;
+          canvas.height = 1;
+          const context = canvas.getContext("2d");
+          if (!context) return 0;
+          context.fillStyle = getComputedStyle(element).backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          return context.getImageData(0, 0, 1, 1).data[3];
+        }),
+      )
+      .toBe(255);
     await page.mouse.move(nodeBox!.x + nodeBox!.width / 2, nodeBox!.y + nodeBox!.height / 2);
     await page.mouse.down();
     await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.6, canvasBox!.y + canvasBox!.height * 0.4);

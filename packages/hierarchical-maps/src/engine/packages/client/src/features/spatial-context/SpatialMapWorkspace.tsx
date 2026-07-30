@@ -5,7 +5,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  ChevronUp,
   CornerDownRight,
   Download,
   GitFork,
@@ -144,31 +143,6 @@ const ARTWORK_MIME_EXTENSIONS = new Map([
   ["image/webp", "webp"],
   ["image/avif", "avif"],
 ]);
-
-const ARTWORK_REMINDER_STORAGE_PREFIX = "marinara:maps:artwork-reminder-collapsed:";
-
-function artworkReminderStorageKey(chatId: string): string {
-  return `${ARTWORK_REMINDER_STORAGE_PREFIX}${chatId}`;
-}
-
-function readCollapsedArtworkSignature(chatId: string | null): string | null {
-  if (!chatId || typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(artworkReminderStorageKey(chatId));
-  } catch {
-    return null;
-  }
-}
-
-function writeCollapsedArtworkSignature(chatId: string, signature: string | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (signature) window.localStorage.setItem(artworkReminderStorageKey(chatId), signature);
-    else window.localStorage.removeItem(artworkReminderStorageKey(chatId));
-  } catch {
-    // A private or restricted browser may deny local storage. The current editor session still works.
-  }
-}
 
 export function referencedArtworkIds(definition: SpatialContextDefinition): string[] {
   return Array.from(
@@ -466,9 +440,6 @@ export function SpatialMapWorkspace({
   const [isImporting, setIsImporting] = useState(false);
   const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
   const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
-  const [collapsedArtworkSignature, setCollapsedArtworkSignature] = useState<string | null>(() =>
-    readCollapsedArtworkSignature(chatId),
-  );
   const backgroundMoveFrameRef = useRef<number | null>(null);
   const pendingBackgroundMoveRef = useRef<{
     locationId: string;
@@ -714,15 +685,6 @@ export function SpatialMapWorkspace({
   const artworkImagesToGenerate = missingArtworkLocations.filter(
     (location) => !location.referenceImageId && !location.mapBackgroundImageId,
   ).length;
-  const artworkReminderSignature = missingArtworkLocations
-    .map((location) => location.id)
-    .sort((left, right) => left.localeCompare(right))
-    .join("\u0000");
-  const artworkReminderCollapsed =
-    !artworkPreview &&
-    artworkProgress === null &&
-    artworkReminderSignature.length > 0 &&
-    collapsedArtworkSignature === artworkReminderSignature;
   const linkedSharedWorld =
     !templateMode && spatial.data?.sharedWorld.mode === "linked" ? spatial.data.sharedWorld : null;
   const mobileMapNoticeCount =
@@ -778,10 +740,6 @@ export function SpatialMapWorkspace({
   useEffect(() => {
     setArtworkPreview(null);
   }, [artworkPreviewSignature]);
-
-  useEffect(() => {
-    setCollapsedArtworkSignature(readCollapsedArtworkSignature(chatId));
-  }, [chatId]);
 
   useEffect(() => {
     if (
@@ -2163,19 +2121,25 @@ export function SpatialMapWorkspace({
         </div>
       )}
 
-      <div className="mari-editor-header relative z-50">
+      <div
+        className="mari-editor-header relative z-50"
+        onPointerDown={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
         <button
           type="button"
+          data-marinara-map-header-back
           onClick={() => void handleClose()}
           aria-label={templateMode ? "Back to map library" : "Back to chat"}
           className="mari-editor-action inline-flex min-h-11 min-w-11"
         >
           <ArrowLeft size="1.125rem" />
         </button>
-        <div className="mari-editor-icon-tile">
+        <div data-marinara-map-header-icon className="mari-editor-icon-tile">
           <MapIcon size="1.125rem" />
         </div>
-        <div className="min-w-0 flex-1">
+        <div data-marinara-map-header-title className="min-w-0 flex-1">
           {templateMode ? (
             <label className="block max-w-md">
               <span className="sr-only">{sharedWorldMode ? "Shared world name" : "Map template name"}</span>
@@ -2200,8 +2164,104 @@ export function SpatialMapWorkspace({
             </>
           )}
         </div>
-        <div className="mari-editor-actions flex max-md:w-full max-md:justify-between max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
+        <div
+          data-marinara-map-header-actions
+          className="mari-editor-actions flex max-md:w-full max-md:justify-between max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2"
+        >
           <div className="hidden items-center gap-1.5 lg:flex">
+            {!templateMode && missingArtworkLocations.length > 0 && !artworkPreview && (
+              <button
+                type="button"
+                data-marinara-fill-map-artwork
+                onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
+                disabled={
+                  artworkProgress !== null ||
+                  previewGalleryImages.isPending ||
+                  conflict ||
+                  updateSpatial.isPending
+                }
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+                aria-label={`Review artwork for ${missingArtworkLocations.length} ${missingArtworkLocations.length === 1 ? "location" : "locations"}`}
+                title={`${missingArtworkLocations.length} ${missingArtworkLocations.length === 1 ? "location needs" : "locations need"} artwork`}
+              >
+                {artworkProgress || previewGalleryImages.isPending ? (
+                  <Loader2 size="0.8125rem" className="animate-spin" />
+                ) : (
+                  <ImageIcon size="0.8125rem" />
+                )}
+                {artworkImagesToGenerate > 0
+                  ? `${artworkImagesToGenerate} art request${artworkImagesToGenerate === 1 ? "" : "s"}`
+                  : "Apply artwork"}
+              </button>
+            )}
+            {linkedSharedWorld && (
+              <>
+                <span
+                  role={linkedSharedWorld.missing || linkedSharedWorld.conflict ? "alert" : "status"}
+                  className={cn(
+                    "mari-editor-action inline-flex min-h-11 max-w-44 px-3 text-xs",
+                    linkedSharedWorld.missing || linkedSharedWorld.conflict
+                      ? "border-red-500/30 bg-red-500/10 text-[var(--destructive)]"
+                      : linkedSharedWorld.pendingChanges
+                        ? "border-amber-500/30 bg-amber-500/10"
+                        : "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+                  )}
+                  title={
+                    linkedSharedWorld.missing
+                      ? "The account-owned world is unavailable."
+                      : linkedSharedWorld.conflict
+                        ? "The canonical world changed after this chat began editing."
+                        : linkedSharedWorld.pendingChanges
+                          ? "This chat has unpublished shared-world changes."
+                          : `Revision ${linkedSharedWorld.worldRevision ?? "?"} · ${linkedSharedWorld.linkedChatCount} linked chat${linkedSharedWorld.linkedChatCount === 1 ? "" : "s"}`
+                  }
+                >
+                  <Link2 size="0.8125rem" className="shrink-0" />
+                  <span className="truncate">
+                    {linkedSharedWorld.missing
+                      ? "Shared unavailable"
+                      : linkedSharedWorld.conflict
+                        ? "Shared conflict"
+                        : linkedSharedWorld.pendingChanges
+                          ? "Shared changes"
+                          : linkedSharedWorld.worldName ?? "Shared world"}
+                  </span>
+                </span>
+                {linkedSharedWorld.pendingChanges && !linkedSharedWorld.conflict && (
+                  <button
+                    type="button"
+                    onClick={() => void publishLinkedChanges()}
+                    disabled={dirty || publishSharedWorld.isPending}
+                    className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+                  >
+                    {publishSharedWorld.isPending ? (
+                      <Loader2 size="0.75rem" className="animate-spin" />
+                    ) : (
+                      <Upload size="0.75rem" />
+                    )}
+                    Publish
+                  </button>
+                )}
+                {linkedSharedWorld.pendingChanges && (
+                  <button
+                    type="button"
+                    onClick={() => void discardLinkedChanges()}
+                    disabled={dirty || discardSharedWorldDraft.isPending}
+                    className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+                  >
+                    Discard
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void forkLinkedWorld()}
+                  disabled={dirty || forkSharedWorld.isPending || linkedSharedWorld.missing}
+                  className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+                >
+                  <GitFork size="0.75rem" /> Fork independent
+                </button>
+              </>
+            )}
             {!templateMode && (
               <button
                 type="button"
@@ -2220,85 +2280,8 @@ export function SpatialMapWorkspace({
                     : "Build with AI"}
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => void handleExport()}
-              disabled={isExporting}
-              className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-              aria-label="Export world map"
-            >
-              {isExporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Upload size="0.8125rem" />} Export
-            </button>
-            <label
-              className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs"
-              title="Bundle referenced location and map background images. This makes the export file larger."
-            >
-              <input
-                type="checkbox"
-                checked={includeArtworkInExport}
-                disabled={isExporting}
-                onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
-              />
-              <span>Include map artwork</span>
-            </label>
-            <button
-              type="button"
-              onClick={() => importInputRef.current?.click()}
-              disabled={conflict || updateSpatial.isPending || isImporting}
-              className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-              aria-label="Import world map"
-            >
-              {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />}{" "}
-              Import
-            </button>
-            {!templateMode && onOpenTemplates && (
-              <button
-                type="button"
-                onClick={onOpenTemplates}
-                disabled={conflict || updateSpatial.isPending}
-                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-                aria-label="Add a saved map template"
-              >
-                <MapIcon size="0.8125rem" /> Templates
-              </button>
-            )}
-            {!templateMode && draft.locations.length > 0 && (
-              <button
-                type="button"
-                onClick={() => void saveAsTemplate()}
-                disabled={createTemplate.isPending}
-                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-              >
-                <Save size="0.8125rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
-              </button>
-            )}
-            {!templateMode && spatial.data?.sharedWorld.mode !== "linked" && draft.locations.length > 0 && (
-              <button
-                type="button"
-                onClick={() => void saveAsSharedWorld()}
-                disabled={dirty || createSharedWorld.isPending || linkSharedWorld.isPending}
-                title={dirty ? "Save this chat's map before creating a shared world." : undefined}
-                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-              >
-                <Link2 size="0.8125rem" />{" "}
-                {createSharedWorld.isPending || linkSharedWorld.isPending ? "Creating shared world" : "Make shared"}
-              </button>
-            )}
-            {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setReplaceMapOpen((open) => !open)}
-                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
-                className="mari-editor-action inline-flex min-h-11 px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
-                aria-label="Replace map or start over"
-                aria-expanded={replaceMapOpen}
-                aria-controls="hierarchical-map-replace-panel"
-              >
-                <RefreshCw size="0.8125rem" /> Replace / start over
-              </button>
-            )}
           </div>
-          <div className="shrink-0 lg:hidden">
+          <div data-marinara-map-more-control className="shrink-0">
             <button
               type="button"
               onClick={() => setMobileActionsOpen((open) => !open)}
@@ -2314,17 +2297,19 @@ export function SpatialMapWorkspace({
                   : ""
               }`}
             >
-              <MoreHorizontal size="0.8125rem" /> More
+              <MoreHorizontal size="0.8125rem" />
+              <span data-marinara-map-more-label>More</span>
               {mobileMapNoticeCount > 0 && (
                 <span
                   data-marinara-map-notice-count
                   aria-hidden="true"
-                  className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[var(--destructive)] px-1 text-[0.625rem] font-bold leading-none text-white"
+                  className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[var(--destructive)] px-1 text-[0.625rem] font-bold leading-none text-white lg:hidden"
                 >
                   {mobileMapNoticeCount}
                 </span>
               )}
               <ChevronDown
+                data-marinara-map-more-chevron
                 size="0.75rem"
                 className={cn("transition-transform duration-150", mobileActionsOpen && "rotate-180")}
               />
@@ -2341,6 +2326,8 @@ export function SpatialMapWorkspace({
             onChange={(event) => void handleImport(event)}
           />
           <span
+            data-marinara-map-header-status
+            title={status.label}
             className={cn(
               "mari-editor-status mr-2",
               "max-md:mr-0 max-md:min-w-0 max-md:flex-1 max-md:justify-end max-md:overflow-hidden max-md:whitespace-nowrap",
@@ -2348,10 +2335,10 @@ export function SpatialMapWorkspace({
             )}
           >
             {status.icon}
-            {status.label}
+            <span data-marinara-map-status-label>{status.label}</span>
           </span>
           {!templateMode && !isFirstMapDraft && (
-            <div className="hidden lg:block">
+            <div data-marinara-map-wide-only className="hidden lg:block">
               <label className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs">
                 <input
                   type="checkbox"
@@ -2365,6 +2352,7 @@ export function SpatialMapWorkspace({
           )}
           <button
             type="button"
+            data-marinara-map-header-save
             onClick={() => {
               setMobileActionsOpen(false);
               void handleSave(isFirstMapDraft);
@@ -2382,7 +2370,9 @@ export function SpatialMapWorkspace({
             aria-label={saveLabel}
           >
             <Save size="0.8125rem" />
-            <span className="lg:hidden">{isFirstMapDraft ? "Enable & save" : "Save"}</span>
+            <span data-marinara-map-save-label className="lg:hidden">
+              {isFirstMapDraft ? "Enable & save" : "Save"}
+            </span>
             <span className="hidden lg:inline">{saveLabel}</span>
           </button>
         </div>
@@ -2394,13 +2384,14 @@ export function SpatialMapWorkspace({
           data-marinara-map-mobile-actions
           role="region"
           aria-label="Map actions"
-          className="relative z-40 border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)] p-3 lg:hidden"
+          className="relative z-40 border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)] p-3"
         >
           <div className="grid grid-cols-2 gap-2">
             {!templateMode && missingArtworkLocations.length > 0 && !artworkPreview && (
               <button
                 type="button"
                 data-marinara-fill-map-artwork
+                data-marinara-map-compact-only
                 onClick={() => {
                   setMobileActionsOpen(false);
                   void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork());
@@ -2430,6 +2421,7 @@ export function SpatialMapWorkspace({
             {linkedSharedWorld && (
               <div
                 data-marinara-mobile-shared-world-status
+                data-marinara-map-compact-only
                 role={linkedSharedWorld.missing || linkedSharedWorld.conflict ? "alert" : "status"}
                 className={cn(
                   "col-span-2 flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-3 text-xs",
@@ -2464,6 +2456,7 @@ export function SpatialMapWorkspace({
             {linkedSharedWorld?.pendingChanges && !linkedSharedWorld.conflict && (
               <button
                 type="button"
+                data-marinara-map-compact-only
                 onClick={() => {
                   setMobileActionsOpen(false);
                   void publishLinkedChanges();
@@ -2482,6 +2475,7 @@ export function SpatialMapWorkspace({
             {linkedSharedWorld?.pendingChanges && (
               <button
                 type="button"
+                data-marinara-map-compact-only
                 onClick={() => {
                   setMobileActionsOpen(false);
                   void discardLinkedChanges();
@@ -2495,6 +2489,7 @@ export function SpatialMapWorkspace({
             {linkedSharedWorld && (
               <button
                 type="button"
+                data-marinara-map-compact-only
                 onClick={() => {
                   setMobileActionsOpen(false);
                   void forkLinkedWorld();
@@ -2508,6 +2503,7 @@ export function SpatialMapWorkspace({
             {!templateMode && (
               <button
                 type="button"
+                data-marinara-map-compact-only
                 onClick={() => {
                   setMobileActionsOpen(false);
                   void spatial.refetch();
@@ -2598,7 +2594,10 @@ export function SpatialMapWorkspace({
               </button>
             )}
             {!templateMode && !isFirstMapDraft && (
-              <label className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs">
+              <label
+                data-marinara-map-mid-overflow
+                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs"
+              >
                 <span>{draft.enabled ? "Map enabled" : "Map disabled"}</span>
                 <input
                   type="checkbox"
@@ -2782,13 +2781,13 @@ export function SpatialMapWorkspace({
         onApply={applyGeneratedDraft}
       />
 
-      {!templateMode && !aiBuilderOpen && missingArtworkLocations.length > 0 && (
+      {!templateMode &&
+        !aiBuilderOpen &&
+        missingArtworkLocations.length > 0 &&
+        (artworkPreview || artworkProgress !== null) && (
         <section
           data-marinara-map-artwork-reminder
-          className={cn(
-            "border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3",
-            !artworkPreview && artworkProgress === null && "max-lg:hidden",
-          )}
+          className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3"
         >
           {artworkPreview ? (
             <div
@@ -2955,37 +2954,6 @@ export function SpatialMapWorkspace({
                 </button>
               </div>
             </div>
-          ) : artworkReminderCollapsed ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="min-w-0 flex-1 text-xs font-medium text-[var(--marinara-editor-title)]">
-                {missingArtworkLocations.length} {missingArtworkLocations.length === 1 ? "location needs" : "locations need"} artwork
-              </p>
-              <button
-                type="button"
-                data-marinara-fill-map-artwork
-                onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
-                disabled={previewGalleryImages.isPending || conflict || updateSpatial.isPending}
-                className="mari-chrome-control min-h-11 shrink-0 justify-center px-3 text-xs disabled:opacity-45"
-              >
-                {previewGalleryImages.isPending ? (
-                  <Loader2 size="0.8125rem" className="animate-spin" />
-                ) : (
-                  <ImageIcon size="0.8125rem" />
-                )}
-                {previewGalleryImages.isPending ? "Preparing preview" : "Review artwork"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (chatId) writeCollapsedArtworkSignature(chatId, null);
-                  setCollapsedArtworkSignature(null);
-                }}
-                className="mari-chrome-control min-h-11 shrink-0 justify-center px-3 text-xs"
-                aria-label="Expand location artwork reminder"
-              >
-                <ChevronDown size="0.8125rem" /> Expand
-              </button>
-            </div>
           ) : (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1">
@@ -3023,20 +2991,6 @@ export function SpatialMapWorkspace({
                     Creating artwork for {artworkProgress.currentName}
                   </span>
                 )}
-              {!artworkProgress && !previewGalleryImages.isPending && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!chatId || !artworkReminderSignature) return;
-                    writeCollapsedArtworkSignature(chatId, artworkReminderSignature);
-                    setCollapsedArtworkSignature(artworkReminderSignature);
-                  }}
-                  className="mari-chrome-control min-h-11 shrink-0 justify-center px-3 text-xs"
-                  aria-label="Collapse location artwork reminder"
-                >
-                  <ChevronUp size="0.8125rem" /> Collapse
-                </button>
-              )}
             </div>
           )}
         </section>
@@ -3154,75 +3108,6 @@ export function SpatialMapWorkspace({
             )}
           </div>
         </section>
-      )}
-
-      {!templateMode && !aiBuilderOpen && spatial.data?.sharedWorld.mode === "linked" && (
-        <div
-          className={cn(
-            "hidden flex-wrap items-center gap-3 border-b px-4 py-3 text-xs lg:flex",
-            spatial.data.sharedWorld.missing || spatial.data.sharedWorld.conflict
-              ? "border-red-500/25 bg-red-500/10 text-[var(--destructive)]"
-              : spatial.data.sharedWorld.pendingChanges
-                ? "border-amber-500/25 bg-amber-500/10 text-[var(--marinara-editor-text)]"
-                : "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-editor-title)]",
-          )}
-          role={spatial.data.sharedWorld.missing || spatial.data.sharedWorld.conflict ? "alert" : "status"}
-        >
-          <Link2 size="0.875rem" className="shrink-0" />
-          <div className="min-w-52 flex-1">
-            <p className="font-semibold">
-              {spatial.data.sharedWorld.missing
-                ? "Shared world unavailable"
-                : spatial.data.sharedWorld.conflict
-                  ? "Shared world conflict"
-                  : spatial.data.sharedWorld.pendingChanges
-                    ? "Unpublished changes in this chat"
-                    : `Linked to ${spatial.data.sharedWorld.worldName ?? "shared world"}`}
-            </p>
-            <p className="mt-0.5 opacity-80">
-              {spatial.data.sharedWorld.missing
-                ? "The account-owned world was removed or cannot be read. Fork a recovered map or link another world."
-                : spatial.data.sharedWorld.conflict
-                  ? "The canonical world changed after this chat began editing. Fork this version or discard it before continuing."
-                  : spatial.data.sharedWorld.pendingChanges
-                    ? "Review these map edits before publishing them to every linked chat."
-                    : `Revision ${spatial.data.sharedWorld.worldRevision ?? "?"} · ${spatial.data.sharedWorld.linkedChatCount} linked chat${spatial.data.sharedWorld.linkedChatCount === 1 ? "" : "s"}`}
-            </p>
-          </div>
-          {spatial.data.sharedWorld.pendingChanges && !spatial.data.sharedWorld.conflict && (
-            <button
-              type="button"
-              onClick={() => void publishLinkedChanges()}
-              disabled={dirty || publishSharedWorld.isPending}
-              className="mari-chrome-control mari-chrome-control--primary min-h-11 px-3 text-xs disabled:opacity-45"
-            >
-              {publishSharedWorld.isPending ? (
-                <Loader2 size="0.75rem" className="animate-spin" />
-              ) : (
-                <Upload size="0.75rem" />
-              )}
-              Publish changes
-            </button>
-          )}
-          {spatial.data.sharedWorld.pendingChanges && (
-            <button
-              type="button"
-              onClick={() => void discardLinkedChanges()}
-              disabled={dirty || discardSharedWorldDraft.isPending}
-              className="mari-chrome-control min-h-11 px-3 text-xs disabled:opacity-45"
-            >
-              Discard
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => void forkLinkedWorld()}
-            disabled={dirty || forkSharedWorld.isPending || spatial.data.sharedWorld.missing}
-            className="mari-chrome-control min-h-11 px-3 text-xs disabled:opacity-45"
-          >
-            <GitFork size="0.75rem" /> Fork independent
-          </button>
-        </div>
       )}
 
       {!aiBuilderOpen && firstSaveResult && (
