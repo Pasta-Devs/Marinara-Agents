@@ -399,10 +399,10 @@ export function SpatialContextRuntimeBar({
       {!enabled && !pending && (
         <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] px-3 py-2.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
           {!data?.definition
-            ? "No map yet. Create one from Agents → Hierarchical Maps; your message draft is unchanged."
+            ? "No map yet. Create one from Agents → World Maps; your message draft is unchanged."
             : !data.definition.enabled
               ? "Map disabled. Its saved hierarchy and history are preserved until you enable it again."
-              : "The saved map does not have an available current location. Open Hierarchical Maps to review it."}
+              : "The saved map does not have an available current location. Open World Maps to review it."}
         </div>
       )}
 

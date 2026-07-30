@@ -545,7 +545,7 @@
         "schemaVersion": 1,
         "id": "expression",
         "name": "Expression Engine",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Detects character emotions and selects VN sprites/expressions. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -560,8 +560,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "6bb5461c5d58ae4ffa0e1b66ee72a9c5cf04ed3ba6aa673a7f129037cf77da0f",
-            "bytes": 1962
+            "sha256": "2122c5e12c01762de6937558184d7077f0f266282abfd96ebf1cafee71f4da36",
+            "bytes": 1934
           }
         ],
         "permissions": [
@@ -576,9 +576,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/expression.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.1.zip",
-        "sha256": "3e3378c90e8a3708baf479ae9286a16e02bba9c9ac54367256359df321e39683",
-        "bytes": 1595
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.2.zip",
+        "sha256": "b4077f505ce125bae469581231d37e6e63dcee921fef12c38c86e1cd2ec8b695",
+        "bytes": 1590
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine"
     },
@@ -623,85 +623,6 @@
         "bytes": 1731
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 2,
-        "capabilityApi": {
-          "major": 1,
-          "minor": 3
-        },
-        "builtAgainst": {
-          "engineVersion": "2.3.3",
-          "engineCommit": "858cfa431e07f6f558aa1e8826a2c9b024269ab7"
-        },
-        "id": "hierarchical-maps",
-        "name": "Hierarchical Maps",
-        "version": "1.1.10",
-        "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
-        "engine": {
-          "min": "2.3.3",
-          "maxExclusive": "3.0.0"
-        },
-        "kind": [
-          "agent",
-          "maps"
-        ],
-        "entrypoints": {
-          "agents": "agents.json",
-          "server": "server.mjs",
-          "client": "client.js"
-        },
-        "contributions": {
-          "agentDetail": {
-            "agentIds": [
-              "hierarchical-maps"
-            ]
-          },
-          "slots": [
-            "chat-settings",
-            "spatial-workspace",
-            "chat-runtime",
-            "game-world-map"
-          ]
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "fc329c5372292892d649cdfb4174ef44e8f4702b8cc19b0b2d32ae4020729dad",
-            "bytes": 613
-          },
-          {
-            "path": "server.mjs",
-            "sha256": "6dc8cf91e91e8704eacea0c7e185efb14a857ba474cd42e6c9b992887268fff5",
-            "bytes": 319983
-          },
-          {
-            "path": "client.js",
-            "sha256": "10b54430bdd732b5b3bf05dc7dc802d8e847e17cbe1948c1578d7d1d0559804d",
-            "bytes": 804356
-          }
-        ],
-        "permissions": [
-          "agent-runtime",
-          "chat-read",
-          "chat-write",
-          "network",
-          "prompt-context",
-          "routes",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": true
-      },
-      "category": "tracker",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.1.10.zip",
-        "sha256": "b57b62a91b5ba487f006ca33aa9673ecefdf6aaa8f83d803ae6676216fb97dc9",
-        "bytes": 300708
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },
     {
       "manifest": {
@@ -1337,6 +1258,48 @@
     {
       "manifest": {
         "schemaVersion": 1,
+        "id": "storyboard",
+        "name": "Storyboard",
+        "version": "1.0.0",
+        "description": "Plans and generates still or animated Game storyboards through provider-tuned planner, image, and video prompt chains. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Game mode.",
+        "engine": {
+          "min": "2.3.5",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "8e649ab18362ed05b4dc1d2578526e0a248d8bdb37b6ca85e2d1357ae3729779",
+            "bytes": 60746
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.0.0.zip",
+        "sha256": "a66c419edba6a2388f9e07c68b1975f096cd990ffb4885b2374511a76b40370b",
+        "bytes": 11958
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
         "id": "tic-tac-toe",
         "name": "Tic-Tac-Toe",
         "version": "1.0.3",
@@ -1470,6 +1433,85 @@
         "bytes": 194942
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 4
+        },
+        "builtAgainst": {
+          "engineVersion": "2.3.5",
+          "engineCommit": "b3a60e335c9eaadd04c52d2286382767f21b595f"
+        },
+        "id": "hierarchical-maps",
+        "name": "World Maps",
+        "version": "1.2.0",
+        "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
+        "engine": {
+          "min": "2.3.5",
+          "maxExclusive": "3.0.0"
+        },
+        "kind": [
+          "agent",
+          "maps"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "agentDetail": {
+            "agentIds": [
+              "hierarchical-maps"
+            ]
+          },
+          "slots": [
+            "chat-settings",
+            "spatial-workspace",
+            "chat-runtime",
+            "game-world-map"
+          ]
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "5d77eee57b2dbd401c89ef4b96114b1ea48c8776380eb5d2bcb089f3b238419b",
+            "bytes": 606
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "422fa0b468d37a38a4fb06b60f181185b3afe96ef9146cb2e22c1e73557dae89",
+            "bytes": 331711
+          },
+          {
+            "path": "client.js",
+            "sha256": "8edc8a89d4c80780f151abbd14e2b3a2d964ba8a33d66ffcaccd589a156ea14d",
+            "bytes": 864110
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "network",
+          "prompt-context",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.0.zip",
+        "sha256": "6e479afb4a3e0d41e6fce7aab677f50c8e3d708a4b99d3e62c7bfdd33ca0daca",
+        "bytes": 317080
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },
     {
       "manifest": {

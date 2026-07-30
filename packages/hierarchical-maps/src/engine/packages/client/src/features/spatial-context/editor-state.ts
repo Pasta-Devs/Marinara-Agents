@@ -239,6 +239,25 @@ export function archiveSpatialLocation(
     : next;
 }
 
+export function removeSpatialSubtree(
+  definition: SpatialContextDefinition,
+  locationId: string,
+): SpatialContextDefinition {
+  const removedIds = new Set([locationId, ...getSpatialDescendantIds(definition, locationId)]);
+  return {
+    ...definition,
+    startingLocationId: definition.startingLocationId && removedIds.has(definition.startingLocationId)
+      ? null
+      : definition.startingLocationId,
+    locations: definition.locations
+      .filter((location) => !removedIds.has(location.id))
+      .map((location) => ({
+        ...location,
+        links: location.links.filter((link) => !removedIds.has(link.targetId)),
+      })),
+  };
+}
+
 export function spatialDefinitionIssues(definition: SpatialContextDefinition): SpatialDefinitionIssue[] {
   const issues = [...validateSpatialContextDefinition(definition).issues];
   const parsed = spatialContextDefinitionSchema.safeParse(definition);

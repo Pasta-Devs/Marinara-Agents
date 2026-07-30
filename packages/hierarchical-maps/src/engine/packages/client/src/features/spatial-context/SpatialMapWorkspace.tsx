@@ -3,12 +3,15 @@ import {
   AlertCircle,
   ArrowLeft,
   Check,
+  ChevronDown,
   ChevronRight,
   CornerDownRight,
   Download,
+  ImageIcon,
   List,
   Loader2,
-  Map,
+  Map as MapIcon,
+  MoreHorizontal,
   Move,
   Plus,
   RefreshCw,
@@ -29,14 +32,25 @@ import {
   type GenerateSpatialMapDraftResponse,
   type SpatialContextDefinition,
   type SpatialDefinitionIssue,
+  type SpatialLocationPlacement,
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
-import { getSpatialContextProblem, useSpatialContext, useUpdateSpatialContext } from "../../hooks/use-spatial-context";
+import {
+  getSpatialContextProblem,
+  useCreateSpatialMapTemplate,
+  useSpatialContext,
+  useUpdateSpatialContext,
+  useUpdateSpatialMapTemplate,
+} from "../../hooks/use-spatial-context";
 import { cn } from "./package-utils";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
 import { LocalMapCanvas } from "./components/LocalMapCanvas";
-import { LocationInspector } from "./components/LocationInspector";
+import {
+  defaultLocationReferencePrompt,
+  locationArtworkContext,
+  LocationInspector,
+} from "./components/LocationInspector";
 import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
 import {
   addSpatialLocation,
@@ -47,26 +61,37 @@ import {
   duplicateSpatialSubtree,
   isSpatialDefinitionDirty,
   reparentSpatialLocation,
+  removeSpatialSubtree,
   spatialDefinitionIssues,
   startNewSpatialMap,
   updateSpatialLocation,
 } from "./editor-state";
 import {
   getSpatialExcludedLorebookIds,
+  uploadSpatialGalleryImage,
+  useGenerateSpatialGalleryImage,
+  usePreviewSpatialGalleryImages,
   useSpatialChat,
+  useSpatialGalleryImages,
   useSpatialLorebookEntries,
   useSpatialLorebooks,
+  type SpatialGalleryImage,
+  type SpatialGalleryImagePromptPreview,
 } from "./use-spatial-resources";
+import { packageApi } from "./package-api";
 import {
   defaultGenerationPreferences,
   defaultHierarchyProfile,
   hierarchyTypeForLocation,
+  instantiateSpatialMapTemplate,
   normalizeHierarchyProfile,
   withLocationHierarchyType,
   type SpatialHierarchyProfile,
+  type SpatialMapTemplateRecord,
 } from "../../../../maps-shared/src/maps-model";
 
 type MobilePane = "hierarchy" | "local" | "details";
+type LayoutEditingMode = "places" | "background" | null;
 
 type FirstSaveResult = {
   locationCount: number;
@@ -77,6 +102,102 @@ type ImportIdReport = {
   missing: Array<{ id: string; name: string }>;
 };
 
+type ArtworkProgress = {
+  completed: number;
+  total: number;
+  currentName: string;
+};
+
+type SpatialMapArtworkExport = Pick<
+  SpatialGalleryImage,
+  "prompt" | "provider" | "model" | "width" | "height"
+> & {
+  sourceImageId: string;
+  filename: string;
+  data: string;
+};
+
+const ARTWORK_MIME_EXTENSIONS = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/gif", "gif"],
+  ["image/webp", "webp"],
+  ["image/avif", "avif"],
+]);
+
+function referencedArtworkIds(definition: SpatialContextDefinition): string[] {
+  return Array.from(
+    new Set(
+      definition.locations.flatMap((location) =>
+        [location.referenceImageId, location.mapBackgroundImageId].filter(
+          (imageId): imageId is string => typeof imageId === "string" && imageId.length > 0,
+        ),
+      ),
+    ),
+  );
+}
+
+function artworkFilename(image: SpatialGalleryImage, mimeType: string): string | null {
+  const extension = ARTWORK_MIME_EXTENSIONS.get(mimeType.toLowerCase());
+  if (!extension) return null;
+  const sourceName = image.filePath.split(/[\\/]/u).at(-1) ?? `map-artwork-${image.id}`;
+  const stem = sourceName
+    .replace(/\.[^.]+$/u, "")
+    .replace(/[^a-z0-9._-]+/giu, "-")
+    .replace(/^-+|-+$/gu, "") || `map-artwork-${image.id}`;
+  return `${stem}.${extension}`;
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Artwork could not be read."));
+    reader.onerror = () => reject(reader.error ?? new Error("Artwork could not be read."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function parseBundledArtwork(value: unknown): SpatialMapArtworkExport[] {
+  if (!Array.isArray(value)) return [];
+  const deduplicated = new Map<string, SpatialMapArtworkExport>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const sourceImageId = typeof record.sourceImageId === "string" ? record.sourceImageId.trim() : "";
+    const filename = typeof record.filename === "string" ? record.filename.trim() : "";
+    const data = typeof record.data === "string" ? record.data : "";
+    if (!sourceImageId || !filename || !/^data:image\/(?:jpeg|png|gif|webp|avif);base64,/iu.test(data)) continue;
+    deduplicated.set(sourceImageId, {
+      sourceImageId,
+      filename,
+      data,
+      prompt: typeof record.prompt === "string" ? record.prompt : "",
+      provider: typeof record.provider === "string" ? record.provider : "",
+      model: typeof record.model === "string" ? record.model : "",
+      width: typeof record.width === "number" && Number.isFinite(record.width) ? record.width : null,
+      height: typeof record.height === "number" && Number.isFinite(record.height) ? record.height : null,
+    });
+  }
+  return [...deduplicated.values()];
+}
+
+function bundledArtworkFile(artwork: SpatialMapArtworkExport): File {
+  const match = /^data:(image\/(?:jpeg|png|gif|webp|avif));base64,(.+)$/isu.exec(artwork.data);
+  if (!match) throw new Error("Bundled artwork is not a supported image.");
+  const mimeType = match[1].toLowerCase();
+  const extension = ARTWORK_MIME_EXTENSIONS.get(mimeType);
+  if (!extension) throw new Error("Bundled artwork is not a supported image.");
+  const binary = atob(match[2].replace(/\s+/gu, ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const stem = artwork.filename
+    .replace(/\.[^.]+$/u, "")
+    .replace(/[^a-z0-9._-]+/giu, "-")
+    .replace(/^-+|-+$/gu, "") || "map-artwork";
+  return new File([bytes], `${stem}.${extension}`, { type: mimeType });
+}
+
 type MapConfirmationOptions = {
   title: string;
   message: string;
@@ -86,12 +207,15 @@ type MapConfirmationOptions = {
 };
 
 interface SpatialMapWorkspaceProps {
-  chatId: string;
+  chatId: string | null;
+  template?: SpatialMapTemplateRecord;
+  stagedTemplate?: SpatialMapTemplateRecord | null;
   debugMode?: boolean;
   pendingDraftReview?: { chatId: string; result: GenerateSpatialMapDraftResponse } | null;
   onClearPendingDraftReview?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenLorebook?: (lorebookId: string) => void;
+  onOpenTemplates?: () => void;
   onClose: () => void;
 }
 
@@ -130,17 +254,26 @@ function statusCopy(options: {
 
 export function SpatialMapWorkspace({
   chatId,
+  template,
+  stagedTemplate = null,
   debugMode = false,
   pendingDraftReview = null,
   onClearPendingDraftReview,
   onDirtyChange,
   onOpenLorebook,
+  onOpenTemplates,
   onClose,
 }: SpatialMapWorkspaceProps) {
-  const spatial = useSpatialContext(chatId);
+  const templateMode = template !== undefined;
+  const spatial = useSpatialContext(templateMode ? null : chatId);
   const updateSpatial = useUpdateSpatialContext();
-  const { data: chat } = useSpatialChat(chatId);
-  const pendingSetupReview = pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
+  const updateTemplate = useUpdateSpatialMapTemplate();
+  const createTemplate = useCreateSpatialMapTemplate();
+  const { data: chat } = useSpatialChat(templateMode ? null : chatId);
+  const galleryImages = useSpatialGalleryImages(chatId ?? "", !templateMode);
+  const generateGalleryImage = useGenerateSpatialGalleryImage(chatId ?? "");
+  const previewGalleryImages = usePreviewSpatialGalleryImages(chatId ?? "");
+  const pendingSetupReview = !templateMode && pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
   const [baseDefinition, setBaseDefinition] = useState<SpatialContextDefinition | null>(null);
   const [draft, setDraft] = useState<SpatialContextDefinition | null>(null);
   const [baseHierarchyProfile, setBaseHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
@@ -154,9 +287,12 @@ export function SpatialMapWorkspace({
   const confirmationDialogRef = useRef<HTMLDivElement>(null);
   const confirmationCancelRef = useRef<HTMLButtonElement>(null);
   const [initialized, setInitialized] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [baseTemplateName, setBaseTemplateName] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [enteredParentId, setEnteredParentId] = useState<string | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("hierarchy");
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const [serverIssues, setServerIssues] = useState<SpatialDefinitionIssue[]>([]);
   const [conflict, setConflict] = useState(false);
   const [reviewConflict, setReviewConflict] = useState(false);
@@ -175,8 +311,18 @@ export function SpatialMapWorkspace({
   );
   const [replacementCurrentLocationId, setReplacementCurrentLocationId] = useState<string | null>(null);
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
-  const [layoutEditing, setLayoutEditing] = useState(false);
+  const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
+  const [includeArtworkInExport, setIncludeArtworkInExport] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
+  const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
+  const backgroundMoveFrameRef = useRef<number | null>(null);
+  const pendingBackgroundMoveRef = useRef<{
+    locationId: string;
+    position: SpatialLocationPlacement;
+  } | null>(null);
 
   const resolveConfirmation = useCallback((confirmed: boolean) => {
     const resolve = confirmationResolverRef.current;
@@ -236,7 +382,22 @@ export function SpatialMapWorkspace({
     [],
   );
 
-  const ownerMode: SpatialOwnerMode = chat?.mode === "game" ? "game" : "roleplay";
+  useEffect(
+    () => () => {
+      if (backgroundMoveFrameRef.current !== null) {
+        window.cancelAnimationFrame(backgroundMoveFrameRef.current);
+        backgroundMoveFrameRef.current = null;
+      }
+      pendingBackgroundMoveRef.current = null;
+    },
+    [chatId],
+  );
+
+  const ownerMode: SpatialOwnerMode = templateMode
+    ? template.data.definition.ownerMode
+    : chat?.mode === "game"
+      ? "game"
+      : "roleplay";
   const gameMaps = useMemo(() => {
     if (ownerMode !== "game") return [];
     const raw = chat?.metadata as unknown;
@@ -267,18 +428,58 @@ export function SpatialMapWorkspace({
     setBaseDefinition(null);
     setSelectedId(null);
     setEnteredParentId(null);
+    setMobileActionsOpen(false);
     setConflict(false);
     setAiBuilderOpen(false);
     setFirstSaveResult(null);
     setFirstMapGenerationSession(null);
     setRegenerateRequestId(0);
-    setLayoutEditing(false);
+    setLayoutEditingMode(null);
     setImportIdReport(null);
-  }, [chatId, resolveConfirmation]);
+    setArtworkProgress(null);
+    setTemplateName(template?.name ?? "");
+    setBaseTemplateName(template?.name ?? "");
+  }, [chatId, resolveConfirmation, stagedTemplate?.id, template?.id]);
 
   useEffect(() => {
-    if (!spatial.isSuccess || initialized) return;
+    if (initialized) return;
+    if (templateMode && template) {
+      const definition = cloneSpatialDefinition(template.data.definition);
+      const hierarchyProfile = normalizeHierarchyProfile(template.data.hierarchyProfile, definition);
+      setBaseDefinition(cloneSpatialDefinition(definition));
+      setDraft(definition);
+      setBaseHierarchyProfile(hierarchyProfile);
+      setDraftHierarchyProfile(hierarchyProfile);
+      setSelectedId(definition.startingLocationId ?? definition.locations[0]?.id ?? null);
+      setEnteredParentId(null);
+      setServerIssues([]);
+      setInitialized(true);
+      return;
+    }
+    if (!spatial.isSuccess) return;
     const server = spatial.data.definition;
+    if (stagedTemplate) {
+      const instantiated = instantiateSpatialMapTemplate(stagedTemplate.data, ownerMode);
+      const nextDraft = {
+        ...instantiated.definition,
+        enabled: true,
+        revision: server?.revision ?? 0,
+      };
+      const baseProfile = normalizeHierarchyProfile(
+        spatial.data.hierarchyProfile,
+        server ?? createEmptySpatialDefinition(ownerMode),
+      );
+      setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
+      setDraft(nextDraft);
+      setBaseHierarchyProfile(baseProfile);
+      setDraftHierarchyProfile(normalizeHierarchyProfile(instantiated.hierarchyProfile, nextDraft));
+      setSelectedId(nextDraft.startingLocationId ?? nextDraft.locations[0]?.id ?? null);
+      setEnteredParentId(null);
+      setServerIssues(spatial.data.warnings);
+      setInitialized(true);
+      toast.success(`Loaded “${stagedTemplate.name}” as a Game working copy. Review it, then save.`);
+      return;
+    }
     const nextDraft = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
     setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
     setDraft(nextDraft);
@@ -289,7 +490,7 @@ export function SpatialMapWorkspace({
     setEnteredParentId(null);
     setServerIssues(spatial.data.warnings);
     setInitialized(true);
-  }, [initialized, ownerMode, spatial.data, spatial.isSuccess]);
+  }, [initialized, ownerMode, spatial.data, spatial.isSuccess, stagedTemplate, template, templateMode]);
 
   useEffect(() => {
     if (!initialized || !pendingSetupReview) return;
@@ -304,12 +505,52 @@ export function SpatialMapWorkspace({
     () =>
       !!draft &&
       (isSpatialDefinitionDirty(baseDefinition, draft) ||
-        JSON.stringify(baseHierarchyProfile) !== JSON.stringify(normalizeHierarchyProfile(draftHierarchyProfile, draft))),
-    [baseDefinition, baseHierarchyProfile, draft, draftHierarchyProfile],
+        JSON.stringify(baseHierarchyProfile) !== JSON.stringify(normalizeHierarchyProfile(draftHierarchyProfile, draft)) ||
+        (templateMode && templateName.trim() !== baseTemplateName)),
+    [baseDefinition, baseHierarchyProfile, baseTemplateName, draft, draftHierarchyProfile, templateMode, templateName],
   );
   const selected = draft?.locations.find((location) => location.id === selectedId) ?? null;
-  const currentLocationId = spatial.data?.currentLocationId ?? null;
+  const currentContext = enteredParentId
+    ? (draft?.locations.find((location) => location.id === enteredParentId) ?? null)
+    : null;
+  const currentContextId = currentContext?.id ?? null;
+  const localPresentation = currentContext?.childPresentation ?? "list";
+  const localMapBackgroundImageUrl = currentContext?.mapBackgroundImageId
+    ? galleryImages.data?.find((image) => image.id === currentContext.mapBackgroundImageId)?.url
+    : undefined;
+  const galleryImagesInitiallyLoading =
+    galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined);
+  const effectiveLayoutEditingMode =
+    layoutEditingMode === "background" &&
+    (localPresentation !== "map" || !localMapBackgroundImageUrl)
+      ? null
+      : layoutEditingMode;
+  const currentLocationId = templateMode ? null : (spatial.data?.currentLocationId ?? null);
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
+  const missingArtworkLocations = useMemo(
+    () =>
+      draft?.locations.filter(
+        (location) =>
+          location.status === "active" &&
+          (!location.referenceImageId ||
+            (location.childPresentation === "map" && !location.mapBackgroundImageId)),
+      ) ?? [],
+    [draft],
+  );
+  const artworkImagesToGenerate = missingArtworkLocations.filter(
+    (location) => !location.referenceImageId && !location.mapBackgroundImageId,
+  ).length;
+  const artworkPreviewSignature = missingArtworkLocations
+    .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
+    .map((location) =>
+      [
+        location.id,
+        location.name,
+        defaultLocationReferencePrompt(location),
+        JSON.stringify(locationArtworkContext(draft!, draftHierarchyProfile, location)),
+      ].join("\u0000"),
+    )
+    .join("\u0001");
   const canEnable =
     !!draft?.startingLocationId &&
     draft.locations.some((location) => location.id === draft.startingLocationId && location.status === "active");
@@ -346,12 +587,154 @@ export function SpatialMapWorkspace({
     return () => window.clearTimeout(timer);
   }, [savedFlash]);
 
+  useEffect(() => {
+    setArtworkPreview(null);
+  }, [artworkPreviewSignature]);
+
+  useEffect(() => {
+    if (
+      layoutEditingMode !== "background" ||
+      (localPresentation === "map" && localMapBackgroundImageUrl) ||
+      galleryImagesInitiallyLoading
+    ) {
+      return;
+    }
+    setLayoutEditingMode(null);
+  }, [galleryImagesInitiallyLoading, layoutEditingMode, localMapBackgroundImageUrl, localPresentation]);
+
   const applyDraft = useCallback((next: SpatialContextDefinition) => {
     setDraft(next);
     setServerIssues([]);
     setSavedFlash(false);
     setFirstSaveResult(null);
+    setArtworkPreview(null);
   }, []);
+
+  const fillMissingArtwork = useCallback(async () => {
+    if (!draft || artworkProgress || missingArtworkLocations.length === 0) return;
+
+    let next = draft;
+    let updatedLocations = 0;
+    let failedImages = 0;
+    const reviewedItems = new globalThis.Map(artworkPreview?.items.map((item) => [item.id, item]) ?? []);
+    setArtworkPreview(null);
+    setArtworkProgress({ completed: 0, total: missingArtworkLocations.length, currentName: "" });
+
+    for (const [index, target] of missingArtworkLocations.entries()) {
+      setArtworkProgress({
+        completed: index,
+        total: missingArtworkLocations.length,
+        currentName: target.name,
+      });
+
+      let imageId = target.referenceImageId ?? target.mapBackgroundImageId ?? null;
+      if (!imageId) {
+        try {
+          const reviewed = reviewedItems.get(target.id);
+          const image = await generateGalleryImage.mutateAsync({
+            prompt: reviewed?.sourcePrompt ?? defaultLocationReferencePrompt(target),
+            title: target.name,
+            mapsArtworkContext: locationArtworkContext(draft, draftHierarchyProfile, target),
+            ...(reviewed
+              ? {
+                  promptOverride: reviewed.prompt,
+                  negativePromptOverride: reviewed.negativePrompt,
+                }
+              : {}),
+            debugMode,
+          });
+          imageId = image.id;
+        } catch {
+          failedImages += 1;
+          continue;
+        }
+      }
+
+      const current = next.locations.find((location) => location.id === target.id);
+      if (!current) continue;
+      const shouldSetReference = !current.referenceImageId;
+      const shouldSetBackground = current.childPresentation === "map" && !current.mapBackgroundImageId;
+      if (!shouldSetReference && !shouldSetBackground) continue;
+
+      next = updateSpatialLocation(next, current.id, {
+        ...(shouldSetReference ? { referenceImageId: imageId, useReferenceImage: true } : {}),
+        ...(shouldSetBackground
+          ? {
+              mapBackgroundImageId: imageId,
+              mapBackgroundPosition: current.mapBackgroundPosition ?? { x: 50, y: 50 },
+            }
+          : {}),
+      });
+      updatedLocations += 1;
+    }
+
+    if (updatedLocations > 0) {
+      applyDraft(next);
+      toast.success(
+        `Added artwork to ${updatedLocations} location${updatedLocations === 1 ? "" : "s"}. Review it, then Save.`,
+      );
+    }
+    if (failedImages > 0) {
+      toast.error(
+        `${failedImages} location image${failedImages === 1 ? "" : "s"} could not be created. Any successful artwork is still in the working copy.`,
+      );
+    }
+    setArtworkProgress(null);
+  }, [
+    applyDraft,
+    artworkPreview,
+    artworkProgress,
+    debugMode,
+    draft,
+    draftHierarchyProfile,
+    generateGalleryImage,
+    missingArtworkLocations,
+  ]);
+
+  const reviewMissingArtwork = useCallback(async () => {
+    if (artworkProgress || previewGalleryImages.isPending || artworkImagesToGenerate === 0) return;
+    const items = missingArtworkLocations
+      .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
+      .map((location) => ({
+        id: location.id,
+        title: location.name,
+        prompt: defaultLocationReferencePrompt(location),
+        mapsArtworkContext: locationArtworkContext(draft!, draftHierarchyProfile, location),
+      }));
+    try {
+      const preview = await previewGalleryImages.mutateAsync({ items, debugMode });
+      setArtworkPreview(preview);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not prepare the image request preview.");
+    }
+  }, [artworkImagesToGenerate, artworkProgress, debugMode, draft, draftHierarchyProfile, missingArtworkLocations, previewGalleryImages]);
+
+  const flushBackgroundMove = useCallback(() => {
+    backgroundMoveFrameRef.current = null;
+    const pending = pendingBackgroundMoveRef.current;
+    pendingBackgroundMoveRef.current = null;
+    if (!pending) return;
+    setDraft((currentDraft) =>
+      currentDraft
+        ? updateSpatialLocation(currentDraft, pending.locationId, {
+            mapBackgroundPosition: pending.position,
+          })
+        : currentDraft,
+    );
+    setServerIssues([]);
+    setSavedFlash(false);
+    setFirstSaveResult(null);
+  }, []);
+
+  const queueBackgroundMove = useCallback(
+    (position: SpatialLocationPlacement) => {
+      if (!currentContextId) return;
+      pendingBackgroundMoveRef.current = { locationId: currentContextId, position };
+      if (backgroundMoveFrameRef.current !== null) return;
+      backgroundMoveFrameRef.current = window.requestAnimationFrame(flushBackgroundMove);
+    },
+    [currentContextId, flushBackgroundMove],
+  );
 
   const applyHierarchyProfile = useCallback(
     (next: SpatialHierarchyProfile) => {
@@ -370,6 +753,7 @@ export function SpatialMapWorkspace({
   }, []);
 
   const enterLocation = useCallback((locationId: string) => {
+    setLayoutEditingMode(null);
     setEnteredParentId(locationId);
     setSelectedId(locationId);
     setMobilePane("local");
@@ -433,6 +817,24 @@ export function SpatialMapWorkspace({
   const requestArchive = useCallback(
     (locationId: string) => {
       if (!draft) return;
+      if (templateMode) {
+        const location = draft.locations.find((candidate) => candidate.id === locationId);
+        if (!location) return;
+        const next = removeSpatialSubtree(draft, locationId);
+        const removedCount = draft.locations.length - next.locations.length;
+        void confirmAction({
+          title: "Delete template location?",
+          message: `Delete ${location.name || "this location"}${removedCount > 1 ? ` and its ${removedCount - 1} child locations` : ""} from this template?`,
+          confirmLabel: "Delete location",
+          tone: "destructive",
+        }).then((confirmed) => {
+          if (!confirmed) return;
+          applyDraft(next);
+          setSelectedId(location.parentId);
+          if (enteredParentId === locationId) setEnteredParentId(location.parentId);
+        });
+        return;
+      }
       const validation = validateSpatialArchive(draft, locationId, { currentLocationId });
       if (validation.ok) {
         void finishArchive(locationId);
@@ -448,7 +850,7 @@ export function SpatialMapWorkspace({
       }
       toast.error(validation.message);
     },
-    [currentLocationId, draft, finishArchive],
+    [applyDraft, confirmAction, currentLocationId, draft, enteredParentId, finishArchive, templateMode],
   );
 
   const handleDeleteMap = useCallback(async () => {
@@ -504,39 +906,96 @@ export function SpatialMapWorkspace({
     spatial.data?.hasCommittedSpatialHistory,
   ]);
 
-  const handleExport = useCallback(() => {
-    if (!draft) return;
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            format: "marinara-hierarchical-map",
-            formatVersion: 2,
-            definition: draft,
-            hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
-          },
-          null,
-          2,
-        ),
-      ],
-      { type: "application/json" },
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const safeName = (chat?.name ?? "hierarchical-map")
-      .replace(/[^a-z0-9._-]+/gi, "-")
-      .replace(/^-+|-+$/g, "") || "hierarchical-map";
-    link.href = url;
-    link.download = `${safeName}.hierarchical-map.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }, [chat?.name, draft, draftHierarchyProfile]);
+  const handleExport = useCallback(async () => {
+    if (!draft || isExporting) return;
+    setIsExporting(true);
+    try {
+      const shouldIncludeArtwork = !templateMode && includeArtworkInExport;
+      const artwork: SpatialMapArtworkExport[] = [];
+      let missingArtworkCount = 0;
+      if (shouldIncludeArtwork) {
+        const images = galleryImages.data ?? (await galleryImages.refetch()).data ?? [];
+        const imagesById = new Map(images.map((image) => [image.id, image]));
+        for (const imageId of referencedArtworkIds(draft)) {
+          const image = imagesById.get(imageId);
+          if (!image) {
+            missingArtworkCount += 1;
+            continue;
+          }
+          try {
+            const imageBlob = await packageApi.blob(image.url);
+            const filename = artworkFilename(image, imageBlob.type);
+            if (!filename) throw new Error("Unsupported artwork type");
+            artwork.push({
+              sourceImageId: image.id,
+              filename,
+              data: await blobToDataUrl(imageBlob),
+              prompt: image.prompt,
+              provider: image.provider,
+              model: image.model,
+              width: image.width,
+              height: image.height,
+            });
+          } catch {
+            missingArtworkCount += 1;
+          }
+        }
+      }
+
+      const exportBlob = new Blob(
+        [
+          JSON.stringify(
+            {
+              format: "marinara-hierarchical-map",
+              formatVersion: shouldIncludeArtwork ? 3 : 2,
+              definition: draft,
+              hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+              ...(shouldIncludeArtwork ? { artwork } : {}),
+            },
+            null,
+            2,
+          ),
+        ],
+        { type: "application/json" },
+      );
+      const url = URL.createObjectURL(exportBlob);
+      const link = document.createElement("a");
+      const safeName = (templateMode ? templateName : (chat?.name ?? "world-map"))
+        .replace(/[^a-z0-9._-]+/gi, "-")
+        .replace(/^-+|-+$/g, "") || "world-map";
+      link.href = url;
+      link.download = `${safeName}.world-map.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      if (shouldIncludeArtwork) {
+        const includedCopy = `${artwork.length} artwork file${artwork.length === 1 ? "" : "s"} included`;
+        const missingCopy = missingArtworkCount > 0
+          ? `; ${missingArtworkCount} missing artwork link${missingArtworkCount === 1 ? " was" : "s were"} skipped`
+          : "";
+        toast.success(`World map exported: ${includedCopy}${missingCopy}.`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The world map could not be exported.");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [
+    chat?.name,
+    draft,
+    draftHierarchyProfile,
+    galleryImages,
+    includeArtworkInExport,
+    isExporting,
+    templateMode,
+    templateName,
+  ]);
 
   const handleImport = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       event.target.value = "";
-      if (!file || !draft) return;
+      if (!file || !draft || isImporting) return;
+      setIsImporting(true);
       try {
         const raw = JSON.parse(await file.text()) as unknown;
         const rawRecord = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
@@ -546,7 +1005,7 @@ export function SpatialMapWorkspace({
             : raw;
         const parsed = spatialContextDefinitionSchema.safeParse(candidate);
         if (!parsed.success) {
-          throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid hierarchical map.");
+          throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid world map.");
         }
         const importedIds = new Set(parsed.data.locations.map((location) => location.id));
         const missing = (baseDefinition?.locations ?? [])
@@ -558,8 +1017,34 @@ export function SpatialMapWorkspace({
             `Campaign history uses ${missing.length} location ID${missing.length === 1 ? "" : "s"} missing from this file. Review the repair steps shown in the editor.`,
           );
         }
+        const bundledArtwork = parseBundledArtwork(rawRecord?.artwork);
+        const referencedIds = new Set(referencedArtworkIds(parsed.data));
+        const applicableArtwork = bundledArtwork.filter((artwork) => referencedIds.has(artwork.sourceImageId));
+        const artworkIdMap = new Map<string, string>();
+        let failedArtworkCount = 0;
+        if (!templateMode && chatId) {
+          for (const artwork of applicableArtwork) {
+            try {
+              const uploaded = await uploadSpatialGalleryImage(chatId, bundledArtworkFile(artwork), artwork);
+              artworkIdMap.set(artwork.sourceImageId, uploaded.id);
+            } catch {
+              failedArtworkCount += 1;
+            }
+          }
+          if (artworkIdMap.size > 0) await galleryImages.refetch();
+        }
+        const importedLocations = parsed.data.locations.map((location) => ({
+          ...location,
+          referenceImageId: location.referenceImageId
+            ? (artworkIdMap.get(location.referenceImageId) ?? location.referenceImageId)
+            : location.referenceImageId,
+          mapBackgroundImageId: location.mapBackgroundImageId
+            ? (artworkIdMap.get(location.mapBackgroundImageId) ?? location.mapBackgroundImageId)
+            : location.mapBackgroundImageId,
+        }));
         const imported: SpatialContextDefinition = {
           ...parsed.data,
+          locations: importedLocations,
           ownerMode,
           enabled: draft.enabled,
           revision: baseDefinition?.revision ?? 0,
@@ -572,29 +1057,104 @@ export function SpatialMapWorkspace({
         setSelectedId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
         setEnteredParentId(null);
         setMobilePane("hierarchy");
-        toast.success("Map imported into the working copy. Review it, then Save.");
+        toast.success(
+          templateMode
+            ? `World map imported into this template. Review it, then Save template.${applicableArtwork.length > 0 ? " Bundled artwork stays chat-specific and was not imported." : ""}`
+            : `World map imported into the working copy. Review it, then Save.${artworkIdMap.size > 0 ? ` ${artworkIdMap.size} artwork file${artworkIdMap.size === 1 ? " was" : "s were"} restored to this chat's Gallery.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
+        );
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "The map could not be imported.");
+        toast.error(error instanceof Error ? error.message : "The world map could not be imported.");
+      } finally {
+        setIsImporting(false);
       }
     },
-    [applyDraft, baseDefinition, draft, ownerMode, spatial.data?.hasCommittedSpatialHistory],
+    [
+      applyDraft,
+      baseDefinition,
+      chatId,
+      draft,
+      galleryImages,
+      isImporting,
+      ownerMode,
+      spatial.data?.hasCommittedSpatialHistory,
+      templateMode,
+    ],
   );
+
+  const saveAsTemplate = useCallback(async () => {
+    if (templateMode || !draft || draft.locations.length === 0 || createTemplate.isPending) return;
+    const name = `${chat?.name?.trim() || "Untitled"} map`;
+    const confirmed = await confirmAction({
+      title: "Save map as a template?",
+      message:
+        `Save a reusable copy named “${name}” to Agents → Maps? Campaign history, current location, Game bindings, and chat Gallery images are not copied.`,
+      confirmLabel: "Save template",
+    });
+    if (!confirmed) return;
+    try {
+      await createTemplate.mutateAsync({
+        name,
+        description: "",
+        definition: draft,
+        hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+      });
+      toast.success("Map template saved. You can edit it from Agents → Maps.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The map template could not be saved.");
+    }
+  }, [chat?.name, confirmAction, createTemplate, draft, draftHierarchyProfile, templateMode]);
 
   const handleClose = useCallback(async () => {
     if (dirty) {
       const discard = await confirmAction({
-        title: "Discard map changes?",
-        message: "You have unsaved hierarchical map changes. Leave the editor and discard them?",
+        title: templateMode ? "Discard template changes?" : "Discard map changes?",
+        message: templateMode
+          ? "You have unsaved map template changes. Return to the library and discard them?"
+          : "You have unsaved world map changes. Leave the editor and discard them?",
         confirmLabel: "Discard changes",
         tone: "destructive",
       });
       if (!discard) return;
     }
     onClose();
-  }, [confirmAction, dirty, onClose]);
+  }, [confirmAction, dirty, onClose, templateMode]);
 
   const handleSave = useCallback(async (enableForFirstSave = false) => {
     if (!draft || !dirty || issues.length > 0) return;
+    if (templateMode && template) {
+      const name = templateName.trim();
+      if (!name) {
+        toast.error("Give this map template a name before saving.");
+        return;
+      }
+      setConflict(false);
+      try {
+        const saved = await updateTemplate.mutateAsync({
+          id: template.id,
+          expectedRevision: template.revision,
+          name,
+          description: template.description,
+          definition: draft,
+          hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+        });
+        const savedDefinition = cloneSpatialDefinition(saved.data.definition);
+        const savedProfile = normalizeHierarchyProfile(saved.data.hierarchyProfile, savedDefinition);
+        setBaseDefinition(savedDefinition);
+        setDraft(cloneSpatialDefinition(savedDefinition));
+        setBaseHierarchyProfile(savedProfile);
+        setDraftHierarchyProfile(savedProfile);
+        setTemplateName(saved.name);
+        setBaseTemplateName(saved.name);
+        setSavedFlash(true);
+        onDirtyChange?.(false);
+        toast.success("Map template saved.");
+      } catch (error) {
+        if (error instanceof Error && "status" in error && error.status === 409) setConflict(true);
+        toast.error(error instanceof Error ? error.message : "The map template could not be saved.");
+      }
+      return;
+    }
+    if (!chatId) return;
     const completingFirstMap = enableForFirstSave && baseDefinition === null;
     if (completingFirstMap && !canEnable) return;
     const definitionToSave = completingFirstMap ? { ...draft, enabled: true } : draft;
@@ -628,7 +1188,7 @@ export function SpatialMapWorkspace({
         });
       }
       onDirtyChange?.(false);
-      toast.success(completingFirstMap ? "Map ready for turns." : "Hierarchical map saved.");
+      toast.success(completingFirstMap ? "Map ready for turns." : "World map saved.");
     } catch (error) {
       const problem = getSpatialContextProblem(error);
       setServerIssues(problem.issues);
@@ -653,6 +1213,10 @@ export function SpatialMapWorkspace({
     onDirtyChange,
     spatial,
     updateSpatial,
+    updateTemplate,
+    template,
+    templateMode,
+    templateName,
   ]);
 
   const reloadServerVersion = useCallback(async () => {
@@ -681,7 +1245,7 @@ export function SpatialMapWorkspace({
       const generated = session.result.definition;
       const parsedGenerated = spatialContextDefinitionSchema.safeParse(generated);
       if (!parsedGenerated.success) {
-        toast.error(parsedGenerated.error.issues[0]?.message ?? "The AI draft was not a valid hierarchical map.");
+        toast.error(parsedGenerated.error.issues[0]?.message ?? "The AI draft was not a valid world map.");
         return;
       }
       const normalizedGenerated = parsedGenerated.data;
@@ -719,12 +1283,14 @@ export function SpatialMapWorkspace({
       }
       setAiBuilderOpen(false);
       toast.success(
-        expandedExistingMap
+        templateMode
+          ? "AI map draft applied. Review it, choose a start, then save the template."
+          : expandedExistingMap
           ? "AI expansion added to the working map. Review it, then Save."
           : "AI map draft applied. Review it, choose a start, then enable and save.",
       );
     },
-    [applyDraft, baseDefinition, currentLocationId, draft, draftHierarchyProfile, onClearPendingDraftReview, ownerMode],
+    [applyDraft, baseDefinition, currentLocationId, draft, draftHierarchyProfile, onClearPendingDraftReview, ownerMode, templateMode],
   );
 
   const regenerateFirstMapDraft = useCallback(async () => {
@@ -775,7 +1341,7 @@ export function SpatialMapWorkspace({
     return (
       <div
         className="mari-editor-shell flex flex-1 flex-col overflow-hidden"
-        aria-label="Loading hierarchical map editor"
+        aria-label="Loading world map editor"
       >
         <div className="mari-editor-header">
           <div className="h-9 w-9 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />
@@ -794,16 +1360,16 @@ export function SpatialMapWorkspace({
     );
   }
 
-  if (spatial.isError) {
+  if (!templateMode && spatial.isError) {
     return (
       <div
         className="mari-editor-shell flex flex-1 items-center justify-center p-6"
         role="region"
-        aria-label="Hierarchical map recovery"
+        aria-label="World map recovery"
       >
         <div className="max-w-sm text-center">
           <AlertCircle className="mx-auto text-[var(--destructive)]" />
-          <h1 className="mt-3 text-base font-semibold">Hierarchical map unavailable</h1>
+          <h1 className="mt-3 text-base font-semibold">World map unavailable</h1>
           <p className="mt-1 text-sm text-[var(--marinara-editor-muted)]">
             {getSpatialContextProblem(spatial.error).message}
           </p>
@@ -834,14 +1400,12 @@ export function SpatialMapWorkspace({
     dirty,
     conflict,
     invalid: issues.length > 0,
-    pending: updateSpatial.isPending,
+    pending: updateSpatial.isPending || updateTemplate.isPending,
     savedFlash,
   });
-  const currentContext = enteredParentId
-    ? (draft.locations.find((location) => location.id === enteredParentId) ?? null)
-    : null;
+  const saveLabel = templateMode ? "Save template" : isFirstMapDraft ? "Enable and save map" : "Save";
   const localChildren = sortedChildren(draft, enteredParentId);
-  const localPresentation = currentContext?.childPresentation ?? "list";
+  const localMapBackgroundPosition = currentContext?.mapBackgroundPosition ?? { x: 50, y: 50 };
   const localBreadcrumb = resolveSpatialBreadcrumb(draft, enteredParentId);
   const conflictDifference = compareSpatialDefinitions(spatial.data?.definition ?? null, draft);
   const archiveRequest = draft.locations.find((location) => location.id === archiveRequestId) ?? null;
@@ -854,7 +1418,10 @@ export function SpatialMapWorkspace({
           {currentContext && (
             <button
               type="button"
-              onClick={() => setEnteredParentId(currentContext.parentId)}
+              onClick={() => {
+                setLayoutEditingMode(null);
+                setEnteredParentId(currentContext.parentId);
+              }}
               aria-label="Leave this location"
               className="mari-chrome-control h-11 w-11 p-0"
             >
@@ -865,7 +1432,10 @@ export function SpatialMapWorkspace({
             <div className="flex items-center gap-1 overflow-hidden text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
               <button
                 type="button"
-                onClick={() => setEnteredParentId(null)}
+                onClick={() => {
+                  setLayoutEditingMode(null);
+                  setEnteredParentId(null);
+                }}
                 className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md px-1 hover:text-[var(--marinara-chat-chrome-button-text-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
               >
                 World
@@ -875,7 +1445,10 @@ export function SpatialMapWorkspace({
                   <ChevronRight size="0.625rem" className="shrink-0" />
                   <button
                     type="button"
-                    onClick={() => setEnteredParentId(location.id)}
+                    onClick={() => {
+                      setLayoutEditingMode(null);
+                      setEnteredParentId(location.id);
+                    }}
                     className="flex min-h-11 min-w-0 items-center truncate rounded-md px-1 hover:text-[var(--marinara-chat-chrome-button-text-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                   >
                     {location.name}
@@ -888,32 +1461,52 @@ export function SpatialMapWorkspace({
             </h2>
           </div>
           <span className="flex items-center gap-1 rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-2 py-1 text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
-            {localPresentation === "map" ? <Map size="0.6875rem" /> : <List size="0.6875rem" />}
+            {localPresentation === "map" ? <MapIcon size="0.6875rem" /> : <List size="0.6875rem" />}
             {localPresentation}
           </span>
-          {localPresentation === "map" && (
+        </div>
+        {localPresentation === "map" && (
+          <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
-              aria-pressed={layoutEditing}
-              onClick={() => setLayoutEditing((value) => !value)}
+              aria-pressed={effectiveLayoutEditingMode === "places"}
+              onClick={() => setLayoutEditingMode((value) => (value === "places" ? null : "places"))}
               className={cn(
-                "mari-chrome-control min-h-11 px-3 text-xs",
-                layoutEditing && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+                "mari-chrome-control min-h-11 flex-1 justify-center px-3 text-xs sm:flex-none",
+                effectiveLayoutEditingMode === "places" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
               )}
             >
-              <Move size="0.75rem" /> {layoutEditing ? "Done arranging" : "Arrange map"}
+              <Move size="0.75rem" /> {effectiveLayoutEditingMode === "places" ? "Done arranging" : "Arrange map"}
             </button>
-          )}
-        </div>
+            {localMapBackgroundImageUrl && (
+              <button
+                type="button"
+                aria-pressed={effectiveLayoutEditingMode === "background"}
+                onClick={() => setLayoutEditingMode((value) => (value === "background" ? null : "background"))}
+                className={cn(
+                  "mari-chrome-control min-h-11 flex-1 justify-center px-3 text-xs sm:flex-none",
+                  effectiveLayoutEditingMode === "background" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+                )}
+              >
+                <ImageIcon size="0.75rem" />
+                {effectiveLayoutEditingMode === "background" ? "Done repositioning" : "Reposition background"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {localPresentation === "map" ? (
           <LocalMapCanvas
             locations={localChildren}
             selectedId={selectedId}
-            onSelect={(locationId) => selectLocation(locationId, !layoutEditing)}
+            onSelect={(locationId) => selectLocation(locationId, effectiveLayoutEditingMode === null)}
             onEnter={enterLocation}
-            editing={layoutEditing}
+            backgroundImageUrl={localMapBackgroundImageUrl}
+            backgroundPosition={localMapBackgroundPosition}
+            backgroundEditing={effectiveLayoutEditingMode === "background"}
+            onBackgroundMove={queueBackgroundMove}
+            editing={effectiveLayoutEditingMode === "places"}
             onMove={(locationId, placement) =>
               applyDraft(updateSpatialLocation(draft, locationId, { placement }))
             }
@@ -978,6 +1571,9 @@ export function SpatialMapWorkspace({
 
   const inspector = (
     <LocationInspector
+      chatId={chatId ?? ""}
+      artworkEnabled={!templateMode}
+      debugMode={debugMode}
       definition={draft}
       location={selected}
       issues={issues.filter((issue) => issue.locationId === selected?.id)}
@@ -1000,7 +1596,7 @@ export function SpatialMapWorkspace({
       onSetStarting={() => selected && applyDraft({ ...draft, startingLocationId: selected.id })}
       onArchive={() => selected && requestArchive(selected.id)}
       gameBinding={
-        ownerMode === "game"
+        !templateMode && ownerMode === "game" && chatId
           ? {
               chatId,
               maps: gameMaps,
@@ -1071,63 +1667,141 @@ export function SpatialMapWorkspace({
         <button
           type="button"
           onClick={() => void handleClose()}
-          aria-label="Back to chat"
+          aria-label={templateMode ? "Back to map templates" : "Back to chat"}
           className="mari-editor-action inline-flex min-h-11 min-w-11"
         >
           <ArrowLeft size="1.125rem" />
         </button>
         <div className="mari-editor-icon-tile">
-          <Map size="1.125rem" />
+          <MapIcon size="1.125rem" />
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-semibold text-[var(--marinara-editor-title)]">Hierarchical map</h1>
-          <p className="truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">{chat?.name ?? "Chat"}</p>
+          {templateMode ? (
+            <label className="block max-w-md">
+              <span className="sr-only">Map template name</span>
+              <input
+                aria-label="Map template name"
+                value={templateName}
+                maxLength={120}
+                onChange={(event) => setTemplateName(event.target.value)}
+                className="w-full border-0 bg-transparent p-0 text-sm font-semibold text-[var(--marinara-editor-title)] outline-none placeholder:text-[var(--marinara-editor-muted)]"
+                placeholder="Untitled map"
+              />
+              <span className="block truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">
+                Reusable map template · no chat history
+              </span>
+            </label>
+          ) : (
+            <>
+              <h1 className="truncate text-sm font-semibold text-[var(--marinara-editor-title)]">World map</h1>
+              <p className="truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">{chat?.name ?? "Chat"}</p>
+            </>
+          )}
         </div>
-        <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              void spatial.refetch();
-              setAiBuilderOpen(true);
-            }}
-            disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
-            className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-          >
-            <Sparkles size="0.8125rem" />{" "}
-            {firstMapGenerationSession
-              ? "Regenerate with AI"
-              : draft.locations.length > 0
-                ? "Expand with AI"
-                : "Build with AI"}
-          </button>
-          <button
-            type="button"
-            onClick={handleExport}
-            className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
-            aria-label="Export hierarchical map"
-          >
-            <Upload size="0.8125rem" /> Export
-          </button>
-          <button
-            type="button"
-            onClick={() => importInputRef.current?.click()}
-            disabled={conflict || updateSpatial.isPending}
-            className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
-            aria-label="Import hierarchical map"
-          >
-            <Download size="0.8125rem" /> Import
-          </button>
-          {baseDefinition && baseDefinition.locations.length > 0 && (
+        <div className="mari-editor-actions flex max-md:w-full max-md:justify-between max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
+          <div className="hidden items-center gap-1.5 lg:flex">
+            {!templateMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  void spatial.refetch();
+                  setAiBuilderOpen(true);
+                }}
+                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              >
+                <Sparkles size="0.8125rem" />{" "}
+                {firstMapGenerationSession
+                  ? "Regenerate with AI"
+                  : draft.locations.length > 0
+                    ? "Expand with AI"
+                    : "Build with AI"}
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => void handleDeleteMap()}
-              disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
-              className="mari-editor-action inline-flex min-h-11 px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
-              aria-label="Delete map and start over"
+              onClick={() => void handleExport()}
+              disabled={isExporting}
+              className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              aria-label="Export world map"
             >
-              <Trash2 size="0.8125rem" /> Delete map
+              {isExporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Upload size="0.8125rem" />} Export
             </button>
-          )}
+            {!templateMode && (
+              <label
+                className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs"
+                title="Bundle referenced location and map background images. This makes the export file larger."
+              >
+                <input
+                  type="checkbox"
+                  checked={includeArtworkInExport}
+                  disabled={isExporting}
+                  onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
+                />
+                <span>Include map artwork</span>
+              </label>
+            )}
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              disabled={conflict || updateSpatial.isPending || isImporting}
+              className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              aria-label="Import world map"
+            >
+              {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />} Import
+            </button>
+            {!templateMode && onOpenTemplates && (
+              <button
+                type="button"
+                onClick={onOpenTemplates}
+                disabled={conflict || updateSpatial.isPending}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+                aria-label="Add a saved map template"
+              >
+                <MapIcon size="0.8125rem" /> Templates
+              </button>
+            )}
+            {!templateMode && draft.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void saveAsTemplate()}
+                disabled={createTemplate.isPending}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              >
+                <Save size="0.8125rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
+              </button>
+            )}
+            {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleDeleteMap()}
+                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
+                aria-label="Delete map and start over"
+              >
+                <Trash2 size="0.8125rem" /> Delete map
+              </button>
+            )}
+          </div>
+          <div className="shrink-0 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileActionsOpen((open) => !open)}
+              className={cn(
+                "mari-editor-action inline-flex min-h-11 px-3 text-xs",
+                mobileActionsOpen && "mari-editor-action--accent",
+              )}
+              aria-expanded={mobileActionsOpen}
+              aria-controls="hierarchical-map-mobile-actions"
+              aria-label={mobileActionsOpen ? "Close map actions" : "More map actions"}
+            >
+              <MoreHorizontal size="0.8125rem" /> More
+              <ChevronDown
+                size="0.75rem"
+                className={cn("transition-transform duration-150", mobileActionsOpen && "rotate-180")}
+              />
+            </button>
+          </div>
           <input
             data-marinara-map-import-input
             ref={importInputRef}
@@ -1138,40 +1812,172 @@ export function SpatialMapWorkspace({
             aria-hidden="true"
             onChange={(event) => void handleImport(event)}
           />
-          <span className={cn("mari-editor-status mr-2", status.className)}>
+          <span
+            className={cn(
+              "mari-editor-status mr-2",
+              "max-md:mr-0 max-md:min-w-0 max-md:flex-1 max-md:justify-end max-md:overflow-hidden max-md:whitespace-nowrap",
+              status.className,
+            )}
+          >
             {status.icon}
             {status.label}
           </span>
-          {!isFirstMapDraft && (
-            <label className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs">
-              <input
-                type="checkbox"
-                checked={draft.enabled}
-                disabled={!canEnable && !draft.enabled}
-                onChange={(event) => applyDraft({ ...draft, enabled: event.target.checked })}
-              />
-              <span>{draft.enabled ? "Enabled" : "Disabled"}</span>
-            </label>
+          {!templateMode && !isFirstMapDraft && (
+            <div className="hidden lg:block">
+              <label className="mari-editor-action inline-flex min-h-11 cursor-pointer gap-2 px-3 text-xs">
+                <input
+                  type="checkbox"
+                  checked={draft.enabled}
+                  disabled={!canEnable && !draft.enabled}
+                  onChange={(event) => applyDraft({ ...draft, enabled: event.target.checked })}
+                />
+                <span>{draft.enabled ? "Enabled" : "Disabled"}</span>
+              </label>
+            </div>
           )}
           <button
             type="button"
-            onClick={() => void handleSave(isFirstMapDraft)}
+            onClick={() => {
+              setMobileActionsOpen(false);
+              void handleSave(isFirstMapDraft);
+            }}
             disabled={
               !dirty ||
               issues.length > 0 ||
               updateSpatial.isPending ||
+              updateTemplate.isPending ||
               conflict ||
-              (isFirstMapDraft && !canEnable)
+              (!templateMode && isFirstMapDraft && !canEnable)
             }
-            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 disabled:opacity-45"
+            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 shrink-0 disabled:opacity-45"
+            aria-label={saveLabel}
           >
-            <Save size="0.8125rem" /> {isFirstMapDraft ? "Enable and save map" : "Save"}
+            <Save size="0.8125rem" />
+            <span className="lg:hidden">{isFirstMapDraft ? "Enable & save" : "Save"}</span>
+            <span className="hidden lg:inline">{saveLabel}</span>
           </button>
         </div>
       </div>
 
+      {mobileActionsOpen && (
+        <section
+          id="hierarchical-map-mobile-actions"
+          data-marinara-map-mobile-actions
+          role="region"
+          aria-label="Map actions"
+          className="relative z-40 border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)] p-3 lg:hidden"
+        >
+          <div className="grid grid-cols-2 gap-2">
+            {!templateMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileActionsOpen(false);
+                  void spatial.refetch();
+                  setAiBuilderOpen(true);
+                }}
+                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              >
+                <Sparkles size="0.8125rem" />{" "}
+                {firstMapGenerationSession
+                  ? "Regenerate with AI"
+                  : draft.locations.length > 0
+                    ? "Expand with AI"
+                    : "Build with AI"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setMobileActionsOpen(false);
+                void handleExport();
+              }}
+              disabled={isExporting}
+              className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              aria-label="Export world map"
+            >
+              {isExporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Upload size="0.8125rem" />} Export
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileActionsOpen(false);
+                importInputRef.current?.click();
+              }}
+              disabled={conflict || updateSpatial.isPending || isImporting}
+              className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              aria-label="Import world map"
+            >
+              {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />} Import
+            </button>
+            {!templateMode && (
+              <label
+                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs"
+                title="Bundle referenced location and map background images. This makes the export file larger."
+              >
+                <span>Include map artwork</span>
+                <input
+                  type="checkbox"
+                  checked={includeArtworkInExport}
+                  disabled={isExporting}
+                  onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
+                />
+              </label>
+            )}
+            {!templateMode && onOpenTemplates && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileActionsOpen(false);
+                  onOpenTemplates();
+                }}
+                disabled={conflict || updateSpatial.isPending}
+                className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+                aria-label="Add a saved map template"
+              >
+                <MapIcon size="0.8125rem" /> Templates
+              </button>
+            )}
+            {!templateMode && draft.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void saveAsTemplate()}
+                disabled={createTemplate.isPending}
+                className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              >
+                <Save size="0.8125rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
+              </button>
+            )}
+            {!templateMode && !isFirstMapDraft && (
+              <label className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs">
+                <span>{draft.enabled ? "Map enabled" : "Map disabled"}</span>
+                <input
+                  type="checkbox"
+                  checked={draft.enabled}
+                  disabled={!canEnable && !draft.enabled}
+                  onChange={(event) => applyDraft({ ...draft, enabled: event.target.checked })}
+                />
+              </label>
+            )}
+            {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleDeleteMap()}
+                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
+                aria-label="Delete map and start over"
+              >
+                <Trash2 size="0.8125rem" /> Delete map
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
       <SpatialMapAiBuilder
-        chatId={chatId}
+        chatId={chatId ?? ""}
+        standalone={templateMode}
         debugMode={debugMode}
         ownerMode={ownerMode}
         open={aiBuilderOpen}
@@ -1194,6 +2000,207 @@ export function SpatialMapWorkspace({
         onClose={closeAiBuilder}
         onApply={applyGeneratedDraft}
       />
+
+      {!templateMode && !aiBuilderOpen && missingArtworkLocations.length > 0 && (
+        <section className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3">
+          {artworkPreview ? (
+            <div
+              className="mx-auto flex min-h-0 w-full max-w-5xl flex-col gap-3 overflow-hidden rounded-xl border border-amber-500/35 bg-amber-500/10 p-3"
+              style={{ maxHeight: "calc(100dvh - 8rem)" }}
+              aria-label="Review location artwork image requests"
+            >
+              <div className="flex items-start gap-2.5">
+                <AlertCircle size="0.9375rem" className="mt-0.5 shrink-0 text-amber-300" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">
+                    Review {artworkPreview.requestCount} image request
+                    {artworkPreview.requestCount === 1 ? "" : "s"}
+                  </p>
+                  <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                    This will send {artworkPreview.requestCount} separate request
+                    {artworkPreview.requestCount === 1 ? "" : "s"} to your image provider. Existing artwork is
+                    reused, nothing is replaced, and each new image becomes both the location reference and its
+                    child-map background. Prompts use the relevant Chat Settings and global image-generation settings.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className="grid min-h-0 flex-1 gap-3 overflow-y-auto overscroll-contain pr-1"
+                data-marinara-map-artwork-review-scroll
+              >
+                <dl className="grid gap-2 text-[0.6875rem] sm:grid-cols-2 lg:grid-cols-6">
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Image connection</dt>
+                  <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.connection.name}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Model</dt>
+                  <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.connection.model}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Engine style</dt>
+                  <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.styleProfile.name}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Campaign art style</dt>
+                  <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.campaign.artStyleIncluded ? "Included" : "Off"}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Scene instructions</dt>
+                  <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.chatSettings.imageInstructionsIncluded ? "Included" : "None saved"}
+                  </dd>
+                </div>
+                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                  <dt className="text-[var(--marinara-editor-muted)]">Image size</dt>
+                  <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
+                    {artworkPreview.width} × {artworkPreview.height}
+                  </dd>
+                </div>
+                </dl>
+
+                <div className="grid gap-2">
+                  {artworkPreview.items.map((item, index) => (
+                  <details key={item.id} className="rounded-lg border border-white/10 bg-black/10" open={index === 0}>
+                    <summary className="cursor-pointer px-3 py-2 text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">
+                      {index + 1}. {item.title}
+                    </summary>
+                    <div className="grid gap-2 border-t border-white/10 px-3 py-2.5">
+                      <div>
+                        <label
+                          htmlFor={`map-artwork-positive-${item.id}`}
+                          className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]"
+                        >
+                          Prompt sent to provider
+                        </label>
+                        <textarea
+                          id={`map-artwork-positive-${item.id}`}
+                          aria-label={`Positive prompt for ${item.title}`}
+                          value={item.prompt}
+                          maxLength={200_000}
+                          rows={5}
+                          onChange={(event) =>
+                            setArtworkPreview((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    items: current.items.map((candidate) =>
+                                      candidate.id === item.id
+                                        ? { ...candidate, prompt: event.target.value }
+                                        : candidate,
+                                    ),
+                                  }
+                                : current,
+                            )
+                          }
+                          className="mari-editor-field mt-1 max-h-40 min-h-24 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor={`map-artwork-negative-${item.id}`}
+                          className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]"
+                        >
+                          Negative prompt
+                        </label>
+                        <textarea
+                          id={`map-artwork-negative-${item.id}`}
+                          aria-label={`Negative prompt for ${item.title}`}
+                          value={item.negativePrompt}
+                          maxLength={200_000}
+                          rows={3}
+                          placeholder="None"
+                          onChange={(event) =>
+                            setArtworkPreview((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    items: current.items.map((candidate) =>
+                                      candidate.id === item.id
+                                        ? { ...candidate, negativePrompt: event.target.value }
+                                        : candidate,
+                                    ),
+                                  }
+                                : current,
+                            )
+                          }
+                          className="mari-editor-field mt-1 max-h-32 min-h-20 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                  </details>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setArtworkPreview(null)}
+                  className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  data-marinara-confirm-map-artwork
+                  onClick={() => void fillMissingArtwork()}
+                  disabled={artworkProgress !== null || conflict || updateSpatial.isPending}
+                  className="mari-editor-action mari-editor-action--primary min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                >
+                  <Sparkles size="0.8125rem" /> Generate {artworkPreview.requestCount} image
+                  {artworkPreview.requestCount === 1 ? "" : "s"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">Location artwork</p>
+                <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                  {artworkImagesToGenerate > 0
+                    ? `Review ${artworkImagesToGenerate} missing image request${artworkImagesToGenerate === 1 ? "" : "s"} before anything is generated. Each location uses the same image for its reference and child-map background.`
+                    : "Reuse existing location art for missing references and child-map backgrounds."}
+                </p>
+              </div>
+              <button
+                type="button"
+                data-marinara-fill-map-artwork
+                onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
+                disabled={artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending}
+                className="mari-chrome-control min-h-11 shrink-0 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
+              >
+                {artworkProgress || previewGalleryImages.isPending ? (
+                  <Loader2 size="0.8125rem" className="animate-spin" />
+                ) : (
+                  <ImageIcon size="0.8125rem" />
+                )}
+                {artworkProgress
+                  ? `Creating ${Math.min(artworkProgress.completed + 1, artworkProgress.total)} of ${artworkProgress.total}`
+                  : previewGalleryImages.isPending
+                    ? "Preparing preview"
+                    : artworkImagesToGenerate > 0
+                      ? `Review ${artworkImagesToGenerate} request${artworkImagesToGenerate === 1 ? "" : "s"}`
+                      : "Apply existing artwork"}
+              </button>
+              {artworkProgress?.currentName && (
+                <span className="sr-only" role="status" aria-live="polite">
+                  Creating artwork for {artworkProgress.currentName}
+                </span>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {!aiBuilderOpen && importIdReport && (
         <section
@@ -1331,9 +2338,19 @@ export function SpatialMapWorkspace({
           <div className="flex flex-wrap items-center gap-2">
             <AlertCircle size="0.8125rem" />
             <span className="min-w-52 flex-1 font-medium">
-              The map changed elsewhere. Your working copy is preserved.
+              {templateMode
+                ? "This template changed elsewhere. Your working copy is preserved. Return to the library and reopen it."
+                : "The map changed elsewhere. Your working copy is preserved."}
             </span>
-            <button
+            {templateMode ? (
+              <button
+                type="button"
+                onClick={() => void handleClose()}
+                className="mari-chrome-control min-h-11 px-3 text-xs"
+              >
+                <ArrowLeft size="0.75rem" /> Return to library
+              </button>
+            ) : <><button
               type="button"
               onClick={() => void reloadServerVersion()}
               className="mari-chrome-control min-h-11 px-3 text-xs"
@@ -1347,8 +2364,9 @@ export function SpatialMapWorkspace({
             >
               Review differences
             </button>
+            </>}
           </div>
-          {reviewConflict && (
+          {!templateMode && reviewConflict && (
             <div className="mt-3 grid gap-2 rounded-lg border border-red-500/20 bg-[var(--background)]/40 p-3 sm:grid-cols-4">
               <span>{conflictDifference.added.length} added</span>
               <span>{conflictDifference.removed.length} removed</span>
@@ -1427,13 +2445,15 @@ export function SpatialMapWorkspace({
         <div className="flex min-h-0 flex-1 items-center justify-center p-6">
           <div className="max-w-md text-center">
             <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-accent)]">
-              <Map size="1.25rem" />
+              <MapIcon size="1.25rem" />
             </span>
             <h2 className="mt-4 text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
-              Create a starting location
+              {templateMode ? "Create a map template" : "Create a starting location"}
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-              Let AI draft the full hierarchy from the game or chat setup, or start manually with one broad place.
+              {templateMode
+                ? "Describe a fandom or setting for Maps to draft without a chat, or start manually with one broad place."
+                : "Let AI draft the full hierarchy from the game or chat setup, add a saved template, or start manually with one broad place."}
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <button
@@ -1441,7 +2461,7 @@ export function SpatialMapWorkspace({
                 onClick={() => setAiBuilderOpen(true)}
                 className="mari-chrome-control mari-chrome-control--primary min-h-11 px-5 text-sm"
               >
-                <Sparkles size="0.875rem" /> Draft with AI
+                <Sparkles size="0.875rem" /> {templateMode ? "Create with AI" : "Draft with AI"}
               </button>
               <button
                 type="button"

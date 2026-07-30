@@ -36,7 +36,7 @@ Follow instructions in this order:
 - Base work on `staging`; open a draft PR targeting `staging` when implementation begins.
 - Mark the PR ready only when it is ready for human and CodeRabbit review.
 - Leave every PR test checkbox unchecked unless a human actually performed that item.
-- Address actionable review feedback and rerun validation after changes. Pasta-Devs developers may merge internal PRs after required checks and CodeRabbit complete; outside and first-time contributors also need an approving review from `SpicyMarinara`.
+- Address actionable review feedback and rerun validation after changes. PRs from active Pasta-Devs organization members and owners do not require separate owner approval; those with repository merge permission may merge internal PRs after required checks and CodeRabbit complete. Outside and first-time contributors also need an approving review from `SpicyMarinara`.
 - Only `SpicyMarinara` may promote tested `staging` work into `main`.
 - Never push directly to `main` without explicit maintainer direction.
 
