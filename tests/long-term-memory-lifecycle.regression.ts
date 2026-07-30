@@ -219,6 +219,7 @@ async function main() {
     });
     await page.locator('[data-ltm-surface="detail"]').waitFor();
     assert.equal(await page.locator('[data-ltm-surface="overview"]').count(), 0);
+    assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
     const desktopNavigationLayout = await page
       .locator('[data-ltm-control="navigation"]').first()
       .evaluate((element) => {

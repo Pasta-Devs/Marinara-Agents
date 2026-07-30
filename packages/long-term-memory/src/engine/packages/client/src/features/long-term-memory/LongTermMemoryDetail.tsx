@@ -516,32 +516,37 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     review: pendingDrafts.data?.count,
                   }}
                 />
-                <div
-                  aria-busy={status.isFetching}
-                  className="hidden shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs text-[var(--marinara-editor-muted)] md:flex"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`h-1.5 w-1.5 rounded-full ${healthTone}`}
-                  />
-                  <span aria-live="polite" aria-atomic="true">
-                    {status.isError
-                      ? localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.statusUnavailable",
-                        )
-                      : status.data
-                        ? healthLabel
-                        : localizeUi(
-                            "ui.longTermMemory.longtermmemorydetail.loadingStatus",
-                          )}
-                  </span>
-                  <InfoPopover
-                    label={localizeUi(
-                      "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
+                {health !== "healthy" ? (
+                  <div
+                    aria-busy={status.isFetching}
+                    data-ltm-surface="vault-health-pill"
+                    className="hidden shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs text-[var(--marinara-editor-muted)] md:flex"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 w-1.5 rounded-full ${healthTone}`}
+                    />
+                    <span aria-live="polite" aria-atomic="true">
+                      {status.isError
+                        ? localizeUi(
+                            "ui.longTermMemory.longtermmemorydetail.statusUnavailable",
+                          )
+                        : status.data
+                          ? healthLabel
+                          : localizeUi(
+                              "ui.longTermMemory.longtermmemorydetail.loadingStatus",
+                            )}
+                    </span>
+                    {needsHealthAttention ? null : (
+                      <InfoPopover
+                        label={localizeUi(
+                          "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
+                        )}
+                        content={healthInfo}
+                      />
                     )}
-                    content={healthInfo}
-                  />
-                </div>
+                  </div>
+                ) : null}
               </div>
               {needsHealthAttention ? (
                 <StatusSurface
