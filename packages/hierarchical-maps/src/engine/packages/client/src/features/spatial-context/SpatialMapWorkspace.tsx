@@ -7,9 +7,11 @@ import {
   ChevronRight,
   CornerDownRight,
   Download,
+  GitFork,
   ImageIcon,
   List,
   Loader2,
+  Link2,
   Map as MapIcon,
   MoreHorizontal,
   Move,
@@ -38,9 +40,15 @@ import {
 import {
   getSpatialContextProblem,
   useCreateSpatialMapTemplate,
+  useCreateSpatialSharedWorld,
+  useDiscardSpatialSharedWorldDraft,
+  useForkSpatialSharedWorld,
+  useLinkSpatialSharedWorld,
+  usePublishSpatialSharedWorldDraft,
   useSpatialContext,
   useUpdateSpatialContext,
   useUpdateSpatialMapTemplate,
+  useUpdateSpatialSharedWorld,
 } from "../../hooks/use-spatial-context";
 import { cn } from "./package-utils";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
@@ -95,6 +103,7 @@ import {
   withLocationHierarchyType,
   type SpatialHierarchyProfile,
   type SpatialMapTemplateRecord,
+  type SpatialSharedWorldRecord,
 } from "../../../../maps-shared/src/maps-model";
 
 type MobilePane = "hierarchy" | "local" | "details";
@@ -148,10 +157,11 @@ function artworkFilename(image: SpatialArtworkImage, mimeType: string): string |
   const extension = ARTWORK_MIME_EXTENSIONS.get(mimeType.toLowerCase());
   if (!extension) return null;
   const sourceName = image.filePath.split(/[\\/]/u).at(-1) ?? `map-artwork-${image.id}`;
-  const stem = sourceName
-    .replace(/\.[^.]+$/u, "")
-    .replace(/[^a-z0-9._-]+/giu, "-")
-    .replace(/^-+|-+$/gu, "") || `map-artwork-${image.id}`;
+  const stem =
+    sourceName
+      .replace(/\.[^.]+$/u, "")
+      .replace(/[^a-z0-9._-]+/giu, "-")
+      .replace(/^-+|-+$/gu, "") || `map-artwork-${image.id}`;
   return `${stem}.${extension}`;
 }
 
@@ -183,7 +193,12 @@ async function promoteSpatialArtworkToGlobalGallery(
   definition: SpatialContextDefinition,
   chatImages: SpatialGalleryImage[],
   initialGlobalImages: SpatialGlobalGalleryImage[],
-): Promise<{ definition: SpatialContextDefinition; promoted: number; reused: number; missing: number }> {
+): Promise<{
+  definition: SpatialContextDefinition;
+  promoted: number;
+  reused: number;
+  missing: number;
+}> {
   const chatImagesById = new Map(chatImages.map((image) => [image.id, image]));
   const globalImages = [...initialGlobalImages];
   const references = new Map<string, string>();
@@ -199,10 +214,7 @@ async function promoteSpatialArtworkToGlobalGallery(
       continue;
     }
     try {
-      const file = artworkFile(
-        { ...image, referenceId: image.id, source: "chat" },
-        await packageApi.blob(image.url),
-      );
+      const file = artworkFile({ ...image, referenceId: image.id, source: "chat" }, await packageApi.blob(image.url));
       const result = await reuseOrUploadSpatialGlobalGalleryImage(file, image, globalImages);
       references.set(referenceId, globalGallerySpatialReferenceId(result.image.id));
       if (!globalImages.some((candidate) => candidate.id === result.image.id)) globalImages.push(result.image);
@@ -258,16 +270,19 @@ export function parseBundledArtwork(value: unknown): SpatialMapArtworkExport[] {
 export function bundledArtworkFile(artwork: SpatialMapArtworkExport): File {
   const match = /^data:(image\/(?:jpeg|png|gif|webp|avif));base64,(.+)$/isu.exec(artwork.data);
   if (!match) throw new Error("Bundled artwork is not a supported image.");
-  const mimeType = match[1].toLowerCase();
+  const mimeType = match[1]?.toLowerCase();
+  const encoded = match[2];
+  if (!mimeType || !encoded) throw new Error("Bundled artwork is not a supported image.");
   const extension = ARTWORK_MIME_EXTENSIONS.get(mimeType);
   if (!extension) throw new Error("Bundled artwork is not a supported image.");
-  const binary = atob(match[2].replace(/\s+/gu, ""));
+  const binary = atob(encoded.replace(/\s+/gu, ""));
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  const stem = artwork.filename
-    .replace(/\.[^.]+$/u, "")
-    .replace(/[^a-z0-9._-]+/giu, "-")
-    .replace(/^-+|-+$/gu, "") || "map-artwork";
+  const stem =
+    artwork.filename
+      .replace(/\.[^.]+$/u, "")
+      .replace(/[^a-z0-9._-]+/giu, "-")
+      .replace(/^-+|-+$/gu, "") || "map-artwork";
   return new File([bytes], `${stem}.${extension}`, { type: mimeType });
 }
 
@@ -282,9 +297,13 @@ type MapConfirmationOptions = {
 interface SpatialMapWorkspaceProps {
   chatId: string | null;
   template?: SpatialMapTemplateRecord;
+  sharedWorld?: SpatialSharedWorldRecord;
   stagedTemplate?: SpatialMapTemplateRecord | null;
   debugMode?: boolean;
-  pendingDraftReview?: { chatId: string; result: GenerateSpatialMapDraftResponse } | null;
+  pendingDraftReview?: {
+    chatId: string;
+    result: GenerateSpatialMapDraftResponse;
+  } | null;
   onClearPendingDraftReview?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenLorebook?: (lorebookId: string) => void;
@@ -293,9 +312,7 @@ interface SpatialMapWorkspaceProps {
 }
 
 function sortedChildren(definition: SpatialContextDefinition, parentId: string | null) {
-  return definition.locations
-    .filter((location) => location.parentId === parentId)
-    .sort(compareSpatialLocations);
+  return definition.locations.filter((location) => location.parentId === parentId).sort(compareSpatialLocations);
 }
 
 function statusCopy(options: {
@@ -312,22 +329,40 @@ function statusCopy(options: {
       icon: <Loader2 size="0.6875rem" className="animate-spin" />,
     };
   if (options.conflict)
-    return { label: "Conflict", className: "text-[var(--destructive)]", icon: <AlertCircle size="0.6875rem" /> };
+    return {
+      label: "Conflict",
+      className: "text-[var(--destructive)]",
+      icon: <AlertCircle size="0.6875rem" />,
+    };
   if (options.invalid)
-    return { label: "Invalid", className: "text-[var(--destructive)]", icon: <AlertCircle size="0.6875rem" /> };
-  if (options.dirty) return { label: "Unsaved", className: "text-[var(--marinara-editor-muted)]", icon: null };
+    return {
+      label: "Invalid",
+      className: "text-[var(--destructive)]",
+      icon: <AlertCircle size="0.6875rem" />,
+    };
+  if (options.dirty)
+    return {
+      label: "Unsaved",
+      className: "text-[var(--marinara-editor-muted)]",
+      icon: null,
+    };
   if (options.savedFlash)
     return {
       label: "Saved",
       className: "text-[var(--marinara-chat-chrome-accent)]",
       icon: <Check size="0.6875rem" />,
     };
-  return { label: "Up to date", className: "text-[var(--marinara-editor-muted)]", icon: <Check size="0.6875rem" /> };
+  return {
+    label: "Up to date",
+    className: "text-[var(--marinara-editor-muted)]",
+    icon: <Check size="0.6875rem" />,
+  };
 }
 
 export function SpatialMapWorkspace({
   chatId,
   template,
+  sharedWorld,
   stagedTemplate = null,
   debugMode = false,
   pendingDraftReview = null,
@@ -337,11 +372,18 @@ export function SpatialMapWorkspace({
   onOpenTemplates,
   onClose,
 }: SpatialMapWorkspaceProps) {
-  const templateMode = template !== undefined;
+  const sharedWorldMode = sharedWorld !== undefined;
+  const templateMode = template !== undefined || sharedWorldMode;
   const spatial = useSpatialContext(templateMode ? null : chatId);
   const updateSpatial = useUpdateSpatialContext();
   const updateTemplate = useUpdateSpatialMapTemplate();
+  const updateSharedWorld = useUpdateSpatialSharedWorld();
+  const publishSharedWorld = usePublishSpatialSharedWorldDraft();
+  const discardSharedWorldDraft = useDiscardSpatialSharedWorldDraft();
+  const forkSharedWorld = useForkSpatialSharedWorld();
   const createTemplate = useCreateSpatialMapTemplate();
+  const createSharedWorld = useCreateSpatialSharedWorld();
+  const linkSharedWorld = useLinkSpatialSharedWorld();
   const { data: chat } = useSpatialChat(templateMode ? null : chatId);
   const galleryImages = useSpatialGalleryImages(chatId ?? "", !templateMode);
   const globalGalleryImages = useSpatialGlobalGalleryImages();
@@ -352,6 +394,7 @@ export function SpatialMapWorkspace({
   const generateGalleryImage = useGenerateSpatialGalleryImage(chatId ?? "");
   const previewGalleryImages = usePreviewSpatialGalleryImages(chatId ?? "");
   const pendingSetupReview = !templateMode && pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
+  const libraryRecord = sharedWorld ?? template;
   const [baseDefinition, setBaseDefinition] = useState<SpatialContextDefinition | null>(null);
   const [draft, setDraft] = useState<SpatialContextDefinition | null>(null);
   const [baseHierarchyProfile, setBaseHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
@@ -383,10 +426,7 @@ export function SpatialMapWorkspace({
   const [archiveReplacementId, setArchiveReplacementId] = useState("");
   const { data: lorebooks = [] } = useSpatialLorebooks();
   const lorebookEntriesQuery = useSpatialLorebookEntries(lorebooks.map((lorebook) => lorebook.id));
-  const excludedLorebookIds = useMemo(
-    () => (chat ? getSpatialExcludedLorebookIds(chat) : []),
-    [chat],
-  );
+  const excludedLorebookIds = useMemo(() => (chat ? getSpatialExcludedLorebookIds(chat) : []), [chat]);
   const [replacementCurrentLocationId, setReplacementCurrentLocationId] = useState<string | null>(null);
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
   const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
@@ -436,10 +476,16 @@ export function SpatialMapWorkspace({
       const first = focusable[0];
       const last = focusable.at(-1);
       if (!first || !last) return;
-      if (event.shiftKey && (document.activeElement === first || !confirmationDialogRef.current?.contains(document.activeElement))) {
+      if (
+        event.shiftKey &&
+        (document.activeElement === first || !confirmationDialogRef.current?.contains(document.activeElement))
+      ) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !confirmationDialogRef.current?.contains(document.activeElement))) {
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === last || !confirmationDialogRef.current?.contains(document.activeElement))
+      ) {
         event.preventDefault();
         first.focus();
       }
@@ -472,7 +518,7 @@ export function SpatialMapWorkspace({
   );
 
   const ownerMode: SpatialOwnerMode = templateMode
-    ? template.data.definition.ownerMode
+    ? (libraryRecord?.data.definition.ownerMode ?? "roleplay")
     : chat?.mode === "game"
       ? "game"
       : "roleplay";
@@ -515,15 +561,15 @@ export function SpatialMapWorkspace({
     setLayoutEditingMode(null);
     setImportIdReport(null);
     setArtworkProgress(null);
-    setTemplateName(template?.name ?? "");
-    setBaseTemplateName(template?.name ?? "");
-  }, [chatId, resolveConfirmation, stagedTemplate?.id, template?.id]);
+    setTemplateName(libraryRecord?.name ?? "");
+    setBaseTemplateName(libraryRecord?.name ?? "");
+  }, [chatId, libraryRecord?.id, resolveConfirmation, stagedTemplate?.id]);
 
   useEffect(() => {
     if (initialized) return;
-    if (templateMode && template) {
-      const definition = cloneSpatialDefinition(template.data.definition);
-      const hierarchyProfile = normalizeHierarchyProfile(template.data.hierarchyProfile, definition);
+    if (templateMode && libraryRecord) {
+      const definition = cloneSpatialDefinition(libraryRecord.data.definition);
+      const hierarchyProfile = normalizeHierarchyProfile(libraryRecord.data.hierarchyProfile, definition);
       setBaseDefinition(cloneSpatialDefinition(definition));
       setDraft(definition);
       setBaseHierarchyProfile(hierarchyProfile);
@@ -568,7 +614,7 @@ export function SpatialMapWorkspace({
     setEnteredParentId(null);
     setServerIssues(spatial.data.warnings);
     setInitialized(true);
-  }, [initialized, ownerMode, spatial.data, spatial.isSuccess, stagedTemplate, template, templateMode]);
+  }, [initialized, libraryRecord, ownerMode, spatial.data, spatial.isSuccess, stagedTemplate, templateMode]);
 
   useEffect(() => {
     if (!initialized || !pendingSetupReview) return;
@@ -583,7 +629,8 @@ export function SpatialMapWorkspace({
     () =>
       !!draft &&
       (isSpatialDefinitionDirty(baseDefinition, draft) ||
-        JSON.stringify(baseHierarchyProfile) !== JSON.stringify(normalizeHierarchyProfile(draftHierarchyProfile, draft)) ||
+        JSON.stringify(baseHierarchyProfile) !==
+          JSON.stringify(normalizeHierarchyProfile(draftHierarchyProfile, draft)) ||
         (templateMode && templateName.trim() !== baseTemplateName)),
     [baseDefinition, baseHierarchyProfile, baseTemplateName, draft, draftHierarchyProfile, templateMode, templateName],
   );
@@ -601,8 +648,7 @@ export function SpatialMapWorkspace({
     (globalGalleryImages.isFetching && globalGalleryImages.data === undefined) ||
     (!templateMode && (galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined)));
   const effectiveLayoutEditingMode =
-    layoutEditingMode === "background" &&
-    (localPresentation !== "map" || !localMapBackgroundImageUrl)
+    layoutEditingMode === "background" && (localPresentation !== "map" || !localMapBackgroundImageUrl)
       ? null
       : layoutEditingMode;
   const currentLocationId = templateMode ? null : (spatial.data?.currentLocationId ?? null);
@@ -612,8 +658,7 @@ export function SpatialMapWorkspace({
       draft?.locations.filter(
         (location) =>
           location.status === "active" &&
-          (!location.referenceImageId ||
-            (location.childPresentation === "map" && !location.mapBackgroundImageId)),
+          (!location.referenceImageId || (location.childPresentation === "map" && !location.mapBackgroundImageId)),
       ) ?? [],
     [draft],
   );
@@ -698,7 +743,11 @@ export function SpatialMapWorkspace({
     let failedImages = 0;
     const reviewedItems = new globalThis.Map(artworkPreview?.items.map((item) => [item.id, item]) ?? []);
     setArtworkPreview(null);
-    setArtworkProgress({ completed: 0, total: missingArtworkLocations.length, currentName: "" });
+    setArtworkProgress({
+      completed: 0,
+      total: missingArtworkLocations.length,
+      currentName: "",
+    });
 
     for (const [index, target] of missingArtworkLocations.entries()) {
       setArtworkProgress({
@@ -741,7 +790,10 @@ export function SpatialMapWorkspace({
         ...(shouldSetBackground
           ? {
               mapBackgroundImageId: imageId,
-              mapBackgroundPosition: current.mapBackgroundPosition ?? { x: 50, y: 50 },
+              mapBackgroundPosition: current.mapBackgroundPosition ?? {
+                x: 50,
+                y: 50,
+              },
             }
           : {}),
       });
@@ -782,12 +834,23 @@ export function SpatialMapWorkspace({
         mapsArtworkContext: locationArtworkContext(draft!, draftHierarchyProfile, location),
       }));
     try {
-      const preview = await previewGalleryImages.mutateAsync({ items, debugMode });
+      const preview = await previewGalleryImages.mutateAsync({
+        items,
+        debugMode,
+      });
       setArtworkPreview(preview);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not prepare the image request preview.");
     }
-  }, [artworkImagesToGenerate, artworkProgress, debugMode, draft, draftHierarchyProfile, missingArtworkLocations, previewGalleryImages]);
+  }, [
+    artworkImagesToGenerate,
+    artworkProgress,
+    debugMode,
+    draft,
+    draftHierarchyProfile,
+    missingArtworkLocations,
+    previewGalleryImages,
+  ]);
 
   const flushBackgroundMove = useCallback(() => {
     backgroundMoveFrameRef.current = null;
@@ -809,7 +872,10 @@ export function SpatialMapWorkspace({
   const queueBackgroundMove = useCallback(
     (position: SpatialLocationPlacement) => {
       if (!currentContextId) return;
-      pendingBackgroundMoveRef.current = { locationId: currentContextId, position };
+      pendingBackgroundMoveRef.current = {
+        locationId: currentContextId,
+        position,
+      };
       if (backgroundMoveFrameRef.current !== null) return;
       backgroundMoveFrameRef.current = window.requestAnimationFrame(flushBackgroundMove);
     },
@@ -854,7 +920,10 @@ export function SpatialMapWorkspace({
       if (!draft) return;
       const sibling = draft.locations.find((location) => location.id === locationId);
       if (!sibling) return;
-      const result = addSpatialLocation(draft, { parentId: sibling.parentId, kind: sibling.kind });
+      const result = addSpatialLocation(draft, {
+        parentId: sibling.parentId,
+        kind: sibling.kind,
+      });
       applyDraft(result.definition);
       selectLocation(result.location.id);
     },
@@ -897,7 +966,7 @@ export function SpatialMapWorkspace({
   const requestArchive = useCallback(
     (locationId: string) => {
       if (!draft) return;
-      if (templateMode) {
+      if (templateMode && !sharedWorldMode) {
         const location = draft.locations.find((candidate) => candidate.id === locationId);
         if (!location) return;
         const next = removeSpatialSubtree(draft, locationId);
@@ -915,7 +984,9 @@ export function SpatialMapWorkspace({
         });
         return;
       }
-      const validation = validateSpatialArchive(draft, locationId, { currentLocationId });
+      const validation = validateSpatialArchive(draft, locationId, {
+        currentLocationId,
+      });
       if (validation.ok) {
         void finishArchive(locationId);
         return;
@@ -930,17 +1001,23 @@ export function SpatialMapWorkspace({
       }
       toast.error(validation.message);
     },
-    [applyDraft, confirmAction, currentLocationId, draft, enteredParentId, finishArchive, templateMode],
+    [
+      applyDraft,
+      confirmAction,
+      currentLocationId,
+      draft,
+      enteredParentId,
+      finishArchive,
+      sharedWorldMode,
+      templateMode,
+    ],
   );
 
   const handleDeleteMap = useCallback(async () => {
     const savedDefinition = baseDefinition ?? draft;
     if (!savedDefinition || savedDefinition.locations.length === 0) return;
     const preserveExistingLocations = spatial.data?.hasCommittedSpatialHistory ?? false;
-    if (
-      preserveExistingLocations &&
-      savedDefinition.locations.length >= SPATIAL_CONTEXT_LIMITS.maxLocations
-    ) {
+    if (preserveExistingLocations && savedDefinition.locations.length >= SPATIAL_CONTEXT_LIMITS.maxLocations) {
       toast.error(
         "This map is at the location limit, so a history-safe new starting location cannot be added. Export it and start a new chat instead.",
       );
@@ -994,9 +1071,7 @@ export function SpatialMapWorkspace({
       const artwork: SpatialMapArtworkExport[] = [];
       let missingArtworkCount = 0;
       if (shouldIncludeArtwork) {
-        const chatArtwork = templateMode
-          ? []
-          : (galleryImages.data ?? (await galleryImages.refetch()).data ?? []);
+        const chatArtwork = templateMode ? [] : (galleryImages.data ?? (await galleryImages.refetch()).data ?? []);
         const globalArtwork = globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [];
         const imagesById = new Map(
           spatialArtworkImages(chatArtwork, globalArtwork).map((image) => [image.referenceId, image]),
@@ -1045,18 +1120,20 @@ export function SpatialMapWorkspace({
       );
       const url = URL.createObjectURL(exportBlob);
       const link = document.createElement("a");
-      const safeName = (templateMode ? templateName : (chat?.name ?? "world-map"))
-        .replace(/[^a-z0-9._-]+/gi, "-")
-        .replace(/^-+|-+$/g, "") || "world-map";
+      const safeName =
+        (templateMode ? templateName : (chat?.name ?? "world-map"))
+          .replace(/[^a-z0-9._-]+/gi, "-")
+          .replace(/^-+|-+$/g, "") || "world-map";
       link.href = url;
       link.download = `${safeName}.world-map.json`;
       link.click();
       URL.revokeObjectURL(url);
       if (shouldIncludeArtwork) {
         const includedCopy = `${artwork.length} artwork file${artwork.length === 1 ? "" : "s"} included`;
-        const missingCopy = missingArtworkCount > 0
-          ? `; ${missingArtworkCount} missing artwork link${missingArtworkCount === 1 ? " was" : "s were"} skipped`
-          : "";
+        const missingCopy =
+          missingArtworkCount > 0
+            ? `; ${missingArtworkCount} missing artwork link${missingArtworkCount === 1 ? " was" : "s were"} skipped`
+            : "";
         toast.success(`World map exported: ${includedCopy}${missingCopy}.`);
       }
     } catch (error) {
@@ -1084,11 +1161,9 @@ export function SpatialMapWorkspace({
       setIsImporting(true);
       try {
         const raw = JSON.parse(await file.text()) as unknown;
-        const rawRecord = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
-        const candidate =
-          rawRecord && "definition" in rawRecord
-            ? rawRecord.definition
-            : raw;
+        const rawRecord =
+          raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+        const candidate = rawRecord && "definition" in rawRecord ? rawRecord.definition : raw;
         const parsed = spatialContextDefinitionSchema.safeParse(candidate);
         if (!parsed.success) {
           throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid world map.");
@@ -1107,9 +1182,7 @@ export function SpatialMapWorkspace({
         const referencedIds = new Set(referencedArtworkIds(parsed.data));
         const applicableArtwork = bundledArtwork.filter((artwork) => referencedIds.has(artwork.sourceImageId));
         const artworkIdMap = new Map<string, string>();
-        const currentGlobalImages = [
-          ...(globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? []),
-        ];
+        const currentGlobalImages = [...(globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [])];
         let sharedArtworkAdded = 0;
         let sharedArtworkReused = 0;
         let chatArtworkRestored = 0;
@@ -1181,8 +1254,7 @@ export function SpatialMapWorkspace({
     const name = `${chat?.name?.trim() || "Untitled"} map`;
     const confirmed = await confirmAction({
       title: "Save map as a template?",
-      message:
-        `Save a reusable copy named “${name}” to Agents → Maps? Referenced chat artwork will be added to or reused from Global Gallery. Campaign history, current location, and Game bindings are not copied.`,
+      message: `Save a reusable copy named “${name}” to Agents → Maps? Referenced chat artwork will be added to or reused from Global Gallery. Campaign history, current location, and Game bindings are not copied.`,
       confirmLabel: "Save template",
     });
     if (!confirmed) return;
@@ -1214,12 +1286,205 @@ export function SpatialMapWorkspace({
     templateMode,
   ]);
 
+  const saveAsSharedWorld = useCallback(async () => {
+    if (
+      templateMode ||
+      !chatId ||
+      !draft ||
+      dirty ||
+      draft.locations.length === 0 ||
+      spatial.data?.sharedWorld.mode === "linked" ||
+      createSharedWorld.isPending ||
+      linkSharedWorld.isPending
+    )
+      return;
+    const name = `${chat?.name?.trim() || "Untitled"} world`;
+    const confirmed = await confirmAction({
+      title: "Create a shared world from this map?",
+      message: `Create “${name}” as one account-owned world and link this chat to it? The map structure and Global Gallery artwork can then be reused by other chats. This chat keeps its own current location and travel history.`,
+      confirmLabel: "Create and link",
+    });
+    if (!confirmed) return;
+    try {
+      const chatArtwork = galleryImages.data ?? (await galleryImages.refetch()).data ?? [];
+      const globalArtwork = globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [];
+      const promotion = await promoteSpatialArtworkToGlobalGallery(draft, chatArtwork, globalArtwork);
+      if (promotion.promoted > 0) await globalGalleryImages.refetch();
+      const created = await createSharedWorld.mutateAsync({
+        name,
+        description: "",
+        definition: promotion.definition,
+        hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, promotion.definition),
+      });
+      try {
+        await linkSharedWorld.mutateAsync({
+          chatId,
+          worldId: created.id,
+          expectedRevision: draft.revision,
+          expectedCurrentLocationId: currentLocationId,
+        });
+      } catch (error) {
+        throw new Error(
+          `${error instanceof Error ? error.message : "The chat could not be linked."} “${created.name}” was still saved in the world map library.`,
+        );
+      }
+      toast.success(
+        `Shared world created and linked.${promotion.promoted > 0 ? ` ${promotion.promoted} artwork file${promotion.promoted === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${promotion.reused > 0 ? ` ${promotion.reused} existing shared image${promotion.reused === 1 ? " was" : "s were"} reused.` : ""}`,
+      );
+      const refreshed = await spatial.refetch();
+      if (refreshed.data?.definition) {
+        setBaseDefinition(cloneSpatialDefinition(refreshed.data.definition));
+        setDraft(cloneSpatialDefinition(refreshed.data.definition));
+        setBaseHierarchyProfile(refreshed.data.hierarchyProfile);
+        setDraftHierarchyProfile(refreshed.data.hierarchyProfile);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The shared world could not be created.");
+    }
+  }, [
+    chat?.name,
+    chatId,
+    confirmAction,
+    createSharedWorld,
+    currentLocationId,
+    dirty,
+    draft,
+    draftHierarchyProfile,
+    galleryImages,
+    globalGalleryImages,
+    linkSharedWorld,
+    spatial,
+    templateMode,
+  ]);
+
+  const publishLinkedChanges = useCallback(async () => {
+    const sharedStatus = spatial.data?.sharedWorld;
+    if (
+      templateMode ||
+      !chatId ||
+      !draft ||
+      dirty ||
+      !sharedStatus?.pendingChanges ||
+      !sharedStatus.worldRevision ||
+      publishSharedWorld.isPending
+    )
+      return;
+    if (sharedStatus.conflict) {
+      toast.error("The shared world changed elsewhere. Fork or discard this chat's changes before publishing.");
+      return;
+    }
+    const confirmed = await confirmAction({
+      title: "Publish changes to the shared world?",
+      message: `Publish this chat's reviewed map changes to “${sharedStatus.worldName ?? "the shared world"}”? Every linked chat will receive the new canonical definition. Referenced chat artwork will be promoted to Global Gallery first.`,
+      confirmLabel: "Publish changes",
+    });
+    if (!confirmed) return;
+    try {
+      const chatArtwork = galleryImages.data ?? (await galleryImages.refetch()).data ?? [];
+      const globalArtwork = globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [];
+      const promotion = await promoteSpatialArtworkToGlobalGallery(draft, chatArtwork, globalArtwork);
+      if (promotion.promoted > 0) await globalGalleryImages.refetch();
+      const result = await publishSharedWorld.mutateAsync({
+        chatId,
+        expectedWorldRevision: sharedStatus.worldRevision,
+        definition: promotion.definition,
+        hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, promotion.definition),
+      });
+      const saved = result.spatial.definition;
+      if (!saved) throw new Error("The server did not return the published shared world.");
+      setBaseDefinition(cloneSpatialDefinition(saved));
+      setDraft(cloneSpatialDefinition(saved));
+      setBaseHierarchyProfile(result.spatial.hierarchyProfile);
+      setDraftHierarchyProfile(result.spatial.hierarchyProfile);
+      setServerIssues(result.spatial.warnings);
+      setSavedFlash(true);
+      toast.success(
+        `Shared world published to ${result.world.linkedChatCount} linked chat${result.world.linkedChatCount === 1 ? "" : "s"}.${promotion.promoted > 0 ? ` ${promotion.promoted} artwork file${promotion.promoted === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${promotion.reused > 0 ? ` ${promotion.reused} shared image${promotion.reused === 1 ? " was" : "s were"} reused.` : ""}`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The shared-world changes could not be published.");
+      void spatial.refetch();
+    }
+  }, [
+    chatId,
+    confirmAction,
+    dirty,
+    draft,
+    draftHierarchyProfile,
+    galleryImages,
+    globalGalleryImages,
+    publishSharedWorld,
+    spatial,
+    templateMode,
+  ]);
+
+  const discardLinkedChanges = useCallback(async () => {
+    const sharedStatus = spatial.data?.sharedWorld;
+    if (templateMode || !chatId || !draft || dirty || !sharedStatus?.pendingChanges) return;
+    const confirmed = await confirmAction({
+      title: "Discard this chat's map changes?",
+      message: `Return this chat to the current “${sharedStatus.worldName ?? "shared world"}” definition? Unpublished locations and map edits will be lost.`,
+      confirmLabel: "Discard changes",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    try {
+      const response = await discardSharedWorldDraft.mutateAsync({
+        chatId,
+        expectedRevision: draft.revision,
+        expectedCurrentLocationId: currentLocationId,
+      });
+      const saved = response.definition;
+      if (!saved) throw new Error("The shared world is unavailable.");
+      setBaseDefinition(cloneSpatialDefinition(saved));
+      setDraft(cloneSpatialDefinition(saved));
+      setBaseHierarchyProfile(response.hierarchyProfile);
+      setDraftHierarchyProfile(response.hierarchyProfile);
+      setServerIssues(response.warnings);
+      toast.success("Unpublished map changes discarded.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The changes could not be discarded.");
+      void spatial.refetch();
+    }
+  }, [chatId, confirmAction, currentLocationId, dirty, discardSharedWorldDraft, draft, spatial, templateMode]);
+
+  const forkLinkedWorld = useCallback(async () => {
+    const sharedStatus = spatial.data?.sharedWorld;
+    if (templateMode || !chatId || !draft || dirty || sharedStatus?.mode !== "linked") return;
+    const confirmed = await confirmAction({
+      title: "Fork an independent map?",
+      message: `Detach this chat from “${sharedStatus.worldName ?? "the shared world"}” and keep its current map as an independent copy? Future shared-world edits will no longer appear here.`,
+      confirmLabel: "Fork independent copy",
+    });
+    if (!confirmed) return;
+    try {
+      const response = await forkSharedWorld.mutateAsync({
+        chatId,
+        expectedRevision: draft.revision,
+        expectedCurrentLocationId: currentLocationId,
+      });
+      const saved = response.definition;
+      if (!saved) throw new Error("The independent map could not be created.");
+      setBaseDefinition(cloneSpatialDefinition(saved));
+      setDraft(cloneSpatialDefinition(saved));
+      setBaseHierarchyProfile(response.hierarchyProfile);
+      setDraftHierarchyProfile(response.hierarchyProfile);
+      setServerIssues(response.warnings);
+      toast.success("This chat now has an independent map copy.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The linked world could not be forked.");
+      void spatial.refetch();
+    }
+  }, [chatId, confirmAction, currentLocationId, dirty, draft, forkSharedWorld, spatial, templateMode]);
+
   const handleClose = useCallback(async () => {
     if (dirty) {
       const discard = await confirmAction({
-        title: templateMode ? "Discard template changes?" : "Discard map changes?",
+        title: templateMode
+          ? `Discard ${sharedWorldMode ? "shared-world" : "template"} changes?`
+          : "Discard map changes?",
         message: templateMode
-          ? "You have unsaved map template changes. Return to the library and discard them?"
+          ? `You have unsaved ${sharedWorldMode ? "shared-world" : "map template"} changes. Return to the library and discard them?`
           : "You have unsaved world map changes. Leave the editor and discard them?",
         confirmLabel: "Discard changes",
         tone: "destructive",
@@ -1227,43 +1492,51 @@ export function SpatialMapWorkspace({
       if (!discard) return;
     }
     onClose();
-  }, [confirmAction, dirty, onClose, templateMode]);
+  }, [confirmAction, dirty, onClose, sharedWorldMode, templateMode]);
 
-  const handleSave = useCallback(async (enableForFirstSave = false) => {
-    if (!draft || !dirty || issues.length > 0) return;
-    if (templateMode && template) {
-      const name = templateName.trim();
-      if (!name) {
-        toast.error("Give this map template a name before saving.");
-        return;
-      }
-      setConflict(false);
-      try {
-        const saved = await updateTemplate.mutateAsync({
-          id: template.id,
-          expectedRevision: template.revision,
-          name,
-          description: template.description,
-          definition: draft,
-          hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
-        });
-        const savedDefinition = cloneSpatialDefinition(saved.data.definition);
-        const savedProfile = normalizeHierarchyProfile(saved.data.hierarchyProfile, savedDefinition);
-        setBaseDefinition(savedDefinition);
+  const handleSave = useCallback(
+    async (enableForFirstSave = false) => {
+      if (!draft || !dirty || issues.length > 0) return;
+      if (templateMode && libraryRecord) {
+        const name = templateName.trim();
+        if (!name) {
+          toast.error(`Give this ${sharedWorldMode ? "shared world" : "map template"} a name before saving.`);
+          return;
+        }
+        setConflict(false);
+        try {
+          const input = {
+            id: libraryRecord.id,
+            expectedRevision: libraryRecord.revision,
+            name,
+            description: libraryRecord.description,
+            definition: draft,
+            hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+          };
+          const saved = sharedWorldMode
+            ? await updateSharedWorld.mutateAsync(input)
+            : await updateTemplate.mutateAsync(input);
+          const savedDefinition = cloneSpatialDefinition(saved.data.definition);
+          const savedProfile = normalizeHierarchyProfile(saved.data.hierarchyProfile, savedDefinition);
+          setBaseDefinition(savedDefinition);
         setDraft(cloneSpatialDefinition(savedDefinition));
         setBaseHierarchyProfile(savedProfile);
         setDraftHierarchyProfile(savedProfile);
         setTemplateName(saved.name);
-        setBaseTemplateName(saved.name);
-        setSavedFlash(true);
-        onDirtyChange?.(false);
-        toast.success("Map template saved.");
-      } catch (error) {
-        if (error instanceof Error && "status" in error && error.status === 409) setConflict(true);
-        toast.error(error instanceof Error ? error.message : "The map template could not be saved.");
+          setBaseTemplateName(saved.name);
+          setSavedFlash(true);
+          onDirtyChange?.(false);
+          toast.success(sharedWorldMode ? "Shared world updated for every linked chat." : "Map template saved.");
+        } catch (error) {
+          if (error instanceof Error && "status" in error && error.status === 409) setConflict(true);
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : `The ${sharedWorldMode ? "shared world" : "map template"} could not be saved.`,
+          );
+        }
+        return;
       }
-      return;
-    }
     if (!chatId) return;
     const completingFirstMap = enableForFirstSave && baseDefinition === null;
     if (completingFirstMap && !canEnable) return;
@@ -1274,13 +1547,17 @@ export function SpatialMapWorkspace({
     try {
       const response = await updateSpatial.mutateAsync({
         chatId,
-        expectedRevision: baseDefinition?.revision ?? 0,
-        expectedCurrentLocationId: currentLocationId,
-        ...(replacementCurrentLocationId ? { replacementCurrentLocationId } : {}),
-        definition: { ...definitionToSave, ownerMode, revision: baseDefinition?.revision ?? 0 },
-        hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, definitionToSave),
-      });
-      const saved = response.definition;
+          expectedRevision: baseDefinition?.revision ?? 0,
+          expectedCurrentLocationId: currentLocationId,
+          ...(replacementCurrentLocationId ? { replacementCurrentLocationId } : {}),
+          definition: {
+            ...definitionToSave,
+            ownerMode,
+            revision: baseDefinition?.revision ?? 0,
+          },
+          hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, definitionToSave),
+        });
+        const saved = response.definition;
       if (!saved) throw new Error("The server did not return the saved map.");
       setBaseDefinition(cloneSpatialDefinition(saved));
       setDraft(cloneSpatialDefinition(saved));
@@ -1295,39 +1572,49 @@ export function SpatialMapWorkspace({
         setFirstSaveResult({
           locationCount: saved.locations.length,
           startingLocationName: startingLocation?.name ?? "the starting location",
-        });
-      }
-      onDirtyChange?.(false);
-      toast.success(completingFirstMap ? "Map ready for turns." : "World map saved.");
-    } catch (error) {
-      const problem = getSpatialContextProblem(error);
-      setServerIssues(problem.issues);
+          });
+        }
+        onDirtyChange?.(false);
+        toast.success(
+          completingFirstMap
+            ? "Map ready for turns."
+            : response.sharedWorld.pendingChanges
+              ? "Map saved for this chat. Review it, then publish or fork it."
+              : "World map saved.",
+        );
+      } catch (error) {
+        const problem = getSpatialContextProblem(error);
+        setServerIssues(problem.issues);
       if (problem.conflict) {
         setConflict(true);
         void spatial.refetch();
       } else {
-        toast.error(problem.message);
+          toast.error(problem.message);
+        }
       }
-    }
-  }, [
-    baseDefinition,
-    canEnable,
-    chatId,
+    },
+    [
+      baseDefinition,
+      canEnable,
+      chatId,
     currentLocationId,
     dirty,
-    draft,
-    draftHierarchyProfile,
-    issues.length,
-    ownerMode,
-    replacementCurrentLocationId,
-    onDirtyChange,
-    spatial,
-    updateSpatial,
-    updateTemplate,
-    template,
-    templateMode,
-    templateName,
-  ]);
+      draft,
+      draftHierarchyProfile,
+      issues.length,
+      libraryRecord,
+      ownerMode,
+      replacementCurrentLocationId,
+      onDirtyChange,
+      sharedWorldMode,
+      spatial,
+      templateMode,
+      templateName,
+      updateSharedWorld,
+      updateSpatial,
+      updateTemplate,
+    ],
+  );
 
   const reloadServerVersion = useCallback(async () => {
     const result = await spatial.refetch();
@@ -1397,10 +1684,19 @@ export function SpatialMapWorkspace({
           ? "AI map draft applied. Review it, choose a start, then save the template."
           : expandedExistingMap
           ? "AI expansion added to the working map. Review it, then Save."
-          : "AI map draft applied. Review it, choose a start, then enable and save.",
+            : "AI map draft applied. Review it, choose a start, then enable and save.",
       );
     },
-    [applyDraft, baseDefinition, currentLocationId, draft, draftHierarchyProfile, onClearPendingDraftReview, ownerMode, templateMode],
+    [
+      applyDraft,
+      baseDefinition,
+      currentLocationId,
+      draft,
+      draftHierarchyProfile,
+      onClearPendingDraftReview,
+      ownerMode,
+      templateMode,
+    ],
   );
 
   const regenerateFirstMapDraft = useCallback(async () => {
@@ -1449,10 +1745,7 @@ export function SpatialMapWorkspace({
 
   if (!spatial.isError && (spatial.isLoading || !initialized || !draft)) {
     return (
-      <div
-        className="mari-editor-shell flex flex-1 flex-col overflow-hidden"
-        aria-label="Loading world map editor"
-      >
+      <div className="mari-editor-shell flex flex-1 flex-col overflow-hidden" aria-label="Loading world map editor">
         <div className="mari-editor-header">
           <div className="h-9 w-9 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />
           <div className="h-8 w-56 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />
@@ -1510,12 +1803,21 @@ export function SpatialMapWorkspace({
     dirty,
     conflict,
     invalid: issues.length > 0,
-    pending: updateSpatial.isPending || updateTemplate.isPending,
+    pending: updateSpatial.isPending || updateTemplate.isPending || updateSharedWorld.isPending,
     savedFlash,
   });
-  const saveLabel = templateMode ? "Save template" : isFirstMapDraft ? "Enable and save map" : "Save";
+  const saveLabel = sharedWorldMode
+    ? "Update shared world"
+    : templateMode
+      ? "Save template"
+      : isFirstMapDraft
+        ? "Enable and save map"
+        : "Save";
   const localChildren = sortedChildren(draft, enteredParentId);
-  const localMapBackgroundPosition = currentContext?.mapBackgroundPosition ?? { x: 50, y: 50 };
+  const localMapBackgroundPosition = currentContext?.mapBackgroundPosition ?? {
+    x: 50,
+    y: 50,
+  };
   const localBreadcrumb = resolveSpatialBreadcrumb(draft, enteredParentId);
   const conflictDifference = compareSpatialDefinitions(spatial.data?.definition ?? null, draft);
   const archiveRequest = draft.locations.find((location) => location.id === archiveRequestId) ?? null;
@@ -1583,7 +1885,8 @@ export function SpatialMapWorkspace({
               onClick={() => setLayoutEditingMode((value) => (value === "places" ? null : "places"))}
               className={cn(
                 "mari-chrome-control min-h-11 flex-1 justify-center px-3 text-xs sm:flex-none",
-                effectiveLayoutEditingMode === "places" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+                effectiveLayoutEditingMode === "places" &&
+                  "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
               )}
             >
               <Move size="0.75rem" /> {effectiveLayoutEditingMode === "places" ? "Done arranging" : "Arrange map"}
@@ -1595,7 +1898,8 @@ export function SpatialMapWorkspace({
                 onClick={() => setLayoutEditingMode((value) => (value === "background" ? null : "background"))}
                 className={cn(
                   "mari-chrome-control min-h-11 flex-1 justify-center px-3 text-xs sm:flex-none",
-                  effectiveLayoutEditingMode === "background" && "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+                  effectiveLayoutEditingMode === "background" &&
+                    "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
                 )}
               >
                 <ImageIcon size="0.75rem" />
@@ -1617,9 +1921,7 @@ export function SpatialMapWorkspace({
             backgroundEditing={effectiveLayoutEditingMode === "background"}
             onBackgroundMove={queueBackgroundMove}
             editing={effectiveLayoutEditingMode === "places"}
-            onMove={(locationId, placement) =>
-              applyDraft(updateSpatialLocation(draft, locationId, { placement }))
-            }
+            onMove={(locationId, placement) => applyDraft(updateSpatialLocation(draft, locationId, { placement }))}
           />
         ) : localPresentation === "layers" ? (
           <LayerSelector
@@ -1778,7 +2080,7 @@ export function SpatialMapWorkspace({
         <button
           type="button"
           onClick={() => void handleClose()}
-          aria-label={templateMode ? "Back to map templates" : "Back to chat"}
+          aria-label={templateMode ? "Back to map library" : "Back to chat"}
           className="mari-editor-action inline-flex min-h-11 min-w-11"
         >
           <ArrowLeft size="1.125rem" />
@@ -1789,9 +2091,9 @@ export function SpatialMapWorkspace({
         <div className="min-w-0 flex-1">
           {templateMode ? (
             <label className="block max-w-md">
-              <span className="sr-only">Map template name</span>
+              <span className="sr-only">{sharedWorldMode ? "Shared world name" : "Map template name"}</span>
               <input
-                aria-label="Map template name"
+                aria-label={sharedWorldMode ? "Shared world name" : "Map template name"}
                 value={templateName}
                 maxLength={120}
                 onChange={(event) => setTemplateName(event.target.value)}
@@ -1799,7 +2101,9 @@ export function SpatialMapWorkspace({
                 placeholder="Untitled map"
               />
               <span className="block truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">
-                Reusable map template · no chat history
+                {sharedWorldMode
+                  ? `Canonical shared world · ${sharedWorld?.linkedChatCount ?? 0} linked chat${sharedWorld?.linkedChatCount === 1 ? "" : "s"}`
+                  : "Reusable map template · no chat history"}
               </span>
             </label>
           ) : (
@@ -1857,7 +2161,8 @@ export function SpatialMapWorkspace({
               className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
               aria-label="Import world map"
             >
-              {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />} Import
+              {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />}{" "}
+              Import
             </button>
             {!templateMode && onOpenTemplates && (
               <button
@@ -1878,6 +2183,18 @@ export function SpatialMapWorkspace({
                 className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
               >
                 <Save size="0.8125rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
+              </button>
+            )}
+            {!templateMode && spatial.data?.sharedWorld.mode !== "linked" && draft.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void saveAsSharedWorld()}
+                disabled={dirty || createSharedWorld.isPending || linkSharedWorld.isPending}
+                title={dirty ? "Save this chat's map before creating a shared world." : undefined}
+                className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
+              >
+                <Link2 size="0.8125rem" />{" "}
+                {createSharedWorld.isPending || linkSharedWorld.isPending ? "Creating shared world" : "Make shared"}
               </button>
             )}
             {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
@@ -1955,6 +2272,7 @@ export function SpatialMapWorkspace({
               issues.length > 0 ||
               updateSpatial.isPending ||
               updateTemplate.isPending ||
+              updateSharedWorld.isPending ||
               conflict ||
               (!templateMode && isFirstMapDraft && !canEnable)
             }
@@ -2018,7 +2336,8 @@ export function SpatialMapWorkspace({
               className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
               aria-label="Import world map"
             >
-              {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />} Import
+              {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />}{" "}
+              Import
             </button>
             <label
               className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs"
@@ -2056,6 +2375,18 @@ export function SpatialMapWorkspace({
                 <Save size="0.8125rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
               </button>
             )}
+            {!templateMode && spatial.data?.sharedWorld.mode !== "linked" && draft.locations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void saveAsSharedWorld()}
+                disabled={dirty || createSharedWorld.isPending || linkSharedWorld.isPending}
+                title={dirty ? "Save this chat's map before creating a shared world." : undefined}
+                className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
+              >
+                <Link2 size="0.8125rem" />{" "}
+                {createSharedWorld.isPending || linkSharedWorld.isPending ? "Creating shared world" : "Make shared"}
+              </button>
+            )}
             {!templateMode && !isFirstMapDraft && (
               <label className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs">
                 <span>{draft.enabled ? "Map enabled" : "Map disabled"}</span>
@@ -2090,9 +2421,7 @@ export function SpatialMapWorkspace({
         open={aiBuilderOpen}
         definition={draft}
         hierarchyProfile={draftHierarchyProfile}
-        generationPreferences={
-          spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode)
-        }
+        generationPreferences={spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode)}
         currentLocationId={currentLocationId}
         preferredTargetLocationId={selected?.id ?? null}
         hasCommittedSpatialHistory={spatial.data?.hasCommittedSpatialHistory ?? false}
@@ -2125,9 +2454,9 @@ export function SpatialMapWorkspace({
                   </p>
                   <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                     This will send {artworkPreview.requestCount} separate request
-                    {artworkPreview.requestCount === 1 ? "" : "s"} to your image provider. Existing artwork is
-                    reused, nothing is replaced, and each new image becomes both the location reference and its
-                    child-map background. Prompts use the relevant Chat Settings and global image-generation settings.
+                    {artworkPreview.requestCount === 1 ? "" : "s"} to your image provider. Existing artwork is reused,
+                    nothing is replaced, and each new image becomes both the location reference and its child-map
+                    background. Prompts use the relevant Chat Settings and global image-generation settings.
                   </p>
                 </div>
               </div>
@@ -2199,13 +2528,16 @@ export function SpatialMapWorkspace({
                             setArtworkPreview((current) =>
                               current
                                 ? {
-                                    ...current,
-                                    items: current.items.map((candidate) =>
-                                      candidate.id === item.id
-                                        ? { ...candidate, prompt: event.target.value }
-                                        : candidate,
-                                    ),
-                                  }
+                                      ...current,
+                                      items: current.items.map((candidate) =>
+                                        candidate.id === item.id
+                                          ? {
+                                              ...candidate,
+                                              prompt: event.target.value,
+                                            }
+                                          : candidate,
+                                      ),
+                                    }
                                 : current,
                             )
                           }
@@ -2230,13 +2562,16 @@ export function SpatialMapWorkspace({
                             setArtworkPreview((current) =>
                               current
                                 ? {
-                                    ...current,
-                                    items: current.items.map((candidate) =>
-                                      candidate.id === item.id
-                                        ? { ...candidate, negativePrompt: event.target.value }
-                                        : candidate,
-                                    ),
-                                  }
+                                      ...current,
+                                      items: current.items.map((candidate) =>
+                                        candidate.id === item.id
+                                          ? {
+                                              ...candidate,
+                                              negativePrompt: event.target.value,
+                                            }
+                                          : candidate,
+                                      ),
+                                    }
                                 : current,
                             )
                           }
@@ -2283,7 +2618,9 @@ export function SpatialMapWorkspace({
                 type="button"
                 data-marinara-fill-map-artwork
                 onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
-                disabled={artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending}
+                disabled={
+                  artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
+                }
                 className="mari-chrome-control min-h-11 shrink-0 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
               >
                 {artworkProgress || previewGalleryImages.isPending ? (
@@ -2323,7 +2660,9 @@ export function SpatialMapWorkspace({
                 {importIdReport.missing.length === 1 ? " is" : "s are"} missing
               </p>
               <p className="mt-1 leading-relaxed text-amber-200/80">
-                Names are editable labels; campaign history follows the stable IDs. Export this map as a baseline, copy your revised names and details into that file, and keep each matching ID unchanged before importing again.
+                Names are editable labels; campaign history follows the stable IDs. Export this map as a baseline, copy
+                your revised names and details into that file, and keep each matching ID unchanged before importing
+                again.
               </p>
               <ul className="mt-2 grid gap-1 sm:grid-cols-2" aria-label="Missing saved location IDs">
                 {importIdReport.missing.slice(0, 12).map((location) => (
@@ -2336,7 +2675,8 @@ export function SpatialMapWorkspace({
                 <p className="mt-1 text-[0.625rem]">And {importIdReport.missing.length - 12} more missing IDs.</p>
               )}
               <p className="mt-2 text-[0.625rem] leading-relaxed text-amber-200/75">
-                Reusing an old ID for a different conceptual place will make historical messages resolve to that new place.
+                Reusing an old ID for a different conceptual place will make historical messages resolve to that new
+                place.
               </p>
             </div>
             <button
@@ -2420,6 +2760,75 @@ export function SpatialMapWorkspace({
         </section>
       )}
 
+      {!templateMode && !aiBuilderOpen && spatial.data?.sharedWorld.mode === "linked" && (
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-3 border-b px-4 py-3 text-xs",
+            spatial.data.sharedWorld.missing || spatial.data.sharedWorld.conflict
+              ? "border-red-500/25 bg-red-500/10 text-[var(--destructive)]"
+              : spatial.data.sharedWorld.pendingChanges
+                ? "border-amber-500/25 bg-amber-500/10 text-[var(--marinara-editor-text)]"
+                : "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-editor-title)]",
+          )}
+          role={spatial.data.sharedWorld.missing || spatial.data.sharedWorld.conflict ? "alert" : "status"}
+        >
+          <Link2 size="0.875rem" className="shrink-0" />
+          <div className="min-w-52 flex-1">
+            <p className="font-semibold">
+              {spatial.data.sharedWorld.missing
+                ? "Shared world unavailable"
+                : spatial.data.sharedWorld.conflict
+                  ? "Shared world conflict"
+                  : spatial.data.sharedWorld.pendingChanges
+                    ? "Unpublished changes in this chat"
+                    : `Linked to ${spatial.data.sharedWorld.worldName ?? "shared world"}`}
+            </p>
+            <p className="mt-0.5 opacity-80">
+              {spatial.data.sharedWorld.missing
+                ? "The account-owned world was removed or cannot be read. Fork a recovered map or link another world."
+                : spatial.data.sharedWorld.conflict
+                  ? "The canonical world changed after this chat began editing. Fork this version or discard it before continuing."
+                  : spatial.data.sharedWorld.pendingChanges
+                    ? "Review these map edits before publishing them to every linked chat."
+                    : `Revision ${spatial.data.sharedWorld.worldRevision ?? "?"} · ${spatial.data.sharedWorld.linkedChatCount} linked chat${spatial.data.sharedWorld.linkedChatCount === 1 ? "" : "s"}`}
+            </p>
+          </div>
+          {spatial.data.sharedWorld.pendingChanges && !spatial.data.sharedWorld.conflict && (
+            <button
+              type="button"
+              onClick={() => void publishLinkedChanges()}
+              disabled={dirty || publishSharedWorld.isPending}
+              className="mari-chrome-control mari-chrome-control--primary min-h-11 px-3 text-xs disabled:opacity-45"
+            >
+              {publishSharedWorld.isPending ? (
+                <Loader2 size="0.75rem" className="animate-spin" />
+              ) : (
+                <Upload size="0.75rem" />
+              )}
+              Publish changes
+            </button>
+          )}
+          {spatial.data.sharedWorld.pendingChanges && (
+            <button
+              type="button"
+              onClick={() => void discardLinkedChanges()}
+              disabled={dirty || discardSharedWorldDraft.isPending}
+              className="mari-chrome-control min-h-11 px-3 text-xs disabled:opacity-45"
+            >
+              Discard
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void forkLinkedWorld()}
+            disabled={dirty || forkSharedWorld.isPending || spatial.data.sharedWorld.missing}
+            className="mari-chrome-control min-h-11 px-3 text-xs disabled:opacity-45"
+          >
+            <GitFork size="0.75rem" /> Fork independent
+          </button>
+        </div>
+      )}
+
       {!aiBuilderOpen && firstSaveResult && (
         <div
           className="flex flex-wrap items-center gap-3 border-b border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-4 py-3 text-xs text-[var(--marinara-editor-title)]"
@@ -2428,10 +2837,14 @@ export function SpatialMapWorkspace({
         >
           <Check size="0.875rem" className="text-[var(--marinara-chat-chrome-accent)]" />
           <span className="min-w-52 flex-1 font-semibold">
-            Map ready · {firstSaveResult.locationCount}{" "}
-            {firstSaveResult.locationCount === 1 ? "location" : "locations"} · Starting at {firstSaveResult.startingLocationName}
+            Map ready · {firstSaveResult.locationCount} {firstSaveResult.locationCount === 1 ? "location" : "locations"}{" "}
+            · Starting at {firstSaveResult.startingLocationName}
           </span>
-          <button type="button" onClick={() => void handleClose()} className="mari-chrome-control min-h-11 px-3 text-xs">
+          <button
+            type="button"
+            onClick={() => void handleClose()}
+            className="mari-chrome-control min-h-11 px-3 text-xs"
+          >
             Return to chat
           </button>
         </div>
@@ -2446,7 +2859,7 @@ export function SpatialMapWorkspace({
             <AlertCircle size="0.8125rem" />
             <span className="min-w-52 flex-1 font-medium">
               {templateMode
-                ? "This template changed elsewhere. Your working copy is preserved. Return to the library and reopen it."
+                ? `This ${sharedWorldMode ? "shared world" : "template"} changed elsewhere. Your working copy is preserved. Return to the library and reopen it.`
                 : "The map changed elsewhere. Your working copy is preserved."}
             </span>
             {templateMode ? (
@@ -2457,10 +2870,12 @@ export function SpatialMapWorkspace({
               >
                 <ArrowLeft size="0.75rem" /> Return to library
               </button>
-            ) : <><button
-              type="button"
-              onClick={() => void reloadServerVersion()}
-              className="mari-chrome-control min-h-11 px-3 text-xs"
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void reloadServerVersion()}
+                  className="mari-chrome-control min-h-11 px-3 text-xs"
             >
               <RefreshCw size="0.75rem" /> Reload server version
             </button>
@@ -2468,10 +2883,11 @@ export function SpatialMapWorkspace({
               type="button"
               onClick={() => setReviewConflict((value) => !value)}
               className="mari-chrome-control min-h-11 px-3 text-xs"
-            >
-              Review differences
-            </button>
-            </>}
+                >
+                  Review differences
+                </button>
+              </>
+            )}
           </div>
           {!templateMode && reviewConflict && (
             <div className="mt-3 grid gap-2 rounded-lg border border-red-500/20 bg-[var(--background)]/40 p-3 sm:grid-cols-4">
@@ -2548,21 +2964,28 @@ export function SpatialMapWorkspace({
         </div>
       )}
 
-      {!aiBuilderOpen && (draft.locations.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-          <div className="max-w-md text-center">
-            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-accent)]">
-              <MapIcon size="1.25rem" />
-            </span>
-            <h2 className="mt-4 text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
-              {templateMode ? "Create a map template" : "Create a starting location"}
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-              {templateMode
-                ? "Describe a fandom or setting for Maps to draft without a chat, or start manually with one broad place."
-                : "Let AI draft the full hierarchy from the game or chat setup, add a saved template, or start manually with one broad place."}
-            </p>
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
+      {!aiBuilderOpen &&
+        (draft.locations.length === 0 ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+            <div className="max-w-md text-center">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-accent)]">
+                <MapIcon size="1.25rem" />
+              </span>
+              <h2 className="mt-4 text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                {sharedWorldMode
+                  ? "Create a shared world"
+                  : templateMode
+                    ? "Create a map template"
+                    : "Create a starting location"}
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                {templateMode
+                  ? sharedWorldMode
+                    ? "Build the canonical world once, then link Roleplay and Game chats while each keeps its own location and travel history."
+                    : "Describe a fandom or setting for Maps to draft without a chat, or start manually with one broad place."
+                  : "Let AI draft the full hierarchy from the game or chat setup, add a saved template, or start manually with one broad place."}
+              </p>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
               <button
                 type="button"
                 onClick={() => setAiBuilderOpen(true)}

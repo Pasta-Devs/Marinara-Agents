@@ -141,7 +141,7 @@ const features = [
     minEngineVersion: "2.3.5",
     maxEngineExclusive: "3.0.0",
     name: "World Maps",
-    description: "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game.",
+    description: "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, and movement to Roleplay and Game.",
     category: "tracker",
     kind: ["agent", "maps"],
     modes: ["roleplay", "game"],

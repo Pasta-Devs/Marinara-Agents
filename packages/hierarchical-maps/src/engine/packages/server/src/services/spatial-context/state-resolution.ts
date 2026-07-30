@@ -10,11 +10,21 @@ import {
 } from "@marinara-engine/shared";
 import { getPackagePersistence, logger, newId, newTimeSortableId, now } from "./package-runtime.js";
 import { parseSpatialMetadata } from "./metadata.js";
+import {
+  readSpatialSharedWorldLink,
+  resolveSpatialWorldSource,
+  withSpatialSharedWorldDraft,
+} from "./shared-world.service.js";
 import { selectBoundGameMapForLocation } from "./game-map-binding.js";
 
 export type AssistantSpatialDirective =
   | { type: "move"; destinationId: string }
-  | { type: "discover"; name: string; relation: "enter" | "link"; description?: string };
+  | {
+      type: "discover";
+      name: string;
+      relation: "enter" | "link";
+      description?: string;
+    };
 
 export interface SpatialMessageAnchor {
   messageId: string;
@@ -52,31 +62,26 @@ function numberedLayerIdentity(value: string): string | null {
   return match ? `${match[1]!.toLowerCase()} ${match[2]!.toLowerCase()}` : null;
 }
 
-function knownLocationMatches(
-  definition: SpatialContextDefinition,
-  guidance: string,
-): SpatialLocation[] {
+function knownLocationMatches(definition: SpatialContextDefinition, guidance: string): SpatialLocation[] {
   const expected = normalizedLocationName(guidance);
   if (!expected) return [];
   const exact = definition.locations.filter((location) => {
     if (location.status !== "active") return false;
-    const breadcrumb = resolveSpatialBreadcrumb(definition, location.id).map((entry) => entry.name).join(" > ");
+    const breadcrumb = resolveSpatialBreadcrumb(definition, location.id)
+      .map((entry) => entry.name)
+      .join(" > ");
     return normalizedLocationName(location.name) === expected || normalizedLocationName(breadcrumb) === expected;
   });
   if (exact.length > 0) return exact;
   const layerIdentity = numberedLayerIdentity(guidance);
   return layerIdentity
     ? definition.locations.filter(
-        (location) =>
-          location.status === "active" && numberedLayerIdentity(location.name) === layerIdentity,
+        (location) => location.status === "active" && numberedLayerIdentity(location.name) === layerIdentity,
       )
     : [];
 }
 
-function exactGuidanceDestination(
-  definition: SpatialContextDefinition,
-  guidance: string,
-): string | null {
+function exactGuidanceDestination(definition: SpatialContextDefinition, guidance: string): string | null {
   const matches = knownLocationMatches(definition, guidance);
   return matches.length === 1 ? matches[0]!.id : null;
 }
@@ -101,12 +106,20 @@ function addAvailableLink(
             links: existing
               ? location.links.map((link) =>
                   link.targetId === destinationId
-                    ? { ...link, bidirectional: true, state: "available" as const }
+                    ? {
+                        ...link,
+                        bidirectional: true,
+                        state: "available" as const,
+                      }
                     : link,
                 )
               : [
                   ...location.links,
-                  { targetId: destinationId, bidirectional: true, state: "available" as const },
+                  {
+                    targetId: destinationId,
+                    bidirectional: true,
+                    state: "available" as const,
+                  },
                 ],
           },
     ),
@@ -170,9 +183,7 @@ function discoverLocation(
     nextDefinition = linked;
   }
   const parsed = spatialContextDefinitionSchema.safeParse(nextDefinition);
-  return parsed.success
-    ? { definition: parsed.data as SpatialContextDefinition, destinationId }
-    : null;
+  return parsed.success ? { definition: parsed.data as SpatialContextDefinition, destinationId } : null;
 }
 
 export function parseStoredSpatialDefinition(rawMetadata: unknown): SpatialContextDefinition | null {
@@ -194,7 +205,7 @@ export async function resolveEffectiveSpatialState(
   persistence: CapabilityPersistenceSession = getPackagePersistence(),
 ): Promise<EffectiveSpatialState> {
   const chat = await persistence.getChat(chatId);
-  const definition = chat ? parseStoredSpatialDefinition(chat.metadata) : null;
+  const definition = chat ? (await resolveSpatialWorldSource(chat, persistence)).definition : null;
   const storage = persistence.spatialSnapshots;
 
   if (options.exactAnchor) {
@@ -266,17 +277,15 @@ export async function resolveEffectiveSpatialState(
   };
 }
 
-export async function materializeAssistantSpatialState(
-  input: {
-    chatId: string;
-    messageId: string;
-    swipeIndex: number;
-    regenerate: boolean;
-    continuation: boolean;
-    directive?: AssistantSpatialDirective | null;
-    locationGuidance?: string | null;
-  },
-): Promise<SpatialContextSnapshot | null> {
+export async function materializeAssistantSpatialState(input: {
+  chatId: string;
+  messageId: string;
+  swipeIndex: number;
+  regenerate: boolean;
+  continuation: boolean;
+  directive?: AssistantSpatialDirective | null;
+  locationGuidance?: string | null;
+}): Promise<SpatialContextSnapshot | null> {
   const persistence = getPackagePersistence();
   return persistence.withChatLock(input.chatId, async () =>
     persistence.transaction(async (transaction) => {
@@ -305,8 +314,7 @@ export async function materializeAssistantSpatialState(
           resolveSpatialDestinations(definition, state.currentLocationId).map((destination) => destination.id),
         );
         const destination = definition.locations.find(
-          (location) =>
-            location.id === requestedDestinationId && location.status === "active",
+          (location) => location.id === requestedDestinationId && location.status === "active",
         );
         if (destination && destination.id !== state.currentLocationId) {
           if (!reachable.has(destination.id)) {
@@ -328,13 +336,11 @@ export async function materializeAssistantSpatialState(
         if (discovered) {
           definition = discovered.definition;
           destinationId = discovered.destinationId;
-          transitionApplied = destinationId !== state.currentLocationId || definition.revision !== state.definition.revision;
+          transitionApplied =
+            destinationId !== state.currentLocationId || definition.revision !== state.definition.revision;
         }
       } else if (input.locationGuidance) {
-        const guidedDestinationId = exactGuidanceDestination(
-          definition,
-          input.locationGuidance,
-        );
+        const guidedDestinationId = exactGuidanceDestination(definition, input.locationGuidance);
         if (guidedDestinationId && guidedDestinationId !== state.currentLocationId) {
           const reachable = new Set(
             resolveSpatialDestinations(definition, state.currentLocationId).map((destination) => destination.id),
@@ -355,18 +361,35 @@ export async function materializeAssistantSpatialState(
       const metadata = parseSpatialMetadata(chat.metadata);
       let nextMetadata = metadata;
       if (definition.revision !== state.definition.revision) {
-        nextMetadata = { ...nextMetadata, spatialContext: definition };
+        const link = readSpatialSharedWorldLink(metadata);
+        if (link) {
+          const source = await resolveSpatialWorldSource(chat, transaction);
+          nextMetadata = withSpatialSharedWorldDraft(
+            nextMetadata,
+            link,
+            link.draft?.baseWorldRevision ?? source.world?.revision ?? state.definition.revision,
+            definition,
+            source.hierarchyProfile,
+            now(),
+          );
+        } else {
+          nextMetadata = { ...nextMetadata, spatialContext: definition };
+        }
       }
       if (chat.mode === "game" && transitionApplied) {
         nextMetadata = selectBoundGameMapForLocation(nextMetadata, definition, destinationId);
       }
       if (nextMetadata !== metadata) {
-        await transaction.updateChatMetadata({ chatId: input.chatId, metadata: nextMetadata, updatedAt: now() });
+        await transaction.updateChatMetadata({
+          chatId: input.chatId,
+          metadata: nextMetadata,
+          updatedAt: now(),
+        });
       }
 
       const transitionCommandId = transitionApplied
         ? `assistant:${input.messageId}:${input.swipeIndex}`.slice(0, 200)
-        : existingAtAnchor?.transitionCommandId ?? null;
+        : (existingAtAnchor?.transitionCommandId ?? null);
       const snapshot = await transaction.spatialSnapshots.replaceAtAnchor({
         id: newTimeSortableId(),
         chatId: input.chatId,

@@ -12,6 +12,8 @@ export const GENERATION_PREFERENCES_VERSION = 3 as const;
 export const GENERATION_PROMPT_LIBRARIES_VERSION = 1 as const;
 export const TURN_PROMPT_TEMPLATES_VERSION = 1 as const;
 export const SPATIAL_MAP_TEMPLATE_VERSION = 1 as const;
+export const SPATIAL_SHARED_WORLD_VERSION = 1 as const;
+export const SPATIAL_SHARED_WORLD_LINK_VERSION = 1 as const;
 export const GLOBAL_GALLERY_SPATIAL_REFERENCE_PREFIX = "global-gallery:";
 export const DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID = "default";
 export const SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY = "spatialMapGenerationPromptLibraries";
@@ -221,6 +223,51 @@ export interface SpatialMapTemplateRecord {
   updatedAt: string;
 }
 
+/** One account-owned canonical map definition shared by linked Roleplay and Game chats. */
+export interface SpatialSharedWorldData {
+  version: typeof SPATIAL_SHARED_WORLD_VERSION;
+  definition: SpatialContextDefinition;
+  hierarchyProfile: SpatialHierarchyProfile;
+}
+
+export interface SpatialSharedWorldRecord {
+  id: string;
+  name: string;
+  description: string;
+  data: SpatialSharedWorldData;
+  revision: number;
+  linkedChatCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpatialSharedWorldDraft {
+  baseWorldRevision: number;
+  definition: SpatialContextDefinition;
+  hierarchyProfile: SpatialHierarchyProfile;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpatialSharedWorldLink {
+  version: typeof SPATIAL_SHARED_WORLD_LINK_VERSION;
+  worldId: string;
+  linkedAt: string;
+  draft?: SpatialSharedWorldDraft;
+}
+
+export interface SpatialSharedWorldStatus {
+  mode: "independent" | "linked";
+  worldId: string | null;
+  worldName: string | null;
+  worldRevision: number | null;
+  linkedChatCount: number;
+  pendingChanges: boolean;
+  pendingBaseRevision: number | null;
+  conflict: boolean;
+  missing: boolean;
+}
+
 export interface SpatialGenerationPreferences {
   version: typeof GENERATION_PREFERENCES_VERSION;
   activeOptionId: string;
@@ -247,6 +294,7 @@ export interface SpatialTurnPromptTemplates {
 export interface MapsSpatialContextResponse extends SpatialContextResponse {
   hierarchyProfile: SpatialHierarchyProfile;
   generationPreferences: SpatialGenerationPreferences;
+  sharedWorld: SpatialSharedWorldStatus;
 }
 
 const hierarchyIdSchema = z
@@ -319,7 +367,10 @@ const spatialGenerationCustomVariableNameSchema = z
   .trim()
   .min(1)
   .max(80)
-  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u, "Start with a letter or underscore, then use only letters, numbers, or underscores.");
+  .regex(
+    /^[A-Za-z_][A-Za-z0-9_]*$/u,
+    "Start with a letter or underscore, then use only letters, numbers, or underscores.",
+  );
 
 export const spatialGenerationCustomVariableSchema = z
   .object({
@@ -548,7 +599,11 @@ export const HIERARCHY_TEMPLATES: Array<{
     name: "Dungeon tower",
     path: "Dungeon Tower → Floors → Rooms and Boss Arenas",
     types: [
-      { id: "type_dungeon_tower", label: "Dungeon Tower", baseKind: "building" },
+      {
+        id: "type_dungeon_tower",
+        label: "Dungeon Tower",
+        baseKind: "building",
+      },
       { id: "type_floor", label: "Floor", baseKind: "floor" },
       { id: "type_room", label: "Room", baseKind: "room" },
       { id: "type_boss_arena", label: "Boss Arena", baseKind: "room" },
@@ -588,8 +643,7 @@ export function defaultGenerationPreferences(ownerMode: SpatialOwnerMode = "role
         guidance: BUILT_IN_GENERATION_GUIDANCE,
         customVariables: [],
         prompts: {
-          draftSystem:
-            ownerMode === "game" ? GAME_DRAFT_SYSTEM_PROMPT_TEMPLATE : ROLEPLAY_DRAFT_SYSTEM_PROMPT_TEMPLATE,
+          draftSystem: ownerMode === "game" ? GAME_DRAFT_SYSTEM_PROMPT_TEMPLATE : ROLEPLAY_DRAFT_SYSTEM_PROMPT_TEMPLATE,
           draftUser: DRAFT_USER_PROMPT_TEMPLATE,
           expansionSystem:
             ownerMode === "game" ? GAME_EXPANSION_SYSTEM_PROMPT_TEMPLATE : ROLEPLAY_EXPANSION_SYSTEM_PROMPT_TEMPLATE,
@@ -630,7 +684,11 @@ export function normalizeGenerationPreferences(
     .strict()
     .safeParse(value);
   const defaults = defaultGenerationPreferences(ownerMode);
-  const legacy = legacyVersionTwo.success ? legacyVersionTwo.data : legacyVersionOne.success ? legacyVersionOne.data : null;
+  const legacy = legacyVersionTwo.success
+    ? legacyVersionTwo.data
+    : legacyVersionOne.success
+      ? legacyVersionOne.data
+      : null;
   if (!legacy || legacy.mode === "default") return defaults;
   const defaultOption = defaults.options[0]!;
   const customOption: SpatialGenerationPromptOption = {
@@ -832,9 +890,7 @@ export function createSpatialMapTemplateData(
     locations: definition.locations.map(
       ({ referenceImageId, useReferenceImage, mapBackgroundImageId, mapBackgroundPosition, ...location }) => ({
         ...location,
-        ...(isGlobalGallerySpatialReferenceId(referenceImageId)
-          ? { referenceImageId, useReferenceImage }
-          : {}),
+        ...(isGlobalGallerySpatialReferenceId(referenceImageId) ? { referenceImageId, useReferenceImage } : {}),
         ...(isGlobalGallerySpatialReferenceId(mapBackgroundImageId)
           ? { mapBackgroundImageId, mapBackgroundPosition }
           : {}),
@@ -848,10 +904,52 @@ export function createSpatialMapTemplateData(
   };
 }
 
+export function createSpatialSharedWorldData(
+  definition: SpatialContextDefinition,
+  hierarchyProfile: SpatialHierarchyProfile,
+): SpatialSharedWorldData {
+  const template = createSpatialMapTemplateData(definition, hierarchyProfile);
+  const sharedDefinition: SpatialContextDefinition = {
+    ...template.definition,
+    enabled: true,
+  };
+  return {
+    version: SPATIAL_SHARED_WORLD_VERSION,
+    definition: sharedDefinition,
+    hierarchyProfile: normalizeHierarchyProfile(template.hierarchyProfile, sharedDefinition),
+  };
+}
+
+export function instantiateSpatialSharedWorld(
+  world: SpatialSharedWorldData,
+  ownerMode: SpatialOwnerMode,
+  revision: number,
+): {
+  definition: SpatialContextDefinition;
+  hierarchyProfile: SpatialHierarchyProfile;
+} {
+  const instantiated = instantiateSpatialMapTemplate(
+    {
+      version: SPATIAL_MAP_TEMPLATE_VERSION,
+      definition: world.definition,
+      hierarchyProfile: world.hierarchyProfile,
+    },
+    ownerMode,
+  );
+  const definition = { ...instantiated.definition, revision };
+  return {
+    definition,
+    hierarchyProfile: normalizeHierarchyProfile(instantiated.hierarchyProfile, definition),
+  };
+}
+
 export function instantiateSpatialMapTemplate(
   template: SpatialMapTemplateData,
   ownerMode: SpatialOwnerMode,
-): { definition: SpatialContextDefinition; hierarchyProfile: SpatialHierarchyProfile } {
+): {
+  definition: SpatialContextDefinition;
+  hierarchyProfile: SpatialHierarchyProfile;
+} {
   const definition: SpatialContextDefinition = {
     ...template.definition,
     ownerMode,

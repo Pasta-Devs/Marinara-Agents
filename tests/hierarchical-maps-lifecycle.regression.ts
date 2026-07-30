@@ -1458,6 +1458,294 @@ async function main() {
       },
       204,
     );
+    const verifySharedWorldLifecycle = async () => {
+      const sharedWorldArtworkReference = "global-gallery:lifecycle-shared-world-art";
+      const sharedWorldDefinition = {
+        ...definition,
+        locations: definition.locations.map((location, index) =>
+          index === 0
+            ? {
+                ...location,
+                referenceImageId: sharedWorldArtworkReference,
+                useReferenceImage: true,
+                mapBackgroundImageId: sharedWorldArtworkReference,
+                mapBackgroundPosition: { x: 24, y: 76 },
+              }
+            : location,
+        ),
+      };
+      const sharedWorldHierarchyProfile = {
+        version: 1,
+        mode: "custom",
+        name: "Lifecycle shared-world types",
+        types: [
+          { id: "type_region", label: "Region", baseKind: "region" },
+          {
+            id: "type_settlement",
+            label: "Settlement",
+            baseKind: "settlement",
+          },
+          { id: "type_place", label: "Place", baseKind: "place" },
+          { id: "type_building", label: "Building", baseKind: "building" },
+          { id: "type_floor", label: "Floor", baseKind: "floor" },
+          { id: "type_room", label: "Room", baseKind: "room" },
+        ],
+        locationTypeIds: Object.fromEntries(
+          sharedWorldDefinition.locations.map((location) => [location.id, `type_${location.kind}`]),
+        ),
+      };
+      const sharedWorld = (await expectJson(
+        app,
+        {
+          method: "POST",
+          url: "/api/chats/spatial-context/shared-worlds",
+          headers: csrfHeaders,
+          payload: {
+            name: "Lifecycle durable world",
+            description: "One canonical map shared by otherwise independent chats.",
+            definition: sharedWorldDefinition,
+            hierarchyProfile: sharedWorldHierarchyProfile,
+          },
+        },
+        201,
+      )) as {
+        id: string;
+        name: string;
+        revision: number;
+        linkedChatCount: number;
+        data: { definition: typeof definition; hierarchyProfile: unknown };
+      };
+      assert.equal(sharedWorld.revision, 1);
+      assert.equal(sharedWorld.linkedChatCount, 0);
+      assert.equal(
+        sharedWorld.data.definition.locations[0]?.referenceImageId,
+        sharedWorldArtworkReference,
+        "Shared worlds must retain reusable Global Gallery artwork references",
+      );
+
+      const createSharedWorldChat = async (name: string) => {
+        const chat = (await expectJson(app, {
+          method: "POST",
+          url: "/api/chats",
+          headers: csrfHeaders,
+          payload: { name, mode: "roleplay", characterIds: [] },
+        })) as { id: string };
+        await expectJson(app, {
+          method: "PATCH",
+          url: `/api/chats/${chat.id}/metadata`,
+          headers: csrfHeaders,
+          payload: {
+            enableAgents: true,
+            activeAgentIds: ["hierarchical-maps"],
+          },
+        });
+        return chat;
+      };
+      const firstLinkedChat = await createSharedWorldChat("Lifecycle linked world A");
+      const secondLinkedChat = await createSharedWorldChat("Lifecycle linked world B");
+      const linkChat = async (chatId: string) =>
+        expectJson(app, {
+          method: "POST",
+          url: `/api/chats/${chatId}/spatial-context/shared-world/link`,
+          headers: csrfHeaders,
+          payload: {
+            worldId: sharedWorld.id,
+            expectedRevision: 0,
+            expectedCurrentLocationId: null,
+          },
+        }) as Promise<{
+          definition: typeof definition & { revision: number };
+          currentLocationId: string | null;
+          hierarchyProfile: unknown;
+          sharedWorld: {
+            mode: "linked" | "independent";
+            pendingChanges: boolean;
+            conflict: boolean;
+            linkedChatCount: number;
+            worldRevision: number | null;
+          };
+        }>;
+      const firstLinked = await linkChat(firstLinkedChat.id);
+      const secondLinked = await linkChat(secondLinkedChat.id);
+      assert.equal(firstLinked.currentLocationId, "lifecycle_world");
+      assert.equal(firstLinked.sharedWorld.mode, "linked");
+      assert.equal(secondLinked.sharedWorld.linkedChatCount, 2);
+
+      const firstDraftDefinition = {
+        ...firstLinked.definition,
+        locations: firstLinked.definition.locations.map((location) =>
+          location.id === "lifecycle_harbor"
+            ? {
+                ...location,
+                description: "A harbor expanded in the first linked chat.",
+              }
+            : location,
+        ),
+      };
+      const firstDraft = (await expectJson(app, {
+        method: "PUT",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: firstLinked.definition.revision,
+          expectedCurrentLocationId: firstLinked.currentLocationId,
+          definition: firstDraftDefinition,
+          hierarchyProfile: firstLinked.hierarchyProfile,
+        },
+      })) as typeof firstLinked;
+      assert.equal(firstDraft.sharedWorld.pendingChanges, true);
+      const blockedRelink = (await expectJson(
+        app,
+        {
+          method: "POST",
+          url: `/api/chats/${firstLinkedChat.id}/spatial-context/shared-world/link`,
+          headers: csrfHeaders,
+          payload: {
+            worldId: sharedWorld.id,
+            expectedRevision: firstDraft.definition.revision,
+            expectedCurrentLocationId: firstDraft.currentLocationId,
+          },
+        },
+        409,
+      )) as { code: string };
+      assert.equal(blockedRelink.code, "spatial_shared_world_pending_changes");
+      const untouchedSecond = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context`,
+      })) as typeof secondLinked;
+      assert.notEqual(
+        untouchedSecond.definition.locations.find((location) => location.id === "lifecycle_harbor")?.description,
+        "A harbor expanded in the first linked chat.",
+        "Linked-chat map edits must remain private until explicitly published",
+      );
+
+      const published = (await expectJson(app, {
+        method: "POST",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context/shared-world/publish`,
+        headers: csrfHeaders,
+        payload: {
+          expectedWorldRevision: sharedWorld.revision,
+          definition: firstDraft.definition,
+          hierarchyProfile: firstDraft.hierarchyProfile,
+        },
+      })) as {
+        world: typeof sharedWorld;
+        spatial: typeof firstLinked;
+      };
+      assert.equal(published.world.revision, 2);
+      assert.equal(published.spatial.sharedWorld.pendingChanges, false);
+      const updatedSecond = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context`,
+      })) as typeof secondLinked;
+      assert.equal(
+        updatedSecond.definition.locations.find((location) => location.id === "lifecycle_harbor")?.description,
+        "A harbor expanded in the first linked chat.",
+        "Publishing must update the canonical definition read by every linked chat",
+      );
+
+      const conflictingDraftDefinition = {
+        ...published.spatial.definition,
+        locations: published.spatial.definition.locations.map((location) =>
+          location.id === "lifecycle_harbor" ? { ...location, modelMemory: "An unpublished local secret." } : location,
+        ),
+      };
+      const conflictingDraft = (await expectJson(app, {
+        method: "PUT",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: published.spatial.definition.revision,
+          expectedCurrentLocationId: published.spatial.currentLocationId,
+          definition: conflictingDraftDefinition,
+          hierarchyProfile: published.spatial.hierarchyProfile,
+        },
+      })) as typeof firstLinked;
+      const canonicalUpdate = (await expectJson(app, {
+        method: "PUT",
+        url: `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: published.world.revision,
+          name: published.world.name,
+          description: "Canonical edit made while a linked chat has a draft.",
+          definition: published.world.data.definition,
+          hierarchyProfile: published.world.data.hierarchyProfile,
+        },
+      })) as typeof sharedWorld;
+      assert.equal(canonicalUpdate.revision, 3);
+      const conflicted = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context`,
+      })) as typeof firstLinked;
+      assert.equal(conflicted.sharedWorld.conflict, true);
+      const rejectedPublish = (await expectJson(
+        app,
+        {
+          method: "POST",
+          url: `/api/chats/${firstLinkedChat.id}/spatial-context/shared-world/publish`,
+          headers: csrfHeaders,
+          payload: {
+            expectedWorldRevision: canonicalUpdate.revision,
+            definition: conflictingDraft.definition,
+            hierarchyProfile: conflictingDraft.hierarchyProfile,
+          },
+        },
+        409,
+      )) as { code: string };
+      assert.equal(rejectedPublish.code, "spatial_shared_world_conflict");
+
+      const forked = (await expectJson(app, {
+        method: "POST",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context/shared-world/fork`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: conflictingDraft.definition.revision,
+          expectedCurrentLocationId: conflictingDraft.currentLocationId,
+        },
+      })) as typeof firstLinked;
+      assert.equal(forked.sharedWorld.mode, "independent");
+      assert.equal(
+        forked.definition.locations.find((location) => location.id === "lifecycle_harbor")?.modelMemory,
+        "An unpublished local secret.",
+      );
+
+      const inUseDelete = (await expectJson(
+        app,
+        {
+          method: "DELETE",
+          url: `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+          headers: csrfHeaders,
+          payload: { expectedRevision: canonicalUpdate.revision },
+        },
+        409,
+      )) as { code: string; linkedChatCount: number };
+      assert.equal(inUseDelete.code, "spatial_shared_world_in_use");
+      assert.equal(inUseDelete.linkedChatCount, 1);
+
+      const independentSecond = (await expectJson(app, {
+        method: "POST",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context/shared-world/independent-copy`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: canonicalUpdate.revision,
+          expectedCurrentLocationId: updatedSecond.currentLocationId,
+          definition: updatedSecond.definition,
+          hierarchyProfile: updatedSecond.hierarchyProfile,
+        },
+      })) as typeof secondLinked;
+      assert.equal(independentSecond.sharedWorld.mode, "independent");
+      await expectJson(
+        app,
+        {
+          method: "DELETE",
+          url: `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+          headers: csrfHeaders,
+          payload: { expectedRevision: canonicalUpdate.revision },
+        },
+        204,
+      );
+    };
     const rewoundGameSource = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${existingGame.id}/spatial-context`,
@@ -2355,6 +2643,7 @@ async function main() {
       },
       204,
     );
+    await verifySharedWorldLifecycle();
     const narratedPrompt = (await expectJson(app, {
       method: "POST",
       url: `/api/chats/${branch.id}/peek-prompt`,
@@ -2719,7 +3008,7 @@ async function main() {
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, shared template artwork, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, shared template artwork, canonical shared worlds, private linked-chat drafts, publish/conflict/fork protection, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);
