@@ -348,6 +348,7 @@
   "ui.longTermMemory.reviewqueue.evidenceAndPreview": "Evidence and preview |",
   "ui.longTermMemory.reviewqueue.filteredToThisSource": "Filtered to this source.",
   "ui.longTermMemory.reviewqueue.loadingPendingReviewDrafts": "Loading pending review drafts.",
+  "ui.longTermMemory.reviewqueue.loadingRejectedSuggestions": "Loading rejected suggestions.",
   "ui.longTermMemory.reviewqueue.modes": "Modes:",
   "ui.longTermMemory.reviewqueue.mutation": "mutation",
   "ui.longTermMemory.reviewqueue.mutationActions": "Mutation actions",

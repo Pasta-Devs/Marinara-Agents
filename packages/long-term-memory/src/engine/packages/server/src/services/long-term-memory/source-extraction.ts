@@ -6,6 +6,7 @@ import {
   type LtmDraftMutation,
   type LtmExtractionOutcome,
   type LtmExtractionResponse,
+  type LtmExtractionDraft,
   type LtmMode,
   type LtmNote,
   type LtmScope,
@@ -196,7 +197,7 @@ export async function finalizeLongTermMemoryExtractionDraft(
     accounting?: LtmExtractionAccounting;
     chatId?: string;
     reviewRequired?: boolean;
-    afterWrite?: (draft: import("../../../../shared/src/features/agents/long-term-memory/schema.js").LtmExtractionDraft) => Promise<void>;
+    afterWrite?: (draft: LtmExtractionDraft) => Promise<void>;
   },
   options: { root?: string; overlay?: Map<string, LtmNote> } = {},
 ) {

@@ -113,14 +113,9 @@ async function commitPreparedLongTermMemorySource(prepared: PreparedSource, opti
     accounting: prepared.accounting,
     reviewRequired: prepared.reviewRequired,
     chatId: prepared.chatId,
-    afterWrite: (draft) =>
-      draft.extractionOutcome?.droppedCandidates.length
-        ? addRejectedSuggestions(draft, options.root).catch((error) => {
-            logger.error(error, "[ltm] Could not persist rejected suggestions");
-            throw error;
-          })
-        : Promise.resolve(),
   }, { root: options.root, overlay: options.overlay });
+  if (draft.extractionOutcome?.droppedCandidates.length)
+    void addRejectedSuggestions(draft, options.root).catch((error) => logger.error(error, "[ltm] Could not persist rejected suggestions"));
   const markCurrent = canMarkCurrent(prepared);
   const note = markCurrent && draft.source.extractionFingerprint
     ? await new LongTermMemoryStorage(options.root).updateNote(prepared.sourceNote.id, { extractionFingerprint: draft.source.extractionFingerprint })

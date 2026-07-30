@@ -454,6 +454,15 @@ async function main() {
       links: [],
     });
     const draftStore = new LongTermMemoryDraftStore(root);
+    const afterWriteFailureDraft = await draftStore.createDraft({
+      source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
+      scope: legacySource.scope,
+      modes: ["roleplay"],
+      response: { summary: "After-write failure proof.", mutations: [] },
+      afterWrite: async () => { throw new Error("after-write fixture failure"); },
+    });
+    assert.ok(await draftStore.getDraft(afterWriteFailureDraft.id), "afterWrite failure must not roll back the draft");
+    await draftStore.deleteDraft(afterWriteFailureDraft.id);
     const suggestionDraft = await draftStore.createDraft({
       source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
       scope: legacySource.scope,

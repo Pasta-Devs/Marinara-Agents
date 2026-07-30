@@ -102,7 +102,7 @@ export class LongTermMemoryDraftStore {
       throw new Error("Long-term memory drafts must be tied to a source note.");
     }
     const sourceNoteId = options.source.sourceNoteId;
-    return withLtmVaultLock(this.root, () =>
+    const { draft, afterWrite } = await withLtmVaultLock(this.root, () =>
       withDraftWriteLock(sourceDraftLockKey(this.root, sourceNoteId), async () => {
         const sourceNote = await this.storage.getNote(sourceNoteId);
         const source = {
@@ -154,7 +154,6 @@ export class LongTermMemoryDraftStore {
         let superseded: LtmExtractionDraft[] = [];
         try {
           superseded = await this.supersedeOlderPendingDrafts(draft);
-          await options.afterWrite?.(draft);
         } catch (error) {
           const rollback = await Promise.allSettled([
             unlink(draftPathForId(draft.id, this.root)),
@@ -169,9 +168,12 @@ export class LongTermMemoryDraftStore {
             throw new AggregateError([error, ...failures], "Long-Term Memory draft creation and rollback both failed.");
           throw error;
         }
-        return draft;
+        return { draft, afterWrite: options.afterWrite };
       }),
     );
+    if (afterWrite)
+      await afterWrite(draft).catch((error) => logger.error(error, "[ltm] Draft afterWrite callback failed"));
+    return draft;
   }
 
   private async supersedeOlderPendingDrafts(replacement: LtmExtractionDraft) {

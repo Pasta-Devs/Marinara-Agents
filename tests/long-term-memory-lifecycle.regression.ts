@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { createServer } from "node:http";
 import {
   existsSync,
   mkdirSync,
@@ -126,6 +127,8 @@ async function main() {
     ) => Promise<{ statusCode: number; body: string; rawPayload: Buffer }>;
     close: () => Promise<void>;
   } | null = null;
+  let browser: { close: () => Promise<void> } | null = null;
+  let browserServer: ReturnType<typeof createServer> | null = null;
   await runWithSafeCleanup("LTM lifecycle", async () => {
     assert.equal(artifactManifest.id, "long-term-memory");
     assert.equal(artifactManifest.version, packageManifest.version);
@@ -134,6 +137,99 @@ async function main() {
       /crypto\.randomUUID/u,
       "The mobile client must not require secure-context-only crypto.randomUUID",
     );
+    const { chromium } = await import(
+      pathToFileURL(join(engineRoot, "node_modules/@playwright/test/index.mjs")).href,
+    );
+    const rejectedSuggestionId = "2a1b5c7d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
+    let savedNote: Record<string, unknown> | null = null;
+    let deletedSuggestionId: string | null = null;
+    browserServer = createServer(async (request, response) => {
+      const url = new URL(request.url ?? "/", "http://127.0.0.1");
+      const send = (status: number, body: unknown, contentType = "application/json") => {
+        const payload = typeof body === "string" ? body : JSON.stringify(body);
+        response.writeHead(status, { "content-type": contentType });
+        response.end(payload);
+      };
+      if (url.pathname === "/")
+        return send(200, `<!doctype html><script type="module" src="/client.js"></script>`, "text/html");
+      if (url.pathname === "/client.js") return send(200, artifactClient, "application/javascript");
+      if (!url.pathname.startsWith("/api/long-term-memory/")) return send(404, {});
+      if (request.method === "GET" && url.pathname.endsWith("/status"))
+        return send(200, {
+          initialized: true,
+          directory: "long-term-memory",
+          notes: { total: 0, byType: {}, byStatus: {} },
+          events: { logAvailable: false, bytes: null },
+          indexes: {
+            health: "healthy", dirty: false, rebuildState: "idle", errors: [], warnings: [],
+            generatedAt: null, sourceHash: null, noteCount: 0, chunkCount: 0,
+            chunkFormatVersion: 1, embeddingsAvailable: false, embeddedChunkCount: 0,
+          },
+        });
+      if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count")) return send(200, { count: 0 });
+      if (request.method === "GET" && url.pathname.endsWith("/scope-targets"))
+        return send(200, { currentScope: null, chats: [], groups: [], characters: [] });
+      if (request.method === "GET" && url.pathname.endsWith("/notes")) return send(200, []);
+      if (request.method === "GET" && url.pathname.endsWith("/rejected-suggestions"))
+        return send(200, {
+          suggestions: [{
+            id: rejectedSuggestionId,
+            fingerprint: "a".repeat(64),
+            source: { sourceNoteId: "source_mobile_recovery" },
+            scope: {},
+            modes: ["roleplay"],
+            candidate: {
+              index: 0, reason: "invalid_format", message: "A recoverable mobile memory.",
+              snippet: "A recoverable mobile memory.",
+              recovery: { noteType: "world", noteId: "world_mobile_recovery", sectionKey: "facts" },
+            },
+            createdAt: "2026-07-30T00:00:00.000Z",
+            lastSeenAt: "2026-07-30T00:00:00.000Z",
+          }],
+          total: 1,
+        });
+      if (request.method === "POST" && url.pathname.endsWith("/notes")) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        savedNote = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        return send(201, { note: { ...savedNote, createdAt: "2026-07-30T00:00:00.000Z", updatedAt: "2026-07-30T00:00:00.000Z", version: 1 } });
+      }
+      if (request.method === "DELETE" && url.pathname.includes("/rejected-suggestions/")) {
+        deletedSuggestionId = decodeURIComponent(url.pathname.split("/").at(-1)!);
+        return send(200, { deleted: true, id: deletedSuggestionId });
+      }
+      return send(404, {});
+    });
+    await new Promise<void>((resolveListen) => browserServer!.listen(0, "127.0.0.1", resolveListen));
+    const address = browserServer.address();
+    assert.ok(address && typeof address !== "string");
+    browser = await chromium.launch();
+    const page = await browser.newPage();
+    await page.addInitScript(() => {
+      Object.defineProperty(Crypto.prototype, "randomUUID", { configurable: true, value: undefined });
+    });
+    await page.goto(`http://127.0.0.1:${address.port}/`);
+    await page.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+    await page.evaluate(() => {
+      const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
+      element.setAttribute("view", "detail");
+      element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version: "1.0.2" } };
+      document.body.append(element);
+    });
+    await page.locator('[data-ltm-surface="detail"]').waitFor();
+    await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
+    await page.locator(`[data-ltm-rejected-suggestion="${rejectedSuggestionId}"]`).waitFor();
+    await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
+    await page.locator("[data-ltm-note-editor]").waitFor();
+    const cleanupRequest = page.waitForRequest(
+      (request) => request.method() === "DELETE" && request.url().includes(`/rejected-suggestions/${rejectedSuggestionId}`),
+    );
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await cleanupRequest;
+    await page.locator('[data-ltm-status="success"]').waitFor();
+    assert.equal((await page.locator('[role="alert"]').count()), 0);
+    assert.equal(deletedSuggestionId, rejectedSuggestionId);
+    assert.equal(savedNote?.type, "world");
     const { capabilityPackageManager } = await importEngine<{
       capabilityPackageManager: {
         install(
@@ -242,6 +338,11 @@ async function main() {
       `Long-Term Memory ${packageManifest.version} lifecycle: install, offline restart, backup inclusion, uninstall, reinstall, and durable-byte preservation ok`,
     );
   }, [
+    () => browser?.close(),
+    () => new Promise<void>((resolveClose, reject) => {
+      if (!browserServer) return resolveClose();
+      browserServer.close((error) => error ? reject(error) : resolveClose());
+    }),
     () => app?.close(),
     () => { globalThis.fetch = originalFetch; },
     () => rmSync(dataDir, { recursive: true, force: true }),

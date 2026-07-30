@@ -720,6 +720,7 @@ export default function ReviewQueue({
   const [running, setRunning] = useState<"accept" | "skip" | null>(null);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [result, setResult] = useState<BatchResult | null>(null);
+  const [deleteSuggestionError, setDeleteSuggestionError] = useState("");
   useEffect(() => {
     setSelectedIds(new Set());
     setEditedById(new Map());
@@ -1010,20 +1011,12 @@ export default function ReviewQueue({
       : window.confirm(localizeUi("ui.longTermMemory.reviewqueue.deleteRejectedSuggestionDescription", { title }));
     if (!confirmed) return;
     setDismissingId(suggestion.id);
+    setDeleteSuggestionError("");
     try {
       await request(`/rejected-suggestions/${encodeURIComponent(suggestion.id)}`, "DELETE");
       await invalidateLtmQueries(queryClient, [queryKeys.rejectedSuggestions]);
     } catch (error) {
-      setResult({
-        action: "skipped",
-        completed: 0,
-        failed: 1,
-        remaining: 0,
-        autoIncluded: 0,
-        indexRebuildFailures: [],
-        messages: [error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed")],
-        cascadeMutationIds: [],
-      });
+      setDeleteSuggestionError(error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"));
     } finally {
       setDismissingId(null);
     }
@@ -1363,7 +1356,15 @@ export default function ReviewQueue({
             : ""}
         </StatusSurface>
       ) : null}
-      {!review.isLoading && !review.isError && !rejectedSuggestions.isLoading && !review.data?.sources.length && !rejectedSuggestions.data?.suggestions.length ? (
+      {deleteSuggestionError ? (
+        <StatusSurface tone="danger">{deleteSuggestionError}</StatusSurface>
+      ) : null}
+      {rejectedSuggestions.isLoading ? (
+        <StatusSurface busy>
+          {localizeUi("ui.longTermMemory.reviewqueue.loadingRejectedSuggestions")}
+        </StatusSurface>
+      ) : null}
+      {!review.isLoading && !review.isError && !rejectedSuggestions.isLoading && !rejectedSuggestions.isError && !review.data?.sources.length && !rejectedSuggestions.data?.suggestions.length ? (
         <StatusSurface>
           {localizeUi(
             "ui.longTermMemory.reviewqueue.noProposedMemoriesNeedReviewYetImportASource",
