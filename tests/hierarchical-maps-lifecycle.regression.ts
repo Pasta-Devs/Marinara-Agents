@@ -2528,7 +2528,10 @@ async function main() {
     const rewoundSource = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${chatId}/spatial-context`,
-    })) as { currentLocationId: string };
+    })) as {
+      currentLocationId: string;
+      definition: { revision: number; locations: Array<{ id: string }> };
+    };
     assert.equal(rewoundSource.currentLocationId, "lifecycle_harbor");
     const unchangedBranch = (await expectJson(app, {
       method: "GET",
@@ -2566,6 +2569,48 @@ async function main() {
       ),
       false,
       "The updated artifact must ignore missing lore links retained only on archived locations",
+    );
+
+    const upgradedSource = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${chatId}/spatial-context`,
+    })) as {
+      currentLocationId: string;
+      definition: { revision: number; locations: Array<{ id: string }> };
+    };
+    const messagesBeforeCorrection = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${chatId}/messages`,
+    })) as Array<{ id: string; content: string }>;
+    const assistantContentBeforeCorrection = messagesBeforeCorrection.find(
+      (message) => message.id === assistantAtHarbor.id,
+    )?.content;
+    assert.ok(assistantContentBeforeCorrection);
+    const correctedSource = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${chatId}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: upgradedSource.definition.revision,
+        expectedCurrentLocationId: "lifecycle_harbor",
+        replacementCurrentLocationId: "lifecycle_world",
+        definition: upgradedSource.definition,
+      },
+    })) as { currentLocationId: string; definition: { revision: number } };
+    assert.equal(
+      correctedSource.currentLocationId,
+      "lifecycle_world",
+      "A saved map edit must support an explicit administrative current-location correction",
+    );
+    assert.equal(correctedSource.definition.revision, upgradedSource.definition.revision + 1);
+    const correctedMessages = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${chatId}/messages`,
+    })) as Array<{ id: string; content: string }>;
+    assert.equal(
+      correctedMessages.find((message) => message.id === assistantAtHarbor.id)?.content,
+      assistantContentBeforeCorrection,
+      "Correcting the current visible state must not rewrite message prose",
     );
     const sharedArtworkReference = "global-gallery:lifecycle-shared-art";
     const templateWithArtwork = (await expectJson(
@@ -2862,7 +2907,7 @@ async function main() {
       currentLocationId: string;
       definition: { locations: Array<{ id: string }> };
     };
-    assert.equal(restarted.currentLocationId, "lifecycle_harbor");
+    assert.equal(restarted.currentLocationId, "lifecycle_world");
     assert.ok(
       restarted.definition.locations.some(
         (location) => location.id === "lifecycle_harbor",
@@ -2934,7 +2979,7 @@ async function main() {
       method: "GET",
       url: `/api/chats/${chatId}/spatial-context`,
     })) as { currentLocationId: string };
-    assert.equal(stateAfterReinstall.currentLocationId, "lifecycle_harbor");
+    assert.equal(stateAfterReinstall.currentLocationId, "lifecycle_world");
 
     await expectJson(
       app,
@@ -2988,7 +3033,7 @@ async function main() {
       currentLocationId: string;
       definition: { locations: Array<{ id: string }> };
     };
-    assert.equal(restoredState.currentLocationId, "lifecycle_harbor");
+    assert.equal(restoredState.currentLocationId, "lifecycle_world");
     assert.ok(
       restoredState.definition.locations.some(
         (location) => location.id === "lifecycle_harbor",

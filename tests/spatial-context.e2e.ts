@@ -2111,6 +2111,48 @@ test("Map editor fills missing location artwork with one image per location", as
       useReferenceImage: true,
       mapBackgroundImageId: "existing-sewers-art",
     });
+
+    const hierarchy = workspace.locator('section[aria-label="Location hierarchy"]:visible');
+    await hierarchy.getByRole("button", { name: "Shrouded Coast region" }).click();
+    const details = workspace.locator('section[aria-label="Location details"]:visible');
+    const uploadReference = details.getByRole("button", { name: "Upload location reference" });
+    await expectMinimumInteractiveSize(uploadReference, "Direct location artwork upload");
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await uploadReference.click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({
+      name: "shrouded-coast-upload.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+    await expect(details.getByRole("img", { name: "Shrouded Coast location reference" })).toBeVisible();
+    await workspace.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(workspace).toContainText("Saved");
+
+    const uploadedMapResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    const uploadedMap = (await uploadedMapResponse.json()) as {
+      definition: { locations: Array<{ id: string; referenceImageId?: string; mapBackgroundImageId?: string }> };
+    };
+    const uploadedWorld = uploadedMap.definition.locations.find((location) => location.id === "ai_world");
+    expect(uploadedWorld?.referenceImageId).toBeTruthy();
+    expect(uploadedWorld?.referenceImageId).not.toBe("generated-map-art-1");
+    expect(uploadedWorld?.mapBackgroundImageId).toBe("generated-map-art-1");
+
+    const galleryResponse = await page.request.get(`/api/gallery/${chat.id}`);
+    const gallery = (await galleryResponse.json()) as Array<{
+      id: string;
+      prompt: string;
+      provider: string;
+      model: string;
+    }>;
+    expect(gallery.find((image) => image.id === uploadedWorld?.referenceImageId)).toMatchObject({
+      prompt: "Uploaded location reference for Shrouded Coast.",
+      provider: "upload",
+      model: "user-upload",
+    });
   } finally {
     await page.unroute(`**/api/gallery/${chat.id}/generate-image/preview`);
     await page.unroute(`**/api/gallery/${chat.id}/generate-image`);
@@ -2739,7 +2781,31 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       "Old Sewers",
     ]);
 
-    let deleteMap = workspace.getByRole("button", { name: "Delete map and start over" });
+    await hierarchy.getByRole("button", { name: "Recharted Coast region" }).click();
+    if (mobile) await page.getByRole("button", { name: "details", exact: true }).click();
+    const details = page.locator('section[aria-label="Location details"]:visible');
+    await expect(details).toContainText(
+      "The starting location is used when a new story begins. The current story location is where this chat is now.",
+    );
+    const correctCurrentLocation = details.getByRole("button", { name: "Set current story location" });
+    await expectMinimumInteractiveSize(correctCurrentLocation, "Correct current story location control");
+    await correctCurrentLocation.click();
+    const currentLocationDialog = page.getByRole("dialog", { name: "Set current story location?" });
+    await expect(currentLocationDialog).toContainText("administrative correction, not narrated travel");
+    await expect(currentLocationDialog).toContainText("does not rewrite earlier messages");
+    await currentLocationDialog.getByRole("button", { name: "Set current location" }).click();
+    await expect(details.getByRole("button", { name: "Current story location" })).toBeDisabled();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const correctedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        return ((await correctedResponse.json()) as { currentLocationId: string }).currentLocationId;
+      })
+      .toBe("ai_world");
+
+    if (mobile) await page.getByRole("button", { name: "hierarchy", exact: true }).click();
+
+    let replaceMap = workspace.getByRole("button", { name: "Replace map or start over" });
     if (mobile) {
       const header = workspace.locator(":scope > .mari-editor-header");
       const moreActions = header.getByRole("button", { name: "More map actions" });
@@ -2774,30 +2840,42 @@ test("AI map builder previews a validated local draft before save", async ({ pag
         mobileActions.getByRole("button", { name: "Add a saved map template" }),
         "Mobile map templates action",
       );
-      deleteMap = mobileActions.getByRole("button", { name: "Delete map and start over" });
+      replaceMap = mobileActions.getByRole("button", { name: "Replace map or start over" });
     } else {
       await expect(workspace.getByRole("button", { name: "More map actions" })).toHaveCount(0);
     }
-    await expectMinimumInteractiveSize(deleteMap, "Delete map control");
-    await deleteMap.click();
+    await expectMinimumInteractiveSize(replaceMap, "Replace map control");
+    await replaceMap.click();
+    const replacePanel = workspace.getByRole("region", { name: "Replace the current map" });
+    await expect(replacePanel).toBeVisible();
+    await expect(replacePanel).toContainText("4 locations");
+    await expect(replacePanel).toContainText("Recharted Coast");
+    await expect(replacePanel.getByRole("button", { name: "Save as template" })).toBeVisible();
+    await expect(replacePanel.getByRole("button", { name: "Export backup" })).toBeVisible();
+    await expect(replacePanel.getByRole("button", { name: "Create with AI" })).toBeVisible();
+    await expect(replacePanel.getByRole("button", { name: "Use template or shared world" })).toBeVisible();
+    await expect(replacePanel.getByRole("button", { name: "Import map file" })).toBeVisible();
+    const startBlank = replacePanel.getByRole("button", { name: "Start blank" });
+    await expectMinimumInteractiveSize(startBlank, "Start blank control");
+    await startBlank.click();
     const deleteDialog = page.getByRole("dialog", { name: "Delete this map and start over?" });
     await expect(deleteDialog).toHaveAttribute("data-marinara-maps-confirmation", "true");
     await expect(deleteDialog).toContainText("Are you sure? This is dangerous.");
     await expect(deleteDialog).toContainText("Deleting replaces 4 saved locations");
     await expect(deleteDialog).toContainText("the deleted map cannot be restored unless you exported a backup");
     const cancelDelete = deleteDialog.getByRole("button", { name: "Go back and backup first", exact: true });
-    const confirmDelete = deleteDialog.getByRole("button", { name: "Delete", exact: true });
+    const confirmDelete = deleteDialog.getByRole("button", { name: "Start blank", exact: true });
     await expect(cancelDelete).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await expect(confirmDelete).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(cancelDelete).toBeFocused();
     await cancelDelete.click();
-    await expect(deleteMap).toBeFocused();
+    await expect(startBlank).toBeFocused();
     await expect(hierarchy.getByRole("button", { name: "Recharted Coast region" })).toBeVisible();
 
-    await deleteMap.click();
-    await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await startBlank.click();
+    await deleteDialog.getByRole("button", { name: "Start blank", exact: true }).click();
     await expect(page.getByText("Fresh map started in the working copy. Review it, then Save.")).toBeVisible();
     await expect(hierarchy.getByRole("button", { name: "New world region" })).toBeVisible();
     await expect(hierarchy.getByRole("button", { name: "Recharted Coast region" })).toHaveCount(0);
@@ -3153,16 +3231,20 @@ test("AI map expansion preserves a campaign map and its current location", async
       "ai_minnow",
     ]);
 
-    const deleteMap = page.getByRole("button", { name: "Delete map and start over" });
-    await expectMinimumInteractiveSize(deleteMap, "History-safe delete map control");
-    await deleteMap.click();
+    const replaceMap = page.getByRole("button", { name: "Replace map or start over" });
+    await expectMinimumInteractiveSize(replaceMap, "History-safe replace map control");
+    await replaceMap.click();
+    const replacePanel = page.getByRole("region", { name: "Replace the current map" });
+    await expect(replacePanel).toContainText("6 locations");
+    const startBlank = replacePanel.getByRole("button", { name: "Start blank" });
+    await startBlank.click();
     const protectedDeleteDialog = page.getByRole("dialog", { name: "Archive this map and start over?" });
     await expect(protectedDeleteDialog).toHaveAttribute("data-marinara-maps-confirmation", "true");
     await expect(protectedDeleteDialog).toContainText("Are you sure? This is dangerous.");
     await expect(protectedDeleteDialog).toContainText("Campaign history uses this map");
     await expect(protectedDeleteDialog).toContainText("6 saved locations cannot be erased");
     await expect(protectedDeleteDialog).toContainText("preserve its stable ID for older messages");
-    await protectedDeleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await protectedDeleteDialog.getByRole("button", { name: "Start blank", exact: true }).click();
     await expect(
       page.getByText("Fresh map started. Previous locations remain archived for campaign history. Review it, then Save."),
     ).toBeVisible();

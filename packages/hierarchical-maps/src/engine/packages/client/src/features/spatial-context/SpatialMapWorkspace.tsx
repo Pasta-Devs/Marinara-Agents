@@ -22,6 +22,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -93,6 +94,8 @@ import {
   type SpatialGalleryImagePromptPreview,
 } from "./use-spatial-resources";
 import { packageApi } from "./package-api";
+import { usePendingSpatialTransition } from "./pending-spatial-transitions";
+import { cancelSpatialRoute, useSpatialRoutePlan } from "./spatial-route-plans";
 import {
   defaultGenerationPreferences,
   defaultHierarchyProfile,
@@ -454,6 +457,7 @@ export function SpatialMapWorkspace({
   const lorebookEntriesQuery = useSpatialLorebookEntries(lorebooks.map((lorebook) => lorebook.id));
   const excludedLorebookIds = useMemo(() => (chat ? getSpatialExcludedLorebookIds(chat) : []), [chat]);
   const [replacementCurrentLocationId, setReplacementCurrentLocationId] = useState<string | null>(null);
+  const [replaceMapOpen, setReplaceMapOpen] = useState(false);
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
   const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
@@ -660,8 +664,21 @@ export function SpatialMapWorkspace({
       (isSpatialDefinitionDirty(baseDefinition, draft) ||
         JSON.stringify(baseHierarchyProfile) !==
           JSON.stringify(normalizeHierarchyProfile(draftHierarchyProfile, draft)) ||
-        (templateMode && templateName.trim() !== baseTemplateName)),
-    [baseDefinition, baseHierarchyProfile, baseTemplateName, draft, draftHierarchyProfile, templateMode, templateName],
+        (templateMode && templateName.trim() !== baseTemplateName) ||
+        (!templateMode &&
+          replacementCurrentLocationId !== null &&
+          replacementCurrentLocationId !== spatial.data?.currentLocationId)),
+    [
+      baseDefinition,
+      baseHierarchyProfile,
+      baseTemplateName,
+      draft,
+      draftHierarchyProfile,
+      replacementCurrentLocationId,
+      spatial.data?.currentLocationId,
+      templateMode,
+      templateName,
+    ],
   );
   const selected = draft?.locations.find((location) => location.id === selectedId) ?? null;
   const currentContext = enteredParentId
@@ -681,6 +698,9 @@ export function SpatialMapWorkspace({
       ? null
       : layoutEditingMode;
   const currentLocationId = templateMode ? null : (spatial.data?.currentLocationId ?? null);
+  const effectiveCurrentLocationId = replacementCurrentLocationId ?? currentLocationId;
+  const routePlan = useSpatialRoutePlan(templateMode ? null : chatId);
+  const pendingTransition = usePendingSpatialTransition(templateMode ? null : chatId);
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
   const missingArtworkLocations = useMemo(
     () =>
@@ -1057,13 +1077,13 @@ export function SpatialMapWorkspace({
 
   const handleDeleteMap = useCallback(async () => {
     const savedDefinition = baseDefinition ?? draft;
-    if (!savedDefinition || savedDefinition.locations.length === 0) return;
+    if (!savedDefinition || savedDefinition.locations.length === 0) return false;
     const preserveExistingLocations = spatial.data?.hasCommittedSpatialHistory ?? false;
     if (preserveExistingLocations && savedDefinition.locations.length >= SPATIAL_CONTEXT_LIMITS.maxLocations) {
       toast.error(
         "This map is at the location limit, so a history-safe new starting location cannot be added. Export it and start a new chat instead.",
       );
-      return;
+      return false;
     }
 
     const locationCount = savedDefinition.locations.length;
@@ -1072,11 +1092,11 @@ export function SpatialMapWorkspace({
       message: preserveExistingLocations
         ? `Are you sure? This is dangerous.\n\nCampaign history uses this map, so its ${locationCount} saved ${locationCount === 1 ? "location" : "locations"} cannot be erased. Delete will instead archive every existing location and preserve its stable ID for older messages, then create one blank New world starting location. Existing routes and details will remain only in the archived hierarchy. Any unsaved map edits are discarded.\n\nNothing changes until you click Save. Export first if you want a separate backup.`
         : `Are you sure? This is dangerous.\n\nDeleting replaces ${locationCount} saved ${locationCount === 1 ? "location" : "locations"} with one blank New world starting location. Existing map names, descriptions, routes, lore links, layout, and other map-only edits will be removed. Any unsaved map edits are also discarded.\n\nNothing changes until you click Save. After Save, the deleted map cannot be restored unless you exported a backup.`,
-      confirmLabel: "Delete",
+      confirmLabel: "Start blank",
       cancelLabel: "Go back and backup first",
       tone: "destructive",
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     const result = startNewSpatialMap(savedDefinition, preserveExistingLocations);
     applyDraft(result.definition);
@@ -1095,6 +1115,7 @@ export function SpatialMapWorkspace({
         ? "Fresh map started. Previous locations remain archived for campaign history. Review it, then Save."
         : "Fresh map started in the working copy. Review it, then Save.",
     );
+    return true;
   }, [
     applyDraft,
     baseDefinition,
@@ -1606,6 +1627,7 @@ export function SpatialMapWorkspace({
       setBaseHierarchyProfile(response.hierarchyProfile);
       setDraftHierarchyProfile(response.hierarchyProfile);
       setServerIssues(response.warnings);
+      if (replacementCurrentLocationId !== null) cancelSpatialRoute(chatId);
       setReplacementCurrentLocationId(null);
       setSavedFlash(true);
       setFirstMapGenerationSession(null);
@@ -1864,6 +1886,8 @@ export function SpatialMapWorkspace({
   const conflictDifference = compareSpatialDefinitions(spatial.data?.definition ?? null, draft);
   const archiveRequest = draft.locations.find((location) => location.id === archiveRequestId) ?? null;
   const archiveReplacementChoices = activeLocations.filter((location) => location.id !== archiveRequestId);
+  const currentLocationName =
+    draft.locations.find((location) => location.id === effectiveCurrentLocationId)?.name ?? "Not set";
 
   const localView = (
     <section className="flex h-full min-h-0 flex-col" aria-label="Local location view">
@@ -2032,7 +2056,7 @@ export function SpatialMapWorkspace({
       definition={draft}
       location={selected}
       issues={issues.filter((issue) => issue.locationId === selected?.id)}
-      currentLocationId={currentLocationId}
+      currentLocationId={effectiveCurrentLocationId}
       hierarchyProfile={draftHierarchyProfile}
       onHierarchyTypeChange={(typeId) => {
         if (!selected) return;
@@ -2049,6 +2073,22 @@ export function SpatialMapWorkspace({
       onOpenLorebook={onOpenLorebook}
       onReparent={(parentId) => selected && applyDraft(reparentSpatialLocation(draft, selected.id, parentId))}
       onSetStarting={() => selected && applyDraft({ ...draft, startingLocationId: selected.id })}
+      onSetCurrent={
+        !templateMode && selected
+          ? () => {
+              const location = selected;
+              void confirmAction({
+                title: "Set current story location?",
+                message: `Correct this chat's current location to ${location.name || "this location"}? This is an administrative correction, not narrated travel. It takes effect when you click Save, clears any queued destination or route, and does not rewrite earlier messages.`,
+                confirmLabel: "Set current location",
+              }).then((confirmed) => {
+                if (!confirmed) return;
+                setReplacementCurrentLocationId(location.id);
+                toast.success("Current story location staged. Click Save to apply it.");
+              });
+            }
+          : undefined
+      }
       onArchive={() => selected && requestArchive(selected.id)}
       gameBinding={
         !templateMode && ownerMode === "game" && chatId
@@ -2242,12 +2282,14 @@ export function SpatialMapWorkspace({
             {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
               <button
                 type="button"
-                onClick={() => void handleDeleteMap()}
+                onClick={() => setReplaceMapOpen((open) => !open)}
                 disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
                 className="mari-editor-action inline-flex min-h-11 px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
-                aria-label="Delete map and start over"
+                aria-label="Replace map or start over"
+                aria-expanded={replaceMapOpen}
+                aria-controls="hierarchical-map-replace-panel"
               >
-                <Trash2 size="0.8125rem" /> Delete map
+                <RefreshCw size="0.8125rem" /> Replace / start over
               </button>
             )}
           </div>
@@ -2443,14 +2485,149 @@ export function SpatialMapWorkspace({
             {!templateMode && baseDefinition && baseDefinition.locations.length > 0 && (
               <button
                 type="button"
-                onClick={() => void handleDeleteMap()}
+                onClick={() => {
+                  setMobileActionsOpen(false);
+                  setReplaceMapOpen(true);
+                }}
                 disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
                 className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
-                aria-label="Delete map and start over"
+                aria-label="Replace map or start over"
+                aria-expanded={replaceMapOpen}
+                aria-controls="hierarchical-map-replace-panel"
               >
-                <Trash2 size="0.8125rem" /> Delete map
+                <RefreshCw size="0.8125rem" /> Replace / start over
               </button>
             )}
+          </div>
+        </section>
+      )}
+
+      {!templateMode && replaceMapOpen && baseDefinition && baseDefinition.locations.length > 0 && (
+        <section
+          id="hierarchical-map-replace-panel"
+          data-marinara-map-replace-panel
+          aria-labelledby="hierarchical-map-replace-title"
+          className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)] px-4 py-4"
+        >
+          <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,1.2fr)]">
+            <div>
+              <div className="flex items-start gap-3">
+                <RefreshCw size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-chat-chrome-accent)]" />
+                <div className="min-w-0 flex-1">
+                  <h2
+                    id="hierarchical-map-replace-title"
+                    className="text-sm font-semibold text-[var(--marinara-chat-chrome-panel-title)]"
+                  >
+                    Replace the current map
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                    Preserve a reusable copy or export a backup first. A blank or AI-generated replacement remains a working copy until you click Save.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReplaceMapOpen(false)}
+                  className="mari-chrome-control h-11 w-11 shrink-0 justify-center p-0"
+                  aria-label="Close replace map options"
+                >
+                  <X size="0.875rem" />
+                </button>
+              </div>
+              <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-3">
+                  <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-panel-muted)]">Current map</dt>
+                  <dd className="mt-1 font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                    {baseDefinition.locations.length} {baseDefinition.locations.length === 1 ? "location" : "locations"}
+                  </dd>
+                </div>
+                <div className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-3">
+                  <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-panel-muted)]">Story location</dt>
+                  <dd className="mt-1 truncate font-semibold text-[var(--marinara-chat-chrome-panel-title)]" title={currentLocationName}>
+                    {currentLocationName}
+                  </dd>
+                </div>
+              </dl>
+              {(routePlan || pendingTransition) && (
+                <p className="mt-3 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[0.6875rem] leading-relaxed text-amber-300">
+                  A queued {routePlan ? `route to ${routePlan.targetLocationName}` : `move to ${pendingTransition?.destinationName}`} will be cleared when the replacement is saved.
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] p-3">
+                <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Preserve this map</h3>
+                <div className="mt-3 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void saveAsTemplate()}
+                    disabled={createTemplate.isPending}
+                    className="mari-chrome-control min-h-11 justify-start px-3 text-xs disabled:opacity-45"
+                  >
+                    <Save size="0.75rem" /> {createTemplate.isPending ? "Saving template" : "Save as template"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleExport()}
+                    disabled={isExporting}
+                    className="mari-chrome-control min-h-11 justify-start px-3 text-xs disabled:opacity-45"
+                  >
+                    {isExporting ? <Loader2 size="0.75rem" className="animate-spin" /> : <Upload size="0.75rem" />}
+                    Export backup
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] p-3">
+                <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Choose a replacement</h3>
+                <div className="mt-3 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReplaceMapOpen(false);
+                      setAiBuilderOpen(true);
+                    }}
+                    className="mari-chrome-control min-h-11 justify-start px-3 text-xs"
+                  >
+                    <Sparkles size="0.75rem" /> Create with AI
+                  </button>
+                  {onOpenTemplates && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplaceMapOpen(false);
+                        onOpenTemplates();
+                      }}
+                      className="mari-chrome-control min-h-11 justify-start px-3 text-xs"
+                    >
+                      <MapIcon size="0.75rem" /> Use template or shared world
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReplaceMapOpen(false);
+                      importInputRef.current?.click();
+                    }}
+                    disabled={isImporting}
+                    className="mari-chrome-control min-h-11 justify-start px-3 text-xs disabled:opacity-45"
+                  >
+                    <Download size="0.75rem" /> Import map file
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleDeleteMap().then((started) => {
+                        if (started) setReplaceMapOpen(false);
+                      });
+                    }}
+                    className="mari-chrome-control mari-chrome-control--danger min-h-11 justify-start px-3 text-xs"
+                  >
+                    <Trash2 size="0.75rem" /> Start blank
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       )}
@@ -3101,7 +3278,7 @@ export function SpatialMapWorkspace({
               definition={draft}
               hierarchyProfile={draftHierarchyProfile}
               selectedId={selectedId}
-              currentLocationId={currentLocationId}
+              currentLocationId={effectiveCurrentLocationId}
               expandSelectedChildren={isFirstMapDraft}
               onSelect={(id) => selectLocation(id, false)}
               onEnter={enterLocation}
@@ -3142,7 +3319,7 @@ export function SpatialMapWorkspace({
                   definition={draft}
                   hierarchyProfile={draftHierarchyProfile}
                   selectedId={selectedId}
-                  currentLocationId={currentLocationId}
+                  currentLocationId={effectiveCurrentLocationId}
                   expandSelectedChildren={isFirstMapDraft}
                   onSelect={selectLocation}
                   onEnter={enterLocation}

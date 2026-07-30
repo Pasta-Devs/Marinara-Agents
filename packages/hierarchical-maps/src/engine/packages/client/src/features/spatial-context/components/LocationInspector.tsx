@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Archive, BookOpen, Check, ImageIcon, Link2, Loader2, MapPin, Plus, RefreshCw, Search, Sparkles, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { Archive, BookOpen, Check, ImageIcon, Link2, Loader2, LocateFixed, MapPin, Plus, RefreshCw, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
 import type {
   Lorebook,
   LorebookEntry,
@@ -19,6 +19,7 @@ import {
 import {
   resolveSpatialArtworkImage,
   spatialArtworkImages,
+  uploadSpatialGalleryImage,
   useGenerateSpatialGalleryImage,
   useSpatialGalleryImages,
   useSpatialGlobalGalleryImages,
@@ -212,6 +213,7 @@ interface LocationInspectorProps {
   onOpenLorebook?: (lorebookId: string) => void;
   onReparent: (parentId: string | null) => void;
   onSetStarting: () => void;
+  onSetCurrent?: () => void;
   onArchive: () => void;
   gameBinding?: {
     chatId: string;
@@ -239,6 +241,7 @@ export function LocationInspector({
   lorebooksLoading = false,
   onOpenLorebook,
   onSetStarting,
+  onSetCurrent,
   onArchive,
   gameBinding,
 }: LocationInspectorProps) {
@@ -249,6 +252,10 @@ export function LocationInspector({
   const [referenceGeneratorOpen, setReferenceGeneratorOpen] = useState(false);
   const [referenceGenerationPrompt, setReferenceGenerationPrompt] = useState("");
   const [generatedReferenceImage, setGeneratedReferenceImage] = useState<SpatialGalleryImage | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [uploadTarget, setUploadTarget] = useState<"reference" | "background" | null>(null);
+  const [uploadingArtwork, setUploadingArtwork] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const galleryImages = useSpatialGalleryImages(chatId, artworkEnabled && allowChatArtwork && chatId.length > 0);
   const globalGalleryImages = useSpatialGlobalGalleryImages(artworkEnabled);
   const artworkImages = useMemo(
@@ -329,6 +336,8 @@ export function LocationInspector({
     setReferenceGeneratorOpen(false);
     setReferenceGenerationPrompt("");
     setGeneratedReferenceImage(null);
+    setUploadTarget(null);
+    setUploadError(null);
   }, [location?.id]);
 
   const openGalleryPicker = (target: "reference" | "background") => {
@@ -351,6 +360,45 @@ export function LocationInspector({
     }
     setGalleryPickerTarget(null);
     setPendingGalleryImageId(null);
+  };
+
+  const beginArtworkUpload = (target: "reference" | "background") => {
+    setGalleryPickerTarget(null);
+    setReferenceGeneratorOpen(false);
+    setUploadError(null);
+    setUploadTarget(target);
+    uploadInputRef.current?.click();
+  };
+
+  const handleArtworkUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !location || !uploadTarget || !allowChatArtwork || !chatId) return;
+    setUploadingArtwork(true);
+    setUploadError(null);
+    try {
+      const uploaded = await uploadSpatialGalleryImage(chatId, file, {
+        prompt: `Uploaded ${uploadTarget === "reference" ? "location reference" : "child map background"} for ${location.name}.`,
+        provider: "upload",
+        model: "user-upload",
+        width: null,
+        height: null,
+      });
+      await galleryImages.refetch();
+      if (uploadTarget === "reference") {
+        onUpdate({ referenceImageId: uploaded.id, useReferenceImage: true });
+      } else {
+        onUpdate({
+          mapBackgroundImageId: uploaded.id,
+          mapBackgroundPosition: location.mapBackgroundPosition ?? { x: 50, y: 50 },
+        });
+      }
+      setUploadTarget(null);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "The image could not be uploaded.");
+    } finally {
+      setUploadingArtwork(false);
+    }
   };
 
   if (!location) {
@@ -512,7 +560,19 @@ export function LocationInspector({
             )}
           </div>
 
-          <div className={cn("mt-3 grid gap-2", allowChatArtwork ? "grid-cols-2" : "grid-cols-1")}>
+          {allowChatArtwork && (
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={(event) => void handleArtworkUpload(event)}
+            />
+          )}
+
+          <div className={cn("mt-3 grid gap-2", allowChatArtwork ? "grid-cols-3" : "grid-cols-1")}>
             <button
               type="button"
               onClick={() => openGalleryPicker("reference")}
@@ -520,6 +580,22 @@ export function LocationInspector({
             >
               <ImageIcon size="0.75rem" /> Choose artwork
             </button>
+            {allowChatArtwork && (
+              <button
+                type="button"
+                disabled={uploadingArtwork}
+                onClick={() => beginArtworkUpload("reference")}
+                className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                aria-label="Upload location reference"
+              >
+                {uploadingArtwork && uploadTarget === "reference" ? (
+                  <Loader2 size="0.75rem" className="animate-spin" />
+                ) : (
+                  <Upload size="0.75rem" />
+                )}{" "}
+                Upload
+              </button>
+            )}
             {allowChatArtwork && (
               <button
                 type="button"
@@ -536,6 +612,7 @@ export function LocationInspector({
               </button>
             )}
           </div>
+          {uploadError && <p className="mt-2 text-[0.6875rem] text-red-400">{uploadError}</p>}
           {location.referenceImageId && (
             <button
               type="button"
@@ -889,7 +966,7 @@ export function LocationInspector({
                     </div>
                   )}
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className={cn("mt-2 grid gap-2", allowChatArtwork ? "grid-cols-3" : "grid-cols-2")}>
                   <button
                     type="button"
                     onClick={() => openGalleryPicker("background")}
@@ -897,6 +974,22 @@ export function LocationInspector({
                   >
                     <ImageIcon size="0.75rem" /> Choose artwork
                   </button>
+                  {allowChatArtwork && (
+                    <button
+                      type="button"
+                      disabled={uploadingArtwork}
+                      onClick={() => beginArtworkUpload("background")}
+                      className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                      aria-label="Upload child map background"
+                    >
+                      {uploadingArtwork && uploadTarget === "background" ? (
+                        <Loader2 size="0.75rem" className="animate-spin" />
+                      ) : (
+                        <Upload size="0.75rem" />
+                      )}{" "}
+                      Upload
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={!location.mapBackgroundImageId}
@@ -1057,6 +1150,9 @@ export function LocationInspector({
         <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] pt-4">
           <h3 className="mb-3 text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Location status</h3>
           <div className="space-y-2">
+            <p className="text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+              The starting location is used when a new story begins. The current story location is where this chat is now.
+            </p>
             <button
               type="button"
               onClick={onSetStarting}
@@ -1066,6 +1162,17 @@ export function LocationInspector({
               <MapPin size="0.75rem" />
               {definition.startingLocationId === location.id ? "Starting location" : "Set as starting location"}
             </button>
+            {onSetCurrent && (
+              <button
+                type="button"
+                onClick={onSetCurrent}
+                disabled={location.status !== "active" || currentLocationId === location.id}
+                className="mari-chrome-control min-h-11 w-full justify-start px-3 text-xs"
+              >
+                <LocateFixed size="0.75rem" />
+                {currentLocationId === location.id ? "Current story location" : "Set current story location"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -1081,8 +1188,8 @@ export function LocationInspector({
               {location.status === "archived" ? "Restore location" : "Archive location"}
             </button>
             {currentLocationId === location.id && (
-              <p className="text-[0.6875rem] leading-relaxed text-amber-400">
-                This is the current runtime location. Choose a replacement before saving an archive.
+              <p className="text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                This is the current story location. Setting another location here corrects the saved state without narrating travel.
               </p>
             )}
           </div>

@@ -394,16 +394,14 @@ export function createSpatialContextService() {
 
         const byId = buildSpatialLocationIndex(definition);
         const currentStillActive = currentLocationId === null || byId.get(currentLocationId)?.status === "active";
-        let nextCurrentLocationId = currentLocationId;
-        if (!currentStillActive) {
-          if (input.replacementCurrentLocationId === undefined) {
-            throw new SpatialContextServiceError(
-              "spatial_replacement_required",
-              "Choose an active replacement before removing or archiving the current location.",
-              409,
-            );
-          }
-          nextCurrentLocationId = input.replacementCurrentLocationId;
+        let nextCurrentLocationId =
+          input.replacementCurrentLocationId === undefined ? currentLocationId : input.replacementCurrentLocationId;
+        if (!currentStillActive && input.replacementCurrentLocationId === undefined) {
+          throw new SpatialContextServiceError(
+            "spatial_replacement_required",
+            "Choose an active replacement before removing or archiving the current location.",
+            409,
+          );
         }
 
         if (nextCurrentLocationId !== null && byId.get(nextCurrentLocationId)?.status !== "active") {
