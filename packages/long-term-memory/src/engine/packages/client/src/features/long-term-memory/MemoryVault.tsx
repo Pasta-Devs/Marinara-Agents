@@ -607,11 +607,6 @@ export default function MemoryVault({
           group: group.label,
         }),
     );
-    const selectedConversationId = selectedGroupId
-      ? `group:${selectedGroupId}`
-      : selectedChat
-        ? `chat:${selectedChat.id}`
-        : "";
     return {
       conversations,
       selectedConversation: conversations.find(
@@ -628,8 +623,7 @@ export default function MemoryVault({
     scopeTargets.data?.chats,
     scopeTargets.data?.groups,
     selectedCharacterId,
-    selectedChat,
-    selectedGroupId,
+    selectedConversationId,
   ]);
   const referenceLabel = (value: string) => {
     const [kind, id] = value.split(/:(.+)/, 2);

@@ -8,7 +8,7 @@ import type {
   LtmIntegrityResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
-import { invalidateLtmQueries, queryKeys, request } from "./api";
+import { invalidateLtmQueries, queryKeys, request, requestHost } from "./api";
 import {
   Button,
   InfoPopover,
@@ -280,11 +280,7 @@ export default function MemorySettings({
   });
   const connections = useQuery({
     queryKey: ["long-term-memory", "language-connections"],
-    queryFn: async () => {
-      const response = await fetch("/api/connections", { cache: "no-store" });
-      if (!response.ok) throw new Error("Could not load language connections");
-      return (await response.json()) as LanguageConnection[];
-    },
+    queryFn: () => requestHost<LanguageConnection[]>("/api/connections"),
   });
   const integrity = useQuery({
     queryKey: queryKeys.integrity,
@@ -1382,6 +1378,20 @@ export default function MemorySettings({
                   </option>
                 ))}
             </select>
+            {connections.isError ? (
+              <StatusSurface tone="danger">
+                {localizeUi(
+                  "ui.longTermMemory.memorysettings.couldNotLoadLanguageConnections",
+                )}{" "}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => void connections.refetch()}
+                >
+                  {localizeUi("ui.longTermMemory.activityview.retry")}
+                </button>
+              </StatusSurface>
+            ) : null}
           </div>
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
             <span

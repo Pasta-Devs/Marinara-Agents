@@ -593,7 +593,7 @@ export function createLongTermMemoryRoutes(runtime: {
             label: chat.name?.trim() || "Untitled chat",
             mode: ltmModeForChatMode(chat.mode),
             groupId: chat.groupId,
-            characterIds: chat.characterIds,
+            characterIds: normalizeLtmChatCharacterIds(chat.characterIds),
           }))
           .sort(
             (left, right) =>
@@ -657,7 +657,7 @@ export function createLongTermMemoryRoutes(runtime: {
               return {
                 id,
                 chatIds: members.map((chat) => chat.id),
-                label: members[0]?.name?.trim() || "Untitled chat",
+                label: members[0]?.name?.trim() || "Untitled group",
               };
             })
             .sort(

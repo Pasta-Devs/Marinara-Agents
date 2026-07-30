@@ -292,7 +292,7 @@ function TransferWorkbench({
       {!destinations.length ? (
         <StatusSurface tone="danger">
           {localizeUi(
-            "ui.longTermMemory.transferworkbench.openLongTermMemoryFromAChatBeforeTransferring",
+            "ui.longTermMemory.transferworkbench.noChatsAvailableAsTransferDestinations",
           )}
         </StatusSurface>
       ) : null}

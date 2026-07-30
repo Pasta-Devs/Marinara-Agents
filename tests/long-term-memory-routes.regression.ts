@@ -2408,6 +2408,17 @@ async function main() {
       modelRequests.at(-1)?.connectionId,
       "saved-extraction-connection",
     );
+    const resetSavedConnection = await app.inject({
+      method: "PUT",
+      url: "/api/long-term-memory/extraction-settings",
+      headers,
+      payload: { connectionId: null },
+    });
+    assert.equal(
+      resetSavedConnection.statusCode,
+      200,
+      resetSavedConnection.body,
+    );
     assert.equal(
       ltmExtractionSettingsSchema.parse(extractionPatch.json()).temperature,
       extractionPatch.json().temperature,
