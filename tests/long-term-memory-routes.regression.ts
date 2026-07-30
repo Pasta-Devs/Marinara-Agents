@@ -2419,6 +2419,7 @@ async function main() {
       200,
       resetSavedConnection.body,
     );
+    assert.equal(resetSavedConnection.json().connectionId, null);
     assert.equal(
       ltmExtractionSettingsSchema.parse(extractionPatch.json()).temperature,
       extractionPatch.json().temperature,

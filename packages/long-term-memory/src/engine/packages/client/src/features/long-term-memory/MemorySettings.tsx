@@ -282,6 +282,11 @@ export default function MemorySettings({
     queryKey: ["long-term-memory", "language-connections"],
     queryFn: () => requestHost<LanguageConnection[]>("/api/connections"),
   });
+  const availableConnections = (connections.data ?? []).filter(
+    (connection) =>
+      connection.provider !== "image_generation" &&
+      connection.provider !== "video_generation",
+  );
   const integrity = useQuery({
     queryKey: queryKeys.integrity,
     queryFn: () => request<LtmIntegrityResponse>("/integrity"),
@@ -1353,9 +1358,9 @@ export default function MemorySettings({
               <option value="">
                 {localizeUi("ui.longTermMemory.sourcesworkspace.automatic")}
               </option>
-              {connections.isSuccess &&
+              {connections.data &&
               extractionFormState.connectionId &&
-              !connections.data.some(
+              !availableConnections.some(
                 (connection) =>
                   connection.id === extractionFormState.connectionId,
               ) ? (
@@ -1365,18 +1370,12 @@ export default function MemorySettings({
                   )}
                 </option>
               ) : null}
-              {(connections.isSuccess ? connections.data : [])
-                .filter(
-                  (connection) =>
-                    connection.provider !== "image_generation" &&
-                    connection.provider !== "video_generation",
-                )
-                .map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {connection.name || connection.provider}
-                    {connection.model ? ` - ${connection.model}` : ""}
-                  </option>
-                ))}
+              {availableConnections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.name || connection.provider}
+                  {connection.model ? ` - ${connection.model}` : ""}
+                </option>
+              ))}
             </select>
             {connections.isError ? (
               <StatusSurface tone="danger">

@@ -2507,6 +2507,9 @@ export default function MemoryVault({
                             mutateScope({
                               chatIds: [
                                 ...new Set([
+                                  ...(draft.scope.chatId
+                                    ? [draft.scope.chatId]
+                                    : []),
                                   ...(draft.scope.chatIds ?? []),
                                   id,
                                 ]),

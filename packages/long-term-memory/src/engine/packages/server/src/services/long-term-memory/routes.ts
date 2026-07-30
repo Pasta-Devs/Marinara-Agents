@@ -657,7 +657,10 @@ export function createLongTermMemoryRoutes(runtime: {
               return {
                 id,
                 chatIds: members.map((chat) => chat.id),
-                label: members[0]?.name?.trim() || "Untitled group",
+                label:
+                  namedChats
+                    .find((chat) => chat.id === members[0]?.id)
+                    ?.label?.trim() || "Untitled group",
               };
             })
             .sort(
