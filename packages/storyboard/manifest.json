@@ -3,7 +3,7 @@
   "id": "storyboard",
   "name": "Storyboard",
   "version": "1.0.0",
-  "description": "Plans and generates still or animated Game storyboards through provider-tuned planner, image, and video prompt chains. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Game mode.",
+  "description": "Plans and generates still or animated storyboards in Game and Roleplay through provider-tuned planner, image, and video prompt chains.",
   "engine": {
     "min": "2.3.5",
     "maxExclusive": "3.0.0"
