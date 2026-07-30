@@ -1526,7 +1526,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
 
     const chatSettingsLibrary = page.locator("[data-marinara-map-template-library]");
     const chatSettingsTemplateCard = chatSettingsLibrary
-      .getByRole("heading", { name: "Reusable Test World" })
+      .getByRole("heading", { name: "Imported Shared Artwork World" })
       .locator("xpath=ancestor::article");
     await expect(chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" })).toBeVisible();
     await chatSettingsTemplateCard.getByRole("button", { name: "Add to chat" }).click();

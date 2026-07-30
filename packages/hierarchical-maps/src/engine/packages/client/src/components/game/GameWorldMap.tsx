@@ -551,7 +551,8 @@ export function GameWorldMap({
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-[var(--marinara-chat-chrome-panel-title)]">{selected.name}</p>
               <p className="line-clamp-2 text-[0.6875rem] leading-4 text-[var(--marinara-chat-chrome-panel-muted)]">
-                {selected.description || `A ${selected.kind} in this world.`}
+                {selected.description ||
+                  `A ${hierarchyTypeForLocation(spatial.hierarchyProfile, selected).label} in this world.`}
               </p>
             </div>
           </div>
