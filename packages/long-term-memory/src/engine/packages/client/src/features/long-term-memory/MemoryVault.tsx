@@ -369,6 +369,7 @@ export default function MemoryVault({
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const client = useQueryClient();
+  const vaultRef = useRef<HTMLElement>(null);
   const detailRef = useRef<HTMLElement>(null);
   const [search, setSearch] = useState("");
   const contextKey = props.chatId ?? "__global__";
@@ -386,6 +387,18 @@ export default function MemoryVault({
   const [draft, setDraft] = useState<LtmNote | null>(null);
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  function setMobilePaneAndFocus(pane: LtmWorkspacePane) {
+    setMobilePane(pane);
+    requestAnimationFrame(() => {
+      const workspace = vaultRef.current?.querySelector<HTMLElement>(
+        "[data-ltm-workspace]",
+      );
+      const target = workspace?.querySelector<HTMLElement>(
+        `[data-ltm-workspace-pane-tab="${pane}"], [data-ltm-workspace-pane="${pane}"] button, [data-ltm-workspace-pane="${pane}"] [tabindex]:not([tabindex="-1"]), [data-ltm-workspace-pane="${pane}"][tabindex]`,
+      );
+      target?.focus({ preventScroll: true });
+    });
+  }
   const [saved, setSaved] = useState("");
   const [isNew, setIsNew] = useState(false);
   const [busy, setBusy] = useState("");
@@ -488,7 +501,7 @@ export default function MemoryVault({
     setSubjectKey("");
     setSectionKey("");
     setChecked(new Set());
-    setMobilePane("navigator");
+    setMobilePaneAndFocus("navigator");
     // Context switches are the only reset boundary. Dedicated effects above
     // update chat labels without discarding an open draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -708,7 +721,7 @@ export default function MemoryVault({
       localizeUi("ui.longTermMemory.memoryvault.reviewRecoveredSuggestion"),
     );
     setDetailsOpen(false);
-    setMobilePane("workbench");
+    setMobilePaneAndFocus("workbench");
   }, [recoveryHandoff?.key]);
   useEffect(() => {
     if (deleteIds) {
@@ -773,7 +786,7 @@ export default function MemoryVault({
     setLinkRelation("involves");
     setSubjectKey("");
     setSectionKey("");
-    setMobilePane("navigator");
+    setMobilePaneAndFocus("navigator");
   }
   async function openNote(
     note: LtmNote,
@@ -802,7 +815,7 @@ export default function MemoryVault({
     setError("");
     setNotice("");
     setDetailsOpen(false);
-    setMobilePane("workbench");
+    setMobilePaneAndFocus("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -828,7 +841,7 @@ export default function MemoryVault({
     setSubjectKey("");
     setSectionKey("");
     setDetailsOpen(false);
-    setMobilePane("workbench");
+    setMobilePaneAndFocus("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -857,7 +870,7 @@ export default function MemoryVault({
     setLinkRelation("involves");
     setSubjectKey("");
     setSectionKey("");
-    setMobilePane("navigator");
+    setMobilePaneAndFocus("navigator");
   }
   async function invalidate() {
     await invalidateLtmQueries(client, [
@@ -1008,7 +1021,7 @@ export default function MemoryVault({
       if (draft && result.deletedIds.includes(draft.id)) {
         setDraft(null);
         setSaved("");
-        setMobilePane("navigator");
+        setMobilePaneAndFocus("navigator");
       }
       setNotice(
         localizeUi(
@@ -1206,7 +1219,7 @@ export default function MemoryVault({
       if (result.deleted) {
         setDraft(null);
         setSaved("");
-        setMobilePane("navigator");
+         setMobilePaneAndFocus("navigator");
         setNotice(
           localizeUi("ui.longTermMemory.memoryvault.memoryRemovedAndDeleted"),
         );
@@ -1316,6 +1329,7 @@ export default function MemoryVault({
 
   return (
     <section
+      ref={vaultRef}
       data-ltm-surface="vault"
       className="space-y-4"
       aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryVault")}
@@ -2018,7 +2032,7 @@ export default function MemoryVault({
                     onClick={() => {
                       const next = !detailsOpen;
                       setDetailsOpen(next);
-                      setMobilePane(next ? "inspector" : "workbench");
+                      setMobilePaneAndFocus(next ? "inspector" : "workbench");
                     }}
                     aria-pressed={detailsOpen}
                     data-ltm-details-toggle

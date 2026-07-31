@@ -19,15 +19,19 @@ type WorkspaceSlot = {
   disabled?: boolean;
 };
 
-type LtmWorkspaceProps = {
+type LtmWorkspaceBaseProps = {
   activeMobilePane: LtmWorkspacePane;
   onMobilePaneChange: (pane: LtmWorkspacePane) => void;
   switcherLabel: string;
-  navigator?: WorkspaceSlot;
   workbench: WorkspaceSlot;
-  inspector?: WorkspaceSlot;
   className?: string;
 };
+
+type LtmWorkspaceProps = LtmWorkspaceBaseProps &
+  (
+    | { navigator?: WorkspaceSlot; inspector?: never }
+    | { navigator: WorkspaceSlot; inspector?: WorkspaceSlot }
+  );
 
 export function LtmWorkspace({
   activeMobilePane,
@@ -230,7 +234,7 @@ export function LtmWorkspace({
           const slot = slots[pane];
           if (!slot) return null;
           const paneId = `${id}-${pane}`;
-          const tabbed = tabPanes.includes(pane);
+          const tabbed = availablePanes.includes(pane);
           return (
             <section
               key={pane}

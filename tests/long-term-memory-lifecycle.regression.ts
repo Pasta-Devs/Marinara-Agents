@@ -167,7 +167,7 @@ async function main() {
             chunkFormatVersion: 1, embeddingsAvailable: false, embeddedChunkCount: 0,
           },
         });
-      if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count")) return send(200, { count: 0 });
+      if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count")) return send(200, { count: 2 });
       if (request.method === "GET" && url.pathname.endsWith("/scope-targets"))
         return send(200, { currentScope: null, chats: [], groups: [], characters: [] });
       if (request.method === "GET" && url.pathname.endsWith("/notes")) return send(200, []);
@@ -313,12 +313,16 @@ async function main() {
           const badgeRect = badge.getBoundingClientRect();
           const buttonRect = badge.closest("button")!.getBoundingClientRect();
           return {
+            destination: badge.closest<HTMLButtonElement>("button")?.dataset.ltmDestination,
             top: badgeRect.top < buttonRect.top + buttonRect.height / 2,
             left: badgeRect.left < buttonRect.left + buttonRect.width / 2,
           };
-        }),
+        }).sort((left, right) => left.destination!.localeCompare(right.destination!)),
       ),
-      [{ top: true, left: true }],
+      [
+        { destination: "review", top: true, left: true },
+        { destination: "vault", top: true, left: true },
+      ],
     );
     assert.equal(
       await page.locator('[data-ltm-workspace-pane-tab="workbench"]').count(),
@@ -405,6 +409,19 @@ async function main() {
     await page.waitForFunction(() =>
       document.activeElement?.getAttribute("data-ltm-workspace-pane-tab") === "workbench",
     );
+    await page.locator('[data-ltm-details-toggle]').click();
+    await page.waitForFunction(() => {
+      const tab = document.querySelector('[data-ltm-workspace-pane-tab="workbench"]');
+      return (
+        (document.activeElement === tab && tab?.getAttribute("aria-selected") === "true") ||
+        document.activeElement?.getAttribute("data-ltm-workspace-pane") === "workbench"
+      );
+    });
+    await page.locator('[data-ltm-details-toggle]').click();
+    await page.waitForFunction(() => {
+      const tab = document.querySelector('[data-ltm-workspace-pane-tab="inspector"]');
+      return document.activeElement === tab && tab?.getAttribute("aria-selected") === "true";
+    });
     await page.evaluate(() => {
       document.documentElement.style.fontSize = "20px";
     });
