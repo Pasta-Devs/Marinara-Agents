@@ -1598,6 +1598,7 @@ async function main() {
       const gameSetupLinked = await linkChat(gameSetupLinkedChat.id);
       assert.equal(gameSetupLinked.currentLocationId, "lifecycle_world");
       assert.equal(gameSetupLinked.sharedWorld.mode, "linked");
+      assert.equal(gameSetupLinked.sharedWorld.worldRevision, sharedWorld.revision);
       const sharedWorldsAfterGameSetupLink = (await expectJson(app, {
         method: "GET",
         url: "/api/chats/spatial-context/shared-worlds",
@@ -1686,6 +1687,7 @@ async function main() {
           headers: csrfHeaders,
           payload: {
             worldId: sharedWorld.id,
+            expectedWorldRevision: sharedWorld.revision,
             expectedRevision: firstDraft.definition.revision,
             expectedCurrentLocationId: firstDraft.currentLocationId,
           },

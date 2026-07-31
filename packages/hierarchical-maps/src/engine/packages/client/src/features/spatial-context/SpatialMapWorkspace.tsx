@@ -1346,6 +1346,7 @@ export function SpatialMapWorkspace({
         await linkSharedWorld.mutateAsync({
           chatId,
           worldId: created.id,
+          expectedWorldRevision: created.revision,
           expectedRevision: draft.revision,
           expectedCurrentLocationId: currentLocationId,
         });
