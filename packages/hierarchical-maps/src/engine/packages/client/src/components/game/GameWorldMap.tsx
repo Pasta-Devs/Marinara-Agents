@@ -589,7 +589,7 @@ export function GameWorldMap({
                     className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2.5 text-left text-[0.6875rem] text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                     aria-label={`Show linked place ${location.name}`}
                   >
-                    <SpatialLocationIcon icon={location.icon} className="text-sm" />
+                    <SpatialLocationIcon icon={location.icon} fallback="⌖" className="text-sm" />
                     <span>
                       <span className="block max-w-32 truncate font-semibold">{location.name}</span>
                       {label && <span className="block max-w-32 truncate text-[0.5625rem] opacity-70">{label}</span>}

@@ -1,4 +1,5 @@
 import { cn } from "../package-utils";
+import { SPATIAL_LOCATION_ICON_MAX_LENGTH } from "../../../../../maps-shared/src/maps-model";
 
 interface SpatialLocationIconProps {
   icon?: string | null;
@@ -13,7 +14,7 @@ export function SpatialLocationIcon({ icon, fallback = "⌖", className }: Spati
     <span
       data-marinara-location-icon
       aria-hidden="true"
-      title={value.length > 16 ? value : undefined}
+      title={value.length > SPATIAL_LOCATION_ICON_MAX_LENGTH ? value : undefined}
       className={cn(
         "inline-block max-w-[2.5em] shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-center align-middle",
         className,

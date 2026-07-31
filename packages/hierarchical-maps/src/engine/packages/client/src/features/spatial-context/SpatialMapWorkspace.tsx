@@ -1062,8 +1062,18 @@ export function SpatialMapWorkspace({
     });
     if (!confirmed) return;
     const next = removeSpatialSubtree(draft, selected.id);
+    const retainedLocationTypeIds = Object.fromEntries(
+      Object.entries(draftHierarchyProfile.locationTypeIds).filter(
+        ([locationId]) => !archivedDeletion.locationIds.has(locationId),
+      ),
+    );
     applyDraft(next);
-    applyHierarchyProfile(normalizeHierarchyProfile(draftHierarchyProfile, next));
+    applyHierarchyProfile(
+      normalizeHierarchyProfile(
+        { ...draftHierarchyProfile, locationTypeIds: retainedLocationTypeIds },
+        next,
+      ),
+    );
     const nextSelection =
       selected.parentId ?? next.locations.find((location) => location.status === "active")?.id ?? null;
     setSelectedId(nextSelection);

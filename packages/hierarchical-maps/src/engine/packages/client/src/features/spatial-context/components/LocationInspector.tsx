@@ -327,21 +327,26 @@ export function LocationInspector({
   const candidateLoreGroups = useMemo(() => {
     const attachedIds = new Set(location?.lorebookEntryIds ?? []);
     const query = loreSearch.trim().toLocaleLowerCase();
+    const entriesByLorebook = new Map<string, LorebookEntry[]>();
+    for (const entry of lorebookEntries) {
+      if (attachedIds.has(entry.id)) continue;
+      const entries = entriesByLorebook.get(entry.lorebookId);
+      if (entries) entries.push(entry);
+      else entriesByLorebook.set(entry.lorebookId, [entry]);
+    }
     return lorebooks
       .map((lorebook) => {
         const bookMatches = lorebook.name.toLocaleLowerCase().includes(query);
         return {
           lorebook,
-          entries: lorebookEntries
-            .filter((entry) => entry.lorebookId === lorebook.id && !attachedIds.has(entry.id))
-            .filter(
-              (entry) =>
-                !query ||
-                bookMatches ||
-                entry.name.toLocaleLowerCase().includes(query) ||
-                entry.description.toLocaleLowerCase().includes(query) ||
-                entry.keys.some((key) => key.toLocaleLowerCase().includes(query)),
-            ),
+          entries: (entriesByLorebook.get(lorebook.id) ?? []).filter(
+            (entry) =>
+              !query ||
+              bookMatches ||
+              entry.name.toLocaleLowerCase().includes(query) ||
+              entry.description.toLocaleLowerCase().includes(query) ||
+              entry.keys.some((key) => key.toLocaleLowerCase().includes(query)),
+          ),
         };
       })
       .filter((group) => group.entries.length > 0);

@@ -22,8 +22,10 @@ const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
 const generationProviderBaseUrl = "http://127.0.0.1:9/v1";
 const csrfHeaders = { "x-marinara-csrf": "1" };
 const originalFetch = globalThis.fetch;
-const worldMapsGuideUrl =
-  "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/hierarchical-maps.md";
+const artifactWorldMapsGuideUrl =
+  "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md";
+const catalogWorldMapsGuideUrl =
+  "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md";
 const defaultTurnPromptTemplate = [
   "Current path: ${currentPath}",
   "Current location ID: ${currentLocationId}",
@@ -80,9 +82,9 @@ function artifactFixture(version: string): ArtifactFixture {
   ) as Manifest;
   assert.equal(manifest.id, "hierarchical-maps");
   assert.equal(manifest.version, version);
-  if (version === "1.2.4") {
+  if (version === "1.2.5") {
     const clientSource = execFileSync("unzip", ["-p", path, "client.js"], { encoding: "utf8" });
-    assert.ok(clientSource.includes(worldMapsGuideUrl));
+    assert.ok(clientSource.includes(artifactWorldMapsGuideUrl));
     assert.match(clientSource, /Open World Maps movement help/u);
     assert.match(clientSource, /Open shared-world guide/u);
   }
@@ -109,6 +111,7 @@ const fixtures = new Map(
     artifactFixture("1.2.2"),
     artifactFixture("1.2.3"),
     artifactFixture("1.2.4"),
+    artifactFixture("1.2.5"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -132,7 +135,7 @@ assert.deepEqual(candidateFixture.manifest.builtAgainst, {
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
-const currentFixture = fixtures.get("1.2.4");
+const currentFixture = fixtures.get("1.2.5");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
   engineVersion: "2.3.5",
@@ -194,8 +197,8 @@ function catalogFixture(version: string) {
           bytes: fixture.bytes.byteLength,
         },
         documentationUrl:
-          version === "1.2.4"
-            ? worldMapsGuideUrl
+          version === "1.2.5"
+            ? catalogWorldMapsGuideUrl
             : "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
       },
     ],
@@ -1552,6 +1555,45 @@ async function main() {
         "Shared worlds must retain reusable Global Gallery artwork references",
       );
 
+      const concurrentSharedWorldPayload = {
+        name: "Lifecycle concurrent world",
+        description: "Only one request may claim this account-owned world name.",
+        definition: sharedWorldDefinition,
+        hierarchyProfile: sharedWorldHierarchyProfile,
+      };
+      const concurrentSharedWorldResponses = await Promise.all([
+        app.inject({
+          method: "POST",
+          url: "/api/chats/spatial-context/shared-worlds",
+          headers: csrfHeaders,
+          payload: concurrentSharedWorldPayload,
+        }),
+        app.inject({
+          method: "POST",
+          url: "/api/chats/spatial-context/shared-worlds",
+          headers: csrfHeaders,
+          payload: concurrentSharedWorldPayload,
+        }),
+      ]);
+      assert.deepEqual(
+        concurrentSharedWorldResponses.map((response) => response.statusCode).sort((left, right) => left - right),
+        [201, 409],
+        "Concurrent shared-world creation must persist only one case-insensitive friendly name",
+      );
+      const concurrentNameConflict = concurrentSharedWorldResponses.find((response) => response.statusCode === 409);
+      assert.ok(concurrentNameConflict);
+      assert.equal(JSON.parse(concurrentNameConflict.body).code, "spatial_shared_world_name_conflict");
+      const sharedWorldsAfterConcurrentCreate = (await expectJson(app, {
+        method: "GET",
+        url: "/api/chats/spatial-context/shared-worlds",
+      })) as Array<{ name: string }>;
+      assert.equal(
+        sharedWorldsAfterConcurrentCreate.filter(
+          (world) => world.name.toLocaleLowerCase() === concurrentSharedWorldPayload.name.toLocaleLowerCase(),
+        ).length,
+        1,
+      );
+
       const createSharedWorldChat = async (name: string, mode: "roleplay" | "game" = "roleplay") => {
         const chat = (await expectJson(app, {
           method: "POST",
@@ -2658,11 +2700,11 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.2.4";
+    catalogVersion = "1.2.5";
     catalogOnline = true;
-    const upgraded124 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded124.version, "1.2.4");
-    assert.equal(upgraded124.previousVersion, "1.1.7");
+    const upgraded125 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded125.version, "1.2.5");
+    assert.equal(upgraded125.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
@@ -3310,7 +3352,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.2.4");
+    assert.equal(reinstalled.version, "1.2.5");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -3398,7 +3440,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.2.4", status: "active", readiness: "ready" }],
+      [{ version: "1.2.5", status: "active", readiness: "ready" }],
     );
 
     console.info(

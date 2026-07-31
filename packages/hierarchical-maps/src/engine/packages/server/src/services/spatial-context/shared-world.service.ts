@@ -27,6 +27,26 @@ export const SPATIAL_SHARED_WORLD_LINK_METADATA_KEY = "spatialSharedWorldLink";
 export const SPATIAL_DEFINITION_METADATA_KEY = "spatialContext";
 export const SPATIAL_HIERARCHY_PROFILE_METADATA_KEY = "spatialContextHierarchyProfile";
 
+let spatialSharedWorldCreationQueue = Promise.resolve();
+
+export function withSpatialSharedWorldCreationLock<T>(operation: () => Promise<T>): Promise<T> {
+  const pending = spatialSharedWorldCreationQueue.then(operation);
+  spatialSharedWorldCreationQueue = pending.then(
+    () => undefined,
+    () => undefined,
+  );
+  return pending;
+}
+
+export async function spatialSharedWorldNameExists(
+  persistence: Pick<CapabilityPersistenceSession, "documents">,
+  name: string,
+): Promise<boolean> {
+  const normalizedName = name.trim().toLocaleLowerCase();
+  const documents = await persistence.documents.list(SPATIAL_SHARED_WORLD_PACKAGE_ID, SPATIAL_SHARED_WORLD_KIND);
+  return documents.some((document) => document.name.trim().toLocaleLowerCase() === normalizedName);
+}
+
 const spatialSharedWorldDataSchema = z
   .object({
     version: z.literal(SPATIAL_SHARED_WORLD_VERSION),

@@ -237,7 +237,6 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_GAME = [
 export const DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE = {
   roleplay: DEFAULT_LTM_EXTRACTION_PROMPT,
   conversation: DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION,
-  visual_novel: DEFAULT_LTM_EXTRACTION_PROMPT,
   game: DEFAULT_LTM_EXTRACTION_PROMPT_GAME,
 } as const satisfies Record<LtmMode, string>;
 
@@ -247,7 +246,6 @@ export const DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE: Record<
 > = {
   roleplay: DEFAULT_LTM_ALLOWED_STREAMS,
   conversation: DEFAULT_LTM_ALLOWED_STREAMS,
-  visual_novel: DEFAULT_LTM_ALLOWED_STREAMS,
   game: DEFAULT_LTM_ALLOWED_STREAMS,
 };
 
@@ -278,19 +276,6 @@ export const DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE: Record<
     tone: "durable conversation register or recurring style only",
     anchor: "recurring motif, planted callback, or inside joke",
   },
-  visual_novel: {
-    timeline_event:
-      "source-summary scene/plot pivot, decision, action, discovery, fight outcome, promise, arrival, or departure; not the live current scene",
-    character_fact:
-      "durable character identity/trait/role/affiliation/backstory/belief/permanent status/development/ability/item/exact voice quote; not ordinary scene action or transient condition",
-    relationship_state:
-      "relationship state or dimension change backed by a caused_by event link or existing relationship note",
-    world_fact: "stable world/lore fact",
-    thread:
-      "unresolved situation, question, tension, or goal with a clear future resolver",
-    tone: "durable world/session atmospheric register or recurring style only",
-    anchor: "recurring motif, planted callback, or continuity anchor",
-  },
   game: {
     timeline_event:
       "game session scene/plot pivot, decision, action, discovery, fight outcome, promise, arrival, or departure; not the live current scene",
@@ -312,7 +297,6 @@ export const DEFAULT_LTM_RECALL_STYLE_BY_MODE: Record<
 > = {
   roleplay: "story",
   conversation: "balanced",
-  visual_novel: "story",
   game: "exact",
 };
 

@@ -113,7 +113,7 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 const features = [
   {
     id: "long-term-memory",
-    version: "1.0.4",
+    version: "1.0.5",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: "2.4.0",
     name: "Long-Term Memory",
@@ -137,7 +137,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.4",
+    version: "1.2.5",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: "3.0.0",
     name: "World Maps",
@@ -153,7 +153,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.6",
+    version: "1.0.7",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -172,7 +172,7 @@ const features = [
   ].map(([id, name, description, clientName, command, aliases, playerLabel]) => ({
     id,
     name,
-    version: "1.0.3",
+    version: "1.0.4",
     maxEngineExclusive: "4.0.0",
     description,
     kind: ["agent", "turn-game"],
@@ -1121,7 +1121,7 @@ for (const feature of selectedFeatures) {
       },
       documentationUrl:
         feature.id === "hierarchical-maps"
-          ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/hierarchical-maps.md"
+          ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });
   } finally {

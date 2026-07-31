@@ -2016,8 +2016,10 @@ test("global World Maps home edits the current map location types", async ({ pag
     const afterPermanentDeleteResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     const afterPermanentDelete = (await afterPermanentDeleteResponse.json()) as {
       definition: { locations: Array<{ id: string }> };
+      hierarchyProfile: { locationTypeIds: Record<string, string> };
     };
     expect(afterPermanentDelete.definition.locations.some((location) => location.id === "ai_sewers")).toBe(false);
+    expect(afterPermanentDelete.hierarchyProfile.locationTypeIds.ai_sewers).toBeUndefined();
   } finally {
     const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
       data: { settings: originalMapsAgentSettings },

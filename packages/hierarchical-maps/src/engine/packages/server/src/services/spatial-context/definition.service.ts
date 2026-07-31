@@ -207,8 +207,10 @@ export function createSpatialContextService() {
         );
       }
 
-      const state = await resolveEffectiveSpatialState(chatId, {}, persistence);
-      const locationDeletionProtections = await resolveLocationDeletionProtections(chatId, metadata, persistence);
+      const [state, locationDeletionProtections] = await Promise.all([
+        resolveEffectiveSpatialState(chatId, {}, persistence),
+        resolveLocationDeletionProtections(chatId, metadata, persistence),
+      ]);
       return buildResponse(
         stored.definition,
         state.currentLocationId,

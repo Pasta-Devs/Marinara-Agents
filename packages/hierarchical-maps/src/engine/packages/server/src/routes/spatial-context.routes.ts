@@ -81,6 +81,8 @@ import {
   listSpatialSharedWorlds,
   readSpatialSharedWorldDocument,
   resolveSpatialWorldSource,
+  spatialSharedWorldNameExists,
+  withSpatialSharedWorldCreationLock,
   withSpatialSharedWorldLink,
   withoutSpatialSharedWorldLink,
 } from "../services/spatial-context/shared-world.service.js";
@@ -664,17 +666,26 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         issues: input.error.issues,
       });
     }
-    const timestamp = now();
-    const document = await persistence.documents.create({
-      id: newTimeSortableId(),
-      packageId: SPATIAL_SHARED_WORLD_PACKAGE_ID,
-      kind: SPATIAL_SHARED_WORLD_KIND,
-      name: input.data.name,
-      description: input.data.description,
-      data: createSpatialSharedWorldData(input.data.definition, input.data.hierarchyProfile),
-      createdAt: timestamp,
-      updatedAt: timestamp,
+    const document = await withSpatialSharedWorldCreationLock(async () => {
+      if (await spatialSharedWorldNameExists(persistence, input.data.name)) return null;
+      const timestamp = now();
+      return persistence.documents.create({
+        id: newTimeSortableId(),
+        packageId: SPATIAL_SHARED_WORLD_PACKAGE_ID,
+        kind: SPATIAL_SHARED_WORLD_KIND,
+        name: input.data.name,
+        description: input.data.description,
+        data: createSpatialSharedWorldData(input.data.definition, input.data.hierarchyProfile),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
     });
+    if (!document) {
+      return reply.status(409).send({
+        error: "A shared world with that name already exists. Refresh the World library and choose another name.",
+        code: "spatial_shared_world_name_conflict",
+      });
+    }
     return reply.status(201).send(readSpatialSharedWorldDocument(document, 0));
   });
 
