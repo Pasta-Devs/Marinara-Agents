@@ -132,6 +132,7 @@ const spatialSharedWorldDeleteSchema = spatialMapTemplateDeleteSchema;
 const spatialSharedWorldAttachSchema = z
   .object({
     worldId: z.string().trim().min(1).max(200),
+    expectedWorldRevision: z.number().int().positive().safe(),
     expectedRevision: z.number().int().nonnegative().safe(),
     expectedCurrentLocationId: z.string().trim().min(1).nullable(),
   })
@@ -786,6 +787,12 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       return reply.status(404).send({
         error: "The shared world was removed or is unavailable.",
         code: "spatial_shared_world_missing",
+      });
+    }
+    if (world.revision !== input.data.expectedWorldRevision) {
+      return reply.status(409).send({
+        error: "This shared world changed after it was selected. Return to the library and choose it again.",
+        code: "spatial_shared_world_selection_stale",
       });
     }
     if (current.sharedWorld.pendingChanges) {

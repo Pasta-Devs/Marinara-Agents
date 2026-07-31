@@ -27,7 +27,7 @@ Across its Engine compatibility lanes, the catalog currently contains **31 first
 | Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks present characters, moods, actions, appearance, thoughts, and character stats. |
 | Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks user-defined currencies, counters, flags, and other custom fields. |
 | Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |
-| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, map authoring, and movement. |
+| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, customizable Direct Link lines, map authoring, and movement. |
 | Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks the player persona's status bars and custom stats from narrative events. |
 | Quest Tracker | [`quest`](packages/quest/manifest.json) | Manages quest objectives, completion states, and rewards. |
 | World State | [`world-state`](packages/world-state/manifest.json) | Tracks date, time, weather, location, temperature, and custom world details. |
@@ -50,7 +50,7 @@ Across its Engine compatibility lanes, the catalog currently contains **31 first
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
-| Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game storyboards with provider-tuned prompt chains. |
+| Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game and Roleplay storyboards with provider-tuned prompt chains. |
 | Tic-Tac-Toe | [`tic-tac-toe`](packages/tic-tac-toe/manifest.json) | Adds one-on-one Conversation matches and the `/tictactoe` command. |
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
 

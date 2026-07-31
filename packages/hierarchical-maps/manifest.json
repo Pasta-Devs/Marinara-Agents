@@ -6,12 +6,12 @@
   },
   "builtAgainst": {
     "engineVersion": "2.3.5",
-    "engineCommit": "b3a60e335c9eaadd04c52d2286382767f21b595f"
+    "engineCommit": "655d7f922bb7f06e3ab5391bf877d2b5be928aa6"
   },
   "id": "hierarchical-maps",
   "name": "World Maps",
-  "version": "1.2.1",
-  "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
+  "version": "1.2.3",
+  "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
   "engine": {
     "min": "2.3.5",
     "maxExclusive": "3.0.0"
@@ -41,18 +41,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "07da20c7168f60cc479131e5ad802ae41d6f039b3f60f975d16a5deea8c0c19c",
-      "bytes": 615
+      "sha256": "d30af31c7e3b76d137366c3b0963a318d2a20b8287d9f6c9dad038ed9beafd03",
+      "bytes": 647
     },
     {
       "path": "server.mjs",
-      "sha256": "66502faf14fb2837b7ce8ee1bcd6a1d1a10a471d01bfc415f97a06aaa0ee2067",
-      "bytes": 346538
+      "sha256": "3f215301a8bd3e175737e7a47d1449258a19cc70e8d62bcffc25bb0ccd4b1fd1",
+      "bytes": 347497
     },
     {
       "path": "client.js",
-      "sha256": "1bd96c157fc72174802eee38daa8955a5ef0245f083f3aa197b4b937e5c93f2f",
-      "bytes": 905562
+      "sha256": "e7376ff6da77adb475bf6bdf42db9238108e0e69c4b37be4a6c97552e6bab713",
+      "bytes": 912674
     }
   ],
   "permissions": [

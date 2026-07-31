@@ -352,6 +352,8 @@ export function readSpatialHierarchyProfile(
         "AI-inferred hierarchy",
       types,
       locationTypeIds,
+      showConnections: requestedProfile?.showConnections ?? true,
+      linkPresentations: requestedProfile?.linkPresentations ?? {},
     },
     { locations },
   );

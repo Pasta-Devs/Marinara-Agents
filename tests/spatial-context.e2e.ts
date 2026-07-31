@@ -581,7 +581,7 @@ async function expectAiBuilderLayout(page: Page, mobile: boolean) {
 async function openGameSetupMapDraftReview(
   page: Page,
   testInfo: TestInfo,
-  planMode: "ai" | "template" = "ai",
+  planMode: "ai" | "template" | "shared-world" = "ai",
 ) {
   const suffix = `${testInfo.project.name}-${Date.now()}`;
   const chatResponse = await page.request.post("/api/chats", {
@@ -595,20 +595,39 @@ async function openGameSetupMapDraftReview(
   const chat = (await chatResponse.json()) as Record<string, unknown> & { id: string };
   await activateHierarchicalMaps(page, chat.id);
   let template: { id: string; revision: number; name: string } | null = null;
-  if (planMode === "template") {
+  let sharedWorld: {
+    id: string;
+    revision: number;
+    name: string;
+    data: unknown;
+  } | null = null;
+  if (planMode === "template" || planMode === "shared-world") {
     const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(spatialResponse.ok(), await spatialResponse.text()).toBeTruthy();
     const spatial = (await spatialResponse.json()) as { hierarchyProfile: unknown };
-    const templateResponse = await page.request.post("/api/chats/spatial-context/templates", {
-      data: {
-        name: `Setup Template ${suffix}`,
-        description: "A reusable Game setup template fixture.",
-        definition: { ...gameGeneratedDefinition, ownerMode: "roleplay", enabled: false, revision: 0 },
-        hierarchyProfile: spatial.hierarchyProfile,
-      },
-    });
-    expect(templateResponse.ok(), await templateResponse.text()).toBeTruthy();
-    template = (await templateResponse.json()) as { id: string; revision: number; name: string };
+    if (planMode === "template") {
+      const templateResponse = await page.request.post("/api/chats/spatial-context/templates", {
+        data: {
+          name: `Setup Template ${suffix}`,
+          description: "A reusable Game setup template fixture.",
+          definition: { ...gameGeneratedDefinition, ownerMode: "roleplay", enabled: false, revision: 0 },
+          hierarchyProfile: spatial.hierarchyProfile,
+        },
+      });
+      expect(templateResponse.ok(), await templateResponse.text()).toBeTruthy();
+      template = (await templateResponse.json()) as { id: string; revision: number; name: string };
+    } else {
+      const sharedWorldResponse = await page.request.post("/api/chats/spatial-context/shared-worlds", {
+        data: {
+          name: `Setup Shared World ${suffix}`,
+          description: "A canonical shared world selected during Game setup.",
+          definition: { ...gameGeneratedDefinition, ownerMode: "roleplay", enabled: true, revision: 0 },
+          hierarchyProfile: spatial.hierarchyProfile,
+        },
+      });
+      expect(sharedWorldResponse.ok(), await sharedWorldResponse.text()).toBeTruthy();
+      sharedWorld = (await sharedWorldResponse.json()) as NonNullable<typeof sharedWorld>;
+    }
   }
   const connection = {
     id: `e2-connection-${suffix}`,
@@ -756,6 +775,19 @@ async function openGameSetupMapDraftReview(
     await expect(library).toHaveCount(0);
     await expect(wizard).toContainText(`Selected map template: ${template!.name}`);
     expect(createRequestCount).toBe(0);
+  } else if (planMode === "shared-world") {
+    await expect(wizard.getByRole("button", { name: /Use a template or shared world/ })).toBeVisible();
+    await wizard.getByRole("button", { name: /Use a template or shared world/ }).click();
+    expect(createRequestCount).toBe(0);
+    const library = page.locator("[data-marinara-map-template-library]");
+    await expect(library.getByRole("heading", { name: "Shared worlds", exact: true })).toBeVisible();
+    const card = library.getByRole("heading", { name: sharedWorld!.name }).locator("xpath=ancestor::article");
+    await card.getByRole("button", { name: "Use shared world", exact: true }).click();
+    const confirm = page.getByRole("dialog").filter({ hasText: "Use this shared world?" });
+    await confirm.getByRole("button", { name: "Use shared world", exact: true }).click();
+    await expect(library).toHaveCount(0);
+    await expect(wizard).toContainText(`Selected shared world: ${sharedWorld!.name}`);
+    expect(createRequestCount).toBe(0);
   } else {
     await wizard.getByRole("button", { name: /Draft with AI/ }).click();
     await wizard.getByRole("button", { name: /Small About 8 places/ }).click();
@@ -767,7 +799,19 @@ async function openGameSetupMapDraftReview(
   if (planMode === "template") {
     await expect(page.locator("[data-marinara-map-template-library]")).toHaveCount(0);
     await expect(page.locator("[data-marinara-maps-workspace-root]")).toBeVisible();
-    return { chat, template };
+    return { chat, template, sharedWorld };
+  }
+  if (planMode === "shared-world") {
+    await expect(wizard).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        if (!response.ok()) return null;
+        const spatial = (await response.json()) as { sharedWorld?: { mode?: string; worldId?: string } };
+        return spatial.sharedWorld?.mode === "linked" ? spatial.sharedWorld.worldId : null;
+      })
+      .toBe(sharedWorld!.id);
+    return { chat, template, sharedWorld };
   }
 
   await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
@@ -778,7 +822,7 @@ async function openGameSetupMapDraftReview(
   await expect(page.getByRole("button", { name: "Continue to editor" })).toBeVisible();
   await expectAiBuilderLayout(page, testInfo.project.name.includes("mobile"));
 
-  return { chat, template };
+  return { chat, template, sharedWorld };
 }
 
 test("World Maps activates inside its Tracker Agents entry", async ({ page }, testInfo) => {
@@ -961,7 +1005,7 @@ test("global World Maps home activates and opens the current chat map", async ({
     await expect(home.getByRole("heading", { name: "Installed package", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Current chat", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "World Maps", exact: true })).toBeVisible();
-    await expect(home.locator(".mari-editor-header")).toContainText("v1.2.1");
+    await expect(home.locator(".mari-editor-header")).toContainText("v1.2.2");
     await expect(home.getByRole("heading", { name: "Description", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Pipeline Phase", exact: true })).toBeVisible();
     await expect(home.getByRole("button", { name: "Pre-Generation", exact: true })).toHaveAttribute(
@@ -3248,6 +3292,25 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(page.getByRole("button", { name: "Location types" })).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Location type fields" })).toHaveCount(0);
     await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    const locationHierarchy = page.getByRole("region", { name: "Location hierarchy" });
+    await locationHierarchy.getByRole("button", { name: /^Blackglass Lighthouse/ }).click();
+    await page.getByLabel("Line style for Old Sewers").selectOption("dotted");
+    await page.getByLabel("Line color for Old Sewers").fill("#22c55e");
+    await page.getByLabel("Link state").selectOption("available");
+    await locationHierarchy.getByRole("button", { name: "Enter Shrouded Coast" }).click();
+    const editorConnection = page.locator(
+      'line[data-marinara-map-connection="ai_lighthouse|ai_sewers"]',
+    );
+    await expect(editorConnection).toHaveCount(1);
+    await expect(editorConnection).toHaveAttribute("data-line-style", "dotted");
+    await expect(editorConnection).toHaveAttribute("stroke", "#22C55E");
+    await expect(editorConnection).toHaveAttribute("stroke-dasharray", "1 5");
+    const editorConnectionToggle = page.getByRole("button", { name: "Hide connections" });
+    await expectMinimumInteractiveSize(editorConnectionToggle, "Map editor connection visibility control");
+    await editorConnectionToggle.click();
+    await expect(editorConnection).toHaveCount(0);
+    await page.getByRole("button", { name: "Show connections" }).click();
+    await expect(editorConnection).toHaveCount(1);
     await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
     if (mobile) {
@@ -3491,6 +3554,47 @@ test("Game setup stages a saved map template as a Game-owned working copy", asyn
       expect(deleteTemplateResponse.ok(), await deleteTemplateResponse.text()).toBeTruthy();
     }
     await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+  }
+});
+
+test("Game setup links a selected shared world before Start without changing its canonical record", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The shared-world setup handoff is shared across viewports.");
+  test.setTimeout(120_000);
+  const { chat, sharedWorld } = await openGameSetupMapDraftReview(page, testInfo, "shared-world");
+
+  try {
+    const linkedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(linkedResponse.ok(), await linkedResponse.text()).toBeTruthy();
+    const linked = (await linkedResponse.json()) as {
+      currentLocationId: string | null;
+      sharedWorld: { mode: string; worldId: string | null; worldRevision: number | null };
+    };
+    expect(linked.currentLocationId).toBe(gameGeneratedDefinition.startingLocationId);
+    expect(linked.sharedWorld).toMatchObject({
+      mode: "linked",
+      worldId: sharedWorld!.id,
+      worldRevision: sharedWorld!.revision,
+    });
+
+    const canonicalResponse = await page.request.get("/api/chats/spatial-context/shared-worlds");
+    expect(canonicalResponse.ok(), await canonicalResponse.text()).toBeTruthy();
+    const canonical = ((await canonicalResponse.json()) as Array<NonNullable<typeof sharedWorld>>).find(
+      (world) => world.id === sharedWorld!.id,
+    );
+    expect(canonical?.revision).toBe(sharedWorld!.revision);
+    expect(canonical?.data).toEqual(sharedWorld!.data);
+
+    const startResponse = await page.request.post("/api/game/start", { data: { chatId: chat.id } });
+    expect(startResponse.ok(), await startResponse.text()).toBeTruthy();
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+    if (sharedWorld) {
+      const deleteSharedWorldResponse = await page.request.delete(
+        `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+        { data: { expectedRevision: sharedWorld.revision } },
+      );
+      expect(deleteSharedWorldResponse.ok(), await deleteSharedWorldResponse.text()).toBeTruthy();
+    }
   }
 });
 
@@ -3756,10 +3860,40 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       expectedRevision: 0,
       expectedCurrentLocationId: null,
       definition: runtimeDefinition,
+      hierarchyProfile: {
+        version: 1,
+        mode: "template",
+        name: "Runtime map presentation",
+        types: [
+          { id: "type_region", label: "Region", baseKind: "region" },
+          { id: "type_settlement", label: "Settlement", baseKind: "settlement" },
+          { id: "type_place", label: "Place", baseKind: "place" },
+          { id: "type_building", label: "Building", baseKind: "building" },
+          { id: "type_floor", label: "Floor", baseKind: "floor" },
+          { id: "type_room", label: "Room", baseKind: "room" },
+        ],
+        locationTypeIds: {},
+        showConnections: true,
+        linkPresentations: {
+          "ai_harbor|ai_lighthouse": { color: "#22C55E", lineStyle: "dotted" },
+        },
+      },
     },
   });
   expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
-  const saved = (await saveResponse.json()) as { definition: { revision: number }; currentLocationId: string };
+  const saved = (await saveResponse.json()) as {
+    definition: { revision: number };
+    currentLocationId: string;
+    hierarchyProfile: {
+      showConnections: boolean;
+      linkPresentations: Record<string, { color: string; lineStyle: string }>;
+    };
+  };
+  expect(saved.hierarchyProfile.linkPresentations["ai_harbor|ai_lighthouse"]).toEqual({
+    color: "#22C55E",
+    lineStyle: "dotted",
+  });
+  expect(saved.hierarchyProfile.showConnections).toBe(true);
   let generationRequestCount = 0;
 
   await page.route("**/api/generate", async (route) => {
@@ -3890,6 +4024,14 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await openStoryMap.click();
     let roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
     await expect(roleplayMap).toBeVisible();
+    const connectionLine = roleplayMap.locator(
+      'line[data-marinara-map-connection="ai_harbor|ai_lighthouse"]',
+    );
+    await expect(connectionLine).toHaveCount(1);
+    await expect(connectionLine).toHaveAttribute("data-line-style", "dotted");
+    await expect(connectionLine).toHaveAttribute("stroke", "#22C55E");
+    await expect(connectionLine).toHaveAttribute("stroke-dasharray", "1 5");
+    await expect(roleplayMap.getByRole("button", { name: /connections/u })).toHaveCount(0);
     const visibleMapPopover = storyLocation.locator("[data-marinara-maps-runtime-popover]:visible");
     await expect(visibleMapPopover).toBeVisible();
     const mapPopoverBox = await visibleMapPopover.boundingBox();

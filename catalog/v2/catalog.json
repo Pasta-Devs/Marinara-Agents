@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-31T11:37:26.327Z",
+  "generatedAt": "2026-07-31T12:32:03.725Z",
   "packages": [
     {
       "manifest": {
@@ -1260,8 +1260,8 @@
         "schemaVersion": 1,
         "id": "storyboard",
         "name": "Storyboard",
-        "version": "1.0.0",
-        "description": "Plans and generates still or animated Game storyboards through provider-tuned planner, image, and video prompt chains. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Game mode.",
+        "version": "1.1.0",
+        "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.5",
           "maxExclusive": "3.0.0"
@@ -1275,8 +1275,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "8e649ab18362ed05b4dc1d2578526e0a248d8bdb37b6ca85e2d1357ae3729779",
-            "bytes": 60746
+            "sha256": "bf7699b1415d712515637cb1da9ca56b6a183dfab6c8a94bfe4b066b2dfd783c",
+            "bytes": 69315
           }
         ],
         "permissions": [
@@ -1291,9 +1291,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.0.0.zip",
-        "sha256": "a66c419edba6a2388f9e07c68b1975f096cd990ffb4885b2374511a76b40370b",
-        "bytes": 11958
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.0.zip",
+        "sha256": "eaec59a0d9d5c28b4778212ea895b336babc9868606156e379d1850d4f9a3faf",
+        "bytes": 13595
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
     },
@@ -1443,12 +1443,12 @@
         },
         "builtAgainst": {
           "engineVersion": "2.3.5",
-          "engineCommit": "b3a60e335c9eaadd04c52d2286382767f21b595f"
+          "engineCommit": "655d7f922bb7f06e3ab5391bf877d2b5be928aa6"
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.2.1",
-        "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
+        "version": "1.2.3",
+        "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.5",
           "maxExclusive": "3.0.0"
@@ -1478,18 +1478,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "07da20c7168f60cc479131e5ad802ae41d6f039b3f60f975d16a5deea8c0c19c",
-            "bytes": 615
+            "sha256": "d30af31c7e3b76d137366c3b0963a318d2a20b8287d9f6c9dad038ed9beafd03",
+            "bytes": 647
           },
           {
             "path": "server.mjs",
-            "sha256": "66502faf14fb2837b7ce8ee1bcd6a1d1a10a471d01bfc415f97a06aaa0ee2067",
-            "bytes": 346538
+            "sha256": "3f215301a8bd3e175737e7a47d1449258a19cc70e8d62bcffc25bb0ccd4b1fd1",
+            "bytes": 347497
           },
           {
             "path": "client.js",
-            "sha256": "1bd96c157fc72174802eee38daa8955a5ef0245f083f3aa197b4b937e5c93f2f",
-            "bytes": 905562
+            "sha256": "e7376ff6da77adb475bf6bdf42db9238108e0e69c4b37be4a6c97552e6bab713",
+            "bytes": 912674
           }
         ],
         "permissions": [
@@ -1507,9 +1507,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.1.zip",
-        "sha256": "fd9e1c5838faeba09d9835a84a1e368a792f0ed548fa25397f895ac621b32aca",
-        "bytes": 328136
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.3.zip",
+        "sha256": "93e531c0e02caa88fc3a20149772d1a987bfc11fe3b86947e7021f7cf7dbeaa2",
+        "bytes": 330425
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },
