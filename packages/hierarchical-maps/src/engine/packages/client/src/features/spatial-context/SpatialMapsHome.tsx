@@ -124,7 +124,9 @@ const MAPS_PHASE_META = [
 function modeLabel(mode: string | null) {
   if (mode === "roleplay") return "Roleplay";
   if (mode === "game") return "Game";
-  if (mode === "visual_novel") return "Visual Novel";
+  // "visual_novel" is a retired chat mode; Roleplay is its behavioural
+  // successor. Chats written before the retirement may still carry it.
+  if (mode === "visual_novel") return "Roleplay";
   if (mode === "conversation") return "Conversation";
   return "Chat";
 }
@@ -287,7 +289,11 @@ export function SpatialMapsHome({
   const [turnPromptCopyStatus, setTurnPromptCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [hierarchyEditing, setHierarchyEditing] = useState(false);
   const [hierarchyDraft, setHierarchyDraft] = useState<SpatialHierarchyProfileDraft | null>(null);
-  const supportedChat = chatMode === "roleplay" || chatMode === "game";
+  // "visual_novel" is a retired chat mode; Roleplay is its behavioural
+  // successor, and chatOwnerMode above already folds it to "roleplay". Chats
+  // written before the retirement may still carry the raw value, so they get
+  // the full Roleplay maps experience instead of the unsupported state.
+  const supportedChat = chatMode === "roleplay" || chatMode === "visual_novel" || chatMode === "game";
   const definition = spatial.data?.definition ?? null;
   const activeLocationCount = definition?.locations.filter((location) => location.status === "active").length ?? 0;
   const currentPath = spatial.data?.breadcrumb.map((location) => location.name).join(" / ") ?? "";

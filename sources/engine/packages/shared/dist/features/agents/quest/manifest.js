@@ -6,7 +6,7 @@ export const questAgentManifest = {
     enabledByDefault: false,
     defaultInjectAsSection: true,
     category: "tracker",
-    modeAllowlist: ["roleplay", "visual_novel"],
+    modeAllowlist: ["roleplay"],
     defaultTools: [],
 };
 //# sourceMappingURL=manifest.js.map

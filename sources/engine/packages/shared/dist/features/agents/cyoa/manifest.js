@@ -5,7 +5,7 @@ export const cyoaAgentManifest = {
     phase: "post_processing",
     enabledByDefault: false,
     category: "misc",
-    modeAllowlist: ["roleplay", "visual_novel"],
+    modeAllowlist: ["roleplay"],
     defaultTools: [],
 };
 //# sourceMappingURL=manifest.js.map

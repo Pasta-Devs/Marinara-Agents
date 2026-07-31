@@ -14,13 +14,6 @@ export const CHAT_MODES = {
         icon: "🎭",
         defaultAgents: [...CHAT_MODE_CAPABILITIES.roleplay.defaultAgentIds],
     },
-    visual_novel: {
-        id: "visual_novel",
-        name: "Roleplay (Legacy)",
-        description: "Legacy roleplay chats retained for import and existing conversation compatibility.",
-        icon: "🎮",
-        defaultAgents: [...CHAT_MODE_CAPABILITIES.visual_novel.defaultAgentIds],
-    },
     game: {
         id: "game",
         name: "Game",
