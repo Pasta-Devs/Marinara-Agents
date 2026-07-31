@@ -88,8 +88,9 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     activation: "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
   },
   storyboard: {
-    modes: ["game"],
-    activation: "Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Game mode.",
+    modes: ["roleplay", "game"],
+    activation:
+      "Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
   },
   html: {
     modes: ["roleplay"],
