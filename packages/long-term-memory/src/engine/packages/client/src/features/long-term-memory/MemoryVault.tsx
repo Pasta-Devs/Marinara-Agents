@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -51,6 +52,7 @@ import {
   useLtmTranslation,
   type LtmTranslationFunction,
 } from "./localization";
+import { LtmWorkspace } from "./LtmWorkspace";
 import {
   buildScopeIndexes,
   deriveScopeBranches,
@@ -377,8 +379,11 @@ export default function MemoryVault({
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">("all");
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [mobilePane, setMobilePane] = useState<
-    "memories" | "editor" | "details"
-  >("memories");
+    "navigator" | "workbench" | "inspector"
+  >("navigator");
+  const [inspectorMount, setInspectorMount] = useState<HTMLDivElement | null>(
+    null,
+  );
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [draft, setDraft] = useState<LtmNote | null>(null);
   const draftRef = useRef(draft);
@@ -485,7 +490,7 @@ export default function MemoryVault({
     setSubjectKey("");
     setSectionKey("");
     setChecked(new Set());
-    setMobilePane("memories");
+    setMobilePane("navigator");
     // Context switches are the only reset boundary. Dedicated effects above
     // update chat labels without discarding an open draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -704,7 +709,7 @@ export default function MemoryVault({
     setNotice(
       localizeUi("ui.longTermMemory.memoryvault.reviewRecoveredSuggestion"),
     );
-    setMobilePane("editor");
+    setMobilePane("workbench");
   }, [recoveryHandoff?.key]);
   useEffect(() => {
     if (deleteIds) {
@@ -769,7 +774,7 @@ export default function MemoryVault({
     setLinkRelation("involves");
     setSubjectKey("");
     setSectionKey("");
-    setMobilePane("memories");
+    setMobilePane("navigator");
   }
   async function openNote(
     note: LtmNote,
@@ -798,7 +803,7 @@ export default function MemoryVault({
     setError("");
     setNotice("");
     setDetailsOpen(false);
-    setMobilePane("editor");
+    setMobilePane("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -824,7 +829,7 @@ export default function MemoryVault({
     setSubjectKey("");
     setSectionKey("");
     setDetailsOpen(false);
-    setMobilePane("editor");
+    setMobilePane("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -853,7 +858,7 @@ export default function MemoryVault({
     setLinkRelation("involves");
     setSubjectKey("");
     setSectionKey("");
-    setMobilePane("memories");
+    setMobilePane("navigator");
   }
   async function invalidate() {
     await invalidateLtmQueries(client, [
@@ -1004,7 +1009,7 @@ export default function MemoryVault({
       if (draft && result.deletedIds.includes(draft.id)) {
         setDraft(null);
         setSaved("");
-        setMobilePane("memories");
+        setMobilePane("navigator");
       }
       setNotice(
         localizeUi(
@@ -1202,7 +1207,7 @@ export default function MemoryVault({
       if (result.deleted) {
         setDraft(null);
         setSaved("");
-        setMobilePane("memories");
+        setMobilePane("navigator");
         setNotice(
           localizeUi("ui.longTermMemory.memoryvault.memoryRemovedAndDeleted"),
         );
@@ -1316,98 +1321,13 @@ export default function MemoryVault({
       className="space-y-4"
       aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryVault")}
     >
-      <style>{`
-        [data-ltm-note-inspector] [data-ltm-inspector-tokens],
-        [data-ltm-note-inspector] [data-ltm-inspector-fields] {
-          grid-template-columns: minmax(0, 1fr);
-        }
-        @container ltm-destination (min-width: 64rem) {
-          [data-ltm-surface="vault"] {
-            display: grid;
-            grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
-            grid-template-areas:
-              "controls workbench"
-              "bulk workbench"
-              "list workbench"
-              "feedback feedback";
-            align-items: start;
-            gap: 1rem;
-          }
-          [data-ltm-vault-feedback] {
-            grid-area: feedback;
-            display: block;
-          }
-          [data-ltm-browser-controls] {
-            grid-area: controls;
-          }
-          [data-ltm-bulk-actions] {
-            grid-area: bulk;
-          }
-          [data-ltm-vault-workspace] {
-            display: contents;
-          }
-          [data-ltm-memory-list] {
-            grid-area: list;
-            max-height: calc(100vh - 20rem);
-            overflow-y: auto;
-          }
-          [data-ltm-note-workbench] {
-            grid-area: workbench;
-            max-height: calc(100vh - 10rem);
-            overflow-y: auto;
-          }
-          [data-ltm-note-editor] {
-            display: block !important;
-          }
-        }
-        @container ltm-note-workbench (min-width: 48rem) {
-          [data-ltm-note-layout][data-details-open="true"] {
-            display: flex;
-            column-gap: 1rem;
-          }
-          [data-ltm-note-layout][data-details-open="true"]
-            > [data-ltm-note-editor] {
-            min-width: 0;
-            flex: 1 1 0%;
-          }
-          [data-ltm-note-layout][data-details-open="true"]
-            > [data-ltm-note-inspector] {
-            min-width: 16rem;
-            flex: 0 0 18rem;
-            border-left: 1px solid var(--border);
-            padding-left: 1rem;
-          }
-          [data-ltm-inspector-tokens] {
-            border-top: 0;
-            padding-top: 0;
-          }
-        }
-      `}</style>
-      <div
-        className="grid grid-cols-3 rounded-lg border border-[var(--border)] p-1 md:hidden"
-      >
-        {(["memories", "editor", "details"] as const).map((pane) => (
-          <button
-            key={pane}
-             type="button"
-             disabled={pane !== "memories" && !draft}
-             aria-pressed={mobilePane === pane}
-             onClick={() => {
-              setMobilePane(pane);
-              if (pane !== "details") setDetailsOpen(false);
-            }}
-            className={`min-h-11 rounded-md px-2 text-xs font-semibold disabled:opacity-40 ${mobilePane === pane ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
-          >
-            {localizeUi(
-              {
-                memories: "ui.longTermMemory.longtermmemorynavigation.memories",
-                editor: "ui.longTermMemory.memoryvault.memoryEditor",
-                details: "ui.longTermMemory.memoryvault.memoryDetails",
-              }[pane],
-            )}
-          </button>
-        ))}
-      </div>
+      <LtmWorkspace
+        activeMobilePane={mobilePane}
+        onMobilePaneChange={setMobilePane}
+        navigator={{
+          label: localizeUi("ui.longTermMemory.longtermmemorynavigation.memories"),
+          content: (
+            <>
       <section
         data-ltm-browser-controls
         className="grid grid-cols-2 gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3"
@@ -1836,13 +1756,9 @@ export default function MemoryVault({
           </section>
         </dialog>
       ) : null}
-      <div
-        data-ltm-vault-workspace
-        className="grid min-h-0 min-w-0 gap-4 md:grid-cols-[minmax(17rem,0.75fr)_minmax(0,1.25fr)]"
-      >
         <section
           data-ltm-memory-list
-          className={`${mobilePane === "memories" ? "block" : "hidden"} min-w-0 rounded-lg border border-[var(--border)] md:block`}
+          className="min-w-0 rounded-lg border border-[var(--border)]"
           aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryList")}
         >
           {notes.isLoading ? (
@@ -2050,11 +1966,18 @@ export default function MemoryVault({
             </div>
           ) : null}
         </section>
+            </>
+          ),
+        }}
+        workbench={{
+          label: localizeUi("ui.longTermMemory.memoryvault.memoryEditor"),
+          disabled: !draft,
+          content: (
         <section
           ref={detailRef}
           tabIndex={-1}
           data-ltm-note-workbench
-          className={`${mobilePane === "memories" ? "hidden" : "block"} min-w-0 scroll-mt-20 rounded-lg border border-[var(--border)] p-3 md:block`}
+          className="min-w-0 scroll-mt-20 rounded-lg border border-[var(--border)] p-3"
           style={{
             containerName: "ltm-note-workbench",
             containerType: "inline-size",
@@ -2093,13 +2016,13 @@ export default function MemoryVault({
                     onClick={() => {
                       setDetailsOpen((value) => {
                         const next = !value;
-                        setMobilePane(next ? "details" : "editor");
+                        setMobilePane(next ? "inspector" : "workbench");
                         return next;
                       });
                     }}
                     aria-pressed={detailsOpen}
                     data-ltm-details-toggle
-                    className="hidden min-h-11 items-center gap-2 aria-pressed:bg-[var(--accent)] md:inline-flex"
+                    className="inline-flex min-h-11 items-center gap-2 aria-pressed:bg-[var(--accent)]"
                   >
                     <Braces aria-hidden="true" size="0.875rem" />
                     {localizeUi("ui.longTermMemory.memoryvault.metadata")}
@@ -2126,11 +2049,7 @@ export default function MemoryVault({
               >
                 <div
                   data-ltm-note-editor
-                  className={
-                    mobilePane === "details"
-                      ? "hidden space-y-4 md:block"
-                      : "space-y-4"
-                  }
+                  className="space-y-4"
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1 text-xs font-medium">
@@ -2332,18 +2251,14 @@ export default function MemoryVault({
                     ))}
                   </section>
                 </div>
-                <aside
+                {inspectorMount
+                  ? createPortal(
+                      <aside
                   data-ltm-note-inspector
                   aria-label={localizeUi(
                     "ui.longTermMemory.memoryvault.memoryInspector",
                   )}
-                  className={
-                    detailsOpen || mobilePane === "details"
-                      ? mobilePane === "editor"
-                        ? "hidden md:block"
-                        : "contents md:block"
-                      : "hidden"
-                  }
+                  className="min-w-0"
                 >
                   <section className="space-y-3 border-t border-[var(--border)] pt-4">
                     <h4 className="flex items-center gap-1 text-xs font-medium">
@@ -2454,7 +2369,7 @@ export default function MemoryVault({
                   </section>
                   <div
                     data-ltm-inspector-tokens
-                    className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2"
+                    className="grid gap-4 border-t border-[var(--border)] pt-4"
                   >
                     <TokenEditor
                       label={localizeUi("ui.longTermMemory.memoryvault.tags")}
@@ -2532,7 +2447,7 @@ export default function MemoryVault({
                     </div>
                     <div
                       data-ltm-inspector-fields
-                      className="grid gap-2 sm:grid-cols-2"
+                      className="grid gap-2"
                     >
                       <select
                         className={inputClass}
@@ -2670,7 +2585,7 @@ export default function MemoryVault({
                     </div>
                     <div
                       data-ltm-inspector-fields
-                      className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto]"
+                      className="grid gap-2"
                     >
                       <input
                         className={inputClass}
@@ -2861,7 +2776,10 @@ export default function MemoryVault({
                       </Button>
                     </div>
                   ) : null}
-                </aside>
+                      </aside>,
+                      inspectorMount,
+                    )
+                  : null}
               </div>
               {draft.type === "source" ? (
                 <section className="space-y-2 border-t border-[var(--border)] pt-4">
@@ -2982,7 +2900,19 @@ export default function MemoryVault({
             </div>
           )}
         </section>
-      </div>
+          ),
+        }}
+        inspector={
+          draft && detailsOpen
+            ? {
+                label: localizeUi(
+                  "ui.longTermMemory.memoryvault.memoryDetails",
+                ),
+                content: <div ref={setInspectorMount} data-ltm-inspector-mount />,
+              }
+            : undefined
+        }
+      />
     </section>
   );
 }

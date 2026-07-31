@@ -43,6 +43,7 @@ import {
 import { humanizeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
+import { LtmWorkspace } from "./LtmWorkspace";
 import {
   buildScopeIndexes,
   deriveScopeBranches,
@@ -463,8 +464,8 @@ export default function SourcesWorkspace({
     null,
   );
   const [lorebookMobilePane, setLorebookMobilePane] = useState<
-    "lorebooks" | "entries"
-  >("lorebooks");
+    "navigator" | "workbench"
+  >("navigator");
   const [importTargetId, setImportTargetId] = useState(
     props.chatId ? `chat:${props.chatId}` : "all",
   );
@@ -825,7 +826,7 @@ export default function SourcesWorkspace({
 
   const changeSource = (next: Source) => {
     setSource(next);
-    if (next === "lorebooks") setLorebookMobilePane("lorebooks");
+    if (next === "lorebooks") setLorebookMobilePane("navigator");
     clearImportResult();
   };
 
@@ -1611,45 +1612,15 @@ export default function SourcesWorkspace({
           data-ltm-lorebook-browser
           className="space-y-3"
         >
-          <style>{`
-            @media (min-width: 1280px) {
-              [data-ltm-lorebook-layout] {
-                display: grid;
-                grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
-                gap: 1rem;
-              }
-              [data-ltm-lorebook-list],
-              [data-ltm-lorebook-workbench] {
-                display: block;
-                margin-top: 0;
-              }
-            }
-          `}</style>
-          <div
-            className="mari-editor-tab-rail grid grid-cols-2 rounded-lg border p-1 xl:hidden"
-          >
-            {(["lorebooks", "entries"] as const).map((pane) => (
-              <button
-                key={pane}
-                type="button"
-                disabled={pane === "entries" && !selectedLorebook}
-                aria-pressed={lorebookMobilePane === pane}
-                onClick={() => setLorebookMobilePane(pane)}
-                data-ltm-lorebook-pane={pane}
-                data-active={lorebookMobilePane === pane}
-                className="mari-editor-tab min-h-11 rounded-md px-2 text-xs font-semibold disabled:opacity-40"
-              >
-                {pane === "lorebooks"
-                  ? localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks")
-                  : localizeUi("ui.longTermMemory.sourcesworkspace.entries")}
-              </button>
-            ))}
-          </div>
-
-          <div data-ltm-lorebook-layout>
-            <section
+          <LtmWorkspace
+            activeMobilePane={lorebookMobilePane}
+            onMobilePaneChange={setLorebookMobilePane}
+            navigator={{
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks"),
+              content: (
+                <section
               data-ltm-lorebook-list
-              className={`${lorebookMobilePane === "lorebooks" ? "block" : "hidden"} overflow-hidden rounded-lg border border-[var(--border)] xl:block xl:max-h-[calc(100vh-20rem)] xl:overflow-y-auto`}
+              className="overflow-hidden rounded-lg border border-[var(--border)]"
             >
               <div className="flex min-h-11 items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2">
                 <h2 className="text-sm font-semibold">
@@ -1668,7 +1639,7 @@ export default function SourcesWorkspace({
                       data-ltm-lorebook-id={book.id}
                       onClick={() => {
                         setSelectedLorebookId(book.id);
-                        setLorebookMobilePane("entries");
+                        setLorebookMobilePane("workbench");
                       }}
                       className={`flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--secondary)]/35 ${selectedLorebookId === book.id ? "bg-[var(--primary)]/10" : ""}`}
                     >
@@ -1707,11 +1678,16 @@ export default function SourcesWorkspace({
                   </p>
                 ) : null}
               </div>
-            </section>
-
-            <section
+                </section>
+              ),
+            }}
+            workbench={{
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.entries"),
+              disabled: !selectedLorebook,
+              content: (
+                <section
               data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
-              className={`${lorebookMobilePane === "entries" ? "block" : "hidden"} mt-3 overflow-hidden rounded-lg border border-[var(--border)] xl:mt-0 xl:block xl:max-h-[calc(100vh-14rem)] xl:overflow-y-auto`}
+              className="overflow-hidden rounded-lg border border-[var(--border)]"
             >
               {selectedLorebook ? (
                 <>
@@ -1989,8 +1965,10 @@ export default function SourcesWorkspace({
                   )}
                 </p>
               )}
-            </section>
-          </div>
+                </section>
+              ),
+            }}
+          />
         </div>
       ) : (
         <section
