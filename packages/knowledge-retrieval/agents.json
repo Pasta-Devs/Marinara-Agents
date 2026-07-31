@@ -7,8 +7,7 @@
     "enabledByDefault": false,
     "category": "writer",
     "modeAllowlist": [
-      "roleplay",
-      "visual_novel"
+      "roleplay"
     ],
     "defaultTools": [
       "search_lorebook"

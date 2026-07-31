@@ -11,7 +11,6 @@
     "modeAllowlist": [
       "conversation",
       "roleplay",
-      "visual_novel",
       "game"
     ],
     "defaultTools": [],
