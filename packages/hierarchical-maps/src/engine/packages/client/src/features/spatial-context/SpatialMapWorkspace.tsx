@@ -1504,6 +1504,27 @@ export function SpatialMapWorkspace({
     }
   }, [chatId, confirmAction, currentLocationId, dirty, draft, forkSharedWorld, spatial, templateMode]);
 
+  const handleOpenLorebook = useCallback(
+    async (lorebookId: string) => {
+      if (!onOpenLorebook) return;
+      if (dirty) {
+        const discard = await confirmAction({
+          title: templateMode
+            ? `Discard ${sharedWorldMode ? "shared-world" : "template"} changes?`
+            : "Discard map changes?",
+          message: templateMode
+            ? `You have unsaved ${sharedWorldMode ? "shared-world" : "map template"} changes. Open the linked lorebook and discard them?`
+            : "You have unsaved world map changes. Open the linked lorebook and discard them?",
+          confirmLabel: "Discard changes",
+          tone: "destructive",
+        });
+        if (!discard) return;
+      }
+      onOpenLorebook(lorebookId);
+    },
+    [confirmAction, dirty, onOpenLorebook, sharedWorldMode, templateMode],
+  );
+
   const handleClose = useCallback(async () => {
     if (dirty) {
       const discard = await confirmAction({
@@ -2054,7 +2075,7 @@ export function SpatialMapWorkspace({
       lorebookEntries={lorebookEntriesQuery.entries ?? []}
       excludedLorebookIds={excludedLorebookIds}
       lorebooksLoading={lorebookEntriesQuery.isLoading}
-      onOpenLorebook={onOpenLorebook}
+      onOpenLorebook={onOpenLorebook ? (lorebookId) => void handleOpenLorebook(lorebookId) : undefined}
       onReparent={(parentId) => selected && applyDraft(reparentSpatialLocation(draft, selected.id, parentId))}
       onSetStarting={() => selected && applyDraft({ ...draft, startingLocationId: selected.id })}
       onSetCurrent={

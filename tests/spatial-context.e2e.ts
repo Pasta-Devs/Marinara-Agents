@@ -2388,6 +2388,109 @@ test("missing location lore explains the problem without exposing opaque entry I
   }
 });
 
+test("opening linked lore protects unsaved map edits", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The guarded navigation contract is viewport-independent.");
+  test.setTimeout(90_000);
+  const suffix = `${testInfo.project.name}-${Date.now()}`;
+  const lorebookName = `Maps guarded navigation ${suffix}`;
+  const lorebookResponse = await page.request.post("/api/lorebooks", {
+    data: {
+      name: lorebookName,
+      description: "Linked lore navigation regression fixture.",
+      category: "world",
+      enabled: true,
+    },
+  });
+  expect(lorebookResponse.ok(), await lorebookResponse.text()).toBeTruthy();
+  const lorebook = (await lorebookResponse.json()) as { id: string };
+  const entryResponse = await page.request.post(`/api/lorebooks/${lorebook.id}/entries`, {
+    data: {
+      name: "Harbor navigation lore",
+      content: "The harbor keeps a careful ledger.",
+      order: 0,
+    },
+  });
+  expect(entryResponse.ok(), await entryResponse.text()).toBeTruthy();
+  const entry = (await entryResponse.json()) as { id: string };
+  const chatResponse = await page.request.post("/api/chats", {
+    data: {
+      name: `Maps Guarded Lore ${suffix}`,
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: {
+        ...generatedDefinition,
+        enabled: true,
+        startingLocationId: "ai_harbor",
+        locations: generatedDefinition.locations.map((location) =>
+          location.id === "ai_harbor" ? { ...location, lorebookEntryIds: [entry.id] } : location,
+        ),
+      },
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    const workspace = page.locator("[data-marinara-maps-workspace-overlay]");
+    await expect(workspace).toBeVisible();
+    const details = workspace.locator('section[aria-label^="Details for "]:visible');
+    const nameInput = details.getByLabel("Name", { exact: true });
+    await nameInput.fill("Unsaved harbor name");
+    await expect(workspace.getByText("Unsaved", { exact: true })).toBeVisible();
+    await details.getByText("Linked lore", { exact: true }).click();
+    await expect(details.getByText("Harbor navigation lore", { exact: true })).toBeVisible();
+
+    await details.getByRole("button", { name: "Open", exact: true }).click();
+    const discardDialog = page.getByRole("dialog", { name: "Discard map changes?" });
+    await expect(discardDialog).toContainText(
+      "You have unsaved world map changes. Open the linked lorebook and discard them?",
+    );
+    await discardDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(discardDialog).toHaveCount(0);
+    await expect(nameInput).toHaveValue("Unsaved harbor name");
+    await expect(workspace).toBeVisible();
+
+    await details.getByRole("button", { name: "Open", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Discard map changes?" })
+      .getByRole("button", { name: "Discard changes", exact: true })
+      .click();
+    await expect(workspace).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
+  } finally {
+    await expectDeletedInOrder(page, [`/api/chats/${chat.id}`, `/api/lorebooks/${lorebook.id}`]);
+  }
+});
+
 test("Deep maps and long labels remain keyboard and touch operable across themes", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const chatResponse = await page.request.post("/api/chats", {

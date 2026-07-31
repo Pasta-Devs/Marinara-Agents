@@ -100,6 +100,7 @@ const fixtures = new Map(
     artifactFixture("1.2.1"),
     artifactFixture("1.2.2"),
     artifactFixture("1.2.3"),
+    artifactFixture("1.2.4"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -2640,11 +2641,11 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.2.3";
+    catalogVersion = "1.2.4";
     catalogOnline = true;
-    const upgraded123 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded123.version, "1.2.3");
-    assert.equal(upgraded123.previousVersion, "1.1.7");
+    const upgraded124 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded124.version, "1.2.4");
+    assert.equal(upgraded124.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
@@ -3199,7 +3200,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.2.3");
+    assert.equal(reinstalled.version, "1.2.4");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -3287,7 +3288,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.2.3", status: "active", readiness: "ready" }],
+      [{ version: "1.2.4", status: "active", readiness: "ready" }],
     );
 
     console.info(
