@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 import { z } from "zod";
 import { pendingSpatialTransitionSchema } from "./spatial-context.schema.js";
-export const chatModeSchema = z.enum(["conversation", "roleplay", "visual_novel", "game"]);
+export const chatModeSchema = z.enum(["conversation", "roleplay", "game"]);
 export const messageRoleSchema = z.enum(["user", "assistant", "system", "narrator"]);
 export const createChatSchema = z.object({
     name: z.string().min(1).max(200),
@@ -26,6 +26,8 @@ export const generateRequestSchema = z.object({
     userMessage: z.string().nullable().default(null),
     regenerateMessageId: z.string().nullable().default(null),
     continueMessageId: z.string().nullable().default(null),
+    /** Whether continuation text is separated from the existing message by a blank line. */
+    continueAddsNewline: z.boolean().optional().default(true),
     connectionId: z.string().nullable().default(null),
     pendingSpatialTransition: pendingSpatialTransitionSchema.nullable().optional().default(null),
     impersonate: z.boolean().optional().default(false),
@@ -37,6 +39,7 @@ export const generateRequestSchema = z.object({
     autonomous: z.boolean().optional().default(false),
     autonomousIntentKey: z.string().max(100).optional().default(""),
     userTimeZone: z.string().max(100).optional().default(""),
+    currentBackground: z.string().nullable().optional(),
     mentionedCharacterNames: z.array(z.string()).optional().default([]),
     forCharacterId: z.string().nullable().optional().default(null),
     skipPresenceDelay: z.boolean().optional().default(false),

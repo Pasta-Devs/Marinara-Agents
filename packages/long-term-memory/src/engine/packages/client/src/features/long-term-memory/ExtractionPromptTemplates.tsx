@@ -17,11 +17,10 @@ type ExtractionForm = Omit<
   "systemPrompt" | "activePromptTemplateId"
 >;
 type Mode = LtmMode;
-const modes: Mode[] = ["conversation", "roleplay", "visual_novel", "game"];
+const modes: Mode[] = ["conversation", "roleplay", "game"];
 const modeLabelKeys: Record<Mode, string> = {
   conversation: "ui.longTermMemory.extractionprompttemplates.conversation",
   roleplay: "ui.longTermMemory.extractionprompttemplates.roleplay",
-  visual_novel: "ui.longTermMemory.extractionprompttemplates.visualNovel",
   game: "ui.longTermMemory.extractionprompttemplates.game",
 };
 type PromptSelection =

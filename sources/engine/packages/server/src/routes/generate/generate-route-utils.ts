@@ -615,7 +615,7 @@ export function isMessageHiddenFromAI(message: { extra?: unknown }): boolean {
 }
 
 export function isRoleplaySummaryMode(chatMode: string): boolean {
-  return chatMode === "roleplay" || chatMode === "visual_novel";
+  return chatMode === "roleplay";
 }
 
 /**

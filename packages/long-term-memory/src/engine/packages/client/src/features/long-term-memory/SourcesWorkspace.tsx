@@ -1517,9 +1517,6 @@ export default function SourcesWorkspace({
               <option value="roleplay">
                 {localizeUi("ui.longTermMemory.sourcesworkspace.roleplay")}
               </option>
-              <option value="visual_novel">
-                {localizeUi("ui.longTermMemory.sourcesworkspace.visualNovel")}
-              </option>
             </select>
           </label>
           <Button

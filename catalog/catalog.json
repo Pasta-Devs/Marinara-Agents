@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-31T22:32:02.686Z",
+  "generatedAt": "2026-07-31T23:13:44.568Z",
   "packages": [
     {
       "manifest": {
         "schemaVersion": 1,
         "id": "eightball",
         "name": "8-Ball Pool",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Play 8-Ball Pool with a Conversation character. Install to use /8ball manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -51,8 +51,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "c121818c0414fb67cb001a6854b91758ae4f84b5d9e57705a18d6cfc961e2284",
-            "bytes": 625135
+            "sha256": "d7bade1c032f020dceda61208db2bafdaa938fdbb55a303f35c0e73b92efeb52",
+            "bytes": 625583
           }
         ],
         "permissions": [
@@ -67,9 +67,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/eightball.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.3.zip",
-        "sha256": "7ea090ae4df0cb0a73225ad862ec20ff1af61a4d07adfc9c0e7b957731fd2381",
-        "bytes": 200104
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.4.zip",
+        "sha256": "8ea89796d6646553ee1e6c4f13bf77a9cd05747e4f4155d01cdf38c13b041d40",
+        "bytes": 200394
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball"
     },
@@ -120,7 +120,7 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.6",
+        "version": "1.0.7",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
           "min": "2.3.0",
@@ -150,13 +150,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "942dc38a1e6c3778e51dfcb1626831fdf3bf886cbdc99a8ab6bcc2a6db903f00",
-            "bytes": 2380552
+            "sha256": "3837a966042501ec0d5bbe9a99a670b33cab94d0ed6e6c18a533506e08e96790",
+            "bytes": 2380966
           },
           {
             "path": "client.js",
-            "sha256": "5bb6f28a85542eb3cdb25f8829de6699ff0a170cec939d965637fec1a8bbf039",
-            "bytes": 901815
+            "sha256": "88822953e621b854014b98d9c6208431bd527c5f41bce18ee7d50d3a8ccda1d5",
+            "bytes": 902263
           }
         ],
         "permissions": [
@@ -173,9 +173,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.6.zip",
-        "sha256": "58c03b571bd1b0c6510b760053649b4542706df0c7f8c1fcc21807f2cb8d6080",
-        "bytes": 915466
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.7.zip",
+        "sha256": "3f2133de14b3f61aadbd919b97b60b556fcc9311e253f6f00a26248cf749d0a5",
+        "bytes": 915997
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -268,7 +268,7 @@
         "schemaVersion": 1,
         "id": "chess",
         "name": "Chess",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Play Chess with a Conversation character. Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -308,8 +308,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "995c9f90bcda97c7029def80d2616a643eb8bda28f64b44d3179be63f18b37ad",
-            "bytes": 619047
+            "sha256": "0cac462057b8421b5ef538339ac1c9785c42b2088cf4433493552cfc04504422",
+            "bytes": 619495
           }
         ],
         "permissions": [
@@ -324,9 +324,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/chess.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.3.zip",
-        "sha256": "204cc456f0371cc06621d50d6f6ba85a52b942d5743ff13087af9f63950162a5",
-        "bytes": 203897
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.4.zip",
+        "sha256": "3ba8d586afd805f439f3b4fe254c6a3a5d92491f3e85134d942f59f7b709effa",
+        "bytes": 204277
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess"
     },
@@ -805,7 +805,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, and Game modes.",
         "engine": {
           "min": "2.3.5",
@@ -837,13 +837,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "937e4f7a8a0c212b953fc4061be282e11a5770abf6c07aae876fdb20870d4ca9",
-            "bytes": 347633
+            "sha256": "a8d1a40dfcc1692c7339fb8ab2aa5dc930314791e8dd665ecd3bdcaee28179dc",
+            "bytes": 347011
           },
           {
             "path": "client.js",
-            "sha256": "c010b749b667196c6bd11679c833125f7eee237a0e32f757fb672698ea13948c",
-            "bytes": 548803
+            "sha256": "000aae5a2368643434836469aa52c46764f1c1e35b98e2709023f48cf861a62f",
+            "bytes": 548446
           }
         ],
         "permissions": [
@@ -859,9 +859,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.0.4.zip",
-        "sha256": "ec1e10525400917558b268c842ebbe8cdf4f1188a33e1005aba924d845ae18a6",
-        "bytes": 248467
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.0.5.zip",
+        "sha256": "a457e7a12788c4b014fc34164a361d16105d8438048fff3f1a0dde208b98854c",
+        "bytes": 248413
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -1038,7 +1038,7 @@
         "schemaVersion": 1,
         "id": "poker",
         "name": "Poker",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Play Texas Hold’em Poker with Conversation characters. Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -1080,8 +1080,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "91c4a5a7c9f5df3fa0b02c9d46b71a1c2d39c8ce4e901f4ab6b3b892669b488d",
-            "bytes": 621664
+            "sha256": "37a62943af3832766ce3339939cbece882201a0d786da8fec94fd5fe5f839e6e",
+            "bytes": 622112
           }
         ],
         "permissions": [
@@ -1096,9 +1096,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/poker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.3.zip",
-        "sha256": "4567402dc2cf8045084a445b598b0429e0e59ff5c74ec09d60c42ffac66cc842",
-        "bytes": 195438
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.4.zip",
+        "sha256": "97dad23727e3f10e8fa6a15c88d11a970d3a162626b51d512ea1593a34ceed31",
+        "bytes": 195777
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker"
     },
@@ -1191,7 +1191,7 @@
         "schemaVersion": 1,
         "id": "rock-paper-scissors",
         "name": "Rock-Paper-Scissors",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Play Rock-Paper-Scissors with a Conversation character. Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -1233,8 +1233,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "8483fc833439edf395901b81d0faa24a71a3ea8529907bc9ba28e9acb34ce099",
-            "bytes": 617802
+            "sha256": "797c2cf2eab58a45bb43953cb4444f2acf42d8a5f35f65e3863e92528557b946",
+            "bytes": 618250
           }
         ],
         "permissions": [
@@ -1249,9 +1249,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/rock-paper-scissors.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.3.zip",
-        "sha256": "a9224ba5cae7c3368667d498eead163d9cf59e1ad51fc65a3289d747f51fb03e",
-        "bytes": 188798
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.4.zip",
+        "sha256": "5c1ac7f33f5aad94df88243dbcd04f19f9f8be86522450de19228778f3ed6dfa",
+        "bytes": 189110
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
     },
@@ -1302,7 +1302,7 @@
         "schemaVersion": 1,
         "id": "tic-tac-toe",
         "name": "Tic-Tac-Toe",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Play Tic-Tac-Toe with a Conversation character. Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -1345,8 +1345,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "7fd3aa907eabf51df511f38c440f543136a8674ecb38e58c49e99ff70c1bf81e",
-            "bytes": 613441
+            "sha256": "317d735b4615d4fa9a90193977cbc4c605ce8736ccb17b955378124d8958f24b",
+            "bytes": 613889
           }
         ],
         "permissions": [
@@ -1361,9 +1361,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/tic-tac-toe.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.3.zip",
-        "sha256": "6de73b0a47fc044ca76e55ede4f76aa751feeaebe9f8ff5547831b8c5112c76c",
-        "bytes": 187981
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.4.zip",
+        "sha256": "c3874fd3d382e2c49bd2c77d8800201f9dd1f637353b16e31e2500c23c4d191f",
+        "bytes": 188258
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe"
     },
@@ -1372,7 +1372,7 @@
         "schemaVersion": 1,
         "id": "uno",
         "name": "UNO",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Play UNO with Conversation characters. Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -1412,8 +1412,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "b447027e9dc6187810e415eeffcf684fcd6851f769350750989c138b2d311528",
-            "bytes": 619972
+            "sha256": "67a6510cc970b9fc8901d2b878ff59fa20770c898d6e2999d34036d0e643d875",
+            "bytes": 620420
           }
         ],
         "permissions": [
@@ -1428,9 +1428,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/uno.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.3.zip",
-        "sha256": "f100a36db98bb9935de190a368a6e2fcd9b46fa2f4ef6975ddbdedbe42240ee8",
-        "bytes": 194942
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.4.zip",
+        "sha256": "ac3198ec4c34bea93e7fa5157495ad442eeb85e8af8690122cd3734fa242c4f0",
+        "bytes": 195178
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
     },
@@ -1447,7 +1447,7 @@
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.2.3",
+        "version": "1.2.4",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.5",
@@ -1483,13 +1483,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "3f215301a8bd3e175737e7a47d1449258a19cc70e8d62bcffc25bb0ccd4b1fd1",
-            "bytes": 347497
+            "sha256": "d6266adb254f3364697ea61f252b6be5ae175ae8065ac8482132879408d2b3b7",
+            "bytes": 347740
           },
           {
             "path": "client.js",
-            "sha256": "e7376ff6da77adb475bf6bdf42db9238108e0e69c4b37be4a6c97552e6bab713",
-            "bytes": 912674
+            "sha256": "a4d24fff0044d09e99385a01177f5173878f7c83dfdfaeaea65d09be15242c2e",
+            "bytes": 912913
           }
         ],
         "permissions": [
@@ -1507,9 +1507,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.3.zip",
-        "sha256": "93e531c0e02caa88fc3a20149772d1a987bfc11fe3b86947e7021f7cf7dbeaa2",
-        "bytes": 330425
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.4.zip",
+        "sha256": "aec9e70952b1c35231d3613661efd795faa2979dbf7c23d47c26c4b601d8b865",
+        "bytes": 330961
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps"
     },

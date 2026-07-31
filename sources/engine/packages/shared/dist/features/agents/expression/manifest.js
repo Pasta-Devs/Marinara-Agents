@@ -5,7 +5,7 @@ export const expressionAgentManifest = {
     phase: "post_processing",
     enabledByDefault: false,
     category: "tracker",
-    modeAllowlist: ["roleplay", "visual_novel"],
+    modeAllowlist: ["roleplay"],
     defaultTools: ["set_expression"],
 };
 //# sourceMappingURL=manifest.js.map

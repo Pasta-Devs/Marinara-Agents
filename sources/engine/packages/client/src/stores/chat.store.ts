@@ -202,7 +202,7 @@ interface ChatState {
   /** When true (and the wizard opens), it should land directly on the Quick Setup shortcut view. */
   shouldOpenWizardInShortcutMode: boolean;
   /** Pending new-chat mode for first-run connection setup gating. */
-  pendingNewChatMode: Exclude<ChatMode, "visual_novel"> | null;
+  pendingNewChatMode: ChatMode | null;
   /** Per-chat draft input text so typing isn't lost when navigating away. */
   inputDrafts: Map<string, string>;
   /** Per-chat structured movement staged for the next accepted owner turn. */
@@ -268,7 +268,7 @@ interface ChatState {
   setShouldOpenSettings: (v: boolean) => void;
   setShouldOpenWizard: (v: boolean) => void;
   setShouldOpenWizardInShortcutMode: (v: boolean) => void;
-  setPendingNewChatMode: (mode: Exclude<ChatMode, "visual_novel"> | null) => void;
+  setPendingNewChatMode: (mode: ChatMode | null) => void;
   setInputDraft: (chatId: string, text: string) => void;
   clearInputDraft: (chatId: string) => void;
   setPendingSpatialTransition: (chatId: string, draft: PendingSpatialTransitionDraft) => void;

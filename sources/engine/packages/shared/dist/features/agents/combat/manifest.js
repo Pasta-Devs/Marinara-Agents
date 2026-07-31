@@ -5,7 +5,7 @@ export const combatAgentManifest = {
     phase: "parallel",
     enabledByDefault: false,
     category: "misc",
-    modeAllowlist: ["roleplay", "visual_novel"],
+    modeAllowlist: ["roleplay"],
     defaultTools: ["roll_dice"],
 };
 //# sourceMappingURL=manifest.js.map

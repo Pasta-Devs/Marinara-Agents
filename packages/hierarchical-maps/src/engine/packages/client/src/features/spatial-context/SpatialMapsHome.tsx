@@ -124,7 +124,9 @@ const MAPS_PHASE_META = [
 function modeLabel(mode: string | null) {
   if (mode === "roleplay") return "Roleplay";
   if (mode === "game") return "Game";
-  if (mode === "visual_novel") return "Visual Novel";
+  // "visual_novel" is a retired chat mode; Roleplay is its behavioural
+  // successor. Chats written before the retirement may still carry it.
+  if (mode === "visual_novel") return "Roleplay";
   if (mode === "conversation") return "Conversation";
   return "Chat";
 }

@@ -43,13 +43,18 @@ export const ltmEvidenceUnitBucketSchema = z.enum([
 
 export const ltmClaimKindSchema = z.enum(["static", "change"]);
 
-export const ltmModeSchema = z.enum([
-  "roleplay",
-  "conversation",
-  "visual_novel",
-  "game",
-]);
-const LTM_EXTRACTION_MODES = ltmModeSchema.options;
+const ltmModeEnumSchema = z.enum(["roleplay", "conversation", "game"]);
+/**
+ * The retired "visual_novel" chat mode folds into Roleplay, its behavioural
+ * successor (mirrors the Engine's retired-chat-mode migration). Persisted
+ * vault entries and requests written by older builds may still carry the
+ * retired value, so it is normalized here instead of failing the parse.
+ */
+export const ltmModeSchema = z.preprocess(
+  (value) => (value === "visual_novel" ? "roleplay" : value),
+  ltmModeEnumSchema,
+);
+const LTM_EXTRACTION_MODES = ltmModeEnumSchema.options;
 
 export const ltmExtractionReasoningEffortSchema = z.enum([
   "none",
@@ -202,7 +207,6 @@ export const ltmExtractionPromptTemplateSchema = z
 const LTM_EXTRACTION_MODE_LABELS = {
   roleplay: "Roleplay",
   conversation: "Conversation",
-  visual_novel: "Visual Novel",
   game: "Game",
 } as const satisfies Record<(typeof LTM_EXTRACTION_MODES)[number], string>;
 
@@ -214,10 +218,7 @@ function isLtmExtractionMode(
   value: unknown,
 ): value is (typeof LTM_EXTRACTION_MODES)[number] {
   return (
-    value === "roleplay" ||
-    value === "conversation" ||
-    value === "visual_novel" ||
-    value === "game"
+    value === "roleplay" || value === "conversation" || value === "game"
   );
 }
 
@@ -243,9 +244,27 @@ function nextLegacyPromptTemplateId(
   return id;
 }
 
+function foldRetiredVisualNovelMode(value: Record<string, unknown>) {
+  // The retired "visual_novel" mode folds into Roleplay, its behavioural
+  // successor (mirrors the Engine's retired-chat-mode migration). Stored
+  // settings from before the retirement may still carry the key; without this
+  // fold the strict schemas below would reject them.
+  const folded: Record<string, unknown> = { ...value };
+  for (const key of ["activePromptTemplateIdsByMode", "systemPromptsByMode"]) {
+    const record = folded[key];
+    if (!isRecord(record) || !("visual_novel" in record)) continue;
+    const { visual_novel: legacyValue, ...rest } = record;
+    folded[key] =
+      rest.roleplay === undefined && legacyValue !== undefined
+        ? { ...rest, roleplay: legacyValue }
+        : rest;
+  }
+  return folded;
+}
+
 function normalizeLegacyExtractionSettings(value: unknown) {
   if (!isRecord(value)) return value;
-  const input = value;
+  const input = foldRetiredVisualNovelMode(value);
   const normalized: Record<string, unknown> = { ...input };
   if (
     typeof input.useExtractionAgentOnGameMode !== "boolean" &&
@@ -366,7 +385,6 @@ const ltmActivePromptTemplateIdsByModeSchema = z
   .object({
     roleplay: z.string().min(1).max(64).nullable().optional(),
     conversation: z.string().min(1).max(64).nullable().optional(),
-    visual_novel: z.string().min(1).max(64).nullable().optional(),
     game: z.string().min(1).max(64).nullable().optional(),
   })
   .strict();
