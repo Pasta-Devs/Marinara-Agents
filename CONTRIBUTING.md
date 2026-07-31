@@ -44,6 +44,14 @@ Developer/
 
 Set `MARINARA_ENGINE_ROOT` when the Engine checkout is elsewhere.
 
+Before rebuilding feature packages, install this repository's pinned build dependencies once per checkout:
+
+```bash
+npm install
+```
+
+The root `package.json` pins libraries that feature sources import but that the Engine no longer provides (currently `chess.js` for the Chess package). The feature builder resolves them from this repository's `node_modules` through standard Node module resolution.
+
 ## Repository Layout
 
 - `packages/<id>/` — package manifest, package-owned source, and declared/generated payloads
