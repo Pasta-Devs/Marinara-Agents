@@ -900,7 +900,19 @@ export function normalizeHierarchyProfile(
       locationTypeIds[locationId] = typeId;
     }
   }
-  return { ...parsed.data, locationTypeIds };
+  const linkKeys = definition
+    ? new Set(
+        definition.locations.flatMap((location) =>
+          location.links
+            .filter((link) => locationIds.has(link.targetId))
+            .map((link) => spatialLinkPresentationKey(location.id, link.targetId)),
+        ),
+      )
+    : null;
+  const linkPresentations = Object.fromEntries(
+    Object.entries(parsed.data.linkPresentations).filter(([key]) => !linkKeys || linkKeys.has(key)),
+  );
+  return { ...parsed.data, locationTypeIds, linkPresentations };
 }
 
 export function createSpatialMapTemplateData(

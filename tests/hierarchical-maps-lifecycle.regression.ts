@@ -2743,7 +2743,17 @@ async function main() {
       url: `/api/chats/${chatId}/spatial-context`,
     })) as {
       currentLocationId: string;
-      definition: { revision: number; locations: Array<{ id: string }> };
+      definition: {
+        revision: number;
+        locations: Array<{
+          id: string;
+          links: Array<{ targetId: string; label?: string; bidirectional: boolean; state: string }>;
+        }>;
+      };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
     };
     const messagesBeforeCorrection = (await expectJson(app, {
       method: "GET",
@@ -2753,6 +2763,7 @@ async function main() {
       (message) => message.id === assistantAtHarbor.id,
     )?.content;
     assert.ok(assistantContentBeforeCorrection);
+    const stalePresentationKey = "lifecycle_harbor|missing-location";
     const correctedSource = (await expectJson(app, {
       method: "PUT",
       url: `/api/chats/${chatId}/spatial-context`,
@@ -2761,15 +2772,59 @@ async function main() {
         expectedRevision: upgradedSource.definition.revision,
         expectedCurrentLocationId: "lifecycle_harbor",
         replacementCurrentLocationId: "lifecycle_world",
-        definition: upgradedSource.definition,
+        definition: {
+          ...upgradedSource.definition,
+          locations: upgradedSource.definition.locations.map((location) =>
+            location.id === "lifecycle_harbor"
+              ? {
+                  ...location,
+                  links: [
+                    ...location.links,
+                    {
+                      targetId: "lifecycle_level_5",
+                      label: "Lantern walk",
+                      bidirectional: true,
+                      state: "available",
+                    },
+                  ],
+                }
+              : location,
+          ),
+        },
+        hierarchyProfile: {
+          ...upgradedSource.hierarchyProfile,
+          showConnections: false,
+          linkPresentations: {
+            ...upgradedSource.hierarchyProfile.linkPresentations,
+            [presentationKey]: { color: "#22C55E", lineStyle: "dotted" },
+            [stalePresentationKey]: { color: "#EF4444", lineStyle: "solid" },
+          },
+        },
       },
-    })) as { currentLocationId: string; definition: { revision: number } };
+    })) as {
+      currentLocationId: string;
+      definition: { revision: number };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
+    };
     assert.equal(
       correctedSource.currentLocationId,
       "lifecycle_world",
       "A saved map edit must support an explicit administrative current-location correction",
     );
     assert.equal(correctedSource.definition.revision, upgradedSource.definition.revision + 1);
+    assert.equal(correctedSource.hierarchyProfile.showConnections, false);
+    assert.deepEqual(correctedSource.hierarchyProfile.linkPresentations[presentationKey], {
+      color: "#22C55E",
+      lineStyle: "dotted",
+    });
+    assert.equal(
+      correctedSource.hierarchyProfile.linkPresentations[stalePresentationKey],
+      undefined,
+      "Profile normalization must discard presentation metadata for links with missing endpoints",
+    );
     const correctedMessages = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${chatId}/messages`,
@@ -3203,6 +3258,10 @@ async function main() {
     })) as {
       currentLocationId: string;
       definition: { locations: Array<{ id: string }> };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
     };
     assert.equal(restoredState.currentLocationId, "lifecycle_world");
     assert.ok(
@@ -3210,6 +3269,12 @@ async function main() {
         (location) => location.id === "lifecycle_harbor",
       ),
     );
+    assert.equal(restoredState.hierarchyProfile.showConnections, false);
+    assert.deepEqual(restoredState.hierarchyProfile.linkPresentations[presentationKey], {
+      color: "#22C55E",
+      lineStyle: "dotted",
+    });
+    assert.equal(restoredState.hierarchyProfile.linkPresentations[stalePresentationKey], undefined);
 
     const finalInstalled = await capabilityPackageManager.installed();
     assert.deepEqual(

@@ -2,13 +2,14 @@
   {
     "id": "storyboard",
     "name": "Storyboard",
-    "description": "Plans and generates still or animated Game storyboards through provider-tuned planner, image, and video prompt chains. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Game mode.",
+    "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",
     "execution": "host",
     "modeAllowlist": [
-      "game"
+      "game",
+      "roleplay"
     ],
     "defaultTools": [],
     "defaultSettings": {
@@ -89,7 +90,67 @@
       "viewerDisplayMode": "floating",
       "includeCharacterAppearance": true,
       "useAvatarReferences": true,
-      "useNovelAiCharacterPrompts": true
+      "useNovelAiCharacterPrompts": true,
+      "roleplayEpisodeTemplates": [
+        {
+          "id": "roleplay-completed-episode",
+          "name": "Completed Roleplay Episode",
+          "description": "Plans only completed exchanges since the previous successful Storyboard and anchors every beat to the supplied source sections.",
+          "promptTemplate": "You are Marinara's Roleplay Storyboard planner.\nTurn the supplied completed Roleplay episode into an ordered visual storyboard with up to ${keyframeCount} keyframes.\nThe episode contains numbered user and assistant message sections in chronological order. User sections establish actions, dialogue, and immediate intent; assistant sections establish the canonical completed outcomes.\nUse only events, dialogue, characters, locations, props, and visible details supported by the episode or supplied continuity context. Do not invent the user's next reply, a later assistant response, or connective events that did not occur.\nTreat out-of-character instructions, prompt requests, and generation discussion as context rather than visible in-world events.\nSelect the strongest visual beats directly; do not summarize the episode before planning it. Follow chronology and prefer contiguous section ranges that cover the episode in order.\nFor every keyframe, set sectionStartIndex and sectionEndIndex to the first and last covered source indices. Set anchorQuote to a short exact phrase from those sections and anchorKind to the dominant section role.\nKeep named visible characters synchronized with the characters array and use only names supported by the episode or allowed-character context.\nReturn fewer keyframes when the episode cannot support ${keyframeCount} distinct visual beats. Never duplicate a moment or pad the plan."
+        }
+      ],
+      "roleplayStyleTemplates": [
+        {
+          "id": "roleplay-normal-anime",
+          "name": "Normal / Anime",
+          "description": "Cinematic single-scene anime illustrations with concrete composition and readable character acting.",
+          "promptTemplate": "Visual style: polished cinematic anime illustration.\nWrite imagePrompt as a compact, concrete visual description: visible characters, identity and clothing, action or starting pose, expression, camera angle, composition, setting, lighting, mood, and essential props.\nPrefer one readable scene per keyframe. Do not add captions, dialogue lettering, UI, subtitles, logos, watermarks, speech bubbles, manga SFX text, or prompt commentary."
+        },
+        {
+          "id": "roleplay-novelai",
+          "name": "NovelAI",
+          "description": "Compact ASCII Danbooru tags for NovelAI V4/V4.5 and native Add Character prompting.",
+          "promptTemplate": "Visual style: NovelAI V4/V4.5 anime keyframe.\nWrite imagePrompt as one compact ASCII-only comma-separated NovelAI/Danbooru tag list, never prose or labelled sections.\nBegin with concrete subject counts, then visible character identity or appearance, clothing, action or starting pose, expression, camera framing, composition, setting, lighting, mood, and essential props.\nUse canonical character tags when known and concrete visual traits otherwise. Do not include titles, narrationBeat, commentary, sentences, captions, dialogue lettering, UI, subtitles, logos, watermarks, speech bubbles, manga SFX text, borders, or prompt labels."
+        },
+        {
+          "id": "roleplay-comic",
+          "name": "Comic",
+          "description": "Colored comic storytelling with cinematic framing, expressive acting, and optional source-supported lettering for stills.",
+          "promptTemplate": "Visual style: polished colored comic art with confident inks, cinematic framing, expressive acting, dramatic lighting, and clear action flow.\nFor still Storyboards, imagePrompt may describe a concise 2-6 panel page and brief dialogue bubbles, captions, or SFX only when their exact content is supported by the episode.\nFor animation Storyboards, the animation addon takes priority: create one text-free, border-free T=0 frame rather than a page or panel layout.\nNever invent lettering, captions, dialogue, logos, watermarks, UI, or unrelated events."
+        },
+        {
+          "id": "roleplay-colored-manga",
+          "name": "Colored Manga",
+          "description": "Colored manga rendering with cel shading, screentone texture, dynamic staging, and expressive motion cues.",
+          "promptTemplate": "Visual style: colored manga with expressive linework, cel shading, flat color, controlled screentone texture, crisp silhouettes, dramatic lighting, and dynamic panel-inspired composition.\nFor still Storyboards, source-supported speech bubbles, captions, and SFX may be included when they serve the selected beat.\nFor animation Storyboards, the animation addon takes priority: use one text-free, border-free T=0 frame with no gutters or multi-panel layout.\nDo not invent text, events, visual consequences, or extra characters."
+        },
+        {
+          "id": "roleplay-bw-manga",
+          "name": "B&W Manga",
+          "description": "Black-and-white manga inks, screentones, strong silhouettes, and dramatic staging.",
+          "promptTemplate": "Visual style: black-and-white manga with clean inked line art, strong line weight, stable screentones, heavy blacks, crisp silhouettes, dramatic shadows, and dynamic panel-inspired composition.\nFor still Storyboards, source-supported speech bubbles, captions, and SFX may be included when they serve the selected beat.\nFor animation Storyboards, the animation addon takes priority: use one text-free, border-free T=0 frame with no gutters or multi-panel layout, and do not introduce color.\nDo not invent text, events, visual consequences, or extra characters."
+        }
+      ],
+      "roleplayAnimationTemplates": [
+        {
+          "id": "roleplay-simple-motion",
+          "name": "Simple Storyboard Motion",
+          "description": "Keeps the generated illustration at T=0 and adds one provider-neutral action, camera behavior, ambience, sound, dialogue, and ending hold.",
+          "promptTemplate": "This is an animation Storyboard. Each keyframe becomes one continuous ${durationSeconds}-second image-to-video clip.\nimagePrompt describes only time T=0: the exact visible frame immediately before or as the primary action begins. Choose a starting pose that naturally leads into motion. Do not include later consequences, ending poses, displaced objects, opened mechanisms, new damage, environmental changes, animation directions, lettering, borders, gutters, or multiple panels.\nnarrationBeat is a compact provider-neutral motion direction that begins exactly from imagePrompt. Describe one simple source-supported primary action; one simple camera move or a locked camera; subtle supporting environmental motion; relevant ambience and sound effects; exact brief dialogue only when present in the episode; and a final settling pose, expression, composition, or dramatic hold.\nKeep the motion physically achievable within ${durationSeconds} seconds. Preserve character identity, face, hair, clothing, anatomy, equipment, setting, lighting, and the selected visual style.\nDo not name a video provider, emit timecodes or timeline JSON, repeat the static image inventory, add cuts or scene changes, invent speech, or add unrelated actions and characters."
+        }
+      ],
+      "roleplayOutputTemplates": [
+        {
+          "id": "roleplay-keyframe-json",
+          "name": "Roleplay Keyframe JSON",
+          "description": "Shared strict JSON contract for Roleplay still and animation Storyboards.",
+          "promptTemplate": "Return strict JSON only with this shape:\n{ \"title\": string, \"keyframes\": [ { \"title\": string, \"sectionStartIndex\": number, \"sectionEndIndex\": number, \"anchorQuote\": string, \"anchorKind\": \"user\" | \"assistant\", \"narrationBeat\": string, \"imagePrompt\": string, \"characters\": string[] } ] }\nFor still Storyboards, narrationBeat briefly names the completed visual beat and must not contain animation direction. For animation Storyboards, narrationBeat follows the animation addon.\nDo not add videoPrompt, cameraMotion, transitionHint, continuityNotes, markdown fences, or text outside the JSON object."
+        }
+      ],
+      "roleplayEpisodeTemplateId": "roleplay-completed-episode",
+      "roleplayStyleTemplateId": "roleplay-normal-anime",
+      "roleplayAnimationTemplateId": "roleplay-simple-motion",
+      "roleplayOutputTemplateId": "roleplay-keyframe-json"
     },
     "promptTemplates": [
       {
