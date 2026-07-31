@@ -600,6 +600,7 @@ export function useLinkSpatialSharedWorld() {
     mutationFn: (input: {
       chatId: string;
       worldId: string;
+      expectedWorldRevision: number;
       expectedRevision: number;
       expectedCurrentLocationId: string | null;
     }) => {
