@@ -1968,7 +1968,6 @@ export function SpatialMapWorkspace({
             backgroundEditing={effectiveLayoutEditingMode === "background"}
             onBackgroundMove={queueBackgroundMove}
             hierarchyProfile={draftHierarchyProfile}
-            showConnections={draftHierarchyProfile.showConnections}
             editing={effectiveLayoutEditingMode === "places"}
             onMove={(locationId, placement) => applyDraft(updateSpatialLocation(draft, locationId, { placement }))}
           />

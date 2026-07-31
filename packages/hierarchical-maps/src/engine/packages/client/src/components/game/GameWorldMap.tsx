@@ -478,7 +478,7 @@ export function GameWorldMap({
                   const from = placementById.get(link.from);
                   const to = placementById.get(link.to);
                   if (!from || !to) return null;
-                  const selectedRoute = selectedId === link.from || selectedId === link.to;
+                  const linkIsSelected = selectedId === link.from || selectedId === link.to;
                   const linkPresentation = resolveSpatialLinkPresentation(
                     spatial.hierarchyProfile,
                     link.from,
@@ -494,10 +494,10 @@ export function GameWorldMap({
                       x2={`${displayCoordinate(to.x)}%`}
                       y2={`${displayCoordinate(to.y)}%`}
                       stroke={linkPresentation.color ?? "var(--marinara-chat-chrome-accent)"}
-                      strokeWidth={selectedRoute ? "3" : "2.25"}
+                      strokeWidth={linkIsSelected ? "3" : "2.25"}
                       strokeDasharray={spatialLinkStrokeDasharray(linkPresentation.lineStyle)}
                       strokeLinecap="round"
-                      opacity={selectedRoute ? "1" : "0.85"}
+                      opacity={linkIsSelected ? "1" : "0.85"}
                       vectorEffect="non-scaling-stroke"
                       style={{ filter: "drop-shadow(0 0 1.5px var(--marinara-chat-chrome-panel-bg))" }}
                     />

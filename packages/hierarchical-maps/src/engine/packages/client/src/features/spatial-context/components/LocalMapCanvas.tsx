@@ -19,7 +19,6 @@ interface LocalMapCanvasProps {
   backgroundEditing?: boolean;
   onBackgroundMove?: (position: SpatialLocationPlacement) => void;
   hierarchyProfile: SpatialHierarchyProfile;
-  showConnections?: boolean;
   editing?: boolean;
   onMove?: (locationId: string, placement: { x: number; y: number }) => void;
 }
@@ -38,7 +37,6 @@ export function LocalMapCanvas({
   backgroundEditing = false,
   onBackgroundMove,
   hierarchyProfile,
-  showConnections = true,
   editing = false,
   onMove,
 }: LocalMapCanvasProps) {
@@ -177,7 +175,7 @@ export function LocalMapCanvas({
           Add a child location to place it on this map.
         </div>
       )}
-      {showConnections && (
+      {hierarchyProfile.showConnections && (
         <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
           {visibleLinks.map((link) => {
             const from = placementById.get(link.from);
