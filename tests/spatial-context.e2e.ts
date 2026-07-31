@@ -3957,10 +3957,11 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       });
       return;
     }
-    const expectedRouteHop =
-      generationRequestCount === 3
-        ? { destinationId: "ai_lighthouse", expectedCurrentLocationId: "ai_harbor" }
-        : { destinationId: "ai_lighthouse_upper", expectedCurrentLocationId: "ai_lighthouse" };
+    expect(generationRequestCount).toBe(3);
+    const expectedRouteHop = {
+      destinationId: "ai_lighthouse_upper",
+      expectedCurrentLocationId: "ai_lighthouse",
+    };
     expect(request.pendingSpatialTransition).toMatchObject({
       ...expectedRouteHop,
       expectedDefinitionRevision: saved.definition.revision,
@@ -4161,10 +4162,82 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(recoveredStoryLocation).toContainText("Route to Upper Level");
     await expect(recoveredStoryLocation).toContainText("Next step 1 of 2 · Blackglass Lighthouse");
 
-    const routeInput = page.locator("textarea.mari-chat-input-textarea");
-    await routeInput.fill("I take the cliff road to the lighthouse.");
-    await page.locator("button.mari-chat-send-btn").click();
+    await page.evaluate(() => {
+      const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as
+        | (HTMLElement & {
+            capabilityProps?: Record<string, unknown>;
+            routeTestOriginalProps?: Record<string, unknown>;
+          })
+        | null;
+      if (!runtime?.capabilityProps) throw new Error("World Maps runtime capability was not mounted");
+      runtime.routeTestOriginalProps = runtime.capabilityProps;
+      runtime.capabilityProps = {
+        ...runtime.capabilityProps,
+        onPendingTransitionChange: () => {},
+      };
+      runtime.dispatchEvent(new CustomEvent("marinara-capability-props"));
+    });
+    const firstRouteTransition = await page.evaluate((chatId) => {
+      const stored = JSON.parse(localStorage.getItem("marinara-pending-spatial-transitions") ?? "[]") as Array<
+        [string, { transition: Record<string, unknown> }]
+      >;
+      return stored.find(([storedChatId]) => storedChatId === chatId)?.[1].transition ?? null;
+    }, chat.id);
+    expect(firstRouteTransition).toMatchObject({
+      destinationId: "ai_lighthouse",
+      expectedCurrentLocationId: "ai_harbor",
+    });
+    const firstRouteCommit = await page.request.post(`/api/chats/${chat.id}/spatial-context/turn`, {
+      data: {
+        content: "I take the cliff road to the lighthouse.",
+        transition: firstRouteTransition,
+      },
+    });
+    expect(firstRouteCommit.ok(), await firstRouteCommit.text()).toBeTruthy();
+    await page.evaluate((chatId) => {
+      window.dispatchEvent(
+        new CustomEvent("marinara-capability-server-event", {
+          detail: { packageId: "hierarchical-maps", type: "spatial_transition_committed", chatId },
+        }),
+      );
+    }, chat.id);
     await expect(recoveredStoryLocation).toContainText("Next step 2 of 2 · Upper Level");
+
+    // Engine acknowledges the committed first command with null after Maps has
+    // already queued the second hop. That acknowledgement must only clear the
+    // submitted command, never the newly queued route command.
+    await page.evaluate(() => {
+      const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as
+        | (HTMLElement & { capabilityProps?: Record<string, unknown> })
+        | null;
+      if (!runtime?.capabilityProps) throw new Error("World Maps runtime capability was not mounted");
+      runtime.capabilityProps = { ...runtime.capabilityProps, pendingTransition: null };
+      runtime.dispatchEvent(new CustomEvent("marinara-capability-props"));
+    });
+    await expect(recoveredStoryLocation).toContainText("Next step 2 of 2 · Upper Level");
+
+    await page.evaluate((chatId) => {
+      const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as
+        | (HTMLElement & {
+            capabilityProps?: Record<string, unknown>;
+            routeTestOriginalProps?: Record<string, unknown>;
+          })
+        | null;
+      if (!runtime?.capabilityProps || !runtime.routeTestOriginalProps) {
+        throw new Error("World Maps runtime capability test bridge was not available");
+      }
+      const stored = JSON.parse(localStorage.getItem("marinara-pending-spatial-transitions") ?? "[]") as Array<
+        [string, unknown]
+      >;
+      const pending = stored.find(([storedChatId]) => storedChatId === chatId)?.[1] ?? null;
+      runtime.capabilityProps = { ...runtime.routeTestOriginalProps, pendingTransition: pending };
+      runtime.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      const onPendingTransitionChange = runtime.routeTestOriginalProps.onPendingTransitionChange;
+      if (typeof onPendingTransitionChange === "function") onPendingTransitionChange(pending);
+      delete runtime.routeTestOriginalProps;
+    }, chat.id);
+
+    const routeInput = page.locator("textarea.mari-chat-input-textarea");
     await routeInput.fill("I climb to the lantern gallery.");
     await page.locator("button.mari-chat-send-btn").click();
     await expect(recoveredStoryLocation.getByText("Route to Upper Level", { exact: false })).toHaveCount(0);
