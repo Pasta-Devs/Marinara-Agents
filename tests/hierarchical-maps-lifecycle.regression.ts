@@ -1552,8 +1552,9 @@ async function main() {
         });
         return chat;
       };
-      const firstLinkedChat = await createSharedWorldChat("Lifecycle linked Game world A", "game");
+      const firstLinkedChat = await createSharedWorldChat("Lifecycle linked world A");
       const secondLinkedChat = await createSharedWorldChat("Lifecycle linked world B");
+      const gameSetupLinkedChat = await createSharedWorldChat("Lifecycle linked Game setup world", "game");
       const staleSelectionChat = await createSharedWorldChat("Lifecycle stale setup selection", "game");
       const staleSelection = (await expectJson(
         app,
@@ -1594,6 +1595,29 @@ async function main() {
             worldRevision: number | null;
           };
         }>;
+      const gameSetupLinked = await linkChat(gameSetupLinkedChat.id);
+      assert.equal(gameSetupLinked.currentLocationId, "lifecycle_world");
+      assert.equal(gameSetupLinked.sharedWorld.mode, "linked");
+      const sharedWorldsAfterGameSetupLink = (await expectJson(app, {
+        method: "GET",
+        url: "/api/chats/spatial-context/shared-worlds",
+      })) as Array<typeof sharedWorld>;
+      const canonicalAfterGameSetupLink = sharedWorldsAfterGameSetupLink.find((world) => world.id === sharedWorld.id);
+      assert.equal(canonicalAfterGameSetupLink?.revision, sharedWorld.revision);
+      assert.deepEqual(
+        canonicalAfterGameSetupLink?.data,
+        sharedWorld.data,
+        "Linking a shared world during Game setup must not mutate its canonical definition or artwork",
+      );
+      await expectJson(
+        app,
+        {
+          method: "DELETE",
+          url: `/api/chats/${gameSetupLinkedChat.id}?force=true`,
+          headers: csrfHeaders,
+        },
+        204,
+      );
       const firstLinked = await linkChat(firstLinkedChat.id);
       const secondLinked = await linkChat(secondLinkedChat.id);
       assert.equal(firstLinked.currentLocationId, "lifecycle_world");
@@ -1605,11 +1629,7 @@ async function main() {
       })) as Array<typeof sharedWorld>;
       const canonicalAfterSetupLinks = sharedWorldsAfterSetupLinks.find((world) => world.id === sharedWorld.id);
       assert.equal(canonicalAfterSetupLinks?.revision, sharedWorld.revision);
-      assert.deepEqual(
-        canonicalAfterSetupLinks?.data,
-        sharedWorld.data,
-        "Linking a shared world during Game setup must not mutate its canonical definition or artwork",
-      );
+      assert.deepEqual(canonicalAfterSetupLinks?.data, sharedWorld.data);
       const firstLinkedMove = (await expectJson(app, {
         method: "POST",
         url: `/api/chats/${firstLinkedChat.id}/spatial-context/turn`,
