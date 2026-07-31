@@ -52,7 +52,7 @@ import {
   useLtmTranslation,
   type LtmTranslationFunction,
 } from "./localization";
-import { LtmWorkspace } from "./LtmWorkspace";
+import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
 import {
   buildScopeIndexes,
   deriveScopeBranches,
@@ -378,9 +378,7 @@ export default function MemoryVault({
   const targetContextKey = useRef(contextKey);
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">("all");
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
-  const [mobilePane, setMobilePane] = useState<
-    "navigator" | "workbench" | "inspector"
-  >("navigator");
+  const [mobilePane, setMobilePane] = useState<LtmWorkspacePane>("navigator");
   const [inspectorMount, setInspectorMount] = useState<HTMLDivElement | null>(
     null,
   );
@@ -1324,6 +1322,9 @@ export default function MemoryVault({
       <LtmWorkspace
         activeMobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
+        switcherLabel={localizeUi(
+          "ui.longTermMemory.longtermmemorynavigation.workspacePanes",
+        )}
         navigator={{
           label: localizeUi("ui.longTermMemory.longtermmemorynavigation.memories"),
           content: (
@@ -2014,11 +2015,9 @@ export default function MemoryVault({
                           )
                     }
                     onClick={() => {
-                      setDetailsOpen((value) => {
-                        const next = !value;
-                        setMobilePane(next ? "inspector" : "workbench");
-                        return next;
-                      });
+                      const next = !detailsOpen;
+                      setDetailsOpen(next);
+                      setMobilePane(next ? "inspector" : "workbench");
                     }}
                     aria-pressed={detailsOpen}
                     data-ltm-details-toggle

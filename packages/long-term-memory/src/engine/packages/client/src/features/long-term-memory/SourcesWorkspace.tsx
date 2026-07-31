@@ -44,6 +44,7 @@ import { humanizeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace } from "./LtmWorkspace";
+import type { LtmWorkspacePane } from "./LtmWorkspace";
 import {
   buildScopeIndexes,
   deriveScopeBranches,
@@ -464,7 +465,7 @@ export default function SourcesWorkspace({
     null,
   );
   const [lorebookMobilePane, setLorebookMobilePane] = useState<
-    "navigator" | "workbench"
+    Exclude<LtmWorkspacePane, "inspector">
   >("navigator");
   const [importTargetId, setImportTargetId] = useState(
     props.chatId ? `chat:${props.chatId}` : "all",
@@ -1614,7 +1615,12 @@ export default function SourcesWorkspace({
         >
           <LtmWorkspace
             activeMobilePane={lorebookMobilePane}
-            onMobilePaneChange={setLorebookMobilePane}
+            onMobilePaneChange={(pane) => {
+              if (pane !== "inspector") setLorebookMobilePane(pane);
+            }}
+            switcherLabel={localizeUi(
+              "ui.longTermMemory.longtermmemorynavigation.workspacePanes",
+            )}
             navigator={{
               label: localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks"),
               content: (

@@ -138,6 +138,7 @@
   "ui.longTermMemory.longtermmemorydetail.value1Value2": "{{value1}} {{value2}}",
   "ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton": "You can replay this guide with the help button above.",
   "ui.longTermMemory.longtermmemorynavigation.longTermMemorySections": "Long-Term Memory sections",
+  "ui.longTermMemory.longtermmemorynavigation.workspacePanes": "Workspace panes",
   "ui.longTermMemory.memorysettings.aiKeywordExtraction": "AI keyword extraction",
   "ui.longTermMemory.memorysettings.allowsResolvedMemoriesToParticipateInRecallArchivedMemories": "Allows resolved memories to participate in recall. Archived memories remain excluded.",
   "ui.longTermMemory.memorysettings.alreadyBound": ", already bound",

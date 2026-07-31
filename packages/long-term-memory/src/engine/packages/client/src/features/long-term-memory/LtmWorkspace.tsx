@@ -19,6 +19,7 @@ type WorkspaceSlot = {
 type LtmWorkspaceProps = {
   activeMobilePane: LtmWorkspacePane;
   onMobilePaneChange: (pane: LtmWorkspacePane) => void;
+  switcherLabel: string;
   navigator?: WorkspaceSlot;
   workbench: WorkspaceSlot;
   inspector?: WorkspaceSlot;
@@ -28,6 +29,7 @@ type LtmWorkspaceProps = {
 export function LtmWorkspace({
   activeMobilePane,
   onMobilePaneChange,
+  switcherLabel,
   navigator,
   workbench,
   inspector,
@@ -176,7 +178,7 @@ export function LtmWorkspace({
             data-ltm-workspace-switcher
             className="mari-editor-tab-rail flex gap-1 rounded-lg border p-1"
             role="tablist"
-            aria-label={workbench.label}
+            aria-label={switcherLabel}
           >
             {availablePanes.map((pane) => {
               const slot = slots[pane];
