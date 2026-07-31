@@ -54,6 +54,7 @@ interface SpatialMapLibraryProps {
   onClose: () => void;
   onAppliedToChat?: () => void;
   onSelectForSetup?: (template: SpatialMapTemplateRecord) => void;
+  onSelectSharedWorldForSetup?: (world: SpatialSharedWorldRecord) => void;
   onOpenLorebook?: (lorebookId: string) => void;
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
 }
@@ -84,6 +85,7 @@ export function SpatialMapLibrary({
   onClose,
   onAppliedToChat,
   onSelectForSetup,
+  onSelectSharedWorldForSetup,
   onOpenLorebook,
   onEnabledForChatChange,
 }: SpatialMapLibraryProps) {
@@ -362,6 +364,7 @@ export function SpatialMapLibrary({
       await linkSharedWorld.mutateAsync({
         chatId,
         worldId: world.id,
+        expectedWorldRevision: world.revision,
         expectedRevision: current?.revision ?? 0,
         expectedCurrentLocationId: spatial.data.currentLocationId,
       });
@@ -377,6 +380,17 @@ export function SpatialMapLibrary({
       }
       toast.error(error instanceof Error ? error.message : "The shared world could not be linked.");
     }
+  };
+
+  const selectSharedWorldForSetup = async (world: SpatialSharedWorldRecord) => {
+    if (!onSelectSharedWorldForSetup) return;
+    const confirmed = await ask({
+      title: "Use this shared world?",
+      message: `Link the new Game to “${world.name}”? The canonical world definition and artwork stay account-owned. The Game keeps its own location, travel history, snapshots, bindings, and unpublished discoveries.`,
+      confirmLabel: "Use shared world",
+      tone: "accent",
+    });
+    if (confirmed) onSelectSharedWorldForSetup(world);
   };
 
   const copyWorldToChat = async (world: SpatialSharedWorldRecord) => {
@@ -735,7 +749,19 @@ export function SpatialMapLibrary({
                         >
                           <PencilLine size="0.75rem" /> Edit canonical
                         </button>
-                        {supportedChat ? (
+                        {onSelectSharedWorldForSetup ? (
+                          <button
+                            type="button"
+                            onClick={() => void selectSharedWorldForSetup(world)}
+                            disabled={
+                              world.data.definition.locations.length === 0 ||
+                              !world.data.definition.startingLocationId
+                            }
+                            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                          >
+                            <Link2 size="0.75rem" /> Use shared world
+                          </button>
+                        ) : supportedChat ? (
                           <button
                             type="button"
                             onClick={() => void linkWorldToChat(world)}

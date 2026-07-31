@@ -137,7 +137,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.2",
+    version: "1.2.3",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: "3.0.0",
     name: "World Maps",
@@ -698,7 +698,48 @@ function WorldMapView({ props, chatId, onOpenEditor, useParentScroll = false }) 
 }
 function stopOverlayEvent(event) { event.stopPropagation(); }
 function WorkspaceOverlay({ chatId, props, stagedTemplate, onClose, onOpenTemplates }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} debugMode={props.debugMode === true} stagedTemplate={stagedTemplate} pendingDraftReview={props.pendingDraftReview?.mode === "template" ? null : props.pendingDraftReview || null} onClearPendingDraftReview={() => props.onClearPendingDraftReview?.()} onDirtyChange={(dirty) => props.onDirtyChange?.(dirty)} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onOpenTemplates={onOpenTemplates} onClose={onClose} /><Toaster richColors /></div>, document.body); }
-function LibraryOverlay({ chatId, props, setupSelection, onClose, onAppliedToChat, onSelectForSetup }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onClose={onClose} /><Toaster richColors /></div>, document.body); }
+function LibraryOverlay({ chatId, props, setupSelection, onClose, onAppliedToChat, onSelectForSetup, onSelectSharedWorldForSetup }) { const sharedWorldSetupSupported = Array.isArray(props.supportedSelectionKinds) && props.supportedSelectionKinds.includes("shared-world"); return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onSelectSharedWorldForSetup={setupSelection && sharedWorldSetupSupported ? onSelectSharedWorldForSetup : undefined} onClose={onClose} /><Toaster richColors /></div>, document.body); }
+function SetupSharedWorldApply({ chatId, props }) {
+  const attemptRef = useRef("");
+  const onAppliedRef = useRef(props.onApplied);
+  const onErrorRef = useRef(props.onError);
+  onAppliedRef.current = props.onApplied;
+  onErrorRef.current = props.onError;
+  const selection = props.selection && typeof props.selection === "object" ? props.selection : null;
+  const payload = selection?.payload && typeof selection.payload === "object" ? selection.payload : null;
+  const worldId = typeof payload?.worldId === "string" ? payload.worldId.trim() : "";
+  const worldName = typeof selection?.label === "string" ? selection.label.trim() : "";
+  const expectedWorldRevision = Number.isSafeInteger(payload?.expectedWorldRevision) && payload.expectedWorldRevision > 0 ? payload.expectedWorldRevision : null;
+  const valid = Boolean(payload?.kind === "shared-world" && worldId && worldName && selection?.id === worldId && expectedWorldRevision !== null);
+  const attemptKey = valid ? chatId + ":" + worldId + ":" + expectedWorldRevision : chatId + ":invalid";
+  useEffect(() => {
+    if (attemptRef.current === attemptKey) return;
+    attemptRef.current = attemptKey;
+    if (!valid) {
+      onErrorRef.current?.("The selected shared world could not be read. Return to the library and choose it again.");
+      return;
+    }
+    let cancelled = false;
+    void packageApi.get("/chats/" + encodeURIComponent(chatId) + "/spatial-context").then((spatial) => {
+      if (cancelled) return null;
+      return packageApi.post("/chats/" + encodeURIComponent(chatId) + "/spatial-context/shared-world/link", {
+        worldId,
+        expectedWorldRevision,
+        expectedRevision: spatial?.definition?.revision ?? 0,
+        expectedCurrentLocationId: spatial?.currentLocationId ?? null,
+      });
+    }).then((spatial) => {
+      if (cancelled || !spatial) return;
+      if (spatial.sharedWorld?.mode !== "linked" || spatial.sharedWorld?.worldId !== worldId) throw new Error("World Maps did not confirm the shared-world link.");
+      client.setQueryData(["spatial-context", chatId], spatial);
+      onAppliedRef.current?.({ worldId, worldName, worldRevision: spatial.sharedWorld.worldRevision });
+    }).catch((error) => {
+      if (!cancelled) onErrorRef.current?.(error instanceof Error ? error.message : "The shared world could not be linked.");
+    });
+    return () => { cancelled = true; };
+  }, [attemptKey, chatId, expectedWorldRevision, valid, worldId, worldName]);
+  return null;
+}
 function WorldMapOverlay({ chatId, props, onClose, onOpenEditor }) {
   useEffect(() => {
     const closeOnEscape = (event) => { if (event.key === "Escape") onClose(); };
@@ -777,7 +818,7 @@ function Root({ element }) {
   };
   const selectTemplateForSetup = (template) => {
     if (view === "setup") {
-      props.onSelect?.({ id: template.id, label: template.name, payload: template });
+      props.onSelect?.({ kind: "template", id: template.id, label: template.name, payload: template });
       props.onClose?.();
       return;
     }
@@ -786,7 +827,17 @@ function Root({ element }) {
     setLibraryOpen(false);
     setWorkspaceOpen(true);
   };
-  if (view === "setup") return <LibraryOverlay chatId="" props={props} setupSelection onSelectForSetup={selectTemplateForSetup} onClose={() => props.onClose?.()} />;
+  const selectSharedWorldForSetup = (world) => {
+    props.onSelect?.({
+      kind: "shared-world",
+      id: world.id,
+      label: world.name,
+      payload: { kind: "shared-world", worldId: world.id, expectedWorldRevision: world.revision },
+    });
+    props.onClose?.();
+  };
+  if (view === "setup-apply") return chatId ? <SetupSharedWorldApply chatId={chatId} props={props} /> : null;
+  if (view === "setup") return <LibraryOverlay chatId="" props={props} setupSelection onSelectForSetup={selectTemplateForSetup} onSelectSharedWorldForSetup={selectSharedWorldForSetup} onClose={() => props.onClose?.()} />;
   if (libraryOpen) return <LibraryOverlay chatId={chatId} props={props} setupSelection={setupTemplateNeedsSelection} onSelectForSetup={selectTemplateForSetup} onClose={closeLibrary} onAppliedToChat={() => { setLibraryOpen(false); setWorkspaceOpen(true); }} />;
   if (workspaceOpen && chatId) return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={() => setLibraryOpen(true)} />;
   if (worldMapOpen && chatId) return <WorldMapOverlay chatId={chatId} props={props} onClose={() => setWorldMapOpen(false)} onOpenEditor={editFromWorldMap} />;

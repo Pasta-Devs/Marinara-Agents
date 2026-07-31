@@ -581,7 +581,7 @@ async function expectAiBuilderLayout(page: Page, mobile: boolean) {
 async function openGameSetupMapDraftReview(
   page: Page,
   testInfo: TestInfo,
-  planMode: "ai" | "template" = "ai",
+  planMode: "ai" | "template" | "shared-world" = "ai",
 ) {
   const suffix = `${testInfo.project.name}-${Date.now()}`;
   const chatResponse = await page.request.post("/api/chats", {
@@ -595,20 +595,39 @@ async function openGameSetupMapDraftReview(
   const chat = (await chatResponse.json()) as Record<string, unknown> & { id: string };
   await activateHierarchicalMaps(page, chat.id);
   let template: { id: string; revision: number; name: string } | null = null;
-  if (planMode === "template") {
+  let sharedWorld: {
+    id: string;
+    revision: number;
+    name: string;
+    data: unknown;
+  } | null = null;
+  if (planMode === "template" || planMode === "shared-world") {
     const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(spatialResponse.ok(), await spatialResponse.text()).toBeTruthy();
     const spatial = (await spatialResponse.json()) as { hierarchyProfile: unknown };
-    const templateResponse = await page.request.post("/api/chats/spatial-context/templates", {
-      data: {
-        name: `Setup Template ${suffix}`,
-        description: "A reusable Game setup template fixture.",
-        definition: { ...gameGeneratedDefinition, ownerMode: "roleplay", enabled: false, revision: 0 },
-        hierarchyProfile: spatial.hierarchyProfile,
-      },
-    });
-    expect(templateResponse.ok(), await templateResponse.text()).toBeTruthy();
-    template = (await templateResponse.json()) as { id: string; revision: number; name: string };
+    if (planMode === "template") {
+      const templateResponse = await page.request.post("/api/chats/spatial-context/templates", {
+        data: {
+          name: `Setup Template ${suffix}`,
+          description: "A reusable Game setup template fixture.",
+          definition: { ...gameGeneratedDefinition, ownerMode: "roleplay", enabled: false, revision: 0 },
+          hierarchyProfile: spatial.hierarchyProfile,
+        },
+      });
+      expect(templateResponse.ok(), await templateResponse.text()).toBeTruthy();
+      template = (await templateResponse.json()) as { id: string; revision: number; name: string };
+    } else {
+      const sharedWorldResponse = await page.request.post("/api/chats/spatial-context/shared-worlds", {
+        data: {
+          name: `Setup Shared World ${suffix}`,
+          description: "A canonical shared world selected during Game setup.",
+          definition: { ...gameGeneratedDefinition, ownerMode: "roleplay", enabled: true, revision: 0 },
+          hierarchyProfile: spatial.hierarchyProfile,
+        },
+      });
+      expect(sharedWorldResponse.ok(), await sharedWorldResponse.text()).toBeTruthy();
+      sharedWorld = (await sharedWorldResponse.json()) as NonNullable<typeof sharedWorld>;
+    }
   }
   const connection = {
     id: `e2-connection-${suffix}`,
@@ -756,6 +775,19 @@ async function openGameSetupMapDraftReview(
     await expect(library).toHaveCount(0);
     await expect(wizard).toContainText(`Selected map template: ${template!.name}`);
     expect(createRequestCount).toBe(0);
+  } else if (planMode === "shared-world") {
+    await expect(wizard.getByRole("button", { name: /Use a template or shared world/ })).toBeVisible();
+    await wizard.getByRole("button", { name: /Use a template or shared world/ }).click();
+    expect(createRequestCount).toBe(0);
+    const library = page.locator("[data-marinara-map-template-library]");
+    await expect(library.getByRole("heading", { name: "Shared worlds", exact: true })).toBeVisible();
+    const card = library.getByRole("heading", { name: sharedWorld!.name }).locator("xpath=ancestor::article");
+    await card.getByRole("button", { name: "Use shared world", exact: true }).click();
+    const confirm = page.getByRole("dialog").filter({ hasText: "Use this shared world?" });
+    await confirm.getByRole("button", { name: "Use shared world", exact: true }).click();
+    await expect(library).toHaveCount(0);
+    await expect(wizard).toContainText(`Selected shared world: ${sharedWorld!.name}`);
+    expect(createRequestCount).toBe(0);
   } else {
     await wizard.getByRole("button", { name: /Draft with AI/ }).click();
     await wizard.getByRole("button", { name: /Small About 8 places/ }).click();
@@ -767,7 +799,19 @@ async function openGameSetupMapDraftReview(
   if (planMode === "template") {
     await expect(page.locator("[data-marinara-map-template-library]")).toHaveCount(0);
     await expect(page.locator("[data-marinara-maps-workspace-root]")).toBeVisible();
-    return { chat, template };
+    return { chat, template, sharedWorld };
+  }
+  if (planMode === "shared-world") {
+    await expect(wizard).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        if (!response.ok()) return null;
+        const spatial = (await response.json()) as { sharedWorld?: { mode?: string; worldId?: string } };
+        return spatial.sharedWorld?.mode === "linked" ? spatial.sharedWorld.worldId : null;
+      })
+      .toBe(sharedWorld!.id);
+    return { chat, template, sharedWorld };
   }
 
   await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
@@ -778,7 +822,7 @@ async function openGameSetupMapDraftReview(
   await expect(page.getByRole("button", { name: "Continue to editor" })).toBeVisible();
   await expectAiBuilderLayout(page, testInfo.project.name.includes("mobile"));
 
-  return { chat, template };
+  return { chat, template, sharedWorld };
 }
 
 test("World Maps activates inside its Tracker Agents entry", async ({ page }, testInfo) => {
@@ -3510,6 +3554,47 @@ test("Game setup stages a saved map template as a Game-owned working copy", asyn
       expect(deleteTemplateResponse.ok(), await deleteTemplateResponse.text()).toBeTruthy();
     }
     await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+  }
+});
+
+test("Game setup links a selected shared world before Start without changing its canonical record", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The shared-world setup handoff is shared across viewports.");
+  test.setTimeout(120_000);
+  const { chat, sharedWorld } = await openGameSetupMapDraftReview(page, testInfo, "shared-world");
+
+  try {
+    const linkedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(linkedResponse.ok(), await linkedResponse.text()).toBeTruthy();
+    const linked = (await linkedResponse.json()) as {
+      currentLocationId: string | null;
+      sharedWorld: { mode: string; worldId: string | null; worldRevision: number | null };
+    };
+    expect(linked.currentLocationId).toBe(gameGeneratedDefinition.startingLocationId);
+    expect(linked.sharedWorld).toMatchObject({
+      mode: "linked",
+      worldId: sharedWorld!.id,
+      worldRevision: sharedWorld!.revision,
+    });
+
+    const canonicalResponse = await page.request.get("/api/chats/spatial-context/shared-worlds");
+    expect(canonicalResponse.ok(), await canonicalResponse.text()).toBeTruthy();
+    const canonical = ((await canonicalResponse.json()) as Array<NonNullable<typeof sharedWorld>>).find(
+      (world) => world.id === sharedWorld!.id,
+    );
+    expect(canonical?.revision).toBe(sharedWorld!.revision);
+    expect(canonical?.data).toEqual(sharedWorld!.data);
+
+    const startResponse = await page.request.post("/api/game/start", { data: { chatId: chat.id } });
+    expect(startResponse.ok(), await startResponse.text()).toBeTruthy();
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+    if (sharedWorld) {
+      const deleteSharedWorldResponse = await page.request.delete(
+        `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+        { data: { expectedRevision: sharedWorld.revision } },
+      );
+      expect(deleteSharedWorldResponse.ok(), await deleteSharedWorldResponse.text()).toBeTruthy();
+    }
   }
 });
 
