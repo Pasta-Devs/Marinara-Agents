@@ -113,14 +113,14 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 const features = [
   {
     id: "long-term-memory",
-    version: "1.0.3",
+    version: "1.0.4",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: "2.4.0",
     name: "Long-Term Memory",
     description: "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
     category: "misc",
     kind: ["agent"],
-    modes: ["conversation", "roleplay", "visual_novel", "game"],
+    modes: ["conversation", "roleplay", "game"],
     permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
     serverImport: "packages/server/src/services/long-term-memory/server-entry.ts",
     serverEntry: true,
