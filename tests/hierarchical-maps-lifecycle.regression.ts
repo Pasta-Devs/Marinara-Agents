@@ -98,6 +98,7 @@ const fixtures = new Map(
     artifactFixture("1.1.7"),
     artifactFixture("1.2.0"),
     artifactFixture("1.2.1"),
+    artifactFixture("1.2.2"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -2587,18 +2588,32 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.2.1";
+    catalogVersion = "1.2.2";
     catalogOnline = true;
-    const upgraded121 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded121.version, "1.2.1");
-    assert.equal(upgraded121.previousVersion, "1.1.7");
+    const upgraded122 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded122.version, "1.2.2");
+    assert.equal(upgraded122.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
     const upgradedBranchSpatial = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${branch.id}/spatial-context`,
-    })) as { warnings: Array<{ code: string; message: string; locationId?: string }> };
+    })) as {
+      currentLocationId: string;
+      definition: {
+        revision: number;
+        locations: Array<{
+          id: string;
+          links: Array<{ targetId: string; label?: string; bidirectional: boolean; state: string }>;
+        }>;
+      };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
+      warnings: Array<{ code: string; message: string; locationId?: string }>;
+    };
     assert.ok(
       upgradedBranchSpatial.warnings.some(
         (warning) =>
@@ -2618,13 +2633,77 @@ async function main() {
       false,
       "The updated artifact must ignore missing lore links retained only on archived locations",
     );
+    const presentationKey = "lifecycle_harbor|lifecycle_level_5";
+    const styledBranch = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${branch.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: upgradedBranchSpatial.definition.revision,
+        expectedCurrentLocationId: upgradedBranchSpatial.currentLocationId,
+        definition: {
+          ...upgradedBranchSpatial.definition,
+          locations: upgradedBranchSpatial.definition.locations.map((location) =>
+            location.id === "lifecycle_harbor"
+              ? {
+                  ...location,
+                  links: [
+                    ...location.links,
+                    {
+                      targetId: "lifecycle_level_5",
+                      label: "Lantern walk",
+                      bidirectional: true,
+                      state: "available",
+                    },
+                  ],
+                }
+              : location,
+          ),
+        },
+        hierarchyProfile: {
+          ...upgradedBranchSpatial.hierarchyProfile,
+          showConnections: false,
+          linkPresentations: {
+            ...upgradedBranchSpatial.hierarchyProfile.linkPresentations,
+            [presentationKey]: { color: "#22C55E", lineStyle: "dotted" },
+          },
+        },
+      },
+    })) as {
+      definition: { locations: Array<{ id: string; links: Array<{ targetId: string; label?: string }> }> };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
+    };
+    assert.equal(
+      styledBranch.definition.locations
+        .find((location) => location.id === "lifecycle_harbor")
+        ?.links.find((link) => link.targetId === "lifecycle_level_5")?.label,
+      "Lantern walk",
+    );
+    assert.deepEqual(styledBranch.hierarchyProfile.linkPresentations[presentationKey], {
+      color: "#22C55E",
+      lineStyle: "dotted",
+    });
+    assert.equal(styledBranch.hierarchyProfile.showConnections, false);
 
     const upgradedSource = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${chatId}/spatial-context`,
     })) as {
       currentLocationId: string;
-      definition: { revision: number; locations: Array<{ id: string }> };
+      definition: {
+        revision: number;
+        locations: Array<{
+          id: string;
+          links: Array<{ targetId: string; label?: string; bidirectional: boolean; state: string }>;
+        }>;
+      };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
     };
     const messagesBeforeCorrection = (await expectJson(app, {
       method: "GET",
@@ -2634,6 +2713,7 @@ async function main() {
       (message) => message.id === assistantAtHarbor.id,
     )?.content;
     assert.ok(assistantContentBeforeCorrection);
+    const stalePresentationKey = "lifecycle_harbor|missing-location";
     const correctedSource = (await expectJson(app, {
       method: "PUT",
       url: `/api/chats/${chatId}/spatial-context`,
@@ -2642,15 +2722,59 @@ async function main() {
         expectedRevision: upgradedSource.definition.revision,
         expectedCurrentLocationId: "lifecycle_harbor",
         replacementCurrentLocationId: "lifecycle_world",
-        definition: upgradedSource.definition,
+        definition: {
+          ...upgradedSource.definition,
+          locations: upgradedSource.definition.locations.map((location) =>
+            location.id === "lifecycle_harbor"
+              ? {
+                  ...location,
+                  links: [
+                    ...location.links,
+                    {
+                      targetId: "lifecycle_level_5",
+                      label: "Lantern walk",
+                      bidirectional: true,
+                      state: "available",
+                    },
+                  ],
+                }
+              : location,
+          ),
+        },
+        hierarchyProfile: {
+          ...upgradedSource.hierarchyProfile,
+          showConnections: false,
+          linkPresentations: {
+            ...upgradedSource.hierarchyProfile.linkPresentations,
+            [presentationKey]: { color: "#22C55E", lineStyle: "dotted" },
+            [stalePresentationKey]: { color: "#EF4444", lineStyle: "solid" },
+          },
+        },
       },
-    })) as { currentLocationId: string; definition: { revision: number } };
+    })) as {
+      currentLocationId: string;
+      definition: { revision: number };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
+    };
     assert.equal(
       correctedSource.currentLocationId,
       "lifecycle_world",
       "A saved map edit must support an explicit administrative current-location correction",
     );
     assert.equal(correctedSource.definition.revision, upgradedSource.definition.revision + 1);
+    assert.equal(correctedSource.hierarchyProfile.showConnections, false);
+    assert.deepEqual(correctedSource.hierarchyProfile.linkPresentations[presentationKey], {
+      color: "#22C55E",
+      lineStyle: "dotted",
+    });
+    assert.equal(
+      correctedSource.hierarchyProfile.linkPresentations[stalePresentationKey],
+      undefined,
+      "Profile normalization must discard presentation metadata for links with missing endpoints",
+    );
     const correctedMessages = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${chatId}/messages`,
@@ -3023,7 +3147,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.2.1");
+    assert.equal(reinstalled.version, "1.2.2");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -3084,6 +3208,10 @@ async function main() {
     })) as {
       currentLocationId: string;
       definition: { locations: Array<{ id: string }> };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
     };
     assert.equal(restoredState.currentLocationId, "lifecycle_world");
     assert.ok(
@@ -3091,6 +3219,12 @@ async function main() {
         (location) => location.id === "lifecycle_harbor",
       ),
     );
+    assert.equal(restoredState.hierarchyProfile.showConnections, false);
+    assert.deepEqual(restoredState.hierarchyProfile.linkPresentations[presentationKey], {
+      color: "#22C55E",
+      lineStyle: "dotted",
+    });
+    assert.equal(restoredState.hierarchyProfile.linkPresentations[stalePresentationKey], undefined);
 
     const finalInstalled = await capabilityPackageManager.installed();
     assert.deepEqual(
@@ -3101,7 +3235,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.2.1", status: "active", readiness: "ready" }],
+      [{ version: "1.2.2", status: "active", readiness: "ready" }],
     );
 
     console.info(

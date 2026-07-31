@@ -961,7 +961,7 @@ test("global World Maps home activates and opens the current chat map", async ({
     await expect(home.getByRole("heading", { name: "Installed package", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Current chat", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "World Maps", exact: true })).toBeVisible();
-    await expect(home.locator(".mari-editor-header")).toContainText("v1.2.1");
+    await expect(home.locator(".mari-editor-header")).toContainText("v1.2.2");
     await expect(home.getByRole("heading", { name: "Description", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Pipeline Phase", exact: true })).toBeVisible();
     await expect(home.getByRole("button", { name: "Pre-Generation", exact: true })).toHaveAttribute(
@@ -3248,6 +3248,25 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(page.getByRole("button", { name: "Location types" })).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Location type fields" })).toHaveCount(0);
     await page.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    const locationHierarchy = page.getByRole("region", { name: "Location hierarchy" });
+    await locationHierarchy.getByRole("button", { name: /^Blackglass Lighthouse/ }).click();
+    await page.getByLabel("Line style for Old Sewers").selectOption("dotted");
+    await page.getByLabel("Line color for Old Sewers").fill("#22c55e");
+    await page.getByLabel("Link state").selectOption("available");
+    await locationHierarchy.getByRole("button", { name: "Enter Shrouded Coast" }).click();
+    const editorConnection = page.locator(
+      'line[data-marinara-map-connection="ai_lighthouse|ai_sewers"]',
+    );
+    await expect(editorConnection).toHaveCount(1);
+    await expect(editorConnection).toHaveAttribute("data-line-style", "dotted");
+    await expect(editorConnection).toHaveAttribute("stroke", "#22C55E");
+    await expect(editorConnection).toHaveAttribute("stroke-dasharray", "1 5");
+    const editorConnectionToggle = page.getByRole("button", { name: "Hide connections" });
+    await expectMinimumInteractiveSize(editorConnectionToggle, "Map editor connection visibility control");
+    await editorConnectionToggle.click();
+    await expect(editorConnection).toHaveCount(0);
+    await page.getByRole("button", { name: "Show connections" }).click();
+    await expect(editorConnection).toHaveCount(1);
     await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
     if (mobile) {
@@ -3756,10 +3775,40 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       expectedRevision: 0,
       expectedCurrentLocationId: null,
       definition: runtimeDefinition,
+      hierarchyProfile: {
+        version: 1,
+        mode: "template",
+        name: "Runtime map presentation",
+        types: [
+          { id: "type_region", label: "Region", baseKind: "region" },
+          { id: "type_settlement", label: "Settlement", baseKind: "settlement" },
+          { id: "type_place", label: "Place", baseKind: "place" },
+          { id: "type_building", label: "Building", baseKind: "building" },
+          { id: "type_floor", label: "Floor", baseKind: "floor" },
+          { id: "type_room", label: "Room", baseKind: "room" },
+        ],
+        locationTypeIds: {},
+        showConnections: true,
+        linkPresentations: {
+          "ai_harbor|ai_lighthouse": { color: "#22C55E", lineStyle: "dotted" },
+        },
+      },
     },
   });
   expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
-  const saved = (await saveResponse.json()) as { definition: { revision: number }; currentLocationId: string };
+  const saved = (await saveResponse.json()) as {
+    definition: { revision: number };
+    currentLocationId: string;
+    hierarchyProfile: {
+      showConnections: boolean;
+      linkPresentations: Record<string, { color: string; lineStyle: string }>;
+    };
+  };
+  expect(saved.hierarchyProfile.linkPresentations["ai_harbor|ai_lighthouse"]).toEqual({
+    color: "#22C55E",
+    lineStyle: "dotted",
+  });
+  expect(saved.hierarchyProfile.showConnections).toBe(true);
   let generationRequestCount = 0;
 
   await page.route("**/api/generate", async (route) => {
@@ -3890,6 +3939,14 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await openStoryMap.click();
     let roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
     await expect(roleplayMap).toBeVisible();
+    const connectionLine = roleplayMap.locator(
+      'line[data-marinara-map-connection="ai_harbor|ai_lighthouse"]',
+    );
+    await expect(connectionLine).toHaveCount(1);
+    await expect(connectionLine).toHaveAttribute("data-line-style", "dotted");
+    await expect(connectionLine).toHaveAttribute("stroke", "#22C55E");
+    await expect(connectionLine).toHaveAttribute("stroke-dasharray", "1 5");
+    await expect(roleplayMap.getByRole("button", { name: /connections/u })).toHaveCount(0);
     const visibleMapPopover = storyLocation.locator("[data-marinara-maps-runtime-popover]:visible");
     await expect(visibleMapPopover).toBeVisible();
     const mapPopoverBox = await visibleMapPopover.boundingBox();

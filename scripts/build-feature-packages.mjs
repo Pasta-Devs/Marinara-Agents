@@ -137,11 +137,11 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.1",
+    version: "1.2.2",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: "3.0.0",
     name: "World Maps",
-    description: "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, and movement to Roleplay and Game.",
+    description: "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game.",
     category: "tracker",
     kind: ["agent", "maps"],
     modes: ["roleplay", "game"],

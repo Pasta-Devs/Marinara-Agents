@@ -27,7 +27,7 @@ Across its Engine compatibility lanes, the catalog currently contains **31 first
 | Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks present characters, moods, actions, appearance, thoughts, and character stats. |
 | Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks user-defined currencies, counters, flags, and other custom fields. |
 | Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |
-| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, map authoring, and movement. |
+| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, customizable Direct Link lines, map authoring, and movement. |
 | Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks the player persona's status bars and custom stats from narrative events. |
 | Quest Tracker | [`quest`](packages/quest/manifest.json) | Manages quest objectives, completion states, and rewards. |
 | World State | [`world-state`](packages/world-state/manifest.json) | Tracks date, time, weather, location, temperature, and custom world details. |
