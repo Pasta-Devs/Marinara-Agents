@@ -259,6 +259,15 @@ function collectGameMapBindingTargets(metadata: Record<string, unknown>): Collec
   });
 }
 
+export function countGameMapBindingsBySpatialLocation(metadata: Record<string, unknown>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const target of collectGameMapBindingTargets(metadata)) {
+    if (!target.currentSpatialLocationId) continue;
+    counts.set(target.currentSpatialLocationId, (counts.get(target.currentSpatialLocationId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export function buildGameMapBindingReconciliationPreview(
   metadata: Record<string, unknown>,
   definition: SpatialContextDefinition,

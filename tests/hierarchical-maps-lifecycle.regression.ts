@@ -2682,6 +2682,11 @@ async function main() {
         showConnections: boolean;
         linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
       };
+      locationDeletionProtections: Array<{
+        locationId: string;
+        historySnapshotCount: number;
+        gameMapBindingCount: number;
+      }>;
       warnings: Array<{ code: string; message: string; locationId?: string }>;
     };
     assert.ok(
@@ -2703,8 +2708,20 @@ async function main() {
       false,
       "The updated artifact must ignore missing lore links retained only on archived locations",
     );
-    const presentationKey = "lifecycle_harbor|lifecycle_level_5";
-    const styledBranch = (await expectJson(app, {
+
+    const temporaryArchivedLocation = {
+      id: "lifecycle_temporary_archive",
+      parentId: null,
+      name: "Temporary Archived Location",
+      kind: "place",
+      description: "An accidental location that has never appeared in message history.",
+      childPresentation: "list",
+      links: [],
+      lorebookEntryIds: [],
+      status: "archived",
+      sortOrder: 99,
+    };
+    const branchWithTemporaryArchive = (await expectJson(app, {
       method: "PUT",
       url: `/api/chats/${branch.id}/spatial-context`,
       headers: csrfHeaders,
@@ -2713,7 +2730,78 @@ async function main() {
         expectedCurrentLocationId: upgradedBranchSpatial.currentLocationId,
         definition: {
           ...upgradedBranchSpatial.definition,
-          locations: upgradedBranchSpatial.definition.locations.map((location) =>
+          locations: [...upgradedBranchSpatial.definition.locations, temporaryArchivedLocation],
+        },
+        hierarchyProfile: upgradedBranchSpatial.hierarchyProfile,
+      },
+    })) as typeof upgradedBranchSpatial;
+    assert.ok(
+      branchWithTemporaryArchive.locationDeletionProtections.some(
+        (protection: { locationId: string; historySnapshotCount: number }) =>
+          protection.locationId === "lifecycle_world" && protection.historySnapshotCount > 0,
+      ),
+      "The editor must receive per-location history protections",
+    );
+
+    const branchAfterSafeDeletion = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${branch.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: branchWithTemporaryArchive.definition.revision,
+        expectedCurrentLocationId: branchWithTemporaryArchive.currentLocationId,
+        definition: {
+          ...branchWithTemporaryArchive.definition,
+          locations: branchWithTemporaryArchive.definition.locations.filter(
+            (location) => location.id !== temporaryArchivedLocation.id,
+          ),
+        },
+        hierarchyProfile: branchWithTemporaryArchive.hierarchyProfile,
+      },
+    })) as typeof upgradedBranchSpatial;
+    assert.equal(
+      branchAfterSafeDeletion.definition.locations.some((location) => location.id === temporaryArchivedLocation.id),
+      false,
+      "An archived location with no history or bindings must be permanently removable",
+    );
+
+    const protectedHistoryRemoval = (await expectJson(
+      app,
+      {
+        method: "PUT",
+        url: `/api/chats/${branch.id}/spatial-context`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: branchAfterSafeDeletion.definition.revision,
+          expectedCurrentLocationId: branchAfterSafeDeletion.currentLocationId,
+          definition: {
+            ...branchAfterSafeDeletion.definition,
+            locations: branchAfterSafeDeletion.definition.locations
+              .filter((location) => location.id !== "lifecycle_harbor")
+              .map((location) => ({
+                ...location,
+                links: location.links.filter((link) => link.targetId !== "lifecycle_harbor"),
+              })),
+          },
+          hierarchyProfile: branchAfterSafeDeletion.hierarchyProfile,
+        },
+      },
+      409,
+    )) as { code: string; error: string };
+    assert.equal(protectedHistoryRemoval.code, "spatial_history_location_removal_forbidden");
+    assert.match(protectedHistoryRemoval.error, /historical message/u);
+
+    const presentationKey = "lifecycle_harbor|lifecycle_level_5";
+    const styledBranch = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${branch.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: branchAfterSafeDeletion.definition.revision,
+        expectedCurrentLocationId: branchAfterSafeDeletion.currentLocationId,
+        definition: {
+          ...branchAfterSafeDeletion.definition,
+          locations: branchAfterSafeDeletion.definition.locations.map((location) =>
             location.id === "lifecycle_harbor"
               ? {
                   ...location,
@@ -2731,10 +2819,10 @@ async function main() {
           ),
         },
         hierarchyProfile: {
-          ...upgradedBranchSpatial.hierarchyProfile,
+          ...branchAfterSafeDeletion.hierarchyProfile,
           showConnections: false,
           linkPresentations: {
-            ...upgradedBranchSpatial.hierarchyProfile.linkPresentations,
+            ...branchAfterSafeDeletion.hierarchyProfile.linkPresentations,
             [presentationKey]: { color: "#22C55E", lineStyle: "dotted" },
           },
         },

@@ -16,6 +16,7 @@ import {
   applyGameMapBindingReconciliation,
   bindGameMapsToExactSpatialLocations,
   buildGameMapBindingReconciliationPreview,
+  countGameMapBindingsBySpatialLocation,
   GameMapBindingError,
   type GameMapBindingReconciliationSelection,
 } from "./game-map-binding.js";
@@ -27,6 +28,7 @@ import {
   type MapsSpatialContextResponse,
   type SpatialGenerationPreferences,
   type SpatialHierarchyProfile,
+  type SpatialLocationDeletionProtection,
   type SpatialSharedWorldStatus,
 } from "../../../../maps-shared/src/maps-model.js";
 import {
@@ -83,6 +85,7 @@ function buildResponse(
   hierarchyProfile: SpatialHierarchyProfile = normalizeHierarchyProfile(null, definition),
   generationPreferences: SpatialGenerationPreferences = defaultGenerationPreferences(),
   sharedWorld: SpatialSharedWorldStatus = independentSpatialWorldStatus(),
+  locationDeletionProtections: SpatialLocationDeletionProtection[] = [],
 ): MapsSpatialContextResponse {
   if (!definition) {
     return {
@@ -103,6 +106,7 @@ function buildResponse(
       hierarchyProfile,
       generationPreferences,
       sharedWorld,
+      locationDeletionProtections,
     };
   }
 
@@ -119,7 +123,27 @@ function buildResponse(
     hierarchyProfile,
     generationPreferences,
     sharedWorld,
+    locationDeletionProtections,
   };
+}
+
+async function resolveLocationDeletionProtections(
+  chatId: string,
+  metadata: Record<string, unknown>,
+  persistence: CapabilityPersistenceSession,
+): Promise<SpatialLocationDeletionProtection[]> {
+  const historyCounts = new Map<string, number>();
+  const snapshots = await createSpatialContextStorage(persistence).listForChat(chatId);
+  for (const snapshot of snapshots) {
+    if (!snapshot.messageId.trim() || !snapshot.currentLocationId) continue;
+    historyCounts.set(snapshot.currentLocationId, (historyCounts.get(snapshot.currentLocationId) ?? 0) + 1);
+  }
+  const bindingCounts = countGameMapBindingsBySpatialLocation(metadata);
+  return [...new Set([...historyCounts.keys(), ...bindingCounts.keys()])].map((locationId) => ({
+    locationId,
+    historySnapshotCount: historyCounts.get(locationId) ?? 0,
+    gameMapBindingCount: bindingCounts.get(locationId) ?? 0,
+  }));
 }
 
 function readGenerationPreferences(
@@ -184,6 +208,7 @@ export function createSpatialContextService() {
       }
 
       const state = await resolveEffectiveSpatialState(chatId, {}, persistence);
+      const locationDeletionProtections = await resolveLocationDeletionProtections(chatId, metadata, persistence);
       return buildResponse(
         stored.definition,
         state.currentLocationId,
@@ -193,6 +218,7 @@ export function createSpatialContextService() {
         hierarchyProfile,
         generationPreferences,
         stored.status,
+        locationDeletionProtections,
       );
     },
 
@@ -378,17 +404,49 @@ export function createSpatialContextService() {
           );
         }
 
-        const spatialStorage = createSpatialContextStorage(persistence);
-        const hasCommittedSpatialHistory = await spatialStorage.hasMessageSnapshots(chatId);
-        if (hasCommittedSpatialHistory && stored.definition) {
+        const hasCommittedSpatialHistory = await createSpatialContextStorage(persistence).hasMessageSnapshots(chatId);
+        if (stored.definition) {
           const nextIds = new Set(definition.locations.map((location) => location.id));
-          const removedLocation = stored.definition.locations.find((location) => !nextIds.has(location.id));
-          if (removedLocation) {
+          const removedLocations = stored.definition.locations.filter((location) => !nextIds.has(location.id));
+          if (removedLocations.length > 0 && stored.link && !options.detachSharedWorld) {
             throw new SpatialContextServiceError(
               "spatial_history_location_removal_forbidden",
-              `Campaign history uses this map. Keep ${removedLocation.name || "every existing location"} and archive locations instead of removing them.`,
+              "Detach and keep an independent copy before permanently deleting locations from a linked shared world.",
               409,
             );
+          }
+          if (removedLocations.length > 0) {
+            const deletionProtections = await resolveLocationDeletionProtections(chatId, metadata, persistence);
+            const protectionById = new Map(
+              deletionProtections.map((protection) => [protection.locationId, protection]),
+            );
+            const protectedLocation = removedLocations.find((location) => {
+              const protection = protectionById.get(location.id);
+              return (
+                location.id === stored.definition?.startingLocationId ||
+                location.id === currentLocationId ||
+                Boolean(protection?.historySnapshotCount) ||
+                Boolean(protection?.gameMapBindingCount)
+              );
+            });
+            if (protectedLocation) {
+              const protection = protectionById.get(protectedLocation.id);
+              const reasons = [
+                protectedLocation.id === stored.definition.startingLocationId ? "the saved starting location" : null,
+                protectedLocation.id === currentLocationId ? "the current story location" : null,
+                protection?.historySnapshotCount
+                  ? `${protection.historySnapshotCount} historical message${protection.historySnapshotCount === 1 ? "" : "s"}`
+                  : null,
+                protection?.gameMapBindingCount
+                  ? `${protection.gameMapBindingCount} Game map binding${protection.gameMapBindingCount === 1 ? "" : "s"}`
+                  : null,
+              ].filter(Boolean);
+              throw new SpatialContextServiceError(
+                "spatial_history_location_removal_forbidden",
+                `Keep ${protectedLocation.name || "this location"}; it is referenced by ${reasons.join(", ")}. Archive it instead.`,
+                409,
+              );
+            }
           }
         }
 
@@ -496,6 +554,7 @@ export function createSpatialContextService() {
           hierarchyProfile,
           readGenerationPreferences(metadata, chat.mode),
           nextSharedWorldStatus,
+          await resolveLocationDeletionProtections(chatId, nextMetadata, persistence),
         );
       });
     },

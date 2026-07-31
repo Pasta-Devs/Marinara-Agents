@@ -1894,7 +1894,15 @@ test("global World Maps home edits the current map location types", async ({ pag
     await expect(home.getByLabel("Location type 2 label")).toHaveAttribute("readonly", "");
 
     await home.getByRole("button", { name: "Edit location types" }).click();
-    await home.getByLabel("Profile name").fill("Maritime hierarchy");
+    const profileName = home.getByLabel("Profile name");
+    const saveLocationTypes = home.getByRole("button", { name: "Save location types" });
+    await profileName.fill("X");
+    await profileName.press("Backspace");
+    await expect(profileName).toHaveValue("");
+    await expect(home.getByText("Profile name is required.", { exact: false })).toBeVisible();
+    await expect(saveLocationTypes).toBeDisabled();
+    await profileName.fill("  Maritime hierarchy  ");
+    await expect(profileName).toHaveValue("  Maritime hierarchy  ");
     await home.getByLabel("Location type 1 label").fill("Planet");
     await home.getByLabel("Location type 2 label").fill("City");
     await home.getByRole("button", { name: "Add location type" }).click();
@@ -1909,7 +1917,19 @@ test("global World Maps home edits the current map location types", async ({ pag
     );
     await expect(home.getByRole("button", { name: "Remove City" })).toBeDisabled();
     await expect(home.getByRole("button", { name: "Remove Neighborhood" })).toBeEnabled();
-    await home.getByRole("button", { name: "Save location types" }).click();
+    await home.getByRole("button", { name: "Revert to defaults" }).click();
+    await expect(profileName).toHaveValue("Default location types");
+    await expect(home.getByLabel("Location type 1 label")).toHaveValue("Region");
+    await expect(home.getByLabel("Location type 2 label")).toHaveValue("Settlement");
+    await profileName.fill("  Maritime hierarchy  ");
+    await home.getByLabel("Location type 1 label").fill("Planet");
+    await home.getByLabel("Location type 2 label").fill("City");
+    await home.getByRole("button", { name: "Add location type" }).click();
+    await home.getByLabel("Location type 7 label").fill("Neighborhood");
+    await home.getByLabel("Neighborhood semantic base kind").selectOption("place");
+    const restoredMoveNeighborhoodUp = home.getByRole("button", { name: "Move Neighborhood up" });
+    for (let step = 0; step < 6; step += 1) await restoredMoveNeighborhoodUp.click();
+    await saveLocationTypes.click();
 
     await expect
       .poll(async () => {
@@ -1963,6 +1983,41 @@ test("global World Maps home edits the current map location types", async ({ pag
     await expect(hierarchy.getByRole("button", { name: /Gloam Harbor.*City/u })).toBeVisible();
     await expect(workspace.getByRole("button", { name: "Location types" })).toHaveCount(0);
     await expect(workspace.getByRole("region", { name: "Location type fields" })).toHaveCount(0);
+    await hierarchy.getByRole("button", { name: /Shrouded Coast.*Planet/u }).click();
+    const iconInput = workspace.getByLabel("Icon", { exact: true });
+    await expect(iconInput).toHaveAttribute("maxlength", "16");
+    await iconInput.fill("12345678901234567");
+    await expect(iconInput).toHaveValue("1234567890123456");
+    const renderedIcon = workspace
+      .locator("[data-marinara-location-icon]")
+      .filter({ hasText: "1234567890123456" })
+      .first();
+    await expect(renderedIcon).toBeVisible();
+    expect((await renderedIcon.boundingBox())?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(48);
+
+    await hierarchy.getByRole("button", { name: /Gloam Harbor.*City/u }).click();
+    await hierarchy.getByRole("button", { name: /Blackglass Lighthouse/u }).click();
+    await hierarchy.getByRole("button", { name: /Old Sewers/u }).click();
+    await workspace.getByRole("button", { name: "Archive location", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Archive location" })
+      .getByRole("button", { name: "Archive", exact: true })
+      .click();
+    const permanentDelete = workspace.getByRole("button", { name: "Delete permanently", exact: true });
+    await expect(permanentDelete).toBeEnabled();
+    await permanentDelete.click();
+    await page
+      .getByRole("dialog", { name: "Delete archived location permanently?" })
+      .getByRole("button", { name: "Delete permanently", exact: true })
+      .click();
+    await expect(hierarchy).not.toContainText("Old Sewers");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    const afterPermanentDeleteResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    const afterPermanentDelete = (await afterPermanentDeleteResponse.json()) as {
+      definition: { locations: Array<{ id: string }> };
+    };
+    expect(afterPermanentDelete.definition.locations.some((location) => location.id === "ai_sewers")).toBe(false);
   } finally {
     const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
       data: { settings: originalMapsAgentSettings },
@@ -2508,6 +2563,24 @@ test("opening linked lore protects unsaved map edits", async ({ page }, testInfo
   });
   expect(entryResponse.ok(), await entryResponse.text()).toBeTruthy();
   const entry = (await entryResponse.json()) as { id: string };
+  const searchableLorebookResponse = await page.request.post("/api/lorebooks", {
+    data: {
+      name: `Trick Archive ${suffix}`,
+      description: "A disabled book used to prove book-name search and grouping.",
+      category: "world",
+      enabled: false,
+    },
+  });
+  expect(searchableLorebookResponse.ok(), await searchableLorebookResponse.text()).toBeTruthy();
+  const searchableLorebook = (await searchableLorebookResponse.json()) as { id: string };
+  const searchableEntryResponse = await page.request.post(`/api/lorebooks/${searchableLorebook.id}/entries`, {
+    data: {
+      name: "TODO location note",
+      content: "This entry is found by its parent lorebook name.",
+      order: 0,
+    },
+  });
+  expect(searchableEntryResponse.ok(), await searchableEntryResponse.text()).toBeTruthy();
   const chatResponse = await page.request.post("/api/chats", {
     data: {
       name: `Maps Guarded Lore ${suffix}`,
@@ -2563,7 +2636,16 @@ test("opening linked lore protects unsaved map edits", async ({ page }, testInfo
     await nameInput.fill("Unsaved harbor name");
     await expect(workspace.getByText("Unsaved", { exact: true })).toBeVisible();
     await details.getByText("Linked lore", { exact: true }).click();
+    await expect(details.locator("[data-marinara-disclosure-indicator]")).toBeVisible();
     await expect(details.getByText("Harbor navigation lore", { exact: true })).toBeVisible();
+
+    const searchableLorebookGroup = details.locator(`[data-marinara-lorebook-group="${searchableLorebook.id}"]`);
+    await expect(searchableLorebookGroup).not.toHaveAttribute("open", "");
+    await expect(searchableLorebookGroup.getByText("TODO location note", { exact: true })).toBeHidden();
+    await details.getByLabel("Search lorebook names and entries").fill("Trick Archive");
+    await expect(searchableLorebookGroup).toHaveAttribute("open", "");
+    await expect(searchableLorebookGroup).toContainText("Trick Archive");
+    await expect(searchableLorebookGroup.getByRole("button", { name: /TODO location note/u })).toBeDisabled();
 
     await details.getByRole("button", { name: "Open", exact: true }).click();
     const discardDialog = page.getByRole("dialog", { name: "Discard map changes?" });
@@ -2583,7 +2665,11 @@ test("opening linked lore protects unsaved map edits", async ({ page }, testInfo
     await expect(workspace).toHaveCount(0);
     await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
   } finally {
-    await expectDeletedInOrder(page, [`/api/chats/${chat.id}`, `/api/lorebooks/${lorebook.id}`]);
+    await expectDeletedInOrder(page, [
+      `/api/chats/${chat.id}`,
+      `/api/lorebooks/${lorebook.id}`,
+      `/api/lorebooks/${searchableLorebook.id}`,
+    ]);
   }
 });
 

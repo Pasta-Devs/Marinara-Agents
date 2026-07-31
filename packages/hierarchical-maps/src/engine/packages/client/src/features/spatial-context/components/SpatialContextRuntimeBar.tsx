@@ -15,6 +15,7 @@ import {
   reconcileSpatialRoutePlan,
   useSpatialRoutePlan,
 } from "../spatial-route-plans";
+import { SpatialLocationIcon } from "./SpatialLocationIcon";
 
 interface SpatialContextRuntimeBarProps {
   chatId: string | null;
@@ -498,7 +499,7 @@ export function SpatialContextRuntimeBar({
           </div>
           {currentLocation && (
             <div className="mb-2 flex items-start gap-2 rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 py-2.5">
-              <span className="text-base" aria-hidden="true">{currentLocation.icon || "📍"}</span>
+              <SpatialLocationIcon icon={currentLocation.icon} fallback="📍" className="text-base" />
               <div className="min-w-0 flex-1">
                 <p className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-accent)]">
                   You are here
@@ -540,7 +541,7 @@ export function SpatialContextRuntimeBar({
                             )}
                             aria-label={`Inspect ${destination.name}`}
                           >
-                            <span className="text-base" aria-hidden="true">{location?.icon || "⌖"}</span>
+                            <SpatialLocationIcon icon={location?.icon} className="text-base" />
                             <span className="min-w-0">
                               <span className="block truncate font-medium">{destination.name}</span>
                               <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
@@ -561,7 +562,7 @@ export function SpatialContextRuntimeBar({
 
           {selectedDestination && (
             <div className="mt-2 flex flex-wrap items-start gap-3 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]/35 p-3">
-              <span className="text-lg" aria-hidden="true">{selectedLocation?.icon || "📍"}</span>
+              <SpatialLocationIcon icon={selectedLocation?.icon} fallback="📍" className="text-lg" />
               <div className="min-w-52 flex-1">
                 <p className="text-xs font-semibold">{selectedDestination.name}</p>
                 <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">

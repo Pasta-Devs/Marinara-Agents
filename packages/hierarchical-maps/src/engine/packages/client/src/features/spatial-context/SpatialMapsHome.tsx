@@ -55,6 +55,7 @@ import {
   SPATIAL_GENERATION_PROMPT_VARIABLES,
   SPATIAL_TURN_PROMPT_VARIABLES,
   spatialGenerationPreferencesSchema,
+  spatialHierarchyProfileSchema,
   spatialTurnPromptTemplatesSchema,
   type SpatialGenerationPreferences,
   type SpatialGenerationCustomVariable,
@@ -449,6 +450,13 @@ export function SpatialMapsHome({
   const hierarchySaveError = updateSpatial.isError
     ? getSpatialContextProblem(updateSpatial.error).message
     : null;
+  const hierarchyDraftValidation = hierarchyDraft
+    ? spatialHierarchyProfileSchema.safeParse(hierarchyDraft.profile)
+    : null;
+  const hierarchyDraftValidationMessage =
+    hierarchyDraftValidation && !hierarchyDraftValidation.success
+      ? hierarchyDraftValidation.error.issues[0]?.message ?? "Review the location types before saving."
+      : null;
   const turnPromptSaveError = updateTurnPromptTemplates.isError
     ? getSpatialContextProblem(updateTurnPromptTemplates.error).message
     : null;
@@ -469,13 +477,15 @@ export function SpatialMapsHome({
 
   const saveHierarchyProfile = async () => {
     if (!chatId || !hierarchyDraft || !spatial.data?.definition) return;
+    const parsedProfile = spatialHierarchyProfileSchema.safeParse(hierarchyDraft.profile);
+    if (!parsedProfile.success) return;
     const savingChatId = chatId;
     const response = await updateSpatial.mutateAsync({
       chatId: savingChatId,
       expectedRevision: spatial.data.definition.revision,
       expectedCurrentLocationId: spatial.data.currentLocationId,
       definition: hierarchyDraft.definition,
-      hierarchyProfile: normalizeHierarchyProfile(hierarchyDraft.profile, hierarchyDraft.definition),
+      hierarchyProfile: normalizeHierarchyProfile(parsedProfile.data, hierarchyDraft.definition),
     });
     if (currentChatIdRef.current !== savingChatId || !response.definition) return;
     setHierarchyDraft({
@@ -1840,6 +1850,17 @@ export function SpatialMapsHome({
                   onChange={setHierarchyDraft}
                 />
 
+                {hierarchyDraftValidationMessage && (
+                  <p
+                    className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                    role="alert"
+                  >
+                    {hierarchyDraft.profile.name.trim().length === 0
+                      ? "Enter a profile name before saving. Leading and trailing spaces will be removed."
+                      : hierarchyDraftValidationMessage}
+                  </p>
+                )}
+
                 {hierarchySaveError && (
                   <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
                     {hierarchySaveError}
@@ -1864,7 +1885,7 @@ export function SpatialMapsHome({
                       <button
                         type="button"
                         onClick={() => void saveHierarchyProfile()}
-                        disabled={updateSpatial.isPending}
+                        disabled={updateSpatial.isPending || !hierarchyDraftValidation?.success}
                         className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                       >
                         {updateSpatial.isPending ? <LoaderCircle size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}

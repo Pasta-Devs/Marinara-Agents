@@ -36,6 +36,7 @@ import {
   type MapsGenerateSpatialMapDraftResponse,
 } from "../../../hooks/use-spatial-context";
 import { cn } from "../package-utils";
+import { SpatialLocationIcon } from "./SpatialLocationIcon";
 import {
   HIERARCHY_TEMPLATES,
   generationPreferencesWithPromptLibrary,
@@ -485,9 +486,7 @@ export function SpatialMapAiBuilder({
             aria-current={selected ? "true" : undefined}
             className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
           >
-            <span className="text-base" aria-hidden="true">
-              {location.icon || "⌖"}
-            </span>
+            <SpatialLocationIcon icon={location.icon} className="text-base" />
             <span className="min-w-0 flex-1 py-1">
               <span className="block truncate text-xs font-medium text-[var(--marinara-editor-title)]">
                 {location.name || "Untitled location"}
@@ -1175,9 +1174,7 @@ export function SpatialMapAiBuilder({
                     {selectedPreviewPath.map((location) => location.name).join(" / ")}
                   </p>
                   <div className="mt-2 flex items-start gap-3">
-                    <span className="text-xl" aria-hidden="true">
-                      {selectedPreviewLocation.icon || "⌖"}
-                    </span>
+                    <SpatialLocationIcon icon={selectedPreviewLocation.icon} className="text-xl" />
                     <div className="min-w-0 flex-1">
                       <h4 className="text-sm font-semibold text-[var(--marinara-editor-title)]">{selectedPreviewLocation.name}</h4>
                       <p className="mt-0.5 text-[0.625rem] capitalize text-[var(--marinara-editor-muted)]">

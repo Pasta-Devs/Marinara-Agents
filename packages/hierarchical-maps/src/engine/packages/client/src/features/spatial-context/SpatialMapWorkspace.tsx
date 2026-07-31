@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 import {
   compareSpatialLocations,
+  getSpatialDescendantIds,
   resolveSpatialLocationDepth,
   resolveSpatialBreadcrumb,
   SPATIAL_CONTEXT_LIMITS,
@@ -64,6 +65,7 @@ import {
   LocationInspector,
 } from "./components/LocationInspector";
 import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
+import { SpatialLocationIcon } from "./components/SpatialLocationIcon";
 import {
   addSpatialLocation,
   archiveSpatialLocation,
@@ -691,6 +693,57 @@ export function SpatialMapWorkspace({
   ).length;
   const linkedSharedWorld =
     !templateMode && spatial.data?.sharedWorld.mode === "linked" ? spatial.data.sharedWorld : null;
+  const archivedDeletion = useMemo(() => {
+    if (!draft || !selected || selected.status !== "archived" || templateMode) return null;
+    const locationIds = new Set([selected.id, ...getSpatialDescendantIds(draft, selected.id)]);
+    const removedLocations = draft.locations.filter((location) => locationIds.has(location.id));
+    const reasons: string[] = [];
+    if (linkedSharedWorld) reasons.push("Detach and keep an independent copy before permanently deleting locations.");
+    if (removedLocations.some((location) => location.status !== "archived")) {
+      reasons.push("Archive every child location in this branch before deleting it.");
+    }
+    if (draft.startingLocationId && locationIds.has(draft.startingLocationId)) {
+      reasons.push("Choose another starting location before deleting this branch.");
+    }
+    if (effectiveCurrentLocationId && locationIds.has(effectiveCurrentLocationId)) {
+      reasons.push("Set another current story location and save it before deleting this branch.");
+    }
+    const protections = (spatial.data?.locationDeletionProtections ?? []).filter((entry) =>
+      locationIds.has(entry.locationId),
+    );
+    const historySnapshotCount = protections.reduce((total, entry) => total + entry.historySnapshotCount, 0);
+    if (historySnapshotCount > 0) {
+      reasons.push(
+        `Kept because ${historySnapshotCount} historical message${historySnapshotCount === 1 ? "" : "s"} reference this branch.`,
+      );
+    }
+    const gameMapBindingCount = protections.reduce((total, entry) => total + entry.gameMapBindingCount, 0);
+    if (gameMapBindingCount > 0) {
+      reasons.push(
+        `Remove ${gameMapBindingCount} Game map binding${gameMapBindingCount === 1 ? "" : "s"} before deleting this branch.`,
+      );
+    }
+    if (routePlan?.locationIds.some((locationId) => locationIds.has(locationId))) {
+      reasons.push("Cancel the planned route before deleting this branch.");
+    }
+    if (pendingTransition && locationIds.has(pendingTransition.transition.destinationId)) {
+      reasons.push("Cancel the queued destination before deleting this branch.");
+    }
+    return {
+      count: removedLocations.length,
+      locationIds,
+      protection: reasons[0] ?? null,
+    };
+  }, [
+    draft,
+    effectiveCurrentLocationId,
+    linkedSharedWorld,
+    pendingTransition,
+    routePlan,
+    selected,
+    spatial.data?.locationDeletionProtections,
+    templateMode,
+  ]);
   const mobileMapNoticeCount =
     Number(missingArtworkLocations.length > 0) +
     Number(Boolean(linkedSharedWorld?.missing || linkedSharedWorld?.conflict || linkedSharedWorld?.pendingChanges));
@@ -991,6 +1044,45 @@ export function SpatialMapWorkspace({
     },
     [applyDraft, confirmAction, currentLocationId, draft, enteredParentId],
   );
+
+  const deleteArchivedLocation = useCallback(async () => {
+    if (!draft || !selected || selected.status !== "archived" || !archivedDeletion) return;
+    if (archivedDeletion.protection) {
+      toast.error(archivedDeletion.protection);
+      return;
+    }
+    const confirmed = await confirmAction({
+      title: "Delete archived location permanently?",
+      message:
+        archivedDeletion.count > 1
+          ? `Remove ${selected.name || "this location"} and ${archivedDeletion.count - 1} archived child location${archivedDeletion.count === 2 ? "" : "s"} from this map draft? Direct links, hierarchy assignments, and exported map data are cleaned up when you Save. Closing without saving still discards this deletion.`
+          : `Remove ${selected.name || "this location"} from this map draft? Direct links, hierarchy assignments, and exported map data are cleaned up when you Save. Closing without saving still discards this deletion.`,
+      confirmLabel: "Delete permanently",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    const next = removeSpatialSubtree(draft, selected.id);
+    applyDraft(next);
+    applyHierarchyProfile(normalizeHierarchyProfile(draftHierarchyProfile, next));
+    const nextSelection =
+      selected.parentId ?? next.locations.find((location) => location.status === "active")?.id ?? null;
+    setSelectedId(nextSelection);
+    if (enteredParentId && archivedDeletion.locationIds.has(enteredParentId)) setEnteredParentId(selected.parentId);
+    toast.success(
+      archivedDeletion.count > 1
+        ? `${archivedDeletion.count} archived locations removed from the draft. Click Save to apply it.`
+        : "Archived location removed from the draft. Click Save to apply it.",
+    );
+  }, [
+    applyDraft,
+    applyHierarchyProfile,
+    archivedDeletion,
+    confirmAction,
+    draft,
+    draftHierarchyProfile,
+    enteredParentId,
+    selected,
+  ]);
 
   const requestArchive = useCallback(
     (locationId: string) => {
@@ -2042,9 +2134,7 @@ export function SpatialMapWorkspace({
                   onClick={() => selectLocation(location.id)}
                   className="flex min-w-0 flex-1 self-stretch items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                 >
-                  <span className="text-lg" aria-hidden="true">
-                    {location.icon || "⌖"}
-                  </span>
+                  <SpatialLocationIcon icon={location.icon} className="text-lg" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{location.name || "Untitled location"}</span>
                     <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
@@ -2112,6 +2202,11 @@ export function SpatialMapWorkspace({
           : undefined
       }
       onArchive={() => selected && requestArchive(selected.id)}
+      onDeletePermanently={
+        !templateMode && selected?.status === "archived" ? () => void deleteArchivedLocation() : undefined
+      }
+      permanentDeleteProtection={archivedDeletion?.protection}
+      permanentDeleteCount={archivedDeletion?.count}
       gameBinding={
         !templateMode && ownerMode === "game" && chatId
           ? {

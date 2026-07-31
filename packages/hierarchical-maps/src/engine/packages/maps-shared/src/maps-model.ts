@@ -177,6 +177,11 @@ export const SPATIAL_LOCATION_KINDS = [
   "room",
 ] as const satisfies readonly SpatialLocationKind[];
 
+// Manual location icons share compact map controls with emoji-sized affordances.
+// Keep the input small while continuing to accept older imported definitions at
+// the host schema's legacy limit; rendering remains defensively contained.
+export const SPATIAL_LOCATION_ICON_MAX_LENGTH = 16;
+
 export const SPATIAL_LINK_LINE_STYLES = ["solid", "dashed", "dotted"] as const;
 export type SpatialLinkLineStyle = (typeof SPATIAL_LINK_LINE_STYLES)[number];
 
@@ -308,6 +313,13 @@ export interface MapsSpatialContextResponse extends SpatialContextResponse {
   hierarchyProfile: SpatialHierarchyProfile;
   generationPreferences: SpatialGenerationPreferences;
   sharedWorld: SpatialSharedWorldStatus;
+  locationDeletionProtections: SpatialLocationDeletionProtection[];
+}
+
+export interface SpatialLocationDeletionProtection {
+  locationId: string;
+  historySnapshotCount: number;
+  gameMapBindingCount: number;
 }
 
 const hierarchyIdSchema = z
