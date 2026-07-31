@@ -1509,7 +1509,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await mapsCard.getByText("World Maps", { exact: true }).click();
 
     const home = page.locator("[data-marinara-maps-home]");
-    await home.getByRole("button", { name: "Open map templates" }).click();
+    await home.getByRole("button", { name: "Open world library" }).click();
     const library = page.locator("[data-marinara-map-template-library]");
     await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
     await expect(library).toContainText("shared Global Gallery artwork");
@@ -1566,7 +1566,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const { agentEntry } = await openHierarchicalMapsAgentControls(page);
     await agentEntry.getByRole("button", { name: "Create world map" }).click();
-    await workspace.getByRole("button", { name: "Add a saved map template" }).click();
+    await workspace.getByRole("button", { name: "Open shared worlds and map templates" }).click();
 
     const chatSettingsLibrary = page.locator("[data-marinara-map-template-library]");
     const chatSettingsTemplateCard = chatSettingsLibrary
@@ -1621,6 +1621,102 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     const deleteSharedArtworkResponse = await page.request.delete(`/api/global-gallery/${sharedArtwork.id}`);
     expect(deleteSharedArtworkResponse.ok(), await deleteSharedArtworkResponse.text()).toBeTruthy();
     await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("detached chat maps create distinguishable shared-world copies and expose plain-language ownership", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The shared-world ownership flow is shared across viewports.");
+  test.setTimeout(90_000);
+  const suffix = `${testInfo.project.name}-${Date.now()}`;
+  const chatName = `Shared Copy ${suffix}`;
+  const baseWorldName = `${chatName} world`;
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: chatName, mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: { ...generatedDefinition, enabled: true },
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+  const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+  expect(spatialResponse.ok(), await spatialResponse.text()).toBeTruthy();
+  const spatial = (await spatialResponse.json()) as { hierarchyProfile: unknown };
+  const originalWorldResponse = await page.request.post("/api/chats/spatial-context/shared-worlds", {
+    data: {
+      name: baseWorldName,
+      description: "Existing canonical world used to exercise detached-copy naming.",
+      definition: { ...generatedDefinition, enabled: true, revision: 0 },
+      hierarchyProfile: spatial.hierarchyProfile,
+    },
+  });
+  expect(originalWorldResponse.ok(), await originalWorldResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await page.getByRole("button", { name: "Chat Settings" }).click();
+    const { agentEntry } = await openHierarchicalMapsAgentControls(page);
+    await agentEntry.getByRole("button", { name: "Edit world map" }).click();
+
+    const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    await expect(workspace).toContainText(`${chatName} · Independent chat map`);
+    await workspace.getByRole("button", { name: "More map actions" }).click();
+    const actions = workspace.getByRole("region", { name: "Map actions" });
+    await actions.getByRole("button", { name: "Make shared" }).click();
+    const createDialog = page.getByRole("dialog", { name: "Create a shared world from this map?" });
+    await expect(createDialog).toContainText(`A shared world named “${baseWorldName}” already exists.`);
+    await expect(createDialog).toContainText(`“${baseWorldName} (copy)”`);
+    await createDialog.getByRole("button", { name: "Create and link" }).click();
+    await expect(workspace).toContainText(`${chatName} · Linked to ${baseWorldName} (copy)`);
+
+    const detach = workspace.getByRole("button", { name: "Detach and keep copy" });
+    await expect(detach).toBeVisible();
+    await detach.click();
+    const detachDialog = page.getByRole("dialog", { name: "Detach from the shared world?" });
+    await expect(detachDialog).toContainText("keep its current map as an independent copy");
+    await detachDialog.getByRole("button", { name: "Detach and keep copy" }).click();
+    await expect(workspace).toContainText(`${chatName} · Independent chat map`);
+
+    const worldsResponse = await page.request.get("/api/chats/spatial-context/shared-worlds");
+    expect(worldsResponse.ok(), await worldsResponse.text()).toBeTruthy();
+    const matchingNames = ((await worldsResponse.json()) as Array<{ name: string }>)
+      .map((world) => world.name)
+      .filter((name) => name.startsWith(baseWorldName))
+      .sort();
+    expect(matchingNames).toEqual([baseWorldName, `${baseWorldName} (copy)`]);
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+    const worldsResponse = await page.request.get("/api/chats/spatial-context/shared-worlds");
+    if (worldsResponse.ok()) {
+      const worlds = (await worldsResponse.json()) as Array<{ id: string; name: string; revision: number }>;
+      for (const world of worlds.filter((candidate) => candidate.name.startsWith(baseWorldName))) {
+        const response = await page.request.delete(`/api/chats/spatial-context/shared-worlds/${world.id}`, {
+          data: { expectedRevision: world.revision },
+        });
+        expect(response.ok(), await response.text()).toBeTruthy();
+      }
+    }
   }
 });
 
@@ -2985,7 +3081,9 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       const mobileActions = workspace.getByRole("region", { name: "Map actions" });
       await expect(mobileActions).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Expand with AI", exact: true })).toBeVisible();
-      await expect(mobileActions.getByRole("button", { name: "Add a saved map template" })).toBeVisible();
+      await expect(
+        mobileActions.getByRole("button", { name: "Open shared worlds and map templates" }),
+      ).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Export world map" })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Import world map" })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Review artwork for 4 locations" })).toBeVisible();
@@ -2994,7 +3092,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
         "Mobile AI map action",
       );
       await expectMinimumInteractiveSize(
-        mobileActions.getByRole("button", { name: "Add a saved map template" }),
+        mobileActions.getByRole("button", { name: "Open shared worlds and map templates" }),
         "Mobile map templates action",
       );
       replaceMap = mobileActions.getByRole("button", { name: "Replace map or start over" });
@@ -3017,7 +3115,9 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       await expect(desktopActions.locator("[data-marinara-map-compact-only]:visible")).toHaveCount(0);
       await expect(desktopActions.getByRole("button", { name: "Export world map" })).toBeVisible();
       await expect(desktopActions.getByRole("button", { name: "Import world map" })).toBeVisible();
-      await expect(desktopActions.getByRole("button", { name: "Add a saved map template" })).toBeVisible();
+      await expect(
+        desktopActions.getByRole("button", { name: "Open shared worlds and map templates" }),
+      ).toBeVisible();
       replaceMap = desktopActions.getByRole("button", { name: "Replace map or start over" });
     }
     await expectMinimumInteractiveSize(replaceMap, "Replace map control");

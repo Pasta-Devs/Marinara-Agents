@@ -911,9 +911,9 @@ export function SpatialMapsHome({
             <Map size="1rem" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-xs font-semibold">Map templates</h2>
+            <h2 className="text-xs font-semibold">Shared worlds and templates</h2>
             <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-              Create fandom or original maps with AI or by hand, then add a clean copy to any Roleplay or Game chat.
+              Link one canonical world across chats, or add independent template copies when stories should diverge.
             </p>
           </div>
           <button
@@ -921,7 +921,7 @@ export function SpatialMapsHome({
             onClick={onOpenLibrary}
             className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 shrink-0 justify-center px-4 text-xs"
           >
-            Open map templates
+            Open world library
           </button>
         </article>
 

@@ -582,7 +582,9 @@ export function SpatialMapLibrary({
         <div className="min-w-0 flex-1">
           <h1 className="text-sm font-semibold text-[var(--marinara-editor-title)]">World map library</h1>
           <p className="text-[0.625rem] text-[var(--marinara-editor-muted)]">
-            Link one durable world across chats or create independent template copies
+            {supportedChat
+              ? `Choose a shared world or independent template copy for ${chatName || "this chat"}`
+              : "Link one durable world across chats or create independent template copies"}
           </p>
         </div>
         <div className="mari-editor-actions flex max-sm:w-full max-sm:border-t max-sm:border-[var(--marinara-editor-divider)] max-sm:pt-2">

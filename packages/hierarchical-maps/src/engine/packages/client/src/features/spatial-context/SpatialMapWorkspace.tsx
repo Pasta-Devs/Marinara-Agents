@@ -47,11 +47,13 @@ import {
   useLinkSpatialSharedWorld,
   usePublishSpatialSharedWorldDraft,
   useSpatialContext,
+  useSpatialSharedWorlds,
   useUpdateSpatialContext,
   useUpdateSpatialMapTemplate,
   useUpdateSpatialSharedWorld,
 } from "../../hooks/use-spatial-context";
 import { cn } from "./package-utils";
+import { nextAvailableSharedWorldName } from "./shared-world-naming";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
 import { LocalMapCanvas } from "./components/LocalMapCanvas";
@@ -387,6 +389,7 @@ export function SpatialMapWorkspace({
   const createTemplate = useCreateSpatialMapTemplate();
   const createSharedWorld = useCreateSpatialSharedWorld();
   const linkSharedWorld = useLinkSpatialSharedWorld();
+  const sharedWorlds = useSpatialSharedWorlds(!templateMode);
   const { data: chat } = useSpatialChat(templateMode ? null : chatId);
   const galleryImages = useSpatialGalleryImages(chatId ?? "", !templateMode);
   const globalGalleryImages = useSpatialGlobalGalleryImages();
@@ -1324,10 +1327,22 @@ export function SpatialMapWorkspace({
       linkSharedWorld.isPending
     )
       return;
-    const name = `${chat?.name?.trim() || "Untitled"} world`;
+    const baseName = `${chat?.name?.trim() || "Untitled"} world`;
+    const refreshedSharedWorlds = await sharedWorlds.refetch();
+    if (refreshedSharedWorlds.isError) {
+      toast.error("Shared worlds could not be checked. Try again before creating a new one.");
+      return;
+    }
+    const name = nextAvailableSharedWorldName(
+      baseName,
+      (refreshedSharedWorlds.data ?? []).map((world) => world.name),
+    );
+    const nameCollision = name !== baseName;
     const confirmed = await confirmAction({
       title: "Create a shared world from this map?",
-      message: `Create “${name}” as one account-owned world and link this chat to it? The map structure and Global Gallery artwork can then be reused by other chats. This chat keeps its own current location and travel history.`,
+      message: nameCollision
+        ? `A shared world named “${baseName}” already exists. Create a separate canonical world named “${name}” and link this chat to the new copy? Matching names are not treated as the same world.`
+        : `Create “${name}” as one account-owned world and link this chat to it? The map structure and Global Gallery artwork can then be reused by other chats. This chat keeps its own current location and travel history.`,
       confirmLabel: "Create and link",
     });
     if (!confirmed) return;
@@ -1380,6 +1395,7 @@ export function SpatialMapWorkspace({
     galleryImages,
     globalGalleryImages,
     linkSharedWorld,
+    sharedWorlds,
     spatial,
     templateMode,
   ]);
@@ -1479,9 +1495,9 @@ export function SpatialMapWorkspace({
     const sharedStatus = spatial.data?.sharedWorld;
     if (templateMode || !chatId || !draft || dirty || sharedStatus?.mode !== "linked") return;
     const confirmed = await confirmAction({
-      title: "Fork an independent map?",
+      title: "Detach from the shared world?",
       message: `Detach this chat from “${sharedStatus.worldName ?? "the shared world"}” and keep its current map as an independent copy? Future shared-world edits will no longer appear here.`,
-      confirmLabel: "Fork independent copy",
+      confirmLabel: "Detach and keep copy",
     });
     if (!confirmed) return;
     try {
@@ -1499,7 +1515,7 @@ export function SpatialMapWorkspace({
       setServerIssues(response.warnings);
       toast.success("This chat now has an independent map copy.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "The linked world could not be forked.");
+      toast.error(error instanceof Error ? error.message : "The chat could not be detached from the shared world.");
       void spatial.refetch();
     }
   }, [chatId, confirmAction, currentLocationId, dirty, draft, forkSharedWorld, spatial, templateMode]);
@@ -2197,7 +2213,18 @@ export function SpatialMapWorkspace({
           ) : (
             <>
               <h1 className="truncate text-sm font-semibold text-[var(--marinara-editor-title)]">World map</h1>
-              <p className="truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">{chat?.name ?? "Chat"}</p>
+              <p
+                className="truncate text-[0.625rem] text-[var(--marinara-editor-muted)]"
+                title={
+                  linkedSharedWorld
+                    ? `${chat?.name ?? "Chat"} · Linked to ${linkedSharedWorld.worldName ?? "shared world"}`
+                    : `${chat?.name ?? "Chat"} · Independent chat map`
+                }
+              >
+                {linkedSharedWorld
+                  ? `${chat?.name ?? "Chat"} · Linked to ${linkedSharedWorld.worldName ?? "shared world"}`
+                  : `${chat?.name ?? "Chat"} · Independent chat map`}
+              </p>
             </>
           )}
         </div>
@@ -2295,7 +2322,7 @@ export function SpatialMapWorkspace({
                   disabled={dirty || forkSharedWorld.isPending || linkedSharedWorld.missing}
                   className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
                 >
-                  <GitFork size="0.75rem" /> Fork independent
+                  <GitFork size="0.75rem" /> Detach and keep copy
                 </button>
               </>
             )}
@@ -2534,7 +2561,7 @@ export function SpatialMapWorkspace({
                 disabled={dirty || forkSharedWorld.isPending || linkedSharedWorld.missing}
                 className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
               >
-                <GitFork size="0.75rem" /> Fork independent
+                <GitFork size="0.75rem" /> Detach and keep copy
               </button>
             )}
             {!templateMode && (
@@ -2603,9 +2630,9 @@ export function SpatialMapWorkspace({
                 }}
                 disabled={conflict || updateSpatial.isPending}
                 className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
-                aria-label="Add a saved map template"
+                aria-label="Open shared worlds and map templates"
               >
-                <MapIcon size="0.8125rem" /> Templates
+                <MapIcon size="0.8125rem" /> World library
               </button>
             )}
             {!templateMode && draft.locations.length > 0 && (
