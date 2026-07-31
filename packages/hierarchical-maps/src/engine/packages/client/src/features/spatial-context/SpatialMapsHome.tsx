@@ -10,6 +10,7 @@ import {
   ClipboardCopy,
   Clock,
   Code2,
+  CircleHelp,
   Eye,
   FileText,
   Info,
@@ -68,6 +69,7 @@ import {
   SpatialHierarchyProfileFields,
   type SpatialHierarchyProfileDraft,
 } from "./components/SpatialHierarchyProfileFields";
+import { WORLD_MAPS_GUIDE_URL } from "./package-utils";
 
 interface SpatialMapsHomeProps {
   chatId: string | null;
@@ -773,6 +775,17 @@ export function SpatialMapsHome({
             )}
             <span className="max-md:hidden">Save</span>
           </button>
+          <a
+            href={WORLD_MAPS_GUIDE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mari-editor-action inline-flex"
+            title="Open World Maps guide"
+            aria-label="Open World Maps guide"
+            style={{ minHeight: 44, minWidth: 44 }}
+          >
+            <CircleHelp size="0.9375rem" />
+          </a>
           {onManagePackage && (
             <button
               type="button"

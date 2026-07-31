@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Map as MapIcon, MapPin, RefreshCw, Route, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, CircleHelp, Map as MapIcon, MapPin, RefreshCw, Route, X } from "lucide-react";
 import type { SpatialDestination, SpatialDestinationRelation } from "@marinara-engine/shared";
 import { GameWorldMap } from "../../../components/game/GameWorldMap";
 import { useSpatialContext } from "../../../hooks/use-spatial-context";
-import { cn, generateClientId } from "../package-utils";
+import { cn, generateClientId, WORLD_MAPS_GUIDE_URL } from "../package-utils";
 import {
   clearPendingSpatialTransition,
   setPendingSpatialTransition,
@@ -381,6 +381,16 @@ export function SpatialContextRuntimeBar({
                   : "Moves with your next turn"}
             </span>
           </span>
+          <a
+            href={`${WORLD_MAPS_GUIDE_URL}#a-planned-route-does-not-advance`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
+            aria-label="Open World Maps movement help"
+            title="Movement help"
+          >
+            <CircleHelp size="0.875rem" />
+          </a>
           <button
             type="button"
             onClick={() => {

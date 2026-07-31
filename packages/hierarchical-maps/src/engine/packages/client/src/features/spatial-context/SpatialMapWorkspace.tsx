@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Check,
+  CircleHelp,
   ChevronDown,
   ChevronRight,
   CornerDownRight,
@@ -52,7 +53,7 @@ import {
   useUpdateSpatialMapTemplate,
   useUpdateSpatialSharedWorld,
 } from "../../hooks/use-spatial-context";
-import { cn } from "./package-utils";
+import { cn, WORLD_MAPS_GUIDE_URL } from "./package-utils";
 import { nextAvailableSharedWorldName } from "./shared-world-naming";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
@@ -2324,6 +2325,15 @@ export function SpatialMapWorkspace({
                 >
                   <GitFork size="0.75rem" /> Detach and keep copy
                 </button>
+                <a
+                  href={`${WORLD_MAPS_GUIDE_URL}#link-chats-to-one-shared-world`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+                  title="Open shared-world guide"
+                >
+                  <CircleHelp size="0.75rem" /> Guide
+                </a>
               </>
             )}
             {!templateMode && (

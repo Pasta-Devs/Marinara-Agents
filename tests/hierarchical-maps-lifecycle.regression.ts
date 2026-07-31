@@ -22,6 +22,8 @@ const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
 const generationProviderBaseUrl = "http://127.0.0.1:9/v1";
 const csrfHeaders = { "x-marinara-csrf": "1" };
 const originalFetch = globalThis.fetch;
+const worldMapsGuideUrl =
+  "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/hierarchical-maps.md";
 const defaultTurnPromptTemplate = [
   "Current path: ${currentPath}",
   "Current location ID: ${currentLocationId}",
@@ -78,6 +80,12 @@ function artifactFixture(version: string): ArtifactFixture {
   ) as Manifest;
   assert.equal(manifest.id, "hierarchical-maps");
   assert.equal(manifest.version, version);
+  if (version === "1.2.4") {
+    const clientSource = execFileSync("unzip", ["-p", path, "client.js"], { encoding: "utf8" });
+    assert.ok(clientSource.includes(worldMapsGuideUrl));
+    assert.match(clientSource, /Open World Maps movement help/u);
+    assert.match(clientSource, /Open shared-world guide/u);
+  }
   return {
     bytes,
     manifest,
@@ -123,6 +131,13 @@ assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineCommit: "858cfa431e07f6f558aa1e8826a2c9b024269ab7",
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
+
+const currentFixture = fixtures.get("1.2.4");
+assert.ok(currentFixture);
+assert.deepEqual(currentFixture.manifest.builtAgainst, {
+  engineVersion: "2.3.5",
+  engineCommit: "ed0e2422b17b747aa5c392d9019bb92a71b00260",
+});
 
 function seedInstalledProfile(version: string) {
   const fixture = fixtures.get(version);
@@ -179,7 +194,9 @@ function catalogFixture(version: string) {
           bytes: fixture.bytes.byteLength,
         },
         documentationUrl:
-          "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
+          version === "1.2.4"
+            ? worldMapsGuideUrl
+            : "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
       },
     ],
   };

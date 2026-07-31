@@ -1119,7 +1119,10 @@ for (const feature of selectedFeatures) {
         sha256: sha256(artifact),
         bytes: artifact.byteLength,
       },
-      documentationUrl: `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
+      documentationUrl:
+        feature.id === "hierarchical-maps"
+          ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/hierarchical-maps.md"
+          : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });
   } finally {
     await rm(temporary, { recursive: true, force: true });
