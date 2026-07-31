@@ -2926,6 +2926,11 @@ async function main() {
     })) as { messages: Array<{ content: string }> };
     const narratedPromptText = narratedPrompt.messages.map((message) => message.content).join("\n");
     assert.match(narratedPromptText, /\[spatial_move: destination_id=/u);
+    assert.match(narratedPromptText, /Use the latest user message as the authority for map changes/u);
+    assert.match(narratedPromptText, /We follow her into the outdoor section/u);
+    assert.match(narratedPromptText, /We discover a hidden room/u);
+    assert.match(narratedPromptText, /your own narration alone never authorizes either command/u);
+    assert.match(narratedPromptText, /NPC-only movement/u);
     assert.match(
       narratedPromptText,
       /Lifecycle World > Level 5 — Prism Caverns \[lifecycle_level_5\]/u,
