@@ -1910,6 +1910,24 @@ export function SpatialMapWorkspace({
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
+              aria-pressed={draftHierarchyProfile.showConnections}
+              onClick={() =>
+                applyHierarchyProfile({
+                  ...draftHierarchyProfile,
+                  showConnections: !draftHierarchyProfile.showConnections,
+                })
+              }
+              className={cn(
+                "mari-chrome-control min-h-11 flex-1 justify-center px-3 text-xs sm:flex-none",
+                draftHierarchyProfile.showConnections &&
+                  "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]",
+              )}
+            >
+              <Link2 size="0.75rem" />
+              {draftHierarchyProfile.showConnections ? "Hide connections" : "Show connections"}
+            </button>
+            <button
+              type="button"
               aria-pressed={effectiveLayoutEditingMode === "places"}
               onClick={() => setLayoutEditingMode((value) => (value === "places" ? null : "places"))}
               className={cn(
@@ -1949,6 +1967,8 @@ export function SpatialMapWorkspace({
             backgroundPosition={localMapBackgroundPosition}
             backgroundEditing={effectiveLayoutEditingMode === "background"}
             onBackgroundMove={queueBackgroundMove}
+            hierarchyProfile={draftHierarchyProfile}
+            showConnections={draftHierarchyProfile.showConnections}
             editing={effectiveLayoutEditingMode === "places"}
             onMove={(locationId, placement) => applyDraft(updateSpatialLocation(draft, locationId, { placement }))}
           />
@@ -2028,6 +2048,7 @@ export function SpatialMapWorkspace({
         applyDraft(updateSpatialLocation(draft, selected.id, { kind: type.baseKind }));
         applyHierarchyProfile(withLocationHierarchyType(draftHierarchyProfile, selected.id, typeId));
       }}
+      onHierarchyProfileChange={applyHierarchyProfile}
       onUpdate={(patch) => selected && applyDraft(updateSpatialLocation(draft, selected.id, patch))}
       lorebooks={lorebooks}
       lorebookEntries={lorebookEntriesQuery.entries ?? []}

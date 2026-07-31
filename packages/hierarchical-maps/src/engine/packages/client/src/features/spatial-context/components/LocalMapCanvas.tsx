@@ -1,7 +1,13 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { CornerDownRight, Crosshair, MapPin, Move } from "lucide-react";
 import type { SpatialLocation, SpatialLocationPlacement } from "@marinara-engine/shared";
 import { cn } from "../package-utils";
+import {
+  resolveSpatialLinkPresentation,
+  spatialLinkPresentationKey,
+  spatialLinkStrokeDasharray,
+  type SpatialHierarchyProfile,
+} from "../../../../../maps-shared/src/maps-model";
 
 interface LocalMapCanvasProps {
   locations: SpatialLocation[];
@@ -12,6 +18,8 @@ interface LocalMapCanvasProps {
   backgroundPosition?: SpatialLocationPlacement;
   backgroundEditing?: boolean;
   onBackgroundMove?: (position: SpatialLocationPlacement) => void;
+  hierarchyProfile: SpatialHierarchyProfile;
+  showConnections?: boolean;
   editing?: boolean;
   onMove?: (locationId: string, placement: { x: number; y: number }) => void;
 }
@@ -29,12 +37,31 @@ export function LocalMapCanvas({
   backgroundPosition = { x: 50, y: 50 },
   backgroundEditing = false,
   onBackgroundMove,
+  hierarchyProfile,
+  showConnections = true,
   editing = false,
   onMove,
 }: LocalMapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingBackground, setDraggingBackground] = useState(false);
+  const visibleLocationIds = useMemo(() => new Set(locations.map((location) => location.id)), [locations]);
+  const visibleLinks = useMemo(() => {
+    const seen = new Set<string>();
+    return locations.flatMap((location) =>
+      location.links.flatMap((link) => {
+        if (link.state !== "available" || !visibleLocationIds.has(link.targetId)) return [];
+        const key = spatialLinkPresentationKey(location.id, link.targetId);
+        if (seen.has(key)) return [];
+        seen.add(key);
+        return [{ key, from: location.id, to: link.targetId }];
+      }),
+    );
+  }, [locations, visibleLocationIds]);
+  const placementById = useMemo(
+    () => new Map(locations.map((location) => [location.id, location.placement ?? { x: 50, y: 50 }])),
+    [locations],
+  );
 
   const backgroundFromPointer = (event: PointerEvent<HTMLElement>) => {
     const bounds = canvasRef.current?.getBoundingClientRect();
@@ -149,6 +176,35 @@ export function LocalMapCanvas({
         <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-[var(--marinara-chat-chrome-panel-muted)]">
           Add a child location to place it on this map.
         </div>
+      )}
+      {showConnections && (
+        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
+          {visibleLinks.map((link) => {
+            const from = placementById.get(link.from);
+            const to = placementById.get(link.to);
+            if (!from || !to) return null;
+            const selected = selectedId === link.from || selectedId === link.to;
+            const presentation = resolveSpatialLinkPresentation(hierarchyProfile, link.from, link.to);
+            return (
+              <line
+                key={link.key}
+                data-marinara-map-connection={link.key}
+                data-line-style={presentation.lineStyle}
+                x1={`${from.x}%`}
+                y1={`${from.y}%`}
+                x2={`${to.x}%`}
+                y2={`${to.y}%`}
+                stroke={presentation.color ?? "var(--marinara-chat-chrome-accent)"}
+                strokeWidth={selected ? "3.5" : "2.5"}
+                strokeDasharray={spatialLinkStrokeDasharray(presentation.lineStyle)}
+                strokeLinecap="round"
+                opacity={selected ? "1" : "0.9"}
+                vectorEffect="non-scaling-stroke"
+                style={{ filter: "drop-shadow(0 0 1.5px var(--marinara-chat-chrome-panel-bg))" }}
+              />
+            );
+          })}
+        </svg>
       )}
       {locations.map((location) => {
         const placement = location.placement ?? { x: 50, y: 50 };

@@ -15,7 +15,6 @@ import {
   compareSpatialLocations,
   resolveSpatialBreadcrumb,
   spatialRadialPlacement,
-  type SpatialContextResponse,
   type SpatialLocation,
 } from "@marinara-engine/shared";
 import { cn, generateClientId } from "../../features/spatial-context/package-utils";
@@ -35,11 +34,17 @@ import {
   setPendingSpatialTransition,
   usePendingSpatialTransition,
 } from "../../features/spatial-context/pending-spatial-transitions";
-import { hierarchyTypeForLocation } from "../../../../maps-shared/src/maps-model";
+import {
+  hierarchyTypeForLocation,
+  resolveSpatialLinkPresentation,
+  spatialLinkPresentationKey,
+  spatialLinkStrokeDasharray,
+  type MapsSpatialContextResponse,
+} from "../../../../maps-shared/src/maps-model";
 
 interface GameWorldMapProps {
   chatId: string;
-  spatial: SpatialContextResponse;
+  spatial: MapsSpatialContextResponse;
   disabled?: boolean;
   compact?: boolean;
   useParentScroll?: boolean;
@@ -51,7 +56,7 @@ function sortLocations(locations: SpatialLocation[]): SpatialLocation[] {
   return [...locations].sort(compareSpatialLocations);
 }
 
-function defaultViewLocationId(spatial: SpatialContextResponse): string | null {
+function defaultViewLocationId(spatial: MapsSpatialContextResponse): string | null {
   const definition = spatial.definition;
   if (!definition) return null;
   const current = definition.locations.find(
@@ -146,7 +151,7 @@ export function GameWorldMap({
     return visibleLocations.flatMap((location) =>
       location.links.flatMap((link) => {
         if (link.state !== "available" || !visibleLocationIds.has(link.targetId)) return [];
-        const key = [location.id, link.targetId].sort().join(":");
+        const key = spatialLinkPresentationKey(location.id, link.targetId);
         if (seen.has(key)) return [];
         seen.add(key);
         return [{ key, from: location.id, to: link.targetId }];
@@ -467,27 +472,39 @@ export function GameWorldMap({
                 backgroundSize: "1.5rem 1.5rem",
               }}
             />
-            <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
-              {visibleLinks.map((link) => {
-                const from = placementById.get(link.from);
-                const to = placementById.get(link.to);
-                if (!from || !to) return null;
-                const selectedRoute = selectedId === link.from || selectedId === link.to;
-                return (
-                  <line
-                    key={link.key}
-                    x1={`${displayCoordinate(from.x)}%`}
-                    y1={`${displayCoordinate(from.y)}%`}
-                    x2={`${displayCoordinate(to.x)}%`}
-                    y2={`${displayCoordinate(to.y)}%`}
-                    stroke={selectedRoute ? "var(--marinara-chat-chrome-accent)" : "var(--marinara-chat-chrome-panel-muted)"}
-                    strokeWidth={selectedRoute ? "2.5" : "1.5"}
-                    strokeDasharray={selectedRoute ? undefined : "4 4"}
-                    opacity={selectedRoute ? "0.9" : "0.45"}
-                  />
-                );
-              })}
-            </svg>
+            {spatial.hierarchyProfile.showConnections && (
+              <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
+                {visibleLinks.map((link) => {
+                  const from = placementById.get(link.from);
+                  const to = placementById.get(link.to);
+                  if (!from || !to) return null;
+                  const selectedRoute = selectedId === link.from || selectedId === link.to;
+                  const linkPresentation = resolveSpatialLinkPresentation(
+                    spatial.hierarchyProfile,
+                    link.from,
+                    link.to,
+                  );
+                  return (
+                    <line
+                      key={link.key}
+                      data-marinara-map-connection={link.key}
+                      data-line-style={linkPresentation.lineStyle}
+                      x1={`${displayCoordinate(from.x)}%`}
+                      y1={`${displayCoordinate(from.y)}%`}
+                      x2={`${displayCoordinate(to.x)}%`}
+                      y2={`${displayCoordinate(to.y)}%`}
+                      stroke={linkPresentation.color ?? "var(--marinara-chat-chrome-accent)"}
+                      strokeWidth={selectedRoute ? "3" : "2.25"}
+                      strokeDasharray={spatialLinkStrokeDasharray(linkPresentation.lineStyle)}
+                      strokeLinecap="round"
+                      opacity={selectedRoute ? "1" : "0.85"}
+                      vectorEffect="non-scaling-stroke"
+                      style={{ filter: "drop-shadow(0 0 1.5px var(--marinara-chat-chrome-panel-bg))" }}
+                    />
+                  );
+                })}
+              </svg>
+            )}
             {visibleLocations.map((location) => {
               const placement = placementById.get(location.id) ?? { x: 50, y: 50 };
               const isCurrent = location.id === spatial.currentLocationId;

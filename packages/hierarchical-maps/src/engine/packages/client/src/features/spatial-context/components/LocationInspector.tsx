@@ -13,8 +13,13 @@ import { cn } from "../package-utils";
 import { getSpatialDescendantIds, resolveSpatialBreadcrumb } from "@marinara-engine/shared";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
 import {
+  DEFAULT_SPATIAL_LINK_PICKER_COLOR,
   hierarchyTypeForLocation,
+  resolveSpatialLinkPresentation,
+  withoutSpatialLinkPresentation,
+  withSpatialLinkPresentation,
   type SpatialHierarchyProfile,
+  type SpatialLinkLineStyle,
 } from "../../../../../maps-shared/src/maps-model";
 import {
   resolveSpatialArtworkImage,
@@ -205,6 +210,7 @@ interface LocationInspectorProps {
   currentLocationId: string | null;
   hierarchyProfile: SpatialHierarchyProfile;
   onHierarchyTypeChange: (typeId: string) => void;
+  onHierarchyProfileChange: (profile: SpatialHierarchyProfile) => void;
   onUpdate: (patch: Partial<SpatialLocation>) => void;
   lorebooks?: Lorebook[];
   lorebookEntries?: LorebookEntry[];
@@ -233,6 +239,7 @@ export function LocationInspector({
   currentLocationId,
   hierarchyProfile,
   onHierarchyTypeChange,
+  onHierarchyProfileChange,
   onUpdate,
   onReparent,
   lorebooks = [],
@@ -419,8 +426,17 @@ export function LocationInspector({
   const updateLink = (index: number, patch: Partial<SpatialLocation["links"][number]>) => {
     onUpdate({ links: location.links.map((link, linkIndex) => (index === linkIndex ? { ...link, ...patch } : link)) });
   };
-  const removeLink = (index: number) =>
+  const removeLink = (index: number) => {
+    const link = location.links[index];
+    if (!link) return;
     onUpdate({ links: location.links.filter((_, linkIndex) => linkIndex !== index) });
+    const reverseLinkRemains = definition.locations
+      .find((candidate) => candidate.id === link.targetId)
+      ?.links.some((candidate) => candidate.targetId === location.id);
+    if (!reverseLinkRemains) {
+      onHierarchyProfileChange(withoutSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId));
+    }
+  };
   const addLink = () => {
     if (!newLinkTarget) return;
     onUpdate({
@@ -1075,6 +1091,7 @@ export function LocationInspector({
           <div className="space-y-2">
             {location.links.map((link, index) => {
               const target = definition.locations.find((candidate) => candidate.id === link.targetId);
+              const presentation = resolveSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId);
               return (
                 <div
                   key={`${link.targetId}-${index}`}
@@ -1118,6 +1135,56 @@ export function LocationInspector({
                       />
                       Both ways
                     </label>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <select
+                      className={INPUT_CLASS}
+                      value={presentation.lineStyle}
+                      aria-label={`Line style for ${target?.name ?? "missing location"}`}
+                      onChange={(event) =>
+                        onHierarchyProfileChange(
+                          withSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId, {
+                            lineStyle: event.target.value as SpatialLinkLineStyle,
+                          }),
+                        )
+                      }
+                    >
+                      <option value="solid">Solid line</option>
+                      <option value="dashed">Dashed line</option>
+                      <option value="dotted">Dotted line</option>
+                    </select>
+                    <div className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] px-2">
+                      <input
+                        type="color"
+                        value={presentation.color ?? DEFAULT_SPATIAL_LINK_PICKER_COLOR}
+                        aria-label={`Line color for ${target?.name ?? "missing location"}`}
+                        title="Choose line color"
+                        onChange={(event) =>
+                          onHierarchyProfileChange(
+                            withSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId, {
+                              color: event.target.value,
+                            }),
+                          )
+                        }
+                        className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+                      />
+                      <span className="min-w-0 flex-1 text-xs">Color</span>
+                      {presentation.color && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onHierarchyProfileChange(
+                              withSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId, {
+                                color: undefined,
+                              }),
+                            )
+                          }
+                          className="min-h-11 rounded-md px-2 text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)] hover:text-[var(--marinara-chat-chrome-panel-title)]"
+                        >
+                          Auto
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

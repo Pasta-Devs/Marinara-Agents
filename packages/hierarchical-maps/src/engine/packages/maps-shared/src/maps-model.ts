@@ -177,6 +177,17 @@ export const SPATIAL_LOCATION_KINDS = [
   "room",
 ] as const satisfies readonly SpatialLocationKind[];
 
+export const SPATIAL_LINK_LINE_STYLES = ["solid", "dashed", "dotted"] as const;
+export type SpatialLinkLineStyle = (typeof SPATIAL_LINK_LINE_STYLES)[number];
+
+export interface SpatialLinkPresentation {
+  color?: string;
+  lineStyle?: SpatialLinkLineStyle;
+}
+
+export const DEFAULT_SPATIAL_LINK_PICKER_COLOR = "#A78BFA";
+export const DEFAULT_SPATIAL_LINK_LINE_STYLE: SpatialLinkLineStyle = "dashed";
+
 export interface SpatialHierarchyType {
   id: string;
   label: string;
@@ -190,6 +201,8 @@ export interface SpatialHierarchyProfile {
   name: string;
   types: SpatialHierarchyType[];
   locationTypeIds: Record<string, string>;
+  showConnections: boolean;
+  linkPresentations: Record<string, SpatialLinkPresentation>;
 }
 
 /** Reusable hierarchy content. Campaign state and chat-only artwork are excluded; Global Gallery references remain shared. */
@@ -313,6 +326,13 @@ export const spatialHierarchyTypeSchema = z
   })
   .strict();
 
+export const spatialLinkPresentationSchema = z
+  .object({
+    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/u, "Choose a six-digit hex color.").optional(),
+    lineStyle: z.enum(SPATIAL_LINK_LINE_STYLES).optional(),
+  })
+  .strict();
+
 const spatialHierarchyProfileBaseSchema = z
   .object({
     version: z.literal(HIERARCHY_PROFILE_VERSION),
@@ -320,6 +340,8 @@ const spatialHierarchyProfileBaseSchema = z
     name: z.string().trim().min(1).max(120),
     types: z.array(spatialHierarchyTypeSchema).min(1).max(40),
     locationTypeIds: z.record(z.string(), hierarchyIdSchema).default({}),
+    showConnections: z.boolean().default(true),
+    linkPresentations: z.record(z.string(), spatialLinkPresentationSchema).default({}),
   })
   .strict();
 
@@ -825,6 +847,8 @@ export function defaultHierarchyProfile(
     locationTypeIds: Object.fromEntries(
       (definition?.locations ?? []).map((location) => [location.id, `type_${location.kind}`]),
     ),
+    showConnections: true,
+    linkPresentations: {},
   };
 }
 
@@ -848,6 +872,8 @@ export function profileFromTemplate(
         firstTypeByKind.get(location.kind) ?? template.types[0]!.id,
       ]),
     ),
+    showConnections: true,
+    linkPresentations: {},
   };
 }
 
@@ -1002,4 +1028,59 @@ export function withLocationHierarchyType(
     ...profile,
     locationTypeIds: { ...profile.locationTypeIds, [locationId]: typeId },
   };
+}
+
+export function spatialLinkPresentationKey(sourceId: string, targetId: string): string {
+  return [sourceId, targetId].sort((left, right) => left.localeCompare(right)).join("|");
+}
+
+export function resolveSpatialLinkPresentation(
+  profile: Pick<SpatialHierarchyProfile, "linkPresentations">,
+  sourceId: string,
+  targetId: string,
+): Required<Pick<SpatialLinkPresentation, "lineStyle">> & Pick<SpatialLinkPresentation, "color"> {
+  const presentation = profile.linkPresentations[spatialLinkPresentationKey(sourceId, targetId)];
+  return {
+    ...(presentation?.color ? { color: presentation.color } : {}),
+    lineStyle: presentation?.lineStyle ?? DEFAULT_SPATIAL_LINK_LINE_STYLE,
+  };
+}
+
+export function withSpatialLinkPresentation(
+  profile: SpatialHierarchyProfile,
+  sourceId: string,
+  targetId: string,
+  patch: Partial<SpatialLinkPresentation>,
+): SpatialHierarchyProfile {
+  const key = spatialLinkPresentationKey(sourceId, targetId);
+  const current = profile.linkPresentations[key] ?? {};
+  const merged = { ...current, ...patch };
+  const next: SpatialLinkPresentation = {
+    ...(merged.color ? { color: merged.color.toUpperCase() } : {}),
+    ...(merged.lineStyle && merged.lineStyle !== DEFAULT_SPATIAL_LINK_LINE_STYLE
+      ? { lineStyle: merged.lineStyle }
+      : {}),
+  };
+  const linkPresentations = { ...profile.linkPresentations };
+  if (Object.keys(next).length === 0) delete linkPresentations[key];
+  else linkPresentations[key] = next;
+  return { ...profile, linkPresentations };
+}
+
+export function withoutSpatialLinkPresentation(
+  profile: SpatialHierarchyProfile,
+  sourceId: string,
+  targetId: string,
+): SpatialHierarchyProfile {
+  const key = spatialLinkPresentationKey(sourceId, targetId);
+  if (!profile.linkPresentations[key]) return profile;
+  const linkPresentations = { ...profile.linkPresentations };
+  delete linkPresentations[key];
+  return { ...profile, linkPresentations };
+}
+
+export function spatialLinkStrokeDasharray(lineStyle: SpatialLinkLineStyle): string | undefined {
+  if (lineStyle === "dotted") return "1 5";
+  if (lineStyle === "dashed") return "6 5";
+  return undefined;
 }
