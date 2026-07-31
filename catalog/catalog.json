@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-31T00:21:55.231Z",
+  "generatedAt": "2026-07-31T05:08:28.252Z",
   "packages": [
     {
       "manifest": {
@@ -1260,8 +1260,8 @@
         "schemaVersion": 1,
         "id": "storyboard",
         "name": "Storyboard",
-        "version": "1.1.1",
-        "description": "Plans and generates still or animated storyboards in Game and Roleplay through provider-tuned planner, image, and video prompt chains. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
+        "version": "1.1.0",
+        "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.5",
           "maxExclusive": "3.0.0"
@@ -1275,8 +1275,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "742c7642bc1e8a3b78bc0322bd4530bc774e727a1933bfb4233a11c6bc73ec19",
-            "bytes": 52379
+            "sha256": "bf7699b1415d712515637cb1da9ca56b6a183dfab6c8a94bfe4b066b2dfd783c",
+            "bytes": 69315
           }
         ],
         "permissions": [
@@ -1291,9 +1291,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.1.zip",
-        "sha256": "0c36e881b5d91cb640a775c19ca7a97ba139a32b7970db21d02cdea414b98a25",
-        "bytes": 11593
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.0.zip",
+        "sha256": "eaec59a0d9d5c28b4778212ea895b336babc9868606156e379d1850d4f9a3faf",
+        "bytes": 13595
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
     },
