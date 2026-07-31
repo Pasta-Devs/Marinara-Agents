@@ -707,6 +707,7 @@ export default function MemoryVault({
     setNotice(
       localizeUi("ui.longTermMemory.memoryvault.reviewRecoveredSuggestion"),
     );
+    setDetailsOpen(false);
     setMobilePane("workbench");
   }, [recoveryHandoff?.key]);
   useEffect(() => {

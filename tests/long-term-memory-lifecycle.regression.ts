@@ -405,7 +405,33 @@ async function main() {
     await page.waitForFunction(() =>
       document.activeElement?.getAttribute("data-ltm-workspace-pane-tab") === "workbench",
     );
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "20px";
+    });
+    await page.setViewportSize({ width: 900, height: 844 });
+    await page.waitForFunction(() =>
+      document.querySelectorAll("[data-ltm-workspace-pane-tab]").length === 3,
+    );
+    assert.deepEqual(
+      await page.locator("[data-ltm-workspace-pane-tab]").evaluateAll((tabs) =>
+        tabs.map((tab) => tab.getAttribute("data-ltm-workspace-pane-tab")),
+      ),
+      ["navigator", "workbench", "inspector"],
+    );
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "";
+    });
     await page.setViewportSize({ width: 1280, height: 900 });
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
+    await page.locator(`[data-ltm-rejected-suggestion="${rejectedSuggestionId}"]`).waitFor();
+    await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
+    await page.locator("[data-ltm-note-editor]").waitFor();
+    assert.equal(
+      await page.locator("[data-ltm-details-toggle]").getAttribute("aria-pressed"),
+      "false",
+    );
+    assert.equal(await page.locator('[data-ltm-workspace-pane="inspector"]').count(), 0);
     const cleanupRequest = page.waitForRequest(
       (request) => request.method() === "DELETE" && request.url().includes(`/rejected-suggestions/${rejectedSuggestionId}`),
     );

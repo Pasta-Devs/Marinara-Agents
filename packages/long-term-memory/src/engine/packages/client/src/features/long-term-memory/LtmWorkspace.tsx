@@ -10,6 +10,9 @@ import {
 
 export type LtmWorkspacePane = "navigator" | "workbench" | "inspector";
 
+const compactBreakpointRem = 48;
+const wideBreakpointRem = 64;
+
 type WorkspaceSlot = {
   label: string;
   content: ReactNode;
@@ -39,15 +42,19 @@ export function LtmWorkspace({
   const containerRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
+  const [rootFontSize, setRootFontSize] = useState(() =>
+    Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16,
+  );
+  const widthRem = width / rootFontSize;
   const panes = [
     ...(navigator ? (["navigator"] as const) : []),
     "workbench" as const,
     ...(inspector ? (["inspector"] as const) : []),
   ];
   const slots = { navigator, workbench, inspector };
-  const tabPanes = width < 768
+  const tabPanes = widthRem < compactBreakpointRem
     ? panes
-    : inspector && width < 1024
+    : inspector && widthRem < wideBreakpointRem
       ? panes.filter((pane) => pane !== "navigator")
       : [];
   const availablePanes = tabPanes.filter((pane) => !slots[pane]?.disabled);
@@ -64,7 +71,19 @@ export function LtmWorkspace({
       setWidth(entry.contentRect.width),
     );
     observer.observe(container);
-    return () => observer.disconnect();
+    const rootObserver = new MutationObserver(() =>
+      setRootFontSize(
+        Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16,
+      ),
+    );
+    rootObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
+    return () => {
+      observer.disconnect();
+      rootObserver.disconnect();
+    };
   }, []);
 
   useEffect(() => {
@@ -95,7 +114,7 @@ export function LtmWorkspace({
     requestAnimationFrame(() =>
       workspaceRef.current
         ?.querySelector<HTMLElement>(`[data-ltm-workspace-pane-tab="${next}"]`)
-        ?.focus(),
+        ?.focus({ preventScroll: true }),
     );
   };
 
@@ -119,7 +138,7 @@ export function LtmWorkspace({
         [data-ltm-workspace] [data-ltm-workspace-pane][data-active="true"] {
           display: block;
         }
-        @container ltm-workspace (min-width: 48rem) {
+        @container ltm-workspace (min-width: ${compactBreakpointRem}rem) {
           [data-ltm-workspace] [data-ltm-workspace-pane] {
             max-height: calc(100vh - 13rem);
             overflow-y: auto;
@@ -135,7 +154,7 @@ export function LtmWorkspace({
             display: none;
           }
         }
-        @container ltm-workspace (min-width: 48rem) and (max-width: 63.99rem) {
+        @container ltm-workspace (min-width: ${compactBreakpointRem}rem) and (max-width: ${wideBreakpointRem - 0.01}rem) {
           [data-ltm-workspace][data-ltm-workspace-inspector="true"] {
             grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
             grid-template-rows: auto minmax(0, 1fr);
@@ -155,7 +174,7 @@ export function LtmWorkspace({
             grid-row: 2;
           }
         }
-        @container ltm-workspace (min-width: 64rem) {
+        @container ltm-workspace (min-width: ${wideBreakpointRem}rem) {
           [data-ltm-workspace][data-ltm-workspace-inspector="true"] {
             grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr) minmax(16rem, 22rem);
           }
