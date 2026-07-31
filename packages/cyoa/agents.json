@@ -7,8 +7,7 @@
     "enabledByDefault": false,
     "category": "misc",
     "modeAllowlist": [
-      "roleplay",
-      "visual_novel"
+      "roleplay"
     ],
     "defaultTools": [],
     "author": "Pasta Devs",
