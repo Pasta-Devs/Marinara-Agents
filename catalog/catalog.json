@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-30T18:34:27.811Z",
+  "generatedAt": "2026-07-31T05:08:28.252Z",
   "packages": [
     {
       "manifest": {
@@ -1260,8 +1260,8 @@
         "schemaVersion": 1,
         "id": "storyboard",
         "name": "Storyboard",
-        "version": "1.0.0",
-        "description": "Plans and generates still or animated Game storyboards through provider-tuned planner, image, and video prompt chains. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Game mode.",
+        "version": "1.1.0",
+        "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.5",
           "maxExclusive": "3.0.0"
@@ -1275,8 +1275,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "8e649ab18362ed05b4dc1d2578526e0a248d8bdb37b6ca85e2d1357ae3729779",
-            "bytes": 60746
+            "sha256": "bf7699b1415d712515637cb1da9ca56b6a183dfab6c8a94bfe4b066b2dfd783c",
+            "bytes": 69315
           }
         ],
         "permissions": [
@@ -1291,9 +1291,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.0.0.zip",
-        "sha256": "a66c419edba6a2388f9e07c68b1975f096cd990ffb4885b2374511a76b40370b",
-        "bytes": 11958
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.0.zip",
+        "sha256": "eaec59a0d9d5c28b4778212ea895b336babc9868606156e379d1850d4f9a3faf",
+        "bytes": 13595
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
     },
