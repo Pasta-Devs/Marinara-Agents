@@ -83,6 +83,20 @@ const freshnessLabel: Record<string, string> = {
   not_pending: "ui.longTermMemory.reviewqueue.notPending",
 };
 
+function freshnessClass(freshness: string) {
+  if (freshness === "fresh")
+    return "border-[var(--marinara-editor-accent)]/40 text-[var(--marinara-editor-accent)]";
+  if (
+    freshness === "stale" ||
+    freshness === "missing" ||
+    freshness === "invalid" ||
+    freshness === "superseded" ||
+    freshness === "not_pending"
+  )
+    return "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]";
+  return "border-[var(--border)] text-[var(--muted-foreground)]";
+}
+
 const mutationLabels: Record<LtmDraftMutation["kind"], string> = {
   create_note: "ui.longTermMemory.reviewqueue.createMemory",
   append_section: "ui.longTermMemory.reviewqueue.addToSection",
@@ -715,7 +729,7 @@ function ExtractionDetails({
     <details
       data-ltm-extraction-details
       open
-      className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs"
+      className="mari-editor-panel mari-editor-panel--soft p-3 text-xs"
     >
       <summary className="cursor-pointer font-medium">
         {localizeUi("ui.longTermMemory.extractiondetails.extractionDetails")}
@@ -1408,9 +1422,9 @@ export default function ReviewQueue({
           <SelectionCheckbox
             checked={selectedIds.has(row.mutation.id)}
             compact
-            label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
+            label={`${localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
               value1: mutationLabel,
-            })}
+            })}: ${targetTitle}`}
             onChange={() => toggleSelection(row.mutation.id)}
           />
           <button
@@ -1425,7 +1439,12 @@ export default function ReviewQueue({
                 return next;
               })
             }
-            className="min-w-0 flex-1 rounded-md px-2 py-1 text-left hover:bg-[var(--accent)]"
+            aria-controls={
+              expanded
+                ? `ltm-review-mutation-details-${row.mutation.id}`
+                : undefined
+            }
+            className="min-w-0 flex-1 rounded-md px-2 py-1 text-left hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
             data-ltm-risk={row.mutation.risk}
             data-ltm-disposition={row.disposition}
           >
@@ -1498,7 +1517,7 @@ export default function ReviewQueue({
           >
             <IconButton
               icon={Check}
-              label={localizeUi("ui.longTermMemory.reviewqueue.accept")}
+              label={`${localizeUi("ui.longTermMemory.reviewqueue.accept")} ${targetTitle} (${mutationLabel})`}
               iconSize="1.25rem"
               className="mari-editor-action--primary !h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
@@ -1509,7 +1528,7 @@ export default function ReviewQueue({
             />
             <IconButton
               icon={X}
-              label={localizeUi("ui.longTermMemory.longtermmemorydetail.skip")}
+              label={`${localizeUi("ui.longTermMemory.longtermmemorydetail.skip")} ${targetTitle} (${mutationLabel})`}
               destructive
               disabled={running !== null}
               onClick={() => void runBatch("skip", [row])}
@@ -1518,6 +1537,7 @@ export default function ReviewQueue({
         </div>
         {expanded ? (
           <div
+            id={`ltm-review-mutation-details-${row.mutation.id}`}
             data-ltm-review-mutation-details
             className="space-y-2 pl-10 pt-3 text-xs"
           >
@@ -1763,7 +1783,7 @@ export default function ReviewQueue({
                   })}
                 </p>
               </header>
-              <div className="rounded-lg border border-[var(--border)]">
+      <div className="mari-editor-panel overflow-hidden">
                 {sourceIds.map((id) => {
                   const source = review.data?.sources.find(
                     (item) => item.sourceNoteId === id,
@@ -1833,7 +1853,7 @@ export default function ReviewQueue({
                             </span>
                             <span
                               data-ltm-freshness={item.freshness}
-                               className={`shrink-0 rounded-full border px-2 py-0.5 text-[0.6875rem] font-semibold ${item.freshness === "fresh" ? "border-[var(--marinara-editor-accent)]/40 text-[var(--marinara-editor-accent)]" : item.freshness === "stale" ? "border-[var(--destructive)]/40 text-[var(--destructive)]" : "border-[var(--border)] text-[var(--muted-foreground)]"}`}
+                                className={`shrink-0 rounded-full border px-2 py-0.5 text-[0.6875rem] font-semibold ${freshnessClass(item.freshness)}`}
                             >
                               {localizeUi(freshnessLabel[item.freshness])}
                             </span>
@@ -1859,7 +1879,7 @@ export default function ReviewQueue({
           content: (
             <div
               data-ltm-review-workbench
-              className="space-y-4 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/10 p-3 sm:p-4"
+              className="mari-editor-panel space-y-4 p-3 sm:p-4"
             >
               <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
                 <div className="min-w-0">
@@ -2174,7 +2194,7 @@ export default function ReviewQueue({
                               <section
                                 key={item.draft.id}
                                 data-ltm-review-draft={item.draft.id}
-                                className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 shadow-sm sm:p-4"
+                                className="mari-editor-panel space-y-3 p-3 sm:p-4"
                               >
                                 <div className="flex flex-wrap items-start justify-between gap-2">
                                   <div>
@@ -2216,7 +2236,7 @@ export default function ReviewQueue({
                                   </div>
                                   <span
                                     data-ltm-freshness={item.freshness}
-                                    className="rounded-full border border-[var(--border)] px-2 py-1 text-xs font-medium"
+                                    className={`rounded-full border px-2 py-1 text-xs font-medium ${freshnessClass(item.freshness)}`}
                                   >
                                     {localizeUi(freshnessLabel[item.freshness])}
                                   </span>

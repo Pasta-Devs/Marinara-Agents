@@ -92,51 +92,25 @@ export function LongTermMemoryNavigation({
   });
 
   return (
-    <>
-      {mobile ? (
-        <style>{`
-          [data-ltm-navigation="mobile"] {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            width: 100%;
-          }
-          [data-ltm-navigation="mobile"] > [data-ltm-control="navigation"] {
-            min-width: 0;
-            width: 100%;
-          }
-          [data-ltm-navigation="mobile"] [data-ltm-badge] {
-            position: absolute;
-            left: 0.375rem;
-            top: 0.375rem;
-            margin-left: 0;
-          }
-          [data-ltm-navigation="desktop"] {
-            display: none;
-          }
-          @media (min-width: 48rem) {
-            [data-ltm-navigation="mobile"] {
-              display: none;
-            }
-            [data-ltm-navigation="desktop"] {
-              display: flex;
-            }
-          }
-        `}</style>
-      ) : null}
-      <nav
-      aria-label={localizeUi(
-        "ui.longTermMemory.longtermmemorynavigation.longTermMemorySections",
-      )}
-      data-ltm-navigation={mobile ? "mobile" : "desktop"}
-      className={
-        mobile
-          ? "mari-editor-tab-rail w-full shrink-0 border-t"
-          : "mari-editor-tab-rail min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border p-1"
-      }
-      style={mobile ? undefined : { overflowX: "auto" }}
+    <div
+      data-ltm-navigation-host
+      className={mobile ? "w-full" : "min-w-0 flex-1"}
+      style={{ containerName: "ltm-navigation", containerType: "inline-size" }}
     >
-      {items}
+      <nav
+        aria-label={localizeUi(
+          "ui.longTermMemory.longtermmemorynavigation.longTermMemorySections",
+        )}
+        data-ltm-navigation={mobile ? "mobile" : "desktop"}
+        className={
+          mobile
+            ? "mari-editor-tab-rail grid w-full shrink-0 grid-cols-4"
+            : "mari-editor-tab-rail min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border p-1"
+        }
+        style={mobile ? undefined : { overflowX: "auto" }}
+      >
+        {items}
       </nav>
-    </>
+    </div>
   );
 }

@@ -719,7 +719,7 @@ async function main() {
     await page.setViewportSize({ width: 1280, height: 900 });
     const acceptButtonSize = await page
       .locator(
-        '[data-ltm-review-mutation] [aria-label="Accept"]',
+        '[data-ltm-review-mutation] [aria-label^="Accept "]',
       )
       .first()
       .evaluate((button) => {
