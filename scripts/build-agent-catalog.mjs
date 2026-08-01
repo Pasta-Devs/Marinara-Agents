@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -12,6 +12,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const MIN_ENGINE_VERSION = "2.3.0";
+const ARTIFACT_MTIME = new Date("2000-01-01T00:00:00.000Z");
 const nonDownloadableCoreFeatures = new Set(["about-me-keeper"]);
 await mkdir(artifactsDir, { recursive: true });
 
@@ -79,6 +80,11 @@ for (const id of selectedPackageDirectories) {
   try {
     await writeFile(join(temporary, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
     await writeFile(join(temporary, manifest.entrypoints.agents), agentsBuffer);
+    for (const artifactFile of ["manifest.json", manifest.entrypoints.agents]) {
+      const artifactSource = join(temporary, artifactFile);
+      await chmod(artifactSource, 0o644);
+      await utimes(artifactSource, ARTIFACT_MTIME, ARTIFACT_MTIME);
+    }
     const artifactName = `${id}-${manifest.version}.zip`;
     const artifactPath = join(artifactsDir, artifactName);
     await rm(artifactPath, { force: true });
