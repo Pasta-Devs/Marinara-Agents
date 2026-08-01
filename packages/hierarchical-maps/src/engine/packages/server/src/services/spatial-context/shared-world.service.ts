@@ -41,10 +41,13 @@ export function withSpatialSharedWorldCreationLock<T>(operation: () => Promise<T
 export async function spatialSharedWorldNameExists(
   persistence: Pick<CapabilityPersistenceSession, "documents">,
   name: string,
+  excludedWorldId?: string,
 ): Promise<boolean> {
-  const normalizedName = name.trim().toLocaleLowerCase();
+  const normalizedName = name.trim().toLowerCase();
   const documents = await persistence.documents.list(SPATIAL_SHARED_WORLD_PACKAGE_ID, SPATIAL_SHARED_WORLD_KIND);
-  return documents.some((document) => document.name.trim().toLocaleLowerCase() === normalizedName);
+  return documents.some(
+    (document) => document.id !== excludedWorldId && document.name.trim().toLowerCase() === normalizedName,
+  );
 }
 
 const spatialSharedWorldDataSchema = z

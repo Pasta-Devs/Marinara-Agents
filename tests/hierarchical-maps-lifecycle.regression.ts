@@ -1593,6 +1593,27 @@ async function main() {
         ).length,
         1,
       );
+      const conflictingRename = (await expectJson(
+        app,
+        {
+          method: "PUT",
+          url: `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+          headers: csrfHeaders,
+          payload: {
+            expectedRevision: sharedWorld.revision,
+            name: concurrentSharedWorldPayload.name.toUpperCase(),
+            description: "One canonical map shared by otherwise independent chats.",
+            definition: sharedWorld.data.definition,
+            hierarchyProfile: sharedWorld.data.hierarchyProfile,
+          },
+        },
+        409,
+      )) as { code: string };
+      assert.equal(
+        conflictingRename.code,
+        "spatial_shared_world_name_conflict",
+        "Shared-world renames must preserve the case-insensitive uniqueness policy",
+      );
 
       const createSharedWorldChat = async (name: string, mode: "roleplay" | "game" = "roleplay") => {
         const chat = (await expectJson(app, {
