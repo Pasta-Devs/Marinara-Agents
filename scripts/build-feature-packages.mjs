@@ -24,6 +24,7 @@ const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
     : engineRoot;
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const MIN_ENGINE_VERSION = "2.3.0";
+const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const ARTIFACT_MTIME = new Date("2000-01-01T00:00:00.000Z");
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
@@ -113,9 +114,9 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 const features = [
   {
     id: "long-term-memory",
-    version: "1.0.5",
+    version: "1.0.6",
     minEngineVersion: "2.3.5",
-    maxEngineExclusive: "2.4.0",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
     description: "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
     category: "misc",
@@ -137,9 +138,9 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.5",
+    version: "1.2.6",
     minEngineVersion: "2.3.5",
-    maxEngineExclusive: "3.0.0",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
     description: "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game.",
     category: "tracker",
@@ -153,7 +154,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.7",
+    version: "1.0.8",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -1051,7 +1052,7 @@ for (const feature of selectedFeatures) {
     description,
     engine: {
       min: feature.minEngineVersion ?? MIN_ENGINE_VERSION,
-      maxExclusive: feature.maxEngineExclusive ?? "3.0.0",
+      maxExclusive: feature.maxEngineExclusive ?? MAX_ENGINE_EXCLUSIVE,
     },
     kind: feature.kind,
     entrypoints: {

@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "knowledge-retrieval",
   "name": "Knowledge Retrieval",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Scans specified lorebooks for information relevant to the current conversation, summarizes the key data, and injects it into the prompt — a lightweight RAG pipeline without vector databases. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
-    "maxExclusive": "3.0.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent"
