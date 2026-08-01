@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "illustrator",
   "name": "Illustrator",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Creates images and videos, with optional automatic scene backgrounds for Roleplay location changes. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
   "engine": {
     "min": "2.3.3",
-    "maxExclusive": "3.0.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent"

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-01T01:03:17.014Z",
+  "generatedAt": "2026-08-01T11:50:32.587Z",
   "packages": [
     {
       "manifest": {
@@ -78,11 +78,11 @@
         "schemaVersion": 1,
         "id": "background",
         "name": "Background",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Selects the most fitting existing background image for the current scene from your background library. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -109,9 +109,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/background.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/background-1.0.2.zip",
-        "sha256": "ba98b22b843da43fa8ee3c817318f4fbc3ebb04eaea5266183ff42bfde013381",
-        "bytes": 1431
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/background-1.0.3.zip",
+        "sha256": "4dc672d39a2270533eacbc7d8fb6d9b21c7a0859cce3d219d163c9833e44a3bb",
+        "bytes": 1433
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#background"
     },
@@ -120,11 +120,11 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.7",
+        "version": "1.0.8",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent",
@@ -173,9 +173,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.7.zip",
-        "sha256": "3f2133de14b3f61aadbd919b97b60b556fcc9311e253f6f00a26248cf749d0a5",
-        "bytes": 915997
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.8.zip",
+        "sha256": "cc0a8acc09ab37e0fc1b00fb851909a257f4df187251595799dddec4079d0869",
+        "bytes": 916007
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -184,11 +184,11 @@
         "schemaVersion": 1,
         "id": "card-evolution-auditor",
         "name": "Card Evolution Auditor",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Audits durable roleplay changes against saved character cards and proposes precise edits for user approval. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -215,9 +215,9 @@
       "category": "writer",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/card-evolution-auditor.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/card-evolution-auditor-1.0.1.zip",
-        "sha256": "ba434d526765d424fc264743bc1798337ecb2f90bd1b15c6390ffb310f81b9c8",
-        "bytes": 1593
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/card-evolution-auditor-1.0.2.zip",
+        "sha256": "1b4579d763a0b5053857f6f608a18b07c20bd6fb01d180a8a85fe4215e20a807",
+        "bytes": 1595
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#card-evolution-auditor"
     },
@@ -226,11 +226,11 @@
         "schemaVersion": 1,
         "id": "character-tracker",
         "name": "Character Tracker",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.). Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -257,9 +257,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/character-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.0.1.zip",
-        "sha256": "8177999cbdd9cbb8437d814f777765be93c7442e93f71aaacd4a3a7668b084d4",
-        "bytes": 1839
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.0.2.zip",
+        "sha256": "f5230b2df2428a44a78c11abaf3ba956561e8698b20eb8ab5b62314bb6c22f25",
+        "bytes": 1841
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker"
     },
@@ -335,11 +335,11 @@
         "schemaVersion": 1,
         "id": "combat",
         "name": "Combat",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Manages combat encounters, initiative, HP tracking, and turn-based actions. Add as an Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -366,9 +366,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/combat.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/combat-1.0.2.zip",
-        "sha256": "c51d425ef3a2702f97054020b134f7742068b811121be69f08b9f2bee61d060f",
-        "bytes": 1601
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/combat-1.0.3.zip",
+        "sha256": "d636fa6c82b5113576221d6507a48256d1e0b09e9a58a901e690a299a47721d8",
+        "bytes": 1603
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#combat"
     },
@@ -377,11 +377,11 @@
         "schemaVersion": 1,
         "id": "continuity",
         "name": "Continuity Checker",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Post-processes the latest assistant message to fix concrete spatial, timeline, and physical logic errors without changing the story. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -408,9 +408,9 @@
       "category": "writer",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/continuity.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/continuity-1.0.1.zip",
-        "sha256": "16ab11d2b172feea1d8572ce1746cfb2e545503680b77cb6afa41dae3b7716d4",
-        "bytes": 1614
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/continuity-1.0.2.zip",
+        "sha256": "6f39e2058373cc7bc064b63862d5cef6f27bf60701f94ea9d56050d43940469b",
+        "bytes": 1615
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#continuity-checker"
     },
@@ -419,11 +419,11 @@
         "schemaVersion": 1,
         "id": "custom-tracker",
         "name": "Custom Tracker",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -450,9 +450,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/custom-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.0.1.zip",
-        "sha256": "89bf15877f4b6bb64ac6af1e06e09185638bf3886e77d674faa37b8e4acae323",
-        "bytes": 1461
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.0.2.zip",
+        "sha256": "66ce40c365a5dce2757a959768f5dd1eb5b7f12e75fa8b868c27f08c30c1c418",
+        "bytes": 1462
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker"
     },
@@ -461,11 +461,11 @@
         "schemaVersion": 1,
         "id": "cyoa",
         "name": "CYOA Choices",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Generates interactive Choose Your Own Adventure choices after each assistant message. Click a choice to send it as your response. Available in Roleplay chats. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -492,9 +492,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/cyoa.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/cyoa-1.0.2.zip",
-        "sha256": "c82f725d7f60e46abf13d5264255eea164d5cc84a67cca0d89ff756734536476",
-        "bytes": 1465
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/cyoa-1.0.3.zip",
+        "sha256": "e2deb52eb74d4b4533383bf5e89782a27fa7d4ffe626a75d31c7791c0756b797",
+        "bytes": 1466
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#cyoa-choices"
     },
@@ -503,11 +503,11 @@
         "schemaVersion": 1,
         "id": "echo-chamber",
         "name": "Echo Chamber",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Simulates a live streaming-style chat reacting to your roleplay in real time. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -534,8 +534,8 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/echo-chamber.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/echo-chamber-1.0.1.zip",
-        "sha256": "a01b83bc9b388d1a53ef8a9a8e569a0346ed4319ffbac21e15e52a48436a172d",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/echo-chamber-1.0.2.zip",
+        "sha256": "f876eabb76fcccacbd2c3222778c70a76b3f8884f557418f708e905ae84b04d7",
         "bytes": 2429
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#echo-chamber"
@@ -545,11 +545,11 @@
         "schemaVersion": 1,
         "id": "expression",
         "name": "Expression Engine",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Detects character emotions and selects VN sprites/expressions. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -576,9 +576,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/expression.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.3.zip",
-        "sha256": "64a7a3918ebd171fbcf5b0711c192f9bec31f4f81f9b19a93bde3c9fd49def16",
-        "bytes": 1574
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.4.zip",
+        "sha256": "37bdddad56991decbe75983daba36e37797b9e7adf69870b09f35c7e9917ae42",
+        "bytes": 1578
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine"
     },
@@ -587,11 +587,11 @@
         "schemaVersion": 1,
         "id": "haptic",
         "name": "Haptic Feedback",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Analyzes narrative content and controls connected intimate toys in real time. Requires Intiface Central running locally — connect your toy there first, then enable this agent. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation and Roleplay modes.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -618,9 +618,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/haptic.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/haptic-1.0.1.zip",
-        "sha256": "f936efc36c58ec783be0edc7cf1323c76e30829cbee64b4f8fa7c4fcdc1761a6",
-        "bytes": 1731
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/haptic-1.0.2.zip",
+        "sha256": "5fd54dc89d6ba39392d64d5d36305fa72e62972cf1ac2a43d8670973ba7cc8db",
+        "bytes": 1733
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback"
     },
@@ -629,11 +629,11 @@
         "schemaVersion": 1,
         "id": "illustrator",
         "name": "Illustrator",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Creates images and videos, with optional automatic scene backgrounds for Roleplay location changes. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
         "engine": {
           "min": "2.3.3",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -660,8 +660,8 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/illustrator.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/illustrator-1.0.3.zip",
-        "sha256": "e81b016b75447cdaca8f4f395cfd3eaf00ff0bdc917a2f21f031f447fc7fb1b1",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/illustrator-1.0.4.zip",
+        "sha256": "d90c940a3bb0658526cedcd99e067da7f1b44a4102b060c8ac63051f87a3d281",
         "bytes": 3173
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#illustrator"
@@ -671,11 +671,11 @@
         "schemaVersion": 1,
         "id": "html",
         "name": "Immersive HTML",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Post-processes the latest Roleplay response with diegetic HTML/CSS/JS visual artifacts without changing the story meaning. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -702,9 +702,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/html.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/html-1.0.1.zip",
-        "sha256": "28366709cfdcc78206e023484e3a0f35f5911e2b14a224e1445a20ac29762e02",
-        "bytes": 1673
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/html-1.0.2.zip",
+        "sha256": "affb85a797c726bddd4fe9e4e3a83ad988dcc8acf7db23e4ae572849b0f26136",
+        "bytes": 1675
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#immersive-html"
     },
@@ -713,11 +713,11 @@
         "schemaVersion": 1,
         "id": "knowledge-retrieval",
         "name": "Knowledge Retrieval",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Scans specified lorebooks for information relevant to the current conversation, summarizes the key data, and injects it into the prompt — a lightweight RAG pipeline without vector databases. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -744,9 +744,9 @@
       "category": "writer",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/knowledge-retrieval.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/knowledge-retrieval-1.0.2.zip",
-        "sha256": "e84ed26278abbdf5afcf1db151a3de30633877dcbb305c8cf09d6e4efa4a0d0c",
-        "bytes": 1513
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/knowledge-retrieval-1.0.3.zip",
+        "sha256": "022975c3f441191c25225a7b6a74fde4fcb27bc4ec208f1ae2842219566a23ed",
+        "bytes": 1514
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-retrieval"
     },
@@ -755,11 +755,11 @@
         "schemaVersion": 1,
         "id": "knowledge-router",
         "name": "Knowledge Router",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Lower-cost alternative to Knowledge Retrieval. Reads a short catalog of lorebook entries (descriptions or content snippets), picks which ones are relevant to the current scene, and injects them verbatim — no per-entry summarization passes. Best for large lorebooks where you've written entry descriptions. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -786,9 +786,9 @@
       "category": "writer",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/knowledge-router.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/knowledge-router-1.0.2.zip",
-        "sha256": "371d66b26040e883ed81b3b7337a55c618d358d02f8959edc6e3fe10c3678e27",
-        "bytes": 1631
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/knowledge-router-1.0.3.zip",
+        "sha256": "afc440835dc63917f2a5e44b206c8d98a08ce6a97908e33125ce5075dbafdbcc",
+        "bytes": 1634
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#knowledge-router"
     },
@@ -800,16 +800,16 @@
           "minor": 6
         },
         "builtAgainst": {
-          "engineVersion": "2.3.5",
-          "engineCommit": "4e651e9c63722b40ebd5b785cbf22541e3095f39"
+          "engineVersion": "2.4.0",
+          "engineCommit": "6115d944317aa1106e5b7aa5d9178a37fa79bf70"
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.0.5",
+        "version": "1.0.6",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, and Game modes.",
         "engine": {
-          "min": "2.3.5",
-          "maxExclusive": "2.4.0"
+          "min": "2.4.0",
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -859,9 +859,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.0.5.zip",
-        "sha256": "a457e7a12788c4b014fc34164a361d16105d8438048fff3f1a0dde208b98854c",
-        "bytes": 248413
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.0.6.zip",
+        "sha256": "9fff069cbbd2446e970080a615d78e07c6cc014696a8a67fa11839fc1abb88e1",
+        "bytes": 248219
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -870,11 +870,11 @@
         "schemaVersion": 1,
         "id": "lorebook-keeper",
         "name": "Lorebook Keeper",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes. Add the Agent in Chat Settings → Agents → Misc Agents/Lorebook Keeper for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -901,9 +901,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/lorebook-keeper.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/lorebook-keeper-1.0.1.zip",
-        "sha256": "863c6ce7a286815c5bb375981ea091ca1d78f1c3f23ac5641721e6273faa9cba",
-        "bytes": 1598
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/lorebook-keeper-1.0.2.zip",
+        "sha256": "92459d501de39eaba63777bbe559aeaf6260b1ab127b30528166858e91e08d29",
+        "bytes": 1600
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#lorebook-keeper"
     },
@@ -912,11 +912,11 @@
         "schemaVersion": 1,
         "id": "spotify",
         "name": "Music DJ",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Analyzes the narrative mood and plays matching music through Spotify, YouTube, or local Game Assets music. Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -943,9 +943,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/spotify.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/spotify-1.0.1.zip",
-        "sha256": "73c53ac3f2bdcab046c1f20718ca2df265c04d4839ae65f750b4397e67c91ba1",
-        "bytes": 2620
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/spotify-1.0.2.zip",
+        "sha256": "24e511ed37261f1e7588bbe49564ea600916d789be17fa5c363282a19dc0f643",
+        "bytes": 2621
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#music-dj"
     },
@@ -954,11 +954,11 @@
         "schemaVersion": 1,
         "id": "director",
         "name": "Narrative Director",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Creates one-shot story directions when you choose to push the next response forward. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -985,9 +985,9 @@
       "category": "writer",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/director.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/director-1.0.1.zip",
-        "sha256": "94739efec3a7b247348284e61074cbd7688ba04c62d216e600dbf41be1d7c375",
-        "bytes": 1438
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/director-1.0.2.zip",
+        "sha256": "27ee303d3d6bbb80d8a5a1a0943bf964d5ba777b3dea4355d984267582d08475",
+        "bytes": 1440
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director"
     },
@@ -996,11 +996,11 @@
         "schemaVersion": 1,
         "id": "persona-stats",
         "name": "Persona Stats",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -1027,9 +1027,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/persona-stats.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/persona-stats-1.0.1.zip",
-        "sha256": "aec286060e8a03714a3ddd7fe4d85c91f821465ae712dc23b5bed36b8c2a457a",
-        "bytes": 1757
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/persona-stats-1.0.2.zip",
+        "sha256": "228ed51491c75ee3ff907945b5680db7d0f2ad931aa00bc2a6e394d2b61d93b9",
+        "bytes": 1758
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#persona-stats"
     },
@@ -1107,11 +1107,11 @@
         "schemaVersion": 1,
         "id": "prose-guardian",
         "name": "Prose Guardian",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -1138,9 +1138,9 @@
       "category": "writer",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/prose-guardian.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/prose-guardian-1.0.1.zip",
-        "sha256": "1d0c054e4b464ea0aa8e9eb85a4ad14c283f8e97d4179f7bf568a9071f46af82",
-        "bytes": 1572
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/prose-guardian-1.0.2.zip",
+        "sha256": "3a8313093f7765aa9d6448843b6b8d407cee8ed04c5765d352f4804da551c0ba",
+        "bytes": 1573
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#prose-guardian"
     },
@@ -1149,11 +1149,11 @@
         "schemaVersion": 1,
         "id": "quest",
         "name": "Quest Tracker",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Manages quest objectives, completion states, and rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -1180,9 +1180,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quest.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quest-1.0.2.zip",
-        "sha256": "8e4b5266f194d957faa03f12846f713da04f3be2379b564653eaffce4077b509",
-        "bytes": 1383
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quest-1.0.3.zip",
+        "sha256": "b51391b661b893b1d5153f909fd255e583d8b3ed87653236c73b39cfcfcf695e",
+        "bytes": 1384
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest-tracker"
     },
@@ -1260,11 +1260,11 @@
         "schemaVersion": 1,
         "id": "storyboard",
         "name": "Storyboard",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
         "engine": {
-          "min": "2.3.5",
-          "maxExclusive": "3.0.0"
+          "min": "2.4.0",
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -1291,9 +1291,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.0.zip",
-        "sha256": "eaec59a0d9d5c28b4778212ea895b336babc9868606156e379d1850d4f9a3faf",
-        "bytes": 13595
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.1.zip",
+        "sha256": "53a06cf1eab0fdc9aca61849686d8b7e82457bcd2ca0577b925780ee71392fcd",
+        "bytes": 13593
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
     },
@@ -1442,16 +1442,16 @@
           "minor": 4
         },
         "builtAgainst": {
-          "engineVersion": "2.3.5",
-          "engineCommit": "ed0e2422b17b747aa5c392d9019bb92a71b00260"
+          "engineVersion": "2.4.0",
+          "engineCommit": "6115d944317aa1106e5b7aa5d9178a37fa79bf70"
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.2.5",
+        "version": "1.2.6",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
-          "min": "2.3.5",
-          "maxExclusive": "3.0.0"
+          "min": "2.4.0",
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent",
@@ -1507,9 +1507,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.5.zip",
-        "sha256": "04037585561153e75c18dede944956a5962bc31d72b22f53c446c12b01d5bd86",
-        "bytes": 334950
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.6.zip",
+        "sha256": "c24035194bd85950c701ff87fd8a151c184bc21b441fce4d83b794bbf6e32717",
+        "bytes": 334945
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },
@@ -1518,11 +1518,11 @@
         "schemaVersion": 1,
         "id": "world-state",
         "name": "World State",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Tracks date, time, weather, location, temperature, and custom world details automatically. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
-          "maxExclusive": "3.0.0"
+          "maxExclusive": "4.0.0"
         },
         "kind": [
           "agent"
@@ -1549,9 +1549,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/world-state.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.0.2.zip",
-        "sha256": "fe0a66213d60e337848f981332a15ad1039bac04a0270303129eca2ad6fe27bb",
-        "bytes": 1638
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.0.3.zip",
+        "sha256": "59c5e4f106e4b46fc07e7044573a65a7e4eac86aa66f39d02e9df93607a1bf3f",
+        "bytes": 1640
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state"
     }

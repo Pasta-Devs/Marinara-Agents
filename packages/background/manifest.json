@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "background",
   "name": "Background",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Selects the most fitting existing background image for the current scene from your background library. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
-    "maxExclusive": "3.0.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent"

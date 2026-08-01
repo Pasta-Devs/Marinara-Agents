@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "world-state",
   "name": "World State",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Tracks date, time, weather, location, temperature, and custom world details automatically. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
-    "maxExclusive": "3.0.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent"

@@ -23,6 +23,7 @@ import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./cata
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { catalog, catalogsByMajor, legacyCatalog } = await readCatalogFamily(repoRoot);
 const MIN_ENGINE_VERSION = "2.3.0";
+const REQUIRED_MAX_ENGINE_EXCLUSIVE = "4.0.0";
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
 const expectedCatalogsByMajor = createCatalogLanes(catalog);
 if (JSON.stringify([...catalogsByMajor.keys()].sort()) !== JSON.stringify([...expectedCatalogsByMajor.keys()].sort())) {
@@ -278,6 +279,11 @@ for (const entry of catalog.packages) {
   }
   if (compareEngineVersions(manifest.engine.maxExclusive, manifest.engine.min) <= 0) {
     throw new Error(`${manifest.id} Engine compatibility range must be increasing`);
+  }
+  if (compareEngineVersions(manifest.engine.maxExclusive, REQUIRED_MAX_ENGINE_EXCLUSIVE) < 0) {
+    throw new Error(
+      `${manifest.id} must accept supported higher Engine versions below ${REQUIRED_MAX_ENGINE_EXCLUSIVE}`,
+    );
   }
   assertManifestBuildProvenance(manifest);
   if (!OFFICIAL_PACKAGE_GUIDANCE[manifest.id]) {
