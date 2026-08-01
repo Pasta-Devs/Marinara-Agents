@@ -44,6 +44,14 @@ Developer/
 
 Set `MARINARA_ENGINE_ROOT` when the Engine checkout is elsewhere.
 
+After a fresh checkout, and whenever `package.json` or `package-lock.json` changes, install this repository's pinned build dependencies:
+
+```bash
+npm ci
+```
+
+The root `package.json` pins libraries that feature sources import but that the Engine no longer provides (currently `chess.js` for the Chess package). Because captured sources build from `sources/engine/` inside this repository, esbuild's standard upward module resolution finds those libraries in this repository's `node_modules`. When `MARINARA_ENGINE_SOURCE_ROOT` points at a source tree outside this repository, that upward walk does not reach this repository's `node_modules`, so the pinned libraries must be resolvable from the external tree instead.
+
 ## Repository Layout
 
 - `packages/<id>/` — package manifest, package-owned source, and declared/generated payloads
