@@ -8,7 +8,7 @@ import type {
   LtmIntegrityResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
-import { invalidateLtmQueries, queryKeys, request } from "./api";
+import { invalidateLtmQueries, queryKeys, request, requestHost } from "./api";
 import {
   Button,
   InfoPopover,
@@ -28,7 +28,11 @@ type GlobalForm = {
   longTermMemoryScoreThreshold: number;
   longTermMemoryRecallContextMessages: number;
   longTermMemoryRecallStyle:
-    "balanced" | "exact" | "broad" | "story" | "custom";
+    | "balanced"
+    | "exact"
+    | "broad"
+    | "story"
+    | "custom";
   longTermMemorySemanticWeight: number;
   longTermMemoryLexicalWeight: number;
   longTermMemoryGraphWeight: number;
@@ -40,6 +44,12 @@ type GlobalForm = {
 type ExtractionForm = Required<LtmExtractionSettingsPatch> & {
   systemPrompt?: string;
   activePromptTemplateId?: string | null;
+};
+type LanguageConnection = {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
 };
 type RepairAction =
   | "rebuild_indexes"
@@ -186,6 +196,7 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
   };
   return {
     version: 1,
+    connectionId: resolved.connectionId ?? null,
     reasoningEffort: resolved.reasoningEffort ?? "medium",
     verbosity: resolved.verbosity ?? "medium",
     maxOutputTokens: resolved.maxOutputTokens ?? 4096,
@@ -229,25 +240,20 @@ function Toggle({
 }) {
   const inputId = useId();
   return (
-    <div className="flex min-h-11 items-stretch rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 text-xs">
+    <div className="flex min-h-11 items-end gap-2">
       <label
         htmlFor={inputId}
-        className="flex min-h-11 flex-1 cursor-pointer items-start gap-2 px-3 py-2"
+        className="flex min-h-11 flex-1 cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 px-3 text-xs font-semibold text-[var(--foreground)]"
       >
         <input
           id={inputId}
-          className="mt-0.5"
           type="checkbox"
           checked={checked}
           onChange={(event) => onChange(event.target.checked)}
         />
-        <span className="font-semibold">{label}</span>
+        <span>{label}</span>
       </label>
-      {help ? (
-        <span className="p-1.5">
-          <InfoPopover label={label} content={help} />
-        </span>
-      ) : null}
+      {help ? <InfoPopover label={label} content={help} /> : null}
     </div>
   );
 }
@@ -258,10 +264,12 @@ export default function MemorySettings({
   onOpenMemory,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
+  const memorySettingsTitleId = useId();
   const recallStyleLabelId = useId();
   const recallPreambleLabelId = useId();
   const reasoningEffortLabelId = useId();
   const verbosityLabelId = useId();
+  const extractionConnectionLabelId = useId();
   const queryClient = useQueryClient();
   const global = useQuery({
     queryKey: queryKeys.settings,
@@ -271,6 +279,15 @@ export default function MemorySettings({
     queryKey: queryKeys.extractionSettings,
     queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
   });
+  const connections = useQuery({
+    queryKey: ["long-term-memory", "language-connections"],
+    queryFn: () => requestHost<LanguageConnection[]>("/api/connections"),
+  });
+  const availableConnections = (connections.data ?? []).filter(
+    (connection) =>
+      connection.provider !== "image_generation" &&
+      connection.provider !== "video_generation",
+  );
   const integrity = useQuery({
     queryKey: queryKeys.integrity,
     queryFn: () => request<LtmIntegrityResponse>("/integrity"),
@@ -308,8 +325,8 @@ export default function MemorySettings({
   >({});
   const [backupPreview, setBackupPreview] = useState<{
     backup: unknown;
-    incoming: { notes: number; drafts: number };
-    current: { notes: number; drafts: number };
+    incoming: { notes: number; drafts: number; rejectedSuggestions: number };
+    current: { notes: number; drafts: number; rejectedSuggestions: number };
   } | null>(null);
   const backupInput = useRef<HTMLInputElement>(null);
 
@@ -661,6 +678,7 @@ export default function MemorySettings({
         queryKeys.notes,
         queryKeys.review,
         queryKeys.pendingDrafts,
+        queryKeys.rejectedSuggestions,
         queryKeys.activity,
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
@@ -724,8 +742,8 @@ export default function MemorySettings({
     try {
       const backup = JSON.parse(await file.text());
       const preview = await request<{
-        incoming: { notes: number; drafts: number };
-        current: { notes: number; drafts: number };
+        incoming: { notes: number; drafts: number; rejectedSuggestions: number };
+        current: { notes: number; drafts: number; rejectedSuggestions: number };
       }>("/backup/preview", "POST", backup);
       setBackupPreview({ ...preview, backup });
       setMessage(
@@ -782,6 +800,7 @@ export default function MemorySettings({
         queryKeys.notes,
         queryKeys.review,
         queryKeys.pendingDrafts,
+        queryKeys.rejectedSuggestions,
         queryKeys.integrity,
         queryKeys.status,
         queryKeys.activity,
@@ -903,6 +922,7 @@ export default function MemorySettings({
         queryKeys.notes,
         queryKeys.review,
         queryKeys.pendingDrafts,
+        queryKeys.rejectedSuggestions,
         queryKeys.integrity,
         queryKeys.status,
         queryKeys.activity,
@@ -983,10 +1003,14 @@ export default function MemorySettings({
   );
 
   return (
-    <section data-ltm-surface="memory-settings" className="space-y-5">
+    <section
+      aria-labelledby={memorySettingsTitleId}
+      data-ltm-surface="memory-settings"
+      className="space-y-5"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold">
+          <h2 id={memorySettingsTitleId} className="text-sm font-semibold">
             {localizeUi("ui.longTermMemory.memorysettings.memorySettings")}
           </h2>
         </div>
@@ -1323,6 +1347,60 @@ export default function MemorySettings({
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={extractionConnectionLabelId}>
+              {localizeUi(
+                "ui.longTermMemory.memorysettings.extractionConnection",
+              )}
+            </span>
+            <select
+              aria-labelledby={extractionConnectionLabelId}
+              className={inputClass}
+              value={extractionFormState.connectionId ?? ""}
+              onChange={(event) =>
+                setExtractionFormState({
+                  ...extractionFormState,
+                  connectionId: event.target.value || null,
+                })
+              }
+            >
+              <option value="">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.automatic")}
+              </option>
+              {connections.data &&
+              extractionFormState.connectionId &&
+              !availableConnections.some(
+                (connection) =>
+                  connection.id === extractionFormState.connectionId,
+              ) ? (
+                <option value={extractionFormState.connectionId}>
+                  {localizeUi(
+                    "ui.longTermMemory.memorysettings.unavailableSavedConnection",
+                  )}
+                </option>
+              ) : null}
+              {availableConnections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.name || connection.provider}
+                  {connection.model ? ` - ${connection.model}` : ""}
+                </option>
+              ))}
+            </select>
+            {connections.isError ? (
+              <StatusSurface tone="danger">
+                {localizeUi(
+                  "ui.longTermMemory.memorysettings.couldNotLoadLanguageConnections",
+                )}{" "}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => void connections.refetch()}
+                >
+                  {localizeUi("ui.longTermMemory.activityview.retry")}
+                </button>
+              </StatusSurface>
+            ) : null}
+          </div>
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
             <span
               id={reasoningEffortLabelId}
               className="flex items-center gap-1"
@@ -1589,6 +1667,9 @@ export default function MemorySettings({
             <input
               ref={backupInput}
               type="file"
+              aria-label={localizeUi(
+                "ui.longTermMemory.memorysettings.chooseBackup",
+              )}
               accept="application/json,.json"
               className="sr-only"
               onChange={(event) => {
@@ -1628,7 +1709,11 @@ export default function MemorySettings({
                 {backupPreview.incoming.notes}{" "}
                 {localizeUi("ui.longTermMemory.memorysettings.memories")}{" "}
                 {backupPreview.incoming.drafts}{" "}
-                {localizeUi("ui.longTermMemory.memorysettings.drafts")}
+                {localizeUi("ui.longTermMemory.memorysettings.drafts")} {" | "}
+                {backupPreview.current.rejectedSuggestions}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsCurrent")} {" | "}
+                {backupPreview.incoming.rejectedSuggestions}{" "}
+                {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsIncoming")}
               </p>
               <Button
                 primary

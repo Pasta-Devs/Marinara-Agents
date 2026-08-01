@@ -22,6 +22,10 @@ const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
 const generationProviderBaseUrl = "http://127.0.0.1:9/v1";
 const csrfHeaders = { "x-marinara-csrf": "1" };
 const originalFetch = globalThis.fetch;
+const artifactWorldMapsGuideUrl =
+  "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md";
+const catalogWorldMapsGuideUrl =
+  "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md";
 const defaultTurnPromptTemplate = [
   "Current path: ${currentPath}",
   "Current location ID: ${currentLocationId}",
@@ -78,6 +82,12 @@ function artifactFixture(version: string): ArtifactFixture {
   ) as Manifest;
   assert.equal(manifest.id, "hierarchical-maps");
   assert.equal(manifest.version, version);
+  if (version === "1.2.5" || version === "1.2.6") {
+    const clientSource = execFileSync("unzip", ["-p", path, "client.js"], { encoding: "utf8" });
+    assert.ok(clientSource.includes(artifactWorldMapsGuideUrl));
+    assert.match(clientSource, /Open World Maps movement help/u);
+    assert.match(clientSource, /Open shared-world guide/u);
+  }
   return {
     bytes,
     manifest,
@@ -96,6 +106,13 @@ const fixtures = new Map(
     artifactFixture("1.1.5"),
     artifactFixture("1.1.6"),
     artifactFixture("1.1.7"),
+    artifactFixture("1.2.0"),
+    artifactFixture("1.2.1"),
+    artifactFixture("1.2.2"),
+    artifactFixture("1.2.3"),
+    artifactFixture("1.2.4"),
+    artifactFixture("1.2.5"),
+    artifactFixture("1.2.6"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -118,6 +135,13 @@ assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineCommit: "858cfa431e07f6f558aa1e8826a2c9b024269ab7",
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
+
+const currentFixture = fixtures.get("1.2.6");
+assert.ok(currentFixture);
+assert.deepEqual(currentFixture.manifest.builtAgainst, {
+  engineVersion: "2.3.5",
+  engineCommit: "ed0e2422b17b747aa5c392d9019bb92a71b00260",
+});
 
 function seedInstalledProfile(version: string) {
   const fixture = fixtures.get(version);
@@ -174,7 +198,9 @@ function catalogFixture(version: string) {
           bytes: fixture.bytes.byteLength,
         },
         documentationUrl:
-          "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
+          version === "1.2.6"
+            ? catalogWorldMapsGuideUrl
+            : "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
       },
     ],
   };
@@ -411,6 +437,39 @@ const definition = {
       status: "active",
       sortOrder: 0,
     },
+    {
+      id: "lifecycle_level_5",
+      parentId: "lifecycle_world",
+      name: "Level 5 — Prism Caverns",
+      kind: "floor",
+      description: "A known numbered level used to prevent duplicate discoveries.",
+      childPresentation: "list",
+      links: [],
+      status: "active",
+      sortOrder: 1,
+    },
+    {
+      id: "lifecycle_deck",
+      parentId: "lifecycle_world",
+      name: "Deck",
+      kind: "floor",
+      description: "A bare deck name used to detect false location aliases.",
+      childPresentation: "list",
+      links: [],
+      status: "active",
+      sortOrder: 2,
+    },
+    {
+      id: "lifecycle_deck_a",
+      parentId: "lifecycle_world",
+      name: "Deck A",
+      kind: "floor",
+      description: "A lettered deck that must retain its single-letter designator.",
+      childPresentation: "list",
+      links: [],
+      status: "active",
+      sortOrder: 3,
+    },
   ],
 };
 
@@ -460,9 +519,18 @@ async function main() {
           swipeIndex: number;
           regenerate: boolean;
           continuation: boolean;
+          directive?:
+            | { type: "move"; destinationId: string }
+            | { type: "discover"; name: string; relation: "enter" | "link"; description?: string }
+            | null;
+          locationGuidance?: string | null;
         },
         chatMetadata?: unknown,
-      ): Promise<{ currentLocationId: string } | null>;
+      ): Promise<{
+        currentLocationId: string;
+        definitionRevision: number;
+        transitionCommandId: string | null;
+      } | null>;
       resolveEffectiveSpatialState(
         chatId: string,
         options?: { exactAnchor?: { messageId: string; swipeIndex: number } },
@@ -497,6 +565,11 @@ async function main() {
         ): Promise<string>;
       };
     }>("packages/server/src/services/storage/game-state.storage.ts");
+    const { createGlobalGalleryStorage } = await importEngine<{
+      createGlobalGalleryStorage(db: unknown): {
+        createImage(input: { filePath: string }): Promise<{ id: string } | null>;
+      };
+    }>("packages/server/src/services/storage/global-gallery.storage.ts");
 
     seedInstalledProfile("1.0.6");
     const installedProfile = await capabilityPackageManager.installed();
@@ -1414,6 +1487,448 @@ async function main() {
       },
       204,
     );
+    const verifySharedWorldLifecycle = async () => {
+      const sharedWorldArtwork = await createGlobalGalleryStorage(app.db).createImage({
+        filePath: "global/lifecycle-shared-world-art.png",
+      });
+      assert.ok(sharedWorldArtwork);
+      const sharedWorldArtworkReference = `global-gallery:${sharedWorldArtwork.id}`;
+      const sharedWorldDefinition = {
+        ...definition,
+        locations: definition.locations.map((location, index) =>
+          index === 0
+            ? {
+                ...location,
+                referenceImageId: sharedWorldArtworkReference,
+                useReferenceImage: true,
+                mapBackgroundImageId: sharedWorldArtworkReference,
+                mapBackgroundPosition: { x: 24, y: 76 },
+              }
+            : location,
+        ),
+      };
+      const sharedWorldHierarchyProfile = {
+        version: 1,
+        mode: "custom",
+        name: "Lifecycle shared-world types",
+        types: [
+          { id: "type_region", label: "Region", baseKind: "region" },
+          {
+            id: "type_settlement",
+            label: "Settlement",
+            baseKind: "settlement",
+          },
+          { id: "type_place", label: "Place", baseKind: "place" },
+          { id: "type_building", label: "Building", baseKind: "building" },
+          { id: "type_floor", label: "Floor", baseKind: "floor" },
+          { id: "type_room", label: "Room", baseKind: "room" },
+        ],
+        locationTypeIds: Object.fromEntries(
+          sharedWorldDefinition.locations.map((location) => [location.id, `type_${location.kind}`]),
+        ),
+      };
+      const sharedWorld = (await expectJson(
+        app,
+        {
+          method: "POST",
+          url: "/api/chats/spatial-context/shared-worlds",
+          headers: csrfHeaders,
+          payload: {
+            name: "Lifecycle durable world",
+            description: "One canonical map shared by otherwise independent chats.",
+            definition: sharedWorldDefinition,
+            hierarchyProfile: sharedWorldHierarchyProfile,
+          },
+        },
+        201,
+      )) as {
+        id: string;
+        name: string;
+        revision: number;
+        linkedChatCount: number;
+        data: { definition: typeof definition; hierarchyProfile: unknown };
+      };
+      assert.equal(sharedWorld.revision, 1);
+      assert.equal(sharedWorld.linkedChatCount, 0);
+      assert.equal(
+        sharedWorld.data.definition.locations[0]?.referenceImageId,
+        sharedWorldArtworkReference,
+        "Shared worlds must retain reusable Global Gallery artwork references",
+      );
+
+      const concurrentSharedWorldPayload = {
+        name: "Lifecycle concurrent world",
+        description: "Only one request may claim this account-owned world name.",
+        definition: sharedWorldDefinition,
+        hierarchyProfile: sharedWorldHierarchyProfile,
+      };
+      const concurrentSharedWorldResponses = await Promise.all([
+        app.inject({
+          method: "POST",
+          url: "/api/chats/spatial-context/shared-worlds",
+          headers: csrfHeaders,
+          payload: concurrentSharedWorldPayload,
+        }),
+        app.inject({
+          method: "POST",
+          url: "/api/chats/spatial-context/shared-worlds",
+          headers: csrfHeaders,
+          payload: concurrentSharedWorldPayload,
+        }),
+      ]);
+      assert.deepEqual(
+        concurrentSharedWorldResponses.map((response) => response.statusCode).sort((left, right) => left - right),
+        [201, 409],
+        "Concurrent shared-world creation must persist only one case-insensitive friendly name",
+      );
+      const concurrentNameConflict = concurrentSharedWorldResponses.find((response) => response.statusCode === 409);
+      assert.ok(concurrentNameConflict);
+      assert.equal(JSON.parse(concurrentNameConflict.body).code, "spatial_shared_world_name_conflict");
+      const sharedWorldsAfterConcurrentCreate = (await expectJson(app, {
+        method: "GET",
+        url: "/api/chats/spatial-context/shared-worlds",
+      })) as Array<{ name: string }>;
+      assert.equal(
+        sharedWorldsAfterConcurrentCreate.filter(
+          (world) => world.name.toLocaleLowerCase() === concurrentSharedWorldPayload.name.toLocaleLowerCase(),
+        ).length,
+        1,
+      );
+      const conflictingRename = (await expectJson(
+        app,
+        {
+          method: "PUT",
+          url: `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+          headers: csrfHeaders,
+          payload: {
+            expectedRevision: sharedWorld.revision,
+            name: concurrentSharedWorldPayload.name.toUpperCase(),
+            description: "One canonical map shared by otherwise independent chats.",
+            definition: sharedWorld.data.definition,
+            hierarchyProfile: sharedWorld.data.hierarchyProfile,
+          },
+        },
+        409,
+      )) as { code: string };
+      assert.equal(
+        conflictingRename.code,
+        "spatial_shared_world_name_conflict",
+        "Shared-world renames must preserve the case-insensitive uniqueness policy",
+      );
+
+      const createSharedWorldChat = async (name: string, mode: "roleplay" | "game" = "roleplay") => {
+        const chat = (await expectJson(app, {
+          method: "POST",
+          url: "/api/chats",
+          headers: csrfHeaders,
+          payload: { name, mode, characterIds: [] },
+        })) as { id: string };
+        await expectJson(app, {
+          method: "PATCH",
+          url: `/api/chats/${chat.id}/metadata`,
+          headers: csrfHeaders,
+          payload: {
+            enableAgents: true,
+            activeAgentIds: ["hierarchical-maps"],
+          },
+        });
+        return chat;
+      };
+      const firstLinkedChat = await createSharedWorldChat("Lifecycle linked world A");
+      const secondLinkedChat = await createSharedWorldChat("Lifecycle linked world B");
+      const gameSetupLinkedChat = await createSharedWorldChat("Lifecycle linked Game setup world", "game");
+      const staleSelectionChat = await createSharedWorldChat("Lifecycle stale setup selection", "game");
+      const staleSelection = (await expectJson(
+        app,
+        {
+          method: "POST",
+          url: `/api/chats/${staleSelectionChat.id}/spatial-context/shared-world/link`,
+          headers: csrfHeaders,
+          payload: {
+            worldId: sharedWorld.id,
+            expectedWorldRevision: sharedWorld.revision + 1,
+            expectedRevision: 0,
+            expectedCurrentLocationId: null,
+          },
+        },
+        409,
+      )) as { code: string };
+      assert.equal(staleSelection.code, "spatial_shared_world_selection_stale");
+      const linkChat = async (chatId: string) =>
+        expectJson(app, {
+          method: "POST",
+          url: `/api/chats/${chatId}/spatial-context/shared-world/link`,
+          headers: csrfHeaders,
+          payload: {
+            worldId: sharedWorld.id,
+            expectedWorldRevision: sharedWorld.revision,
+            expectedRevision: 0,
+            expectedCurrentLocationId: null,
+          },
+        }) as Promise<{
+          definition: typeof definition & { revision: number };
+          currentLocationId: string | null;
+          hierarchyProfile: unknown;
+          sharedWorld: {
+            mode: "linked" | "independent";
+            pendingChanges: boolean;
+            conflict: boolean;
+            linkedChatCount: number;
+            worldRevision: number | null;
+          };
+        }>;
+      const gameSetupLinked = await linkChat(gameSetupLinkedChat.id);
+      assert.equal(gameSetupLinked.currentLocationId, "lifecycle_world");
+      assert.equal(gameSetupLinked.sharedWorld.mode, "linked");
+      assert.equal(gameSetupLinked.sharedWorld.worldRevision, sharedWorld.revision);
+      const sharedWorldsAfterGameSetupLink = (await expectJson(app, {
+        method: "GET",
+        url: "/api/chats/spatial-context/shared-worlds",
+      })) as Array<typeof sharedWorld>;
+      const canonicalAfterGameSetupLink = sharedWorldsAfterGameSetupLink.find((world) => world.id === sharedWorld.id);
+      assert.equal(canonicalAfterGameSetupLink?.revision, sharedWorld.revision);
+      assert.deepEqual(
+        canonicalAfterGameSetupLink?.data,
+        sharedWorld.data,
+        "Linking a shared world during Game setup must not mutate its canonical definition or artwork",
+      );
+      await expectJson(
+        app,
+        {
+          method: "DELETE",
+          url: `/api/chats/${gameSetupLinkedChat.id}?force=true`,
+          headers: csrfHeaders,
+        },
+        204,
+      );
+      const firstLinked = await linkChat(firstLinkedChat.id);
+      const secondLinked = await linkChat(secondLinkedChat.id);
+      assert.equal(firstLinked.currentLocationId, "lifecycle_world");
+      assert.equal(firstLinked.sharedWorld.mode, "linked");
+      assert.equal(secondLinked.sharedWorld.linkedChatCount, 2);
+      const sharedWorldsAfterSetupLinks = (await expectJson(app, {
+        method: "GET",
+        url: "/api/chats/spatial-context/shared-worlds",
+      })) as Array<typeof sharedWorld>;
+      const canonicalAfterSetupLinks = sharedWorldsAfterSetupLinks.find((world) => world.id === sharedWorld.id);
+      assert.equal(canonicalAfterSetupLinks?.revision, sharedWorld.revision);
+      assert.deepEqual(canonicalAfterSetupLinks?.data, sharedWorld.data);
+      const firstLinkedMove = (await expectJson(app, {
+        method: "POST",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context/turn`,
+        headers: csrfHeaders,
+        payload: {
+          content: "I walk from the shared world into Lifecycle Harbor.",
+          transition: {
+            destinationId: "lifecycle_harbor",
+            expectedDefinitionRevision: firstLinked.definition.revision,
+            expectedCurrentLocationId: firstLinked.currentLocationId,
+            commandId: "shared-world-private-runtime-state",
+          },
+        },
+      })) as { spatial: typeof firstLinked };
+      assert.equal(firstLinkedMove.spatial.currentLocationId, "lifecycle_harbor");
+      const secondAfterFirstMove = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context`,
+      })) as typeof secondLinked;
+      assert.equal(
+        secondAfterFirstMove.currentLocationId,
+        "lifecycle_world",
+        "Moving one linked chat must not change another linked chat's private runtime state",
+      );
+
+      const firstDraftDefinition = {
+        ...firstLinked.definition,
+        locations: firstLinked.definition.locations.map((location) =>
+          location.id === "lifecycle_harbor"
+            ? {
+                ...location,
+                description: "A harbor expanded in the first linked chat.",
+              }
+            : location,
+        ),
+      };
+      const firstDraft = (await expectJson(app, {
+        method: "PUT",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: firstLinked.definition.revision,
+          expectedCurrentLocationId: firstLinkedMove.spatial.currentLocationId,
+          definition: firstDraftDefinition,
+          hierarchyProfile: firstLinked.hierarchyProfile,
+        },
+      })) as typeof firstLinked;
+      assert.equal(firstDraft.sharedWorld.pendingChanges, true);
+      const blockedRelink = (await expectJson(
+        app,
+        {
+          method: "POST",
+          url: `/api/chats/${firstLinkedChat.id}/spatial-context/shared-world/link`,
+          headers: csrfHeaders,
+          payload: {
+            worldId: sharedWorld.id,
+            expectedWorldRevision: sharedWorld.revision,
+            expectedRevision: firstDraft.definition.revision,
+            expectedCurrentLocationId: firstDraft.currentLocationId,
+          },
+        },
+        409,
+      )) as { code: string };
+      assert.equal(blockedRelink.code, "spatial_shared_world_pending_changes");
+      const untouchedSecond = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context`,
+      })) as typeof secondLinked;
+      assert.notEqual(
+        untouchedSecond.definition.locations.find((location) => location.id === "lifecycle_harbor")?.description,
+        "A harbor expanded in the first linked chat.",
+        "Linked-chat map edits must remain private until explicitly published",
+      );
+
+      const published = (await expectJson(app, {
+        method: "POST",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context/shared-world/publish`,
+        headers: csrfHeaders,
+        payload: {
+          expectedWorldRevision: sharedWorld.revision,
+          definition: firstDraft.definition,
+          hierarchyProfile: firstDraft.hierarchyProfile,
+        },
+      })) as {
+        world: typeof sharedWorld;
+        spatial: typeof firstLinked;
+      };
+      assert.equal(published.world.revision, 2);
+      assert.equal(published.spatial.sharedWorld.pendingChanges, false);
+      const updatedSecond = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context`,
+      })) as typeof secondLinked;
+      assert.equal(
+        updatedSecond.definition.locations.find((location) => location.id === "lifecycle_harbor")?.description,
+        "A harbor expanded in the first linked chat.",
+        "Publishing must update the canonical definition read by every linked chat",
+      );
+      assert.equal(
+        updatedSecond.currentLocationId,
+        "lifecycle_world",
+        "Publishing a shared definition must preserve each linked chat's private runtime state",
+      );
+
+      const conflictingDraftDefinition = {
+        ...published.spatial.definition,
+        locations: published.spatial.definition.locations.map((location) =>
+          location.id === "lifecycle_harbor" ? { ...location, modelMemory: "An unpublished local secret." } : location,
+        ),
+      };
+      const conflictingDraft = (await expectJson(app, {
+        method: "PUT",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: published.spatial.definition.revision,
+          expectedCurrentLocationId: published.spatial.currentLocationId,
+          definition: conflictingDraftDefinition,
+          hierarchyProfile: published.spatial.hierarchyProfile,
+        },
+      })) as typeof firstLinked;
+      const canonicalUpdate = (await expectJson(app, {
+        method: "PUT",
+        url: `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: published.world.revision,
+          name: published.world.name,
+          description: "Canonical edit made while a linked chat has a draft.",
+          definition: published.world.data.definition,
+          hierarchyProfile: published.world.data.hierarchyProfile,
+        },
+      })) as typeof sharedWorld;
+      assert.equal(canonicalUpdate.revision, 3);
+      const conflicted = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context`,
+      })) as typeof firstLinked;
+      assert.equal(conflicted.sharedWorld.conflict, true);
+      const rejectedPublish = (await expectJson(
+        app,
+        {
+          method: "POST",
+          url: `/api/chats/${firstLinkedChat.id}/spatial-context/shared-world/publish`,
+          headers: csrfHeaders,
+          payload: {
+            expectedWorldRevision: canonicalUpdate.revision,
+            definition: conflictingDraft.definition,
+            hierarchyProfile: conflictingDraft.hierarchyProfile,
+          },
+        },
+        409,
+      )) as { code: string };
+      assert.equal(rejectedPublish.code, "spatial_shared_world_conflict");
+
+      const forked = (await expectJson(app, {
+        method: "POST",
+        url: `/api/chats/${firstLinkedChat.id}/spatial-context/shared-world/fork`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: conflictingDraft.definition.revision,
+          expectedCurrentLocationId: conflictingDraft.currentLocationId,
+        },
+      })) as typeof firstLinked;
+      assert.equal(forked.sharedWorld.mode, "independent");
+      assert.equal(forked.currentLocationId, "lifecycle_harbor");
+      assert.equal(
+        forked.definition.locations.find((location) => location.id === "lifecycle_harbor")?.modelMemory,
+        "An unpublished local secret.",
+      );
+      const secondAfterFirstFork = (await expectJson(app, {
+        method: "GET",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context`,
+      })) as typeof secondLinked;
+      assert.equal(
+        secondAfterFirstFork.currentLocationId,
+        "lifecycle_world",
+        "Forking one linked chat must not change another linked chat's private runtime state",
+      );
+
+      const inUseDelete = (await expectJson(
+        app,
+        {
+          method: "DELETE",
+          url: `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+          headers: csrfHeaders,
+          payload: { expectedRevision: canonicalUpdate.revision },
+        },
+        409,
+      )) as { code: string; linkedChatCount: number };
+      assert.equal(inUseDelete.code, "spatial_shared_world_in_use");
+      assert.equal(inUseDelete.linkedChatCount, 1);
+
+      const independentSecond = (await expectJson(app, {
+        method: "POST",
+        url: `/api/chats/${secondLinkedChat.id}/spatial-context/shared-world/independent-copy`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: canonicalUpdate.revision,
+          expectedCurrentLocationId: updatedSecond.currentLocationId,
+          definition: updatedSecond.definition,
+          hierarchyProfile: updatedSecond.hierarchyProfile,
+        },
+      })) as typeof secondLinked;
+      assert.equal(independentSecond.sharedWorld.mode, "independent");
+      await expectJson(
+        app,
+        {
+          method: "DELETE",
+          url: `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+          headers: csrfHeaders,
+          payload: { expectedRevision: canonicalUpdate.revision },
+        },
+        204,
+      );
+    };
     const rewoundGameSource = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${existingGame.id}/spatial-context`,
@@ -1842,17 +2357,31 @@ async function main() {
 
     const definitionWithLocationLore = {
       ...definition,
-      locations: definition.locations.map((location) =>
-        location.id === "lifecycle_harbor"
-          ? {
-              ...location,
-              lorebookEntryIds: [
-                ...(location.lorebookEntryIds ?? []),
-                locationLoreEntry.id,
-              ],
-            }
-          : location,
-      ),
+      locations: [
+        ...definition.locations.map((location) =>
+          location.id === "lifecycle_harbor"
+            ? {
+                ...location,
+                lorebookEntryIds: [
+                  ...(location.lorebookEntryIds ?? []),
+                  locationLoreEntry.id,
+                ],
+              }
+            : location,
+        ),
+        {
+          id: "lifecycle_archived_region",
+          parentId: null,
+          name: "Lifecycle Archived Region",
+          kind: "region",
+          description: "A retired region retained only for campaign history.",
+          childPresentation: "list",
+          links: [],
+          lorebookEntryIds: ["missing-archived-lifecycle-lore-entry"],
+          status: "archived",
+          sortOrder: 1,
+        },
+      ],
     };
 
     await expectJson(app, {
@@ -1909,6 +2438,14 @@ async function main() {
           warning.locationId === "lifecycle_harbor",
       ),
       "Definition reads must report missing lore links through the host persistence facade",
+    );
+    assert.ok(
+      saved.warnings.some(
+        (warning) =>
+          warning.code === "lorebook_entry_missing" &&
+          warning.locationId === "lifecycle_archived_region",
+      ),
+      "The prior artifact must reproduce archived-location lore warnings before update",
     );
     const ownerTurn = (await expectJson(app, {
       method: "POST",
@@ -2174,13 +2711,580 @@ async function main() {
     const rewoundSource = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${chatId}/spatial-context`,
-    })) as { currentLocationId: string };
+    })) as {
+      currentLocationId: string;
+      definition: { revision: number; locations: Array<{ id: string }> };
+    };
     assert.equal(rewoundSource.currentLocationId, "lifecycle_harbor");
     const unchangedBranch = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${branch.id}/spatial-context`,
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
+
+    catalogVersion = "1.2.6";
+    catalogOnline = true;
+    const upgraded126 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded126.version, "1.2.6");
+    assert.equal(upgraded126.previousVersion, "1.1.7");
+    catalogOnline = false;
+    await app.close();
+    app = await buildApp();
+    const upgradedBranchSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as {
+      currentLocationId: string;
+      definition: {
+        revision: number;
+        locations: Array<{
+          id: string;
+          links: Array<{ targetId: string; label?: string; bidirectional: boolean; state: string }>;
+        }>;
+      };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
+      locationDeletionProtections: Array<{
+        locationId: string;
+        historySnapshotCount: number;
+        gameMapBindingCount: number;
+      }>;
+      warnings: Array<{ code: string; message: string; locationId?: string }>;
+    };
+    assert.ok(
+      upgradedBranchSpatial.warnings.some(
+        (warning) =>
+          warning.code === "lorebook_entry_missing" &&
+          warning.locationId === "lifecycle_harbor" &&
+          warning.message ===
+            "“Lifecycle Harbor” links to a lore entry that was deleted or is unavailable. Open Linked lore for this location and detach the missing entry, or restore/import its lorebook.",
+      ),
+      "The updated artifact must identify the active location without exposing its opaque missing lore ID",
+    );
+    assert.equal(
+      upgradedBranchSpatial.warnings.some(
+        (warning) =>
+          warning.code === "lorebook_entry_missing" &&
+          warning.locationId === "lifecycle_archived_region",
+      ),
+      false,
+      "The updated artifact must ignore missing lore links retained only on archived locations",
+    );
+
+    const temporaryArchivedLocation = {
+      id: "lifecycle_temporary_archive",
+      parentId: null,
+      name: "Temporary Archived Location",
+      kind: "place",
+      description: "An accidental location that has never appeared in message history.",
+      childPresentation: "list",
+      links: [],
+      lorebookEntryIds: [],
+      status: "archived",
+      sortOrder: 99,
+    };
+    const branchWithTemporaryArchive = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${branch.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: upgradedBranchSpatial.definition.revision,
+        expectedCurrentLocationId: upgradedBranchSpatial.currentLocationId,
+        definition: {
+          ...upgradedBranchSpatial.definition,
+          locations: [...upgradedBranchSpatial.definition.locations, temporaryArchivedLocation],
+        },
+        hierarchyProfile: upgradedBranchSpatial.hierarchyProfile,
+      },
+    })) as typeof upgradedBranchSpatial;
+    assert.ok(
+      branchWithTemporaryArchive.locationDeletionProtections.some(
+        (protection: { locationId: string; historySnapshotCount: number }) =>
+          protection.locationId === "lifecycle_world" && protection.historySnapshotCount > 0,
+      ),
+      "The editor must receive per-location history protections",
+    );
+
+    const branchAfterSafeDeletion = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${branch.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: branchWithTemporaryArchive.definition.revision,
+        expectedCurrentLocationId: branchWithTemporaryArchive.currentLocationId,
+        definition: {
+          ...branchWithTemporaryArchive.definition,
+          locations: branchWithTemporaryArchive.definition.locations.filter(
+            (location) => location.id !== temporaryArchivedLocation.id,
+          ),
+        },
+        hierarchyProfile: branchWithTemporaryArchive.hierarchyProfile,
+      },
+    })) as typeof upgradedBranchSpatial;
+    assert.equal(
+      branchAfterSafeDeletion.definition.locations.some((location) => location.id === temporaryArchivedLocation.id),
+      false,
+      "An archived location with no history or bindings must be permanently removable",
+    );
+
+    const protectedHistoryRemoval = (await expectJson(
+      app,
+      {
+        method: "PUT",
+        url: `/api/chats/${branch.id}/spatial-context`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: branchAfterSafeDeletion.definition.revision,
+          expectedCurrentLocationId: branchAfterSafeDeletion.currentLocationId,
+          definition: {
+            ...branchAfterSafeDeletion.definition,
+            locations: branchAfterSafeDeletion.definition.locations
+              .filter((location) => location.id !== "lifecycle_harbor")
+              .map((location) => ({
+                ...location,
+                links: location.links.filter((link) => link.targetId !== "lifecycle_harbor"),
+              })),
+          },
+          hierarchyProfile: branchAfterSafeDeletion.hierarchyProfile,
+        },
+      },
+      409,
+    )) as { code: string; error: string };
+    assert.equal(protectedHistoryRemoval.code, "spatial_history_location_removal_forbidden");
+    assert.match(protectedHistoryRemoval.error, /historical message/u);
+
+    const presentationKey = "lifecycle_harbor|lifecycle_level_5";
+    const styledBranch = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${branch.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: branchAfterSafeDeletion.definition.revision,
+        expectedCurrentLocationId: branchAfterSafeDeletion.currentLocationId,
+        definition: {
+          ...branchAfterSafeDeletion.definition,
+          locations: branchAfterSafeDeletion.definition.locations.map((location) =>
+            location.id === "lifecycle_harbor"
+              ? {
+                  ...location,
+                  links: [
+                    ...location.links,
+                    {
+                      targetId: "lifecycle_level_5",
+                      label: "Lantern walk",
+                      bidirectional: true,
+                      state: "available",
+                    },
+                  ],
+                }
+              : location,
+          ),
+        },
+        hierarchyProfile: {
+          ...branchAfterSafeDeletion.hierarchyProfile,
+          showConnections: false,
+          linkPresentations: {
+            ...branchAfterSafeDeletion.hierarchyProfile.linkPresentations,
+            [presentationKey]: { color: "#22C55E", lineStyle: "dotted" },
+          },
+        },
+      },
+    })) as {
+      definition: { locations: Array<{ id: string; links: Array<{ targetId: string; label?: string }> }> };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
+    };
+    assert.equal(
+      styledBranch.definition.locations
+        .find((location) => location.id === "lifecycle_harbor")
+        ?.links.find((link) => link.targetId === "lifecycle_level_5")?.label,
+      "Lantern walk",
+    );
+    assert.deepEqual(styledBranch.hierarchyProfile.linkPresentations[presentationKey], {
+      color: "#22C55E",
+      lineStyle: "dotted",
+    });
+    assert.equal(styledBranch.hierarchyProfile.showConnections, false);
+
+    const upgradedSource = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${chatId}/spatial-context`,
+    })) as {
+      currentLocationId: string;
+      definition: {
+        revision: number;
+        locations: Array<{
+          id: string;
+          links: Array<{ targetId: string; label?: string; bidirectional: boolean; state: string }>;
+        }>;
+      };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
+    };
+    const messagesBeforeCorrection = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${chatId}/messages`,
+    })) as Array<{ id: string; content: string }>;
+    const assistantContentBeforeCorrection = messagesBeforeCorrection.find(
+      (message) => message.id === assistantAtHarbor.id,
+    )?.content;
+    assert.ok(assistantContentBeforeCorrection);
+    const stalePresentationKey = "lifecycle_harbor|missing-location";
+    const correctedSource = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${chatId}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: upgradedSource.definition.revision,
+        expectedCurrentLocationId: "lifecycle_harbor",
+        replacementCurrentLocationId: "lifecycle_world",
+        definition: {
+          ...upgradedSource.definition,
+          locations: upgradedSource.definition.locations.map((location) =>
+            location.id === "lifecycle_harbor"
+              ? {
+                  ...location,
+                  links: [
+                    ...location.links,
+                    {
+                      targetId: "lifecycle_level_5",
+                      label: "Lantern walk",
+                      bidirectional: true,
+                      state: "available",
+                    },
+                  ],
+                }
+              : location,
+          ),
+        },
+        hierarchyProfile: {
+          ...upgradedSource.hierarchyProfile,
+          showConnections: false,
+          linkPresentations: {
+            ...upgradedSource.hierarchyProfile.linkPresentations,
+            [presentationKey]: { color: "#22C55E", lineStyle: "dotted" },
+            [stalePresentationKey]: { color: "#EF4444", lineStyle: "solid" },
+          },
+        },
+      },
+    })) as {
+      currentLocationId: string;
+      definition: { revision: number };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
+    };
+    assert.equal(
+      correctedSource.currentLocationId,
+      "lifecycle_world",
+      "A saved map edit must support an explicit administrative current-location correction",
+    );
+    assert.equal(correctedSource.definition.revision, upgradedSource.definition.revision + 1);
+    assert.equal(correctedSource.hierarchyProfile.showConnections, false);
+    assert.deepEqual(correctedSource.hierarchyProfile.linkPresentations[presentationKey], {
+      color: "#22C55E",
+      lineStyle: "dotted",
+    });
+    assert.equal(
+      correctedSource.hierarchyProfile.linkPresentations[stalePresentationKey],
+      undefined,
+      "Profile normalization must discard presentation metadata for links with missing endpoints",
+    );
+    const correctedMessages = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${chatId}/messages`,
+    })) as Array<{ id: string; content: string }>;
+    assert.equal(
+      correctedMessages.find((message) => message.id === assistantAtHarbor.id)?.content,
+      assistantContentBeforeCorrection,
+      "Correcting the current visible state must not rewrite message prose",
+    );
+    const sharedArtwork = await createGlobalGalleryStorage(app.db).createImage({
+      filePath: "global/lifecycle-shared-art.png",
+    });
+    assert.ok(sharedArtwork);
+    const sharedArtworkReference = `global-gallery:${sharedArtwork.id}`;
+    const templateWithArtwork = (await expectJson(
+      app,
+      {
+        method: "POST",
+        url: "/api/chats/spatial-context/templates",
+        headers: csrfHeaders,
+        payload: {
+          name: "Lifecycle shared-art template",
+          description: "Proves account-wide artwork survives reusable template storage.",
+          definition: {
+            ...definition,
+            locations: definition.locations.map((location, index) =>
+              index === 0
+                ? {
+                    ...location,
+                    childPresentation: "map",
+                    referenceImageId: sharedArtworkReference,
+                    useReferenceImage: true,
+                    mapBackgroundImageId: sharedArtworkReference,
+                    mapBackgroundPosition: { x: 24, y: 76 },
+                  }
+                : index === 1
+                  ? {
+                      ...location,
+                      referenceImageId: "chat-only-lifecycle-art",
+                      useReferenceImage: true,
+                      mapBackgroundImageId: "chat-only-lifecycle-art",
+                      mapBackgroundPosition: { x: 50, y: 50 },
+                    }
+                  : location,
+            ),
+          },
+          hierarchyProfile: createdRouteDraft.hierarchyProfile,
+        },
+      },
+      201,
+    )) as {
+      id: string;
+      revision: number;
+      data: {
+        definition: {
+          locations: Array<{
+            id: string;
+            referenceImageId?: string;
+            useReferenceImage?: boolean;
+            mapBackgroundImageId?: string;
+            mapBackgroundPosition?: { x: number; y: number };
+          }>;
+        };
+      };
+    };
+    const sharedTemplateLocation = templateWithArtwork.data.definition.locations.find(
+      (location) => location.id === "lifecycle_world",
+    );
+    assert.equal(sharedTemplateLocation?.referenceImageId, sharedArtworkReference);
+    assert.equal(sharedTemplateLocation?.useReferenceImage, true);
+    assert.equal(sharedTemplateLocation?.mapBackgroundImageId, sharedArtworkReference);
+    assert.deepEqual(sharedTemplateLocation?.mapBackgroundPosition, { x: 24, y: 76 });
+    const chatOnlyTemplateLocation = templateWithArtwork.data.definition.locations.find(
+      (location) => location.id === "lifecycle_harbor",
+    );
+    assert.equal(chatOnlyTemplateLocation?.referenceImageId, undefined);
+    assert.equal(chatOnlyTemplateLocation?.useReferenceImage, undefined);
+    assert.equal(chatOnlyTemplateLocation?.mapBackgroundImageId, undefined);
+    assert.equal(chatOnlyTemplateLocation?.mapBackgroundPosition, undefined);
+    await expectJson(
+      app,
+      {
+        method: "DELETE",
+        url: `/api/chats/spatial-context/templates/${templateWithArtwork.id}`,
+        headers: csrfHeaders,
+        payload: { expectedRevision: templateWithArtwork.revision },
+      },
+      204,
+    );
+    await verifySharedWorldLifecycle();
+    const narratedPrompt = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/peek-prompt`,
+      headers: csrfHeaders,
+      payload: {},
+    })) as { messages: Array<{ content: string }> };
+    const narratedPromptText = narratedPrompt.messages.map((message) => message.content).join("\n");
+    assert.match(narratedPromptText, /\[spatial_move: destination_id=/u);
+    assert.match(narratedPromptText, /Use the latest user message as the authority for map changes/u);
+    assert.match(narratedPromptText, /We follow her into the outdoor section/u);
+    assert.match(narratedPromptText, /We discover a hidden room/u);
+    assert.match(narratedPromptText, /your own narration alone never authorizes either command/u);
+    assert.match(narratedPromptText, /NPC-only movement/u);
+    assert.match(
+      narratedPromptText,
+      /Lifecycle World > Level 5 — Prism Caverns \[lifecycle_level_5\]/u,
+    );
+
+    const narratedMoveMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The story arrives at Lifecycle Harbor." },
+    })) as { id: string };
+    const narratedMoveSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: narratedMoveMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: { type: "move", destinationId: "lifecycle_harbor" },
+    });
+    assert.equal(narratedMoveSnapshot?.currentLocationId, "lifecycle_harbor");
+    assert.match(narratedMoveSnapshot?.transitionCommandId ?? "", /^assistant:/u);
+
+    const invalidMoveMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The story only mentions an unreachable place." },
+    })) as { id: string };
+    const invalidMoveSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: invalidMoveMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: { type: "move", destinationId: "missing_location" },
+    });
+    assert.equal(invalidMoveSnapshot?.currentLocationId, "lifecycle_harbor");
+    assert.equal(invalidMoveSnapshot?.transitionCommandId, null);
+
+    const knownLevelMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "A secret route reaches Level 5 by another name." },
+    })) as { id: string };
+    const knownLevelSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: knownLevelMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: {
+        type: "discover",
+        name: "Level 5 — The Hollow Foundry",
+        relation: "enter",
+        description: "A second description for an already mapped level.",
+      },
+    });
+    assert.equal(knownLevelSnapshot?.currentLocationId, "lifecycle_level_5");
+    const routedKnownLevel = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as {
+      definition: {
+        locations: Array<{
+          id: string;
+          name: string;
+          links: Array<{ targetId: string; state: string }>;
+        }>;
+      };
+    };
+    assert.equal(
+      routedKnownLevel.definition.locations.filter((location) => location.name.startsWith("Level 5")).length,
+      1,
+    );
+    assert.ok(
+      routedKnownLevel.definition.locations
+        .find((location) => location.id === "lifecycle_harbor")
+        ?.links.some((link) => link.targetId === "lifecycle_level_5" && link.state === "available"),
+    );
+
+    const returnToHarborMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The secret route returns to Lifecycle Harbor." },
+    })) as { id: string };
+    const returnToHarborSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: returnToHarborMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: { type: "move", destinationId: "lifecycle_harbor" },
+    });
+    assert.equal(returnToHarborSnapshot?.currentLocationId, "lifecycle_harbor");
+
+    const deckAMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The hidden lift arrives at Deck A." },
+    })) as { id: string };
+    const deckASnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: deckAMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: {
+        type: "discover",
+        name: "Deck A",
+        relation: "link",
+        description: "A lettered deck that is distinct from the generic Deck location.",
+      },
+    });
+    assert.equal(deckASnapshot?.currentLocationId, "lifecycle_deck_a");
+
+    const deckReturnMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The lift returns to Lifecycle Harbor." },
+    })) as { id: string };
+    const deckReturnSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: deckReturnMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: { type: "move", destinationId: "lifecycle_harbor" },
+    });
+    assert.equal(deckReturnSnapshot?.currentLocationId, "lifecycle_harbor");
+
+    const discoveryMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "A hidden chart room becomes a lasting destination." },
+    })) as { id: string };
+    const discoverySnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: discoveryMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      directive: {
+        type: "discover",
+        name: "Hidden Chart Room",
+        relation: "enter",
+        description: "A chart room concealed behind the harbor office.",
+      },
+    });
+    assert.ok(discoverySnapshot?.currentLocationId?.startsWith("loc_"));
+    const discoveredBranch = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as {
+      currentLocationId: string;
+      definition: { locations: Array<{ id: string; parentId: string | null; name: string }> };
+    };
+    assert.equal(discoveredBranch.currentLocationId, discoverySnapshot?.currentLocationId);
+    const discoveredLocation = discoveredBranch.definition.locations.find(
+      (location) => location.id === discoverySnapshot?.currentLocationId,
+    );
+    assert.equal(discoveredLocation?.parentId, "lifecycle_harbor");
+    assert.equal(discoveredLocation?.name, "Hidden Chart Room");
+
+    const guidanceMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${branch.id}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The tracker identifies Lifecycle Harbor." },
+    })) as { id: string };
+    const guidanceSnapshot = await materializeAssistantSpatialState({
+      chatId: branch.id,
+      messageId: guidanceMessage.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+      locationGuidance: "Lifecycle Harbor",
+    });
+    assert.equal(guidanceSnapshot?.currentLocationId, "lifecycle_harbor");
+    assert.match(guidanceSnapshot?.transitionCommandId ?? "", /^assistant:/u);
+
     for (const disposableChatId of [branch.id, imported.chatId]) {
       await expectJson(
         app,
@@ -2206,7 +3310,7 @@ async function main() {
       currentLocationId: string;
       definition: { locations: Array<{ id: string }> };
     };
-    assert.equal(restarted.currentLocationId, "lifecycle_harbor");
+    assert.equal(restarted.currentLocationId, "lifecycle_world");
     assert.ok(
       restarted.definition.locations.some(
         (location) => location.id === "lifecycle_harbor",
@@ -2270,7 +3374,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.1.7");
+    assert.equal(reinstalled.version, "1.2.6");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -2278,7 +3382,7 @@ async function main() {
       method: "GET",
       url: `/api/chats/${chatId}/spatial-context`,
     })) as { currentLocationId: string };
-    assert.equal(stateAfterReinstall.currentLocationId, "lifecycle_harbor");
+    assert.equal(stateAfterReinstall.currentLocationId, "lifecycle_world");
 
     await expectJson(
       app,
@@ -2331,13 +3435,23 @@ async function main() {
     })) as {
       currentLocationId: string;
       definition: { locations: Array<{ id: string }> };
+      hierarchyProfile: {
+        showConnections: boolean;
+        linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
+      };
     };
-    assert.equal(restoredState.currentLocationId, "lifecycle_harbor");
+    assert.equal(restoredState.currentLocationId, "lifecycle_world");
     assert.ok(
       restoredState.definition.locations.some(
         (location) => location.id === "lifecycle_harbor",
       ),
     );
+    assert.equal(restoredState.hierarchyProfile.showConnections, false);
+    assert.deepEqual(restoredState.hierarchyProfile.linkPresentations[presentationKey], {
+      color: "#22C55E",
+      lineStyle: "dotted",
+    });
+    assert.equal(restoredState.hierarchyProfile.linkPresentations[stalePresentationKey], undefined);
 
     const finalInstalled = await capabilityPackageManager.installed();
     assert.deepEqual(
@@ -2348,11 +3462,11 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.1.7", status: "active", readiness: "ready" }],
+      [{ version: "1.2.6", status: "active", readiness: "ready" }],
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, shared template artwork, canonical shared worlds, private linked-chat drafts, publish/conflict/fork protection, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);

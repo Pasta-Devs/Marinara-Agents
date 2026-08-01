@@ -16,6 +16,7 @@ import {
   applyGameMapBindingReconciliation,
   bindGameMapsToExactSpatialLocations,
   buildGameMapBindingReconciliationPreview,
+  countGameMapBindingsBySpatialLocation,
   GameMapBindingError,
   type GameMapBindingReconciliationSelection,
 } from "./game-map-binding.js";
@@ -27,7 +28,15 @@ import {
   type MapsSpatialContextResponse,
   type SpatialGenerationPreferences,
   type SpatialHierarchyProfile,
+  type SpatialLocationDeletionProtection,
+  type SpatialSharedWorldStatus,
 } from "../../../../maps-shared/src/maps-model.js";
+import {
+  independentSpatialWorldStatus,
+  resolveSpatialWorldSource,
+  withoutSpatialSharedWorldLink,
+  withSpatialSharedWorldDraft,
+} from "./shared-world.service.js";
 
 const METADATA_KEY = "spatialContext";
 const HIERARCHY_PROFILE_KEY = "spatialContextHierarchyProfile";
@@ -39,6 +48,7 @@ export type SpatialContextServiceErrorCode =
   | "spatial_definition_corrupt"
   | "spatial_definition_stale"
   | "spatial_current_location_stale"
+  | "spatial_shared_world_missing"
   | "spatial_replacement_required"
   | "spatial_replacement_invalid"
   | "spatial_history_location_removal_forbidden"
@@ -56,23 +66,11 @@ export class SpatialContextServiceError extends Error {
   }
 }
 
-function readDefinition(metadata: Record<string, unknown>): {
-  definition: SpatialContextDefinition | null;
-  corrupt: boolean;
-} {
-  if (metadata[METADATA_KEY] === undefined || metadata[METADATA_KEY] === null) {
-    return { definition: null, corrupt: false };
-  }
-  const parsed = spatialContextDefinitionSchema.safeParse(metadata[METADATA_KEY]);
-  return parsed.success
-    ? { definition: parsed.data as SpatialContextDefinition, corrupt: false }
-    : { definition: null, corrupt: true };
-}
 function assertSupportedMode(mode: string | null): asserts mode is "roleplay" | "game" {
   if (mode !== "roleplay" && mode !== "game") {
     throw new SpatialContextServiceError(
       "spatial_mode_unsupported",
-      "Hierarchical maps are available only in Roleplay and Game chats.",
+      "World maps are available only in Roleplay and Game chats.",
       400,
     );
   }
@@ -86,6 +84,8 @@ function buildResponse(
   referenceWarnings: SpatialContextResponse["warnings"] = [],
   hierarchyProfile: SpatialHierarchyProfile = normalizeHierarchyProfile(null, definition),
   generationPreferences: SpatialGenerationPreferences = defaultGenerationPreferences(),
+  sharedWorld: SpatialSharedWorldStatus = independentSpatialWorldStatus(),
+  locationDeletionProtections: SpatialLocationDeletionProtection[] = [],
 ): MapsSpatialContextResponse {
   if (!definition) {
     return {
@@ -98,13 +98,15 @@ function buildResponse(
         ? [
             {
               code: "stored_definition_invalid",
-              message: "The stored hierarchical map is invalid and has been disabled.",
+              message: "The stored world map is invalid and has been disabled.",
               path: [METADATA_KEY],
             },
           ]
         : [],
       hierarchyProfile,
       generationPreferences,
+      sharedWorld,
+      locationDeletionProtections,
     };
   }
 
@@ -120,7 +122,28 @@ function buildResponse(
     hasCommittedSpatialHistory,
     hierarchyProfile,
     generationPreferences,
+    sharedWorld,
+    locationDeletionProtections,
   };
+}
+
+async function resolveLocationDeletionProtections(
+  chatId: string,
+  metadata: Record<string, unknown>,
+  persistence: CapabilityPersistenceSession,
+): Promise<SpatialLocationDeletionProtection[]> {
+  const historyCounts = new Map<string, number>();
+  const snapshots = await createSpatialContextStorage(persistence).listForChat(chatId);
+  for (const snapshot of snapshots) {
+    if (!snapshot.messageId.trim() || !snapshot.currentLocationId) continue;
+    historyCounts.set(snapshot.currentLocationId, (historyCounts.get(snapshot.currentLocationId) ?? 0) + 1);
+  }
+  const bindingCounts = countGameMapBindingsBySpatialLocation(metadata);
+  return [...new Set([...historyCounts.keys(), ...bindingCounts.keys()])].map((locationId) => ({
+    locationId,
+    historySnapshotCount: historyCounts.get(locationId) ?? 0,
+    gameMapBindingCount: bindingCounts.get(locationId) ?? 0,
+  }));
 }
 
 function readGenerationPreferences(
@@ -134,19 +157,20 @@ async function resolveLoreReferenceWarnings(
   definition: SpatialContextDefinition,
   persistence: Pick<CapabilityPersistenceSession, "listExistingLorebookEntryIds">,
 ): Promise<SpatialContextResponse["warnings"]> {
-  const entryIds = Array.from(
-    new Set(definition.locations.flatMap((location) => location.lorebookEntryIds ?? [])),
+  const activeLocations = definition.locations.flatMap((location, locationIndex) =>
+    location.status === "active" ? [{ location, locationIndex }] : [],
   );
+  const entryIds = Array.from(new Set(activeLocations.flatMap(({ location }) => location.lorebookEntryIds ?? [])));
   if (entryIds.length === 0) return [];
   const existingIds = new Set(await persistence.listExistingLorebookEntryIds(entryIds));
-  return definition.locations.flatMap((location, locationIndex) =>
+  return activeLocations.flatMap(({ location, locationIndex }) =>
     (location.lorebookEntryIds ?? []).flatMap((entryId, entryIndex) =>
       existingIds.has(entryId)
         ? []
         : [
             {
               code: "lorebook_entry_missing" as const,
-              message: `Linked lore entry ${entryId} no longer exists. Detach it or import the missing lorebook.`,
+              message: `“${location.name}” links to a lore entry that was deleted or is unavailable. Open Linked lore for this location and detach the missing entry, or restore/import its lorebook.`,
               path: ["locations", locationIndex, "lorebookEntryIds", entryIndex],
               locationId: location.id,
             },
@@ -165,8 +189,10 @@ export function createSpatialContextService() {
 
       const hasCommittedSpatialHistory = await createSpatialContextStorage(persistence).hasMessageSnapshots(chatId);
       const metadata = parseSpatialMetadata(chat.metadata);
-      const stored = readDefinition(metadata);
-      const hierarchyProfile = normalizeHierarchyProfile(metadata[HIERARCHY_PROFILE_KEY], stored.definition);
+      const stored = await resolveSpatialWorldSource(chat, persistence, {
+        includeLinkedChatCount: true,
+      });
+      const hierarchyProfile = stored.hierarchyProfile;
       const generationPreferences = readGenerationPreferences(metadata, chat.mode);
       if (!stored.definition) {
         return buildResponse(
@@ -177,10 +203,14 @@ export function createSpatialContextService() {
           [],
           hierarchyProfile,
           generationPreferences,
+          stored.status,
         );
       }
 
-      const state = await resolveEffectiveSpatialState(chatId, {}, persistence);
+      const [state, locationDeletionProtections] = await Promise.all([
+        resolveEffectiveSpatialState(chatId, {}, persistence),
+        resolveLocationDeletionProtections(chatId, metadata, persistence),
+      ]);
       return buildResponse(
         stored.definition,
         state.currentLocationId,
@@ -189,6 +219,8 @@ export function createSpatialContextService() {
         await resolveLoreReferenceWarnings(stored.definition, persistence),
         hierarchyProfile,
         generationPreferences,
+        stored.status,
+        locationDeletionProtections,
       );
     },
 
@@ -229,11 +261,13 @@ export function createSpatialContextService() {
         );
       }
       const metadata = parseSpatialMetadata(chat.metadata);
-      const stored = readDefinition(metadata);
+      const stored = await resolveSpatialWorldSource(chat, persistence, {
+        includeLinkedChatCount: true,
+      });
       if (stored.corrupt || !stored.definition) {
         throw new SpatialContextServiceError(
           "spatial_game_map_reconciliation_unavailable",
-          "Save the hierarchical map before reviewing existing Game map matches.",
+          "Save the world map before reviewing existing Game map matches.",
           409,
         );
       }
@@ -258,18 +292,20 @@ export function createSpatialContextService() {
           );
         }
         const metadata = parseSpatialMetadata(chat.metadata);
-        const stored = readDefinition(metadata);
+        const stored = await resolveSpatialWorldSource(chat, persistence, {
+          includeLinkedChatCount: true,
+        });
         if (stored.corrupt || !stored.definition) {
           throw new SpatialContextServiceError(
             "spatial_game_map_reconciliation_unavailable",
-            "Save the hierarchical map before reviewing existing Game map matches.",
+            "Save the world map before reviewing existing Game map matches.",
             409,
           );
         }
         if (stored.definition.revision !== input.expectedDefinitionRevision) {
           throw new SpatialContextServiceError(
             "spatial_game_map_reconciliation_stale",
-            "The hierarchical map changed. Review existing Game map matches again.",
+            "The world map changed. Review existing Game map matches again.",
             409,
           );
         }
@@ -284,7 +320,11 @@ export function createSpatialContextService() {
           throw error;
         }
         if (applied.bindingCount > 0) {
-          await persistence.updateChatMetadata({ chatId, metadata: applied.metadata, updatedAt: now() });
+          await persistence.updateChatMetadata({
+            chatId,
+            metadata: applied.metadata,
+            updatedAt: now(),
+          });
           logger.info(
             "[spatial/game-map-binding] Reconciled %d reviewed Game map positions for chat %s",
             applied.bindingCount,
@@ -300,7 +340,10 @@ export function createSpatialContextService() {
 
     async update(
       chatId: string,
-      input: UpdateSpatialContextRequestInput & { hierarchyProfile?: SpatialHierarchyProfile },
+      input: UpdateSpatialContextRequestInput & {
+        hierarchyProfile?: SpatialHierarchyProfile;
+      },
+      options: { detachSharedWorld?: boolean } = {},
     ): Promise<MapsSpatialContextResponse> {
       return persistence.withChatLock(chatId, async () => {
         const chat = await persistence.getChat(chatId);
@@ -308,11 +351,20 @@ export function createSpatialContextService() {
         assertSupportedMode(chat.mode);
 
         const metadata = parseSpatialMetadata(chat.metadata);
-        const stored = readDefinition(metadata);
+        const stored = await resolveSpatialWorldSource(chat, persistence, {
+          includeLinkedChatCount: true,
+        });
         if (stored.corrupt) {
           throw new SpatialContextServiceError(
             "spatial_definition_corrupt",
-            "The stored hierarchical map is invalid and must be repaired before it can be updated.",
+            "The stored world map is invalid and must be repaired before it can be updated.",
+            409,
+          );
+        }
+        if (stored.link && !stored.world) {
+          throw new SpatialContextServiceError(
+            "spatial_shared_world_missing",
+            "This chat's shared world was removed or is unavailable. Fork a recovered copy or link another world.",
             409,
           );
         }
@@ -321,7 +373,7 @@ export function createSpatialContextService() {
         if (input.expectedRevision !== currentRevision) {
           throw new SpatialContextServiceError(
             "spatial_definition_stale",
-            "The hierarchical map changed. Reload it before saving.",
+            "The world map changed. Reload it before saving.",
             409,
           );
         }
@@ -342,44 +394,74 @@ export function createSpatialContextService() {
           revision: currentRevision + 1,
         };
         const hierarchyProfile = normalizeHierarchyProfile(
-          input.hierarchyProfile ?? metadata[HIERARCHY_PROFILE_KEY],
+          input.hierarchyProfile ?? stored.hierarchyProfile ?? metadata[HIERARCHY_PROFILE_KEY],
           definition,
         );
         const parsedDefinition = spatialContextDefinitionSchema.safeParse(definition);
         if (!parsedDefinition.success) {
           throw new SpatialContextServiceError(
             "spatial_replacement_invalid",
-            parsedDefinition.error.issues[0]?.message ?? "The hierarchical map is invalid.",
+            parsedDefinition.error.issues[0]?.message ?? "The world map is invalid.",
             400,
           );
         }
 
-        const spatialStorage = createSpatialContextStorage(persistence);
-        const hasCommittedSpatialHistory = await spatialStorage.hasMessageSnapshots(chatId);
-        if (hasCommittedSpatialHistory && stored.definition) {
+        const hasCommittedSpatialHistory = await createSpatialContextStorage(persistence).hasMessageSnapshots(chatId);
+        if (stored.definition) {
           const nextIds = new Set(definition.locations.map((location) => location.id));
-          const removedLocation = stored.definition.locations.find((location) => !nextIds.has(location.id));
-          if (removedLocation) {
+          const removedLocations = stored.definition.locations.filter((location) => !nextIds.has(location.id));
+          if (removedLocations.length > 0 && stored.link && !options.detachSharedWorld) {
             throw new SpatialContextServiceError(
               "spatial_history_location_removal_forbidden",
-              `Campaign history uses this map. Keep ${removedLocation.name || "every existing location"} and archive locations instead of removing them.`,
+              "Detach and keep an independent copy before permanently deleting locations from a linked shared world.",
               409,
             );
+          }
+          if (removedLocations.length > 0) {
+            const deletionProtections = await resolveLocationDeletionProtections(chatId, metadata, persistence);
+            const protectionById = new Map(
+              deletionProtections.map((protection) => [protection.locationId, protection]),
+            );
+            const protectedLocation = removedLocations.find((location) => {
+              const protection = protectionById.get(location.id);
+              return (
+                location.id === stored.definition?.startingLocationId ||
+                location.id === currentLocationId ||
+                Boolean(protection?.historySnapshotCount) ||
+                Boolean(protection?.gameMapBindingCount)
+              );
+            });
+            if (protectedLocation) {
+              const protection = protectionById.get(protectedLocation.id);
+              const reasons = [
+                protectedLocation.id === stored.definition.startingLocationId ? "the saved starting location" : null,
+                protectedLocation.id === currentLocationId ? "the current story location" : null,
+                protection?.historySnapshotCount
+                  ? `${protection.historySnapshotCount} historical message${protection.historySnapshotCount === 1 ? "" : "s"}`
+                  : null,
+                protection?.gameMapBindingCount
+                  ? `${protection.gameMapBindingCount} Game map binding${protection.gameMapBindingCount === 1 ? "" : "s"}`
+                  : null,
+              ].filter(Boolean);
+              throw new SpatialContextServiceError(
+                "spatial_history_location_removal_forbidden",
+                `Keep ${protectedLocation.name || "this location"}; it is referenced by ${reasons.join(", ")}. Archive it instead.`,
+                409,
+              );
+            }
           }
         }
 
         const byId = buildSpatialLocationIndex(definition);
         const currentStillActive = currentLocationId === null || byId.get(currentLocationId)?.status === "active";
-        let nextCurrentLocationId = currentLocationId;
-        if (!currentStillActive) {
-          if (input.replacementCurrentLocationId === undefined) {
-            throw new SpatialContextServiceError(
-              "spatial_replacement_required",
-              "Choose an active replacement before removing or archiving the current location.",
-              409,
-            );
-          }
-          nextCurrentLocationId = input.replacementCurrentLocationId;
+        let nextCurrentLocationId =
+          input.replacementCurrentLocationId === undefined ? currentLocationId : input.replacementCurrentLocationId;
+        if (!currentStillActive && input.replacementCurrentLocationId === undefined) {
+          throw new SpatialContextServiceError(
+            "spatial_replacement_required",
+            "Choose an active replacement before removing or archiving the current location.",
+            409,
+          );
         }
 
         if (nextCurrentLocationId !== null && byId.get(nextCurrentLocationId)?.status !== "active") {
@@ -394,13 +476,27 @@ export function createSpatialContextService() {
           chat.mode === "game" && !stored.definition && metadata.gameSessionStatus === "ready"
             ? bindGameMapsToExactSpatialLocations(metadata, definition)
             : { metadata, bindingCount: 0 };
-        const nextMetadata = {
-          ...initialGameMapBindings.metadata,
-          [METADATA_KEY]: definition,
-          [HIERARCHY_PROFILE_KEY]: hierarchyProfile,
-        };
+        const nextMetadata =
+          stored.link && !options.detachSharedWorld
+            ? withSpatialSharedWorldDraft(
+                initialGameMapBindings.metadata,
+                stored.link,
+                stored.link.draft?.baseWorldRevision ?? stored.world?.revision ?? currentRevision,
+                definition,
+                hierarchyProfile,
+                now(),
+              )
+            : {
+                ...withoutSpatialSharedWorldLink(initialGameMapBindings.metadata),
+                [METADATA_KEY]: definition,
+                [HIERARCHY_PROFILE_KEY]: hierarchyProfile,
+              };
         await persistence.transaction(async (transaction) => {
-          await transaction.updateChatMetadata({ chatId, metadata: nextMetadata, updatedAt: now() });
+          await transaction.updateChatMetadata({
+            chatId,
+            metadata: nextMetadata,
+            updatedAt: now(),
+          });
 
           if (!state.snapshot || nextCurrentLocationId !== currentLocationId) {
             const visibleSnapshot =
@@ -439,6 +535,18 @@ export function createSpatialContextService() {
           );
         }
 
+        const nextSharedWorldStatus: SpatialSharedWorldStatus =
+          stored.link && !options.detachSharedWorld
+            ? {
+                ...stored.status,
+                pendingChanges: true,
+                pendingBaseRevision: stored.link.draft?.baseWorldRevision ?? stored.world?.revision ?? currentRevision,
+                conflict:
+                  Boolean(stored.world) &&
+                  (stored.link.draft?.baseWorldRevision ?? stored.world?.revision ?? currentRevision) !==
+                    stored.world!.revision,
+              }
+            : independentSpatialWorldStatus();
         return buildResponse(
           definition,
           nextCurrentLocationId ?? definition.startingLocationId,
@@ -447,6 +555,8 @@ export function createSpatialContextService() {
           await resolveLoreReferenceWarnings(definition, persistence),
           hierarchyProfile,
           readGenerationPreferences(metadata, chat.mode),
+          nextSharedWorldStatus,
+          await resolveLocationDeletionProtections(chatId, nextMetadata, persistence),
         );
       });
     },

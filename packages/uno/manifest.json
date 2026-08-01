@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "uno",
   "name": "UNO",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Play UNO with Conversation characters. Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   "engine": {
     "min": "2.3.0",
@@ -42,8 +42,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "b447027e9dc6187810e415eeffcf684fcd6851f769350750989c138b2d311528",
-      "bytes": 619972
+      "sha256": "67a6510cc970b9fc8901d2b878ff59fa20770c898d6e2999d34036d0e643d875",
+      "bytes": 620420
     }
   ],
   "permissions": [

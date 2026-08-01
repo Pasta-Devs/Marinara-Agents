@@ -42,6 +42,33 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return response.json() as Promise<T>;
 }
 
+async function upload<T>(path: string, body: FormData): Promise<T> {
+  const headers = new Headers();
+  headers.set(CSRF_HEADER, CSRF_HEADER_VALUE);
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    cache: "no-store",
+    body,
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as unknown;
+    throw new PackageApiError(response.status, errorMessage(payload, response.statusText), payload);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function blob(path: string): Promise<Blob> {
+  const response = await fetch(path.startsWith("/api/") ? path : `${API_BASE}${path}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as unknown;
+    throw new PackageApiError(response.status, errorMessage(payload, response.statusText), payload);
+  }
+  return response.blob();
+}
+
 export const packageApi = {
   get<T>(path: string): Promise<T> {
     return request<T>(path);
@@ -54,5 +81,14 @@ export const packageApi = {
   },
   patch<T>(path: string, body?: unknown): Promise<T> {
     return request<T>(path, "PATCH", body);
+  },
+  delete<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>(path, "DELETE", body);
+  },
+  upload<T>(path: string, body: FormData): Promise<T> {
+    return upload<T>(path, body);
+  },
+  blob(path: string): Promise<Blob> {
+    return blob(path);
   },
 };

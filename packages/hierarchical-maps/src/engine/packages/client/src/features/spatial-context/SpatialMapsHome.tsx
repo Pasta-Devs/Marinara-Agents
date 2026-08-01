@@ -10,6 +10,7 @@ import {
   ClipboardCopy,
   Clock,
   Code2,
+  CircleHelp,
   Eye,
   FileText,
   Info,
@@ -54,6 +55,7 @@ import {
   SPATIAL_GENERATION_PROMPT_VARIABLES,
   SPATIAL_TURN_PROMPT_VARIABLES,
   spatialGenerationPreferencesSchema,
+  spatialHierarchyProfileSchema,
   spatialTurnPromptTemplatesSchema,
   type SpatialGenerationPreferences,
   type SpatialGenerationCustomVariable,
@@ -68,6 +70,7 @@ import {
   SpatialHierarchyProfileFields,
   type SpatialHierarchyProfileDraft,
 } from "./components/SpatialHierarchyProfileFields";
+import { WORLD_MAPS_GUIDE_URL } from "./package-utils";
 
 interface SpatialMapsHomeProps {
   chatId: string | null;
@@ -87,6 +90,7 @@ interface SpatialMapsHomeProps {
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
   onOpenMap: () => void;
   onOpenEditor: () => void;
+  onOpenLibrary: () => void;
   onManagePackage?: () => void;
   confirmAction?: (options: {
     title?: string;
@@ -123,7 +127,9 @@ const MAPS_PHASE_META = [
 function modeLabel(mode: string | null) {
   if (mode === "roleplay") return "Roleplay";
   if (mode === "game") return "Game";
-  if (mode === "visual_novel") return "Visual Novel";
+  // "visual_novel" is a retired chat mode; Roleplay is its behavioural
+  // successor. Chats written before the retirement may still carry it.
+  if (mode === "visual_novel") return "Roleplay";
   if (mode === "conversation") return "Conversation";
   return "Chat";
 }
@@ -215,6 +221,8 @@ function exampleTurnPromptProjection(ownerMode: SpatialOwnerMode): ResolvedOwner
     ],
     description: "The exact current location's public description appears here.",
     modelMemory: "The exact current location's private model memory appears here when it is set.",
+    referenceImageId: null,
+    useReferenceImage: false,
     destinations: [
       {
         id: "reachable-location-id",
@@ -240,6 +248,7 @@ export function SpatialMapsHome({
   onEnabledForChatChange,
   onOpenMap,
   onOpenEditor,
+  onOpenLibrary,
   onManagePackage,
   confirmAction,
   onDirtyChange,
@@ -283,7 +292,11 @@ export function SpatialMapsHome({
   const [turnPromptCopyStatus, setTurnPromptCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [hierarchyEditing, setHierarchyEditing] = useState(false);
   const [hierarchyDraft, setHierarchyDraft] = useState<SpatialHierarchyProfileDraft | null>(null);
-  const supportedChat = chatMode === "roleplay" || chatMode === "game";
+  // "visual_novel" is a retired chat mode; Roleplay is its behavioural
+  // successor, and chatOwnerMode above already folds it to "roleplay". Chats
+  // written before the retirement may still carry the raw value, so they get
+  // the full Roleplay maps experience instead of the unsupported state.
+  const supportedChat = chatMode === "roleplay" || chatMode === "visual_novel" || chatMode === "game";
   const definition = spatial.data?.definition ?? null;
   const activeLocationCount = definition?.locations.filter((location) => location.status === "active").length ?? 0;
   const currentPath = spatial.data?.breadcrumb.map((location) => location.name).join(" / ") ?? "";
@@ -443,6 +456,13 @@ export function SpatialMapsHome({
   const hierarchySaveError = updateSpatial.isError
     ? getSpatialContextProblem(updateSpatial.error).message
     : null;
+  const hierarchyDraftValidation = hierarchyDraft
+    ? spatialHierarchyProfileSchema.safeParse(hierarchyDraft.profile)
+    : null;
+  const hierarchyDraftValidationMessage =
+    hierarchyDraftValidation && !hierarchyDraftValidation.success
+      ? hierarchyDraftValidation.error.issues[0]?.message ?? "Review the location types before saving."
+      : null;
   const turnPromptSaveError = updateTurnPromptTemplates.isError
     ? getSpatialContextProblem(updateTurnPromptTemplates.error).message
     : null;
@@ -463,13 +483,15 @@ export function SpatialMapsHome({
 
   const saveHierarchyProfile = async () => {
     if (!chatId || !hierarchyDraft || !spatial.data?.definition) return;
+    const parsedProfile = spatialHierarchyProfileSchema.safeParse(hierarchyDraft.profile);
+    if (!parsedProfile.success) return;
     const savingChatId = chatId;
     const response = await updateSpatial.mutateAsync({
       chatId: savingChatId,
       expectedRevision: spatial.data.definition.revision,
       expectedCurrentLocationId: spatial.data.currentLocationId,
       definition: hierarchyDraft.definition,
-      hierarchyProfile: normalizeHierarchyProfile(hierarchyDraft.profile, hierarchyDraft.definition),
+      hierarchyProfile: normalizeHierarchyProfile(parsedProfile.data, hierarchyDraft.definition),
     });
     if (currentChatIdRef.current !== savingChatId || !response.definition) return;
     setHierarchyDraft({
@@ -652,7 +674,7 @@ export function SpatialMapsHome({
     try {
       await onEnabledForChatChange(!enabledForChat);
     } catch (error) {
-      setActivationError(error instanceof Error ? error.message : "Hierarchical Maps could not be updated for this chat.");
+      setActivationError(error instanceof Error ? error.message : "World Maps could not be updated for this chat.");
     } finally {
       setActivationPending(false);
     }
@@ -686,7 +708,7 @@ export function SpatialMapsHome({
       setAgentFieldsSaved(true);
     } catch (error) {
       setAgentFieldsError(
-        error instanceof Error ? error.message : "Hierarchical Maps settings could not be saved.",
+        error instanceof Error ? error.message : "World Maps settings could not be saved.",
       );
     }
   };
@@ -696,13 +718,13 @@ export function SpatialMapsHome({
       const discard = confirmAction
         ? await confirmAction({
             title: "Discard agent changes?",
-            message: "You have unsaved Hierarchical Maps agent changes. Leave the editor and discard them?",
+            message: "You have unsaved World Maps agent changes. Leave the editor and discard them?",
             confirmLabel: "Discard changes",
             cancelLabel: "Keep editing",
             tone: "destructive",
           })
         : window.confirm(
-            "You have unsaved Hierarchical Maps agent changes. Leave the editor and discard them?",
+            "You have unsaved World Maps agent changes. Leave the editor and discard them?",
           );
       if (!discard) return;
     }
@@ -733,7 +755,7 @@ export function SpatialMapsHome({
           </span>
           <div className="min-w-0 flex-1">
             <h1 id="hierarchical-maps-home-title" className="mari-editor-title truncate">
-              {agentInfo?.name?.trim() || "Hierarchical Maps"}
+              {agentInfo?.name?.trim() || "World Maps"}
             </h1>
             <p className="mari-editor-meta mt-0.5">
               {agentAuthor || agentInfo?.author?.trim() || "Pasta Devs"}
@@ -769,6 +791,17 @@ export function SpatialMapsHome({
             )}
             <span className="max-md:hidden">Save</span>
           </button>
+          <a
+            href={WORLD_MAPS_GUIDE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mari-editor-action inline-flex"
+            title="Open World Maps guide"
+            aria-label="Open World Maps guide"
+            style={{ minHeight: 44, minWidth: 44 }}
+          >
+            <CircleHelp size="0.9375rem" />
+          </a>
           {onManagePackage && (
             <button
               type="button"
@@ -855,7 +888,7 @@ export function SpatialMapsHome({
               })}
             </div>
             <p className="mt-1.5 text-[0.625rem] text-[var(--marinara-editor-muted)]">
-              Hierarchical Maps runs before generation so its saved location can ground the main AI response.
+              World Maps runs before generation so its saved location can ground the main AI response.
               This feature-owned phase is fixed.
             </p>
           </MapsFieldGroup>
@@ -902,6 +935,25 @@ export function SpatialMapsHome({
           </div>
         </article>
 
+        <article className="mari-editor-panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-accent)]">
+            <Map size="1rem" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xs font-semibold">Shared worlds and templates</h2>
+            <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+              Link one canonical world across chats, or add independent template copies when stories should diverge.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenLibrary}
+            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 shrink-0 justify-center px-4 text-xs"
+          >
+            Open world library
+          </button>
+        </article>
+
         <article className="mari-editor-panel overflow-hidden">
           <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-3">
             <MessageSquare size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
@@ -919,7 +971,7 @@ export function SpatialMapsHome({
             </div>
           ) : !supportedChat ? (
             <div className="px-4 py-5 text-sm text-[var(--marinara-editor-muted)]">
-              Hierarchical Maps supports Roleplay and Game. The current {modeLabel(chatMode)} chat is unchanged.
+              World Maps supports Roleplay and Game. The current {modeLabel(chatMode)} chat is unchanged.
             </div>
           ) : (
             <div className="space-y-4 p-4">
@@ -936,7 +988,7 @@ export function SpatialMapsHome({
                 }`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium">Enable Hierarchical Maps</span>
+                  <span className="block text-xs font-medium">Enable World Maps</span>
                   <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                     {enabledForChat
                       ? "Active in this chat. Saved map context can participate in turns."
@@ -959,7 +1011,7 @@ export function SpatialMapsHome({
 
               {activationPending && (
                 <p role="status" aria-live="polite" className="text-[0.6875rem] text-[var(--marinara-editor-muted)]">
-                  Updating Hierarchical Maps…
+                  Updating World Maps…
                 </p>
               )}
               {activationError && (
@@ -1804,6 +1856,17 @@ export function SpatialMapsHome({
                   onChange={setHierarchyDraft}
                 />
 
+                {hierarchyDraftValidationMessage && (
+                  <p
+                    className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                    role="alert"
+                  >
+                    {hierarchyDraft.profile.name.trim().length === 0
+                      ? "Enter a profile name before saving. Leading and trailing spaces will be removed."
+                      : hierarchyDraftValidationMessage}
+                  </p>
+                )}
+
                 {hierarchySaveError && (
                   <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
                     {hierarchySaveError}
@@ -1828,7 +1891,7 @@ export function SpatialMapsHome({
                       <button
                         type="button"
                         onClick={() => void saveHierarchyProfile()}
-                        disabled={updateSpatial.isPending}
+                        disabled={updateSpatial.isPending || !hierarchyDraftValidation?.success}
                         className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                       >
                         {updateSpatial.isPending ? <LoaderCircle size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}

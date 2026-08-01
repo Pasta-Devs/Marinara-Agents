@@ -276,8 +276,8 @@ export function NumberField({
   }, [value]);
   return (
     <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-      <span id={`${id}-label`} className="flex items-center gap-1">
-        {label}
+      <span className="flex items-center gap-1">
+        <span id={`${id}-label`}>{label}</span>
         {help ? <InfoPopover label={label} content={help} /> : null}
       </span>
       <input

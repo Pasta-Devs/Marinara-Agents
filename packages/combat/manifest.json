@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "combat",
   "name": "Combat",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Manages combat encounters, initiative, HP tracking, and turn-based actions. Add as an Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
-    "maxExclusive": "3.0.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "38676d482486df9ba648958e3e1a2bcda0d09cb3d00bbaf857bb3dccebcd0d60",
-      "bytes": 2199
+      "sha256": "5970b4207db7b2723aa5af90eeeff751bff37307d8a316f35559acc827cf1454",
+      "bytes": 2177
     }
   ],
   "permissions": [

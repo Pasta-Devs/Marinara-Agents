@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "custom-tracker",
   "name": "Custom Tracker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
-    "maxExclusive": "3.0.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent"

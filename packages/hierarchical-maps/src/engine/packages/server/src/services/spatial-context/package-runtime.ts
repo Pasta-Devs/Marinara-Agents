@@ -20,7 +20,7 @@ let writeAgentConfig:
 let agentConfigUpdateQueue = Promise.resolve();
 
 function getRuntimeHost(): CapabilityRuntimeHost {
-  if (!runtimeHost) throw new Error("Hierarchical Maps runtime is not configured");
+  if (!runtimeHost) throw new Error("World Maps runtime is not configured");
   return runtimeHost;
 }
 
@@ -44,7 +44,7 @@ export function configurePackageRuntime(
 }
 
 async function getPackageAgentConfig(agentType: string): Promise<Record<string, unknown>> {
-  if (!resolveAgentConfig) throw new Error("Hierarchical Maps agent configuration is unavailable");
+  if (!resolveAgentConfig) throw new Error("World Maps agent configuration is unavailable");
   const value = await resolveAgentConfig(agentType);
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -62,7 +62,7 @@ export async function updatePackageAgentSettings(
   agentType: string,
   update: (settings: Record<string, unknown>) => Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  if (!writeAgentConfig) throw new Error("Hierarchical Maps agent settings are not writable");
+  if (!writeAgentConfig) throw new Error("World Maps agent settings are not writable");
   const writer = writeAgentConfig;
   const operation = agentConfigUpdateQueue.then(async () => {
     const current = await getPackageAgentSettings(agentType);
@@ -89,7 +89,7 @@ export async function updatePackageAgentConfiguration(
     settings: Record<string, unknown>;
   },
 ): Promise<Record<string, unknown>> {
-  if (!writeAgentConfig) throw new Error("Hierarchical Maps agent configuration is not writable");
+  if (!writeAgentConfig) throw new Error("World Maps agent configuration is not writable");
   const writer = writeAgentConfig;
   const operation = agentConfigUpdateQueue.then(async () => {
     const currentSettings = await getPackageAgentSettings(agentType);

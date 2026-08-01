@@ -31,11 +31,6 @@ export const ROLEPLAY_DEFAULT_AGENT_IDS = [
     "continuity",
     "expression",
 ];
-export const VISUAL_NOVEL_DEFAULT_AGENT_IDS = [
-    "world-state",
-    "prose-guardian",
-    "expression",
-];
 // Game mode has native GM/world-state/quest/combat/knowledge systems.
 // Roleplay helper agents must not be exposed as per-game agent toggles here.
 export const GAME_AGENT_IDS = [];
@@ -74,24 +69,6 @@ export const CHAT_MODE_CAPABILITIES = {
         agentPolicy: {
             kind: "all",
             defaultAgentIds: ROLEPLAY_DEFAULT_AGENT_IDS,
-            hiddenPickerAgentIds: ROLEPLAY_AGENT_PICKER_HIDDEN_IDS,
-        },
-        sharedSections: SHARED_CHAT_SETTINGS_SECTIONS,
-        modeSections: ["chat-settings-presets", "prompt-preset", "scene-instructions", "group-chat", "conversation-notes"],
-        supportsChatSettingsPresets: true,
-        supportsPromptPresets: true,
-        supportsGroupChatControls: true,
-        supportsSceneInstructions: true,
-        supportsConnectedChat: true,
-    },
-    visual_novel: {
-        mode: "visual_novel",
-        label: "Roleplay (Legacy)",
-        participantModel: "chat-participants",
-        defaultAgentIds: VISUAL_NOVEL_DEFAULT_AGENT_IDS,
-        agentPolicy: {
-            kind: "all",
-            defaultAgentIds: VISUAL_NOVEL_DEFAULT_AGENT_IDS,
             hiddenPickerAgentIds: ROLEPLAY_AGENT_PICKER_HIDDEN_IDS,
         },
         sharedSections: SHARED_CHAT_SETTINGS_SECTIONS,

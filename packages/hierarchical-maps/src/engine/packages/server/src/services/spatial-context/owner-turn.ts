@@ -10,7 +10,7 @@ import {
   type SpatialTransitionErrorCode,
 } from "@marinara-engine/shared";
 import { getPackagePersistence, newId, newTimeSortableId, now } from "./package-runtime.js";
-import { parseStoredSpatialDefinition, resolveEffectiveSpatialState } from "./state-resolution.js";
+import { resolveEffectiveSpatialState } from "./state-resolution.js";
 import { selectBoundGameMapForLocation } from "./game-map-binding.js";
 import { parseSpatialMetadata } from "./metadata.js";
 
@@ -71,9 +71,10 @@ function messageExtra(attachments?: MessageAttachment[]) {
   };
 }
 
-export async function commitSpatialOwnerTurn(
-  input: CommitSpatialOwnerTurnInput,
-): Promise<{ message: CapabilityMessageRecord; snapshot: SpatialContextSnapshot }> {
+export async function commitSpatialOwnerTurn(input: CommitSpatialOwnerTurnInput): Promise<{
+  message: CapabilityMessageRecord;
+  snapshot: SpatialContextSnapshot;
+}> {
   const persistence = getPackagePersistence();
   return persistence.withChatLock(input.chatId, async () =>
     persistence.transaction(async (transaction: CapabilityPersistenceSession) => {
@@ -83,15 +84,6 @@ export async function commitSpatialOwnerTurn(
         throw new SpatialOwnerTurnError(
           "spatial_mode_unsupported",
           "Only Roleplay and Game chats can change hierarchical location.",
-          400,
-        );
-      }
-
-      const definition = parseStoredSpatialDefinition(chat.metadata);
-      if (!definition) {
-        throw new SpatialOwnerTurnError(
-          "spatial_definition_invalid",
-          "The hierarchical map must be repaired before moving.",
           400,
         );
       }
@@ -116,6 +108,14 @@ export async function commitSpatialOwnerTurn(
       }
 
       const state = await resolveEffectiveSpatialState(input.chatId, {}, transaction);
+      const definition = state.definition;
+      if (!definition) {
+        throw new SpatialOwnerTurnError(
+          "spatial_definition_invalid",
+          "The world map must be repaired before moving.",
+          400,
+        );
+      }
       const validation = validateSpatialTransition(definition, state.currentLocationId, input.transition);
       if (!validation.ok) {
         const stale =

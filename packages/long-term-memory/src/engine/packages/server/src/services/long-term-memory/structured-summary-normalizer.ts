@@ -1580,6 +1580,9 @@ function renderToneText(section: StructuredSection) {
 }
 
 function isRoleplayMode(mode?: LtmMode, modes?: readonly LtmMode[]) {
+  // "visual_novel" is a retired chat mode; Roleplay is its behavioural
+  // successor. Vault entries written before the retirement may still carry
+  // the raw value, so it stays accepted here as roleplay-family.
   return ["roleplay", "visual_novel"].includes(mode ?? modes?.[0] ?? "roleplay");
 }
 

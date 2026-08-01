@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { Archive, BookOpen, Link2, MapPin, Plus, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { Archive, BookOpen, Check, ChevronRight, ImageIcon, Link2, Loader2, LocateFixed, MapPin, Plus, RefreshCw, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
 import type {
   Lorebook,
   LorebookEntry,
@@ -10,9 +10,28 @@ import type {
   SpatialLinkState,
 } from "@marinara-engine/shared";
 import { cn } from "../package-utils";
-import { getSpatialDescendantIds } from "@marinara-engine/shared";
+import { getSpatialDescendantIds, resolveSpatialBreadcrumb } from "@marinara-engine/shared";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
-import type { SpatialHierarchyProfile } from "../../../../../maps-shared/src/maps-model";
+import {
+  DEFAULT_SPATIAL_LINK_PICKER_COLOR,
+  SPATIAL_LOCATION_ICON_MAX_LENGTH,
+  hierarchyTypeForLocation,
+  resolveSpatialLinkPresentation,
+  withoutSpatialLinkPresentation,
+  withSpatialLinkPresentation,
+  type SpatialHierarchyProfile,
+  type SpatialLinkLineStyle,
+} from "../../../../../maps-shared/src/maps-model";
+import {
+  resolveSpatialArtworkImage,
+  spatialArtworkImages,
+  uploadSpatialGalleryImage,
+  useGenerateSpatialGalleryImage,
+  useSpatialGalleryImages,
+  useSpatialGlobalGalleryImages,
+  type SpatialArtworkImage,
+  type SpatialGalleryImage,
+} from "../use-spatial-resources";
 
 const INPUT_CLASS =
   "w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--marinara-chat-chrome-panel-text)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[var(--marinara-chat-chrome-panel-muted)] focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-focus-ring)]";
@@ -42,13 +61,157 @@ function Field({
   );
 }
 
+function GalleryImagePicker({
+  title,
+  images,
+  selectedId,
+  isLoading,
+  isError,
+  onSelect,
+  onConfirm,
+  onRefresh,
+  onClose,
+}: {
+  title: string;
+  images: SpatialArtworkImage[];
+  selectedId: string | null;
+  isLoading: boolean;
+  isError: boolean;
+  onSelect: (imageId: string) => void;
+  onConfirm: () => void;
+  onRefresh: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]">
+      <div className="flex min-h-11 items-center gap-2 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-3 py-2">
+        <p className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+          {title}
+        </p>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="mari-chrome-control h-9 w-9 justify-center p-0"
+          aria-label="Refresh Gallery images"
+          title="Refresh Gallery images"
+        >
+          <RefreshCw size="0.75rem" />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mari-chrome-control h-9 w-9 justify-center p-0"
+          aria-label="Close Gallery picker"
+          title="Close Gallery picker"
+        >
+          <X size="0.75rem" />
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex min-h-32 items-center justify-center gap-2 text-xs text-[var(--marinara-chat-chrome-panel-muted)]">
+          <Loader2 size="0.875rem" className="animate-spin" /> Loading Gallery…
+        </div>
+      ) : isError ? (
+        <div className="px-4 py-8 text-center text-xs text-red-400">The Gallery could not be loaded.</div>
+      ) : images.length === 0 ? (
+        <div className="px-4 py-8 text-center text-xs leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+          No artwork is available. Add an image to this chat&apos;s Gallery or the shared Global Gallery, then refresh.
+        </div>
+      ) : (
+        <div className="grid max-h-80 grid-cols-2 gap-2 overflow-y-auto p-2 sm:grid-cols-3">
+          {images.map((image) => {
+            const selected = image.referenceId === selectedId;
+            return (
+              <button
+                key={image.referenceId}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => onSelect(image.referenceId)}
+                title={image.prompt || "Gallery image"}
+                className={cn(
+                  "group relative min-h-24 overflow-hidden rounded-lg border bg-[var(--marinara-chat-chrome-panel-bg)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]",
+                  selected
+                    ? "border-[var(--marinara-chat-chrome-button-border-active)] ring-2 ring-[var(--marinara-chat-chrome-focus-ring)]"
+                    : "border-[var(--marinara-chat-chrome-panel-border)] hover:border-[var(--marinara-chat-chrome-button-border-active)]",
+                )}
+              >
+                <img src={image.url} alt="" loading="lazy" className="h-24 w-full object-cover" />
+                <span className="absolute bottom-1.5 left-1.5 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)]/90 px-2 py-0.5 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-panel-text)] shadow-sm">
+                  {image.source === "global" ? "Shared" : "This chat"}
+                </span>
+                {selected && (
+                  <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm">
+                    <Check size="0.75rem" />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-2">
+        <button type="button" onClick={onClose} className="mari-chrome-control min-h-11 justify-center px-3 text-xs">
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!selectedId}
+          onClick={onConfirm}
+          className="mari-chrome-control min-h-11 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
+        >
+          <Check size="0.75rem" /> Use selected
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function defaultLocationReferencePrompt(location: SpatialLocation): string {
+  const description = location.description.trim();
+  return [
+    `Wide establishing image of ${location.name.trim() || "this location"}.`,
+    description,
+    "Show the environment, architecture, lighting, palette, and stable landmarks clearly. No text.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function locationArtworkContext(
+  definition: SpatialContextDefinition,
+  hierarchyProfile: SpatialHierarchyProfile,
+  location: SpatialLocation,
+) {
+  const parent = location.parentId
+    ? definition.locations.find((candidate) => candidate.id === location.parentId) ?? null
+    : null;
+  return {
+    locationName: location.name.trim() || "this location",
+    locationDescription: location.description.trim(),
+    locationType: hierarchyTypeForLocation(hierarchyProfile, location).label,
+    parentLocationName: parent?.name.trim() ?? "",
+    parentLocationDescription: parent?.description.trim() ?? "",
+    locationPath: resolveSpatialBreadcrumb(definition, location.id)
+      .map((entry) => entry.name.trim())
+      .filter(Boolean)
+      .join(" > "),
+  };
+}
+
 interface LocationInspectorProps {
+  chatId: string;
+  artworkEnabled?: boolean;
+  allowChatArtwork?: boolean;
+  debugMode?: boolean;
   definition: SpatialContextDefinition;
   location: SpatialLocation | null;
   issues: SpatialDefinitionIssue[];
   currentLocationId: string | null;
   hierarchyProfile: SpatialHierarchyProfile;
   onHierarchyTypeChange: (typeId: string) => void;
+  onHierarchyProfileChange: (profile: SpatialHierarchyProfile) => void;
   onUpdate: (patch: Partial<SpatialLocation>) => void;
   lorebooks?: Lorebook[];
   lorebookEntries?: LorebookEntry[];
@@ -57,7 +220,11 @@ interface LocationInspectorProps {
   onOpenLorebook?: (lorebookId: string) => void;
   onReparent: (parentId: string | null) => void;
   onSetStarting: () => void;
+  onSetCurrent?: () => void;
   onArchive: () => void;
+  onDeletePermanently?: () => void;
+  permanentDeleteProtection?: string | null;
+  permanentDeleteCount?: number;
   gameBinding?: {
     chatId: string;
     maps: GameMap[];
@@ -66,12 +233,17 @@ interface LocationInspectorProps {
 }
 
 export function LocationInspector({
+  chatId,
+  artworkEnabled = true,
+  allowChatArtwork = true,
+  debugMode = false,
   definition,
   location,
   issues,
   currentLocationId,
   hierarchyProfile,
   onHierarchyTypeChange,
+  onHierarchyProfileChange,
   onUpdate,
   onReparent,
   lorebooks = [],
@@ -80,11 +252,56 @@ export function LocationInspector({
   lorebooksLoading = false,
   onOpenLorebook,
   onSetStarting,
+  onSetCurrent,
   onArchive,
+  onDeletePermanently,
+  permanentDeleteProtection = null,
+  permanentDeleteCount = 1,
   gameBinding,
 }: LocationInspectorProps) {
   const [loreSearch, setLoreSearch] = useState("");
+  const [expandedLorebookIds, setExpandedLorebookIds] = useState<Set<string>>(() => new Set());
   const [newLinkTarget, setNewLinkTarget] = useState("");
+  const [galleryPickerTarget, setGalleryPickerTarget] = useState<"reference" | "background" | null>(null);
+  const [pendingGalleryImageId, setPendingGalleryImageId] = useState<string | null>(null);
+  const [referenceGeneratorOpen, setReferenceGeneratorOpen] = useState(false);
+  const [referenceGenerationPrompt, setReferenceGenerationPrompt] = useState("");
+  const [generatedReferenceImage, setGeneratedReferenceImage] = useState<SpatialGalleryImage | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [uploadTarget, setUploadTarget] = useState<"reference" | "background" | null>(null);
+  const [uploadingArtwork, setUploadingArtwork] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const galleryImages = useSpatialGalleryImages(chatId, artworkEnabled && allowChatArtwork && chatId.length > 0);
+  const globalGalleryImages = useSpatialGlobalGalleryImages(artworkEnabled);
+  const artworkImages = useMemo(
+    () => spatialArtworkImages(galleryImages.data, globalGalleryImages.data),
+    [galleryImages.data, globalGalleryImages.data],
+  );
+  const galleryPickerLoading =
+    globalGalleryImages.isLoading ||
+    (globalGalleryImages.isFetching && globalGalleryImages.data === undefined) ||
+    (allowChatArtwork && (galleryImages.isLoading || (galleryImages.isFetching && galleryImages.data === undefined)));
+  const galleryPickerError =
+    artworkImages.length === 0 && (globalGalleryImages.isError || (allowChatArtwork && galleryImages.isError));
+  const generateReferenceImage = useGenerateSpatialGalleryImage(chatId);
+  const referenceImage = useMemo(
+    () => resolveSpatialArtworkImage(location?.referenceImageId, galleryImages.data, globalGalleryImages.data),
+    [galleryImages.data, globalGalleryImages.data, location?.referenceImageId],
+  );
+  const referenceImageMissing =
+    Boolean(location?.referenceImageId) &&
+    globalGalleryImages.isSuccess &&
+    (!allowChatArtwork || galleryImages.isSuccess) &&
+    referenceImage === null;
+  const mapBackgroundImage = useMemo(
+    () => resolveSpatialArtworkImage(location?.mapBackgroundImageId, galleryImages.data, globalGalleryImages.data),
+    [galleryImages.data, globalGalleryImages.data, location?.mapBackgroundImageId],
+  );
+  const mapBackgroundImageMissing =
+    Boolean(location?.mapBackgroundImageId) &&
+    globalGalleryImages.isSuccess &&
+    (!allowChatArtwork || galleryImages.isSuccess) &&
+    mapBackgroundImage === null;
   const descendants = useMemo(
     () => (location ? getSpatialDescendantIds(definition, location.id) : new Set<string>()),
     [definition, location],
@@ -110,23 +327,102 @@ export function LocationInspector({
   const candidateLoreGroups = useMemo(() => {
     const attachedIds = new Set(location?.lorebookEntryIds ?? []);
     const query = loreSearch.trim().toLocaleLowerCase();
+    const entriesByLorebook = new Map<string, LorebookEntry[]>();
+    for (const entry of lorebookEntries) {
+      if (attachedIds.has(entry.id)) continue;
+      const entries = entriesByLorebook.get(entry.lorebookId);
+      if (entries) entries.push(entry);
+      else entriesByLorebook.set(entry.lorebookId, [entry]);
+    }
     return lorebooks
-      .map((lorebook) => ({
-        lorebook,
-        entries: lorebookEntries
-          .filter((entry) => entry.lorebookId === lorebook.id && !attachedIds.has(entry.id))
-          .filter(
+      .map((lorebook) => {
+        const bookMatches = lorebook.name.toLocaleLowerCase().includes(query);
+        return {
+          lorebook,
+          entries: (entriesByLorebook.get(lorebook.id) ?? []).filter(
             (entry) =>
               !query ||
+              bookMatches ||
               entry.name.toLocaleLowerCase().includes(query) ||
               entry.description.toLocaleLowerCase().includes(query) ||
               entry.keys.some((key) => key.toLocaleLowerCase().includes(query)),
-          )
-          .slice(0, 20),
-      }))
+          ),
+        };
+      })
       .filter((group) => group.entries.length > 0);
   }, [location?.lorebookEntryIds, loreSearch, lorebookEntries, lorebooks]);
   const excludedLorebookIdSet = useMemo(() => new Set(excludedLorebookIds), [excludedLorebookIds]);
+
+  useEffect(() => {
+    setGalleryPickerTarget(null);
+    setPendingGalleryImageId(null);
+    setReferenceGeneratorOpen(false);
+    setReferenceGenerationPrompt("");
+    setGeneratedReferenceImage(null);
+    setUploadTarget(null);
+    setUploadError(null);
+  }, [location?.id]);
+
+  const openGalleryPicker = (target: "reference" | "background") => {
+    setReferenceGeneratorOpen(false);
+    setGeneratedReferenceImage(null);
+    setPendingGalleryImageId(
+      target === "reference" ? location?.referenceImageId ?? null : location?.mapBackgroundImageId ?? null,
+    );
+    setGalleryPickerTarget(target);
+    if (allowChatArtwork) void galleryImages.refetch();
+    void globalGalleryImages.refetch();
+  };
+
+  const confirmGallerySelection = () => {
+    if (!pendingGalleryImageId || !galleryPickerTarget) return;
+    if (galleryPickerTarget === "reference") {
+      onUpdate({ referenceImageId: pendingGalleryImageId, useReferenceImage: true });
+    } else {
+      onUpdate({ mapBackgroundImageId: pendingGalleryImageId, mapBackgroundPosition: { x: 50, y: 50 } });
+    }
+    setGalleryPickerTarget(null);
+    setPendingGalleryImageId(null);
+  };
+
+  const beginArtworkUpload = (target: "reference" | "background") => {
+    setGalleryPickerTarget(null);
+    setReferenceGeneratorOpen(false);
+    setUploadError(null);
+    setUploadTarget(target);
+    uploadInputRef.current?.click();
+  };
+
+  const handleArtworkUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !location || !uploadTarget || !allowChatArtwork || !chatId) return;
+    setUploadingArtwork(true);
+    setUploadError(null);
+    try {
+      const uploaded = await uploadSpatialGalleryImage(chatId, file, {
+        prompt: `Uploaded ${uploadTarget === "reference" ? "location reference" : "child map background"} for ${location.name}.`,
+        provider: "upload",
+        model: "user-upload",
+        width: null,
+        height: null,
+      });
+      await galleryImages.refetch();
+      if (uploadTarget === "reference") {
+        onUpdate({ referenceImageId: uploaded.id, useReferenceImage: true });
+      } else {
+        onUpdate({
+          mapBackgroundImageId: uploaded.id,
+          mapBackgroundPosition: location.mapBackgroundPosition ?? { x: 50, y: 50 },
+        });
+      }
+      setUploadTarget(null);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "The image could not be uploaded.");
+    } finally {
+      setUploadingArtwork(false);
+    }
+  };
 
   if (!location) {
     return (
@@ -146,8 +442,17 @@ export function LocationInspector({
   const updateLink = (index: number, patch: Partial<SpatialLocation["links"][number]>) => {
     onUpdate({ links: location.links.map((link, linkIndex) => (index === linkIndex ? { ...link, ...patch } : link)) });
   };
-  const removeLink = (index: number) =>
+  const removeLink = (index: number) => {
+    const link = location.links[index];
+    if (!link) return;
     onUpdate({ links: location.links.filter((_, linkIndex) => linkIndex !== index) });
+    const reverseLinkRemains = definition.locations
+      .find((candidate) => candidate.id === link.targetId)
+      ?.links.some((candidate) => candidate.targetId === location.id);
+    if (!reverseLinkRemains) {
+      onHierarchyProfileChange(withoutSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId));
+    }
+  };
   const addLink = () => {
     if (!newLinkTarget) return;
     onUpdate({
@@ -215,11 +520,19 @@ export function LocationInspector({
               ))}
             </select>
           </Field>
-          <Field label="Icon" hint="Emoji or symbol">
+          <Field
+            label="Icon"
+            hint={`One emoji or short symbol · ${SPATIAL_LOCATION_ICON_MAX_LENGTH} max`}
+            error={
+              (location.icon?.length ?? 0) > SPATIAL_LOCATION_ICON_MAX_LENGTH
+                ? `Shorten this icon to ${SPATIAL_LOCATION_ICON_MAX_LENGTH} characters or fewer.`
+                : undefined
+            }
+          >
             <input
               className={INPUT_CLASS}
               value={location.icon ?? ""}
-              maxLength={64}
+              maxLength={SPATIAL_LOCATION_ICON_MAX_LENGTH}
               placeholder="⌖"
               onChange={(event) => onUpdate({ icon: event.target.value || undefined })}
             />
@@ -251,14 +564,254 @@ export function LocationInspector({
           />
         </Field>
 
+        {artworkEnabled && <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] pt-4">
+          <div className="mb-3 flex items-center gap-2">
+            <ImageIcon size="0.8125rem" className="text-[var(--marinara-chat-chrome-accent)]" />
+            <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+              Location reference image
+            </h3>
+          </div>
+          <p className="mb-3 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+            Choose a reviewed image from this chat or the shared Global Gallery. One image anchors this location&apos;s look.
+          </p>
 
-        <details className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
+          <div className="overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
+            {referenceImage ? (
+              <img
+                src={referenceImage.url}
+                alt={`${location.name} location reference`}
+                loading="lazy"
+                className="h-40 w-full object-cover"
+              />
+            ) : (
+              <div className="flex min-h-32 items-center justify-center px-4 text-center text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                {galleryPickerLoading && location.referenceImageId ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 size="0.75rem" className="animate-spin" /> Loading reference image…
+                  </span>
+                ) : referenceImageMissing ? (
+                  "This Gallery image is no longer available. Choose a replacement or remove the link."
+                ) : galleryPickerError ? (
+                  "Available artwork could not be loaded."
+                ) : (
+                  "No reference image yet."
+                )}
+              </div>
+            )}
+          </div>
+
+          {allowChatArtwork && (
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={(event) => void handleArtworkUpload(event)}
+            />
+          )}
+
+          <div className={cn("mt-3 grid gap-2", allowChatArtwork ? "grid-cols-3" : "grid-cols-1")}>
+            <button
+              type="button"
+              onClick={() => openGalleryPicker("reference")}
+              className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+            >
+              <ImageIcon size="0.75rem" /> Choose artwork
+            </button>
+            {allowChatArtwork && (
+              <button
+                type="button"
+                disabled={uploadingArtwork}
+                onClick={() => beginArtworkUpload("reference")}
+                className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                aria-label="Upload location reference"
+              >
+                {uploadingArtwork && uploadTarget === "reference" ? (
+                  <Loader2 size="0.75rem" className="animate-spin" />
+                ) : (
+                  <Upload size="0.75rem" />
+                )}{" "}
+                Upload
+              </button>
+            )}
+            {allowChatArtwork && (
+              <button
+                type="button"
+                onClick={() => {
+                  setGalleryPickerTarget(null);
+                  setGeneratedReferenceImage(null);
+                  setReferenceGenerationPrompt(defaultLocationReferencePrompt(location));
+                  setReferenceGeneratorOpen(true);
+                  generateReferenceImage.reset();
+                }}
+                className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+              >
+                <Sparkles size="0.75rem" /> Create with AI
+              </button>
+            )}
+          </div>
+          {uploadError && <p className="mt-2 text-[0.6875rem] text-red-400">{uploadError}</p>}
+          {location.referenceImageId && (
+            <button
+              type="button"
+              onClick={() => onUpdate({ referenceImageId: undefined, useReferenceImage: false })}
+              className="mari-chrome-control mt-2 min-h-11 w-full justify-center px-3 text-xs"
+            >
+              <Trash2 size="0.75rem" /> Remove reference
+            </button>
+          )}
+
+          {galleryPickerTarget === "reference" && (
+            <GalleryImagePicker
+              title="Choose location reference"
+              images={artworkImages}
+              selectedId={pendingGalleryImageId}
+              isLoading={galleryPickerLoading}
+              isError={galleryPickerError}
+              onSelect={setPendingGalleryImageId}
+              onConfirm={confirmGallerySelection}
+              onRefresh={() => {
+                if (allowChatArtwork) void galleryImages.refetch();
+                void globalGalleryImages.refetch();
+              }}
+              onClose={() => {
+                setGalleryPickerTarget(null);
+                setPendingGalleryImageId(null);
+              }}
+            />
+          )}
+
+          {referenceGeneratorOpen && (
+            <div className="mt-3 space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3">
+              <div className="flex items-center gap-2">
+                <Sparkles size="0.8125rem" className="text-[var(--marinara-chat-chrome-accent)]" />
+                <p className="min-w-0 flex-1 text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                  Create location reference
+                </p>
+                <button
+                  type="button"
+                  disabled={generateReferenceImage.isPending}
+                  onClick={() => {
+                    setReferenceGeneratorOpen(false);
+                    setGeneratedReferenceImage(null);
+                  }}
+                  className="mari-chrome-control h-9 w-9 justify-center p-0"
+                  aria-label="Close AI reference creator"
+                  title="Close AI reference creator"
+                >
+                  <X size="0.75rem" />
+                </button>
+              </div>
+              <label className="block space-y-1.5">
+                <span className="text-[0.6875rem] font-medium text-[var(--marinara-chat-chrome-panel-title)]">
+                  Image prompt
+                </span>
+                <textarea
+                  className={`${INPUT_CLASS} min-h-28 resize-y`}
+                  value={referenceGenerationPrompt}
+                  maxLength={7_000}
+                  disabled={generateReferenceImage.isPending}
+                  onChange={(event) => setReferenceGenerationPrompt(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={generateReferenceImage.isPending || !referenceGenerationPrompt.trim()}
+                onClick={() => {
+                  setGeneratedReferenceImage(null);
+                  generateReferenceImage.mutate(
+                    {
+                      prompt: referenceGenerationPrompt.trim(),
+                      mapsArtworkContext: locationArtworkContext(definition, hierarchyProfile, location),
+                      debugMode,
+                    },
+                    { onSuccess: setGeneratedReferenceImage },
+                  );
+                }}
+                className="mari-chrome-control min-h-11 w-full justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
+              >
+                {generateReferenceImage.isPending ? (
+                  <Loader2 size="0.75rem" className="animate-spin" />
+                ) : (
+                  <Sparkles size="0.75rem" />
+                )}
+                {generateReferenceImage.isPending ? "Creating image…" : "Generate into Gallery"}
+              </button>
+              {generateReferenceImage.isError && (
+                <p className="text-[0.6875rem] text-red-400" role="alert">
+                  {generateReferenceImage.error instanceof Error
+                    ? generateReferenceImage.error.message
+                    : "The location reference could not be generated."}
+                </p>
+              )}
+              {generatedReferenceImage && (
+                <div className="overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)]">
+                  <img
+                    src={generatedReferenceImage.url}
+                    alt={`Generated reference candidate for ${location.name}`}
+                    className="h-40 w-full object-cover"
+                  />
+                  <p className="px-3 pt-2 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                    Saved to Gallery. Review it before making it this location&apos;s reference.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 p-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReferenceGeneratorOpen(false);
+                        setGeneratedReferenceImage(null);
+                      }}
+                      className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                    >
+                      Keep in Gallery
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onUpdate({ referenceImageId: generatedReferenceImage.id, useReferenceImage: true });
+                        setReferenceGeneratorOpen(false);
+                        setGeneratedReferenceImage(null);
+                      }}
+                      className="mari-chrome-control min-h-11 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs"
+                    >
+                      <Check size="0.75rem" /> Use as reference
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <label className="mt-3 flex min-h-11 items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] px-3 text-xs text-[var(--marinara-chat-chrome-panel-text)]">
+            <input
+              type="checkbox"
+              checked={location.useReferenceImage === true}
+              disabled={!referenceImage}
+              onChange={(event) => onUpdate({ useReferenceImage: event.target.checked })}
+            />
+            Use for Roleplay illustrations and Game storyboards
+          </label>
+        </div>}
+
+
+        <details
+          data-marinara-linked-lore
+          className="group rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]"
+        >
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
             <BookOpen size="0.8125rem" className="text-[var(--marinara-chat-chrome-accent)]" />
             <span className="flex-1">Linked lore</span>
             <span className="rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-2 py-0.5 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-panel-muted)]">
               {location.lorebookEntryIds.length}
             </span>
+            <ChevronRight
+              data-marinara-disclosure-indicator
+              size="0.875rem"
+              aria-hidden="true"
+              className="shrink-0 text-[var(--marinara-chat-chrome-panel-muted)] transition-transform duration-200 group-open:rotate-90"
+            />
           </summary>
           <div className="space-y-3 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-3">
             <p className="text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
@@ -291,7 +844,7 @@ export function LocationInspector({
                           </p>
                           <p className="mt-0.5 truncate text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
                             {!entry
-                              ? entryId
+                              ? "The original entry name is unavailable."
                               : excluded
                                 ? `${lorebook?.name ?? "Lorebook"} · excluded from this chat`
                                 : disabled
@@ -334,6 +887,7 @@ export function LocationInspector({
               <input
                 className={`${INPUT_CLASS} min-h-11 pl-8`}
                 value={loreSearch}
+                aria-label="Search lorebook names and entries"
                 placeholder="Search lore entries"
                 onChange={(event) => setLoreSearch(event.target.value)}
               />
@@ -346,16 +900,43 @@ export function LocationInspector({
                 No available entries match this search.
               </p>
             ) : (
-              <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                 {candidateLoreGroups.map(({ lorebook, entries }) => {
                   const bookUnavailable = lorebook.enabled === false || excludedLorebookIdSet.has(lorebook.id);
+                  const searchActive = loreSearch.trim().length > 0;
+                  const expanded = searchActive || expandedLorebookIds.has(lorebook.id);
                   return (
-                    <div key={lorebook.id}>
-                      <p className="mb-1 truncate text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-chat-chrome-panel-muted)]">
-                        {lorebook.name}
-                        {bookUnavailable ? " · unavailable" : ""}
-                      </p>
-                      <div className="space-y-1">
+                    <details
+                      key={lorebook.id}
+                      data-marinara-lorebook-group={lorebook.id}
+                      open={expanded}
+                      onToggle={(event) => {
+                        if (searchActive) return;
+                        const open = event.currentTarget.open;
+                        setExpandedLorebookIds((current) => {
+                          const next = new Set(current);
+                          if (open) next.add(lorebook.id);
+                          else next.delete(lorebook.id);
+                          return next;
+                        });
+                      }}
+                      className="group/lorebook overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)]"
+                    >
+                      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left">
+                        <ChevronRight
+                          size="0.8125rem"
+                          aria-hidden="true"
+                          className="shrink-0 text-[var(--marinara-chat-chrome-panel-muted)] transition-transform duration-200 group-open/lorebook:rotate-90"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[0.6875rem] font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                          {lorebook.name}
+                          {bookUnavailable ? " · unavailable" : ""}
+                        </span>
+                        <span className="rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-2 py-0.5 text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                          {entries.length}
+                        </span>
+                      </summary>
+                      <div className="space-y-1 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-2">
                         {entries.map((entry) => {
                           const unavailable = bookUnavailable || entry.enabled === false;
                           return (
@@ -375,7 +956,7 @@ export function LocationInspector({
                           );
                         })}
                       </div>
-                    </div>
+                    </details>
                   );
                 })}
               </div>
@@ -424,6 +1005,98 @@ export function LocationInspector({
                 <option value="layers">Layers</option>
               </select>
             </Field>
+            {location.childPresentation === "map" && (
+              <div className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon size="0.75rem" className="text-[var(--marinara-chat-chrome-accent)]" />
+                  <p className="text-xs font-medium text-[var(--marinara-chat-chrome-panel-title)]">
+                    Child map background
+                  </p>
+                </div>
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                  Displayed behind the movable places on this map and in the runtime minimap. It is never sent to image generation.
+                </p>
+                <div className="mt-3 overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]">
+                  {mapBackgroundImage ? (
+                    <img
+                      src={mapBackgroundImage.url}
+                      alt={`${location.name} child map background`}
+                      loading="lazy"
+                      className="h-32 w-full object-cover"
+                      style={{
+                        objectPosition: `${location.mapBackgroundPosition?.x ?? 50}% ${location.mapBackgroundPosition?.y ?? 50}%`,
+                      }}
+                    />
+                  ) : (
+                    <div className="flex min-h-24 items-center justify-center px-4 text-center text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                      {galleryPickerLoading && location.mapBackgroundImageId ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 size="0.75rem" className="animate-spin" /> Loading map background…
+                        </span>
+                      ) : mapBackgroundImageMissing ? (
+                        "This Gallery image is no longer available."
+                      ) : galleryPickerError ? (
+                        "Available artwork could not be loaded."
+                      ) : (
+                        "The map grid is used until you choose a Gallery background."
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className={cn("mt-2 grid gap-2", allowChatArtwork ? "grid-cols-3" : "grid-cols-2")}>
+                  <button
+                    type="button"
+                    onClick={() => openGalleryPicker("background")}
+                    className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                  >
+                    <ImageIcon size="0.75rem" /> Choose artwork
+                  </button>
+                  {allowChatArtwork && (
+                    <button
+                      type="button"
+                      disabled={uploadingArtwork}
+                      onClick={() => beginArtworkUpload("background")}
+                      className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                      aria-label="Upload child map background"
+                    >
+                      {uploadingArtwork && uploadTarget === "background" ? (
+                        <Loader2 size="0.75rem" className="animate-spin" />
+                      ) : (
+                        <Upload size="0.75rem" />
+                      )}{" "}
+                      Upload
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!location.mapBackgroundImageId}
+                    onClick={() => onUpdate({ mapBackgroundImageId: undefined, mapBackgroundPosition: undefined })}
+                    className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                  >
+                    <Trash2 size="0.75rem" /> Remove
+                  </button>
+                </div>
+                {galleryPickerTarget === "background" && (
+                  <GalleryImagePicker
+                    title="Choose child map background"
+                    images={artworkImages}
+                    selectedId={pendingGalleryImageId}
+                    isLoading={galleryPickerLoading}
+                    isError={galleryPickerError}
+                    onSelect={setPendingGalleryImageId}
+                    onConfirm={confirmGallerySelection}
+                    onRefresh={() => {
+                      if (allowChatArtwork) void galleryImages.refetch();
+                      void globalGalleryImages.refetch();
+                    }}
+                    onClose={() => {
+                      setGalleryPickerTarget(null);
+                      setPendingGalleryImageId(null);
+                    }}
+                  />
+                )}
+              </div>
+            )}
             {location.placement && (
               <details className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center px-3 text-xs font-medium text-[var(--marinara-chat-chrome-panel-title)]">
@@ -479,6 +1152,7 @@ export function LocationInspector({
           <div className="space-y-2">
             {location.links.map((link, index) => {
               const target = definition.locations.find((candidate) => candidate.id === link.targetId);
+              const presentation = resolveSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId);
               return (
                 <div
                   key={`${link.targetId}-${index}`}
@@ -523,6 +1197,56 @@ export function LocationInspector({
                       Both ways
                     </label>
                   </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <select
+                      className={INPUT_CLASS}
+                      value={presentation.lineStyle}
+                      aria-label={`Line style for ${target?.name ?? "missing location"}`}
+                      onChange={(event) =>
+                        onHierarchyProfileChange(
+                          withSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId, {
+                            lineStyle: event.target.value as SpatialLinkLineStyle,
+                          }),
+                        )
+                      }
+                    >
+                      <option value="solid">Solid line</option>
+                      <option value="dashed">Dashed line</option>
+                      <option value="dotted">Dotted line</option>
+                    </select>
+                    <div className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] px-2">
+                      <input
+                        type="color"
+                        value={presentation.color ?? DEFAULT_SPATIAL_LINK_PICKER_COLOR}
+                        aria-label={`Line color for ${target?.name ?? "missing location"}`}
+                        title="Choose line color"
+                        onChange={(event) =>
+                          onHierarchyProfileChange(
+                            withSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId, {
+                              color: event.target.value,
+                            }),
+                          )
+                        }
+                        className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+                      />
+                      <span className="min-w-0 flex-1 text-xs">Color</span>
+                      {presentation.color && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onHierarchyProfileChange(
+                              withSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId, {
+                                color: undefined,
+                              }),
+                            )
+                          }
+                          className="min-h-11 rounded-md px-2 text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)] hover:text-[var(--marinara-chat-chrome-panel-title)]"
+                        >
+                          Auto
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -554,6 +1278,9 @@ export function LocationInspector({
         <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] pt-4">
           <h3 className="mb-3 text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Location status</h3>
           <div className="space-y-2">
+            <p className="text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+              The starting location is used when a new story begins. The current story location is where this chat is now.
+            </p>
             <button
               type="button"
               onClick={onSetStarting}
@@ -563,6 +1290,17 @@ export function LocationInspector({
               <MapPin size="0.75rem" />
               {definition.startingLocationId === location.id ? "Starting location" : "Set as starting location"}
             </button>
+            {onSetCurrent && (
+              <button
+                type="button"
+                onClick={onSetCurrent}
+                disabled={location.status !== "active" || currentLocationId === location.id}
+                className="mari-chrome-control min-h-11 w-full justify-start px-3 text-xs"
+              >
+                <LocateFixed size="0.75rem" />
+                {currentLocationId === location.id ? "Current story location" : "Set current story location"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -577,9 +1315,30 @@ export function LocationInspector({
               <Archive size="0.75rem" />
               {location.status === "archived" ? "Restore location" : "Archive location"}
             </button>
+            {location.status === "archived" && onDeletePermanently && (
+              <>
+                <button
+                  type="button"
+                  onClick={onDeletePermanently}
+                  disabled={Boolean(permanentDeleteProtection)}
+                  title={permanentDeleteProtection ?? undefined}
+                  className="mari-chrome-control mari-chrome-control--danger min-h-11 w-full justify-start px-3 text-xs disabled:opacity-45"
+                >
+                  <Trash2 size="0.75rem" />
+                  {permanentDeleteCount > 1
+                    ? `Delete ${permanentDeleteCount} archived locations permanently`
+                    : "Delete permanently"}
+                </button>
+                {permanentDeleteProtection && (
+                  <p className="text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                    {permanentDeleteProtection}
+                  </p>
+                )}
+              </>
+            )}
             {currentLocationId === location.id && (
-              <p className="text-[0.6875rem] leading-relaxed text-amber-400">
-                This is the current runtime location. Choose a replacement before saving an archive.
+              <p className="text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
+                This is the current story location. Setting another location here corrects the saved state without narrating travel.
               </p>
             )}
           </div>

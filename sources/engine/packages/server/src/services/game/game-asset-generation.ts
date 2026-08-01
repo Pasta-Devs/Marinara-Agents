@@ -821,7 +821,7 @@ export interface ChatBackgroundGenRequest extends BackgroundGenRequest {
   /** Why the background agent asked for generation. Stored as background metadata. */
   reason?: string;
   /** Source chat mode used for library tags. */
-  sourceMode?: "roleplay" | "visual_novel" | "game";
+  sourceMode?: "roleplay" | "game";
 }
 
 export interface SceneIllustrationGenRequest {

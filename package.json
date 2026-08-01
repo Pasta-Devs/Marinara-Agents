@@ -1,0 +1,12 @@
+{
+  "name": "marinara-agents",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinned build dependencies for rebuilding Engine-derived feature packages. See CONTRIBUTING.md.",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "chess.js": "1.4.0"
+  }
+}

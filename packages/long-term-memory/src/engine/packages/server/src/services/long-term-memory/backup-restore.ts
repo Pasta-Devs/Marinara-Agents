@@ -39,6 +39,10 @@ import { LongTermMemoryStorage } from "./storage.js";
 import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { checkLongTermMemoryIntegrity } from "./maintenance.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import {
+  readAllRejectedSuggestions,
+  writeRejectedSuggestions,
+} from "./rejected-suggestions.js";
 
 const backupFormat = "marinara-long-term-memory" as const;
 
@@ -51,9 +55,10 @@ export async function exportLongTermMemoryData(root = getLongTermMemoryRoot()): 
     const storage = new LongTermMemoryStorage(root);
     await storage.initializeLtmStore();
     const dirs = getLongTermMemoryDirectories(root);
-    const [notes, drafts, global, extraction, retention, agent] = await Promise.all([
+    const [notes, drafts, rejectedSuggestions, global, extraction, retention, agent] = await Promise.all([
       storage.listNotes(),
       new LongTermMemoryDraftStore(root).listDrafts(),
+      readAllRejectedSuggestions(root),
       getLtmGlobalSettings(root).then((value) => ltmGlobalSettingsSchema.parse(value)),
       readConfig(ltmExtractionConfigPath(root), ltmExtractionSettingsSchema, { version: 1 }),
       readConfig(longTermMemoryRetentionConfigPath(root), ltmRetentionConfigSchema, DEFAULT_LTM_RETENTION_CONFIG),
@@ -65,6 +70,7 @@ export async function exportLongTermMemoryData(root = getLongTermMemoryRoot()): 
       exportedAt: new Date().toISOString(),
       notes,
       drafts,
+      rejectedSuggestions,
       settings: { global, extraction, retention, agent },
     });
   });
@@ -80,8 +86,8 @@ export function previewLongTermMemoryBackup(value: unknown, root = getLongTermMe
     format: backup.format,
     version: backup.version,
     exportedAt: backup.exportedAt,
-    incoming: { notes: backup.notes.length, drafts: backup.drafts.length },
-    current: { notes: current.notes.length, drafts: current.drafts.length },
+    incoming: { notes: backup.notes.length, drafts: backup.drafts.length, rejectedSuggestions: backup.rejectedSuggestions.length },
+    current: { notes: current.notes.length, drafts: current.drafts.length, rejectedSuggestions: current.rejectedSuggestions.length },
     settings: Object.keys(backup.settings),
   }));
 }
@@ -104,6 +110,7 @@ async function writeBackupRoot(root: string, backup: LtmBackup) {
     await writeJsonAtomic(notePathForId(note.id, note.type, root), note);
   for (const draft of backup.drafts)
     await writeJsonAtomic(safeJoin(dirs.drafts, `${draft.id}.json`), ltmExtractionDraftSchema.parse(draft));
+  await writeRejectedSuggestions(backup.rejectedSuggestions, root);
   await Promise.all([
     writeJsonAtomic(ltmSettingsPath(root), backup.settings.global),
     writeJsonAtomic(ltmExtractionConfigPath(root), backup.settings.extraction),
@@ -151,7 +158,7 @@ export async function replaceLongTermMemoryData(value: unknown, root = getLongTe
       await writeLtmBackupRestoreJournal(root, { ...journal, phase: "verified" });
       await rm(previous, { recursive: true, force: true });
       await removeLtmBackupRestoreJournal(root);
-      return { notes: backup.notes.length, drafts: backup.drafts.length, rebuild: stagedRebuild, integrity };
+       return { notes: backup.notes.length, drafts: backup.drafts.length, rejectedSuggestions: backup.rejectedSuggestions.length, rebuild: stagedRebuild, integrity };
     } catch (error) {
       if (journalWritten && journal) {
         try {
@@ -180,6 +187,7 @@ export async function deleteAllLongTermMemoryData(root = getLongTermMemoryRoot()
       exportedAt: new Date().toISOString(),
       notes: [],
       drafts: [],
+      rejectedSuggestions: [],
     }, root);
   });
 }
@@ -199,6 +207,7 @@ export async function resetLongTermMemorySettings(root = getLongTermMemoryRoot()
       settings: await exportLongTermMemoryData(root).then((current) => current.settings),
       notes: backup.notes.length,
       drafts: backup.drafts.length,
+      rejectedSuggestions: backup.rejectedSuggestions.length,
     };
   });
 }

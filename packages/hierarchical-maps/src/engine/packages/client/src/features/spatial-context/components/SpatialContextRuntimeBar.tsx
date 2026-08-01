@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Map as MapIcon, MapPin, RefreshCw, Route, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, CircleHelp, Map as MapIcon, MapPin, RefreshCw, Route, X } from "lucide-react";
 import type { SpatialDestination, SpatialDestinationRelation } from "@marinara-engine/shared";
 import { GameWorldMap } from "../../../components/game/GameWorldMap";
 import { useSpatialContext } from "../../../hooks/use-spatial-context";
-import { cn, generateClientId } from "../package-utils";
+import { cn, generateClientId, WORLD_MAPS_GUIDE_URL } from "../package-utils";
 import {
   clearPendingSpatialTransition,
   setPendingSpatialTransition,
@@ -15,6 +15,7 @@ import {
   reconcileSpatialRoutePlan,
   useSpatialRoutePlan,
 } from "../spatial-route-plans";
+import { SpatialLocationIcon } from "./SpatialLocationIcon";
 
 interface SpatialContextRuntimeBarProps {
   chatId: string | null;
@@ -381,6 +382,16 @@ export function SpatialContextRuntimeBar({
                   : "Moves with your next turn"}
             </span>
           </span>
+          <a
+            href={`${WORLD_MAPS_GUIDE_URL}#a-planned-route-does-not-advance`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
+            aria-label="Open World Maps movement help"
+            title="Movement help"
+          >
+            <CircleHelp size="0.875rem" />
+          </a>
           <button
             type="button"
             onClick={() => {
@@ -399,10 +410,10 @@ export function SpatialContextRuntimeBar({
       {!enabled && !pending && (
         <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] px-3 py-2.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
           {!data?.definition
-            ? "No map yet. Create one from Agents → Hierarchical Maps; your message draft is unchanged."
+            ? "No map yet. Create one from Agents → World Maps; your message draft is unchanged."
             : !data.definition.enabled
               ? "Map disabled. Its saved hierarchy and history are preserved until you enable it again."
-              : "The saved map does not have an available current location. Open Hierarchical Maps to review it."}
+              : "The saved map does not have an available current location. Open World Maps to review it."}
         </div>
       )}
 
@@ -488,7 +499,7 @@ export function SpatialContextRuntimeBar({
           </div>
           {currentLocation && (
             <div className="mb-2 flex items-start gap-2 rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 py-2.5">
-              <span className="text-base" aria-hidden="true">{currentLocation.icon || "📍"}</span>
+              <SpatialLocationIcon icon={currentLocation.icon} fallback="📍" className="text-base" />
               <div className="min-w-0 flex-1">
                 <p className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-accent)]">
                   You are here
@@ -530,7 +541,7 @@ export function SpatialContextRuntimeBar({
                             )}
                             aria-label={`Inspect ${destination.name}`}
                           >
-                            <span className="text-base" aria-hidden="true">{location?.icon || "⌖"}</span>
+                            <SpatialLocationIcon icon={location?.icon} className="text-base" />
                             <span className="min-w-0">
                               <span className="block truncate font-medium">{destination.name}</span>
                               <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
@@ -551,7 +562,7 @@ export function SpatialContextRuntimeBar({
 
           {selectedDestination && (
             <div className="mt-2 flex flex-wrap items-start gap-3 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]/35 p-3">
-              <span className="text-lg" aria-hidden="true">{selectedLocation?.icon || "📍"}</span>
+              <SpatialLocationIcon icon={selectedLocation?.icon} fallback="📍" className="text-lg" />
               <div className="min-w-52 flex-1">
                 <p className="text-xs font-semibold">{selectedDestination.name}</p>
                 <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">

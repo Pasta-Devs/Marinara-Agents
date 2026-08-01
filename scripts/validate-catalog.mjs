@@ -23,6 +23,7 @@ import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./cata
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { catalog, catalogsByMajor, legacyCatalog } = await readCatalogFamily(repoRoot);
 const MIN_ENGINE_VERSION = "2.3.0";
+const REQUIRED_MAX_ENGINE_EXCLUSIVE = "4.0.0";
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
 const expectedCatalogsByMajor = createCatalogLanes(catalog);
 if (JSON.stringify([...catalogsByMajor.keys()].sort()) !== JSON.stringify([...expectedCatalogsByMajor.keys()].sort())) {
@@ -279,6 +280,11 @@ for (const entry of catalog.packages) {
   if (compareEngineVersions(manifest.engine.maxExclusive, manifest.engine.min) <= 0) {
     throw new Error(`${manifest.id} Engine compatibility range must be increasing`);
   }
+  if (compareEngineVersions(manifest.engine.maxExclusive, REQUIRED_MAX_ENGINE_EXCLUSIVE) < 0) {
+    throw new Error(
+      `${manifest.id} must accept supported higher Engine versions below ${REQUIRED_MAX_ENGINE_EXCLUSIVE}`,
+    );
+  }
   assertManifestBuildProvenance(manifest);
   if (!OFFICIAL_PACKAGE_GUIDANCE[manifest.id]) {
     throw new Error(`Missing activation guidance and mode metadata for ${manifest.id}`);
@@ -494,8 +500,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 
 const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 30 || agentOnly !== 21 || features !== 9) {
-  throw new Error(`Expected 21 agents and 9 features, found ${agentOnly} and ${features}`);
+if (catalog.packages.length !== 31 || agentOnly !== 22 || features !== 9) {
+  throw new Error(`Expected 22 agents and 9 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 console.log(

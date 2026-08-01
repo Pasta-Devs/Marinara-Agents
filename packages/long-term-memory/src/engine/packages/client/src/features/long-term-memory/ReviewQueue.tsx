@@ -5,8 +5,11 @@ import type {
   LtmDraftReviewDraft,
   LtmDraftReviewMutation,
   LtmDraftReviewResponse,
+  LtmExtractionDropReason,
   LtmImportance,
   LtmNote,
+  LtmRejectedSuggestion,
+  LtmRejectedSuggestionsResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   invalidateLtmQueries,
@@ -218,22 +221,55 @@ function recoveryLabel(
   recovery: NonNullable<
     LtmDraftReviewDraft["candidateRejections"][number]["recovery"]
   >,
+  localizeUi: ReturnType<typeof useLtmTranslation>["t"],
 ) {
   const hints = [
     recovery.noteType
-      ? `memory type ${humanizeLabel(recovery.noteType)}`
+      ? localizeUi("ui.longTermMemory.reviewqueue.recoveryMemoryType", { value: humanizeLabel(recovery.noteType) })
       : null,
-    recovery.noteId ? `memory ${recovery.noteId}` : null,
+    recovery.noteId
+      ? localizeUi("ui.longTermMemory.reviewqueue.recoveryMemory", { value: recovery.noteId })
+      : null,
     recovery.sectionKey
-      ? `section ${humanizeLabel(recovery.sectionKey)}`
+      ? localizeUi("ui.longTermMemory.reviewqueue.recoverySection", { value: humanizeLabel(recovery.sectionKey) })
       : null,
-    recovery.status ? `status ${humanizeLabel(recovery.status)}` : null,
+    recovery.status
+      ? localizeUi("ui.longTermMemory.reviewqueue.recoveryStatus", { value: humanizeLabel(recovery.status) })
+      : null,
   ].filter(Boolean);
   return (
     hints.join(", ") ||
-    "Review the rejected candidate and try extraction again."
+    localizeUi("ui.longTermMemory.reviewqueue.reviewRejectedCandidate")
   );
 }
+
+const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> = {
+  invalid_format: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidFormat",
+  placeholder_output: "ui.longTermMemory.reviewqueue.rejectionReasonPlaceholderOutput",
+  quote_not_found_in_source: "ui.longTermMemory.reviewqueue.rejectionReasonQuoteNotFound",
+  missing_source_evidence: "ui.longTermMemory.reviewqueue.rejectionReasonMissingEvidence",
+  source_summary_payload: "ui.longTermMemory.reviewqueue.rejectionReasonSourceSummary",
+  unsupported_bucket: "ui.longTermMemory.reviewqueue.rejectionReasonUnsupportedBucket",
+  target_note_outside_scope: "ui.longTermMemory.reviewqueue.rejectionReasonOutsideScope",
+  ambiguous_subject: "ui.longTermMemory.reviewqueue.rejectionReasonAmbiguousSubject",
+  untrusted_subject: "ui.longTermMemory.reviewqueue.rejectionReasonUntrustedSubject",
+  invalid_subject_cardinality: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidSubjectCardinality",
+  too_long_to_keep_safely: "ui.longTermMemory.reviewqueue.rejectionReasonTooLong",
+};
+
+const rejectionRecommendedLabels: Partial<Record<LtmExtractionDropReason, string>> = {
+  invalid_format: "ui.longTermMemory.reviewqueue.recommendedFixInvalidFormat",
+  placeholder_output: "ui.longTermMemory.reviewqueue.recommendedFixPlaceholderOutput",
+  quote_not_found_in_source: "ui.longTermMemory.reviewqueue.recommendedFixQuoteNotFound",
+  missing_source_evidence: "ui.longTermMemory.reviewqueue.recommendedFixMissingEvidence",
+  source_summary_payload: "ui.longTermMemory.reviewqueue.recommendedFixSourceSummary",
+  unsupported_bucket: "ui.longTermMemory.reviewqueue.recommendedFixUnsupportedBucket",
+  target_note_outside_scope: "ui.longTermMemory.reviewqueue.recommendedFixOutsideScope",
+  ambiguous_subject: "ui.longTermMemory.reviewqueue.recommendedFixAmbiguousSubject",
+  untrusted_subject: "ui.longTermMemory.reviewqueue.recommendedFixUntrustedSubject",
+  invalid_subject_cardinality: "ui.longTermMemory.reviewqueue.recommendedFixInvalidSubjectCardinality",
+  too_long_to_keep_safely: "ui.longTermMemory.reviewqueue.recommendedFixTooLong",
+};
 
 function SelectionCheckbox({
   checked,
@@ -611,7 +647,7 @@ function ExtractionDetails({
                       {localizeUi(
                         "ui.longTermMemory.extractiondetails.recovery",
                       )}{" "}
-                      {recoveryLabel(rejection.recovery)}
+                      {recoveryLabel(rejection.recovery, localizeUi)}
                     </p>
                     {onRecoverCandidate ? (
                       <Button onClick={() => onRecoverCandidate(rejection)}>
@@ -662,6 +698,16 @@ export default function ReviewQueue({
         `/drafts/review?status=pending${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}${sourceNoteId ? `&sourceNoteId=${encodeURIComponent(sourceNoteId)}` : ""}`,
       ),
   });
+  const rejectedSuggestions = useQuery({
+    queryKey: [...queryKeys.rejectedSuggestions, props.chatId, sourceNoteId],
+    queryFn: () =>
+      request<LtmRejectedSuggestionsResponse>(
+        `/rejected-suggestions${props.chatId || sourceNoteId ? "?" : ""}${[
+          props.chatId ? `chatId=${encodeURIComponent(props.chatId)}` : "",
+          sourceNoteId ? `sourceNoteId=${encodeURIComponent(sourceNoteId)}` : "",
+        ].filter(Boolean).join("&")}`,
+      ),
+  });
   const notes = useQuery({
     queryKey: queryKeys.notes,
     queryFn: () => requestAllNotes<LtmNote>("/notes?includeGlobal=true"),
@@ -674,6 +720,7 @@ export default function ReviewQueue({
   const [running, setRunning] = useState<"accept" | "skip" | null>(null);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [result, setResult] = useState<BatchResult | null>(null);
+  const [deleteSuggestionError, setDeleteSuggestionError] = useState("");
   useEffect(() => {
     setSelectedIds(new Set());
     setEditedById(new Map());
@@ -952,24 +999,28 @@ export default function ReviewQueue({
     }
   };
 
-  if (review.isLoading) {
-    return (
-      <StatusSurface busy>
-        {localizeUi("ui.longTermMemory.reviewqueue.loadingPendingReviewDrafts")}
-      </StatusSurface>
-    );
-  }
-  if (review.isError) {
-    return (
-      <StatusSurface tone="danger">
-        {review.error instanceof Error
-          ? review.error.message
-          : localizeUi(
-              "ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad",
-            )}
-      </StatusSurface>
-    );
-  }
+  const deleteRejectedSuggestion = async (suggestion: LtmRejectedSuggestion) => {
+    const title = noteById.get(suggestion.source.sourceNoteId)?.title ?? suggestion.source.sourceNoteId;
+    const confirmed = props.confirmAction
+      ? await props.confirmAction({
+          title: localizeUi("ui.longTermMemory.reviewqueue.deleteRejectedSuggestion"),
+          message: localizeUi("ui.longTermMemory.reviewqueue.deleteRejectedSuggestionDescription", { title }),
+          confirmLabel: localizeUi("ui.longTermMemory.reviewqueue.delete"),
+          tone: "destructive",
+        })
+      : window.confirm(localizeUi("ui.longTermMemory.reviewqueue.deleteRejectedSuggestionDescription", { title }));
+    if (!confirmed) return;
+    setDismissingId(suggestion.id);
+    setDeleteSuggestionError("");
+    try {
+      await request(`/rejected-suggestions/${encodeURIComponent(suggestion.id)}`, "DELETE");
+      await invalidateLtmQueries(queryClient, [queryKeys.rejectedSuggestions]);
+    } catch (error) {
+      setDeleteSuggestionError(error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"));
+    } finally {
+      setDismissingId(null);
+    }
+  };
 
   const renderRow = (row: ReviewRow, projectionStale = false) => {
     const mutation = editedById.get(row.mutation.id) ?? row.mutation;
@@ -1084,7 +1135,13 @@ export default function ReviewQueue({
             )}
           </p>
         ) : null}
-        <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-2">
+        <div
+          role="group"
+          aria-label={localizeUi(
+            "ui.longTermMemory.reviewqueue.mutationActions",
+          )}
+          className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-2"
+        >
           <Button
             primary
             disabled={
@@ -1107,7 +1164,25 @@ export default function ReviewQueue({
   };
 
   return (
-    <section data-ltm-surface="review-queue" className="space-y-4">
+    <section
+      data-ltm-surface="review-queue"
+      aria-label={localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
+      className="space-y-4"
+    >
+      {review.isLoading ? (
+        <StatusSurface busy>
+          {localizeUi("ui.longTermMemory.reviewqueue.loadingPendingReviewDrafts")}
+        </StatusSurface>
+      ) : null}
+      {review.isError ? (
+        <StatusSurface tone="danger">
+          {review.error instanceof Error
+            ? review.error.message
+            : localizeUi(
+                "ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad",
+              )}
+        </StatusSurface>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3">
         <div>
           <h2 className="text-sm font-semibold">
@@ -1153,6 +1228,10 @@ export default function ReviewQueue({
           {selectedRows.length ? (
             <div
               data-ltm-review-batch-actions
+              role="group"
+              aria-label={localizeUi(
+                "ui.longTermMemory.reviewqueue.batchActions",
+              )}
               className="flex flex-wrap items-center gap-2"
             >
               <Button
@@ -1277,12 +1356,93 @@ export default function ReviewQueue({
             : ""}
         </StatusSurface>
       ) : null}
-      {!review.data?.sources.length ? (
+      {deleteSuggestionError ? (
+        <StatusSurface tone="danger">{deleteSuggestionError}</StatusSurface>
+      ) : null}
+      {rejectedSuggestions.isLoading ? (
+        <StatusSurface busy>
+          {localizeUi("ui.longTermMemory.reviewqueue.loadingRejectedSuggestions")}
+        </StatusSurface>
+      ) : null}
+      {!review.isLoading && !review.isError && !rejectedSuggestions.isLoading && !rejectedSuggestions.isError && !review.data?.sources.length && !rejectedSuggestions.data?.suggestions.length ? (
         <StatusSurface>
           {localizeUi(
             "ui.longTermMemory.reviewqueue.noProposedMemoriesNeedReviewYetImportASource",
           )}
         </StatusSurface>
+      ) : null}
+      {rejectedSuggestions.isError ? (
+        <StatusSurface tone="danger">
+          {localizeUi("ui.longTermMemory.reviewqueue.rejectedSuggestionsCouldNotLoad")}
+        </StatusSurface>
+      ) : null}
+      {rejectedSuggestions.data?.suggestions.length ? (
+        <section
+          data-ltm-rejected-suggestions
+          aria-label={localizeUi("ui.longTermMemory.reviewqueue.suggestionsThatWerentSaved")}
+          className="space-y-3"
+        >
+          <header>
+            <h2 className="text-sm font-semibold">
+              {localizeUi("ui.longTermMemory.reviewqueue.suggestionsThatWerentSaved")}
+            </h2>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.reviewqueue.rejectedSuggestionsRemainUntilAction")}
+            </p>
+          </header>
+          {[...new Set(rejectedSuggestions.data.suggestions.map((item) => item.source.sourceNoteId))].map((sourceNoteId) => {
+            const items = rejectedSuggestions.data!.suggestions.filter((item) => item.source.sourceNoteId === sourceNoteId);
+            return (
+              <article key={sourceNoteId} data-ltm-rejected-source={sourceNoteId} className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+                <h3 className="text-sm font-semibold">
+                  {noteById.get(sourceNoteId)?.title || localizeUi("ui.longTermMemory.reviewqueue.untitledMemory")}
+                </h3>
+                {items.map((item) => (
+                  <div key={item.id} data-ltm-rejected-suggestion={item.id} className="space-y-2 border-t border-[var(--border)] pt-3">
+                    <p className="text-xs font-semibold">{localizeUi("ui.longTermMemory.reviewqueue.proposedContent")}</p>
+                    <p className="text-sm">{item.candidate.snippet || item.candidate.message}</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      <span className="font-medium">{localizeUi("ui.longTermMemory.reviewqueue.whyItWasntSaved")}:</span>{" "}
+                      {localizeUi(
+                        rejectionReasonLabels[item.candidate.reason] ??
+                          "ui.longTermMemory.reviewqueue.rejectionReasonOther",
+                      )}
+                    </p>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      <span className="font-medium">{localizeUi("ui.longTermMemory.reviewqueue.whatWasExpected")}:</span>{" "}
+                      {item.candidate.recovery ? recoveryLabel(item.candidate.recovery, localizeUi) : localizeUi("ui.longTermMemory.reviewqueue.reviewAndCorrectSuggestion")}
+                    </p>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      <span className="font-medium">{localizeUi("ui.longTermMemory.reviewqueue.recommendedFix")}:</span>{" "}
+                      {localizeUi(
+                        rejectionRecommendedLabels[item.candidate.reason] ??
+                          "ui.longTermMemory.reviewqueue.recommendedFixOther",
+                      )}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {onRecoverCandidate ? (
+                        <Button
+                          aria-label={localizeUi("ui.longTermMemory.reviewqueue.recoverSuggestionNamed", { value1: item.candidate.message })}
+                          onClick={() => onRecoverCandidate(item.candidate, item.scope, item.modes, item.id)}
+                        >
+                          {localizeUi("ui.longTermMemory.reviewqueue.recoverManually")}
+                        </Button>
+                      ) : null}
+                      <Button
+                        destructive
+                        aria-label={localizeUi("ui.longTermMemory.reviewqueue.deleteSuggestionNamed", { value1: item.candidate.message })}
+                        disabled={dismissingId !== null}
+                        onClick={() => void deleteRejectedSuggestion(item)}
+                      >
+                        {localizeUi("ui.longTermMemory.reviewqueue.delete")}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </article>
+            );
+          })}
+        </section>
       ) : null}
       {review.data?.sources.map((source) => {
         const projectedIds = new Set(

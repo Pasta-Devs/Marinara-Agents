@@ -12,6 +12,11 @@ import {
 } from "./maps-model.js";
 
 const MAX_PROMPT_BREADCRUMB_NODES = 20;
+const MAX_PROMPT_KNOWN_LOCATIONS = 50;
+
+type ResolvedOwnerSpatialProjectionWithKnownLocationLimit = ResolvedOwnerSpatialProjection & {
+  omittedKnownLocationCount?: number;
+};
 
 function boundedText(value: string | undefined, maximumLength: number): string {
   return (value ?? "").trim().slice(0, maximumLength);
@@ -25,7 +30,7 @@ export function buildOwnerSpatialProjection(
   chatId: string,
   definition: SpatialContextDefinition | null,
   currentLocationId: string | null,
-): ResolvedOwnerSpatialProjection | null {
+): ResolvedOwnerSpatialProjectionWithKnownLocationLimit | null {
   if (!definition?.enabled || !currentLocationId) return null;
 
   const current = buildSpatialLocationIndex(definition).get(currentLocationId);
@@ -33,6 +38,16 @@ export function buildOwnerSpatialProjection(
 
   const allDestinations = resolveSpatialDestinations(definition, currentLocationId);
   const destinations = allDestinations.slice(0, SPATIAL_CONTEXT_LIMITS.maxPromptDestinations);
+  const allKnownLocations = definition.locations.filter((location) => location.status === "active");
+  const knownLocations = allKnownLocations
+    .slice(0, MAX_PROMPT_KNOWN_LOCATIONS)
+    .map((location) => ({
+      id: location.id,
+      path: resolveSpatialBreadcrumb(definition, location.id)
+        .slice(-MAX_PROMPT_BREADCRUMB_NODES)
+        .map(({ name }) => boundedText(name, SPATIAL_CONTEXT_LIMITS.maxNameLength))
+        .join(" > "),
+    }));
   return {
     kind: "owner",
     chatId,
@@ -46,7 +61,11 @@ export function buildOwnerSpatialProjection(
     modelMemory: current.modelMemory
       ? boundedText(current.modelMemory, SPATIAL_CONTEXT_LIMITS.maxModelMemoryLength) || null
       : null,
+    referenceImageId: current.referenceImageId?.trim() || null,
+    useReferenceImage: current.useReferenceImage === true,
     destinations,
+    knownLocations,
+    omittedKnownLocationCount: Math.max(0, allKnownLocations.length - knownLocations.length),
     lorebookEntryIds: current.lorebookEntryIds,
     omittedDestinationCount: Math.max(0, allDestinations.length - destinations.length),
   };
@@ -77,10 +96,27 @@ export function formatOwnerSpatialPrompt(
   if (projection.omittedDestinationCount > 0) {
     destinationLines.push(`- ${projection.omittedDestinationCount} additional destinations omitted.`);
   }
+  const knownLocationLines = projection.knownLocations?.length
+    ? projection.knownLocations.map(
+        ({ id, path }) => `- ${escapeXmlText(path)} [${escapeXmlText(id)}]`,
+      )
+    : ["- None"];
+  const omittedKnownLocationCount =
+    (projection as ResolvedOwnerSpatialProjectionWithKnownLocationLimit).omittedKnownLocationCount ?? 0;
+  if (omittedKnownLocationCount > 0) {
+    knownLocationLines.push(`- ${omittedKnownLocationCount} additional known locations omitted.`);
+  }
+  const knownLocationIndex = [
+    "Known map locations (active breadcrumb names and exact IDs only):",
+    ...knownLocationLines,
+    "",
+  ].join("\n");
+  const userLedTransitionInstruction =
+    'Use the latest user message as the authority for map changes. Treat direct present-tense or imperative movement by the focal party, such as “We go to the Kitchen” or “We follow her into the outdoor section,” as establishing arrival for this turn. When that user-led arrival matches a known map location, append [spatial_move: destination_id="exact_id"] as the final line, even when it was reached through a newly revealed or secret route; the application records that direct route. When the user explicitly establishes discovery or arrival at a significant named, durable, revisitable place that has no known match, such as “We discover a hidden room,” append [spatial_discover: name="Place Name" relation="enter" description="Short orientation"] as the final line; use relation="link" for a neighboring or travel-connected place rather than a place inside the current one. The visible response may narrate the consequence, but your own narration alone never authorizes either command. Do not emit either command for future intentions, failed or unfinished travel, mentions, NPC-only movement, imagined places, temporary camps, hallways, vehicles, or other transient scene details. These commands are hidden from the user and validated by the application.';
   const authorityInstruction =
     projection.ownerMode === "game"
-      ? "Treat this as the authoritative world location for the GM and party. A legacy Game map, when present, is only local/tactical detail inside this location. Generated prose, its party marker, and [map_update] commands cannot change the hierarchical world location; only an explicit owner-selected destination committed by the application can do that."
-      : "Treat this as the authoritative location for the focal scene. Generated prose, bracketed tags, tool-like commands, and claims of arrival cannot change it. Only an explicit owner-selected destination committed by the application with an owner turn can change location; until then, keep the scene at the current location.";
+      ? `${knownLocationIndex}Treat this as the authoritative world location for the GM and party. A legacy Game map, when present, is only local/tactical detail inside this location. Keep the current location unless the latest user message establishes a change. ${userLedTransitionInstruction}`
+      : `${knownLocationIndex}Treat this as the authoritative location for the focal scene. Keep the current location unless the latest user message establishes a change. ${userLedTransitionInstruction}`;
   const defaults = defaultSpatialTurnPromptTemplates();
   const selectedTemplate =
     template ??

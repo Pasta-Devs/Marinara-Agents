@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "knowledge-router",
   "name": "Knowledge Router",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Lower-cost alternative to Knowledge Retrieval. Reads a short catalog of lorebook entries (descriptions or content snippets), picks which ones are relevant to the current scene, and injects them verbatim — no per-entry summarization passes. Best for large lorebooks where you've written entry descriptions. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
-    "maxExclusive": "3.0.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "8d79fbfcffcf11fe03639f5db339b2cf65383fc6060ae6a733c3c17d913b6b69",
-      "bytes": 1707
+      "sha256": "10acd80dfa8a32a9c42a0754d69ee702adbb6353cac72514f648b31178bff239",
+      "bytes": 1685
     }
   ],
   "permissions": [

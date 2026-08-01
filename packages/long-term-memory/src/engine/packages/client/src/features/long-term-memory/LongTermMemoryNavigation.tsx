@@ -63,6 +63,7 @@ export function LongTermMemoryNavigation({
   const items = destinations.map((item) => {
     const active = item.id === destination;
     const badge = item.badge ? badges?.[item.badge] : undefined;
+    const label = localizeUi(mobile ? item.shortLabelKey : item.labelKey);
     const Icon = item.icon;
     return (
       <button
@@ -73,14 +74,14 @@ export function LongTermMemoryNavigation({
         aria-current={active ? "page" : undefined}
         onClick={() => onDestinationChange(item.id)}
         data-active={active}
-        className={`mari-editor-tab relative flex shrink-0 items-center gap-2 rounded-lg text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] ${
+        className={`mari-editor-tab relative flex items-center gap-2 rounded-lg text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] ${
           mobile
             ? "min-h-14 min-w-0 flex-1 flex-col justify-center gap-1 px-2 text-[0.625rem]"
-            : "min-h-11 justify-start px-3 text-left"
+            : "min-h-10 shrink-0 justify-start whitespace-nowrap px-3 text-left"
         }`}
       >
         <Icon aria-hidden="true" size={mobile ? "1.125rem" : "0.875rem"} />
-        <span>{localizeUi(mobile ? item.shortLabelKey : item.labelKey)}</span>
+        <span>{label}</span>
         {typeof badge === "number" && badge > 0 ? (
           <span data-ltm-badge className="mari-editor-tab-badge">
             {badge}
@@ -91,17 +92,51 @@ export function LongTermMemoryNavigation({
   });
 
   return (
-    <nav
+    <>
+      {mobile ? (
+        <style>{`
+          [data-ltm-navigation="mobile"] {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            width: 100%;
+          }
+          [data-ltm-navigation="mobile"] > [data-ltm-control="navigation"] {
+            min-width: 0;
+            width: 100%;
+          }
+          [data-ltm-navigation="mobile"] [data-ltm-badge] {
+            position: absolute;
+            left: 0.375rem;
+            top: 0.375rem;
+            margin-left: 0;
+          }
+          [data-ltm-navigation="desktop"] {
+            display: none;
+          }
+          @media (min-width: 48rem) {
+            [data-ltm-navigation="mobile"] {
+              display: none;
+            }
+            [data-ltm-navigation="desktop"] {
+              display: flex;
+            }
+          }
+        `}</style>
+      ) : null}
+      <nav
       aria-label={localizeUi(
         "ui.longTermMemory.longtermmemorynavigation.longTermMemorySections",
       )}
+      data-ltm-navigation={mobile ? "mobile" : "desktop"}
       className={
         mobile
-          ? "mari-editor-tab-rail flex shrink-0 border-t md:hidden"
-          : "mari-editor-tab-rail hidden w-48 shrink-0 flex-col gap-1 rounded-xl border p-2 md:flex"
+          ? "mari-editor-tab-rail w-full shrink-0 border-t"
+          : "mari-editor-tab-rail min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border p-1"
       }
+      style={mobile ? undefined : { overflowX: "auto" }}
     >
       {items}
-    </nav>
+      </nav>
+    </>
   );
 }

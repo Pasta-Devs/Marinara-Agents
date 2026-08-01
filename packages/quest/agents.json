@@ -8,8 +8,7 @@
     "defaultInjectAsSection": true,
     "category": "tracker",
     "modeAllowlist": [
-      "roleplay",
-      "visual_novel"
+      "roleplay"
     ],
     "defaultTools": [],
     "author": "Pasta Devs",

@@ -19,6 +19,7 @@ import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
 import { compileEvidenceUnitExtraction, sourceHashForEvidenceUnitExtraction } from "./evidence-unit-extraction.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 import { LtmServiceError } from "./service-error.js";
+import { addRejectedSuggestions } from "./rejected-suggestions.js";
 
 export type ImportedSourceItem={sourceId:string;title:string;note:LtmNote;created:boolean;deterministicSourceText?:string};
 type PreparedSource={operationId:string;chatId?:string;extractionMethod:"llm"|"deterministic";sourceNote:LtmNote;extractionMode:LtmMode;diagnostics:LtmExtractionDiagnostic[];outcome:LtmExtractionOutcome;accounting:LtmExtractionAccounting;response:LtmExtractionResponse;reviewRequired:boolean};
@@ -112,6 +113,10 @@ async function commitPreparedLongTermMemorySource(prepared: PreparedSource, opti
     accounting: prepared.accounting,
     reviewRequired: prepared.reviewRequired,
     chatId: prepared.chatId,
+    afterWrite: (draft) =>
+      draft.extractionOutcome?.droppedCandidates.length
+        ? addRejectedSuggestions(draft, options.root)
+        : Promise.resolve(),
   }, { root: options.root, overlay: options.overlay });
   const markCurrent = canMarkCurrent(prepared);
   const note = markCurrent && draft.source.extractionFingerprint

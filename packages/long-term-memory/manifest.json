@@ -10,11 +10,11 @@
   },
   "id": "long-term-memory",
   "name": "Long-Term Memory",
-  "version": "1.0.0",
-  "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, Visual Novel, and Game modes.",
+  "version": "1.0.7",
+  "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, and Game modes.",
   "engine": {
     "min": "2.3.5",
-    "maxExclusive": "2.4.0"
+    "maxExclusive": "4.0.0"
   },
   "kind": [
     "agent"
@@ -37,18 +37,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "0adc78f6b6bae09cdecbff6b266fe5940c2f420410f1fe551d7ec123e2c36987",
-      "bytes": 710
+      "sha256": "265dd5e220b501a1adf9159e290f5d8a4cc9d27d247ae9584d28cc856eee2623",
+      "bytes": 674
     },
     {
       "path": "server.mjs",
-      "sha256": "4bd5dff9f485304910c72a49f8ac8ce94c3f8c268e3c2677b202e2b773378da7",
-      "bytes": 342038
+      "sha256": "a8d1a40dfcc1692c7339fb8ab2aa5dc930314791e8dd665ecd3bdcaee28179dc",
+      "bytes": 347011
     },
     {
       "path": "client.js",
-      "sha256": "075d5a4de389de661866eccb2814db86dcfc9a464675aaa8dc40a6a029ba04c5",
-      "bytes": 519758
+      "sha256": "062ebbdf69bda1f0a5491267dcd930ff2c539728b6cc2a90c5c6eb72757b8ee5",
+      "bytes": 547764
     }
   ],
   "permissions": [

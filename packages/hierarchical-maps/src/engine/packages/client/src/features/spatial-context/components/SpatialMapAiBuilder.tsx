@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   BookOpen,
   Check,
   ChevronDown,
@@ -29,15 +31,18 @@ import type {
 import { compareSpatialLocations } from "@marinara-engine/shared";
 import {
   useGenerateSpatialMapDraft,
+  useGenerateSpatialMapTemplateDraft,
   useSpatialGenerationPromptLibraries,
   type MapsGenerateSpatialMapDraftResponse,
 } from "../../../hooks/use-spatial-context";
 import { cn } from "../package-utils";
+import { SpatialLocationIcon } from "./SpatialLocationIcon";
 import {
   HIERARCHY_TEMPLATES,
   generationPreferencesWithPromptLibrary,
   hierarchyTypeForLocation,
   hierarchyTypeId,
+  moveSpatialHierarchyType,
   normalizeHierarchyProfile,
   profileFromTemplate,
   type SpatialGenerationPreferences,
@@ -46,6 +51,7 @@ import {
 
 interface SpatialMapAiBuilderProps {
   chatId: string;
+  standalone?: boolean;
   ownerMode: SpatialOwnerMode;
   open: boolean;
   definition: SpatialContextDefinition;
@@ -92,7 +98,8 @@ const SIZE_OPTIONS: Array<{
   { value: "large", label: "Large", description: "About 28 places" },
 ];
 
-function sourceCopy(ownerMode: SpatialOwnerMode): string {
+function sourceCopy(ownerMode: SpatialOwnerMode, standalone: boolean): string {
+  if (standalone) return "Uses only your instructions and any lorebooks you explicitly select. No chat or Game plot is used.";
   return ownerMode === "game"
     ? "Uses the game setup, world overview, and party characters. Turn history is not included."
     : "Uses the chat setup and character cards. Turn history is not included.";
@@ -152,6 +159,7 @@ function withHierarchyProfile(
 
 export function SpatialMapAiBuilder({
   chatId,
+  standalone = false,
   ownerMode,
   open,
   definition,
@@ -173,6 +181,7 @@ export function SpatialMapAiBuilder({
   onApply,
 }: SpatialMapAiBuilderProps) {
   const generateDraft = useGenerateSpatialMapDraft();
+  const generateTemplateDraft = useGenerateSpatialMapTemplateDraft();
   const promptLibraries = useSpatialGenerationPromptLibraries();
   const generationPreferencesOverride = useMemo(
     () =>
@@ -194,7 +203,9 @@ export function SpatialMapAiBuilder({
         : definition.startingLocationId) ??
     activeLocations[0]?.id ??
     "";
-  const initialOperation = initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create");
+  const initialOperation = standalone
+    ? "create"
+    : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
   const [operation, setOperation] = useState<SpatialMapDraftOperation>(initialOperation);
   const [targetLocationId, setTargetLocationId] = useState(defaultTargetLocationId);
   const [size, setSize] = useState<SpatialMapDraftSize>(initialSession?.size ?? initialResult?.size ?? "medium");
@@ -303,7 +314,9 @@ export function SpatialMapAiBuilder({
 
   useEffect(() => {
     if (!open) return;
-    const nextOperation = initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create");
+    const nextOperation = standalone
+      ? "create"
+      : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
     setOperation(nextOperation);
     setTargetLocationId(initialSession?.targetLocationId ?? initialResult?.targetLocationId ?? defaultTargetLocationId);
     setSize(initialSession?.size ?? initialResult?.size ?? "medium");
@@ -326,11 +339,10 @@ export function SpatialMapAiBuilder({
     async (request: SpatialMapAiBuilderRequest) => {
       setError(null);
       try {
-        const generated = await generateDraft.mutateAsync({
-          chatId,
-          operation: request.operation,
+        const requestInput = {
+          operation: standalone ? "create" : request.operation,
           size: request.size,
-          ...(request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
+          ...(!standalone && request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
           instructions: request.instructions.trim() || undefined,
           groundingMode: request.groundingMode,
           sourceLorebookIds: request.groundingMode === "setup" ? [] : request.sourceLorebookIds,
@@ -338,14 +350,17 @@ export function SpatialMapAiBuilder({
           ...(request.hierarchyProfile ? { hierarchyProfile: request.hierarchyProfile } : {}),
           generationPreferencesOverride,
           debugMode,
-        });
+        };
+        const generated = standalone
+          ? await generateTemplateDraft.mutateAsync(requestInput)
+          : await generateDraft.mutateAsync({ chatId, ...requestInput });
         setResult(withHierarchyProfile(generated, request.hierarchyProfile ?? workingHierarchyProfile));
       } catch (generationError) {
         setResult(null);
         setError(generationError instanceof Error ? generationError.message : "The map draft could not be generated.");
       }
     },
-    [chatId, debugMode, generateDraft, generationPreferencesOverride, workingHierarchyProfile],
+    [chatId, debugMode, generateDraft, generateTemplateDraft, generationPreferencesOverride, standalone, workingHierarchyProfile],
   );
 
   useEffect(() => {
@@ -418,7 +433,8 @@ export function SpatialMapAiBuilder({
   const resultHierarchyValid = Boolean(
     result && result.hierarchyProfile.types.every((type) => type.label.trim().length > 0),
   );
-  const generationDisabled = generateDraft.isPending || requestInvalid;
+  const generationPending = generateDraft.isPending || generateTemplateDraft.isPending;
+  const generationDisabled = generationPending || requestInvalid;
   const generate = () => runGeneration(currentRequest);
   const selectedPreviewProvenance = selectedPreviewLocation ? result?.provenance?.[selectedPreviewLocation.id] : null;
   const togglePreviewExpanded = (locationId: string) => {
@@ -470,9 +486,7 @@ export function SpatialMapAiBuilder({
             aria-current={selected ? "true" : undefined}
             className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
           >
-            <span className="text-base" aria-hidden="true">
-              {location.icon || "⌖"}
-            </span>
+            <SpatialLocationIcon icon={location.icon} className="text-base" />
             <span className="min-w-0 flex-1 py-1">
               <span className="block truncate text-xs font-medium text-[var(--marinara-editor-title)]">
                 {location.name || "Untitled location"}
@@ -551,7 +565,7 @@ export function SpatialMapAiBuilder({
             </div>
           )}
 
-          {advancedOpen && hasLocations && !hasCommittedSpatialHistory && (
+          {!standalone && advancedOpen && hasLocations && !hasCommittedSpatialHistory && (
             <fieldset className="mb-4">
               <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">AI action</legend>
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -560,7 +574,7 @@ export function SpatialMapAiBuilder({
                     key={value}
                     type="button"
                     aria-pressed={operation === value}
-                    disabled={generateDraft.isPending}
+                    disabled={generationPending}
                     onClick={() => {
                       setOperation(value);
                       resetResult();
@@ -590,7 +604,7 @@ export function SpatialMapAiBuilder({
               <select
                 id="spatial-ai-target"
                 value={targetLocationId}
-                disabled={generateDraft.isPending}
+                disabled={generationPending}
                 onChange={(event) => {
                   setTargetLocationId(event.target.value);
                   resetResult();
@@ -624,7 +638,7 @@ export function SpatialMapAiBuilder({
                     key={option.value}
                     type="button"
                     aria-pressed={hierarchyMode === option.value}
-                    disabled={generateDraft.isPending}
+                    disabled={generationPending}
                     onClick={() => {
                       setHierarchyMode(option.value);
                       if (option.value === "template") {
@@ -680,7 +694,10 @@ export function SpatialMapAiBuilder({
                     placeholder="Custom hierarchy name"
                   />
                   {workingHierarchyProfile.types.map((type, index) => (
-                    <div key={type.id} className="grid grid-cols-[minmax(0,1fr)_8rem_2.75rem] gap-2">
+                    <div
+                      key={type.id}
+                      className="grid grid-cols-[minmax(0,1fr)_8rem] gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]/40 p-2"
+                    >
                       <input
                         aria-label={`Location type ${index + 1} label`}
                         value={type.label}
@@ -716,31 +733,60 @@ export function SpatialMapAiBuilder({
                           <option key={kind} value={kind}>{kind}</option>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        disabled={workingHierarchyProfile.types.length === 1}
-                        onClick={() => {
-                          setWorkingHierarchyProfile((current) =>
-                            normalizeHierarchyProfile(
-                              {
-                                ...current,
-                                types: current.types.filter((candidate) => candidate.id !== type.id),
-                                locationTypeIds: Object.fromEntries(
-                                  Object.entries(current.locationTypeIds).filter(
-                                    ([, assignedTypeId]) => assignedTypeId !== type.id,
+                      <div className="col-span-2 flex items-center justify-end gap-1" aria-label={`Order ${type.label || "location type"}`}>
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => {
+                            setWorkingHierarchyProfile((current) => moveSpatialHierarchyType(current, type.id, -1));
+                            resetResult();
+                          }}
+                          className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                          aria-label={`Move ${type.label || "location type"} up`}
+                          title="Move up"
+                        >
+                          <ArrowUp size="0.75rem" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === workingHierarchyProfile.types.length - 1}
+                          onClick={() => {
+                            setWorkingHierarchyProfile((current) => moveSpatialHierarchyType(current, type.id, 1));
+                            resetResult();
+                          }}
+                          className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                          aria-label={`Move ${type.label || "location type"} down`}
+                          title="Move down"
+                        >
+                          <ArrowDown size="0.75rem" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={workingHierarchyProfile.types.length === 1}
+                          onClick={() => {
+                            setWorkingHierarchyProfile((current) =>
+                              normalizeHierarchyProfile(
+                                {
+                                  ...current,
+                                  types: current.types.filter((candidate) => candidate.id !== type.id),
+                                  locationTypeIds: Object.fromEntries(
+                                    Object.entries(current.locationTypeIds).filter(
+                                      ([, assignedTypeId]) => assignedTypeId !== type.id,
+                                    ),
                                   ),
-                                ),
-                              },
-                              definition,
-                            ),
-                          );
-                          resetResult();
-                        }}
-                        className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
-                        aria-label={`Remove ${type.label || "location type"}`}
-                      >
-                        <X size="0.75rem" />
-                      </button>
+                                },
+                                definition,
+                              ),
+                            );
+                            resetResult();
+                          }}
+                          className="mari-chrome-control h-11 w-11 p-0 disabled:opacity-35"
+                          aria-label={`Remove ${type.label || "location type"}`}
+                          title="Remove type"
+                        >
+                          <X size="0.75rem" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                   <button
@@ -791,7 +837,7 @@ export function SpatialMapAiBuilder({
                     key={option.value}
                     type="button"
                     aria-pressed={selected}
-                    disabled={generateDraft.isPending || (option.value !== "setup" && eligibleLorebooks.length === 0)}
+                    disabled={generationPending || (option.value !== "setup" && eligibleLorebooks.length === 0)}
                     onClick={() => {
                       setGroundingMode(option.value);
                       resetResult();
@@ -831,7 +877,7 @@ export function SpatialMapAiBuilder({
                       key={option.value}
                       type="button"
                       aria-pressed={groundingMode === option.value}
-                      disabled={generateDraft.isPending}
+                      disabled={generationPending}
                       onClick={() => {
                         setGroundingMode(option.value);
                         resetResult();
@@ -862,7 +908,7 @@ export function SpatialMapAiBuilder({
                         <input
                           type="checkbox"
                           checked={checked}
-                          disabled={generateDraft.isPending}
+                          disabled={generationPending}
                           onChange={() => {
                             setSourceLorebookIds((ids) => (checked ? ids.filter((id) => id !== lorebook.id) : [...ids, lorebook.id]));
                             resetResult();
@@ -888,7 +934,7 @@ export function SpatialMapAiBuilder({
             ref={requestInputRef}
             id="spatial-ai-request"
             value={instructions}
-            disabled={generateDraft.isPending}
+            disabled={generationPending}
             onChange={(event) => {
               setInstructions(event.target.value);
               resetResult();
@@ -916,7 +962,7 @@ export function SpatialMapAiBuilder({
                   key={option.value}
                   type="button"
                   aria-pressed={size === option.value}
-                  disabled={generateDraft.isPending}
+                  disabled={generationPending}
                   onClick={() => {
                     setSize(option.value);
                     resetResult();
@@ -937,7 +983,7 @@ export function SpatialMapAiBuilder({
 
           <p className="mt-4 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
             {groundingMode === "setup"
-              ? sourceCopy(ownerMode)
+              ? sourceCopy(ownerMode, standalone)
               : `Uses ${sourceLorebookIds.length} selected lorebook${sourceLorebookIds.length === 1 ? "" : "s"} plus setup context. Turn history is not included.`}
           </p>
           {setupReview && (
@@ -971,7 +1017,7 @@ export function SpatialMapAiBuilder({
                 disabled={generationDisabled}
                 className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs disabled:opacity-50"
               >
-                {generateDraft.isPending ? (
+                {generationPending ? (
                   <>
                     <LoaderCircle size="0.8125rem" className="animate-spin" /> Building map
                   </>
@@ -987,7 +1033,7 @@ export function SpatialMapAiBuilder({
 
         <div className="flex min-h-56 flex-col bg-[var(--marinara-editor-bg)] p-4" aria-live="polite">
           <h3 className="text-xs font-semibold text-[var(--marinara-editor-title)]">Draft preview</h3>
-          {generateDraft.isPending ? (
+          {generationPending ? (
             <div className="mt-4 space-y-3" aria-label="Generating map draft">
               <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--marinara-editor-surface)]" />
               <div className="h-12 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />
@@ -1128,9 +1174,7 @@ export function SpatialMapAiBuilder({
                     {selectedPreviewPath.map((location) => location.name).join(" / ")}
                   </p>
                   <div className="mt-2 flex items-start gap-3">
-                    <span className="text-xl" aria-hidden="true">
-                      {selectedPreviewLocation.icon || "⌖"}
-                    </span>
+                    <SpatialLocationIcon icon={selectedPreviewLocation.icon} className="text-xl" />
                     <div className="min-w-0 flex-1">
                       <h4 className="text-sm font-semibold text-[var(--marinara-editor-title)]">{selectedPreviewLocation.name}</h4>
                       <p className="mt-0.5 text-[0.625rem] capitalize text-[var(--marinara-editor-muted)]">

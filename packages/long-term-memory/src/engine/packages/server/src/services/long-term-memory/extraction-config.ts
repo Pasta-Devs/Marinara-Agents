@@ -25,6 +25,7 @@ import { withLtmVaultLock } from "./vault-lock.js";
 export const DEFAULT_LTM_EXTRACTION_CONFIG =
   ltmResolvedExtractionSettingsSchema.parse({
     version: 1,
+    connectionId: null,
     systemPrompt: DEFAULT_LTM_EXTRACTION_PROMPT,
     reasoningEffort: DEFAULT_LTM_EXTRACTION_REASONING_EFFORT,
     verbosity: DEFAULT_LTM_EXTRACTION_VERBOSITY,

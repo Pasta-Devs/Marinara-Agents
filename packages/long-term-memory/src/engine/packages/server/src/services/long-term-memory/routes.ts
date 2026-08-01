@@ -44,6 +44,7 @@ import {
   ltmStatusSchema,
   ltmSourceDerivedMemoriesResponseSchema,
   ltmSubjectsSchema,
+  ltmRejectedSuggestionsResponseSchema,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   clearLtmDebugLog,
@@ -67,6 +68,7 @@ import {
 import {
   getPackageLanguageModels,
   getPackagePersistence,
+  getPackageResources,
   logger,
 } from "./package-runtime.js";
 import { getLongTermMemoryDirectories, LTM_DIR_NAME } from "./paths.js";
@@ -78,15 +80,17 @@ import {
 import { readLtmIndexState, readLtmNoteSummary } from "./index-state.js";
 import { CURRENT_LTM_CHUNK_FORMAT_VERSION } from "./chunking.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
-import {
-  applyLongTermMemoryDraft,
-} from "./reconciliation.js";
+import { applyLongTermMemoryDraft } from "./reconciliation.js";
 import { applyLtmScopeLinksToDerivedNotes } from "./scope-links.js";
 import { getLtmGlobalSettings, updateLtmGlobalSettings } from "./settings.js";
 import type { LongTermMemoryDraftStore } from "./draft-store.js";
 import type { LongTermMemoryStorage } from "./storage.js";
 import { readLongTermMemoryInjectionReceipt } from "./usage.js";
-import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
+import {
+  ltmModeForChatMode,
+  normalizeLtmChatCharacterIds,
+  resolveChatLtmScope,
+} from "./chat-scope.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
 import {
@@ -113,6 +117,10 @@ import {
   replaceLongTermMemoryData,
   resetLongTermMemorySettings,
 } from "./backup-restore.js";
+import {
+  deleteRejectedSuggestion,
+  listRejectedSuggestions,
+} from "./rejected-suggestions.js";
 
 const NOTE_BODY_LIMIT_BYTES = 512 * 1024;
 const DRAFT_BODY_LIMIT_BYTES = 512 * 1024;
@@ -161,8 +169,27 @@ const listNotesQuery = z
 const scopeTargetsQuery = z
   .object({
     chatId: z.string().min(1).max(120).optional(),
+    includeAllChats: queryBoolean,
   })
   .strict();
+
+function numberDuplicateLabels<T extends { id: string; label: string }>(
+  items: T[],
+) {
+  const totals = new Map<string, number>();
+  const seen = new Map<string, number>();
+  for (const item of items)
+    totals.set(item.label, (totals.get(item.label) ?? 0) + 1);
+  return items.map((item) => {
+    if ((totals.get(item.label) ?? 0) < 2) return item;
+    const number = seen.get(item.label) ?? 0;
+    seen.set(item.label, number + 1);
+    return {
+      ...item,
+      label: number ? `${item.label} (${number})` : item.label,
+    };
+  });
+}
 const createNoteBody = z
   .object({
     id: ltmNoteIdSchema,
@@ -258,6 +285,12 @@ const draftReviewQuery = z
     status: ltmDraftStatusSchema.optional(),
   })
   .strict();
+const rejectedSuggestionsQuery = z
+  .object({
+    sourceNoteId: ltmNoteIdSchema.optional(),
+    chatId: z.string().min(1).max(120).optional(),
+  })
+  .strict();
 const acceptDraftBody = z
   .object({
     mutationIds: z.array(z.string().uuid()).min(1).optional(),
@@ -278,8 +311,17 @@ const debugQuery = z
   .strict();
 function routeError(error: unknown, fallback: string) {
   if (error instanceof z.ZodError)
-    return { statusCode: 400, body: { error: error.message, code: "ltm_invalid_request" } };
-  if (error instanceof LtmServiceError || (error && typeof error === "object" && "statusCode" in error && "code" in error))
+    return {
+      statusCode: 400,
+      body: { error: error.message, code: "ltm_invalid_request" },
+    };
+  if (
+    error instanceof LtmServiceError ||
+    (error &&
+      typeof error === "object" &&
+      "statusCode" in error &&
+      "code" in error)
+  )
     return ltmErrorResponse(error, fallback);
   const message = error instanceof Error ? error.message : fallback;
   return {
@@ -325,7 +367,10 @@ export function createLongTermMemoryRoutes(runtime: {
         readLtmNoteSummary(root),
         readLtmIndexState(root),
         readFile(longTermMemoryRecallIndexPath(root), "utf8")
-          .then((value) => ({ index: parseLtmRecallIndex(JSON.parse(value)), corrupt: false }))
+          .then((value) => ({
+            index: parseLtmRecallIndex(JSON.parse(value)),
+            corrupt: false,
+          }))
           .catch((error) => ({ index: null, corrupt: !isEnoent(error) })),
       ]);
       const { index } = indexResult;
@@ -343,19 +388,21 @@ export function createLongTermMemoryRoutes(runtime: {
           health: indexResult.corrupt
             ? "corrupt"
             : state.rebuildState === "failed"
-            ? "stale"
-            : state.rebuildState === "building"
-              ? "degraded"
-            : index
-              ? state.dirty ? "stale" : "healthy"
-              : "not_built",
+              ? "stale"
+              : state.rebuildState === "building"
+                ? "degraded"
+                : index
+                  ? state.dirty
+                    ? "stale"
+                    : "healthy"
+                  : "not_built",
           dirty: state.dirty,
           rebuildState: state.rebuildState,
           errors: indexResult.corrupt
             ? [{ index: "recall", code: "recall_index_unreadable" }]
             : state.rebuildState === "failed"
-            ? [{ index: "recall", code: "index_rebuild_failed" }]
-            : [],
+              ? [{ index: "recall", code: "index_rebuild_failed" }]
+              : [],
           warnings: state.error ? [state.error] : [],
           generatedAt: index?.generatedAt ?? null,
           sourceHash: index?.sourceHash ?? null,
@@ -512,55 +559,128 @@ export function createLongTermMemoryRoutes(runtime: {
       });
       const hasMore = notes.length > query.limit;
       reply.header("x-ltm-has-more", String(hasMore));
-      if (hasMore) reply.header("x-ltm-next-offset", String(query.offset + query.limit));
+      if (hasMore)
+        reply.header("x-ltm-next-offset", String(query.offset + query.limit));
       return notes.slice(0, query.limit);
     });
     app.get<{ Querystring: unknown }>("/scope-targets", async (request) => {
-      const { chatId } = scopeTargetsQuery.parse(request.query);
-      const [notes, chats] = await Promise.all([
+      const { chatId, includeAllChats } = scopeTargetsQuery.parse(
+        request.query,
+      );
+      const [notes, chats, resources] = await Promise.all([
         storage.listNotes(),
         getPackagePersistence().listChats(),
+        getPackageResources().listCharacters(),
       ]);
       const chatById = new Map(chats.map((chat) => [chat.id, chat]));
       const currentChat = chatId ? (chatById.get(chatId) ?? null) : null;
       const chatIds = new Set<string>();
       const groupIds = new Set<string>();
       const characterIds = new Set<string>();
+      if (includeAllChats) {
+        for (const chat of chats) {
+          chatIds.add(chat.id);
+          if (chat.groupId) groupIds.add(chat.groupId);
+        }
+      }
       for (const note of notes) {
         for (const id of getLtmScopeChatIds(note.scope)) {
           chatIds.add(id);
           const chat = chatById.get(id);
           if (chat?.groupId) groupIds.add(chat.groupId);
+          normalizeLtmChatCharacterIds(chat?.characterIds).forEach(
+            (characterId) => characterIds.add(characterId),
+          );
         }
         if (note.scope.groupId) groupIds.add(note.scope.groupId);
         note.scope.characterIds?.forEach((id) => characterIds.add(id));
       }
-      return {
-        currentScope: currentChat ? resolveChatLtmScope(currentChat) : null,
-        chats: [...chatIds]
+      const namedChats = numberDuplicateLabels(
+        [...chatIds]
           .map((id) => chatById.get(id))
           .filter((chat): chat is NonNullable<typeof chat> => Boolean(chat))
           .map((chat) => ({
             id: chat.id,
-            label: chat.name || chat.id,
+            label: chat.name?.trim() || "Untitled chat",
             mode: ltmModeForChatMode(chat.mode),
             groupId: chat.groupId,
+            characterIds: normalizeLtmChatCharacterIds(chat.characterIds),
           }))
-          .sort((left, right) => left.label.localeCompare(right.label)),
-        groups: [...groupIds]
+          .sort(
+            (left, right) =>
+              left.label.localeCompare(right.label) ||
+              left.id.localeCompare(right.id),
+          ),
+      );
+      const resourceById = new Map(
+        resources.map((resource) => [resource.id, resource]),
+      );
+      const visibleCharacterIds = includeAllChats
+        ? new Set(resources.map((resource) => resource.id))
+        : characterIds;
+      const namedCharacters = numberDuplicateLabels(
+        [...visibleCharacterIds]
           .map((id) => {
-            const members = chats.filter((chat) => chat.groupId === id);
-            return {
-              id,
-              chatIds: members.map((chat) => chat.id),
-              label:
-                members.length > 1
-                  ? `${members[0]?.name || "Chat"} and ${members.length - 1} branch${members.length === 2 ? "" : "es"}`
-                  : members[0]?.name || id,
-            };
+            const rawData = resourceById.get(id)?.data;
+            let data: Record<string, unknown> | null = null;
+            if (typeof rawData === "string") {
+              try {
+                const parsed = JSON.parse(rawData);
+                if (
+                  parsed &&
+                  typeof parsed === "object" &&
+                  !Array.isArray(parsed)
+                )
+                  data = parsed as Record<string, unknown>;
+              } catch {
+                data = null;
+              }
+            } else if (
+              rawData &&
+              typeof rawData === "object" &&
+              !Array.isArray(rawData)
+            ) {
+              data = rawData as Record<string, unknown>;
+            }
+            const label =
+              data && "name" in data && typeof data.name === "string"
+                ? data.name.trim()
+                : "";
+            return { id, label: label || "Untitled character" };
           })
-          .sort((left, right) => left.label.localeCompare(right.label)),
-        characters: [...characterIds].sort().map((id) => ({ id, label: id })),
+          .sort(
+            (left, right) =>
+              left.label.localeCompare(right.label) ||
+              left.id.localeCompare(right.id),
+          ),
+      );
+      return {
+        currentScope: currentChat ? resolveChatLtmScope(currentChat) : null,
+        chats: namedChats,
+        groups: numberDuplicateLabels(
+          [...groupIds]
+            .map((id) => {
+              const members = chats.filter(
+                (chat) =>
+                  chat.groupId === id &&
+                  (includeAllChats || chatIds.has(chat.id)),
+              );
+              return {
+                id,
+                chatIds: members.map((chat) => chat.id),
+                label:
+                  namedChats
+                    .find((chat) => chat.id === members[0]?.id)
+                    ?.label?.trim() || "Untitled group",
+              };
+            })
+            .sort(
+              (left, right) =>
+                left.label.localeCompare(right.label) ||
+                left.id.localeCompare(right.id),
+            ),
+        ),
+        characters: namedCharacters,
       };
     });
     app.get<{ Params: { id: string } }>(
@@ -642,23 +762,35 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply
             .status(400)
             .send({ error: "Long-term memory note is not a source note" });
-        const chat = body.chatId
-          ? await getPackagePersistence().getChat(body.chatId)
+        const explicitChatId = body.chatId;
+        const chatId =
+          body.chatId ??
+          (sourceNote.provenance?.kind === "chat_summary"
+            ? sourceNote.provenance.sourceId
+            : undefined);
+        const chat = chatId
+          ? await getPackagePersistence().getChat(chatId)
           : null;
-        if (body.chatId && !chat)
+        if (explicitChatId && !chat)
           return reply.status(404).send({ error: "Chat not found" });
         const operationId = randomUUID();
         try {
           let languageModel;
           try {
+            const extractionConfig = await getLtmExtractionConfig(
+              root,
+              body.mode,
+            );
             languageModel = await getPackageLanguageModels().resolveForRequest({
-                connectionId: body.connectionId,
-                chatConnectionId: chat?.connectionId ?? null,
-                model: body.model,
-              });
+              connectionId: body.connectionId ?? extractionConfig.connectionId,
+              chatConnectionId: chat?.connectionId ?? null,
+              model: body.model,
+            });
           } catch (error) {
             throw new LtmServiceError(
-              error instanceof Error ? error.message : "Language model configuration is invalid",
+              error instanceof Error
+                ? error.message
+                : "Language model configuration is invalid",
               400,
               "ltm_model_configuration",
             );
@@ -679,7 +811,10 @@ export function createLongTermMemoryRoutes(runtime: {
           );
         } catch (error) {
           logger.error(error, "[ltm] Source note extraction route failed");
-          const result = routeError(error, "Failed to extract long-term memory from source note");
+          const result = routeError(
+            error,
+            "Failed to extract long-term memory from source note",
+          );
           return reply.status(result.statusCode).send(result.body);
         }
       },
@@ -712,21 +847,22 @@ export function createLongTermMemoryRoutes(runtime: {
       async (request, reply) => {
         const controller = new AbortController(),
           abort = () => controller.abort();
-        const body = ltmImportSourceNotesRequestSchema.parse(request.body ?? {});
+        const body = ltmImportSourceNotesRequestSchema.parse(
+          request.body ?? {},
+        );
         request.raw.once("aborted", abort);
         request.raw.once("close", () => {
           if (request.raw.aborted) abort();
         });
         try {
           return ltmImportSourceNotesResponseSchema.parse(
-            await importPackageInterop(
-              body,
-              root,
-              controller.signal,
-            ),
+            await importPackageInterop(body, root, controller.signal),
           );
         } catch (error) {
-          const result = routeError(error, "Failed to import long-term memory sources");
+          const result = routeError(
+            error,
+            "Failed to import long-term memory sources",
+          );
           return reply.status(result.statusCode).send(result.body);
         } finally {
           request.raw.off("aborted", abort);
@@ -752,7 +888,10 @@ export function createLongTermMemoryRoutes(runtime: {
             await previewLtmNoteTransfer(body, chat, { root, storage }),
           );
         } catch (error) {
-          const result = routeError(error, "Failed to preview long-term memory transfer");
+          const result = routeError(
+            error,
+            "Failed to preview long-term memory transfer",
+          );
           return reply.status(result.statusCode).send(result.body);
         }
       },
@@ -791,7 +930,10 @@ export function createLongTermMemoryRoutes(runtime: {
             }),
           );
         } catch (error) {
-          const result = routeError(error, "Failed to transfer long-term memory notes");
+          const result = routeError(
+            error,
+            "Failed to transfer long-term memory notes",
+          );
           return reply.status(result.statusCode).send(result.body);
         }
       },
@@ -827,7 +969,9 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply.status(201).send({ note, rebuild });
         } catch (error) {
           if (error instanceof LtmServiceError)
-            return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+            return reply
+              .status(error.statusCode)
+              .send({ error: error.message, code: error.code });
           throw error;
         }
       },
@@ -862,7 +1006,9 @@ export function createLongTermMemoryRoutes(runtime: {
           note = await storage.updateNote(id, patch);
         } catch (error) {
           if (error instanceof LtmServiceError)
-            return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+            return reply
+              .status(error.statusCode)
+              .send({ error: error.message, code: error.code });
           throw error;
         }
         const rebuild = await rebuildAfterMutation();
@@ -929,7 +1075,10 @@ export function createLongTermMemoryRoutes(runtime: {
             chatIds: [chatId],
           });
         } catch (error) {
-          const result = routeError(error, "Could not remove memory from scope");
+          const result = routeError(
+            error,
+            "Could not remove memory from scope",
+          );
           return reply.status(result.statusCode).send(result.body);
         }
         const rebuild = result.changed ? await rebuildAfterMutation() : null;
@@ -955,7 +1104,10 @@ export function createLongTermMemoryRoutes(runtime: {
             removeScopeBody.parse(request.body ?? {}),
           );
         } catch (error) {
-          const result = routeError(error, "Could not remove memory from scope");
+          const result = routeError(
+            error,
+            "Could not remove memory from scope",
+          );
           return reply.status(result.statusCode).send(result.body);
         }
         const rebuild = result.changed ? await rebuildAfterMutation() : null;
@@ -1076,6 +1228,16 @@ export function createLongTermMemoryRoutes(runtime: {
         }),
       );
     });
+    app.get<{ Querystring: unknown }>("/rejected-suggestions", async (request) => {
+      const query = rejectedSuggestionsQuery.parse(request.query);
+      const suggestions = await listRejectedSuggestions(query, root);
+      return ltmRejectedSuggestionsResponseSchema.parse({ suggestions, total: suggestions.length });
+    });
+    app.delete<{ Params: { id: string } }>("/rejected-suggestions/:id", async (request, reply) => {
+      const parsed = z.string().uuid().safeParse(request.params.id);
+      if (!parsed.success) return reply.status(400).send({ error: "Invalid rejected-suggestion ID", code: "ltm_invalid_request" });
+      return deleteRejectedSuggestion(parsed.data, root);
+    });
     app.post<{ Params: { id: string }; Body: unknown }>(
       "/drafts/:id/accept",
       { bodyLimit: DRAFT_BODY_LIMIT_BYTES },
@@ -1092,7 +1254,10 @@ export function createLongTermMemoryRoutes(runtime: {
             operationId: randomUUID(),
           });
         } catch (error) {
-          const result = routeError(error, "Failed to apply long-term memory draft");
+          const result = routeError(
+            error,
+            "Failed to apply long-term memory draft",
+          );
           return reply.status(result.statusCode).send(result.body);
         }
       },

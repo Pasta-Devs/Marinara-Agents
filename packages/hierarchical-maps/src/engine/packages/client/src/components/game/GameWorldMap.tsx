@@ -15,10 +15,15 @@ import {
   compareSpatialLocations,
   resolveSpatialBreadcrumb,
   spatialRadialPlacement,
-  type SpatialContextResponse,
   type SpatialLocation,
 } from "@marinara-engine/shared";
 import { cn, generateClientId } from "../../features/spatial-context/package-utils";
+import { SpatialLocationIcon } from "../../features/spatial-context/components/SpatialLocationIcon";
+import {
+  resolveSpatialArtworkImage,
+  useSpatialGalleryImages,
+  useSpatialGlobalGalleryImages,
+} from "../../features/spatial-context/use-spatial-resources";
 import {
   cancelSpatialRoute,
   findSpatialRoute,
@@ -30,10 +35,17 @@ import {
   setPendingSpatialTransition,
   usePendingSpatialTransition,
 } from "../../features/spatial-context/pending-spatial-transitions";
+import {
+  hierarchyTypeForLocation,
+  resolveSpatialLinkPresentation,
+  spatialLinkPresentationKey,
+  spatialLinkStrokeDasharray,
+  type MapsSpatialContextResponse,
+} from "../../../../maps-shared/src/maps-model";
 
 interface GameWorldMapProps {
   chatId: string;
-  spatial: SpatialContextResponse;
+  spatial: MapsSpatialContextResponse;
   disabled?: boolean;
   compact?: boolean;
   useParentScroll?: boolean;
@@ -45,7 +57,7 @@ function sortLocations(locations: SpatialLocation[]): SpatialLocation[] {
   return [...locations].sort(compareSpatialLocations);
 }
 
-function defaultViewLocationId(spatial: SpatialContextResponse): string | null {
+function defaultViewLocationId(spatial: MapsSpatialContextResponse): string | null {
   const definition = spatial.definition;
   if (!definition) return null;
   const current = definition.locations.find(
@@ -96,11 +108,22 @@ export function GameWorldMap({
     () => definition?.locations.filter((location) => location.status === "active") ?? [],
     [definition?.locations],
   );
+  const galleryImages = useSpatialGalleryImages(
+    chatId,
+    definition?.enabled === true && activeLocations.some((location) => Boolean(location.mapBackgroundImageId)),
+  );
+  const globalGalleryImages = useSpatialGlobalGalleryImages(
+    definition?.enabled === true && activeLocations.some((location) => Boolean(location.mapBackgroundImageId)),
+  );
   const locationById = useMemo(
     () => new Map(activeLocations.map((location) => [location.id, location])),
     [activeLocations],
   );
   const viewLocation = viewLocationId ? (locationById.get(viewLocationId) ?? null) : null;
+  const mapBackgroundImageUrl = viewLocation?.mapBackgroundImageId
+    ? resolveSpatialArtworkImage(viewLocation.mapBackgroundImageId, galleryImages.data, globalGalleryImages.data)?.url
+    : undefined;
+  const mapBackgroundPosition = viewLocation?.mapBackgroundPosition ?? { x: 50, y: 50 };
   const visibleLocations = useMemo(
     () =>
       sortLocations(
@@ -129,7 +152,7 @@ export function GameWorldMap({
     return visibleLocations.flatMap((location) =>
       location.links.flatMap((link) => {
         if (link.state !== "available" || !visibleLocationIds.has(link.targetId)) return [];
-        const key = [location.id, link.targetId].sort().join(":");
+        const key = spatialLinkPresentationKey(location.id, link.targetId);
         if (seen.has(key)) return [];
         seen.add(key);
         return [{ key, from: location.id, to: link.targetId }];
@@ -260,15 +283,18 @@ export function GameWorldMap({
         )}
         aria-label={`Inspect ${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-lg" aria-hidden="true">
-          {location.icon || "⌖"}
-        </span>
+        <SpatialLocationIcon
+          icon={location.icon}
+          className="flex h-8 w-8 max-w-8 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-lg"
+        />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
             {location.name}
           </span>
           <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
-            {layer ? `Layer ${location.layerOrder ?? 0}` : location.kind}
+            {layer
+              ? `Layer ${location.layerOrder ?? 0}`
+              : hierarchyTypeForLocation(spatial.hierarchyProfile, location).label}
             {isCurrent ? " · You are here" : isPending ? " · Pending" : ""}
           </span>
         </span>
@@ -294,7 +320,7 @@ export function GameWorldMap({
           </button>
           <div className="min-w-0 flex-1 text-center">
             <p className="truncate text-xs font-bold text-[var(--marinara-chat-chrome-panel-title)]">
-              <span className="mr-1" aria-hidden="true">{viewLocation?.icon || "🌍"}</span>
+              <SpatialLocationIcon icon={viewLocation?.icon} fallback="🌍" className="mr-1 max-w-[2.5em]" />
               {viewLocation?.name || "World"}
             </p>
             <p className="truncate text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]" title={currentBreadcrumb}>
@@ -316,8 +342,8 @@ export function GameWorldMap({
                 type="button"
                 onClick={onOpenEditor}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
-                aria-label="Edit hierarchical map"
-                title="Edit hierarchical map"
+                aria-label="Edit world map"
+                title="Edit world map"
               >
                 <PencilLine size="1rem" />
               </button>
@@ -412,7 +438,7 @@ export function GameWorldMap({
       >
         {visibleLocations.length === 0 ? (
           <div className="flex min-h-36 flex-col items-center justify-center px-5 text-center">
-            <span className="text-2xl" aria-hidden="true">{viewLocation?.icon || "📍"}</span>
+            <SpatialLocationIcon icon={viewLocation?.icon} fallback="📍" className="text-2xl" />
             <p className="mt-2 text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">No places inside this location</p>
             <p className="mt-1 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
               Browse up to see nearby places.
@@ -427,36 +453,60 @@ export function GameWorldMap({
               compact ? "h-56" : "h-52",
             )}
           >
+            {mapBackgroundImageUrl && (
+              <img
+                src={mapBackgroundImageUrl}
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                style={{ objectPosition: `${mapBackgroundPosition.x}% ${mapBackgroundPosition.y}%` }}
+              />
+            )}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 opacity-25"
+              className={cn(
+                "pointer-events-none absolute inset-0",
+                mapBackgroundImageUrl ? "opacity-15" : "opacity-25",
+              )}
               style={{
                 backgroundImage:
                   "linear-gradient(to right, var(--marinara-chat-chrome-panel-divider) 1px, transparent 1px), linear-gradient(to bottom, var(--marinara-chat-chrome-panel-divider) 1px, transparent 1px)",
                 backgroundSize: "1.5rem 1.5rem",
               }}
             />
-            <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
-              {visibleLinks.map((link) => {
-                const from = placementById.get(link.from);
-                const to = placementById.get(link.to);
-                if (!from || !to) return null;
-                const selectedRoute = selectedId === link.from || selectedId === link.to;
-                return (
-                  <line
-                    key={link.key}
-                    x1={`${displayCoordinate(from.x)}%`}
-                    y1={`${displayCoordinate(from.y)}%`}
-                    x2={`${displayCoordinate(to.x)}%`}
-                    y2={`${displayCoordinate(to.y)}%`}
-                    stroke={selectedRoute ? "var(--marinara-chat-chrome-accent)" : "var(--marinara-chat-chrome-panel-muted)"}
-                    strokeWidth={selectedRoute ? "2.5" : "1.5"}
-                    strokeDasharray={selectedRoute ? undefined : "4 4"}
-                    opacity={selectedRoute ? "0.9" : "0.45"}
-                  />
-                );
-              })}
-            </svg>
+            {spatial.hierarchyProfile.showConnections && (
+              <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
+                {visibleLinks.map((link) => {
+                  const from = placementById.get(link.from);
+                  const to = placementById.get(link.to);
+                  if (!from || !to) return null;
+                  const linkIsSelected = selectedId === link.from || selectedId === link.to;
+                  const linkPresentation = resolveSpatialLinkPresentation(
+                    spatial.hierarchyProfile,
+                    link.from,
+                    link.to,
+                  );
+                  return (
+                    <line
+                      key={link.key}
+                      data-marinara-map-connection={link.key}
+                      data-line-style={linkPresentation.lineStyle}
+                      x1={`${displayCoordinate(from.x)}%`}
+                      y1={`${displayCoordinate(from.y)}%`}
+                      x2={`${displayCoordinate(to.x)}%`}
+                      y2={`${displayCoordinate(to.y)}%`}
+                      stroke={linkPresentation.color ?? "var(--marinara-chat-chrome-accent)"}
+                      strokeWidth={linkIsSelected ? "3" : "2.25"}
+                      strokeDasharray={spatialLinkStrokeDasharray(linkPresentation.lineStyle)}
+                      strokeLinecap="round"
+                      opacity={linkIsSelected ? "1" : "0.85"}
+                      vectorEffect="non-scaling-stroke"
+                      style={{ filter: "drop-shadow(0 0 1.5px var(--marinara-chat-chrome-panel-bg))" }}
+                    />
+                  );
+                })}
+              </svg>
+            )}
             {visibleLocations.map((location) => {
               const placement = placementById.get(location.id) ?? { x: 50, y: 50 };
               const isCurrent = location.id === spatial.currentLocationId;
@@ -470,18 +520,20 @@ export function GameWorldMap({
                   className="absolute z-10 flex w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-lg p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                   style={{ left: `${displayCoordinate(placement.x)}%`, top: `${displayCoordinate(placement.y)}%` }}
                   aria-label={`Inspect ${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
+                  aria-pressed={isSelected}
                 >
                   <span
                     className={cn(
                       "relative flex h-11 w-11 items-center justify-center rounded-full border bg-[var(--marinara-chat-chrome-panel-bg)] text-xl shadow-md transition-[border-color,transform,background-color] duration-200",
                       isSelected
-                        ? "scale-105 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]"
+                        ? "scale-105 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--background)]"
                         : "border-[var(--marinara-chat-chrome-panel-border)] hover:border-[var(--marinara-chat-chrome-button-border-hover)]",
                       isCurrent && "ring-2 ring-[var(--marinara-chat-chrome-focus-ring)] ring-offset-1 ring-offset-[var(--background)]",
                     )}
+                    data-marinara-map-selected-location={isSelected ? "true" : undefined}
                     aria-hidden="true"
                   >
-                    {location.icon || "⌖"}
+                    <SpatialLocationIcon icon={location.icon} className="max-w-9" />
                     {isPending && (
                       <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)]">
                         <Route size="0.5625rem" />
@@ -514,11 +566,12 @@ export function GameWorldMap({
         <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] px-1 pt-2">
           <div className="rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] p-2.5">
           <div className="flex items-start gap-2">
-            <span className="text-lg" aria-hidden="true">{selected.icon || "📍"}</span>
+            <SpatialLocationIcon icon={selected.icon} fallback="📍" className="text-lg" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-[var(--marinara-chat-chrome-panel-title)]">{selected.name}</p>
               <p className="line-clamp-2 text-[0.6875rem] leading-4 text-[var(--marinara-chat-chrome-panel-muted)]">
-                {selected.description || `A ${selected.kind} in this world.`}
+                {selected.description ||
+                  `A ${hierarchyTypeForLocation(spatial.hierarchyProfile, selected).label} in this world.`}
               </p>
             </div>
           </div>
@@ -536,7 +589,7 @@ export function GameWorldMap({
                     className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2.5 text-left text-[0.6875rem] text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                     aria-label={`Show linked place ${location.name}`}
                   >
-                    <span className="text-sm" aria-hidden="true">{location.icon || "⌖"}</span>
+                    <SpatialLocationIcon icon={location.icon} fallback="⌖" className="text-sm" />
                     <span>
                       <span className="block max-w-32 truncate font-semibold">{location.name}</span>
                       {label && <span className="block max-w-32 truncate text-[0.5625rem] opacity-70">{label}</span>}

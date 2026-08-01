@@ -24,6 +24,8 @@ import type {
   SpatialGenerationPromptLibraries,
   SpatialGenerationPromptLibrary,
   SpatialHierarchyProfile,
+  SpatialMapTemplateRecord,
+  SpatialSharedWorldRecord,
   SpatialTurnPromptTemplates,
 } from "../../../maps-shared/src/maps-model";
 import {
@@ -36,12 +38,13 @@ import {
 export const spatialContextKeys = {
   all: ["spatial-context"] as const,
   detail: (chatId: string) => [...spatialContextKeys.all, chatId] as const,
-  gameMapReconciliation: (chatId: string) =>
-    [...spatialContextKeys.detail(chatId), "game-map-reconciliation"] as const,
+  gameMapReconciliation: (chatId: string) => [...spatialContextKeys.detail(chatId), "game-map-reconciliation"] as const,
   agentConfiguration: ["spatial-context", "agent-configuration"] as const,
   connections: ["spatial-context", "connections"] as const,
   generationPromptLibraries: ["spatial-context", "generation-prompt-libraries"] as const,
   turnPromptTemplates: ["spatial-context", "turn-prompt-templates"] as const,
+  templates: ["spatial-context", "templates"] as const,
+  sharedWorlds: ["spatial-context", "shared-worlds"] as const,
 };
 
 export type GameMapBindingTarget =
@@ -175,12 +178,8 @@ async function readSpatialAgentSettings(): Promise<{
   const config = configs.find((candidate) => candidate.type === "hierarchical-maps") ?? null;
   const settings = parseAgentSettings(config?.settings);
   return {
-    libraries: parseSpatialGenerationPromptLibraries(
-      settings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY],
-    ),
-    turnPromptTemplates: normalizeSpatialTurnPromptTemplates(
-      settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
-    ),
+    libraries: parseSpatialGenerationPromptLibraries(settings[SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY]),
+    turnPromptTemplates: normalizeSpatialTurnPromptTemplates(settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY]),
   };
 }
 
@@ -219,7 +218,7 @@ export function getSpatialContextProblem(error: unknown): SpatialContextProblem 
     return {
       status: null,
       code: null,
-      message: error instanceof Error ? error.message : "The hierarchical map could not be saved.",
+      message: error instanceof Error ? error.message : "The world map could not be saved.",
       issues: [],
       conflict: false,
     };
@@ -230,7 +229,7 @@ export function getSpatialContextProblem(error: unknown): SpatialContextProblem 
   return {
     status: error.status,
     code,
-    message: error.message || "The hierarchical map could not be saved.",
+    message: error.message || "The world map could not be saved.",
     issues: readIssues(payload.issues),
     conflict: error.status === 409 || code === "spatial_definition_stale" || code === "spatial_current_location_stale",
   };
@@ -276,15 +275,15 @@ export function useUpdateSpatialAgentConfiguration() {
       phase: "pre_generation";
       connectionId: string | null;
       settings: Record<string, unknown>;
-    }) =>
-      packageApi.patch<MapsAgentConfigRecord>(
-        "/chats/spatial-context/agent-configuration",
-        patch,
-      ),
+    }) => packageApi.patch<MapsAgentConfigRecord>("/chats/spatial-context/agent-configuration", patch),
     onSuccess: (configuration) => {
       queryClient.setQueryData(spatialContextKeys.agentConfiguration, configuration);
-      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.generationPromptLibraries });
-      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.turnPromptTemplates });
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.generationPromptLibraries,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.turnPromptTemplates,
+      });
     },
   });
 }
@@ -299,7 +298,33 @@ export function useUpdateSpatialContext() {
     },
     onError: (error, variables) => {
       if (getSpatialContextProblem(error).conflict) {
-        void queryClient.invalidateQueries({ queryKey: spatialContextKeys.detail(variables.chatId) });
+        void queryClient.invalidateQueries({
+          queryKey: spatialContextKeys.detail(variables.chatId),
+        });
+      }
+    },
+  });
+}
+
+export function useReplaceWithIndependentSpatialWorld() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, ...request }: UpdateSpatialContextInput) =>
+      packageApi.post<MapsSpatialContextResponse>(
+        `/chats/${chatId}/spatial-context/shared-world/independent-copy`,
+        request,
+      ),
+    onSuccess: (response, variables) => {
+      queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), response);
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.sharedWorlds,
+      });
+    },
+    onError: (error, variables) => {
+      if (getSpatialContextProblem(error).conflict) {
+        void queryClient.invalidateQueries({
+          queryKey: spatialContextKeys.detail(variables.chatId),
+        });
       }
     },
   });
@@ -313,11 +338,15 @@ export function useCommitSpatialOwnerTurn() {
     onSuccess: (response, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), response.spatial);
       clearPendingSpatialTransition(variables.chatId, variables.transition.commandId);
-      void queryClient.invalidateQueries({ queryKey: spatialResourceKeys.chat(variables.chatId) });
+      void queryClient.invalidateQueries({
+        queryKey: spatialResourceKeys.chat(variables.chatId),
+      });
     },
     onError: (_error, variables) => {
       setPendingSpatialTransitionStatus(variables.chatId, "needs_review");
-      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.detail(variables.chatId) });
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.detail(variables.chatId),
+      });
     },
   });
 }
@@ -329,13 +358,17 @@ export function useGenerateSpatialMapDraft() {
   });
 }
 
+export function useGenerateSpatialMapTemplateDraft() {
+  return useMutation({
+    mutationFn: (request: Omit<GenerateSpatialMapDraftInput, "chatId">) =>
+      packageApi.post<MapsGenerateSpatialMapDraftResponse>("/chats/spatial-context/templates/generate", request),
+  });
+}
+
 export function usePreviewSpatialMapPrompt() {
   return useMutation({
     mutationFn: ({ chatId, ...request }: PreviewSpatialMapPromptInput) =>
-      packageApi.post<SpatialMapPromptPreview>(
-        `/chats/${chatId}/spatial-context/generation-prompt/preview`,
-        request,
-      ),
+      packageApi.post<SpatialMapPromptPreview>(`/chats/${chatId}/spatial-context/generation-prompt/preview`, request),
   });
 }
 
@@ -358,20 +391,16 @@ export function useSpatialTurnPromptTemplates() {
 export function useUpdateSpatialGenerationPromptLibrary() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      ownerMode,
-      library,
-    }: {
-      ownerMode: SpatialOwnerMode;
-      library: SpatialGenerationPromptLibrary;
-    }) =>
+    mutationFn: ({ ownerMode, library }: { ownerMode: SpatialOwnerMode; library: SpatialGenerationPromptLibrary }) =>
       packageApi.put<SpatialGenerationPromptLibraries>(
         `/chats/spatial-context/global-generation-prompt-libraries/${ownerMode}`,
         library,
       ),
     onSuccess: (libraries) => {
       queryClient.setQueryData(spatialContextKeys.generationPromptLibraries, libraries);
-      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.agentConfiguration });
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.agentConfiguration,
+      });
     },
   });
 }
@@ -385,9 +414,8 @@ export function useUpdateSpatialGenerationPreferences() {
         preferences,
       ),
     onSuccess: (preferences, variables) => {
-      queryClient.setQueryData<MapsSpatialContextResponse>(
-        spatialContextKeys.detail(variables.chatId),
-        (current) => (current ? { ...current, generationPreferences: preferences } : current),
+      queryClient.setQueryData<MapsSpatialContextResponse>(spatialContextKeys.detail(variables.chatId), (current) =>
+        current ? { ...current, generationPreferences: preferences } : current,
       );
     },
   });
@@ -397,13 +425,248 @@ export function useUpdateSpatialTurnPromptTemplates() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (templates: SpatialTurnPromptTemplates) =>
-      packageApi.put<SpatialTurnPromptTemplates>(
-        "/chats/spatial-context/global-turn-prompt-templates",
-        templates,
-      ),
+      packageApi.put<SpatialTurnPromptTemplates>("/chats/spatial-context/global-turn-prompt-templates", templates),
     onSuccess: (templates) => {
       queryClient.setQueryData(spatialContextKeys.turnPromptTemplates, templates);
-      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.agentConfiguration });
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.agentConfiguration,
+      });
+    },
+  });
+}
+
+export function useSpatialMapTemplates() {
+  return useQuery({
+    queryKey: spatialContextKeys.templates,
+    queryFn: () => packageApi.get<SpatialMapTemplateRecord[]>("/chats/spatial-context/templates"),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateSpatialMapTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      name: string;
+      description: string;
+      definition: SpatialContextDefinition;
+      hierarchyProfile: SpatialHierarchyProfile;
+    }) => packageApi.post<SpatialMapTemplateRecord>("/chats/spatial-context/templates", input),
+    onSuccess: (template) => {
+      queryClient.setQueryData<SpatialMapTemplateRecord[]>(spatialContextKeys.templates, (current = []) => [
+        template,
+        ...current.filter((candidate) => candidate.id !== template.id),
+      ]);
+    },
+  });
+}
+
+export function useUpdateSpatialMapTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      expectedRevision: number;
+      name: string;
+      description: string;
+      definition: SpatialContextDefinition;
+      hierarchyProfile: SpatialHierarchyProfile;
+    }) => {
+      const { id, ...body } = input;
+      return packageApi.put<SpatialMapTemplateRecord>(
+        `/chats/spatial-context/templates/${encodeURIComponent(id)}`,
+        body,
+      );
+    },
+    onSuccess: (template) => {
+      queryClient.setQueryData<SpatialMapTemplateRecord[]>(spatialContextKeys.templates, (current = []) =>
+        current.map((candidate) => (candidate.id === template.id ? template : candidate)),
+      );
+    },
+    onError: (error) => {
+      if (error instanceof PackageApiError && error.status === 409) {
+        void queryClient.invalidateQueries({
+          queryKey: spatialContextKeys.templates,
+        });
+      }
+    },
+  });
+}
+
+export function useDeleteSpatialMapTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, expectedRevision }: { id: string; expectedRevision: number }) =>
+      packageApi.delete<void>(`/chats/spatial-context/templates/${encodeURIComponent(id)}`, { expectedRevision }),
+    onSuccess: (_result, variables) => {
+      queryClient.setQueryData<SpatialMapTemplateRecord[]>(spatialContextKeys.templates, (current = []) =>
+        current.filter((candidate) => candidate.id !== variables.id),
+      );
+    },
+    onError: (error) => {
+      if (error instanceof PackageApiError && error.status === 409) {
+        void queryClient.invalidateQueries({
+          queryKey: spatialContextKeys.templates,
+        });
+      }
+    },
+  });
+}
+
+export function useSpatialSharedWorlds(enabled = true) {
+  return useQuery({
+    queryKey: spatialContextKeys.sharedWorlds,
+    queryFn: () => packageApi.get<SpatialSharedWorldRecord[]>("/chats/spatial-context/shared-worlds"),
+    staleTime: 30_000,
+    enabled,
+  });
+}
+
+export function useCreateSpatialSharedWorld() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      name: string;
+      description: string;
+      definition: SpatialContextDefinition;
+      hierarchyProfile: SpatialHierarchyProfile;
+    }) => packageApi.post<SpatialSharedWorldRecord>("/chats/spatial-context/shared-worlds", input),
+    onSuccess: (world) => {
+      queryClient.setQueryData<SpatialSharedWorldRecord[]>(spatialContextKeys.sharedWorlds, (current = []) => [
+        world,
+        ...current.filter((candidate) => candidate.id !== world.id),
+      ]);
+    },
+  });
+}
+
+export function useUpdateSpatialSharedWorld() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      expectedRevision: number;
+      name: string;
+      description: string;
+      definition: SpatialContextDefinition;
+      hierarchyProfile: SpatialHierarchyProfile;
+    }) => {
+      const { id, ...body } = input;
+      return packageApi.put<SpatialSharedWorldRecord>(
+        `/chats/spatial-context/shared-worlds/${encodeURIComponent(id)}`,
+        body,
+      );
+    },
+    onSuccess: (world) => {
+      queryClient.setQueryData<SpatialSharedWorldRecord[]>(spatialContextKeys.sharedWorlds, (current = []) =>
+        current.map((candidate) => (candidate.id === world.id ? world : candidate)),
+      );
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.all });
+    },
+    onError: (error) => {
+      if (error instanceof PackageApiError && error.status === 409) {
+        void queryClient.invalidateQueries({
+          queryKey: spatialContextKeys.sharedWorlds,
+        });
+      }
+    },
+  });
+}
+
+export function useDeleteSpatialSharedWorld() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, expectedRevision }: { id: string; expectedRevision: number }) =>
+      packageApi.delete<void>(`/chats/spatial-context/shared-worlds/${encodeURIComponent(id)}`, {
+        expectedRevision,
+      }),
+    onSuccess: (_result, variables) => {
+      queryClient.setQueryData<SpatialSharedWorldRecord[]>(spatialContextKeys.sharedWorlds, (current = []) =>
+        current.filter((candidate) => candidate.id !== variables.id),
+      );
+    },
+    onError: (error) => {
+      if (error instanceof PackageApiError && error.status === 409) {
+        void queryClient.invalidateQueries({
+          queryKey: spatialContextKeys.sharedWorlds,
+        });
+      }
+    },
+  });
+}
+
+export function useLinkSpatialSharedWorld() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      chatId: string;
+      worldId: string;
+      expectedWorldRevision: number;
+      expectedRevision: number;
+      expectedCurrentLocationId: string | null;
+    }) => {
+      const { chatId, ...body } = input;
+      return packageApi.post<MapsSpatialContextResponse>(`/chats/${chatId}/spatial-context/shared-world/link`, body);
+    },
+    onSuccess: (spatial, variables) => {
+      queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), spatial);
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.sharedWorlds,
+      });
+    },
+  });
+}
+
+export function useForkSpatialSharedWorld() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { chatId: string; expectedRevision: number; expectedCurrentLocationId: string | null }) => {
+      const { chatId, ...body } = input;
+      return packageApi.post<MapsSpatialContextResponse>(`/chats/${chatId}/spatial-context/shared-world/fork`, body);
+    },
+    onSuccess: (spatial, variables) => {
+      queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), spatial);
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.sharedWorlds,
+      });
+    },
+  });
+}
+
+export function useDiscardSpatialSharedWorldDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { chatId: string; expectedRevision: number; expectedCurrentLocationId: string | null }) => {
+      const { chatId, ...body } = input;
+      return packageApi.post<MapsSpatialContextResponse>(`/chats/${chatId}/spatial-context/shared-world/discard`, body);
+    },
+    onSuccess: (spatial, variables) => {
+      queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), spatial);
+    },
+  });
+}
+
+export function usePublishSpatialSharedWorldDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      chatId: string;
+      expectedWorldRevision: number;
+      definition: SpatialContextDefinition;
+      hierarchyProfile: SpatialHierarchyProfile;
+    }) => {
+      const { chatId, ...body } = input;
+      return packageApi.post<{
+        world: SpatialSharedWorldRecord;
+        spatial: MapsSpatialContextResponse;
+      }>(`/chats/${chatId}/spatial-context/shared-world/publish`, body);
+    },
+    onSuccess: ({ world, spatial }, variables) => {
+      queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), spatial);
+      queryClient.setQueryData<SpatialSharedWorldRecord[]>(spatialContextKeys.sharedWorlds, (current = []) =>
+        current.map((candidate) => (candidate.id === world.id ? world : candidate)),
+      );
+      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.all });
     },
   });
 }
@@ -434,7 +697,9 @@ export function useApplyGameMapBindingReconciliation() {
       ),
     onSuccess: (response, variables) => {
       queryClient.setQueryData(spatialContextKeys.gameMapReconciliation(variables.chatId), response);
-      void queryClient.invalidateQueries({ queryKey: spatialResourceKeys.chat(variables.chatId) });
+      void queryClient.invalidateQueries({
+        queryKey: spatialResourceKeys.chat(variables.chatId),
+      });
     },
     onError: (_error, variables) => {
       void queryClient.invalidateQueries({

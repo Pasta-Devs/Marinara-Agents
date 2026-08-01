@@ -1,8 +1,8 @@
 [
   {
     "id": "hierarchical-maps",
-    "name": "Hierarchical Maps",
-    "description": "Adds persistent hierarchical locations, spatial context, map authoring, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
+    "name": "World Maps",
+    "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

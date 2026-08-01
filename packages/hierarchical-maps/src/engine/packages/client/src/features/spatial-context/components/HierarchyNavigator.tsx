@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, ChevronDown, ChevronRight, Copy, CornerDownRight, MapPin, Plus, Split } from "lucide-react";
 import { compareSpatialLocations, type SpatialContextDefinition, type SpatialLocation } from "@marinara-engine/shared";
+import {
+  hierarchyTypeForLocation,
+  type SpatialHierarchyProfile,
+} from "../../../../../maps-shared/src/maps-model";
 import { cn } from "../package-utils";
+import { SpatialLocationIcon } from "./SpatialLocationIcon";
 
 interface HierarchyNavigatorProps {
   definition: SpatialContextDefinition;
+  hierarchyProfile: SpatialHierarchyProfile;
   selectedId: string | null;
   currentLocationId: string | null;
   expandSelectedChildren?: boolean;
@@ -18,6 +24,7 @@ interface HierarchyNavigatorProps {
 
 export function HierarchyNavigator({
   definition,
+  hierarchyProfile,
   selectedId,
   currentLocationId,
   expandSelectedChildren = false,
@@ -94,15 +101,13 @@ export function HierarchyNavigator({
             aria-current={selected ? "true" : undefined}
             className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
           >
-            <span className="text-base" aria-hidden="true">
-              {location.icon || "⌖"}
-            </span>
+            <SpatialLocationIcon icon={location.icon} className="text-base" />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-medium text-[var(--marinara-chat-chrome-panel-title)]">
                 {location.name || "Untitled location"}
               </span>
               <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
-                {location.kind}
+                {hierarchyTypeForLocation(hierarchyProfile, location).label}
                 {location.id === currentLocationId ? " · current" : ""}
                 {location.status === "archived" ? " · archived" : ""}
               </span>
