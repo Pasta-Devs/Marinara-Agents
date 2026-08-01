@@ -10,6 +10,7 @@ import {
   ClipboardCopy,
   Clock,
   Code2,
+  CircleHelp,
   Eye,
   FileText,
   Info,
@@ -54,6 +55,7 @@ import {
   SPATIAL_GENERATION_PROMPT_VARIABLES,
   SPATIAL_TURN_PROMPT_VARIABLES,
   spatialGenerationPreferencesSchema,
+  spatialHierarchyProfileSchema,
   spatialTurnPromptTemplatesSchema,
   type SpatialGenerationPreferences,
   type SpatialGenerationCustomVariable,
@@ -68,6 +70,7 @@ import {
   SpatialHierarchyProfileFields,
   type SpatialHierarchyProfileDraft,
 } from "./components/SpatialHierarchyProfileFields";
+import { WORLD_MAPS_GUIDE_URL } from "./package-utils";
 
 interface SpatialMapsHomeProps {
   chatId: string | null;
@@ -453,6 +456,13 @@ export function SpatialMapsHome({
   const hierarchySaveError = updateSpatial.isError
     ? getSpatialContextProblem(updateSpatial.error).message
     : null;
+  const hierarchyDraftValidation = hierarchyDraft
+    ? spatialHierarchyProfileSchema.safeParse(hierarchyDraft.profile)
+    : null;
+  const hierarchyDraftValidationMessage =
+    hierarchyDraftValidation && !hierarchyDraftValidation.success
+      ? hierarchyDraftValidation.error.issues[0]?.message ?? "Review the location types before saving."
+      : null;
   const turnPromptSaveError = updateTurnPromptTemplates.isError
     ? getSpatialContextProblem(updateTurnPromptTemplates.error).message
     : null;
@@ -473,13 +483,15 @@ export function SpatialMapsHome({
 
   const saveHierarchyProfile = async () => {
     if (!chatId || !hierarchyDraft || !spatial.data?.definition) return;
+    const parsedProfile = spatialHierarchyProfileSchema.safeParse(hierarchyDraft.profile);
+    if (!parsedProfile.success) return;
     const savingChatId = chatId;
     const response = await updateSpatial.mutateAsync({
       chatId: savingChatId,
       expectedRevision: spatial.data.definition.revision,
       expectedCurrentLocationId: spatial.data.currentLocationId,
       definition: hierarchyDraft.definition,
-      hierarchyProfile: normalizeHierarchyProfile(hierarchyDraft.profile, hierarchyDraft.definition),
+      hierarchyProfile: normalizeHierarchyProfile(parsedProfile.data, hierarchyDraft.definition),
     });
     if (currentChatIdRef.current !== savingChatId || !response.definition) return;
     setHierarchyDraft({
@@ -779,6 +791,17 @@ export function SpatialMapsHome({
             )}
             <span className="max-md:hidden">Save</span>
           </button>
+          <a
+            href={WORLD_MAPS_GUIDE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mari-editor-action inline-flex"
+            title="Open World Maps guide"
+            aria-label="Open World Maps guide"
+            style={{ minHeight: 44, minWidth: 44 }}
+          >
+            <CircleHelp size="0.9375rem" />
+          </a>
           {onManagePackage && (
             <button
               type="button"
@@ -917,9 +940,9 @@ export function SpatialMapsHome({
             <Map size="1rem" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-xs font-semibold">Map templates</h2>
+            <h2 className="text-xs font-semibold">Shared worlds and templates</h2>
             <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-              Create fandom or original maps with AI or by hand, then add a clean copy to any Roleplay or Game chat.
+              Link one canonical world across chats, or add independent template copies when stories should diverge.
             </p>
           </div>
           <button
@@ -927,7 +950,7 @@ export function SpatialMapsHome({
             onClick={onOpenLibrary}
             className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 shrink-0 justify-center px-4 text-xs"
           >
-            Open map templates
+            Open world library
           </button>
         </article>
 
@@ -1833,6 +1856,17 @@ export function SpatialMapsHome({
                   onChange={setHierarchyDraft}
                 />
 
+                {hierarchyDraftValidationMessage && (
+                  <p
+                    className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                    role="alert"
+                  >
+                    {hierarchyDraft.profile.name.trim().length === 0
+                      ? "Enter a profile name before saving. Leading and trailing spaces will be removed."
+                      : hierarchyDraftValidationMessage}
+                  </p>
+                )}
+
                 {hierarchySaveError && (
                   <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
                     {hierarchySaveError}
@@ -1857,7 +1891,7 @@ export function SpatialMapsHome({
                       <button
                         type="button"
                         onClick={() => void saveHierarchyProfile()}
-                        disabled={updateSpatial.isPending}
+                        disabled={updateSpatial.isPending || !hierarchyDraftValidation?.success}
                         className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                       >
                         {updateSpatial.isPending ? <LoaderCircle size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}

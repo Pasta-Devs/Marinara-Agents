@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Check,
+  CircleHelp,
   ChevronDown,
   ChevronRight,
   CornerDownRight,
@@ -26,6 +27,7 @@ import {
 import { toast } from "sonner";
 import {
   compareSpatialLocations,
+  getSpatialDescendantIds,
   resolveSpatialLocationDepth,
   resolveSpatialBreadcrumb,
   SPATIAL_CONTEXT_LIMITS,
@@ -47,11 +49,13 @@ import {
   useLinkSpatialSharedWorld,
   usePublishSpatialSharedWorldDraft,
   useSpatialContext,
+  useSpatialSharedWorlds,
   useUpdateSpatialContext,
   useUpdateSpatialMapTemplate,
   useUpdateSpatialSharedWorld,
 } from "../../hooks/use-spatial-context";
-import { cn } from "./package-utils";
+import { cn, WORLD_MAPS_GUIDE_URL } from "./package-utils";
+import { nextAvailableSharedWorldName } from "./shared-world-naming";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
 import { LocalMapCanvas } from "./components/LocalMapCanvas";
@@ -61,6 +65,7 @@ import {
   LocationInspector,
 } from "./components/LocationInspector";
 import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
+import { SpatialLocationIcon } from "./components/SpatialLocationIcon";
 import {
   addSpatialLocation,
   archiveSpatialLocation,
@@ -387,6 +392,7 @@ export function SpatialMapWorkspace({
   const createTemplate = useCreateSpatialMapTemplate();
   const createSharedWorld = useCreateSpatialSharedWorld();
   const linkSharedWorld = useLinkSpatialSharedWorld();
+  const sharedWorlds = useSpatialSharedWorlds(!templateMode);
   const { data: chat } = useSpatialChat(templateMode ? null : chatId);
   const galleryImages = useSpatialGalleryImages(chatId ?? "", !templateMode);
   const globalGalleryImages = useSpatialGlobalGalleryImages();
@@ -687,6 +693,57 @@ export function SpatialMapWorkspace({
   ).length;
   const linkedSharedWorld =
     !templateMode && spatial.data?.sharedWorld.mode === "linked" ? spatial.data.sharedWorld : null;
+  const archivedDeletion = useMemo(() => {
+    if (!draft || !selected || selected.status !== "archived" || templateMode) return null;
+    const locationIds = new Set([selected.id, ...getSpatialDescendantIds(draft, selected.id)]);
+    const removedLocations = draft.locations.filter((location) => locationIds.has(location.id));
+    const reasons: string[] = [];
+    if (linkedSharedWorld) reasons.push("Detach and keep an independent copy before permanently deleting locations.");
+    if (removedLocations.some((location) => location.status !== "archived")) {
+      reasons.push("Archive every child location in this branch before deleting it.");
+    }
+    if (draft.startingLocationId && locationIds.has(draft.startingLocationId)) {
+      reasons.push("Choose another starting location before deleting this branch.");
+    }
+    if (effectiveCurrentLocationId && locationIds.has(effectiveCurrentLocationId)) {
+      reasons.push("Set another current story location and save it before deleting this branch.");
+    }
+    const protections = (spatial.data?.locationDeletionProtections ?? []).filter((entry) =>
+      locationIds.has(entry.locationId),
+    );
+    const historySnapshotCount = protections.reduce((total, entry) => total + entry.historySnapshotCount, 0);
+    if (historySnapshotCount > 0) {
+      reasons.push(
+        `Kept because ${historySnapshotCount} historical message${historySnapshotCount === 1 ? "" : "s"} reference this branch.`,
+      );
+    }
+    const gameMapBindingCount = protections.reduce((total, entry) => total + entry.gameMapBindingCount, 0);
+    if (gameMapBindingCount > 0) {
+      reasons.push(
+        `Remove ${gameMapBindingCount} Game map binding${gameMapBindingCount === 1 ? "" : "s"} before deleting this branch.`,
+      );
+    }
+    if (routePlan?.locationIds.some((locationId) => locationIds.has(locationId))) {
+      reasons.push("Cancel the planned route before deleting this branch.");
+    }
+    if (pendingTransition && locationIds.has(pendingTransition.transition.destinationId)) {
+      reasons.push("Cancel the queued destination before deleting this branch.");
+    }
+    return {
+      count: removedLocations.length,
+      locationIds,
+      protection: reasons[0] ?? null,
+    };
+  }, [
+    draft,
+    effectiveCurrentLocationId,
+    linkedSharedWorld,
+    pendingTransition,
+    routePlan,
+    selected,
+    spatial.data?.locationDeletionProtections,
+    templateMode,
+  ]);
   const mobileMapNoticeCount =
     Number(missingArtworkLocations.length > 0) +
     Number(Boolean(linkedSharedWorld?.missing || linkedSharedWorld?.conflict || linkedSharedWorld?.pendingChanges));
@@ -987,6 +1044,55 @@ export function SpatialMapWorkspace({
     },
     [applyDraft, confirmAction, currentLocationId, draft, enteredParentId],
   );
+
+  const deleteArchivedLocation = useCallback(async () => {
+    if (!draft || !selected || selected.status !== "archived" || !archivedDeletion) return;
+    if (archivedDeletion.protection) {
+      toast.error(archivedDeletion.protection);
+      return;
+    }
+    const confirmed = await confirmAction({
+      title: "Delete archived location permanently?",
+      message:
+        archivedDeletion.count > 1
+          ? `Remove ${selected.name || "this location"} and ${archivedDeletion.count - 1} archived child location${archivedDeletion.count === 2 ? "" : "s"} from this map draft? Direct links, hierarchy assignments, and exported map data are cleaned up when you Save. Closing without saving still discards this deletion.`
+          : `Remove ${selected.name || "this location"} from this map draft? Direct links, hierarchy assignments, and exported map data are cleaned up when you Save. Closing without saving still discards this deletion.`,
+      confirmLabel: "Delete permanently",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    const next = removeSpatialSubtree(draft, selected.id);
+    const retainedLocationTypeIds = Object.fromEntries(
+      Object.entries(draftHierarchyProfile.locationTypeIds).filter(
+        ([locationId]) => !archivedDeletion.locationIds.has(locationId),
+      ),
+    );
+    applyDraft(next);
+    applyHierarchyProfile(
+      normalizeHierarchyProfile(
+        { ...draftHierarchyProfile, locationTypeIds: retainedLocationTypeIds },
+        next,
+      ),
+    );
+    const nextSelection =
+      selected.parentId ?? next.locations.find((location) => location.status === "active")?.id ?? null;
+    setSelectedId(nextSelection);
+    if (enteredParentId && archivedDeletion.locationIds.has(enteredParentId)) setEnteredParentId(selected.parentId);
+    toast.success(
+      archivedDeletion.count > 1
+        ? `${archivedDeletion.count} archived locations removed from the draft. Click Save to apply it.`
+        : "Archived location removed from the draft. Click Save to apply it.",
+    );
+  }, [
+    applyDraft,
+    applyHierarchyProfile,
+    archivedDeletion,
+    confirmAction,
+    draft,
+    draftHierarchyProfile,
+    enteredParentId,
+    selected,
+  ]);
 
   const requestArchive = useCallback(
     (locationId: string) => {
@@ -1324,10 +1430,22 @@ export function SpatialMapWorkspace({
       linkSharedWorld.isPending
     )
       return;
-    const name = `${chat?.name?.trim() || "Untitled"} world`;
+    const baseName = `${chat?.name?.trim() || "Untitled"} world`;
+    const refreshedSharedWorlds = await sharedWorlds.refetch();
+    if (refreshedSharedWorlds.isError) {
+      toast.error("Shared worlds could not be checked. Try again before creating a new one.");
+      return;
+    }
+    const name = nextAvailableSharedWorldName(
+      baseName,
+      (refreshedSharedWorlds.data ?? []).map((world) => world.name),
+    );
+    const nameCollision = name !== baseName;
     const confirmed = await confirmAction({
       title: "Create a shared world from this map?",
-      message: `Create “${name}” as one account-owned world and link this chat to it? The map structure and Global Gallery artwork can then be reused by other chats. This chat keeps its own current location and travel history.`,
+      message: nameCollision
+        ? `A shared world named “${baseName}” already exists. Create a separate canonical world named “${name}” and link this chat to the new copy? Matching names are not treated as the same world.`
+        : `Create “${name}” as one account-owned world and link this chat to it? The map structure and Global Gallery artwork can then be reused by other chats. This chat keeps its own current location and travel history.`,
       confirmLabel: "Create and link",
     });
     if (!confirmed) return;
@@ -1380,6 +1498,7 @@ export function SpatialMapWorkspace({
     galleryImages,
     globalGalleryImages,
     linkSharedWorld,
+    sharedWorlds,
     spatial,
     templateMode,
   ]);
@@ -1479,9 +1598,9 @@ export function SpatialMapWorkspace({
     const sharedStatus = spatial.data?.sharedWorld;
     if (templateMode || !chatId || !draft || dirty || sharedStatus?.mode !== "linked") return;
     const confirmed = await confirmAction({
-      title: "Fork an independent map?",
+      title: "Detach from the shared world?",
       message: `Detach this chat from “${sharedStatus.worldName ?? "the shared world"}” and keep its current map as an independent copy? Future shared-world edits will no longer appear here.`,
-      confirmLabel: "Fork independent copy",
+      confirmLabel: "Detach and keep copy",
     });
     if (!confirmed) return;
     try {
@@ -1499,10 +1618,31 @@ export function SpatialMapWorkspace({
       setServerIssues(response.warnings);
       toast.success("This chat now has an independent map copy.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "The linked world could not be forked.");
+      toast.error(error instanceof Error ? error.message : "The chat could not be detached from the shared world.");
       void spatial.refetch();
     }
   }, [chatId, confirmAction, currentLocationId, dirty, draft, forkSharedWorld, spatial, templateMode]);
+
+  const handleOpenLorebook = useCallback(
+    async (lorebookId: string) => {
+      if (!onOpenLorebook) return;
+      if (dirty) {
+        const discard = await confirmAction({
+          title: templateMode
+            ? `Discard ${sharedWorldMode ? "shared-world" : "template"} changes?`
+            : "Discard map changes?",
+          message: templateMode
+            ? `You have unsaved ${sharedWorldMode ? "shared-world" : "map template"} changes. Open the linked lorebook and discard them?`
+            : "You have unsaved world map changes. Open the linked lorebook and discard them?",
+          confirmLabel: "Discard changes",
+          tone: "destructive",
+        });
+        if (!discard) return;
+      }
+      onOpenLorebook(lorebookId);
+    },
+    [confirmAction, dirty, onOpenLorebook, sharedWorldMode, templateMode],
+  );
 
   const handleClose = useCallback(async () => {
     if (dirty) {
@@ -2004,9 +2144,7 @@ export function SpatialMapWorkspace({
                   onClick={() => selectLocation(location.id)}
                   className="flex min-w-0 flex-1 self-stretch items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                 >
-                  <span className="text-lg" aria-hidden="true">
-                    {location.icon || "⌖"}
-                  </span>
+                  <SpatialLocationIcon icon={location.icon} className="text-lg" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{location.name || "Untitled location"}</span>
                     <span className="block truncate text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
@@ -2054,7 +2192,7 @@ export function SpatialMapWorkspace({
       lorebookEntries={lorebookEntriesQuery.entries ?? []}
       excludedLorebookIds={excludedLorebookIds}
       lorebooksLoading={lorebookEntriesQuery.isLoading}
-      onOpenLorebook={onOpenLorebook}
+      onOpenLorebook={onOpenLorebook ? (lorebookId) => void handleOpenLorebook(lorebookId) : undefined}
       onReparent={(parentId) => selected && applyDraft(reparentSpatialLocation(draft, selected.id, parentId))}
       onSetStarting={() => selected && applyDraft({ ...draft, startingLocationId: selected.id })}
       onSetCurrent={
@@ -2074,6 +2212,11 @@ export function SpatialMapWorkspace({
           : undefined
       }
       onArchive={() => selected && requestArchive(selected.id)}
+      onDeletePermanently={
+        !templateMode && selected?.status === "archived" ? () => void deleteArchivedLocation() : undefined
+      }
+      permanentDeleteProtection={archivedDeletion?.protection}
+      permanentDeleteCount={archivedDeletion?.count}
       gameBinding={
         !templateMode && ownerMode === "game" && chatId
           ? {
@@ -2176,7 +2319,18 @@ export function SpatialMapWorkspace({
           ) : (
             <>
               <h1 className="truncate text-sm font-semibold text-[var(--marinara-editor-title)]">World map</h1>
-              <p className="truncate text-[0.625rem] text-[var(--marinara-editor-muted)]">{chat?.name ?? "Chat"}</p>
+              <p
+                className="truncate text-[0.625rem] text-[var(--marinara-editor-muted)]"
+                title={
+                  linkedSharedWorld
+                    ? `${chat?.name ?? "Chat"} · Linked to ${linkedSharedWorld.worldName ?? "shared world"}`
+                    : `${chat?.name ?? "Chat"} · Independent chat map`
+                }
+              >
+                {linkedSharedWorld
+                  ? `${chat?.name ?? "Chat"} · Linked to ${linkedSharedWorld.worldName ?? "shared world"}`
+                  : `${chat?.name ?? "Chat"} · Independent chat map`}
+              </p>
             </>
           )}
         </div>
@@ -2274,8 +2428,17 @@ export function SpatialMapWorkspace({
                   disabled={dirty || forkSharedWorld.isPending || linkedSharedWorld.missing}
                   className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
                 >
-                  <GitFork size="0.75rem" /> Fork independent
+                  <GitFork size="0.75rem" /> Detach and keep copy
                 </button>
+                <a
+                  href={`${WORLD_MAPS_GUIDE_URL}#link-chats-to-one-shared-world`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+                  title="Open shared-world guide"
+                >
+                  <CircleHelp size="0.75rem" /> Guide
+                </a>
               </>
             )}
             {!templateMode && (
@@ -2513,7 +2676,7 @@ export function SpatialMapWorkspace({
                 disabled={dirty || forkSharedWorld.isPending || linkedSharedWorld.missing}
                 className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
               >
-                <GitFork size="0.75rem" /> Fork independent
+                <GitFork size="0.75rem" /> Detach and keep copy
               </button>
             )}
             {!templateMode && (
@@ -2582,9 +2745,9 @@ export function SpatialMapWorkspace({
                 }}
                 disabled={conflict || updateSpatial.isPending}
                 className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
-                aria-label="Add a saved map template"
+                aria-label="Open shared worlds and map templates"
               >
-                <MapIcon size="0.8125rem" /> Templates
+                <MapIcon size="0.8125rem" /> World library
               </button>
             )}
             {!templateMode && draft.locations.length > 0 && (

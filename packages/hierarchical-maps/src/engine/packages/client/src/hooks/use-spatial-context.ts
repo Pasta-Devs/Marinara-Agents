@@ -513,11 +513,12 @@ export function useDeleteSpatialMapTemplate() {
   });
 }
 
-export function useSpatialSharedWorlds() {
+export function useSpatialSharedWorlds(enabled = true) {
   return useQuery({
     queryKey: spatialContextKeys.sharedWorlds,
     queryFn: () => packageApi.get<SpatialSharedWorldRecord[]>("/chats/spatial-context/shared-worlds"),
     staleTime: 30_000,
+    enabled,
   });
 }
 

@@ -18,6 +18,7 @@ import {
   type SpatialLocation,
 } from "@marinara-engine/shared";
 import { cn, generateClientId } from "../../features/spatial-context/package-utils";
+import { SpatialLocationIcon } from "../../features/spatial-context/components/SpatialLocationIcon";
 import {
   resolveSpatialArtworkImage,
   useSpatialGalleryImages,
@@ -282,9 +283,10 @@ export function GameWorldMap({
         )}
         aria-label={`Inspect ${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-lg" aria-hidden="true">
-          {location.icon || "⌖"}
-        </span>
+        <SpatialLocationIcon
+          icon={location.icon}
+          className="flex h-8 w-8 max-w-8 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-lg"
+        />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
             {location.name}
@@ -318,7 +320,7 @@ export function GameWorldMap({
           </button>
           <div className="min-w-0 flex-1 text-center">
             <p className="truncate text-xs font-bold text-[var(--marinara-chat-chrome-panel-title)]">
-              <span className="mr-1" aria-hidden="true">{viewLocation?.icon || "🌍"}</span>
+              <SpatialLocationIcon icon={viewLocation?.icon} fallback="🌍" className="mr-1 max-w-[2.5em]" />
               {viewLocation?.name || "World"}
             </p>
             <p className="truncate text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]" title={currentBreadcrumb}>
@@ -436,7 +438,7 @@ export function GameWorldMap({
       >
         {visibleLocations.length === 0 ? (
           <div className="flex min-h-36 flex-col items-center justify-center px-5 text-center">
-            <span className="text-2xl" aria-hidden="true">{viewLocation?.icon || "📍"}</span>
+            <SpatialLocationIcon icon={viewLocation?.icon} fallback="📍" className="text-2xl" />
             <p className="mt-2 text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">No places inside this location</p>
             <p className="mt-1 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
               Browse up to see nearby places.
@@ -531,7 +533,7 @@ export function GameWorldMap({
                     data-marinara-map-selected-location={isSelected ? "true" : undefined}
                     aria-hidden="true"
                   >
-                    {location.icon || "⌖"}
+                    <SpatialLocationIcon icon={location.icon} className="max-w-9" />
                     {isPending && (
                       <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)]">
                         <Route size="0.5625rem" />
@@ -564,7 +566,7 @@ export function GameWorldMap({
         <div className="border-t border-[var(--marinara-chat-chrome-panel-divider)] px-1 pt-2">
           <div className="rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] p-2.5">
           <div className="flex items-start gap-2">
-            <span className="text-lg" aria-hidden="true">{selected.icon || "📍"}</span>
+            <SpatialLocationIcon icon={selected.icon} fallback="📍" className="text-lg" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-[var(--marinara-chat-chrome-panel-title)]">{selected.name}</p>
               <p className="line-clamp-2 text-[0.6875rem] leading-4 text-[var(--marinara-chat-chrome-panel-muted)]">
@@ -587,7 +589,7 @@ export function GameWorldMap({
                     className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2.5 text-left text-[0.6875rem] text-[var(--marinara-chat-chrome-button-text)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
                     aria-label={`Show linked place ${location.name}`}
                   >
-                    <span className="text-sm" aria-hidden="true">{location.icon || "⌖"}</span>
+                    <SpatialLocationIcon icon={location.icon} fallback="⌖" className="text-sm" />
                     <span>
                       <span className="block max-w-32 truncate font-semibold">{location.name}</span>
                       {label && <span className="block max-w-32 truncate text-[0.5625rem] opacity-70">{label}</span>}

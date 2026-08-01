@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Archive, BookOpen, Check, ImageIcon, Link2, Loader2, LocateFixed, MapPin, Plus, RefreshCw, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { Archive, BookOpen, Check, ChevronRight, ImageIcon, Link2, Loader2, LocateFixed, MapPin, Plus, RefreshCw, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
 import type {
   Lorebook,
   LorebookEntry,
@@ -14,6 +14,7 @@ import { getSpatialDescendantIds, resolveSpatialBreadcrumb } from "@marinara-eng
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
 import {
   DEFAULT_SPATIAL_LINK_PICKER_COLOR,
+  SPATIAL_LOCATION_ICON_MAX_LENGTH,
   hierarchyTypeForLocation,
   resolveSpatialLinkPresentation,
   withoutSpatialLinkPresentation,
@@ -221,6 +222,9 @@ interface LocationInspectorProps {
   onSetStarting: () => void;
   onSetCurrent?: () => void;
   onArchive: () => void;
+  onDeletePermanently?: () => void;
+  permanentDeleteProtection?: string | null;
+  permanentDeleteCount?: number;
   gameBinding?: {
     chatId: string;
     maps: GameMap[];
@@ -250,9 +254,13 @@ export function LocationInspector({
   onSetStarting,
   onSetCurrent,
   onArchive,
+  onDeletePermanently,
+  permanentDeleteProtection = null,
+  permanentDeleteCount = 1,
   gameBinding,
 }: LocationInspectorProps) {
   const [loreSearch, setLoreSearch] = useState("");
+  const [expandedLorebookIds, setExpandedLorebookIds] = useState<Set<string>>(() => new Set());
   const [newLinkTarget, setNewLinkTarget] = useState("");
   const [galleryPickerTarget, setGalleryPickerTarget] = useState<"reference" | "background" | null>(null);
   const [pendingGalleryImageId, setPendingGalleryImageId] = useState<string | null>(null);
@@ -319,20 +327,28 @@ export function LocationInspector({
   const candidateLoreGroups = useMemo(() => {
     const attachedIds = new Set(location?.lorebookEntryIds ?? []);
     const query = loreSearch.trim().toLocaleLowerCase();
+    const entriesByLorebook = new Map<string, LorebookEntry[]>();
+    for (const entry of lorebookEntries) {
+      if (attachedIds.has(entry.id)) continue;
+      const entries = entriesByLorebook.get(entry.lorebookId);
+      if (entries) entries.push(entry);
+      else entriesByLorebook.set(entry.lorebookId, [entry]);
+    }
     return lorebooks
-      .map((lorebook) => ({
-        lorebook,
-        entries: lorebookEntries
-          .filter((entry) => entry.lorebookId === lorebook.id && !attachedIds.has(entry.id))
-          .filter(
+      .map((lorebook) => {
+        const bookMatches = lorebook.name.toLocaleLowerCase().includes(query);
+        return {
+          lorebook,
+          entries: (entriesByLorebook.get(lorebook.id) ?? []).filter(
             (entry) =>
               !query ||
+              bookMatches ||
               entry.name.toLocaleLowerCase().includes(query) ||
               entry.description.toLocaleLowerCase().includes(query) ||
               entry.keys.some((key) => key.toLocaleLowerCase().includes(query)),
-          )
-          .slice(0, 20),
-      }))
+          ),
+        };
+      })
       .filter((group) => group.entries.length > 0);
   }, [location?.lorebookEntryIds, loreSearch, lorebookEntries, lorebooks]);
   const excludedLorebookIdSet = useMemo(() => new Set(excludedLorebookIds), [excludedLorebookIds]);
@@ -504,11 +520,19 @@ export function LocationInspector({
               ))}
             </select>
           </Field>
-          <Field label="Icon" hint="Emoji or symbol">
+          <Field
+            label="Icon"
+            hint={`One emoji or short symbol · ${SPATIAL_LOCATION_ICON_MAX_LENGTH} max`}
+            error={
+              (location.icon?.length ?? 0) > SPATIAL_LOCATION_ICON_MAX_LENGTH
+                ? `Shorten this icon to ${SPATIAL_LOCATION_ICON_MAX_LENGTH} characters or fewer.`
+                : undefined
+            }
+          >
             <input
               className={INPUT_CLASS}
               value={location.icon ?? ""}
-              maxLength={64}
+              maxLength={SPATIAL_LOCATION_ICON_MAX_LENGTH}
               placeholder="⌖"
               onChange={(event) => onUpdate({ icon: event.target.value || undefined })}
             />
@@ -772,13 +796,22 @@ export function LocationInspector({
         </div>}
 
 
-        <details className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
+        <details
+          data-marinara-linked-lore
+          className="group rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]"
+        >
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
             <BookOpen size="0.8125rem" className="text-[var(--marinara-chat-chrome-accent)]" />
             <span className="flex-1">Linked lore</span>
             <span className="rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-2 py-0.5 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-panel-muted)]">
               {location.lorebookEntryIds.length}
             </span>
+            <ChevronRight
+              data-marinara-disclosure-indicator
+              size="0.875rem"
+              aria-hidden="true"
+              className="shrink-0 text-[var(--marinara-chat-chrome-panel-muted)] transition-transform duration-200 group-open:rotate-90"
+            />
           </summary>
           <div className="space-y-3 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-3">
             <p className="text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
@@ -854,6 +887,7 @@ export function LocationInspector({
               <input
                 className={`${INPUT_CLASS} min-h-11 pl-8`}
                 value={loreSearch}
+                aria-label="Search lorebook names and entries"
                 placeholder="Search lore entries"
                 onChange={(event) => setLoreSearch(event.target.value)}
               />
@@ -866,16 +900,43 @@ export function LocationInspector({
                 No available entries match this search.
               </p>
             ) : (
-              <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                 {candidateLoreGroups.map(({ lorebook, entries }) => {
                   const bookUnavailable = lorebook.enabled === false || excludedLorebookIdSet.has(lorebook.id);
+                  const searchActive = loreSearch.trim().length > 0;
+                  const expanded = searchActive || expandedLorebookIds.has(lorebook.id);
                   return (
-                    <div key={lorebook.id}>
-                      <p className="mb-1 truncate text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-chat-chrome-panel-muted)]">
-                        {lorebook.name}
-                        {bookUnavailable ? " · unavailable" : ""}
-                      </p>
-                      <div className="space-y-1">
+                    <details
+                      key={lorebook.id}
+                      data-marinara-lorebook-group={lorebook.id}
+                      open={expanded}
+                      onToggle={(event) => {
+                        if (searchActive) return;
+                        const open = event.currentTarget.open;
+                        setExpandedLorebookIds((current) => {
+                          const next = new Set(current);
+                          if (open) next.add(lorebook.id);
+                          else next.delete(lorebook.id);
+                          return next;
+                        });
+                      }}
+                      className="group/lorebook overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)]"
+                    >
+                      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left">
+                        <ChevronRight
+                          size="0.8125rem"
+                          aria-hidden="true"
+                          className="shrink-0 text-[var(--marinara-chat-chrome-panel-muted)] transition-transform duration-200 group-open/lorebook:rotate-90"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[0.6875rem] font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                          {lorebook.name}
+                          {bookUnavailable ? " · unavailable" : ""}
+                        </span>
+                        <span className="rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-2 py-0.5 text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                          {entries.length}
+                        </span>
+                      </summary>
+                      <div className="space-y-1 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-2">
                         {entries.map((entry) => {
                           const unavailable = bookUnavailable || entry.enabled === false;
                           return (
@@ -895,7 +956,7 @@ export function LocationInspector({
                           );
                         })}
                       </div>
-                    </div>
+                    </details>
                   );
                 })}
               </div>
@@ -1254,6 +1315,27 @@ export function LocationInspector({
               <Archive size="0.75rem" />
               {location.status === "archived" ? "Restore location" : "Archive location"}
             </button>
+            {location.status === "archived" && onDeletePermanently && (
+              <>
+                <button
+                  type="button"
+                  onClick={onDeletePermanently}
+                  disabled={Boolean(permanentDeleteProtection)}
+                  title={permanentDeleteProtection ?? undefined}
+                  className="mari-chrome-control mari-chrome-control--danger min-h-11 w-full justify-start px-3 text-xs disabled:opacity-45"
+                >
+                  <Trash2 size="0.75rem" />
+                  {permanentDeleteCount > 1
+                    ? `Delete ${permanentDeleteCount} archived locations permanently`
+                    : "Delete permanently"}
+                </button>
+                {permanentDeleteProtection && (
+                  <p className="text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                    {permanentDeleteProtection}
+                  </p>
+                )}
+              </>
+            )}
             {currentLocationId === location.id && (
               <p className="text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-accent)]">
                 This is the current story location. Setting another location here corrects the saved state without narrating travel.

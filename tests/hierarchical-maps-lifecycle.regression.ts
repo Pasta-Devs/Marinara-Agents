@@ -22,6 +22,10 @@ const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
 const generationProviderBaseUrl = "http://127.0.0.1:9/v1";
 const csrfHeaders = { "x-marinara-csrf": "1" };
 const originalFetch = globalThis.fetch;
+const artifactWorldMapsGuideUrl =
+  "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md";
+const catalogWorldMapsGuideUrl =
+  "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md";
 const defaultTurnPromptTemplate = [
   "Current path: ${currentPath}",
   "Current location ID: ${currentLocationId}",
@@ -78,6 +82,12 @@ function artifactFixture(version: string): ArtifactFixture {
   ) as Manifest;
   assert.equal(manifest.id, "hierarchical-maps");
   assert.equal(manifest.version, version);
+  if (version === "1.2.5") {
+    const clientSource = execFileSync("unzip", ["-p", path, "client.js"], { encoding: "utf8" });
+    assert.ok(clientSource.includes(artifactWorldMapsGuideUrl));
+    assert.match(clientSource, /Open World Maps movement help/u);
+    assert.match(clientSource, /Open shared-world guide/u);
+  }
   return {
     bytes,
     manifest,
@@ -100,6 +110,8 @@ const fixtures = new Map(
     artifactFixture("1.2.1"),
     artifactFixture("1.2.2"),
     artifactFixture("1.2.3"),
+    artifactFixture("1.2.4"),
+    artifactFixture("1.2.5"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -122,6 +134,13 @@ assert.deepEqual(candidateFixture.manifest.builtAgainst, {
   engineCommit: "858cfa431e07f6f558aa1e8826a2c9b024269ab7",
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
+
+const currentFixture = fixtures.get("1.2.5");
+assert.ok(currentFixture);
+assert.deepEqual(currentFixture.manifest.builtAgainst, {
+  engineVersion: "2.3.5",
+  engineCommit: "ed0e2422b17b747aa5c392d9019bb92a71b00260",
+});
 
 function seedInstalledProfile(version: string) {
   const fixture = fixtures.get(version);
@@ -178,7 +197,9 @@ function catalogFixture(version: string) {
           bytes: fixture.bytes.byteLength,
         },
         documentationUrl:
-          "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
+          version === "1.2.5"
+            ? catalogWorldMapsGuideUrl
+            : "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
       },
     ],
   };
@@ -1534,6 +1555,66 @@ async function main() {
         "Shared worlds must retain reusable Global Gallery artwork references",
       );
 
+      const concurrentSharedWorldPayload = {
+        name: "Lifecycle concurrent world",
+        description: "Only one request may claim this account-owned world name.",
+        definition: sharedWorldDefinition,
+        hierarchyProfile: sharedWorldHierarchyProfile,
+      };
+      const concurrentSharedWorldResponses = await Promise.all([
+        app.inject({
+          method: "POST",
+          url: "/api/chats/spatial-context/shared-worlds",
+          headers: csrfHeaders,
+          payload: concurrentSharedWorldPayload,
+        }),
+        app.inject({
+          method: "POST",
+          url: "/api/chats/spatial-context/shared-worlds",
+          headers: csrfHeaders,
+          payload: concurrentSharedWorldPayload,
+        }),
+      ]);
+      assert.deepEqual(
+        concurrentSharedWorldResponses.map((response) => response.statusCode).sort((left, right) => left - right),
+        [201, 409],
+        "Concurrent shared-world creation must persist only one case-insensitive friendly name",
+      );
+      const concurrentNameConflict = concurrentSharedWorldResponses.find((response) => response.statusCode === 409);
+      assert.ok(concurrentNameConflict);
+      assert.equal(JSON.parse(concurrentNameConflict.body).code, "spatial_shared_world_name_conflict");
+      const sharedWorldsAfterConcurrentCreate = (await expectJson(app, {
+        method: "GET",
+        url: "/api/chats/spatial-context/shared-worlds",
+      })) as Array<{ name: string }>;
+      assert.equal(
+        sharedWorldsAfterConcurrentCreate.filter(
+          (world) => world.name.toLocaleLowerCase() === concurrentSharedWorldPayload.name.toLocaleLowerCase(),
+        ).length,
+        1,
+      );
+      const conflictingRename = (await expectJson(
+        app,
+        {
+          method: "PUT",
+          url: `/api/chats/spatial-context/shared-worlds/${sharedWorld.id}`,
+          headers: csrfHeaders,
+          payload: {
+            expectedRevision: sharedWorld.revision,
+            name: concurrentSharedWorldPayload.name.toUpperCase(),
+            description: "One canonical map shared by otherwise independent chats.",
+            definition: sharedWorld.data.definition,
+            hierarchyProfile: sharedWorld.data.hierarchyProfile,
+          },
+        },
+        409,
+      )) as { code: string };
+      assert.equal(
+        conflictingRename.code,
+        "spatial_shared_world_name_conflict",
+        "Shared-world renames must preserve the case-insensitive uniqueness policy",
+      );
+
       const createSharedWorldChat = async (name: string, mode: "roleplay" | "game" = "roleplay") => {
         const chat = (await expectJson(app, {
           method: "POST",
@@ -2640,11 +2721,11 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.2.3";
+    catalogVersion = "1.2.5";
     catalogOnline = true;
-    const upgraded123 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded123.version, "1.2.3");
-    assert.equal(upgraded123.previousVersion, "1.1.7");
+    const upgraded125 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded125.version, "1.2.5");
+    assert.equal(upgraded125.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
@@ -2664,6 +2745,11 @@ async function main() {
         showConnections: boolean;
         linkPresentations: Record<string, { color?: string; lineStyle?: "solid" | "dashed" | "dotted" }>;
       };
+      locationDeletionProtections: Array<{
+        locationId: string;
+        historySnapshotCount: number;
+        gameMapBindingCount: number;
+      }>;
       warnings: Array<{ code: string; message: string; locationId?: string }>;
     };
     assert.ok(
@@ -2685,8 +2771,20 @@ async function main() {
       false,
       "The updated artifact must ignore missing lore links retained only on archived locations",
     );
-    const presentationKey = "lifecycle_harbor|lifecycle_level_5";
-    const styledBranch = (await expectJson(app, {
+
+    const temporaryArchivedLocation = {
+      id: "lifecycle_temporary_archive",
+      parentId: null,
+      name: "Temporary Archived Location",
+      kind: "place",
+      description: "An accidental location that has never appeared in message history.",
+      childPresentation: "list",
+      links: [],
+      lorebookEntryIds: [],
+      status: "archived",
+      sortOrder: 99,
+    };
+    const branchWithTemporaryArchive = (await expectJson(app, {
       method: "PUT",
       url: `/api/chats/${branch.id}/spatial-context`,
       headers: csrfHeaders,
@@ -2695,7 +2793,78 @@ async function main() {
         expectedCurrentLocationId: upgradedBranchSpatial.currentLocationId,
         definition: {
           ...upgradedBranchSpatial.definition,
-          locations: upgradedBranchSpatial.definition.locations.map((location) =>
+          locations: [...upgradedBranchSpatial.definition.locations, temporaryArchivedLocation],
+        },
+        hierarchyProfile: upgradedBranchSpatial.hierarchyProfile,
+      },
+    })) as typeof upgradedBranchSpatial;
+    assert.ok(
+      branchWithTemporaryArchive.locationDeletionProtections.some(
+        (protection: { locationId: string; historySnapshotCount: number }) =>
+          protection.locationId === "lifecycle_world" && protection.historySnapshotCount > 0,
+      ),
+      "The editor must receive per-location history protections",
+    );
+
+    const branchAfterSafeDeletion = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${branch.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: branchWithTemporaryArchive.definition.revision,
+        expectedCurrentLocationId: branchWithTemporaryArchive.currentLocationId,
+        definition: {
+          ...branchWithTemporaryArchive.definition,
+          locations: branchWithTemporaryArchive.definition.locations.filter(
+            (location) => location.id !== temporaryArchivedLocation.id,
+          ),
+        },
+        hierarchyProfile: branchWithTemporaryArchive.hierarchyProfile,
+      },
+    })) as typeof upgradedBranchSpatial;
+    assert.equal(
+      branchAfterSafeDeletion.definition.locations.some((location) => location.id === temporaryArchivedLocation.id),
+      false,
+      "An archived location with no history or bindings must be permanently removable",
+    );
+
+    const protectedHistoryRemoval = (await expectJson(
+      app,
+      {
+        method: "PUT",
+        url: `/api/chats/${branch.id}/spatial-context`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: branchAfterSafeDeletion.definition.revision,
+          expectedCurrentLocationId: branchAfterSafeDeletion.currentLocationId,
+          definition: {
+            ...branchAfterSafeDeletion.definition,
+            locations: branchAfterSafeDeletion.definition.locations
+              .filter((location) => location.id !== "lifecycle_harbor")
+              .map((location) => ({
+                ...location,
+                links: location.links.filter((link) => link.targetId !== "lifecycle_harbor"),
+              })),
+          },
+          hierarchyProfile: branchAfterSafeDeletion.hierarchyProfile,
+        },
+      },
+      409,
+    )) as { code: string; error: string };
+    assert.equal(protectedHistoryRemoval.code, "spatial_history_location_removal_forbidden");
+    assert.match(protectedHistoryRemoval.error, /historical message/u);
+
+    const presentationKey = "lifecycle_harbor|lifecycle_level_5";
+    const styledBranch = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${branch.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: branchAfterSafeDeletion.definition.revision,
+        expectedCurrentLocationId: branchAfterSafeDeletion.currentLocationId,
+        definition: {
+          ...branchAfterSafeDeletion.definition,
+          locations: branchAfterSafeDeletion.definition.locations.map((location) =>
             location.id === "lifecycle_harbor"
               ? {
                   ...location,
@@ -2713,10 +2882,10 @@ async function main() {
           ),
         },
         hierarchyProfile: {
-          ...upgradedBranchSpatial.hierarchyProfile,
+          ...branchAfterSafeDeletion.hierarchyProfile,
           showConnections: false,
           linkPresentations: {
-            ...upgradedBranchSpatial.hierarchyProfile.linkPresentations,
+            ...branchAfterSafeDeletion.hierarchyProfile.linkPresentations,
             [presentationKey]: { color: "#22C55E", lineStyle: "dotted" },
           },
         },
@@ -2925,6 +3094,11 @@ async function main() {
     })) as { messages: Array<{ content: string }> };
     const narratedPromptText = narratedPrompt.messages.map((message) => message.content).join("\n");
     assert.match(narratedPromptText, /\[spatial_move: destination_id=/u);
+    assert.match(narratedPromptText, /Use the latest user message as the authority for map changes/u);
+    assert.match(narratedPromptText, /We follow her into the outdoor section/u);
+    assert.match(narratedPromptText, /We discover a hidden room/u);
+    assert.match(narratedPromptText, /your own narration alone never authorizes either command/u);
+    assert.match(narratedPromptText, /NPC-only movement/u);
     assert.match(
       narratedPromptText,
       /Lifecycle World > Level 5 — Prism Caverns \[lifecycle_level_5\]/u,
@@ -3199,7 +3373,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.2.3");
+    assert.equal(reinstalled.version, "1.2.5");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -3287,7 +3461,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.2.3", status: "active", readiness: "ready" }],
+      [{ version: "1.2.5", status: "active", readiness: "ready" }],
     );
 
     console.info(

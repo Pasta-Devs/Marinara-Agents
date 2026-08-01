@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   ArrowLeft,
+  CircleHelp,
   Download,
   GitFork,
   Link2,
@@ -44,7 +45,7 @@ import {
   SpatialMapWorkspace,
 } from "./SpatialMapWorkspace";
 import { reuseOrUploadSpatialGlobalGalleryImage, useSpatialGlobalGalleryImages } from "./use-spatial-resources";
-import { cn } from "./package-utils";
+import { cn, WORLD_MAPS_GUIDE_URL } from "./package-utils";
 
 interface SpatialMapLibraryProps {
   chatId: string | null;
@@ -582,10 +583,21 @@ export function SpatialMapLibrary({
         <div className="min-w-0 flex-1">
           <h1 className="text-sm font-semibold text-[var(--marinara-editor-title)]">World map library</h1>
           <p className="text-[0.625rem] text-[var(--marinara-editor-muted)]">
-            Link one durable world across chats or create independent template copies
+            {supportedChat
+              ? `Choose a shared world or independent template copy for ${chatName || "this chat"}`
+              : "Link one durable world across chats or create independent template copies"}
           </p>
         </div>
         <div className="mari-editor-actions flex max-sm:w-full max-sm:border-t max-sm:border-[var(--marinara-editor-divider)] max-sm:pt-2">
+          <a
+            href={WORLD_MAPS_GUIDE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+            title="Open World Maps guide"
+          >
+            <CircleHelp size="0.8125rem" /> Guide
+          </a>
           <button
             type="button"
             onClick={() => {

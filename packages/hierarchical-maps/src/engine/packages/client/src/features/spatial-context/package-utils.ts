@@ -1,6 +1,9 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+export const WORLD_MAPS_GUIDE_URL =
+  "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

@@ -6,6 +6,7 @@ import {
   type SpatialHierarchyProfile,
 } from "../../../../../maps-shared/src/maps-model";
 import { cn } from "../package-utils";
+import { SpatialLocationIcon } from "./SpatialLocationIcon";
 
 interface HierarchyNavigatorProps {
   definition: SpatialContextDefinition;
@@ -100,9 +101,7 @@ export function HierarchyNavigator({
             aria-current={selected ? "true" : undefined}
             className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
           >
-            <span className="text-base" aria-hidden="true">
-              {location.icon || "⌖"}
-            </span>
+            <SpatialLocationIcon icon={location.icon} className="text-base" />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-medium text-[var(--marinara-chat-chrome-panel-title)]">
                 {location.name || "Untitled location"}
