@@ -2,11 +2,11 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  BrainCircuit,
   CircleHelp,
   Pencil,
   Plus,
   Settings2,
+  Sparkles,
   Upload,
 } from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
@@ -313,17 +313,23 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     >
       <header className="mari-editor-header relative z-20">
         <div className="mari-editor-header-main max-md:min-w-full">
-          <IconButton
-            icon={ArrowLeft}
-            label={localizeUi(
+          <button
+            type="button"
+            aria-label={localizeUi(
               "ui.longTermMemory.longtermmemorydetail.backToAgents",
             )}
             data-ltm-control="back"
             onClick={() => void close()}
-            className="h-11 min-h-11 w-11 min-w-11"
-          />
+            className="mari-editor-action inline-flex"
+          >
+            <ArrowLeft aria-hidden="true" size="1.125rem" />
+          </button>
           <span className="mari-editor-icon-tile">
-            <BrainCircuit aria-hidden="true" size="1.125rem" />
+            <Sparkles
+              aria-hidden="true"
+              size="1.125rem"
+              className="max-md:!h-[0.875rem] max-md:!w-[0.875rem]"
+            />
           </span>
           <div className="min-w-0 flex-1">
             <h1 id="ltm-detail-title" className="mari-editor-title truncate">
