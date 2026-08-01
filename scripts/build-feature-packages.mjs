@@ -115,7 +115,7 @@ const features = [
   {
     id: "long-term-memory",
     version: "1.0.6",
-    minEngineVersion: "2.4.0",
+    minEngineVersion: "2.3.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
     description: "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
@@ -139,7 +139,7 @@ const features = [
   {
     id: "hierarchical-maps",
     version: "1.2.6",
-    minEngineVersion: "2.4.0",
+    minEngineVersion: "2.3.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
     description: "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game.",

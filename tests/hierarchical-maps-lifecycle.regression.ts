@@ -139,8 +139,8 @@ assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds,
 const currentFixture = fixtures.get("1.2.6");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
-  engineVersion: "2.4.0",
-  engineCommit: "6115d944317aa1106e5b7aa5d9178a37fa79bf70",
+  engineVersion: "2.3.5",
+  engineCommit: "ed0e2422b17b747aa5c392d9019bb92a71b00260",
 });
 
 function seedInstalledProfile(version: string) {
