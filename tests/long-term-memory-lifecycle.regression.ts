@@ -735,8 +735,8 @@ async function main() {
       });
     assert.ok(acceptButtonSize.width >= 44);
     assert.ok(acceptButtonSize.height >= 44);
-    assert.equal(acceptButtonSize.iconWidth, "1.25rem");
-    assert.equal(acceptButtonSize.iconHeight, "1.25rem");
+    assert.equal(acceptButtonSize.iconWidth, "1rem");
+    assert.equal(acceptButtonSize.iconHeight, "1rem");
     await page.setViewportSize({ width: 390, height: 844 });
     const reviewTextAfterViewportChanges = await page
       .locator('[data-ltm-workspace-pane="workbench"]')
