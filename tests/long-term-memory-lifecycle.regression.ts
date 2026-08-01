@@ -200,6 +200,7 @@ async function main() {
                 sections: {
                   facts: {
                     text: `${title} content.`,
+                    importance: "major",
                     updatedAt: "2026-07-30T00:00:00.000Z",
                   },
                 },
@@ -207,6 +208,22 @@ async function main() {
             },
           ]
         : [],
+    });
+    const makeExistingReviewMutation = () => ({
+      id: reviewMutationIds.second,
+      kind: "update_section",
+      claimKind: "change",
+      risk: "low",
+      confidence: 0.9,
+      summary: "Update the existing mobile world memory",
+      evidence: ["source_note:source_mobile_review"],
+      noteId: "world_second_mobile",
+      sectionKey: "facts",
+      section: {
+        text: "Updated second mobile review memory text.",
+        importance: "major",
+        updatedAt: "2026-07-30T00:00:00.000Z",
+      },
     });
     let reviewSources: any[] = [
       {
@@ -293,12 +310,27 @@ async function main() {
                     sections: {
                       facts: {
                         text: "First mobile review memory content.",
+                        importance: "major",
                         updatedAt: "2026-07-30T00:00:00.000Z",
                       },
                     },
                   },
                 },
                 disposition: "new",
+                diagnostics: [],
+                changes: [],
+              },
+            ],
+          },
+          {
+            noteId: "world_second_mobile",
+            title: "Second mobile review memory",
+            noteType: "world",
+            rows: [
+              {
+                draftId: reviewDraftIds.second,
+                mutation: makeExistingReviewMutation(),
+                disposition: "merge",
                 diagnostics: [],
                 changes: [],
               },
@@ -389,7 +421,50 @@ async function main() {
             updatedAt: "2026-07-30T00:00:00.000Z",
             version: 1,
           },
+          {
+            id: "world_second_mobile",
+            title: "Second mobile review memory",
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: {},
+            tags: [],
+            keywords: [],
+            links: [],
+            sections: {
+              facts: {
+                text: "Second mobile review memory text.",
+                importance: "major",
+                updatedAt: "2026-07-30T00:00:00.000Z",
+              },
+            },
+            createdAt: "2026-07-30T00:00:00.000Z",
+            updatedAt: "2026-07-30T00:00:00.000Z",
+            version: 1,
+          },
         ]);
+      if (request.method === "GET" && url.pathname.endsWith("/notes/world_second_mobile"))
+        return send(200, {
+          id: "world_second_mobile",
+          title: "Second mobile review memory",
+          type: "world",
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: {
+            facts: {
+              text: "Second mobile review memory text.",
+              importance: "major",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+            },
+          },
+          createdAt: "2026-07-30T00:00:00.000Z",
+          updatedAt: "2026-07-30T00:00:00.000Z",
+          version: 1,
+        });
       if (request.method === "POST" && url.pathname.endsWith("/import/preview"))
         return send(200, { samples: [], scanned: 0, draftable: 0, importedCount: 0 });
       if (request.method === "POST" && url.pathname.endsWith("/import/lorebooks/preview"))
@@ -615,6 +690,53 @@ async function main() {
       .locator('[data-ltm-workspace-pane="workbench"]')
       .innerText();
     assert.match(reviewText, /Second mobile review memory/u);
+    assert.match(reviewText, /Second mobile review memory summary/u);
+    assert.match(reviewText, /World/u);
+    assert.match(reviewText, /Update section/u);
+    assert.match(reviewText, /Major/u);
+    assert.equal(await page.locator('[data-ltm-review-operation]').count(), 1);
+    assert.equal(
+      await page
+        .locator('[data-ltm-review-draft-summary]')
+        .first()
+        .getAttribute("class")
+        .then((className) => className?.includes("truncate")),
+      true,
+    );
+    await page.getByRole("button", { name: "Open memory" }).click();
+    await page.locator('[data-ltm-surface="vault"]').waitFor();
+    await page.locator('[data-ltm-note-editor]').waitFor();
+    assert.equal(
+      await page.locator('[data-ltm-note-editor] input').first().inputValue(),
+      "Second mobile review memory",
+    );
+    await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
+    await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+    await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+    await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+    await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
+    await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const acceptButtonSize = await page
+      .locator(
+        '[data-ltm-review-mutation] [aria-label="Accept"]',
+      )
+      .first()
+      .evaluate((button) => {
+        const rect = button.getBoundingClientRect();
+        const icon = button.querySelector("svg")!;
+        return {
+          width: rect.width,
+          height: rect.height,
+          iconWidth: icon.getAttribute("width"),
+          iconHeight: icon.getAttribute("height"),
+        };
+      });
+    assert.ok(acceptButtonSize.width >= 44);
+    assert.ok(acceptButtonSize.height >= 44);
+    assert.equal(acceptButtonSize.iconWidth, "1.25rem");
+    assert.equal(acceptButtonSize.iconHeight, "1.25rem");
+    await page.setViewportSize({ width: 390, height: 844 });
     assert.doesNotMatch(reviewText, /timeline_event|world_022|10000000-0000-4000-8000-000000000022/u);
     assert.equal(
       await page.locator('[data-ltm-review-target]').first().evaluate((target) =>
@@ -662,7 +784,22 @@ async function main() {
     assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
     assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
     await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
-    await page.locator(`[data-ltm-rejected-suggestion="${rejectedSuggestionId}"]`).waitFor();
+    await page.locator('[data-ltm-rejected-suggestions]').waitFor();
+    assert.equal(
+      await page.locator('[data-ltm-rejected-suggestions]').evaluate(
+        (element) => (element as HTMLDetailsElement).open,
+      ),
+      false,
+    );
+    assert.ok(
+      await page.locator('[data-ltm-rejected-suggestions]').evaluate(
+        (element) =>
+          element.compareDocumentPosition(
+            document.querySelector('[data-ltm-control="review-select"]')!,
+          ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    );
+    await page.locator('[data-ltm-rejected-suggestions] > summary').click();
     await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
     await page.locator("[data-ltm-note-editor]").waitFor();
     await page.locator("[data-ltm-details-toggle]").click();
@@ -739,7 +876,14 @@ async function main() {
     await page.setViewportSize({ width: 1280, height: 900 });
     page.once("dialog", (dialog) => void dialog.accept());
     await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
-    await page.locator(`[data-ltm-rejected-suggestion="${rejectedSuggestionId}"]`).waitFor();
+    await page.locator('[data-ltm-rejected-suggestions]').waitFor();
+    if (
+      !(await page.locator('[data-ltm-rejected-suggestions]').evaluate(
+        (element) => (element as HTMLDetailsElement).open,
+      ))
+    ) {
+      await page.locator('[data-ltm-rejected-suggestions] > summary').click();
+    }
     await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
     await page.locator("[data-ltm-note-editor]").waitFor();
     assert.equal(

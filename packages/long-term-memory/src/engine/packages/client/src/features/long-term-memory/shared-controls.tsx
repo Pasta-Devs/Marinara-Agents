@@ -49,12 +49,14 @@ export function IconButton({
   icon: Icon,
   label,
   destructive = false,
+  iconSize = "0.875rem",
   className = "",
   ...props
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
   icon: LucideIcon;
   label: string;
   destructive?: boolean;
+  iconSize?: string;
 }) {
   return (
     <button
@@ -65,7 +67,7 @@ export function IconButton({
       className={`mari-editor-action h-8 min-h-8 w-8 min-w-8 shrink-0 p-0 ${destructive ? "mari-editor-action--danger" : ""} ${className}`}
       {...props}
     >
-      <Icon aria-hidden="true" size="0.875rem" />
+      <Icon aria-hidden="true" size={iconSize} />
     </button>
   );
 }
