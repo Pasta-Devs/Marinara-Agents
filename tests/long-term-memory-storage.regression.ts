@@ -21,23 +21,39 @@ async function main() {
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts"
   );
   const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
   const requestedOffsets: string[] = [];
+  const requestedHeaders: Headers[] = [];
   try {
-    globalThis.fetch = (async (input: string | URL | Request) => {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { localStorage: { getItem: () => "  ltm-secret  " } },
+    });
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url, "http://localhost");
+      requestedHeaders.push(new Headers(init?.headers));
       requestedOffsets.push(url.searchParams.get("offset") ?? "");
       const offset = Number(url.searchParams.get("offset"));
       return new Response(JSON.stringify(offset === 0 ? Array.from({ length: 500 }, (_, id) => id) : [500]));
     }) as typeof fetch;
     assert.equal((await requestAllNotes<number>("/notes?includeGlobal=true")).length, 501);
     assert.deepEqual(requestedOffsets, ["0", "500"]);
+    assert.equal(requestedHeaders[0].get("X-Admin-Secret"), "ltm-secret");
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
+    else globalThis.window = originalWindow;
   }
   requestedOffsets.length = 0;
+  requestedHeaders.length = 0;
   try {
-    globalThis.fetch = (async (input: string | URL | Request) => {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { localStorage: { getItem: () => null } },
+    });
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url, "http://localhost");
+      requestedHeaders.push(new Headers(init?.headers));
       requestedOffsets.push(url.searchParams.get("offset") ?? "");
       return new Response(JSON.stringify(Array.from({ length: 500 }, (_, id) => id)));
     }) as typeof fetch;
@@ -46,8 +62,11 @@ async function main() {
     });
     assert.equal(requestedOffsets.length, 201);
     assert.equal(requestedOffsets.at(-1), "100000");
+    assert.equal(requestedHeaders[0].has("X-Admin-Secret"), false);
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
+    else globalThis.window = originalWindow;
   }
   const { configurePackageRuntime } = await import(
     `${source}/package-runtime.ts`

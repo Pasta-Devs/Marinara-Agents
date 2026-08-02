@@ -65,6 +65,18 @@ jobs:
               return;
             }
 
+            if (context.eventName === 'pull_request_review') {
+              const association = context.payload.pull_request.author_association;
+              if (association === 'MEMBER' || association === 'OWNER') {
+                core.notice(`${authorLogin} is a trusted repository member on a review event; owner approval is not required.`);
+                core.setOutput('internal', 'true');
+              } else {
+                core.notice(`${authorLogin} requires owner approval; membership lookup is unavailable on review events.`);
+                core.setOutput('internal', 'false');
+              }
+              return;
+            }
+
             if (process.env.MEMBERS_TOKEN_CONFIGURED !== 'true') {
               core.setFailed('PASTA_DEVS_MEMBERS_TOKEN is required to verify Pasta-Devs organization membership.');
               return;

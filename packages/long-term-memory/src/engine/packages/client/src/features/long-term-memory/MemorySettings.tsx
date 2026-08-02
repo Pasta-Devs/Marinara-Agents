@@ -8,7 +8,7 @@ import type {
   LtmIntegrityResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
-import { invalidateLtmQueries, queryKeys, request, requestHost } from "./api";
+import { invalidateLtmQueries, queryKeys, request, requestHost, requestRaw } from "./api";
 import {
   Button,
   InfoPopover,
@@ -701,9 +701,7 @@ export default function MemorySettings({
     setPending("backup-export");
     setMessage("");
     try {
-      const response = await fetch("/api/long-term-memory/backup/export", {
-        cache: "no-store",
-      });
+      const response = await requestRaw("/backup/export");
       if (!response.ok)
         throw new Error(
           response.statusText ||
