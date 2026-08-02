@@ -7,8 +7,14 @@ function extractNamedStep(workflow, stepName) {
   const start = workflow.indexOf(marker);
   assert.notEqual(start, -1, `Missing workflow step: ${stepName}`);
 
-  const nextStep = workflow.indexOf("\n      - ", start + marker.length);
-  return workflow.slice(start, nextStep === -1 ? undefined : nextStep);
+  const contentStart = start + marker.length;
+  const nextStep = workflow.indexOf("\n      - ", contentStart);
+  const nextJobMatch = workflow.slice(contentStart).match(/\n  [A-Za-z_][A-Za-z0-9_-]*:\s*\n/u);
+  const nextJob = nextJobMatch?.index === undefined ? -1 : contentStart + nextJobMatch.index;
+  const boundaries = [nextStep, nextJob].filter((boundary) => boundary !== -1);
+  const end = boundaries.length > 0 ? Math.min(...boundaries) : undefined;
+
+  return workflow.slice(start, end).trimEnd();
 }
 
 export function validatePullRequestTriage() {
@@ -41,13 +47,16 @@ export function validatePullRequestTriage() {
   assert.doesNotMatch(triageWorkflow, /github\.event\.review|pulls\.listReviews|PASTA_DEVS_MEMBERS_TOKEN/u);
 
   const exemptionStep = extractNamedStep(triageWorkflow, "Exempt trusted contributor");
-  assert.match(
+  assert.equal(
     exemptionStep,
-    /if: >-\n\s+github\.event\.pull_request\.author_association == 'MEMBER' \|\|\n\s+github\.event\.pull_request\.author_association == 'OWNER' \|\|\n\s+github\.event\.pull_request\.author_association == 'COLLABORATOR'/u,
-  );
-  assert.match(
-    exemptionStep,
-    /run: echo "Trusted contributor; pull request template validation is not required\."/u,
+    [
+      "      - name: Exempt trusted contributor",
+      "        if: >-",
+      "          github.event.pull_request.author_association == 'MEMBER' ||",
+      "          github.event.pull_request.author_association == 'OWNER' ||",
+      "          github.event.pull_request.author_association == 'COLLABORATOR'",
+      '        run: echo "Trusted contributor; pull request template validation is not required."',
+    ].join("\n"),
   );
 
   assert.equal(existsSync(untrustedReviewGate), false);
