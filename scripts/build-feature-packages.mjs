@@ -138,7 +138,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.8",
+    version: "1.2.9",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -448,6 +448,12 @@ async function bundleSpecialClient(feature, output) {
 [data-marinara-maps-workspace-overlay] .mari-editor-header button {
   pointer-events: auto;
   touch-action: manipulation;
+}
+
+[data-marinara-maps-workspace-overlay] [data-marinara-maps-editor-canvas] {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  width: 100%;
 }
 
 [data-marinara-maps-workspace-overlay] .mari-editor-action,

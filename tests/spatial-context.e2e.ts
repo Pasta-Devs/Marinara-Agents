@@ -3837,6 +3837,8 @@ test("AI map expansion preserves a campaign map and its current location", async
     const [canvasBox, nodeBox] = await Promise.all([arrangedCanvas.boundingBox(), lighthouseNode.boundingBox()]);
     expect(canvasBox).not.toBeNull();
     expect(nodeBox).not.toBeNull();
+    expect(canvasBox!.height).toBeGreaterThan(100);
+    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(16 / 9, 1);
     const unselectedBorderColor = await lighthouseNode.evaluate((element) => getComputedStyle(element).borderColor);
     await lighthouseNode.focus();
     await lighthouseNode.click();
