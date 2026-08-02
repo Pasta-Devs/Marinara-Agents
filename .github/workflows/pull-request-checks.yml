@@ -33,6 +33,9 @@ jobs:
       - name: Validate catalogs, packages, artifacts, and README coverage
         run: node scripts/validate-catalog.mjs
 
+      - name: Validate pull request gate topology
+        run: node scripts/validate-pr-triage.mjs
+
       - name: Check whitespace
         env:
           BASE_REF: ${{ github.base_ref }}
