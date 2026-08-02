@@ -36,6 +36,29 @@ jobs:
               );
               pullRequests = response.data;
             }
+            if (pullRequests.length === 0) {
+              const response = await github.request('GET /search/issues', {
+                q: `${context.payload.workflow_run.head_sha} type:pr repo:${context.repo.owner}/${context.repo.repo}`,
+                per_page: 100,
+              });
+              const candidates = response.data.items.filter((item) => item.pull_request);
+              const verified = await Promise.all(
+                candidates.map(async (item) => {
+                  const candidate = await github.request(
+                    'GET /repos/{owner}/{repo}/pulls/{pull_number}',
+                    {
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      pull_number: item.number,
+                    },
+                  );
+                  return candidate.data.head.sha === context.payload.workflow_run.head_sha
+                    ? candidate.data
+                    : null;
+                }),
+              );
+              pullRequests = verified.filter(Boolean);
+            }
 
             const pullNumbers = [...new Set(pullRequests.map((pullRequest) => pullRequest.number))];
             if (pullNumbers.length === 0) {

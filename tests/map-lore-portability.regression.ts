@@ -106,7 +106,17 @@ assert.equal(linked.books[0]?.entries[0]?.data.enabled, false);
 assert.deepEqual(parsePortableLoreBundle(linked), linked);
 
 const tamperedLinked = structuredClone(linked);
-tamperedLinked.books[0]!.settings.id = "injected-book-id";
+Object.assign(tamperedLinked.books[0]!.settings, {
+  id: "injected-book-id",
+  characterId: "foreign-character",
+  characterIds: ["foreign-character"],
+  personaId: "foreign-persona",
+  personaIds: ["foreign-persona"],
+  chatId: "foreign-chat",
+  isGlobal: true,
+  hiddenFromLibrary: true,
+  scope: "foreign-scope",
+});
 tamperedLinked.books[0]!.entries[0]!.data.userId = "injected-user-id";
 Object.assign(tamperedLinked.books[0]!.folders[0]!.data, {
   lorebookId: "injected-lorebook-id",
@@ -114,6 +124,18 @@ Object.assign(tamperedLinked.books[0]!.folders[0]!.data, {
 const sanitizedLinked = parsePortableLoreBundle(tamperedLinked);
 assert.ok(sanitizedLinked);
 assert.equal("id" in sanitizedLinked.books[0]!.settings, false);
+for (const key of [
+  "characterId",
+  "characterIds",
+  "personaId",
+  "personaIds",
+  "chatId",
+  "isGlobal",
+  "hiddenFromLibrary",
+  "scope",
+]) {
+  assert.equal(key in sanitizedLinked.books[0]!.settings, false);
+}
 assert.equal("userId" in sanitizedLinked.books[0]!.entries[0]!.data, false);
 assert.equal("lorebookId" in sanitizedLinked.books[0]!.folders[0]!.data, false);
 
@@ -197,10 +219,51 @@ async function main() {
       return undefined as T;
     },
   };
+  const ambiguousEntry = ambiguousPlan.entries[0]!;
+  const reused = await importPortableLoreBundle({
+    api,
+    bundle: linked,
+    plan: ambiguousPlan,
+    strategy: "reuse",
+    ambiguousSelections: new Map([[ambiguousEntry.entryKey, "entry-copy"]]),
+  });
+  assert.equal(reused.reusedEntries, 1);
+  assert.equal(reused.importedEntries, 0);
+  assert.equal(reused.importedLorebooks, 0);
+  await assert.rejects(
+    importPortableLoreBundle({
+      api,
+      bundle: linked,
+      plan: ambiguousPlan,
+      strategy: "reuse",
+    }),
+    /Choose how to resolve the duplicate match/u,
+  );
+  await assert.rejects(
+    importPortableLoreBundle({
+      api,
+      bundle: linked,
+      plan: ambiguousPlan,
+      strategy: "reuse",
+      ambiguousSelections: new Map([[ambiguousEntry.entryKey, "missing-entry"]]),
+    }),
+    /no longer available/u,
+  );
+  const importBundle = structuredClone(complete);
+  Object.assign(importBundle.books[0]!.settings, {
+    characterId: "foreign-character",
+    characterIds: ["foreign-character"],
+    personaId: "foreign-persona",
+    personaIds: ["foreign-persona"],
+    chatId: "foreign-chat",
+    isGlobal: true,
+    hiddenFromLibrary: true,
+    scope: "foreign-scope",
+  });
   const imported = await importPortableLoreBundle({
     api,
-    bundle: complete,
-    plan: planPortableLoreImport(complete, [], []),
+    bundle: importBundle,
+    plan: planPortableLoreImport(importBundle, [], []),
     strategy: "separate",
   });
   assert.equal(imported.importedLorebooks, 1);
@@ -211,6 +274,21 @@ async function main() {
     false,
     "Imported lorebooks remain after success",
   );
+  const createdBookBody = requests.find(
+    (request) => request.method === "POST" && request.path === "/lorebooks",
+  )?.body as Record<string, unknown>;
+  for (const key of [
+    "characterId",
+    "characterIds",
+    "personaId",
+    "personaIds",
+    "chatId",
+    "isGlobal",
+    "hiddenFromLibrary",
+    "scope",
+  ]) {
+    assert.equal(key in createdBookBody, false);
+  }
   const bulkBody = requests.find((request) =>
     request.path.endsWith("/entries/bulk"),
   )?.body as {

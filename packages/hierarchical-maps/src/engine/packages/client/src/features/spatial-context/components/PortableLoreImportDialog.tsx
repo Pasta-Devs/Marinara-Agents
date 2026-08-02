@@ -41,6 +41,7 @@ export function PortableLoreImportDialog({
   const [selections, setSelections] = useState<Record<string, string>>(() =>
     Object.fromEntries(ambiguousEntries.map((entry) => [entry.entryKey, ""])),
   );
+  const [mappingOpen, setMappingOpen] = useState(false);
   const reuseReady = ambiguousEntries.every(
     (entry) => selections[entry.entryKey],
   );
@@ -166,20 +167,25 @@ export function PortableLoreImportDialog({
             </section>
           )}
 
-          <details className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
+          <details
+            onToggle={(event) => setMappingOpen(event.currentTarget.open)}
+            className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3"
+          >
             <summary className="cursor-pointer text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
               Inspect location-to-lore mapping ({bundle.references.length})
             </summary>
-            <div className="mt-3 max-h-56 space-y-1 overflow-y-auto font-mono text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-              {bundle.references.map((reference, index) => (
-                <p
-                  key={`${reference.locationId}-${reference.originalEntryId}-${index}`}
-                >
-                  {reference.locationName} → {reference.originalLorebookName} →{" "}
-                  {reference.originalEntryName} → {reference.originalEntryId}
-                </p>
-              ))}
-            </div>
+            {mappingOpen && (
+              <div className="mt-3 max-h-56 space-y-1 overflow-y-auto font-mono text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                {bundle.references.map((reference, index) => (
+                  <p
+                    key={`${reference.locationId}-${reference.originalEntryId}-${index}`}
+                  >
+                    {reference.locationName} → {reference.originalLorebookName} →{" "}
+                    {reference.originalEntryName} → {reference.originalEntryId}
+                  </p>
+                ))}
+              </div>
+            )}
           </details>
         </div>
 

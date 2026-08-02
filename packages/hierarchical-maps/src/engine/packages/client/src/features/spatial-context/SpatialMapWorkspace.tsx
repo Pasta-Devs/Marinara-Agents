@@ -476,6 +476,7 @@ export function SpatialMapWorkspace({
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
   const [includeArtworkInExport, setIncludeArtworkInExport] = useState(true);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportMappingOpen, setExportMappingOpen] = useState(false);
   const [exportLoreMode, setExportLoreMode] = useState<PortableLoreExportMode>("linked-entries");
   const [exportFoldersByLorebookId, setExportFoldersByLorebookId] = useState<ReadonlyMap<string, LorebookFolder[]>>(
     new Map(),
@@ -588,6 +589,7 @@ export function SpatialMapWorkspace({
     setLayoutEditingMode(null);
     setImportIdReport(null);
     setExportDialogOpen(false);
+    setExportMappingOpen(false);
     setPendingPortableLoreImport(null);
     setUnresolvedLoreReferences(initialUnresolvedLoreReferences);
     setArtworkProgress(null);
@@ -1264,7 +1266,10 @@ export function SpatialMapWorkspace({
     initialFocusRef: exportCloseRef,
     open: exportDialogOpen && Boolean(portableExportBundle),
     disabled: isExporting,
-    onEscape: () => setExportDialogOpen(false),
+    onEscape: () => {
+      setExportMappingOpen(false);
+      setExportDialogOpen(false);
+    },
   });
 
   const openExportDialog = useCallback(async () => {
@@ -1295,6 +1300,7 @@ export function SpatialMapWorkspace({
         ),
       );
       setExportFoldersByLorebookId(new Map(folderRows));
+      setExportMappingOpen(false);
       setExportDialogOpen(true);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Lore folders could not be prepared for export.");
@@ -1375,6 +1381,7 @@ export function SpatialMapWorkspace({
       link.download = `${safeName}.world-map.json`;
       link.click();
       URL.revokeObjectURL(url);
+      setExportMappingOpen(false);
       setExportDialogOpen(false);
       if (shouldIncludeArtwork) {
         const includedCopy = `${artwork.length} artwork file${artwork.length === 1 ? "" : "s"} included`;
@@ -1520,6 +1527,9 @@ export function SpatialMapWorkspace({
         if (hasPortableLore && !portableLore) {
           throw new Error("This file contains invalid or unsupported portable lore data.");
         }
+        if (portableLore && portableLore.references.length > 0 && !lorebookEntriesQuery.entries) {
+          throw new Error("Lore entries are still loading. Try the import again in a moment.");
+        }
         if (portableLore && portableLore.books.length > 0) {
           const entries = lorebookEntriesQuery.entries;
           if (!entries) throw new Error("Lore entries are still loading. Try the import again in a moment.");
@@ -1577,7 +1587,11 @@ export function SpatialMapWorkspace({
           },
         );
         setPendingPortableLoreImport(null);
-        await Promise.all([lorebooksQuery.refetch(), onLorebooksChanged?.()]);
+        try {
+          await Promise.all([lorebooksQuery.refetch(), onLorebooksChanged?.()]);
+        } catch {
+          toast.error("The lore was restored, but the lorebook list could not be refreshed.");
+        }
         toast.success(
           `${result.reusedEntries} lore link${result.reusedEntries === 1 ? " was" : "s were"} reused; ${result.importedEntries} entr${result.importedEntries === 1 ? "y was" : "ies were"} imported. Imported lorebooks remain in your library if this map is later deleted.`,
         );
@@ -2533,7 +2547,10 @@ export function SpatialMapWorkspace({
               <button
                 ref={exportCloseRef}
                 type="button"
-                onClick={() => setExportDialogOpen(false)}
+                onClick={() => {
+                  setExportMappingOpen(false);
+                  setExportDialogOpen(false);
+                }}
                 disabled={isExporting}
                 className="mari-chrome-control h-11 w-11 shrink-0 justify-center p-0 disabled:opacity-45"
                 aria-label="Cancel map export"
@@ -2617,23 +2634,31 @@ export function SpatialMapWorkspace({
                   onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
                 />
               </label>
-              <details className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] p-3">
+              <details
+                onToggle={(event) => setExportMappingOpen(event.currentTarget.open)}
+                className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] p-3"
+              >
                 <summary className="cursor-pointer text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
                   Inspect location-to-lore mapping ({portableExportBundle.references.length})
                 </summary>
-                <div className="mt-3 max-h-44 space-y-1 overflow-y-auto font-mono text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
-                  {portableExportBundle.references.map((reference, index) => (
-                    <p key={`${reference.locationId}-${reference.originalEntryId}-${index}`}>
-                      {reference.locationName} → {reference.originalLorebookName} → {reference.originalEntryName} → {reference.originalEntryId}
-                    </p>
-                  ))}
-                </div>
+                {exportMappingOpen && (
+                  <div className="mt-3 max-h-44 space-y-1 overflow-y-auto font-mono text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                    {portableExportBundle.references.map((reference, index) => (
+                      <p key={`${reference.locationId}-${reference.originalEntryId}-${index}`}>
+                        {reference.locationName} → {reference.originalLorebookName} → {reference.originalEntryName} → {reference.originalEntryId}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </details>
             </div>
             <div className="flex flex-col-reverse gap-2 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => setExportDialogOpen(false)}
+                onClick={() => {
+                  setExportMappingOpen(false);
+                  setExportDialogOpen(false);
+                }}
                 disabled={isExporting}
                 className="mari-chrome-control min-h-11 justify-center px-4 text-xs disabled:opacity-45"
               >
