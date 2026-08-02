@@ -125,6 +125,15 @@ function resultTone(status: string): "neutral" | "success" | "warning" | "danger
         : "neutral";
 }
 
+function resultToneClass(status: string) {
+  const tone = resultTone(status);
+  return tone === "success"
+    ? "bg-[var(--marinara-editor-accent)]/15"
+    : tone === "warning"
+      ? "border border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]"
+      : "bg-[var(--secondary)]";
+}
+
 function importStatusLabel(status: string, localizeUi: LtmTranslationFunction) {
   const key = importStatusLabelKeys[status];
   return key ? localizeUi(key) : humanizeLabel(status);
@@ -2356,19 +2365,19 @@ export default function SourcesWorkspace({
                 <strong>{item.title}</strong>
                 <span
                   data-ltm-source-write-status={item.sourceWriteStatus}
-                  className={`rounded-full px-2 py-0.5 ${resultTone(item.sourceWriteStatus) === "success" ? "bg-[var(--marinara-editor-accent)]/15" : "bg-[var(--secondary)]"}`}
+                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.sourceWriteStatus)}`}
                 >
                   {importStatusLabel(item.sourceWriteStatus, localizeUi)}
                 </span>
                 <span
                   data-ltm-extraction-status={item.extractionStatus}
-                  className="rounded-full bg-[var(--secondary)] px-2 py-0.5"
+                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.extractionStatus)}`}
                 >
                   {importStatusLabel(item.extractionStatus, localizeUi)}
                 </span>
                 <span
                   data-ltm-extraction-outcome={item.outcome.state}
-                  className="rounded-full bg-[var(--secondary)] px-2 py-0.5"
+                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.outcome.state)}`}
                 >
                   {importStatusLabel(item.outcome.state, localizeUi)}
                 </span>

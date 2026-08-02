@@ -818,7 +818,9 @@ export default function MemoryVault({
     setMobilePaneAndFocus("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
         block: "nearest",
       }),
     );
@@ -844,7 +846,9 @@ export default function MemoryVault({
     setMobilePaneAndFocus("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
         block: "nearest",
       }),
     );

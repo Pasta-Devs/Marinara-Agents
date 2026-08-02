@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, X } from "lucide-react";
 import type {
@@ -125,8 +125,10 @@ function noteDisplayTitle(note: LtmNote | undefined, fallback: string) {
 function mutationDisplayLabel(
   mutation: LtmDraftMutation | undefined,
   noteById: ReadonlyMap<string, LtmNote>,
+  localizeUi: ReturnType<typeof useLtmTranslation>["t"],
 ) {
-  if (!mutation) return "dependent change";
+  if (!mutation)
+    return localizeUi("ui.longTermMemory.reviewqueue.dependentChange");
   if (mutation.summary.trim()) return `"${mutation.summary.trim()}"`;
   const target =
     mutation.kind === "create_note"
@@ -153,25 +155,17 @@ function draftDisplayTitle(
 function humanizeReviewText(
   text: string,
   noteById: ReadonlyMap<string, LtmNote>,
-  mutationLabels: ReadonlyMap<string, string>,
+  replacementPattern: RegExp | undefined,
+  replacements: ReadonlyMap<string, string>,
   sourcePrefix: string,
+  sourceFallback: string,
 ) {
   let display = text.replace(/source_note:([A-Za-z0-9_-]+)/gu, (_, id: string) =>
-    `${sourcePrefix} ${noteDisplayTitle(noteById.get(id), "this source")}`,
+    `${sourcePrefix} ${noteDisplayTitle(noteById.get(id), sourceFallback)}`,
   );
-  const replacements = new Map<string, string>([
-    ...[...noteById].map(([id, note]) => [
-      id,
-      noteDisplayTitle(note, note.type === "source" ? "this source" : "this memory"),
-    ] as const),
-    ...mutationLabels,
-  ]);
-  for (const [id, label] of [...replacements].sort(
-    (left, right) => right[0].length - left[0].length,
-  )) {
-    display = display.split(id).join(label);
-  }
-  return display;
+  return replacementPattern
+    ? display.replace(replacementPattern, (id) => replacements.get(id) ?? id)
+    : display;
 }
 
 function groupByDraft(rows: readonly ReviewRow[]) {
@@ -327,7 +321,19 @@ function recoveryLabel(
 function rejectedCandidateKey(
   candidate: LtmDraftReviewDraft["candidateRejections"][number],
 ) {
-  return JSON.stringify({ ...candidate, index: undefined });
+  const normalize = (value: string) => value.trim().replace(/\s+/gu, " ");
+  return JSON.stringify({
+    reason: candidate.reason,
+    message: normalize(candidate.message),
+    snippet: candidate.snippet ? normalize(candidate.snippet) : null,
+    issues: candidate.issues?.map(normalize) ?? [],
+    recovery: {
+      noteType: candidate.recovery?.noteType ?? null,
+      noteId: candidate.recovery?.noteId ?? null,
+      sectionKey: candidate.recovery?.sectionKey ?? null,
+      status: candidate.recovery?.status ?? null,
+    },
+  });
 }
 
 const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> =
@@ -883,6 +889,7 @@ export default function ReviewQueue({
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [mobilePane, setMobilePane] = useState<LtmWorkspacePane>("navigator");
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [sourceCollapsed, setSourceCollapsed] = useState(false);
   const [expandedMutationIds, setExpandedMutationIds] = useState<Set<string>>(
     new Set(),
   );
@@ -903,6 +910,7 @@ export default function ReviewQueue({
 
   useEffect(() => {
     setSelectedSourceId(reviewSourceNoteId ?? null);
+    setSourceCollapsed(false);
     setDetailsOpen(false);
   }, [reviewSourceNoteId]);
   const review = useQuery({
@@ -1001,6 +1009,7 @@ export default function ReviewQueue({
   }, [props.chatId]);
   useEffect(() => {
     setSelectedIds(new Set());
+    setSourceCollapsed(false);
     setSelectedDraftId(null);
     setDetailsOpen(false);
     setExpandedMutationIds(new Set());
@@ -1011,50 +1020,99 @@ export default function ReviewQueue({
     setExpandedMutationIds(new Set());
   }, [selectedDraft?.draft.id]);
 
-  const rowByMutationId = new Map<string, ReviewRow>();
-  for (const source of review.data?.sources ?? []) {
-    for (const target of source.targets) {
-      for (const row of target.rows) {
-        rowByMutationId.set(row.mutation.id, {
-          sourceNoteId: source.sourceNoteId,
-          ...row,
-          targetId: target.noteId,
-          targetTitle: target.title,
-          targetType: target.noteType,
-        });
-      }
-    }
-    for (const item of source.drafts) {
-      for (const mutation of item.draft.mutations) {
-        if (!rowByMutationId.has(mutation.id)) {
-          rowByMutationId.set(mutation.id, {
+  const { rowByMutationId, rows } = useMemo(() => {
+    const rowByMutationId = new Map<string, ReviewRow>();
+    for (const source of review.data?.sources ?? []) {
+      for (const target of source.targets) {
+        for (const row of target.rows) {
+          rowByMutationId.set(row.mutation.id, {
             sourceNoteId: source.sourceNoteId,
-            draftId: item.draft.id,
-            mutation,
-            disposition: "unavailable",
-            diagnostics: [],
-          changes: [],
-          targetId: mutationTarget(mutation),
-          targetTitle:
-            mutation.kind === "create_note" ? mutation.note.title : undefined,
-          targetType:
-            mutation.kind === "create_note" ? mutation.note.type : undefined,
+            ...row,
+            targetId: target.noteId,
+            targetTitle: target.title,
+            targetType: target.noteType,
           });
         }
       }
+      for (const item of source.drafts) {
+        for (const mutation of item.draft.mutations) {
+          if (!rowByMutationId.has(mutation.id)) {
+            rowByMutationId.set(mutation.id, {
+              sourceNoteId: source.sourceNoteId,
+              draftId: item.draft.id,
+              mutation,
+              disposition: "unavailable",
+              diagnostics: [],
+              changes: [],
+              targetId: mutationTarget(mutation),
+              targetTitle:
+                mutation.kind === "create_note" ? mutation.note.title : undefined,
+              targetType:
+                mutation.kind === "create_note" ? mutation.note.type : undefined,
+            });
+          }
+        }
+      }
     }
-  }
-  const rows = [...rowByMutationId.values()];
-  const mutationDisplayLabels = new Map(
-    rows.flatMap((row) => [
-      [row.mutation.id, mutationDisplayLabel(row.mutation, noteById)] as const,
-      ...(row.mutation.kind === "create_note"
-        ? [[row.mutation.note.id, row.mutation.note.title ?? "this memory"] as const]
-        : []),
-    ]),
+    return { rowByMutationId, rows: [...rowByMutationId.values()] };
+  }, [review.data]);
+  const mutationDisplayLabels = useMemo(
+    () => new Map(
+      rows.flatMap((row) => [
+        [
+          row.mutation.id,
+          mutationDisplayLabel(row.mutation, noteById, localizeUi),
+        ] as const,
+        ...(row.mutation.kind === "create_note"
+          ? [
+              [
+                row.mutation.note.id,
+                row.mutation.note.title ||
+                  localizeUi("ui.longTermMemory.reviewqueue.thisMemory"),
+              ] as const,
+            ]
+          : []),
+      ]),
+    ),
+    [localizeUi, notes.data, rows],
   );
+  const replacementEntries = useMemo(() => {
+    const replacements = new Map<string, string>([
+      ...[...noteById].map(([id, note]) => [
+        id,
+        noteDisplayTitle(
+          note,
+          note.type === "source"
+            ? localizeUi("ui.longTermMemory.reviewqueue.thisSource")
+            : localizeUi("ui.longTermMemory.reviewqueue.thisMemory"),
+        ),
+      ] as const),
+      ...mutationDisplayLabels,
+    ]);
+    const ids = [...replacements.keys()].sort(
+      (left, right) => right.length - left.length,
+    );
+    return {
+      replacements,
+      pattern: ids.length
+        ? new RegExp(
+            ids
+              .map((id) => id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+              .join("|"),
+            "gu",
+          )
+        : undefined,
+    };
+  }, [localizeUi, mutationDisplayLabels, notes.data]);
   const humanizeText = (text: string) =>
-    humanizeReviewText(text, noteById, mutationDisplayLabels, "Source:");
+    humanizeReviewText(
+      text,
+      noteById,
+      replacementEntries.pattern,
+      replacementEntries.replacements,
+      localizeUi("ui.longTermMemory.reviewqueue.sourcePrefix"),
+      localizeUi("ui.longTermMemory.reviewqueue.thisSource"),
+    );
   const reviewDraftTitle = (item: LtmDraftReviewDraft) =>
     draftDisplayTitle(item, localizeUi);
   useEffect(
@@ -1063,11 +1121,26 @@ export default function ReviewQueue({
   );
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
-  const sourceRows = rows.filter(
-    (row) => row.sourceNoteId === effectiveSourceId,
+  const sourceRows = useMemo(
+    () => rows.filter((row) => row.sourceNoteId === effectiveSourceId),
+    [effectiveSourceId, rows],
   );
-  const activeDraftRows = sourceRows.filter(
-    (row) => row.draftId === selectedDraft?.draft.id,
+  const activeDraftRows = useMemo(
+    () => sourceRows.filter((row) => row.draftId === selectedDraft?.draft.id),
+    [selectedDraft?.draft.id, sourceRows],
+  );
+  const dependencyCounts = useMemo(
+    () =>
+      new Map(
+        activeDraftRows.map((row) => [
+          row.mutation.id,
+          Math.max(
+            0,
+            acceptedMutationIds(activeDraftRows, [row.mutation.id]).size - 1,
+          ),
+        ]),
+      ),
+    [activeDraftRows],
   );
   const selectedRows = activeDraftRows.filter((row) =>
     selectedIds.has(row.mutation.id),
@@ -1159,7 +1232,11 @@ export default function ReviewQueue({
             {
               count: invalidEditIds.length,
               labels: invalidEditIds
-                .map((id) => mutationDisplayLabels.get(id) ?? "the edited change")
+                .map(
+                  (id) =>
+                    mutationDisplayLabels.get(id) ??
+                    localizeUi("ui.longTermMemory.reviewqueue.editedChange"),
+                )
                 .join(", "),
             },
           ),
@@ -1227,7 +1304,8 @@ export default function ReviewQueue({
               completedIds.add(id);
               if (!mutationIds.includes(id)) {
                 cascadeMutationLabels.add(
-                  mutationDisplayLabels.get(id) ?? "dependent change",
+                  mutationDisplayLabels.get(id) ??
+                    localizeUi("ui.longTermMemory.reviewqueue.dependentChange"),
                 );
               }
             });
@@ -1379,10 +1457,7 @@ export default function ReviewQueue({
     const valid = selectedEditIsValid(mutation);
     const previewChanges = hideProjection ? [] : row.changes;
     const expanded = expandedMutationIds.has(row.mutation.id);
-    const dependencyCount = Math.max(
-      0,
-      acceptedMutationIds(activeDraftRows, [row.mutation.id]).size - 1,
-    );
+    const dependencyCount = dependencyCounts.get(row.mutation.id) ?? 0;
     const mutationLabel = localizeUi(mutationLabels[mutation.kind]);
     const dispositionLabel = localizeUi(dispositionLabels[row.disposition]);
     const targetTitle =
@@ -1520,7 +1595,6 @@ export default function ReviewQueue({
               label={`${localizeUi("ui.longTermMemory.reviewqueue.accept")} ${targetTitle} (${mutationLabel})`}
               iconSize="1.25rem"
               className="mari-editor-action--primary !h-11 !min-h-11 !w-11 !min-w-11"
-              style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
               disabled={
                 !eligibleIds.has(row.mutation.id) || !valid || running !== null
               }
@@ -1793,15 +1867,22 @@ export default function ReviewQueue({
                       (item) => item.source.sourceNoteId === id,
                     ).length ?? 0;
                   const active = effectiveSourceId === id;
+                  const expanded = active && !sourceCollapsed;
+                  const panelId = `ltm-review-source-panel-${id}`;
                   return (
-                    <details key={id} open={active} className="group">
-                      <summary
+                    <div key={id} className="group">
+                      <button
+                        type="button"
                         data-ltm-review-source-select={id}
                         aria-current={active || undefined}
-                        onClick={(event) => {
-                          event.preventDefault();
+                        aria-expanded={expanded}
+                        aria-controls={panelId}
+                        onClick={() => {
                           setSelectedSourceId(id);
                           setSelectedDraftId(null);
+                          setSourceCollapsed((current) =>
+                            active ? !current : false,
+                          );
                           setMobilePaneAndFocus("workbench");
                         }}
                         className={`flex min-h-12 cursor-pointer list-none items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-sm ${active ? "bg-[var(--primary)]/10" : ""}`}
@@ -1809,7 +1890,7 @@ export default function ReviewQueue({
                         <ChevronRight
                           aria-hidden="true"
                           size="0.875rem"
-                          className="shrink-0 transition-transform group-open:rotate-90"
+                          className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
                         />
                         <span className="min-w-0 flex-1 truncate font-semibold">
                           {noteById.get(id)?.title ||
@@ -1820,8 +1901,8 @@ export default function ReviewQueue({
                         <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
                           {(source?.drafts.length ?? 0) + rejectedCount}
                         </span>
-                      </summary>
-                      <div>
+                      </button>
+                      <div id={panelId} hidden={!expanded}>
                         {source?.drafts.map((item, index) => (
                           <button
                             key={item.draft.id}
@@ -1867,7 +1948,7 @@ export default function ReviewQueue({
                           </p>
                         )}
                       </div>
-                    </details>
+                    </div>
                   );
                 })}
               </div>
@@ -2095,7 +2176,7 @@ export default function ReviewQueue({
                         )
                   }
                 />
-                <span className="text-xs text-[var(--muted-foreground)] md:hidden">
+                <span className="text-xs text-[var(--muted-foreground)]">
                   {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
                     sources: review.data?.counts.sources ?? 0,
                     source:

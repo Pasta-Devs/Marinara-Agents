@@ -142,6 +142,12 @@ export function LtmWorkspace({
         [data-ltm-workspace] [data-ltm-workspace-pane][data-active="true"] {
           display: block;
         }
+        [data-ltm-workspace] [data-ltm-control="icon-button"].mari-editor-action--primary {
+          height: 2.75rem;
+          min-height: 2.75rem;
+          width: 2.75rem;
+          min-width: 2.75rem;
+        }
         @container ltm-workspace (min-width: ${compactBreakpointRem}rem) {
           [data-ltm-workspace] [data-ltm-workspace-pane] {
             min-height: 0;

@@ -165,6 +165,7 @@ async function main() {
       draftId: string,
       mutationId?: string,
       title = "Review fixture memory",
+      mutation?: Record<string, unknown>,
     ) => ({
       id: draftId,
       status: "pending",
@@ -179,7 +180,7 @@ async function main() {
       summary: `${title} summary`,
       mutations: mutationId
         ? [
-            {
+            mutation ?? {
               id: mutationId,
               kind: "create_note",
               claimKind: "addition",
@@ -273,6 +274,7 @@ async function main() {
               reviewDraftIds.second,
               reviewMutationIds.second,
               "Second mobile review memory",
+              makeExistingReviewMutation(),
             ),
             freshness: "fresh",
             blockReasons: [],
@@ -283,7 +285,7 @@ async function main() {
         ],
         targets: [
           {
-            noteId: "world_existing_mobile",
+            noteId: "world_new_mobile",
             title: "Existing mobile world",
             noteType: "world",
             rows: [
@@ -681,7 +683,6 @@ async function main() {
     await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
     await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
     await page.locator('[data-ltm-review-draft-title]').waitFor();
-    await page.screenshot({ path: "/tmp/opencode/ltm-review-mobile-final.png", fullPage: true });
     assert.match(
       await page.locator('[data-ltm-review-draft-title]').innerText(),
       /Second mobile review memory/u,
@@ -737,7 +738,10 @@ async function main() {
     assert.equal(acceptButtonSize.iconWidth, "1.25rem");
     assert.equal(acceptButtonSize.iconHeight, "1.25rem");
     await page.setViewportSize({ width: 390, height: 844 });
-    assert.doesNotMatch(reviewText, /timeline_event|world_022|10000000-0000-4000-8000-000000000022/u);
+    const reviewTextAfterViewportChanges = await page
+      .locator('[data-ltm-workspace-pane="workbench"]')
+      .innerText();
+    assert.doesNotMatch(reviewTextAfterViewportChanges, /timeline_event|world_022|10000000-0000-4000-8000-000000000022/u);
     assert.equal(
       await page.locator('[data-ltm-review-target]').first().evaluate((target) =>
         Boolean(target.closest('[data-ltm-review-draft]')),
@@ -943,7 +947,10 @@ async function main() {
     assert.equal(
       await mobileNavigation.evaluate((navigation) => {
         const rect = navigation.getBoundingClientRect();
-        return getComputedStyle(navigation).display !== "none" && rect.width > 0 && rect.height > 0;
+        const items = [...navigation.querySelectorAll<HTMLElement>("[data-ltm-control=\"navigation\"]")];
+        const fits = navigation.scrollWidth <= navigation.clientWidth + 1;
+        const touchTargets = items.every((item) => item.getBoundingClientRect().height >= 44);
+        return getComputedStyle(navigation).display !== "none" && rect.width > 0 && rect.height > 0 && (fits || touchTargets);
       }),
       true,
     );
