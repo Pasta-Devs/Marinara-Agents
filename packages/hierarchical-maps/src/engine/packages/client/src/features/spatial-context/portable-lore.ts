@@ -107,15 +107,7 @@ const LOREBOOK_SETTING_KEYS = [
   "vectorQueryDepth",
   "vectorScoreThreshold",
   "vectorMaxResults",
-  "characterId",
-  "characterIds",
-  "personaId",
-  "personaIds",
-  "chatId",
-  "isGlobal",
   "enabled",
-  "hiddenFromLibrary",
-  "scope",
   "tags",
   "generatedBy",
   "sourceAgentId",
@@ -644,7 +636,7 @@ export async function importPortableLoreBundle(options: {
       );
       if (entriesToImport.length === 0) continue;
       const createdBook = await options.api.post<{ id: string }>("/lorebooks", {
-        ...book.settings,
+        ...pickRecord(book.settings, LOREBOOK_SETTING_KEYS),
         name: book.name,
         imagePath: null,
       });

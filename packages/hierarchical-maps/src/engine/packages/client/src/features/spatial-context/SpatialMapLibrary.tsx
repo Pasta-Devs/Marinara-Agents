@@ -133,16 +133,17 @@ export function SpatialMapLibrary({
   const replaceWithIndependentWorld = useReplaceWithIndependentSpatialWorld();
   const globalGalleryImages = useSpatialGlobalGalleryImages();
   const [isImporting, setIsImporting] = useState(false);
+  const [importEntriesPrimed, setImportEntriesPrimed] = useState(false);
   const [pendingPortableLoreImport, setPendingPortableLoreImport] =
     useState<PendingLibraryPortableLoreImport | null>(null);
   const lorebooksQuery = useSpatialLorebooks();
   const { data: lorebooks = [] } = lorebooksQuery;
   const portableLorebookIds = useMemo(
     () =>
-      isImporting || pendingPortableLoreImport
+      importEntriesPrimed || isImporting || pendingPortableLoreImport
         ? lorebooks.map((lorebook) => lorebook.id)
         : [],
-    [isImporting, lorebooks, pendingPortableLoreImport],
+    [importEntriesPrimed, isImporting, lorebooks, pendingPortableLoreImport],
   );
   const lorebookEntriesQuery = useSpatialLorebookEntries(portableLorebookIds);
   const spatial = useSpatialContext(chatId);
@@ -306,8 +307,12 @@ export function SpatialMapLibrary({
     const target = importTargetRef.current;
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || isImporting || pendingPortableLoreImport) return;
+    if (!file || isImporting || pendingPortableLoreImport) {
+      setImportEntriesPrimed(false);
+      return;
+    }
     setIsImporting(true);
+    setImportEntriesPrimed(false);
     try {
       const raw = JSON.parse(await file.text()) as unknown;
       const record = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
@@ -746,7 +751,10 @@ export function SpatialMapLibrary({
           </a>
           <button
             type="button"
+            onFocus={() => setImportEntriesPrimed(true)}
+            onPointerDown={() => setImportEntriesPrimed(true)}
             onClick={() => {
+              setImportEntriesPrimed(true);
               importTargetRef.current = "shared-world";
               importInputRef.current?.click();
             }}
@@ -769,7 +777,10 @@ export function SpatialMapLibrary({
           </button>
           <button
             type="button"
+            onFocus={() => setImportEntriesPrimed(true)}
+            onPointerDown={() => setImportEntriesPrimed(true)}
             onClick={() => {
+              setImportEntriesPrimed(true);
               importTargetRef.current = "template";
               importInputRef.current?.click();
             }}

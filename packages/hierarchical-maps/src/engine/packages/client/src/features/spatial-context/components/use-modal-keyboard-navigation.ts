@@ -14,10 +14,15 @@ export function useModalKeyboardNavigation<
   onEscape: () => void;
 }) {
   const onEscapeRef = useRef(options.onEscape);
+  const disabledRef = useRef(options.disabled);
 
   useEffect(() => {
     onEscapeRef.current = options.onEscape;
   }, [options.onEscape]);
+
+  useEffect(() => {
+    disabledRef.current = options.disabled;
+  }, [options.disabled]);
 
   useEffect(() => {
     if (!options.open) return;
@@ -29,7 +34,7 @@ export function useModalKeyboardNavigation<
       options.initialFocusRef.current?.focus(),
     );
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !options.disabled) {
+      if (event.key === "Escape" && !disabledRef.current) {
         event.preventDefault();
         onEscapeRef.current();
         return;
@@ -67,7 +72,6 @@ export function useModalKeyboardNavigation<
     };
   }, [
     options.dialogRef,
-    options.disabled,
     options.initialFocusRef,
     options.open,
   ]);

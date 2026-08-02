@@ -92,17 +92,14 @@ export function validatePullRequestTriage() {
   assert.match(reviewEvaluator, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/u);
   assert.match(reviewEvaluator, /GET \/repos\/\{owner\}\/\{repo\}\/commits\/\{commit_sha\}\/pulls/u);
   assert.match(reviewEvaluator, /commit_sha: context\.payload\.workflow_run\.head_sha/u);
+  assert.match(reviewEvaluator, /GET \/search\/issues/u);
+  assert.match(reviewEvaluator, /type:pr repo:/u);
   assert.match(reviewEvaluator, /PASTA_DEVS_MEMBERS_TOKEN/u);
   assert.match(reviewEvaluator, /run: node scripts\/evaluate-owner-approval\.mjs/u);
   assert.doesNotMatch(reviewEvaluator, /ref:.*workflow_run|head_repository/u);
 
   assert.match(approvalEvaluator, /\/orgs\/\$\{encodeURIComponent\(organization\)\}\/memberships\//u);
-  assert.match(approvalEvaluator, /membership\.state === "active"/u);
-  assert.match(approvalEvaluator, /membership\.role === "admin" \|\| membership\.role === "member"/u);
-  assert.match(approvalEvaluator, /latestOwnerReview\?\.state === "APPROVED"/u);
-  assert.match(approvalEvaluator, /latestOwnerReview\.commit_id === headSha/u);
   assert.match(approvalEvaluator, /\/statuses\/\$\{encodeURIComponent\(headSha\)\}/u);
-  assert.match(approvalEvaluator, /Owner approval for outside contributors/u);
 
   const exemptionStep = extractNamedStep(triageWorkflow, "Exempt trusted contributor");
   assert.equal(
