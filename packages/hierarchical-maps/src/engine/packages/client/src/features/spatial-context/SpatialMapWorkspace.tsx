@@ -818,7 +818,14 @@ export function SpatialMapWorkspace({
   }, []);
 
   const fillMissingArtwork = useCallback(async () => {
-    if (!draft || artworkProgress || missingArtworkLocations.length === 0) return;
+    if (
+      !draft ||
+      artworkProgress ||
+      previewGalleryImages.isPending ||
+      missingArtworkLocations.length === 0
+    ) {
+      return;
+    }
 
     let next = draft;
     let updatedLocations = 0;
@@ -903,6 +910,7 @@ export function SpatialMapWorkspace({
     draftHierarchyProfile,
     generateGalleryImage,
     missingArtworkLocations,
+    previewGalleryImages.isPending,
   ]);
 
   const prepareArtworkPreview = useCallback(async () => {
@@ -3151,7 +3159,12 @@ export function SpatialMapWorkspace({
                   type="button"
                   data-marinara-confirm-map-artwork
                   onClick={() => void fillMissingArtwork()}
-                  disabled={artworkProgress !== null || conflict || updateSpatial.isPending}
+                  disabled={
+                    artworkProgress !== null ||
+                    previewGalleryImages.isPending ||
+                    conflict ||
+                    updateSpatial.isPending
+                  }
                   className="mari-editor-action mari-editor-action--primary min-h-11 justify-center px-3 text-xs disabled:opacity-45"
                 >
                   <Sparkles size="0.8125rem" /> Generate {artworkPreview.requestCount} image

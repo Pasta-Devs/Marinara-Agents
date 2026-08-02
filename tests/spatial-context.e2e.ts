@@ -4124,6 +4124,20 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       },
       { ...generatedDefinition.locations[2], childPresentation: "layers" as const, links: [] },
       {
+        id: "ai_edge",
+        parentId: "ai_world",
+        name: "World's Edge",
+        kind: "place",
+        description: "The exact edge of the charted coast.",
+        modelMemory: "The mapped road begins at the extreme southwest edge.",
+        icon: "🧭",
+        childPresentation: "list" as const,
+        placement: { x: 0, y: 100 },
+        links: [{ targetId: "ai_harbor", label: "Coastal road", bidirectional: true, state: "available" as const }],
+        status: "active" as const,
+        sortOrder: 2,
+      },
+      {
         id: "ai_lighthouse_ground",
         parentId: "ai_lighthouse",
         name: "Ground Level",
@@ -4355,6 +4369,17 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(connectionLine).toHaveAttribute("data-line-style", "dotted");
     await expect(connectionLine).toHaveAttribute("stroke", "#22C55E");
     await expect(connectionLine).toHaveAttribute("stroke-dasharray", "1 5");
+    const edgeMarker = roleplayMap.getByRole("button", { name: /Inspect World's Edge/ });
+    expect(await edgeMarker.evaluate((element) => (element as HTMLElement).style.left)).toBe("0%");
+    expect(await edgeMarker.evaluate((element) => (element as HTMLElement).style.top)).toBe("100%");
+    const edgeConnectionLine = roleplayMap.locator(
+      'line[data-marinara-map-connection="ai_edge|ai_harbor"]',
+    );
+    await expect(edgeConnectionLine).toHaveCount(1);
+    await expect(edgeConnectionLine).toHaveAttribute("x1", "0%");
+    await expect(edgeConnectionLine).toHaveAttribute("y1", "100%");
+    await expect(edgeConnectionLine).toHaveAttribute("x2", "25%");
+    await expect(edgeConnectionLine).toHaveAttribute("y2", "60%");
     await expect(roleplayMap.getByRole("button", { name: /connections/u })).toHaveCount(0);
     const visibleMapPopover = storyLocation.locator("[data-marinara-maps-runtime-popover]:visible");
     await expect(visibleMapPopover).toBeVisible();

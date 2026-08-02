@@ -87,6 +87,12 @@ function artifactFixture(version: string): ArtifactFixture {
     assert.ok(clientSource.includes(artifactWorldMapsGuideUrl));
     assert.match(clientSource, /Open World Maps movement help/u);
     assert.match(clientSource, /Open shared-world guide/u);
+    if (version === "1.2.7") {
+      assert.match(
+        clientSource,
+        /\[data-marinara-maps-world-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
+      );
+    }
   }
   return {
     bytes,
