@@ -141,7 +141,7 @@ export function SpatialContextSettingsSection({
             onClick={onOpenEditor}
             className="flex min-h-11 w-full items-center justify-between rounded-lg border border-[var(--border)] px-3 text-xs font-medium transition-colors duration-200 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           >
-            {definition ? "Edit world map" : "Create world map"}
+            {definition ? "Edit world map" : "Set up world map"}
             <ChevronRight size="0.8125rem" />
           </button>
         </div>

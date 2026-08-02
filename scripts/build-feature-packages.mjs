@@ -138,7 +138,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.6",
+    version: "1.2.7",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -556,16 +556,9 @@ async function bundleSpecialClient(feature, output) {
 `;
       const worldMapStyles = `
 [data-marinara-maps-world-canvas] {
-  height: 13rem;
-}
-
-[data-marinara-maps-world-canvas][data-compact="true"] {
-  height: min(14rem, 32dvh);
-}
-
-[data-marinara-maps-world-overlay] [data-marinara-maps-world-canvas] {
-  height: min(32rem, 55dvh);
-  min-height: 18rem;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  width: 100%;
 }
 `;
       const runtimeStyles = `
