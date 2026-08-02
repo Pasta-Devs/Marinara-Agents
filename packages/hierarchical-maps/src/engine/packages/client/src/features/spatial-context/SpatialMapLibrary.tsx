@@ -362,6 +362,21 @@ export function SpatialMapLibrary({
     }
   };
 
+  const openImportPicker = (target: "template" | "shared-world") => {
+    setImportEntriesPrimed(true);
+    importTargetRef.current = target;
+    window.addEventListener(
+      "focus",
+      () => {
+        window.setTimeout(() => {
+          if (!importInputRef.current?.files?.length) setImportEntriesPrimed(false);
+        }, 0);
+      },
+      { once: true },
+    );
+    importInputRef.current?.click();
+  };
+
   const confirmPortableLoreImport = async (
     strategy: PortableLoreImportStrategy,
     selections: ReadonlyMap<string, string | null>,
@@ -751,13 +766,11 @@ export function SpatialMapLibrary({
           </a>
           <button
             type="button"
-            onFocus={() => setImportEntriesPrimed(true)}
             onPointerDown={() => setImportEntriesPrimed(true)}
-            onClick={() => {
-              setImportEntriesPrimed(true);
-              importTargetRef.current = "shared-world";
-              importInputRef.current?.click();
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") setImportEntriesPrimed(true);
             }}
+            onClick={() => openImportPicker("shared-world")}
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
           >
             <Download size="0.8125rem" /> Import shared
@@ -777,13 +790,11 @@ export function SpatialMapLibrary({
           </button>
           <button
             type="button"
-            onFocus={() => setImportEntriesPrimed(true)}
             onPointerDown={() => setImportEntriesPrimed(true)}
-            onClick={() => {
-              setImportEntriesPrimed(true);
-              importTargetRef.current = "template";
-              importInputRef.current?.click();
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") setImportEntriesPrimed(true);
             }}
+            onClick={() => openImportPicker("template")}
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
           >
             <Download size="0.8125rem" /> Import template

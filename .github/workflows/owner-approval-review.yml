@@ -41,7 +41,23 @@ jobs:
                 q: `${context.payload.workflow_run.head_sha} type:pr repo:${context.repo.owner}/${context.repo.repo}`,
                 per_page: 100,
               });
-              pullRequests = response.data.items.filter((item) => item.pull_request);
+              const candidates = response.data.items.filter((item) => item.pull_request);
+              const verified = await Promise.all(
+                candidates.map(async (item) => {
+                  const candidate = await github.request(
+                    'GET /repos/{owner}/{repo}/pulls/{pull_number}',
+                    {
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      pull_number: item.number,
+                    },
+                  );
+                  return candidate.data.head.sha === context.payload.workflow_run.head_sha
+                    ? candidate.data
+                    : null;
+                }),
+              );
+              pullRequests = verified.filter(Boolean);
             }
 
             const pullNumbers = [...new Set(pullRequests.map((pullRequest) => pullRequest.number))];

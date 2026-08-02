@@ -10,6 +10,7 @@ const basePullRequest = {
 
 function createMock({
   pullRequest = basePullRequest,
+  pullRequestError,
   membership,
   membershipError,
   reviews = [],
@@ -32,7 +33,10 @@ function createMock({
       if (reviewsError) throw reviewsError;
       return reviews;
     }
-    if (path.endsWith("/pulls/42")) return pullRequest;
+    if (path.endsWith("/pulls/42")) {
+      if (pullRequestError) throw pullRequestError;
+      return pullRequest;
+    }
     if (path.includes("/memberships/")) {
       assert.equal(token, "members-token");
       if (membershipError) throw membershipError;
@@ -145,6 +149,18 @@ async function runCase(options, env = {}) {
     membershipError: notFound,
     reviews: [
       { id: 1, state: "APPROVED", commit_id: "head-sha", user: { login: "SpicyMarinara" } },
+      { id: 2, state: "DISMISSED", commit_id: "head-sha", user: { login: "SpicyMarinara" } },
+    ],
+  });
+  assert.equal(status.state, "failure");
+}
+
+{
+  const notFound = Object.assign(new Error("Not Found"), { status: 404 });
+  const { status } = await runCase({
+    membershipError: notFound,
+    reviews: [
+      { id: 1, state: "APPROVED", commit_id: "head-sha", user: { login: "SpicyMarinara" } },
       { id: 2, state: "COMMENTED", commit_id: "head-sha", user: { login: "SpicyMarinara" } },
     ],
   });
@@ -192,6 +208,27 @@ async function runCase(options, env = {}) {
     statusFailures: 1,
   });
   assert.equal(status.state, "error");
+  assert.equal(getStatusAttempts(), 2);
+}
+
+{
+  const unavailable = Object.assign(new Error("Service unavailable"), { status: 503 });
+  const { result, statuses, getStatusAttempts } = await evaluateCase({
+    pullRequestError: unavailable,
+  });
+  assert.equal(result.state, "error");
+  assert.equal(statuses.length, 0);
+  assert.equal(getStatusAttempts(), 0);
+}
+
+{
+  const { result, statuses, getStatusAttempts } = await evaluateCase({
+    pullRequest: { ...basePullRequest, user: { login: "MemberDeveloper" } },
+    membership: { state: "active", role: "member" },
+    statusFailures: 2,
+  });
+  assert.equal(result.state, "error");
+  assert.equal(statuses.length, 0);
   assert.equal(getStatusAttempts(), 2);
 }
 

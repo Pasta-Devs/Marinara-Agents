@@ -94,6 +94,10 @@ export function validatePullRequestTriage() {
   assert.match(reviewEvaluator, /commit_sha: context\.payload\.workflow_run\.head_sha/u);
   assert.match(reviewEvaluator, /GET \/search\/issues/u);
   assert.match(reviewEvaluator, /type:pr repo:/u);
+  assert.match(
+    reviewEvaluator,
+    /candidate\.data\.head\.sha === context\.payload\.workflow_run\.head_sha/u,
+  );
   assert.match(reviewEvaluator, /PASTA_DEVS_MEMBERS_TOKEN/u);
   assert.match(reviewEvaluator, /run: node scripts\/evaluate-owner-approval\.mjs/u);
   assert.doesNotMatch(reviewEvaluator, /ref:.*workflow_run|head_repository/u);
