@@ -78,56 +78,68 @@ export async function evaluateOwnerApproval({ env = process.env, request = githu
   let description = "Outside contribution requires current SpicyMarinara approval.";
   let internal = authorLogin.toLowerCase() === "spicymarinara";
 
-  if (!internal) {
-    if (env.MEMBERS_TOKEN_CONFIGURED !== "true" || !env.PASTA_DEVS_MEMBERS_TOKEN) {
-      state = "error";
-      description = "Could not verify Pasta-Devs membership; failing closed.";
-    } else {
-      try {
-        const membership = await request({
-          token: env.PASTA_DEVS_MEMBERS_TOKEN,
-          path: `/orgs/${encodeURIComponent(organization)}/memberships/${encodeURIComponent(authorLogin)}`,
-        });
-        internal =
-          membership.state === "active" &&
-          (membership.role === "admin" || membership.role === "member");
-      } catch (error) {
-        if (error.status !== 404) {
-          state = "error";
-          description = "Could not verify Pasta-Devs membership; failing closed.";
-          console.error(`Membership lookup failed with status ${error.status ?? "unknown"}.`);
+  const publishStatus = () =>
+    request({
+      token: githubToken,
+      method: "POST",
+      path: `/repos/${repositoryPath}/statuses/${encodeURIComponent(headSha)}`,
+      body: {
+        state,
+        context: OWNER_APPROVAL_CONTEXT,
+        description,
+        target_url: env.RUN_URL,
+      },
+    });
+
+  try {
+    if (!internal) {
+      if (env.MEMBERS_TOKEN_CONFIGURED !== "true" || !env.PASTA_DEVS_MEMBERS_TOKEN) {
+        state = "error";
+        description = "Could not verify Pasta-Devs membership; failing closed.";
+      } else {
+        try {
+          const membership = await request({
+            token: env.PASTA_DEVS_MEMBERS_TOKEN,
+            path: `/orgs/${encodeURIComponent(organization)}/memberships/${encodeURIComponent(authorLogin)}`,
+          });
+          internal =
+            membership.state === "active" &&
+            (membership.role === "admin" || membership.role === "member");
+        } catch (error) {
+          if (error.status !== 404) {
+            state = "error";
+            description = "Could not verify Pasta-Devs membership; failing closed.";
+            console.error(`Membership lookup failed with status ${error?.status ?? "unknown"}.`);
+          }
         }
       }
     }
-  }
 
-  if (internal) {
-    state = "success";
-    description = "Active Pasta-Devs member; owner approval is not required.";
-  } else if (state !== "error") {
-    const reviews = await listPullRequestReviews(request, githubToken, repositoryPath, pullNumber);
-    const latestOwnerReview = reviews
-      .filter((review) => review.user?.login?.toLowerCase() === "spicymarinara")
-      .sort((left, right) => left.id - right.id)
-      .at(-1);
-
-    if (latestOwnerReview?.state === "APPROVED" && latestOwnerReview.commit_id === headSha) {
+    if (internal) {
       state = "success";
-      description = "Outside contribution approved by SpicyMarinara for the current commit.";
-    }
-  }
+      description = "Active Pasta-Devs member; owner approval is not required.";
+    } else if (state !== "error") {
+      const reviews = await listPullRequestReviews(request, githubToken, repositoryPath, pullNumber);
+      const latestOwnerReview = reviews
+        .filter((review) => review.user?.login?.toLowerCase() === "spicymarinara")
+        .sort((left, right) => left.id - right.id)
+        .at(-1);
 
-  await request({
-    token: githubToken,
-    method: "POST",
-    path: `/repos/${repositoryPath}/statuses/${encodeURIComponent(headSha)}`,
-    body: {
-      state,
-      context: OWNER_APPROVAL_CONTEXT,
-      description,
-      target_url: env.RUN_URL,
-    },
-  });
+      if (latestOwnerReview?.state === "APPROVED" && latestOwnerReview.commit_id === headSha) {
+        state = "success";
+        description = "Outside contribution approved by SpicyMarinara for the current commit.";
+      }
+    }
+
+    await publishStatus();
+  } catch (error) {
+    state = "error";
+    description = "Owner approval evaluation failed unexpectedly; failing closed.";
+    console.error(
+      `Owner approval evaluation failed with status ${error?.status ?? "unknown"}; publishing error status.`,
+    );
+    await publishStatus();
+  }
 
   console.info(`${OWNER_APPROVAL_CONTEXT}: ${state} (${description})`);
   return { skipped: false, state, description, internal };

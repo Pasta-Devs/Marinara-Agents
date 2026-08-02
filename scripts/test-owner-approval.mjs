@@ -8,15 +8,30 @@ const basePullRequest = {
   user: { login: "OutsideContributor" },
 };
 
-function createMock({ pullRequest = basePullRequest, membership, membershipError, reviews = [] }) {
+function createMock({
+  pullRequest = basePullRequest,
+  membership,
+  membershipError,
+  reviews = [],
+  reviewsError,
+  statusFailures = 0,
+}) {
   const statuses = [];
+  let statusAttempts = 0;
   const request = async ({ token, method = "GET", path, body }) => {
     if (method === "POST" && path.endsWith("/statuses/head-sha")) {
       assert.equal(token, "github-token");
+      statusAttempts += 1;
+      if (statusAttempts <= statusFailures) {
+        throw Object.assign(new Error("Status unavailable"), { status: 503 });
+      }
       statuses.push(body);
       return body;
     }
-    if (path.includes("/pulls/42/reviews")) return reviews;
+    if (path.includes("/pulls/42/reviews")) {
+      if (reviewsError) throw reviewsError;
+      return reviews;
+    }
     if (path.endsWith("/pulls/42")) return pullRequest;
     if (path.includes("/memberships/")) {
       assert.equal(token, "members-token");
@@ -25,10 +40,10 @@ function createMock({ pullRequest = basePullRequest, membership, membershipError
     }
     throw new Error(`Unexpected request: ${method} ${path}`);
   };
-  return { request, statuses };
+  return { request, statuses, getStatusAttempts: () => statusAttempts };
 }
 
-async function runCase(options, env = {}) {
+async function evaluateCase(options, env = {}) {
   const mock = createMock(options);
   const result = await evaluateOwnerApproval({
     request: mock.request,
@@ -42,9 +57,22 @@ async function runCase(options, env = {}) {
       ...env,
     },
   });
-  assert.equal(mock.statuses.length, 1);
-  assert.equal(mock.statuses[0].context, OWNER_APPROVAL_CONTEXT);
-  return { result, status: mock.statuses[0] };
+  return { ...mock, result };
+}
+
+async function runCase(options, env = {}) {
+  const outcome = await evaluateCase(options, env);
+  assert.equal(outcome.statuses.length, 1);
+  assert.equal(outcome.statuses[0].context, OWNER_APPROVAL_CONTEXT);
+  return { ...outcome, status: outcome.statuses[0] };
+}
+
+{
+  const { result, statuses } = await evaluateCase({
+    pullRequest: { ...basePullRequest, state: "closed" },
+  });
+  assert.equal(result.skipped, true);
+  assert.equal(statuses.length, 0);
 }
 
 {
@@ -54,6 +82,24 @@ async function runCase(options, env = {}) {
   });
   assert.equal(result.internal, true);
   assert.equal(status.state, "success");
+}
+
+{
+  const { result, status } = await runCase({
+    pullRequest: { ...basePullRequest, user: { login: "OrganizationOwner" } },
+    membership: { state: "active", role: "admin" },
+  });
+  assert.equal(result.internal, true);
+  assert.equal(status.state, "success");
+}
+
+{
+  const { result, status } = await runCase({
+    pullRequest: { ...basePullRequest, user: { login: "PendingMember" } },
+    membership: { state: "pending", role: "member" },
+  });
+  assert.equal(result.internal, false);
+  assert.equal(status.state, "failure");
 }
 
 {
@@ -67,6 +113,18 @@ async function runCase(options, env = {}) {
 {
   const notFound = Object.assign(new Error("Not Found"), { status: 404 });
   const { status } = await runCase({ membershipError: notFound });
+  assert.equal(status.state, "failure");
+}
+
+{
+  const notFound = Object.assign(new Error("Not Found"), { status: 404 });
+  const { status } = await runCase({
+    membershipError: notFound,
+    reviews: [
+      { id: 1, state: "APPROVED", commit_id: "head-sha", user: { login: "SpicyMarinara" } },
+      { id: 2, state: "CHANGES_REQUESTED", commit_id: "head-sha", user: { login: "SpicyMarinara" } },
+    ],
+  });
   assert.equal(status.state, "failure");
 }
 
@@ -104,6 +162,25 @@ async function runCase(options, env = {}) {
   const forbidden = Object.assign(new Error("Forbidden"), { status: 403 });
   const { status } = await runCase({ membershipError: forbidden });
   assert.equal(status.state, "error");
+}
+
+{
+  const unavailable = Object.assign(new Error("Service unavailable"), { status: 503 });
+  const { status } = await runCase({
+    membershipError: Object.assign(new Error("Not Found"), { status: 404 }),
+    reviewsError: unavailable,
+  });
+  assert.equal(status.state, "error");
+}
+
+{
+  const { status, getStatusAttempts } = await runCase({
+    pullRequest: { ...basePullRequest, user: { login: "MemberDeveloper" } },
+    membership: { state: "active", role: "member" },
+    statusFailures: 1,
+  });
+  assert.equal(status.state, "error");
+  assert.equal(getStatusAttempts(), 2);
 }
 
 console.info("Owner approval evaluator tests passed.");

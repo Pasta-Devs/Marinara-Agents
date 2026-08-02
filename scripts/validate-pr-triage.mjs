@@ -84,11 +84,17 @@ export function validatePullRequestTriage() {
     reviewEvaluator,
     /on:\n  workflow_run:\n    workflows: \[Owner Approval Review Signal\]\n    types: \[completed\]/u,
   );
+  assert.match(
+    reviewEvaluator,
+    /group: owner-approval-review-\$\{\{ github\.event\.workflow_run\.pull_requests\[0\]\.number \|\| github\.event\.workflow_run\.head_sha \}\}\n  cancel-in-progress: true/u,
+  );
   assert.match(reviewEvaluator, /statuses: write/u);
   assert.match(reviewEvaluator, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/u);
+  assert.match(reviewEvaluator, /GET \/repos\/\{owner\}\/\{repo\}\/commits\/\{commit_sha\}\/pulls/u);
+  assert.match(reviewEvaluator, /commit_sha: context\.payload\.workflow_run\.head_sha/u);
   assert.match(reviewEvaluator, /PASTA_DEVS_MEMBERS_TOKEN/u);
   assert.match(reviewEvaluator, /run: node scripts\/evaluate-owner-approval\.mjs/u);
-  assert.doesNotMatch(reviewEvaluator, /pull_request\.head|head_repository|head_sha/u);
+  assert.doesNotMatch(reviewEvaluator, /ref:.*workflow_run|head_repository/u);
 
   assert.match(approvalEvaluator, /\/orgs\/\$\{encodeURIComponent\(organization\)\}\/memberships\//u);
   assert.match(approvalEvaluator, /membership\.state === "active"/u);

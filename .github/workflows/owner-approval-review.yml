@@ -5,6 +5,10 @@ on:
     workflows: [Owner Approval Review Signal]
     types: [completed]
 
+concurrency:
+  group: owner-approval-review-${{ github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
 jobs:
   evaluate:
     name: Re-evaluate staging owner approval
@@ -23,11 +27,11 @@ jobs:
             let pullRequests = context.payload.workflow_run.pull_requests || [];
             if (pullRequests.length === 0) {
               const response = await github.request(
-                'GET /repos/{owner}/{repo}/actions/runs/{run_id}/pull_requests',
+                'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
                 {
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  run_id: context.payload.workflow_run.id,
+                  commit_sha: context.payload.workflow_run.head_sha,
                 },
               );
               pullRequests = response.data;
