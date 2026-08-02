@@ -3578,6 +3578,104 @@ test("Roleplay minimap keeps selected locations opaque over map artwork", async 
   }
 });
 
+test("installed World Maps package keeps the editor canvas visible at 16:9", async ({ page, request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The package CSS is shared across viewports.");
+  test.setTimeout(120_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "World Map Canvas Geometry",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+
+  const artworkUpload = await page.request.post(`/api/gallery/${chat.id}/upload`, {
+    multipart: {
+      prompt: "A fogbound anime harbor.",
+      provider: "world-map-e2e",
+      model: "fixture",
+      width: "1",
+      height: "1",
+      file: {
+        name: "gloam-harbor.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2SIAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      },
+    },
+  });
+  expect(artworkUpload.ok(), await artworkUpload.text()).toBeTruthy();
+  const uploadedArtwork = (await artworkUpload.json()) as { id: string };
+  const definition = {
+    ...generatedDefinition,
+    locations: generatedDefinition.locations.map((location) => {
+      if (location.id === "ai_harbor") {
+        return {
+          ...location,
+          childPresentation: "map" as const,
+          mapBackgroundImageId: uploadedArtwork.id,
+        };
+      }
+      if (location.id === "ai_lighthouse") {
+        return { ...location, parentId: "ai_harbor", sortOrder: 0 };
+      }
+      return location;
+    }),
+  };
+  const initialSave = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: { ...definition, enabled: true },
+    },
+  });
+  expect(initialSave.ok(), await initialSave.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await agentsPanel
+      .locator('[data-agent-name="World Maps"]')
+      .getByText("World Maps", { exact: true })
+      .click();
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(home).toBeVisible();
+    await home.getByRole("button", { name: "Edit map", exact: true }).click();
+
+    const locationHierarchy = page.getByRole("region", { name: "Location hierarchy" });
+    await locationHierarchy.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    await locationHierarchy.getByRole("button", { name: "Enter Shrouded Coast" }).click();
+    await locationHierarchy.getByRole("button", { name: "Enter Gloam Harbor" }).click();
+    await page.getByRole("button", { name: "Arrange map" }).click();
+
+    const canvas = page.locator('[data-marinara-maps-editor-canvas][data-layout-editing="true"]:visible');
+    const background = canvas.locator('img[aria-hidden="true"]');
+    await expect(background).toBeVisible();
+    await expect.poll(() => background.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+    const canvasBox = await canvas.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    expect(canvasBox!.height).toBeGreaterThan(100);
+    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(16 / 9, 1);
+  } finally {
+    await page.close();
+    const deleteResponse = await request.delete(`/api/chats/${chat.id}?force=true`);
+    expect(deleteResponse.ok(), await deleteResponse.text()).toBeTruthy();
+  }
+});
+
 test("AI map expansion preserves a campaign map and its current location", async ({ page }, testInfo) => {
   test.setTimeout(150_000);
   const response = await page.request.post("/api/chats", {
@@ -3837,6 +3935,8 @@ test("AI map expansion preserves a campaign map and its current location", async
     const [canvasBox, nodeBox] = await Promise.all([arrangedCanvas.boundingBox(), lighthouseNode.boundingBox()]);
     expect(canvasBox).not.toBeNull();
     expect(nodeBox).not.toBeNull();
+    expect(canvasBox!.height).toBeGreaterThan(100);
+    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(16 / 9, 1);
     const unselectedBorderColor = await lighthouseNode.evaluate((element) => getComputedStyle(element).borderColor);
     await lighthouseNode.focus();
     await lighthouseNode.click();

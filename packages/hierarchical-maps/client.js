@@ -462,6 +462,12 @@ Nothing changes until you click Save. After Save, the deleted map cannot be rest
   touch-action: manipulation;
 }
 
+[data-marinara-maps-workspace-overlay] [data-marinara-maps-editor-canvas] {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  width: 100%;
+}
+
 [data-marinara-maps-workspace-overlay] .mari-editor-action,
 [data-marinara-maps-workspace-overlay] .mari-chrome-control {
   min-width: 2.75rem;

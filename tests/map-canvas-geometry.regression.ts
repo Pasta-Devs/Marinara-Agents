@@ -27,7 +27,12 @@ assert.doesNotMatch(runtimeCanvas, /compact \? "h-56" : "h-52"/u, "Runtime must 
 assert.match(
   packageBuilder,
   /\[data-marinara-maps-world-canvas\] \{\s*aspect-ratio: 16 \/ 9;\s*height: auto;\s*width: 100%;\s*\}/u,
-  "Generated package CSS must preserve the source canvas aspect ratio",
+  "Generated package CSS must preserve the runtime canvas aspect ratio",
+);
+assert.match(
+  packageBuilder,
+  /\[data-marinara-maps-workspace-overlay\] \[data-marinara-maps-editor-canvas\] \{\s*aspect-ratio: 16 \/ 9;\s*height: auto;\s*width: 100%;\s*\}/u,
+  "Generated package CSS must preserve the editor canvas aspect ratio",
 );
 
 console.info("World Maps editor and runtime share one canonical 16:9 coordinate projection.");
