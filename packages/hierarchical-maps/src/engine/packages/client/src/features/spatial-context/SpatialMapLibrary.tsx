@@ -14,7 +14,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { spatialContextDefinitionSchema, type SpatialOwnerMode } from "@marinara-engine/shared";
+import {
+  spatialContextDefinitionSchema,
+  type SpatialContextDefinition,
+  type SpatialOwnerMode,
+} from "@marinara-engine/shared";
 import {
   useCreateSpatialMapTemplate,
   useCreateSpatialSharedWorld,
@@ -44,8 +48,26 @@ import {
   remapArtworkReferences,
   SpatialMapWorkspace,
 } from "./SpatialMapWorkspace";
-import { reuseOrUploadSpatialGlobalGalleryImage, useSpatialGlobalGalleryImages } from "./use-spatial-resources";
+import {
+  reuseOrUploadSpatialGlobalGalleryImage,
+  useSpatialGlobalGalleryImages,
+  useSpatialLorebookEntries,
+  useSpatialLorebooks,
+} from "./use-spatial-resources";
 import { cn, WORLD_MAPS_GUIDE_URL } from "./package-utils";
+import { packageApi } from "./package-api";
+import { PortableLoreImportDialog } from "./components/PortableLoreImportDialog";
+import {
+  importPortableLoreBundle,
+  parsePortableLoreBundle,
+  planPortableLoreImport,
+  remapPortableLoreReferences,
+  unresolvedPortableLoreReferences,
+  type PortableLoreBundle,
+  type PortableLoreImportPlan,
+  type PortableLoreImportStrategy,
+  type PortableLoreReference,
+} from "./portable-lore";
 
 interface SpatialMapLibraryProps {
   chatId: string | null;
@@ -66,6 +88,16 @@ interface LibraryConfirmationOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: "default" | "destructive" | "accent";
+}
+
+interface PendingLibraryPortableLoreImport {
+  record: Record<string, unknown> | null;
+  data: Record<string, unknown> | null;
+  definition: SpatialContextDefinition;
+  fileName: string;
+  target: "template" | "shared-world";
+  bundle: PortableLoreBundle;
+  plan: PortableLoreImportPlan;
 }
 
 function importedTemplateName(fileName: string): string {
@@ -99,6 +131,9 @@ export function SpatialMapLibrary({
   const linkSharedWorld = useLinkSpatialSharedWorld();
   const replaceWithIndependentWorld = useReplaceWithIndependentSpatialWorld();
   const globalGalleryImages = useSpatialGlobalGalleryImages();
+  const lorebooksQuery = useSpatialLorebooks();
+  const { data: lorebooks = [] } = lorebooksQuery;
+  const lorebookEntriesQuery = useSpatialLorebookEntries(lorebooks.map((lorebook) => lorebook.id));
   const spatial = useSpatialContext(chatId);
   const updateSpatial = useUpdateSpatialContext();
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -106,6 +141,11 @@ export function SpatialMapLibrary({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingSharedWorldId, setEditingSharedWorldId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [pendingPortableLoreImport, setPendingPortableLoreImport] =
+    useState<PendingLibraryPortableLoreImport | null>(null);
+  const [editingUnresolvedLoreReferences, setEditingUnresolvedLoreReferences] =
+    useState<PortableLoreReference[]>([]);
   const [pendingConfirmation, setPendingConfirmation] = useState<LibraryConfirmationOptions | null>(null);
   const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const confirmationDialogRef = useRef<HTMLDivElement>(null);
@@ -220,11 +260,79 @@ export function SpatialMapLibrary({
     }
   };
 
+  const finishLibraryImport = async (options: {
+    record: Record<string, unknown> | null;
+    data: Record<string, unknown> | null;
+    definition: SpatialContextDefinition;
+    fileName: string;
+    target: "template" | "shared-world";
+    portableLore: PortableLoreBundle | null;
+    entryIdMap: ReadonlyMap<string, string>;
+  }) => {
+    const loreRemappedDefinition = options.portableLore
+      ? remapPortableLoreReferences(options.definition, options.portableLore, options.entryIdMap)
+      : options.definition;
+    const bundledArtwork = parseBundledArtwork(options.record?.artwork);
+    const referencedIds = new Set(referencedArtworkIds(loreRemappedDefinition));
+    const currentGlobalImages = [...(globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [])];
+    const artworkIdMap = new globalThis.Map<string, string>();
+    let sharedArtworkAdded = 0;
+    let sharedArtworkReused = 0;
+    let failedArtworkCount = 0;
+    for (const artwork of bundledArtwork.filter((entry) => referencedIds.has(entry.sourceImageId))) {
+      try {
+        const result = await reuseOrUploadSpatialGlobalGalleryImage(
+          bundledArtworkFile(artwork),
+          artwork,
+          currentGlobalImages,
+        );
+        artworkIdMap.set(artwork.sourceImageId, globalGallerySpatialReferenceId(result.image.id));
+        if (!currentGlobalImages.some((candidate) => candidate.id === result.image.id)) {
+          currentGlobalImages.push(result.image);
+        }
+        if (result.reused) sharedArtworkReused += 1;
+        else sharedArtworkAdded += 1;
+      } catch {
+        failedArtworkCount += 1;
+      }
+    }
+    if (sharedArtworkAdded > 0) await globalGalleryImages.refetch();
+    const importedDefinition = remapArtworkReferences(loreRemappedDefinition, artworkIdMap);
+    const hierarchyProfile = normalizeHierarchyProfile(options.data?.hierarchyProfile, importedDefinition);
+    const createInput = {
+      name:
+        typeof options.record?.name === "string" && options.record.name.trim()
+          ? options.record.name.trim()
+          : importedTemplateName(options.fileName),
+      description: "",
+      definition: importedDefinition,
+      hierarchyProfile,
+    };
+    const created =
+      options.target === "shared-world"
+        ? await createSharedWorld.mutateAsync(createInput)
+        : await createTemplate.mutateAsync(createInput);
+    const existingLoreEntryIds = new Set((lorebookEntriesQuery.entries ?? []).map((entry) => entry.id));
+    setEditingUnresolvedLoreReferences(
+      options.portableLore
+        ? unresolvedPortableLoreReferences(options.portableLore, options.entryIdMap).filter(
+            (reference) => reference.entryKey !== null || !existingLoreEntryIds.has(reference.originalEntryId),
+          )
+        : [],
+    );
+    toast.success(
+      `Map added to your ${options.target === "shared-world" ? "shared worlds" : "templates"}.${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
+    );
+    if (options.target === "shared-world") setEditingSharedWorldId(created.id);
+    else setEditingId(created.id);
+  };
+
   const importTemplate = async (event: ChangeEvent<HTMLInputElement>) => {
-    const importTarget = importTargetRef.current;
+    const target = importTargetRef.current;
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file) return;
+    if (!file || isImporting) return;
+    setIsImporting(true);
     try {
       const raw = JSON.parse(await file.text()) as unknown;
       const record = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
@@ -235,51 +343,80 @@ export function SpatialMapLibrary({
       const candidate = data && "definition" in data ? data.definition : raw;
       const parsed = spatialContextDefinitionSchema.safeParse(candidate);
       if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "This is not a valid map file.");
-      const bundledArtwork = parseBundledArtwork(record?.artwork);
-      const referencedIds = new Set(referencedArtworkIds(parsed.data));
-      const currentGlobalImages = [...(globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [])];
-      const artworkIdMap = new globalThis.Map<string, string>();
-      let sharedArtworkAdded = 0;
-      let sharedArtworkReused = 0;
-      let failedArtworkCount = 0;
-      for (const artwork of bundledArtwork.filter((entry) => referencedIds.has(entry.sourceImageId))) {
-        try {
-          const result = await reuseOrUploadSpatialGlobalGalleryImage(
-            bundledArtworkFile(artwork),
-            artwork,
-            currentGlobalImages,
-          );
-          artworkIdMap.set(artwork.sourceImageId, globalGallerySpatialReferenceId(result.image.id));
-          if (!currentGlobalImages.some((candidate) => candidate.id === result.image.id)) {
-            currentGlobalImages.push(result.image);
-          }
-          if (result.reused) sharedArtworkReused += 1;
-          else sharedArtworkAdded += 1;
-        } catch {
-          failedArtworkCount += 1;
-        }
+      const hasPortableLore = Boolean(record && "portableLore" in record);
+      const portableLore = hasPortableLore ? parsePortableLoreBundle(record?.portableLore) : null;
+      if (hasPortableLore && !portableLore) {
+        throw new Error("This file contains invalid or unsupported portable lore data.");
       }
-      if (sharedArtworkAdded > 0) await globalGalleryImages.refetch();
-      const importedDefinition = remapArtworkReferences(parsed.data, artworkIdMap);
-      const hierarchyProfile = normalizeHierarchyProfile(data?.hierarchyProfile, importedDefinition);
-      const createInput = {
-        name:
-          typeof record?.name === "string" && record.name.trim() ? record.name.trim() : importedTemplateName(file.name),
-        description: "",
-        definition: importedDefinition,
-        hierarchyProfile,
-      };
-      const created =
-        importTarget === "shared-world"
-          ? await createSharedWorld.mutateAsync(createInput)
-          : await createTemplate.mutateAsync(createInput);
-      toast.success(
-        `Map added to your ${importTarget === "shared-world" ? "shared worlds" : "templates"}.${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
-      );
-      if (importTarget === "shared-world") setEditingSharedWorldId(created.id);
-      else setEditingId(created.id);
+      if (portableLore && portableLore.books.length > 0) {
+        const entries = lorebookEntriesQuery.entries;
+        if (!entries) throw new Error("Lore entries are still loading. Try the import again in a moment.");
+        setPendingPortableLoreImport({
+          record,
+          data,
+          definition: parsed.data,
+          fileName: file.name,
+          target,
+          bundle: portableLore,
+          plan: planPortableLoreImport(portableLore, lorebooks, entries),
+        });
+        return;
+      }
+      await finishLibraryImport({
+        record,
+        data,
+        definition: parsed.data,
+        fileName: file.name,
+        target,
+        portableLore,
+        entryIdMap: new globalThis.Map(),
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The map template could not be imported.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const confirmPortableLoreImport = async (
+    strategy: PortableLoreImportStrategy,
+    selections: ReadonlyMap<string, string | null>,
+  ) => {
+    if (!pendingPortableLoreImport || isImporting) return;
+    setIsImporting(true);
+    let createdLorebookIds: string[] = [];
+    try {
+      const result = await importPortableLoreBundle({
+        api: packageApi,
+        bundle: pendingPortableLoreImport.bundle,
+        plan: pendingPortableLoreImport.plan,
+        strategy,
+        ambiguousSelections: selections,
+      });
+      createdLorebookIds = result.createdLorebookIds;
+      await finishLibraryImport({
+        record: pendingPortableLoreImport.record,
+        data: pendingPortableLoreImport.data,
+        definition: pendingPortableLoreImport.definition,
+        fileName: pendingPortableLoreImport.fileName,
+        target: pendingPortableLoreImport.target,
+        portableLore: pendingPortableLoreImport.bundle,
+        entryIdMap: result.entryIdMap,
+      });
+      setPendingPortableLoreImport(null);
+      await lorebooksQuery.refetch();
+      toast.success(
+        `${result.reusedEntries} lore link${result.reusedEntries === 1 ? " was" : "s were"} reused; ${result.importedEntries} entr${result.importedEntries === 1 ? "y was" : "ies were"} imported. Imported lorebooks stay independent of the map.`,
+      );
+    } catch (error) {
+      if (createdLorebookIds.length > 0) {
+        await Promise.allSettled(
+          createdLorebookIds.map((lorebookId) => packageApi.delete(`/lorebooks/${lorebookId}`)),
+        );
+      }
+      toast.error(error instanceof Error ? error.message : "The portable lore could not be restored.");
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -500,8 +637,12 @@ export function SpatialMapLibrary({
       <SpatialMapWorkspace
         chatId={null}
         sharedWorld={editingSharedWorld}
+        initialUnresolvedLoreReferences={editingUnresolvedLoreReferences}
         onOpenLorebook={onOpenLorebook}
-        onClose={() => setEditingSharedWorldId(null)}
+        onClose={() => {
+          setEditingSharedWorldId(null);
+          setEditingUnresolvedLoreReferences([]);
+        }}
       />
     );
   }
@@ -511,8 +652,12 @@ export function SpatialMapLibrary({
       <SpatialMapWorkspace
         chatId={null}
         template={editingTemplate}
+        initialUnresolvedLoreReferences={editingUnresolvedLoreReferences}
         onOpenLorebook={onOpenLorebook}
-        onClose={() => setEditingId(null)}
+        onClose={() => {
+          setEditingId(null);
+          setEditingUnresolvedLoreReferences([]);
+        }}
       />
     );
   }
@@ -567,6 +712,15 @@ export function SpatialMapLibrary({
             </div>
           </div>
         </div>
+      )}
+      {pendingPortableLoreImport && (
+        <PortableLoreImportDialog
+          bundle={pendingPortableLoreImport.bundle}
+          plan={pendingPortableLoreImport.plan}
+          busy={isImporting}
+          onCancel={() => setPendingPortableLoreImport(null)}
+          onImport={(strategy, selections) => void confirmPortableLoreImport(strategy, selections)}
+        />
       )}
       <header className="mari-editor-header">
         <button
