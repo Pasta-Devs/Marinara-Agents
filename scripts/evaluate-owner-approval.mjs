@@ -12,6 +12,7 @@ function requireValue(value, name) {
 async function githubRequest({ token, method = "GET", path, body }) {
   const response = await fetch(`https://api.github.com${path}`, {
     method,
+    signal: AbortSignal.timeout(30_000),
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${token}`,
@@ -122,6 +123,7 @@ export async function evaluateOwnerApproval({ env = process.env, request = githu
       const reviews = await listPullRequestReviews(request, githubToken, repositoryPath, pullNumber);
       const latestOwnerReview = reviews
         .filter((review) => review.user?.login?.toLowerCase() === "spicymarinara")
+        .filter((review) => review.state === "APPROVED" || review.state === "CHANGES_REQUESTED")
         .sort((left, right) => left.id - right.id)
         .at(-1);
 
