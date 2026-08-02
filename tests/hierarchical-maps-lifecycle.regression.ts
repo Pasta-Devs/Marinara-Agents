@@ -82,11 +82,17 @@ function artifactFixture(version: string): ArtifactFixture {
   ) as Manifest;
   assert.equal(manifest.id, "hierarchical-maps");
   assert.equal(manifest.version, version);
-  if (version === "1.2.5" || version === "1.2.6" || version === "1.2.7") {
+  if (version === "1.2.5" || version === "1.2.6" || version === "1.2.7" || version === "1.2.8") {
     const clientSource = execFileSync("unzip", ["-p", path, "client.js"], { encoding: "utf8" });
     assert.ok(clientSource.includes(artifactWorldMapsGuideUrl));
     assert.match(clientSource, /Open World Maps movement help/u);
     assert.match(clientSource, /Open shared-world guide/u);
+    if (version === "1.2.7" || version === "1.2.8") {
+      assert.match(
+        clientSource,
+        /\[data-marinara-maps-world-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
+      );
+    }
   }
   return {
     bytes,
