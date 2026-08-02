@@ -14,11 +14,11 @@ import type {
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
-  API_ROOT,
   invalidateLtmQueries,
   queryKeys,
   request,
   requestAllNotes,
+  requestRaw,
 } from "./api";
 import {
   Button,
@@ -404,9 +404,7 @@ export default function ActivityView({
     setPending("export");
     setActionError("");
     try {
-      const response = await fetch(`${API_ROOT}/debug-log/export`, {
-        cache: "no-store",
-      });
+      const response = await requestRaw("/debug-log/export");
       if (!response.ok)
         throw new Error(
           response.statusText ||
