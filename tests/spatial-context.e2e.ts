@@ -882,7 +882,7 @@ test("World Maps activates inside its Tracker Agents entry", async ({ page }, te
     await expect(activation).toHaveAttribute("aria-checked", "true");
     const activationHeight = await activation.evaluate((element) => element.getBoundingClientRect().height);
     expect(activationHeight).toBeGreaterThanOrEqual(44);
-    await expect(agentEntry.getByRole("button", { name: "Create world map" })).toBeVisible();
+    await expect(agentEntry.getByRole("button", { name: "Set up world map" })).toBeVisible();
 
     await expect
       .poll(async () => {
@@ -1565,7 +1565,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await page.locator('[data-tour="panel-agents"]').click();
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-    await agentEntry.getByRole("button", { name: "Create world map" }).click();
+    await agentEntry.getByRole("button", { name: "Set up world map" }).click();
     await workspace.getByRole("button", { name: "Open shared worlds and map templates" }).click();
 
     const chatSettingsLibrary = page.locator("[data-marinara-map-template-library]");
@@ -1677,7 +1677,7 @@ test("detached chat maps create distinguishable shared-world copies and expose p
     await dismissOnboardingTutorial(page);
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-    await agentEntry.getByRole("button", { name: "Edit world map" }).click();
+    await agentEntry.getByRole("button", { name: "Set up world map" }).click();
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
     await expect(workspace).toContainText(`${chatName} · Independent chat map`);
@@ -2243,6 +2243,21 @@ test("Map editor fills missing location artwork with one image per location", as
 
     const editedPositive = "Exact reviewed coast prompt, no tower, fog over black piers.";
     const editedNegative = "tower, text, UI, watermark";
+    await workspace.getByLabel("Positive prompt for Shrouded Coast").fill(editedPositive);
+    await workspace.getByLabel("Negative prompt for Shrouded Coast").fill(editedNegative);
+
+    await workspace.getByRole("button", { name: "Refresh prompts" }).click();
+    const refreshDialog = page.getByRole("dialog", { name: "Refresh artwork prompts?" });
+    await expect(refreshDialog).toContainText("replaces any prompt or negative-prompt edits");
+    await expect(workspace.getByLabel("Positive prompt for Shrouded Coast")).toHaveValue(editedPositive);
+    await refreshDialog.getByRole("button", { name: "Refresh prompts" }).click();
+    await expect.poll(() => previewRequests.length).toBe(4);
+    await expect(workspace.getByLabel("Positive prompt for Shrouded Coast")).toHaveValue(
+      "Engine campaign style. Wide establishing image of Shrouded Coast",
+    );
+    await expect(workspace.getByLabel("Negative prompt for Shrouded Coast")).toHaveValue(
+      "global negative, campaign hard negative",
+    );
     await workspace.getByLabel("Positive prompt for Shrouded Coast").fill(editedPositive);
     await workspace.getByLabel("Negative prompt for Shrouded Coast").fill(editedNegative);
 
@@ -2991,11 +3006,15 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
       const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-      await agentEntry.getByRole("button", { name: "Create world map" }).click();
+      await agentEntry.getByRole("button", { name: "Set up world map" }).click();
     }
 
     await expectWorkspaceFillsOverlay(page);
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    await expect(workspace.getByRole("button", { name: "Draft with AI" })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Build manually" })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Use template or shared world" })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Import map file" })).toBeVisible();
     await page.getByRole("button", { name: "Draft with AI" }).click();
     await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
     await expectAiBuilderLayout(page, mobile);
@@ -3498,7 +3517,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
       const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-      await agentEntry.getByRole("button", { name: "Edit world map" }).click();
+      await agentEntry.getByRole("button", { name: "Set up world map" }).click();
     } else {
       const mobileMusicLayer = page.locator('[data-component="MobileMusicWidgetLayer"]');
       const mobileMusicWidget = mobileMusicLayer.locator(".fixed");
@@ -4316,10 +4335,21 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await openStoryMap.click();
     let roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
     await expect(roleplayMap).toBeVisible();
+    const runtimeCanvas = roleplayMap.locator("[data-marinara-maps-world-canvas]");
+    const runtimeCanvasBox = await runtimeCanvas.boundingBox();
+    expect(runtimeCanvasBox, "Runtime map canvas must have browser geometry").not.toBeNull();
+    expect(runtimeCanvasBox!.width / runtimeCanvasBox!.height).toBeCloseTo(16 / 9, 1);
+    const harborMarker = roleplayMap.getByRole("button", { name: /Inspect Gloam Harbor/ });
+    expect(await harborMarker.evaluate((element) => (element as HTMLElement).style.left)).toBe("25%");
+    expect(await harborMarker.evaluate((element) => (element as HTMLElement).style.top)).toBe("60%");
     const connectionLine = roleplayMap.locator(
       'line[data-marinara-map-connection="ai_harbor|ai_lighthouse"]',
     );
     await expect(connectionLine).toHaveCount(1);
+    await expect(connectionLine).toHaveAttribute("x1", "25%");
+    await expect(connectionLine).toHaveAttribute("y1", "60%");
+    await expect(connectionLine).toHaveAttribute("x2", "72%");
+    await expect(connectionLine).toHaveAttribute("y2", "25%");
     await expect(connectionLine).toHaveAttribute("data-line-style", "dotted");
     await expect(connectionLine).toHaveAttribute("stroke", "#22C55E");
     await expect(connectionLine).toHaveAttribute("stroke-dasharray", "1 5");

@@ -126,11 +126,12 @@ export function LocalMapCanvas({
       }}
       onPointerCancel={() => setDraggingBackground(false)}
       className={cn(
-        "relative min-h-[22rem] overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]",
+        "relative aspect-[16/9] w-full overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]",
         backgroundEditing && "cursor-crosshair touch-none",
       )}
       data-layout-editing={editing ? "true" : "false"}
       data-background-editing={backgroundEditing ? "true" : "false"}
+      data-marinara-maps-editor-canvas
       style={{ touchAction: backgroundEditing ? "none" : undefined }}
     >
       {backgroundImageUrl && (

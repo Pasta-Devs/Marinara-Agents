@@ -905,7 +905,7 @@ export function SpatialMapWorkspace({
     missingArtworkLocations,
   ]);
 
-  const reviewMissingArtwork = useCallback(async () => {
+  const prepareArtworkPreview = useCallback(async () => {
     if (artworkProgress || previewGalleryImages.isPending || artworkImagesToGenerate === 0) return;
     const items = missingArtworkLocations
       .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
@@ -933,6 +933,18 @@ export function SpatialMapWorkspace({
     missingArtworkLocations,
     previewGalleryImages,
   ]);
+
+  const refreshArtworkPreview = useCallback(async () => {
+    if (!artworkPreview || artworkProgress || previewGalleryImages.isPending) return;
+    const confirmed = await confirmAction({
+      title: "Refresh artwork prompts?",
+      message:
+        "Refresh every request from the current map and image settings? This replaces any prompt or negative-prompt edits you made in this review.",
+      confirmLabel: "Refresh prompts",
+    });
+    if (!confirmed) return;
+    await prepareArtworkPreview();
+  }, [artworkPreview, artworkProgress, confirmAction, prepareArtworkPreview, previewGalleryImages.isPending]);
 
   const flushBackgroundMove = useCallback(() => {
     backgroundMoveFrameRef.current = null;
@@ -2343,7 +2355,7 @@ export function SpatialMapWorkspace({
               <button
                 type="button"
                 data-marinara-fill-map-artwork
-                onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
+                onClick={() => void (artworkImagesToGenerate > 0 ? prepareArtworkPreview() : fillMissingArtwork())}
                 disabled={
                   artworkProgress !== null ||
                   previewGalleryImages.isPending ||
@@ -2573,7 +2585,7 @@ export function SpatialMapWorkspace({
                 data-marinara-map-compact-only
                 onClick={() => {
                   setMobileActionsOpen(false);
-                  void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork());
+                  void (artworkImagesToGenerate > 0 ? prepareArtworkPreview() : fillMissingArtwork());
                 }}
                 disabled={
                   artworkProgress !== null ||
@@ -3123,6 +3135,20 @@ export function SpatialMapWorkspace({
                 </button>
                 <button
                   type="button"
+                  data-marinara-refresh-map-artwork-prompts
+                  onClick={() => void refreshArtworkPreview()}
+                  disabled={artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending}
+                  className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                >
+                  {previewGalleryImages.isPending ? (
+                    <Loader2 size="0.8125rem" className="animate-spin" />
+                  ) : (
+                    <RefreshCw size="0.8125rem" />
+                  )}
+                  {previewGalleryImages.isPending ? "Refreshing prompts" : "Refresh prompts"}
+                </button>
+                <button
+                  type="button"
                   data-marinara-confirm-map-artwork
                   onClick={() => void fillMissingArtwork()}
                   disabled={artworkProgress !== null || conflict || updateSpatial.isPending}
@@ -3146,7 +3172,7 @@ export function SpatialMapWorkspace({
               <button
                 type="button"
                 data-marinara-fill-map-artwork
-                onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
+                onClick={() => void (artworkImagesToGenerate > 0 ? prepareArtworkPreview() : fillMissingArtwork())}
                 disabled={
                   artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
                 }
@@ -3445,26 +3471,50 @@ export function SpatialMapWorkspace({
                     : "Describe a fandom or setting for Maps to draft without a chat, or start manually with one broad place."
                   : "Let AI draft the full hierarchy from the game or chat setup, add a saved template, or start manually with one broad place."}
               </p>
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <button
-                type="button"
-                onClick={() => setAiBuilderOpen(true)}
-                className="mari-chrome-control mari-chrome-control--primary min-h-11 px-5 text-sm"
-              >
-                <Sparkles size="0.875rem" /> {templateMode ? "Create with AI" : "Draft with AI"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const result = addSpatialLocation(draft);
-                  applyDraft(result.definition);
-                  selectLocation(result.location.id);
-                }}
-                className="mari-chrome-control min-h-11 px-5 text-sm"
-              >
-                <Plus size="0.875rem" /> Build manually
-              </button>
-            </div>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setAiBuilderOpen(true)}
+                  className="mari-chrome-control mari-chrome-control--primary min-h-11 justify-center px-5 text-sm"
+                >
+                  <Sparkles size="0.875rem" /> {templateMode ? "Create with AI" : "Draft with AI"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const result = addSpatialLocation(draft);
+                    applyDraft(result.definition);
+                    selectLocation(result.location.id);
+                  }}
+                  className="mari-chrome-control min-h-11 justify-center px-5 text-sm"
+                >
+                  <Plus size="0.875rem" /> Build manually
+                </button>
+                {!templateMode && onOpenTemplates && (
+                  <button
+                    type="button"
+                    onClick={onOpenTemplates}
+                    className="mari-chrome-control min-h-11 justify-center px-5 text-sm"
+                  >
+                    <MapIcon size="0.875rem" /> Use template or shared world
+                  </button>
+                )}
+                {!templateMode && (
+                  <button
+                    type="button"
+                    onClick={() => importInputRef.current?.click()}
+                    disabled={isImporting}
+                    className="mari-chrome-control min-h-11 justify-center px-5 text-sm disabled:opacity-45"
+                  >
+                    {isImporting ? (
+                      <Loader2 size="0.875rem" className="animate-spin" />
+                    ) : (
+                      <Download size="0.875rem" />
+                    )}
+                    Import map file
+                  </button>
+                )}
+              </div>
           </div>
         </div>
       ) : (
