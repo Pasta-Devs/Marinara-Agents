@@ -427,10 +427,10 @@ export default function MemoryVault({
   const noteLoadSession = useRef(0);
 
   const scopeTargets = useQuery({
-    queryKey: queryKeys.scopeTargets(props.chatId),
+    queryKey: [...queryKeys.scopeTargets(props.chatId), "all-chats"],
     queryFn: () =>
       request<ScopeTargets>(
-        `/scope-targets${props.chatId ? `?chatId=${encodeURIComponent(props.chatId)}` : ""}`,
+        `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
       ),
   });
   useEffect(() => {
@@ -1514,6 +1514,7 @@ export default function MemoryVault({
                     scope: {
                       chatId: branch.id,
                       chatIds: [branch.id],
+                      ...(branch.groupId ? { groupId: branch.groupId } : {}),
                       ...(selectedCharacterId
                         ? { characterIds: [selectedCharacterId] }
                         : {}),

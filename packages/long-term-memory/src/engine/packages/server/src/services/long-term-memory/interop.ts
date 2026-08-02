@@ -460,8 +460,10 @@ async function candidates(
       result.push(...book.candidates);
   if (request.source === "chats") {
     const scopeIds = new Set(getLtmScopeChatIds(request.scope));
+    const broaderScope = Boolean(request.scope?.groupId) || scopeIds.size > 1;
     for (const chat of await getPackagePersistence().listChats()) {
-      if (request.chatId && chat.id !== request.chatId) continue;
+      if (request.chatId && !broaderScope && chat.id !== request.chatId)
+        continue;
       if (
         request.scope?.groupId
           ? chat.groupId !== request.scope.groupId

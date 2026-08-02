@@ -38,10 +38,27 @@ export function ltmScopesOverlap(
   }
 
   const noteChatIds = getLtmScopeChatIds(noteScope);
+  const targetChatIds = getLtmScopeChatIds(targetScope);
+  const noteCharacterIds = uniqueStrings(noteScope?.characterIds ?? []);
+  if (
+    noteCharacterIds.length > 0 &&
+    targetCharacterIds.length > 0 &&
+    !noteCharacterIds.some((id) => targetCharacterIds.includes(id))
+  )
+    return false;
+
   if (noteChatIds.length > 0) {
     const noteChatIdSet = new Set(noteChatIds);
-    const targetChatIds = getLtmScopeChatIds(targetScope);
-    if (!targetChatIds.some((chatId) => noteChatIdSet.has(chatId))) return false;
+    if (
+      targetChatIds.length > 0 &&
+      !targetChatIds.some((chatId) => noteChatIdSet.has(chatId))
+    )
+      return false;
+    if (
+      !targetChatIds.length &&
+      (!targetCharacterIds.length || !noteCharacterIds.length)
+    )
+      return false;
     if (!noteScope?.personaId) return true;
     return noteScope.personaId === (targetScope?.personaId ?? options.personaId);
   }

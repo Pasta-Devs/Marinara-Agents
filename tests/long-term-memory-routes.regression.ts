@@ -744,6 +744,97 @@ async function main() {
         chatIds: ["chat-a", "game-a"],
       },
     );
+    for (const note of [
+      {
+        id: "world_scope_character",
+        scope: { characterIds: ["character-mara"] },
+      },
+      {
+        id: "world_scope_chat",
+        scope: {
+          chatId: "chat-b",
+          chatIds: ["chat-b"],
+        },
+      },
+      {
+        id: "world_scope_group",
+        scope: {
+          groupId: "observatory-branches",
+          chatId: "chat-a",
+          chatIds: ["chat-a", "game-a"],
+          characterIds: ["character-mara"],
+        },
+      },
+      {
+        id: "world_scope_branch",
+        scope: {
+          chatId: "game-a",
+          chatIds: ["game-a"],
+          characterIds: ["character-mara"],
+        },
+      },
+      {
+        id: "world_scope_other_character",
+        scope: {
+          chatId: "chat-a",
+          chatIds: ["chat-a"],
+          characterIds: ["character-nyra"],
+        },
+      },
+    ]) {
+      await storageService.storage.createNote({
+        ...note,
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: { facts: { text: note.id, updatedAt: "2026-07-17T00:00:00.000Z" } },
+      });
+    }
+    const characterAllChats = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=chat-a,game-a,chat-b&scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.deepEqual(
+      characterAllChats.json().map((note: any) => note.id).sort(),
+      [
+        "world_route_fixture",
+        "world_scope_branch",
+        "world_scope_character",
+        "world_scope_chat",
+        "world_scope_group",
+      ].sort(),
+    );
+    assert.equal(
+      new Set(characterAllChats.json().map((note: any) => note.id)).size,
+      characterAllChats.json().length,
+    );
+    const characterAllBranches = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=chat-a,game-a&scopeGroupId=observatory-branches&scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.deepEqual(
+      characterAllBranches.json().map((note: any) => note.id).sort(),
+      [
+        "world_route_fixture",
+        "world_scope_branch",
+        "world_scope_character",
+        "world_scope_group",
+      ].sort(),
+    );
+    const selectedBranch = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=game-a&scopeGroupId=observatory-branches&scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.deepEqual(
+      selectedBranch.json().map((note: any) => note.id).sort(),
+      ["world_scope_branch", "world_scope_character", "world_scope_group"].sort(),
+    );
     const searched = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/search",
@@ -1802,6 +1893,42 @@ async function main() {
           (sample: any) => sample.sourceId === "game-a:game-session-1",
         ),
       true,
+    );
+    const branchSourceId = branchPreview
+      .json()
+      .samples.find((sample: any) => sample.sourceId === "game-a:game-session-1")
+      .sourceId;
+    const currentChatOnlyImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: [branchSourceId],
+        chatId: "chat-a",
+        extract: false,
+      },
+    });
+    assert.equal(currentChatOnlyImport.statusCode, 200, currentChatOnlyImport.body);
+    assert.deepEqual(currentChatOnlyImport.json().missingSourceIds, [
+      branchSourceId,
+    ]);
+    const scopedBranchImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: [branchSourceId],
+        chatId: "chat-a",
+        scope: { groupId: "observatory-branches" },
+        extract: false,
+      },
+    });
+    assert.equal(scopedBranchImport.statusCode, 200, scopedBranchImport.body);
+    assert.deepEqual(
+      scopedBranchImport.json().imported.map((item: any) => item.sourceId),
+      [branchSourceId],
     );
     const gamePreview = await app.inject({
       method: "POST",
