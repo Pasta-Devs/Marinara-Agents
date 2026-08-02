@@ -18,7 +18,7 @@ export function LastInjectionSummary({
     <details
       data-ltm-last-injection
       aria-busy={loading}
-      className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30"
+      className="mari-editor-panel mari-editor-panel--soft"
     >
       <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
         <span>
@@ -70,7 +70,7 @@ export function LastInjectionSummary({
             {data.memories.map((memory) => (
               <li
                 key={memory.noteId}
-                className="flex min-h-9 items-center justify-between gap-3 rounded bg-[var(--background)] px-2"
+                className="mari-editor-panel mari-editor-panel--soft flex min-h-9 items-center justify-between gap-3 px-2"
               >
                 {onOpenMemory ? (
                   <button

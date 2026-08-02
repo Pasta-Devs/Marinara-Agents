@@ -243,7 +243,7 @@ function Toggle({
     <div className="flex min-h-11 items-end gap-2">
       <label
         htmlFor={inputId}
-        className="flex min-h-11 flex-1 cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 px-3 text-xs font-semibold text-[var(--foreground)]"
+        className="mari-editor-panel mari-editor-panel--soft flex min-h-11 flex-1 cursor-pointer items-center gap-2 px-3 text-xs font-semibold text-[var(--foreground)]"
       >
         <input
           id={inputId}
@@ -1086,7 +1086,7 @@ export default function MemorySettings({
         role="tabpanel"
         aria-labelledby="settings-tab-recall"
         hidden={activeTab !== "recall"}
-        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
+        className="mari-editor-panel space-y-3 p-3"
       >
         <div>
           <h3 className="flex items-center gap-1 text-sm font-semibold">
@@ -1338,7 +1338,7 @@ export default function MemorySettings({
         role="tabpanel"
         aria-labelledby="settings-tab-extraction"
         hidden={activeTab !== "extraction"}
-        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
+        className="mari-editor-panel space-y-3 p-3"
       >
         <div>
           <h3 className="text-sm font-semibold">
@@ -1626,7 +1626,7 @@ export default function MemorySettings({
         role="tabpanel"
         aria-labelledby="settings-tab-maintenance"
         hidden={activeTab !== "maintenance"}
-        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
+        className="mari-editor-panel space-y-3 p-3"
       >
         <div>
           <h3 className="text-sm font-semibold">
@@ -1694,7 +1694,7 @@ export default function MemorySettings({
             </Button>
           </div>
           {backupPreview ? (
-            <div className="mt-2 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3 text-xs">
+            <div className="mari-editor-panel mari-editor-panel--soft mt-2 space-y-2 p-3 text-xs">
               <p className="font-semibold">
                 {localizeUi(
                   "ui.longTermMemory.memorysettings.validatedBackupReadyToImport",
@@ -2081,7 +2081,7 @@ export default function MemorySettings({
         role="tabpanel"
         aria-labelledby="settings-tab-debug"
         hidden={activeTab !== "debug"}
-        className="space-y-3 rounded-lg border border-[var(--border)] p-3"
+        className="mari-editor-panel space-y-3 p-3"
       >
         <Toggle
           label={localizeUi(

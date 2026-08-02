@@ -46,6 +46,10 @@ const artifactClient = unzip(
   ["-p", artifactPath, "client.js"],
   `read ${artifactPath}/client.js`,
 );
+const engineStyles = readFileSync(
+  join(engineRoot, "packages/client/src/styles/globals.css"),
+  "utf8",
+);
 const originalFetch = globalThis.fetch;
 let catalogOnline = true;
 
@@ -143,6 +147,200 @@ async function main() {
     const rejectedSuggestionId = "2a1b5c7d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
     let savedNote: Record<string, unknown> | null = null;
     let deletedSuggestionId: string | null = null;
+    const reviewActionCalls: Array<{
+      action: "accept" | "skip";
+      draftId: string;
+      mutationIds: string[];
+    }> = [];
+    const reviewDraftIds = {
+      first: "10000000-0000-4000-8000-000000000011",
+      second: "10000000-0000-4000-8000-000000000012",
+      recovery: "10000000-0000-4000-8000-000000000013",
+    };
+    const reviewMutationIds = {
+      first: "10000000-0000-4000-8000-000000000021",
+      second: "10000000-0000-4000-8000-000000000022",
+    };
+    const makeReviewDraft = (
+      draftId: string,
+      mutationId?: string,
+      title = "Review fixture memory",
+      mutation?: Record<string, unknown>,
+    ) => ({
+      id: draftId,
+      status: "pending",
+      applyState: "not_started",
+      indexRebuildStatus: "not_requested",
+      createdAt: "2026-07-30T00:00:00.000Z",
+      updatedAt: "2026-07-30T00:00:00.000Z",
+      reviewRequired: true,
+      source: { sourceNoteId: "source_mobile_review", chatId: "chat-a" },
+      scope: {},
+      modes: ["roleplay"],
+      summary: `${title} summary`,
+      mutations: mutationId
+        ? [
+            mutation ?? {
+              id: mutationId,
+              kind: "create_note",
+              claimKind: "addition",
+              risk: "low",
+              confidence: 0.9,
+              summary: title,
+              evidence: ["source_note:source_mobile_review"],
+              note: {
+                id: `world_${mutationId.slice(-3)}`,
+                title,
+                type: "world",
+                status: "active",
+                modes: ["roleplay"],
+                scope: {},
+                tags: [],
+                keywords: [],
+                links: [],
+                sections: {
+                  facts: {
+                    text: `${title} content.`,
+                    importance: "major",
+                    updatedAt: "2026-07-30T00:00:00.000Z",
+                  },
+                },
+              },
+            },
+          ]
+        : [],
+    });
+    const makeExistingReviewMutation = () => ({
+      id: reviewMutationIds.second,
+      kind: "update_section",
+      claimKind: "change",
+      risk: "low",
+      confidence: 0.9,
+      summary: "Update the existing mobile world memory",
+      evidence: ["source_note:source_mobile_review"],
+      noteId: "world_second_mobile",
+      sectionKey: "facts",
+      section: {
+        text: "Updated second mobile review memory text.",
+        importance: "major",
+        updatedAt: "2026-07-30T00:00:00.000Z",
+      },
+    });
+    let reviewSources: any[] = [
+      {
+        sourceNoteId: "source_mobile_recovery",
+        modes: ["roleplay"],
+        drafts: [
+          {
+            draft: {
+              ...makeReviewDraft(reviewDraftIds.recovery),
+              source: {
+                sourceNoteId: "source_mobile_recovery",
+                chatId: "chat-a",
+              },
+            },
+            freshness: "hashless",
+            blockReasons: [
+              {
+                code: "no_mutations",
+                message: "No mutation survived extraction.",
+              },
+            ],
+            diagnostics: [],
+            candidateRejections: [],
+            deduplications: [],
+          },
+        ],
+        targets: [],
+      },
+      {
+        sourceNoteId: "source_mobile_review",
+        modes: ["roleplay"],
+        drafts: [
+          {
+            draft: makeReviewDraft(
+              reviewDraftIds.first,
+              reviewMutationIds.first,
+              "First mobile review memory",
+            ),
+            freshness: "fresh",
+            blockReasons: [],
+            diagnostics: [],
+            candidateRejections: [],
+            deduplications: [],
+          },
+          {
+            draft: makeReviewDraft(
+              reviewDraftIds.second,
+              reviewMutationIds.second,
+              "Second mobile review memory",
+              makeExistingReviewMutation(),
+            ),
+            freshness: "fresh",
+            blockReasons: [],
+            diagnostics: [],
+            candidateRejections: [],
+            deduplications: [],
+          },
+        ],
+        targets: [
+          {
+            noteId: "world_new_mobile",
+            title: "Existing mobile world",
+            noteType: "world",
+            rows: [
+              {
+                draftId: reviewDraftIds.first,
+                mutation: {
+                  id: reviewMutationIds.first,
+                  kind: "create_note",
+                  claimKind: "addition",
+                  risk: "low",
+                  confidence: 0.9,
+                  summary: "First mobile review memory",
+                  evidence: ["source_note:source_mobile_review"],
+                  note: {
+                    id: "world_new_mobile",
+                    title: "First mobile review memory",
+                    type: "world",
+                    status: "active",
+                    modes: ["roleplay"],
+                    scope: {},
+                    tags: [],
+                    keywords: [],
+                    links: [],
+                    sections: {
+                      facts: {
+                        text: "First mobile review memory content.",
+                        importance: "major",
+                        updatedAt: "2026-07-30T00:00:00.000Z",
+                      },
+                    },
+                  },
+                },
+                disposition: "new",
+                diagnostics: [],
+                changes: [],
+              },
+            ],
+          },
+          {
+            noteId: "world_second_mobile",
+            title: "Second mobile review memory",
+            noteType: "world",
+            rows: [
+              {
+                draftId: reviewDraftIds.second,
+                mutation: makeExistingReviewMutation(),
+                disposition: "merge",
+                diagnostics: [],
+                changes: [],
+              },
+            ],
+          },
+        ],
+      },
+    ];
     let healthState: "healthy" | "degraded" = "healthy";
     browserServer = createServer(async (request, response) => {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -152,7 +350,9 @@ async function main() {
         response.end(payload);
       };
       if (url.pathname === "/")
-        return send(200, `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><script type="module" src="/client.js"></script>`, "text/html");
+        return send(200, `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/globals.css"><script type="module" src="/client.js"></script>`, "text/html");
+      if (url.pathname === "/globals.css")
+        return send(200, engineStyles, "text/css");
       if (url.pathname === "/client.js") return send(200, artifactClient, "application/javascript");
       if (!url.pathname.startsWith("/api/long-term-memory/")) return send(404, {});
       if (request.method === "GET" && url.pathname.endsWith("/status"))
@@ -168,9 +368,105 @@ async function main() {
           },
         });
       if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count")) return send(200, { count: 2 });
+      if (request.method === "GET" && url.pathname.endsWith("/drafts/review"))
+        return send(200, {
+          generatedAt: "2026-07-30T00:00:00.000Z",
+          sources: reviewSources,
+          counts: {
+            sources: reviewSources.length,
+            drafts: reviewSources.reduce(
+              (count, source) => count + source.drafts.length,
+              0,
+            ),
+            mutations: reviewSources.reduce(
+              (count, source) =>
+                count +
+                source.drafts.reduce(
+                  (draftCount: number, item: any) =>
+                    draftCount + item.draft.mutations.length,
+                  0,
+                ),
+              0,
+            ),
+            blockedDrafts: reviewSources.reduce(
+              (count, source) =>
+                count +
+                source.drafts.filter((item: any) => item.blockReasons.length)
+                  .length,
+              0,
+            ),
+            candidateRejections: 0,
+            deduplications: 0,
+          },
+        });
       if (request.method === "GET" && url.pathname.endsWith("/scope-targets"))
         return send(200, { currentScope: null, chats: [], groups: [], characters: [] });
-      if (request.method === "GET" && url.pathname.endsWith("/notes")) return send(200, []);
+      if (request.method === "GET" && url.pathname.endsWith("/notes"))
+        return send(200, [
+          {
+            id: "source_mobile_review",
+            title: "Mobile review source",
+            type: "source",
+            status: "active",
+            modes: ["roleplay"],
+            scope: {},
+            tags: [],
+            keywords: [],
+            links: [],
+            sections: {
+              source: {
+                text: "Mobile review source text.",
+                updatedAt: "2026-07-30T00:00:00.000Z",
+              },
+            },
+            createdAt: "2026-07-30T00:00:00.000Z",
+            updatedAt: "2026-07-30T00:00:00.000Z",
+            version: 1,
+          },
+          {
+            id: "world_second_mobile",
+            title: "Second mobile review memory",
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: {},
+            tags: [],
+            keywords: [],
+            links: [],
+            sections: {
+              facts: {
+                text: "Second mobile review memory text.",
+                importance: "major",
+                updatedAt: "2026-07-30T00:00:00.000Z",
+              },
+            },
+            createdAt: "2026-07-30T00:00:00.000Z",
+            updatedAt: "2026-07-30T00:00:00.000Z",
+            version: 1,
+          },
+        ]);
+      if (request.method === "GET" && url.pathname.endsWith("/notes/world_second_mobile"))
+        return send(200, {
+          id: "world_second_mobile",
+          title: "Second mobile review memory",
+          type: "world",
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: {
+            facts: {
+              text: "Second mobile review memory text.",
+              importance: "major",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+            },
+          },
+          createdAt: "2026-07-30T00:00:00.000Z",
+          updatedAt: "2026-07-30T00:00:00.000Z",
+          version: 1,
+        });
       if (request.method === "POST" && url.pathname.endsWith("/import/preview"))
         return send(200, { samples: [], scanned: 0, draftable: 0, importedCount: 0 });
       if (request.method === "POST" && url.pathname.endsWith("/import/lorebooks/preview"))
@@ -223,6 +519,36 @@ async function main() {
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
         savedNote = JSON.parse(Buffer.concat(chunks).toString("utf8"));
         return send(201, { note: { ...savedNote, createdAt: "2026-07-30T00:00:00.000Z", updatedAt: "2026-07-30T00:00:00.000Z", version: 1 } });
+      }
+      if (
+        request.method === "POST" &&
+        (url.pathname.endsWith("/accept") || url.pathname.endsWith("/skip"))
+      ) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+          mutationIds?: string[];
+        };
+        const action = url.pathname.endsWith("/accept") ? "accept" : "skip";
+        const draftId = decodeURIComponent(url.pathname.split("/").at(-2)!);
+        const mutationIds = body.mutationIds ?? [];
+        reviewActionCalls.push({ action, draftId, mutationIds });
+        reviewSources = reviewSources
+          .map((source) => ({
+            ...source,
+            drafts: source.drafts.filter(
+              (item: any) => item.draft.id !== draftId,
+            ),
+          }))
+          .filter((source) => source.drafts.length > 0);
+        return action === "accept"
+          ? send(200, {
+              appliedMutationIds: mutationIds,
+              skippedMutationIds: [],
+              autoIncludedMutationIds: [],
+              indexRebuild: { status: "not_requested" },
+            })
+          : send(200, { mutationIds });
       }
       if (request.method === "DELETE" && url.pathname.includes("/rejected-suggestions/")) {
         deletedSuggestionId = decodeURIComponent(url.pathname.split("/").at(-1)!);
@@ -286,7 +612,6 @@ async function main() {
       ),
       ["vault", "review", "sources", "settings"],
     );
-
     await page.setViewportSize({ width: 390, height: 844 });
     healthState = "degraded";
     await page.reload();
@@ -351,6 +676,109 @@ async function main() {
     assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
     assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
 
+    await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+    await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+    await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+    await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+    await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
+    await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+    await page.locator('[data-ltm-review-draft-title]').waitFor();
+    assert.match(
+      await page.locator('[data-ltm-review-draft-title]').innerText(),
+      /Second mobile review memory/u,
+    );
+    const reviewText = await page
+      .locator('[data-ltm-workspace-pane="workbench"]')
+      .innerText();
+    assert.match(reviewText, /Second mobile review memory/u);
+    assert.match(reviewText, /Second mobile review memory summary/u);
+    assert.match(reviewText, /World/u);
+    assert.match(reviewText, /Update section/u);
+    assert.match(reviewText, /Major/u);
+    assert.equal(await page.locator('[data-ltm-review-operation]').count(), 1);
+    assert.equal(
+      await page
+        .locator('[data-ltm-review-draft-summary]')
+        .first()
+        .getAttribute("class")
+        .then((className) => className?.includes("truncate")),
+      true,
+    );
+    await page.getByRole("button", { name: "Open memory" }).click();
+    await page.locator('[data-ltm-surface="vault"]').waitFor();
+    await page.locator('[data-ltm-note-editor]').waitFor();
+    assert.equal(
+      await page.locator('[data-ltm-note-editor] input').first().inputValue(),
+      "Second mobile review memory",
+    );
+    await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
+    await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+    await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+    await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+    await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
+    await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const acceptButtonSize = await page
+      .locator(
+        '[data-ltm-review-mutation] [aria-label^="Accept "]',
+      )
+      .first()
+      .evaluate((button) => {
+        const rect = button.getBoundingClientRect();
+        const icon = button.querySelector("svg")!;
+        return {
+          width: rect.width,
+          height: rect.height,
+          iconWidth: icon.getAttribute("width"),
+          iconHeight: icon.getAttribute("height"),
+        };
+      });
+    assert.ok(acceptButtonSize.width >= 44);
+    assert.ok(acceptButtonSize.height >= 44);
+    assert.equal(acceptButtonSize.iconWidth, "1.25rem");
+    assert.equal(acceptButtonSize.iconHeight, "1.25rem");
+    await page.setViewportSize({ width: 390, height: 844 });
+    const reviewTextAfterViewportChanges = await page
+      .locator('[data-ltm-workspace-pane="workbench"]')
+      .innerText();
+    assert.doesNotMatch(reviewTextAfterViewportChanges, /timeline_event|world_022|10000000-0000-4000-8000-000000000022/u);
+    assert.equal(
+      await page.locator('[data-ltm-review-target]').first().evaluate((target) =>
+        Boolean(target.closest('[data-ltm-review-draft]')),
+      ),
+      true,
+    );
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+      true,
+    );
+    await page
+      .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
+      .check();
+    await page.getByRole("button", { name: "Skip selected (1)" }).click();
+    await page.waitForFunction(() =>
+      document.querySelector('[data-ltm-review-draft-title]')?.textContent?.includes("First mobile review memory"),
+    );
+    await page
+      .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
+      .check();
+    await page.getByRole("button", { name: "Accept eligible (1)" }).click();
+    await page.waitForFunction(() =>
+      !document.querySelector('[data-ltm-review-source-select="source_mobile_review"]'),
+    );
+    assert.deepEqual(reviewActionCalls, [
+      {
+        action: "skip",
+        draftId: reviewDraftIds.second,
+        mutationIds: [reviewMutationIds.second],
+      },
+      {
+        action: "accept",
+        draftId: reviewDraftIds.first,
+        mutationIds: [reviewMutationIds.first],
+      },
+    ]);
+
     healthState = "healthy";
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.reload();
@@ -364,7 +792,22 @@ async function main() {
     assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
     assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
     await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
-    await page.locator(`[data-ltm-rejected-suggestion="${rejectedSuggestionId}"]`).waitFor();
+    await page.locator('[data-ltm-rejected-suggestions]').waitFor();
+    assert.equal(
+      await page.locator('[data-ltm-rejected-suggestions]').evaluate(
+        (element) => (element as HTMLDetailsElement).open,
+      ),
+      false,
+    );
+    assert.ok(
+      await page.locator('[data-ltm-rejected-suggestions]').evaluate(
+        (element) =>
+          element.compareDocumentPosition(
+            document.querySelector('[data-ltm-control="review-select"]')!,
+          ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    );
+    await page.locator('[data-ltm-rejected-suggestions] > summary').click();
     await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
     await page.locator("[data-ltm-note-editor]").waitFor();
     await page.locator("[data-ltm-details-toggle]").click();
@@ -441,7 +884,14 @@ async function main() {
     await page.setViewportSize({ width: 1280, height: 900 });
     page.once("dialog", (dialog) => void dialog.accept());
     await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
-    await page.locator(`[data-ltm-rejected-suggestion="${rejectedSuggestionId}"]`).waitFor();
+    await page.locator('[data-ltm-rejected-suggestions]').waitFor();
+    if (
+      !(await page.locator('[data-ltm-rejected-suggestions]').evaluate(
+        (element) => (element as HTMLDetailsElement).open,
+      ))
+    ) {
+      await page.locator('[data-ltm-rejected-suggestions] > summary').click();
+    }
     await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
     await page.locator("[data-ltm-note-editor]").waitFor();
     assert.equal(
@@ -498,20 +948,20 @@ async function main() {
         await mobileNavigation.locator(`[data-ltm-destination="${destination}"]`).count(),
         1,
       );
-    assert.deepEqual(
-      await mobileNavigation.evaluate((navigation) => {
+    const mobileNavigationLayout = await mobileNavigation.evaluate((navigation) => {
         const rect = navigation.getBoundingClientRect();
-        const itemRects = [...navigation.querySelectorAll<HTMLElement>('[data-ltm-control="navigation"]')]
-          .map((item) => item.getBoundingClientRect());
+        const items = [...navigation.querySelectorAll<HTMLElement>("[data-ltm-control=\"navigation\"]")];
         return {
-          visible: getComputedStyle(navigation).display !== "none" && rect.width > 0 && rect.height > 0,
-          fillsParent: Math.abs(rect.width - navigation.parentElement!.getBoundingClientRect().width) < 1,
-          equalItems: Math.max(...itemRects.map((item) => item.width)) - Math.min(...itemRects.map((item) => item.width)) < 1,
-          fillsBar: Math.abs(itemRects[0].left - rect.left) < 1 && Math.abs(itemRects.at(-1)!.right - rect.right) < 1,
+          visible: getComputedStyle(navigation).display !== "none",
+          hasSize: rect.width > 0 && rect.height > 0,
+          fits: navigation.scrollWidth <= navigation.clientWidth + 1,
+          touchTargets: items.every((item) => item.getBoundingClientRect().height >= 44),
         };
-      }),
-      { visible: true, fillsParent: true, equalItems: true, fillsBar: true },
-    );
+      });
+    assert.equal(mobileNavigationLayout.visible, true);
+    assert.equal(mobileNavigationLayout.hasSize, true);
+    assert.equal(mobileNavigationLayout.fits, true);
+    assert.equal(mobileNavigationLayout.touchTargets, true);
     await mobileNavigation.locator('[data-ltm-destination="sources"]').click();
     await mobilePage.locator('[data-ltm-source-tab="lorebooks"]').click();
     await mobilePage.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();

@@ -1,10 +1,23 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { Module } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
+  const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
+  const engineRoot = resolve(
+    process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"),
+  );
+  process.env.NODE_PATH = [
+    join(engineRoot, "packages/server/node_modules"),
+    join(engineRoot, "packages/shared/node_modules"),
+    process.env.NODE_PATH,
+  ]
+    .filter(Boolean)
+    .join(delimiter);
+  Module._initPaths();
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);
   const {

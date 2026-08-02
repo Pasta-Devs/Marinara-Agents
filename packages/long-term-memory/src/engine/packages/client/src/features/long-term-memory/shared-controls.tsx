@@ -49,12 +49,14 @@ export function IconButton({
   icon: Icon,
   label,
   destructive = false,
+  iconSize = "0.875rem",
   className = "",
   ...props
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
   icon: LucideIcon;
   label: string;
   destructive?: boolean;
+  iconSize?: string;
 }) {
   return (
     <button
@@ -62,10 +64,10 @@ export function IconButton({
       aria-label={label}
       title={label}
       data-ltm-control="icon-button"
-      className={`mari-editor-action h-8 min-h-8 w-8 min-w-8 shrink-0 p-0 ${destructive ? "mari-editor-action--danger" : ""} ${className}`}
+      className={`mari-editor-action h-11 min-h-11 w-11 min-w-11 shrink-0 p-0 ${destructive ? "mari-editor-action--danger" : ""} ${className}`}
       {...props}
     >
-      <Icon aria-hidden="true" size="0.875rem" />
+      <Icon aria-hidden="true" size={iconSize} />
     </button>
   );
 }
@@ -188,11 +190,12 @@ export function InfoPopover({
         aria-label={localizeUi("ui.longTermMemory.infopopover.aboutValue1", {
           value1: label,
         })}
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? `${id}-panel` : undefined}
-        aria-describedby={open ? `${id}-panel` : undefined}
+        aria-describedby={open && !pinned ? `${id}-panel` : undefined}
         data-ltm-info={label}
-        className="inline-grid h-6 w-6 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        className="inline-grid h-11 w-11 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
         onMouseEnter={show}
         onMouseLeave={scheduleClose}
         onFocus={show}
@@ -216,10 +219,12 @@ export function InfoPopover({
             <div
               ref={panelRef}
               id={`${id}-panel`}
-              role="tooltip"
+              role={pinned ? "dialog" : "tooltip"}
+              aria-modal={pinned ? false : undefined}
+              aria-label={pinned ? label : undefined}
               data-ltm-info-panel={label}
               style={{ top: position.top, left: position.left }}
-              className={`fixed z-[100] max-h-[min(20rem,calc(100vh-1rem))] overflow-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs leading-5 text-[var(--foreground)] shadow-lg ${wide ? "w-[min(26rem,calc(100vw-1rem))]" : "w-[min(18rem,calc(100vw-1rem))]"}`}
+              className={`mari-editor-panel fixed z-[100] max-h-[min(20rem,calc(100vh-1rem))] overflow-auto p-3 text-xs leading-5 text-[var(--marinara-editor-text)] shadow-lg ${wide ? "w-[min(26rem,calc(100vw-1rem))]" : "w-[min(18rem,calc(100vw-1rem))]"}`}
               onMouseEnter={clearCloseTimer}
               onMouseLeave={scheduleClose}
             >
@@ -316,7 +321,7 @@ export function StatusSurface({
   ...props
 }: {
   children: ReactNode;
-  tone?: "neutral" | "success" | "danger";
+  tone?: "neutral" | "success" | "warning" | "danger";
   busy?: boolean;
   compact?: boolean;
   className?: string;
@@ -325,6 +330,8 @@ export function StatusSurface({
     neutral: "text-[var(--marinara-editor-muted)]",
     success:
       "border-[var(--marinara-editor-accent)]/35 text-[var(--marinara-editor-accent)]",
+    warning:
+      "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]",
     danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
   }[tone];
   return (
@@ -336,7 +343,7 @@ export function StatusSurface({
       {...props}
     >
       {busy ? (
-        <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin" />
+        <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" />
       ) : null}
       {children}
     </p>

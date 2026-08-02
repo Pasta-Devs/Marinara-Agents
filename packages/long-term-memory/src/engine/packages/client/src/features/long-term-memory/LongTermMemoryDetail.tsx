@@ -310,7 +310,41 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       data-ltm-surface="detail"
       aria-labelledby="ltm-detail-title"
       className="mari-editor-shell mari-editor-legacy-bridge flex min-h-0 flex-1 flex-col overflow-hidden"
+      style={{ containerName: "ltm-detail", containerType: "inline-size" }}
     >
+      <style>{`
+        [data-ltm-surface="detail"] [data-ltm-navigation="desktop"] {
+          display: flex;
+        }
+        [data-ltm-surface="detail"] [data-ltm-navigation="mobile"] {
+          display: none;
+        }
+        [data-ltm-mobile-navigation] {
+          display: none;
+        }
+        @container ltm-detail (max-width: 47.99rem) {
+          [data-ltm-surface="detail"] [data-ltm-navigation="desktop"] {
+            display: none;
+          }
+          [data-ltm-surface="detail"] [data-ltm-navigation="mobile"] {
+            display: grid;
+          }
+          [data-ltm-mobile-navigation] {
+            display: block;
+          }
+        }
+        [data-ltm-navigation="mobile"] > [data-ltm-control="navigation"] {
+          min-height: 2.75rem;
+          min-width: 0;
+          width: 100%;
+        }
+        [data-ltm-navigation="mobile"] [data-ltm-badge] {
+          position: absolute;
+          left: 0.375rem;
+          top: 0.375rem;
+          margin-left: 0;
+        }
+      `}</style>
       <header className="mari-editor-header relative z-20">
         <div className="mari-editor-header-main max-md:min-w-full">
           <button
@@ -511,9 +545,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           className="mari-editor-content-inner mari-editor-content-inner--wide space-y-5"
           style={{ maxWidth: "90rem" }}
         >
-          <div className="flex min-w-0 gap-5">
+          <div className="flex min-h-0 min-w-0 gap-5">
             <div className="min-w-0 flex-1 space-y-3">
-              <div className="flex min-w-0 items-stretch gap-3">
+              <div className="flex min-w-0 flex-wrap items-stretch gap-3">
                 <LongTermMemoryNavigation
                   destination={destination}
                   onDestinationChange={selectDestination}
@@ -526,7 +560,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   <div
                     aria-busy={status.isFetching}
                     data-ltm-surface="vault-health-pill"
-                    className="hidden shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs text-[var(--marinara-editor-muted)] md:flex"
+                    className="mari-editor-panel mari-editor-panel--soft hidden min-h-11 shrink-0 items-center gap-2 px-3 text-xs text-[var(--marinara-editor-muted)] md:flex"
                   >
                     <span
                       aria-hidden="true"
@@ -846,15 +880,20 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           </div>
         </div>
       </div>
-      <LongTermMemoryNavigation
-        mobile
-        destination={destination}
-        onDestinationChange={selectDestination}
-        badges={{
-          memories: status.data?.notes.total,
-          review: pendingDrafts.data?.count,
-        }}
-      />
+      <div
+        data-ltm-mobile-navigation
+        className="sticky bottom-0 z-20 border-t border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-bg)] pb-[env(safe-area-inset-bottom)]"
+      >
+        <LongTermMemoryNavigation
+          mobile
+          destination={destination}
+          onDestinationChange={selectDestination}
+          badges={{
+            memories: status.data?.notes.total,
+            review: pendingDrafts.data?.count,
+          }}
+        />
+      </div>
     </main>
   );
 }

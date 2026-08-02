@@ -142,11 +142,16 @@ export function LtmWorkspace({
         [data-ltm-workspace] [data-ltm-workspace-pane][data-active="true"] {
           display: block;
         }
+        [data-ltm-workspace] [data-ltm-control="icon-button"].mari-editor-action--primary {
+          height: 2.75rem;
+          min-height: 2.75rem;
+          width: 2.75rem;
+          min-width: 2.75rem;
+        }
         @container ltm-workspace (min-width: ${compactBreakpointRem}rem) {
           [data-ltm-workspace] [data-ltm-workspace-pane] {
-            max-height: calc(100vh - 13rem);
-            overflow-y: auto;
-            overscroll-behavior: contain;
+            min-height: 0;
+            overflow: visible;
           }
           [data-ltm-workspace][data-ltm-workspace-inspector="false"][data-ltm-workspace-navigator="true"] {
             grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
@@ -187,6 +192,16 @@ export function LtmWorkspace({
           }
           [data-ltm-workspace][data-ltm-workspace-inspector="true"] [data-ltm-workspace-switcher] {
             display: none;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [data-ltm-workspace] *,
+          [data-ltm-workspace] *::before,
+          [data-ltm-workspace] *::after {
+            scroll-behavior: auto !important;
+            transition-duration: 0.01ms !important;
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
           }
         }
       `}</style>

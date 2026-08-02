@@ -112,7 +112,7 @@ type ScopeTargets = {
   characters: ScopeTargetCharacter[];
 };
 
-function resultTone(status: string) {
+function resultTone(status: string): "neutral" | "success" | "warning" | "danger" {
   return status === "success" ||
     status === "succeeded" ||
     status === "created" ||
@@ -120,7 +120,18 @@ function resultTone(status: string) {
     ? "success"
     : status === "failed" || status === "cancelled"
       ? "danger"
-      : "neutral";
+      : status === "partial_success" || status === "no_suggestions_created" || status === "not_started"
+        ? "warning"
+        : "neutral";
+}
+
+function resultToneClass(status: string) {
+  const tone = resultTone(status);
+  return tone === "success"
+    ? "bg-[var(--marinara-editor-accent)]/15"
+    : tone === "warning"
+      ? "border border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]"
+      : "bg-[var(--secondary)]";
 }
 
 function importStatusLabel(status: string, localizeUi: LtmTranslationFunction) {
@@ -164,6 +175,26 @@ function entryStatusLabel(
   return labels.size === 1
     ? [...labels][0]
     : localizeUi("ui.longTermMemory.sourcesworkspace.mixed");
+}
+
+function entryStatusToneClass(entry: LtmLorebookPreviewEntry) {
+  const statusByFreshness: Record<LorebookCandidate["freshness"], string> = {
+    new: "unknown",
+    current: "success",
+    source_updated: "partial_success",
+    context_updated: "partial_success",
+    extraction_incomplete: "partial_success",
+  };
+  const statuses = entry.candidates.map(
+    (candidate) => statusByFreshness[candidate.freshness],
+  );
+  return resultToneClass(
+    statuses.includes("partial_success")
+      ? "partial_success"
+      : statuses.includes("unknown")
+        ? "unknown"
+        : "success",
+  );
 }
 
 async function confirmSourceAction(
@@ -1339,7 +1370,7 @@ export default function SourcesWorkspace({
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3">
+      <div className="mari-editor-panel mari-editor-panel--soft flex flex-wrap items-center gap-3 p-3">
         <div
           role="group"
           aria-labelledby={importScopeLabelId}
@@ -1623,7 +1654,7 @@ export default function SourcesWorkspace({
               content: (
                 <section
               data-ltm-lorebook-list
-              className="overflow-hidden rounded-lg border border-[var(--border)]"
+              className="mari-editor-panel overflow-hidden"
             >
               <div className="flex min-h-11 items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2">
                 <h2 className="text-sm font-semibold">
@@ -1690,7 +1721,7 @@ export default function SourcesWorkspace({
               content: (
                 <section
               data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
-              className="overflow-hidden rounded-lg border border-[var(--border)]"
+              className="mari-editor-panel overflow-hidden"
             >
               {selectedLorebook ? (
                 <>
@@ -1867,7 +1898,7 @@ export default function SourcesWorkspace({
                                 <h3 className="text-sm font-semibold">
                                   {entry.name}
                                 </h3>
-                                <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase">
+                                <span className={`rounded-full px-2 py-0.5 text-[0.625rem] font-semibold uppercase ${entryStatusToneClass(entry)}`}>
                                   {entryStatusLabel(entry, localizeUi)}
                                 </span>
                                 {entry.candidateCount > 1 ? (
@@ -1979,7 +2010,7 @@ export default function SourcesWorkspace({
           role="tabpanel"
           aria-labelledby={`ltm-source-tab-${source}`}
           data-ltm-source-preview={source}
-          className="overflow-hidden rounded-lg border border-[var(--border)]"
+          className="mari-editor-panel overflow-hidden"
         >
           <div
             role="tablist"
@@ -2284,7 +2315,7 @@ export default function SourcesWorkspace({
           role="region"
           aria-labelledby={importResultLabelId}
           data-ltm-source-import-result={importResult.batchStatus}
-          className="space-y-3 rounded-lg border border-[var(--border)] p-3"
+          className="mari-editor-panel space-y-3 p-3"
         >
           <h2 id={importResultLabelId} className="text-sm font-semibold">
             {localizeUi(
@@ -2348,25 +2379,25 @@ export default function SourcesWorkspace({
             <article
               key={item.sourceId}
               data-ltm-import-outcome={item.extractionStatus}
-              className="space-y-2 rounded border border-[var(--border)] p-3"
+              className="mari-editor-panel space-y-2 p-3"
             >
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <strong>{item.title}</strong>
                 <span
                   data-ltm-source-write-status={item.sourceWriteStatus}
-                  className={`rounded-full px-2 py-0.5 ${resultTone(item.sourceWriteStatus) === "success" ? "bg-[var(--marinara-editor-accent)]/15" : "bg-[var(--secondary)]"}`}
+                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.sourceWriteStatus)}`}
                 >
                   {importStatusLabel(item.sourceWriteStatus, localizeUi)}
                 </span>
                 <span
                   data-ltm-extraction-status={item.extractionStatus}
-                  className="rounded-full bg-[var(--secondary)] px-2 py-0.5"
+                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.extractionStatus)}`}
                 >
                   {importStatusLabel(item.extractionStatus, localizeUi)}
                 </span>
                 <span
                   data-ltm-extraction-outcome={item.outcome.state}
-                  className="rounded-full bg-[var(--secondary)] px-2 py-0.5"
+                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.outcome.state)}`}
                 >
                   {importStatusLabel(item.outcome.state, localizeUi)}
                 </span>
