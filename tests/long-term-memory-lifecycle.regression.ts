@@ -683,27 +683,21 @@ async function main() {
     await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
     await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
     await page.locator('[data-ltm-review-draft-title]').waitFor();
-    assert.match(
+    await page.screenshot({ path: "/tmp/opencode/ltm-review-mobile-final.png", fullPage: true });
+    assert.equal(
       await page.locator('[data-ltm-review-draft-title]').innerText(),
-      /Second mobile review memory/u,
+      "Mobile review source",
     );
     const reviewText = await page
       .locator('[data-ltm-workspace-pane="workbench"]')
       .innerText();
     assert.match(reviewText, /Second mobile review memory/u);
-    assert.match(reviewText, /Second mobile review memory summary/u);
+    assert.match(reviewText, /Second mobile review memory text\./u);
     assert.match(reviewText, /World/u);
     assert.match(reviewText, /Update section/u);
     assert.match(reviewText, /Major/u);
     assert.equal(await page.locator('[data-ltm-review-operation]').count(), 1);
-    assert.equal(
-      await page
-        .locator('[data-ltm-review-draft-summary]')
-        .first()
-        .getAttribute("class")
-        .then((className) => className?.includes("truncate")),
-      true,
-    );
+    await page.locator('[data-ltm-review-mutation-toggle]').click();
     await page.getByRole("button", { name: "Open memory" }).click();
     await page.locator('[data-ltm-surface="vault"]').waitFor();
     await page.locator('[data-ltm-note-editor]').waitFor();
@@ -735,8 +729,8 @@ async function main() {
       });
     assert.ok(acceptButtonSize.width >= 44);
     assert.ok(acceptButtonSize.height >= 44);
-    assert.equal(acceptButtonSize.iconWidth, "1.25rem");
-    assert.equal(acceptButtonSize.iconHeight, "1.25rem");
+    assert.equal(acceptButtonSize.iconWidth, "1rem");
+    assert.equal(acceptButtonSize.iconHeight, "1rem");
     await page.setViewportSize({ width: 390, height: 844 });
     const reviewTextAfterViewportChanges = await page
       .locator('[data-ltm-workspace-pane="workbench"]')
@@ -756,8 +750,16 @@ async function main() {
       .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
       .check();
     await page.getByRole("button", { name: "Skip selected (1)" }).click();
-    await page.waitForFunction(() =>
-      document.querySelector('[data-ltm-review-draft-title]')?.textContent?.includes("First mobile review memory"),
+    const firstMutation = page.locator(
+      `[data-ltm-review-mutation="${reviewMutationIds.first}"]`,
+    );
+    await firstMutation.waitFor({ state: "visible" });
+    await page.waitForFunction(
+      (mutationId) =>
+        document
+          .querySelector(`[data-ltm-review-mutation="${mutationId}"]`)
+          ?.textContent?.includes("First mobile review memory"),
+      reviewMutationIds.first,
     );
     await page
       .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
