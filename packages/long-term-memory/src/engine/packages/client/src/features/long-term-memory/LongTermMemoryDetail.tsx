@@ -334,6 +334,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           }
         }
         [data-ltm-navigation="mobile"] > [data-ltm-control="navigation"] {
+          min-height: 2.75rem;
           min-width: 0;
           width: 100%;
         }

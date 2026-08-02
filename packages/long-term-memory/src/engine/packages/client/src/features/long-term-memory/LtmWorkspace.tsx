@@ -152,7 +152,6 @@ export function LtmWorkspace({
           [data-ltm-workspace] [data-ltm-workspace-pane] {
             min-height: 0;
             overflow: visible;
-            overscroll-behavior: contain;
           }
           [data-ltm-workspace][data-ltm-workspace-inspector="false"][data-ltm-workspace-navigator="true"] {
             grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);

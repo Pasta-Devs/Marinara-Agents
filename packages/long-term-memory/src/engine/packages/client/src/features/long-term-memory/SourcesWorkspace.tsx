@@ -177,6 +177,26 @@ function entryStatusLabel(
     : localizeUi("ui.longTermMemory.sourcesworkspace.mixed");
 }
 
+function entryStatusToneClass(entry: LtmLorebookPreviewEntry) {
+  const statusByFreshness: Record<LorebookCandidate["freshness"], string> = {
+    new: "unknown",
+    current: "success",
+    source_updated: "partial_success",
+    context_updated: "partial_success",
+    extraction_incomplete: "partial_success",
+  };
+  const statuses = entry.candidates.map(
+    (candidate) => statusByFreshness[candidate.freshness],
+  );
+  return resultToneClass(
+    statuses.includes("partial_success")
+      ? "partial_success"
+      : statuses.includes("unknown")
+        ? "unknown"
+        : "success",
+  );
+}
+
 async function confirmSourceAction(
   props: LongTermMemoryDestinationProps["props"],
   title: string,
@@ -1878,7 +1898,7 @@ export default function SourcesWorkspace({
                                 <h3 className="text-sm font-semibold">
                                   {entry.name}
                                 </h3>
-                                   <span className="rounded-full border border-[var(--marinara-editor-warning)]/40 px-2 py-0.5 text-[0.625rem] font-semibold uppercase text-[var(--marinara-editor-warning)]">
+                                <span className={`rounded-full px-2 py-0.5 text-[0.625rem] font-semibold uppercase ${entryStatusToneClass(entry)}`}>
                                   {entryStatusLabel(entry, localizeUi)}
                                 </span>
                                 {entry.candidateCount > 1 ? (

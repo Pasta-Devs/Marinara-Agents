@@ -752,12 +752,16 @@ async function main() {
       await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
       true,
     );
-    await page.locator('[data-ltm-control="review-select"]').first().check();
+    await page
+      .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
+      .check();
     await page.getByRole("button", { name: "Skip selected (1)" }).click();
     await page.waitForFunction(() =>
       document.querySelector('[data-ltm-review-draft-title]')?.textContent?.includes("First mobile review memory"),
     );
-    await page.locator('[data-ltm-control="review-select"]').first().check();
+    await page
+      .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
+      .check();
     await page.getByRole("button", { name: "Accept eligible (1)" }).click();
     await page.waitForFunction(() =>
       !document.querySelector('[data-ltm-review-source-select="source_mobile_review"]'),
@@ -944,16 +948,20 @@ async function main() {
         await mobileNavigation.locator(`[data-ltm-destination="${destination}"]`).count(),
         1,
       );
-    assert.equal(
-      await mobileNavigation.evaluate((navigation) => {
+    const mobileNavigationLayout = await mobileNavigation.evaluate((navigation) => {
         const rect = navigation.getBoundingClientRect();
         const items = [...navigation.querySelectorAll<HTMLElement>("[data-ltm-control=\"navigation\"]")];
-        const fits = navigation.scrollWidth <= navigation.clientWidth + 1;
-        const touchTargets = items.every((item) => item.getBoundingClientRect().height >= 44);
-        return getComputedStyle(navigation).display !== "none" && rect.width > 0 && rect.height > 0 && (fits || touchTargets);
-      }),
-      true,
-    );
+        return {
+          visible: getComputedStyle(navigation).display !== "none",
+          hasSize: rect.width > 0 && rect.height > 0,
+          fits: navigation.scrollWidth <= navigation.clientWidth + 1,
+          touchTargets: items.every((item) => item.getBoundingClientRect().height >= 44),
+        };
+      });
+    assert.equal(mobileNavigationLayout.visible, true);
+    assert.equal(mobileNavigationLayout.hasSize, true);
+    assert.equal(mobileNavigationLayout.fits, true);
+    assert.equal(mobileNavigationLayout.touchTargets, true);
     await mobileNavigation.locator('[data-ltm-destination="sources"]').click();
     await mobilePage.locator('[data-ltm-source-tab="lorebooks"]').click();
     await mobilePage.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();

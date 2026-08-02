@@ -326,7 +326,7 @@ function rejectedCandidateKey(
     reason: candidate.reason,
     message: normalize(candidate.message),
     snippet: candidate.snippet ? normalize(candidate.snippet) : null,
-    issues: candidate.issues?.map(normalize) ?? [],
+    issues: candidate.issues?.map(normalize).sort() ?? [],
     recovery: {
       noteType: candidate.recovery?.noteType ?? null,
       noteId: candidate.recovery?.noteId ?? null,
@@ -1594,7 +1594,7 @@ export default function ReviewQueue({
               icon={Check}
               label={`${localizeUi("ui.longTermMemory.reviewqueue.accept")} ${targetTitle} (${mutationLabel})`}
               iconSize="1.25rem"
-              className="mari-editor-action--primary !h-11 !min-h-11 !w-11 !min-w-11"
+              className="mari-editor-action--primary"
               disabled={
                 !eligibleIds.has(row.mutation.id) || !valid || running !== null
               }

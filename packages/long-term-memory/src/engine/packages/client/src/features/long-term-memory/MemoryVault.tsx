@@ -108,6 +108,12 @@ const groupedNoteTypes: ReadonlyArray<{
     labelKey: "ui.longTermMemory.memoryvault.tone",
   },
 ];
+
+function detailScrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
+}
 const statuses: readonly LtmStatus[] = ["active", "resolved", "archived"];
 const modes: readonly LtmMode[] = ["conversation", "roleplay", "game"];
 const relations: LtmLink["relation"][] = [
@@ -818,9 +824,7 @@ export default function MemoryVault({
     setMobilePaneAndFocus("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth",
+        behavior: detailScrollBehavior(),
         block: "nearest",
       }),
     );
@@ -846,9 +850,7 @@ export default function MemoryVault({
     setMobilePaneAndFocus("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth",
+        behavior: detailScrollBehavior(),
         block: "nearest",
       }),
     );
