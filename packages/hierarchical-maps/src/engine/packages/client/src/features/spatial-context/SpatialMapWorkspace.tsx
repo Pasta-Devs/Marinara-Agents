@@ -342,6 +342,7 @@ interface SpatialMapWorkspaceProps {
   onClearPendingDraftReview?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenLorebook?: (lorebookId: string) => void;
+  onLorebooksChanged?: () => void | Promise<void>;
   onOpenTemplates?: () => void;
   onClose: () => void;
 }
@@ -405,6 +406,7 @@ export function SpatialMapWorkspace({
   onClearPendingDraftReview,
   onDirtyChange,
   onOpenLorebook,
+  onLorebooksChanged,
   onOpenTemplates,
   onClose,
 }: SpatialMapWorkspaceProps) {
@@ -1575,7 +1577,7 @@ export function SpatialMapWorkspace({
           },
         );
         setPendingPortableLoreImport(null);
-        await lorebooksQuery.refetch();
+        await Promise.all([lorebooksQuery.refetch(), onLorebooksChanged?.()]);
         toast.success(
           `${result.reusedEntries} lore link${result.reusedEntries === 1 ? " was" : "s were"} reused; ${result.importedEntries} entr${result.importedEntries === 1 ? "y was" : "ies were"} imported. Imported lorebooks remain in your library if this map is later deleted.`,
         );
@@ -1590,7 +1592,7 @@ export function SpatialMapWorkspace({
         setIsImporting(false);
       }
     },
-    [applyImportedMap, isImporting, lorebooksQuery, pendingPortableLoreImport],
+    [applyImportedMap, isImporting, lorebooksQuery, onLorebooksChanged, pendingPortableLoreImport],
   );
 
   const saveAsTemplate = useCallback(async () => {
@@ -1851,9 +1853,10 @@ export function SpatialMapWorkspace({
         });
         if (!discard) return;
       }
+      await onLorebooksChanged?.();
       onOpenLorebook(lorebookId);
     },
-    [confirmAction, dirty, onOpenLorebook, sharedWorldMode, templateMode],
+    [confirmAction, dirty, onLorebooksChanged, onOpenLorebook, sharedWorldMode, templateMode],
   );
 
   const handleClose = useCallback(async () => {
