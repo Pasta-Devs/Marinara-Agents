@@ -120,6 +120,7 @@ const fixtures = new Map(
     artifactFixture("1.2.5"),
     artifactFixture("1.2.6"),
     artifactFixture("1.2.7"),
+    artifactFixture("1.2.8"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -143,7 +144,7 @@ assert.deepEqual(candidateFixture.manifest.builtAgainst, {
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
-const currentFixture = fixtures.get("1.2.7");
+const currentFixture = fixtures.get("1.2.8");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
   engineVersion: "2.3.5",
@@ -205,7 +206,7 @@ function catalogFixture(version: string) {
           bytes: fixture.bytes.byteLength,
         },
         documentationUrl:
-          version === "1.2.6" || version === "1.2.7"
+          version === "1.2.6" || version === "1.2.7" || version === "1.2.8"
             ? catalogWorldMapsGuideUrl
             : "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
       },
@@ -2729,11 +2730,11 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.2.7";
+    catalogVersion = "1.2.8";
     catalogOnline = true;
-    const upgraded127 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded127.version, "1.2.7");
-    assert.equal(upgraded127.previousVersion, "1.1.7");
+    const upgraded128 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded128.version, "1.2.8");
+    assert.equal(upgraded128.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
@@ -3381,7 +3382,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.2.7");
+    assert.equal(reinstalled.version, "1.2.8");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -3469,7 +3470,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.2.7", status: "active", readiness: "ready" }],
+      [{ version: "1.2.8", status: "active", readiness: "ready" }],
     );
 
     console.info(
