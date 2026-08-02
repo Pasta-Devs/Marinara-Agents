@@ -750,8 +750,16 @@ async function main() {
       .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
       .check();
     await page.getByRole("button", { name: "Skip selected (1)" }).click();
-    await page.waitForFunction(() =>
-      document.querySelector('[data-ltm-review-mutation]')?.textContent?.includes("First mobile review memory"),
+    const firstMutation = page.locator(
+      `[data-ltm-review-mutation="${reviewMutationIds.first}"]`,
+    );
+    await firstMutation.waitFor({ state: "visible" });
+    await page.waitForFunction(
+      (mutationId) =>
+        document
+          .querySelector(`[data-ltm-review-mutation="${mutationId}"]`)
+          ?.textContent?.includes("First mobile review memory"),
+      reviewMutationIds.first,
     );
     await page
       .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)

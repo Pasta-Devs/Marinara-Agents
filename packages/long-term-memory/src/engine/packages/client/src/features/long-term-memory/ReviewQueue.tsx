@@ -1462,7 +1462,7 @@ export default function ReviewQueue({
                 ? `ltm-review-mutation-details-${row.mutation.id}`
                 : undefined
             }
-            className="relative min-w-0 flex-1 rounded-md px-2 py-1 text-left hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
+            className="relative min-w-0 flex-1 rounded-md px-2 py-1 pr-8 text-left hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
             data-ltm-risk={row.mutation.risk}
             data-ltm-disposition={row.disposition}
           >
