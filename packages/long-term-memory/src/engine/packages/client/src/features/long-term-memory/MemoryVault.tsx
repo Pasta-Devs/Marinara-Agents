@@ -108,6 +108,12 @@ const groupedNoteTypes: ReadonlyArray<{
     labelKey: "ui.longTermMemory.memoryvault.tone",
   },
 ];
+
+function detailScrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
+}
 const statuses: readonly LtmStatus[] = ["active", "resolved", "archived"];
 const modes: readonly LtmMode[] = ["conversation", "roleplay", "game"];
 const relations: LtmLink["relation"][] = [
@@ -818,7 +824,7 @@ export default function MemoryVault({
     setMobilePaneAndFocus("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: detailScrollBehavior(),
         block: "nearest",
       }),
     );
@@ -844,7 +850,7 @@ export default function MemoryVault({
     setMobilePaneAndFocus("workbench");
     requestAnimationFrame(() =>
       detailRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: detailScrollBehavior(),
         block: "nearest",
       }),
     );
@@ -1346,7 +1352,7 @@ export default function MemoryVault({
             <>
       <section
         data-ltm-browser-controls
-        className="grid grid-cols-2 gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25 p-3"
+        className="mari-editor-panel mari-editor-panel--soft grid grid-cols-2 gap-2 p-3"
       >
         <div className="col-span-2 flex items-baseline justify-between gap-3">
           <h2 className="text-base font-semibold">
@@ -1618,7 +1624,7 @@ export default function MemoryVault({
         <section
           data-ltm-bulk-actions
           aria-labelledby="ltm-selection-count"
-          className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3"
+          className="mari-editor-panel flex flex-wrap items-center gap-2 p-3"
         >
           <>
             <select
@@ -1774,7 +1780,7 @@ export default function MemoryVault({
       ) : null}
         <section
           data-ltm-memory-list
-          className="min-w-0 rounded-lg border border-[var(--border)]"
+          className="mari-editor-panel min-w-0"
           aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryList")}
         >
           {notes.isLoading ? (
@@ -1993,7 +1999,7 @@ export default function MemoryVault({
           ref={detailRef}
           tabIndex={-1}
           data-ltm-note-workbench
-          className="min-w-0 scroll-mt-20 rounded-lg border border-[var(--border)] p-3"
+          className="mari-editor-panel min-w-0 scroll-mt-20 p-3"
           style={{
             containerName: "ltm-note-workbench",
             containerType: "inline-size",

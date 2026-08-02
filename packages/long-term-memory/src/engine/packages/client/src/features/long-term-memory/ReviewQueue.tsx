@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, ChevronRight, X } from "lucide-react";
 import type {
   LtmDraftMutation,
   LtmDraftReviewDraft,
@@ -20,20 +21,25 @@ import {
 import { humanizeLabel } from "./display-labels";
 import {
   Button,
+  IconButton,
   InfoPopover,
   inputClass,
   StatusSurface,
 } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { selectLtmPluralForm, useLtmTranslation } from "./localization";
+import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
 
 type ReviewRow = {
+  sourceNoteId: string;
   draftId: string;
   mutation: LtmDraftMutation;
   disposition: LtmDraftReviewMutation["disposition"] | "unavailable";
   diagnostics: LtmDraftReviewMutation["diagnostics"];
   changes: LtmDraftReviewMutation["changes"];
   targetId: string;
+  targetTitle?: string;
+  targetType?: string;
 };
 
 type ApplyDraftResponse = {
@@ -57,7 +63,7 @@ type BatchResult = {
   autoIncluded: number;
   indexRebuildFailures: string[];
   messages: string[];
-  cascadeMutationIds: string[];
+  cascadeMutationLabels: string[];
 };
 
 const importanceOptions: LtmImportance[] = [
@@ -76,6 +82,20 @@ const freshnessLabel: Record<string, string> = {
   superseded: "ui.longTermMemory.reviewqueue.superseded",
   not_pending: "ui.longTermMemory.reviewqueue.notPending",
 };
+
+function freshnessClass(freshness: string) {
+  if (freshness === "fresh")
+    return "border-[var(--marinara-editor-accent)]/40 text-[var(--marinara-editor-accent)]";
+  if (
+    freshness === "stale" ||
+    freshness === "missing" ||
+    freshness === "invalid" ||
+    freshness === "superseded" ||
+    freshness === "not_pending"
+  )
+    return "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]";
+  return "border-[var(--border)] text-[var(--muted-foreground)]";
+}
 
 const mutationLabels: Record<LtmDraftMutation["kind"], string> = {
   create_note: "ui.longTermMemory.reviewqueue.createMemory",
@@ -96,6 +116,56 @@ const dispositionLabels: Record<ReviewRow["disposition"], string> = {
 
 function mutationTarget(mutation: LtmDraftMutation) {
   return mutation.kind === "create_note" ? mutation.note.id : mutation.noteId;
+}
+
+function noteDisplayTitle(note: LtmNote | undefined, fallback: string) {
+  return note?.title?.trim() || fallback;
+}
+
+function mutationDisplayLabel(
+  mutation: LtmDraftMutation | undefined,
+  noteById: ReadonlyMap<string, LtmNote>,
+  localizeUi: ReturnType<typeof useLtmTranslation>["t"],
+) {
+  if (!mutation)
+    return localizeUi("ui.longTermMemory.reviewqueue.dependentChange");
+  if (mutation.summary.trim()) return `"${mutation.summary.trim()}"`;
+  const target =
+    mutation.kind === "create_note"
+      ? mutation.note
+      : noteById.get(mutationTarget(mutation));
+  const title = target && "title" in target ? target.title : undefined;
+  return `${humanizeLabel(mutation.kind)}${title ? ` "${title}"` : ""}`;
+}
+
+function draftDisplayTitle(
+  item: LtmDraftReviewDraft,
+  localizeUi: ReturnType<typeof useLtmTranslation>["t"],
+) {
+  const firstMutation = item.draft.mutations[0];
+  if (firstMutation?.kind === "create_note") {
+    return noteDisplayTitle(
+      firstMutation.note,
+      localizeUi("ui.longTermMemory.reviewqueue.untitledMemory"),
+    );
+  }
+  return item.draft.summary || localizeUi("ui.longTermMemory.reviewqueue.noDraftSummary");
+}
+
+function humanizeReviewText(
+  text: string,
+  noteById: ReadonlyMap<string, LtmNote>,
+  replacementPattern: RegExp | undefined,
+  replacements: ReadonlyMap<string, string>,
+  sourcePrefix: string,
+  sourceFallback: string,
+) {
+  let display = text.replace(/source_note:([A-Za-z0-9_-]+)/gu, (_, id: string) =>
+    `${sourcePrefix} ${noteDisplayTitle(noteById.get(id), sourceFallback)}`,
+  );
+  return replacementPattern
+    ? display.replace(replacementPattern, (id) => replacements.get(id) ?? id)
+    : display;
 }
 
 function groupByDraft(rows: readonly ReviewRow[]) {
@@ -210,31 +280,36 @@ function boundedTrim(value: string, max: number) {
   return value.trim().slice(0, max);
 }
 
-function formatTimestamp(timestamp: string, locale: string) {
-  const date = new Date(timestamp);
-  return Number.isNaN(date.getTime())
-    ? timestamp
-    : date.toLocaleDateString(locale);
-}
-
 function recoveryLabel(
   recovery: NonNullable<
     LtmDraftReviewDraft["candidateRejections"][number]["recovery"]
   >,
   localizeUi: ReturnType<typeof useLtmTranslation>["t"],
+  noteById: ReadonlyMap<string, LtmNote>,
 ) {
   const hints = [
     recovery.noteType
-      ? localizeUi("ui.longTermMemory.reviewqueue.recoveryMemoryType", { value: humanizeLabel(recovery.noteType) })
+      ? localizeUi("ui.longTermMemory.reviewqueue.recoveryMemoryType", {
+          value: humanizeLabel(recovery.noteType),
+        })
       : null,
     recovery.noteId
-      ? localizeUi("ui.longTermMemory.reviewqueue.recoveryMemory", { value: recovery.noteId })
+      ? localizeUi("ui.longTermMemory.reviewqueue.recoveryMemory", {
+          value: noteDisplayTitle(
+            noteById.get(recovery.noteId),
+            localizeUi("ui.longTermMemory.reviewqueue.untitledMemory"),
+          ),
+        })
       : null,
     recovery.sectionKey
-      ? localizeUi("ui.longTermMemory.reviewqueue.recoverySection", { value: humanizeLabel(recovery.sectionKey) })
+      ? localizeUi("ui.longTermMemory.reviewqueue.recoverySection", {
+          value: humanizeLabel(recovery.sectionKey),
+        })
       : null,
     recovery.status
-      ? localizeUi("ui.longTermMemory.reviewqueue.recoveryStatus", { value: humanizeLabel(recovery.status) })
+      ? localizeUi("ui.longTermMemory.reviewqueue.recoveryStatus", {
+          value: humanizeLabel(recovery.status),
+        })
       : null,
   ].filter(Boolean);
   return (
@@ -243,43 +318,87 @@ function recoveryLabel(
   );
 }
 
-const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> = {
-  invalid_format: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidFormat",
-  placeholder_output: "ui.longTermMemory.reviewqueue.rejectionReasonPlaceholderOutput",
-  quote_not_found_in_source: "ui.longTermMemory.reviewqueue.rejectionReasonQuoteNotFound",
-  missing_source_evidence: "ui.longTermMemory.reviewqueue.rejectionReasonMissingEvidence",
-  source_summary_payload: "ui.longTermMemory.reviewqueue.rejectionReasonSourceSummary",
-  unsupported_bucket: "ui.longTermMemory.reviewqueue.rejectionReasonUnsupportedBucket",
-  target_note_outside_scope: "ui.longTermMemory.reviewqueue.rejectionReasonOutsideScope",
-  ambiguous_subject: "ui.longTermMemory.reviewqueue.rejectionReasonAmbiguousSubject",
-  untrusted_subject: "ui.longTermMemory.reviewqueue.rejectionReasonUntrustedSubject",
-  invalid_subject_cardinality: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidSubjectCardinality",
-  too_long_to_keep_safely: "ui.longTermMemory.reviewqueue.rejectionReasonTooLong",
-};
+function rejectedCandidateKey(
+  candidate: LtmDraftReviewDraft["candidateRejections"][number],
+) {
+  const normalize = (value: string) => value.trim().replace(/\s+/gu, " ");
+  return JSON.stringify({
+    reason: candidate.reason,
+    message: normalize(candidate.message),
+    snippet: candidate.snippet ? normalize(candidate.snippet) : null,
+    issues: candidate.issues?.map(normalize).sort() ?? [],
+    recovery: {
+      noteType: candidate.recovery?.noteType ?? null,
+      noteId: candidate.recovery?.noteId ?? null,
+      sectionKey: candidate.recovery?.sectionKey ?? null,
+      status: candidate.recovery?.status ?? null,
+    },
+  });
+}
 
-const rejectionRecommendedLabels: Partial<Record<LtmExtractionDropReason, string>> = {
+const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> =
+  {
+    invalid_format:
+      "ui.longTermMemory.reviewqueue.rejectionReasonInvalidFormat",
+    placeholder_output:
+      "ui.longTermMemory.reviewqueue.rejectionReasonPlaceholderOutput",
+    quote_not_found_in_source:
+      "ui.longTermMemory.reviewqueue.rejectionReasonQuoteNotFound",
+    missing_source_evidence:
+      "ui.longTermMemory.reviewqueue.rejectionReasonMissingEvidence",
+    source_summary_payload:
+      "ui.longTermMemory.reviewqueue.rejectionReasonSourceSummary",
+    unsupported_bucket:
+      "ui.longTermMemory.reviewqueue.rejectionReasonUnsupportedBucket",
+    target_note_outside_scope:
+      "ui.longTermMemory.reviewqueue.rejectionReasonOutsideScope",
+    ambiguous_subject:
+      "ui.longTermMemory.reviewqueue.rejectionReasonAmbiguousSubject",
+    untrusted_subject:
+      "ui.longTermMemory.reviewqueue.rejectionReasonUntrustedSubject",
+    invalid_subject_cardinality:
+      "ui.longTermMemory.reviewqueue.rejectionReasonInvalidSubjectCardinality",
+    too_long_to_keep_safely:
+      "ui.longTermMemory.reviewqueue.rejectionReasonTooLong",
+  };
+
+const rejectionRecommendedLabels: Partial<
+  Record<LtmExtractionDropReason, string>
+> = {
   invalid_format: "ui.longTermMemory.reviewqueue.recommendedFixInvalidFormat",
-  placeholder_output: "ui.longTermMemory.reviewqueue.recommendedFixPlaceholderOutput",
-  quote_not_found_in_source: "ui.longTermMemory.reviewqueue.recommendedFixQuoteNotFound",
-  missing_source_evidence: "ui.longTermMemory.reviewqueue.recommendedFixMissingEvidence",
-  source_summary_payload: "ui.longTermMemory.reviewqueue.recommendedFixSourceSummary",
-  unsupported_bucket: "ui.longTermMemory.reviewqueue.recommendedFixUnsupportedBucket",
-  target_note_outside_scope: "ui.longTermMemory.reviewqueue.recommendedFixOutsideScope",
-  ambiguous_subject: "ui.longTermMemory.reviewqueue.recommendedFixAmbiguousSubject",
-  untrusted_subject: "ui.longTermMemory.reviewqueue.recommendedFixUntrustedSubject",
-  invalid_subject_cardinality: "ui.longTermMemory.reviewqueue.recommendedFixInvalidSubjectCardinality",
-  too_long_to_keep_safely: "ui.longTermMemory.reviewqueue.recommendedFixTooLong",
+  placeholder_output:
+    "ui.longTermMemory.reviewqueue.recommendedFixPlaceholderOutput",
+  quote_not_found_in_source:
+    "ui.longTermMemory.reviewqueue.recommendedFixQuoteNotFound",
+  missing_source_evidence:
+    "ui.longTermMemory.reviewqueue.recommendedFixMissingEvidence",
+  source_summary_payload:
+    "ui.longTermMemory.reviewqueue.recommendedFixSourceSummary",
+  unsupported_bucket:
+    "ui.longTermMemory.reviewqueue.recommendedFixUnsupportedBucket",
+  target_note_outside_scope:
+    "ui.longTermMemory.reviewqueue.recommendedFixOutsideScope",
+  ambiguous_subject:
+    "ui.longTermMemory.reviewqueue.recommendedFixAmbiguousSubject",
+  untrusted_subject:
+    "ui.longTermMemory.reviewqueue.recommendedFixUntrustedSubject",
+  invalid_subject_cardinality:
+    "ui.longTermMemory.reviewqueue.recommendedFixInvalidSubjectCardinality",
+  too_long_to_keep_safely:
+    "ui.longTermMemory.reviewqueue.recommendedFixTooLong",
 };
 
 function SelectionCheckbox({
   checked,
   indeterminate = false,
   label,
+  compact = false,
   onChange,
 }: {
   checked: boolean;
   indeterminate?: boolean;
   label: string;
+  compact?: boolean;
   onChange: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -297,7 +416,7 @@ function SelectionCheckbox({
         onChange={onChange}
         className="h-5 w-5 accent-[var(--primary)]"
       />
-      <span>{label}</span>
+      <span className={compact ? "sr-only" : undefined}>{label}</span>
     </label>
   );
 }
@@ -356,10 +475,7 @@ function MutationEditor({
   const { t: localizeUi } = useLtmTranslation();
   if (mutation.kind === "create_note") {
     return (
-      <div
-        data-ltm-mutation-editor
-        className="space-y-3 border-t border-[var(--border)] pt-3"
-      >
+      <div data-ltm-mutation-editor className="space-y-3 pt-3">
         {canEditTitle ? (
           <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
             <span>
@@ -458,7 +574,7 @@ function MutationEditor({
     return (
       <div
         data-ltm-mutation-editor
-        className="grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
+        className="grid gap-2 pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
       >
         <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
           <span>
@@ -495,7 +611,7 @@ function MutationEditor({
     return (
       <div
         data-ltm-mutation-editor
-        className="grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
+        className="grid gap-2 pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
       >
         <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
           <span>
@@ -542,28 +658,84 @@ function MutationEditor({
   return null;
 }
 
+const diagnosticCategoryKeys: Record<string, string> = {
+  source_backed_npc_identity:
+    "ui.longTermMemory.extractiondetails.normalizedCorrected",
+  subject_identity_corrected:
+    "ui.longTermMemory.extractiondetails.normalizedCorrected",
+  subject_identity_normalized:
+    "ui.longTermMemory.extractiondetails.normalizedCorrected",
+  low_lexical_evidence: "ui.longTermMemory.extractiondetails.lowEvidence",
+  missing_evidence: "ui.longTermMemory.extractiondetails.lowEvidence",
+  missing_source_note_evidence:
+    "ui.longTermMemory.extractiondetails.lowEvidence",
+  resolved_thread_missing_fanout:
+    "ui.longTermMemory.extractiondetails.resolvedThreadHandling",
+  relationship_state_missing_caused_by:
+    "ui.longTermMemory.extractiondetails.resolvedThreadHandling",
+  ambiguous_subject_link_target:
+    "ui.longTermMemory.extractiondetails.identityTargetHandling",
+  unknown_link_target:
+    "ui.longTermMemory.extractiondetails.identityTargetHandling",
+  target_note_identity_variant:
+    "ui.longTermMemory.extractiondetails.identityTargetHandling",
+  target_note_scoped_variant:
+    "ui.longTermMemory.extractiondetails.identityTargetHandling",
+};
+
+function hasExtractionDetails(item: LtmDraftReviewDraft) {
+  return (
+    Boolean(item.draft.accounting) ||
+    item.diagnostics.some(
+      (diagnostic) => diagnostic.code !== "deduplicated_evidence_unit",
+    ) ||
+    item.candidateRejections.length > 0 ||
+    item.deduplications.length > 0
+  );
+}
+
 function ExtractionDetails({
   item,
   onRecoverCandidate,
+  rejectedSuggestionIdForCandidate,
+  recoveryReady,
+  noteById,
+  humanizeText,
 }: {
   item: LtmDraftReviewDraft;
   onRecoverCandidate?: (
     candidate: LtmDraftReviewDraft["candidateRejections"][number],
+    rejectedSuggestionId?: string,
   ) => void;
+  rejectedSuggestionIdForCandidate?: (
+    candidate: LtmDraftReviewDraft["candidateRejections"][number],
+  ) => string | undefined;
+  recoveryReady?: boolean;
+  noteById: ReadonlyMap<string, LtmNote>;
+  humanizeText: (text: string) => string;
 }) {
   const { t: localizeUi } = useLtmTranslation();
   const accounting = item.draft.accounting;
-  const hasDetails =
-    Boolean(accounting) ||
-    item.diagnostics.length > 0 ||
-    item.candidateRejections.length > 0 ||
-    item.deduplications.length > 0;
-  if (!hasDetails) return null;
+  const diagnostics = item.diagnostics.filter(
+    (diagnostic) => diagnostic.code !== "deduplicated_evidence_unit",
+  );
+  const diagnosticsByCategory = new Map<string, typeof diagnostics>();
+  for (const diagnostic of diagnostics) {
+    const category =
+      diagnosticCategoryKeys[diagnostic.code] ??
+      "ui.longTermMemory.extractiondetails.otherWarnings";
+    diagnosticsByCategory.set(category, [
+      ...(diagnosticsByCategory.get(category) ?? []),
+      diagnostic,
+    ]);
+  }
+  if (!hasExtractionDetails(item)) return null;
 
   return (
     <details
       data-ltm-extraction-details
-      className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs"
+      open
+      className="mari-editor-panel mari-editor-panel--soft p-3 text-xs"
     >
       <summary className="cursor-pointer font-medium">
         {localizeUi("ui.longTermMemory.extractiondetails.extractionDetails")}
@@ -602,17 +774,45 @@ function ExtractionDetails({
             {localizeUi("ui.longTermMemory.extractiondetails.deduplicated")}
           </p>
         ) : null}
-        {item.diagnostics.length ? (
-          <div data-ltm-draft-diagnostics className="space-y-1">
-            <p className="font-medium text-[var(--foreground)]">
-              {localizeUi("ui.longTermMemory.extractiondetails.diagnostics")}
-            </p>
-            {item.diagnostics.map((diagnostic, index) => (
-              <p key={`${diagnostic.code}-${index}`}>
-                {humanizeLabel(diagnostic.code)}: {diagnostic.message}
-              </p>
-            ))}
-          </div>
+        {item.deduplications.length ? (
+          <details data-ltm-deduplications className="space-y-1">
+            <summary className="cursor-pointer font-medium text-[var(--foreground)]">
+              {localizeUi("ui.longTermMemory.extractiondetails.deduplications")}{" "}
+              ( {item.deduplications.length} )
+            </summary>
+            <div className="mt-2 space-y-1">
+              {item.deduplications.map((diagnostic, index) => (
+                <p key={`${diagnostic.code}-${index}`}>
+                  {humanizeText(diagnostic.message)}
+                </p>
+              ))}
+            </div>
+          </details>
+        ) : null}
+        {diagnostics.length ? (
+          <details data-ltm-draft-diagnostics>
+            <summary className="cursor-pointer font-medium text-[var(--foreground)]">
+              {localizeUi(
+                "ui.longTermMemory.extractiondetails.advancedExtractionDetails",
+              )}
+            </summary>
+            <div className="mt-2 space-y-2">
+              {[...diagnosticsByCategory].map(([category, entries]) => (
+                <details key={category}>
+                  <summary className="cursor-pointer font-medium">
+                    {localizeUi(category)} ({entries.length})
+                  </summary>
+                  <div className="mt-1 space-y-1 pl-3">
+                    {entries.map((diagnostic, index) => (
+                      <p key={`${diagnostic.code}-${index}`}>
+                        {humanizeLabel(diagnostic.code)}: {humanizeText(diagnostic.message)}
+                      </p>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </details>
         ) : null}
         {item.candidateRejections.length ? (
           <div data-ltm-candidate-rejections className="space-y-2">
@@ -627,7 +827,7 @@ function ExtractionDetails({
                 className="space-y-1"
               >
                 <p>
-                  {humanizeLabel(rejection.reason)}: {rejection.message}
+                  {humanizeLabel(rejection.reason)}: {humanizeText(rejection.message)}
                 </p>
                 {rejection.snippet ? (
                   <p>
@@ -638,7 +838,7 @@ function ExtractionDetails({
                 {rejection.issues?.map((issue) => (
                   <p key={issue}>
                     {localizeUi("ui.longTermMemory.extractiondetails.issue")}{" "}
-                    {issue}
+                      {humanizeText(issue)}
                   </p>
                 ))}
                 {rejection.recovery ? (
@@ -647,28 +847,25 @@ function ExtractionDetails({
                       {localizeUi(
                         "ui.longTermMemory.extractiondetails.recovery",
                       )}{" "}
-                      {recoveryLabel(rejection.recovery, localizeUi)}
+                      {recoveryLabel(rejection.recovery, localizeUi, noteById)}
                     </p>
-                    {onRecoverCandidate ? (
-                      <Button onClick={() => onRecoverCandidate(rejection)}>
-                        {localizeUi(
-                          "ui.longTermMemory.extractiondetails.recoverAsMemory",
-                        )}
-                      </Button>
-                    ) : null}
                   </div>
                 ) : null}
+                {onRecoverCandidate && recoveryReady ? (
+                  <Button
+                    onClick={() =>
+                      onRecoverCandidate(
+                        rejection,
+                        rejectedSuggestionIdForCandidate?.(rejection),
+                      )
+                    }
+                  >
+                    {localizeUi(
+                      "ui.longTermMemory.extractiondetails.recoverAsMemory",
+                    )}
+                  </Button>
+                ) : null}
               </div>
-            ))}
-          </div>
-        ) : null}
-        {item.deduplications.length ? (
-          <div data-ltm-deduplications className="space-y-1">
-            <p className="font-medium text-[var(--foreground)]">
-              {localizeUi("ui.longTermMemory.extractiondetails.deduplications")}
-            </p>
-            {item.deduplications.map((diagnostic, index) => (
-              <p key={`${diagnostic.code}-${index}`}>{diagnostic.message}</p>
             ))}
           </div>
         ) : null}
@@ -686,26 +883,52 @@ export default function ReviewQueue({
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const queryClient = useQueryClient();
-  const [sourceNoteId, setSourceNoteId] = useState(reviewSourceNoteId ?? null);
-  useEffect(
-    () => setSourceNoteId(reviewSourceNoteId ?? null),
-    [reviewSourceNoteId],
+  const [selectedSourceId, setSelectedSourceId] = useState(
+    reviewSourceNoteId ?? null,
   );
+  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
+  const [mobilePane, setMobilePane] = useState<LtmWorkspacePane>("navigator");
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [sourceCollapsed, setSourceCollapsed] = useState(false);
+  const [expandedMutationIds, setExpandedMutationIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const reviewRef = useRef<HTMLElement>(null);
+
+  function setMobilePaneAndFocus(pane: LtmWorkspacePane) {
+    setMobilePane(pane);
+    requestAnimationFrame(() => {
+      const workspace = reviewRef.current?.querySelector<HTMLElement>(
+        "[data-ltm-workspace]",
+      );
+      const target = workspace?.querySelector<HTMLElement>(
+        `[data-ltm-workspace-pane-tab="${pane}"], [data-ltm-workspace-pane="${pane}"] button, [data-ltm-workspace-pane="${pane}"] [tabindex]:not([tabindex="-1"]), [data-ltm-workspace-pane="${pane}"][tabindex]`,
+      );
+      target?.focus({ preventScroll: true });
+    });
+  }
+
+  useEffect(() => {
+    setSelectedSourceId(reviewSourceNoteId ?? null);
+    setSourceCollapsed(false);
+    setDetailsOpen(false);
+  }, [reviewSourceNoteId]);
   const review = useQuery({
-    queryKey: [...queryKeys.review, props.chatId, sourceNoteId],
+    queryKey: [...queryKeys.review, props.chatId],
     queryFn: () =>
       request<LtmDraftReviewResponse>(
-        `/drafts/review?status=pending${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}${sourceNoteId ? `&sourceNoteId=${encodeURIComponent(sourceNoteId)}` : ""}`,
+        `/drafts/review?status=pending${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
       ),
   });
   const rejectedSuggestions = useQuery({
-    queryKey: [...queryKeys.rejectedSuggestions, props.chatId, sourceNoteId],
+    queryKey: [...queryKeys.rejectedSuggestions, props.chatId],
     queryFn: () =>
       request<LtmRejectedSuggestionsResponse>(
-        `/rejected-suggestions${props.chatId || sourceNoteId ? "?" : ""}${[
+        `/rejected-suggestions${props.chatId ? "?" : ""}${[
           props.chatId ? `chatId=${encodeURIComponent(props.chatId)}` : "",
-          sourceNoteId ? `sourceNoteId=${encodeURIComponent(sourceNoteId)}` : "",
-        ].filter(Boolean).join("&")}`,
+        ]
+          .filter(Boolean)
+          .join("&")}`,
       ),
   });
   const notes = useQuery({
@@ -713,6 +936,62 @@ export default function ReviewQueue({
     queryFn: () => requestAllNotes<LtmNote>("/notes?includeGlobal=true"),
   });
   const noteById = new Map((notes.data ?? []).map((note) => [note.id, note]));
+  const sourceIds = [
+    ...new Set([
+      ...(review.data?.sources ?? []).map((source) => source.sourceNoteId),
+      ...(rejectedSuggestions.data?.suggestions ?? []).map(
+        (suggestion) => suggestion.source.sourceNoteId,
+      ),
+      ...(selectedSourceId ? [selectedSourceId] : []),
+    ]),
+  ];
+  const selectedSourceIsLive =
+    review.data?.sources.some(
+      (source) => source.sourceNoteId === selectedSourceId,
+    ) ||
+    rejectedSuggestions.data?.suggestions.some(
+      (suggestion) => suggestion.source.sourceNoteId === selectedSourceId,
+    ) ||
+    false;
+  useEffect(() => {
+    if (
+      !review.isSuccess ||
+      !rejectedSuggestions.isSuccess ||
+      !selectedSourceId ||
+      selectedSourceIsLive
+    ) {
+      return;
+    }
+    setSelectedSourceId(null);
+  }, [
+    rejectedSuggestions.isSuccess,
+    review.isSuccess,
+    selectedSourceId,
+    selectedSourceIsLive,
+  ]);
+  const effectiveSourceId =
+    selectedSourceId && sourceIds.includes(selectedSourceId)
+      ? selectedSourceId
+      : (sourceIds[0] ?? null);
+  const selectedReviewSource = review.data?.sources.find(
+    (source) => source.sourceNoteId === effectiveSourceId,
+  );
+  const selectedDraft =
+    selectedReviewSource?.drafts.find(
+      (item) => item.draft.id === selectedDraftId,
+    ) ?? selectedReviewSource?.drafts[0];
+  const sourceRejectedSuggestions =
+    rejectedSuggestions.data?.suggestions.filter(
+      (item) => item.source.sourceNoteId === effectiveSourceId,
+    ) ?? [];
+  const rejectedSuggestionIdForCandidate = (
+    candidate: LtmDraftReviewDraft["candidateRejections"][number],
+  ) =>
+    sourceRejectedSuggestions.find(
+      (item) =>
+        rejectedCandidateKey(item.candidate) ===
+        rejectedCandidateKey(candidate),
+    )?.id;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedById, setEditedById] = useState<Map<string, LtmDraftMutation>>(
     new Map(),
@@ -725,41 +1004,147 @@ export default function ReviewQueue({
     setSelectedIds(new Set());
     setEditedById(new Map());
     setResult(null);
+    setDetailsOpen(false);
+    setExpandedMutationIds(new Set());
   }, [props.chatId]);
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setSourceCollapsed(false);
+    setSelectedDraftId(null);
+    setDetailsOpen(false);
+    setExpandedMutationIds(new Set());
+  }, [effectiveSourceId]);
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setDetailsOpen(false);
+    setExpandedMutationIds(new Set());
+  }, [selectedDraft?.draft.id]);
 
-  const rowByMutationId = new Map<string, ReviewRow>();
-  for (const source of review.data?.sources ?? []) {
-    for (const target of source.targets) {
-      for (const row of target.rows) {
-        rowByMutationId.set(row.mutation.id, {
-          ...row,
-          targetId: target.noteId,
-        });
-      }
-    }
-    for (const item of source.drafts) {
-      for (const mutation of item.draft.mutations) {
-        if (!rowByMutationId.has(mutation.id)) {
-          rowByMutationId.set(mutation.id, {
-            draftId: item.draft.id,
-            mutation,
-            disposition: "unavailable",
-            diagnostics: [],
-            changes: [],
-            targetId: mutationTarget(mutation),
+  const { rowByMutationId, rows } = useMemo(() => {
+    const rowByMutationId = new Map<string, ReviewRow>();
+    for (const source of review.data?.sources ?? []) {
+      for (const target of source.targets) {
+        for (const row of target.rows) {
+          rowByMutationId.set(row.mutation.id, {
+            sourceNoteId: source.sourceNoteId,
+            ...row,
+            targetId: target.noteId,
+            targetTitle: target.title,
+            targetType: target.noteType,
           });
         }
       }
+      for (const item of source.drafts) {
+        for (const mutation of item.draft.mutations) {
+          if (!rowByMutationId.has(mutation.id)) {
+            rowByMutationId.set(mutation.id, {
+              sourceNoteId: source.sourceNoteId,
+              draftId: item.draft.id,
+              mutation,
+              disposition: "unavailable",
+              diagnostics: [],
+              changes: [],
+              targetId: mutationTarget(mutation),
+              targetTitle:
+                mutation.kind === "create_note" ? mutation.note.title : undefined,
+              targetType:
+                mutation.kind === "create_note" ? mutation.note.type : undefined,
+            });
+          }
+        }
+      }
     }
-  }
-  const rows = [...rowByMutationId.values()];
+    return { rowByMutationId, rows: [...rowByMutationId.values()] };
+  }, [review.data]);
+  const mutationDisplayLabels = useMemo(
+    () => new Map(
+      rows.flatMap((row) => [
+        [
+          row.mutation.id,
+          mutationDisplayLabel(row.mutation, noteById, localizeUi),
+        ] as const,
+        ...(row.mutation.kind === "create_note"
+          ? [
+              [
+                row.mutation.note.id,
+                row.mutation.note.title ||
+                  localizeUi("ui.longTermMemory.reviewqueue.thisMemory"),
+              ] as const,
+            ]
+          : []),
+      ]),
+    ),
+    [localizeUi, notes.data, rows],
+  );
+  const replacementEntries = useMemo(() => {
+    const replacements = new Map<string, string>([
+      ...[...noteById].map(([id, note]) => [
+        id,
+        noteDisplayTitle(
+          note,
+          note.type === "source"
+            ? localizeUi("ui.longTermMemory.reviewqueue.thisSource")
+            : localizeUi("ui.longTermMemory.reviewqueue.thisMemory"),
+        ),
+      ] as const),
+      ...mutationDisplayLabels,
+    ]);
+    const ids = [...replacements.keys()].sort(
+      (left, right) => right.length - left.length,
+    );
+    return {
+      replacements,
+      pattern: ids.length
+        ? new RegExp(
+            ids
+              .map((id) => id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+              .join("|"),
+            "gu",
+          )
+        : undefined,
+    };
+  }, [localizeUi, mutationDisplayLabels, notes.data]);
+  const humanizeText = (text: string) =>
+    humanizeReviewText(
+      text,
+      noteById,
+      replacementEntries.pattern,
+      replacementEntries.replacements,
+      localizeUi("ui.longTermMemory.reviewqueue.sourcePrefix"),
+      localizeUi("ui.longTermMemory.reviewqueue.thisSource"),
+    );
+  const reviewDraftTitle = (item: LtmDraftReviewDraft) =>
+    draftDisplayTitle(item, localizeUi);
   useEffect(
     () => onDirtyChange?.(editedById.size > 0),
     [editedById, onDirtyChange],
   );
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
-  const selectedRows = rows.filter((row) => selectedIds.has(row.mutation.id));
+  const sourceRows = useMemo(
+    () => rows.filter((row) => row.sourceNoteId === effectiveSourceId),
+    [effectiveSourceId, rows],
+  );
+  const activeDraftRows = useMemo(
+    () => sourceRows.filter((row) => row.draftId === selectedDraft?.draft.id),
+    [selectedDraft?.draft.id, sourceRows],
+  );
+  const dependencyCounts = useMemo(
+    () =>
+      new Map(
+        activeDraftRows.map((row) => [
+          row.mutation.id,
+          Math.max(
+            0,
+            acceptedMutationIds(activeDraftRows, [row.mutation.id]).size - 1,
+          ),
+        ]),
+      ),
+    [activeDraftRows],
+  );
+  const selectedRows = activeDraftRows.filter((row) =>
+    selectedIds.has(row.mutation.id),
+  );
   const eligibleIds = new Set<string>();
   for (const source of review.data?.sources ?? []) {
     for (const item of source.drafts) {
@@ -774,7 +1159,9 @@ export default function ReviewQueue({
     const edited = editedById.get(row.mutation.id);
     return edited ? !selectedEditIsValid(edited) : false;
   });
-  const allSelected = rows.length > 0 && selectedRows.length === rows.length;
+  const allSelected =
+    activeDraftRows.length > 0 &&
+    selectedRows.length === activeDraftRows.length;
   const someSelected = selectedRows.length > 0 && !allSelected;
 
   const toggleSelection = (id: string) => {
@@ -844,11 +1231,17 @@ export default function ReviewQueue({
               : "ui.longTermMemory.reviewqueue.invalidEditedMutationOther",
             {
               count: invalidEditIds.length,
-              ids: invalidEditIds.join(", "),
+              labels: invalidEditIds
+                .map(
+                  (id) =>
+                    mutationDisplayLabels.get(id) ??
+                    localizeUi("ui.longTermMemory.reviewqueue.editedChange"),
+                )
+                .join(", "),
             },
           ),
         ],
-        cascadeMutationIds: [],
+        cascadeMutationLabels: [],
       });
       return;
     }
@@ -860,7 +1253,7 @@ export default function ReviewQueue({
     const autoIncludedIds = new Set<string>();
     const indexRebuildFailures: string[] = [];
     const messages: string[] = [];
-    const cascadeMutationIds = new Set<string>();
+    const cascadeMutationLabels = new Set<string>();
     try {
       for (const [draftId, draftRows] of groupByDraft(applicableRows)) {
         const mutationIds = draftRows.map((row) => row.mutation.id);
@@ -909,7 +1302,12 @@ export default function ReviewQueue({
             const deleted = new Set(response.mutationIds);
             response.mutationIds.forEach((id) => {
               completedIds.add(id);
-              if (!mutationIds.includes(id)) cascadeMutationIds.add(id);
+              if (!mutationIds.includes(id)) {
+                cascadeMutationLabels.add(
+                  mutationDisplayLabels.get(id) ??
+                    localizeUi("ui.longTermMemory.reviewqueue.dependentChange"),
+                );
+              }
             });
             mutationIds.forEach((id) => {
               if (!deleted.has(id)) failedIds.add(id);
@@ -945,7 +1343,7 @@ export default function ReviewQueue({
         autoIncluded: autoIncludedIds.size,
         indexRebuildFailures,
         messages,
-        cascadeMutationIds: [...cascadeMutationIds],
+        cascadeMutationLabels: [...cascadeMutationLabels],
       });
       if (completedIds.size) {
         await invalidateLtmQueries(queryClient, [
@@ -992,37 +1390,62 @@ export default function ReviewQueue({
                 : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
           }),
         ],
-        cascadeMutationIds: [],
+        cascadeMutationLabels: [],
       });
     } finally {
       setDismissingId(null);
     }
   };
 
-  const deleteRejectedSuggestion = async (suggestion: LtmRejectedSuggestion) => {
-    const title = noteById.get(suggestion.source.sourceNoteId)?.title ?? suggestion.source.sourceNoteId;
+  const deleteRejectedSuggestion = async (
+    suggestion: LtmRejectedSuggestion,
+  ) => {
+    const title =
+      noteById.get(suggestion.source.sourceNoteId)?.title ??
+      localizeUi("ui.longTermMemory.reviewqueue.untitledMemory");
     const confirmed = props.confirmAction
       ? await props.confirmAction({
-          title: localizeUi("ui.longTermMemory.reviewqueue.deleteRejectedSuggestion"),
-          message: localizeUi("ui.longTermMemory.reviewqueue.deleteRejectedSuggestionDescription", { title }),
+          title: localizeUi(
+            "ui.longTermMemory.reviewqueue.deleteRejectedSuggestion",
+          ),
+          message: localizeUi(
+            "ui.longTermMemory.reviewqueue.deleteRejectedSuggestionDescription",
+            { title },
+          ),
           confirmLabel: localizeUi("ui.longTermMemory.reviewqueue.delete"),
           tone: "destructive",
         })
-      : window.confirm(localizeUi("ui.longTermMemory.reviewqueue.deleteRejectedSuggestionDescription", { title }));
+      : window.confirm(
+          localizeUi(
+            "ui.longTermMemory.reviewqueue.deleteRejectedSuggestionDescription",
+            { title },
+          ),
+        );
     if (!confirmed) return;
     setDismissingId(suggestion.id);
     setDeleteSuggestionError("");
     try {
-      await request(`/rejected-suggestions/${encodeURIComponent(suggestion.id)}`, "DELETE");
+      await request(
+        `/rejected-suggestions/${encodeURIComponent(suggestion.id)}`,
+        "DELETE",
+      );
       await invalidateLtmQueries(queryClient, [queryKeys.rejectedSuggestions]);
     } catch (error) {
-      setDeleteSuggestionError(error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"));
+      setDeleteSuggestionError(
+        error instanceof Error
+          ? error.message
+          : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+      );
     } finally {
       setDismissingId(null);
     }
   };
 
-  const renderRow = (row: ReviewRow, projectionStale = false) => {
+  const renderRow = (
+    row: ReviewRow,
+    projectionStale = false,
+    draftSummary = "",
+  ) => {
     const mutation = editedById.get(row.mutation.id) ?? row.mutation;
     const targetExists = noteById.has(row.targetId);
     const canEditTitle =
@@ -1033,145 +1456,265 @@ export default function ReviewQueue({
     const hideProjection = edited || projectionStale;
     const valid = selectedEditIsValid(mutation);
     const previewChanges = hideProjection ? [] : row.changes;
+    const expanded = expandedMutationIds.has(row.mutation.id);
+    const dependencyCount = dependencyCounts.get(row.mutation.id) ?? 0;
+    const mutationLabel = localizeUi(mutationLabels[mutation.kind]);
+    const dispositionLabel = localizeUi(dispositionLabels[row.disposition]);
+    const targetTitle =
+      mutation.kind === "create_note"
+        ? noteDisplayTitle(
+            mutation.note,
+            localizeUi("ui.longTermMemory.reviewqueue.untitledMemory"),
+          )
+        : noteDisplayTitle(
+            noteById.get(row.targetId),
+            row.targetTitle ??
+              localizeUi("ui.longTermMemory.reviewqueue.untitledMemory"),
+          );
+    const targetType =
+      noteById.get(row.targetId)?.type ??
+      row.targetType ??
+      (mutation.kind === "create_note" ? mutation.note.type : undefined);
+    const importance =
+      mutation.kind === "create_note"
+        ? importanceOptions.find((value) =>
+            Object.values(mutation.note.sections).some(
+              (section) => section.importance === value,
+            ),
+          )
+        : mutation.kind === "append_section"
+          ? mutation.importance
+          : mutation.kind === "update_section"
+            ? mutation.section.importance
+            : undefined;
     return (
       <article
         key={row.mutation.id}
         data-ltm-review-mutation={row.mutation.id}
-        className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3"
+        className={`border-b border-[var(--border)]/70 px-1 py-3 last:border-b-0 ${selectedIds.has(row.mutation.id) ? "bg-[var(--primary)]/10" : ""}`}
       >
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2">
           <SelectionCheckbox
             checked={selectedIds.has(row.mutation.id)}
-            label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
-              value1: localizeUi(mutationLabels[row.mutation.kind]),
-            })}
+            compact
+            label={`${localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
+              value1: mutationLabel,
+            })}: ${targetTitle}`}
             onChange={() => toggleSelection(row.mutation.id)}
           />
-          <p
+          <button
+            type="button"
+            data-ltm-review-mutation-toggle={row.mutation.id}
+            aria-expanded={expanded}
+            onClick={() =>
+              setExpandedMutationIds((current) => {
+                const next = new Set(current);
+                if (next.has(row.mutation.id)) next.delete(row.mutation.id);
+                else next.add(row.mutation.id);
+                return next;
+              })
+            }
+            aria-controls={
+              expanded
+                ? `ltm-review-mutation-details-${row.mutation.id}`
+                : undefined
+            }
+            className="min-w-0 flex-1 rounded-md px-2 py-1 text-left hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
             data-ltm-risk={row.mutation.risk}
             data-ltm-disposition={row.disposition}
-            className="text-right text-xs font-semibold"
           >
-            {localizeUi(mutationLabels[row.mutation.kind])} |{" "}
-            {localizeUi(dispositionLabels[row.disposition])} |{" "}
-            {humanizeLabel(row.mutation.risk)}{" "}
-            {localizeUi("ui.longTermMemory.reviewqueue.risk")}{" "}
-            {Math.round(row.mutation.confidence * 100)}
-            {localizeUi("ui.longTermMemory.reviewqueue.confidence")}
-          </p>
+            <span className="block text-sm font-semibold">{targetTitle}</span>
+            {draftSummary.trim() ? (
+              <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">
+                {draftSummary}
+              </span>
+            ) : null}
+            <span className="mt-1 flex flex-wrap gap-1 text-[0.6875rem]">
+              {targetType ? (
+                <span
+                  data-ltm-review-type={targetType}
+                  className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                >
+                  {humanizeLabel(targetType)}
+                </span>
+              ) : null}
+              <span
+                data-ltm-review-disposition={row.disposition}
+                className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+              >
+                {dispositionLabel}
+              </span>
+              {mutation.kind !== "create_note" ? (
+                <span
+                  data-ltm-review-operation={mutation.kind}
+                  className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                >
+                  {mutationLabel}
+                </span>
+              ) : null}
+              {importance ? (
+                <span
+                  data-ltm-review-importance={importance}
+                  className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                >
+                  {humanizeLabel(importance)}
+                </span>
+              ) : null}
+              <span className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5">
+                {humanizeLabel(row.mutation.risk)} /{" "}
+                {Math.round(row.mutation.confidence * 100)}
+                {localizeUi("ui.longTermMemory.reviewqueue.confidence")}
+              </span>
+              {dependencyCount ? (
+                <>
+                  {" "}
+                   <span className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5">
+                    {localizeUi("ui.longTermMemory.reviewqueue.dependencyHint", {
+                      count: dependencyCount,
+                      dependency:
+                        dependencyCount === 1
+                          ? localizeUi("ui.longTermMemory.reviewqueue.dependency")
+                          : localizeUi(
+                              "ui.longTermMemory.reviewqueue.dependencies",
+                            ),
+                    })}
+                  </span>
+                </>
+              ) : null}
+            </span>
+          </button>
+          <div
+            role="group"
+            aria-label={localizeUi(
+              "ui.longTermMemory.reviewqueue.mutationActions",
+            )}
+            className="flex shrink-0 gap-1 pt-1"
+          >
+            <IconButton
+              icon={Check}
+              label={`${localizeUi("ui.longTermMemory.reviewqueue.accept")} ${targetTitle} (${mutationLabel})`}
+              iconSize="1.25rem"
+              className="mari-editor-action--primary"
+              disabled={
+                !eligibleIds.has(row.mutation.id) || !valid || running !== null
+              }
+              onClick={() => void runBatch("accept", [row])}
+            />
+            <IconButton
+              icon={X}
+              label={`${localizeUi("ui.longTermMemory.longtermmemorydetail.skip")} ${targetTitle} (${mutationLabel})`}
+              destructive
+              disabled={running !== null}
+              onClick={() => void runBatch("skip", [row])}
+            />
+          </div>
         </div>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          {row.mutation.summary}
-        </p>
-        <details data-ltm-review-preview className="text-xs">
-          <summary className="cursor-pointer font-medium">
-            {localizeUi("ui.longTermMemory.reviewqueue.evidenceAndPreview")}{" "}
-            {row.mutation.evidence.length}{" "}
-            {localizeUi("ui.longTermMemory.reviewqueue.evidence")}
-            {previewChanges.length
-              ? localizeUi("ui.longTermMemory.reviewqueue.value1Changes", {
-                  value1: previewChanges.length,
-                })
-              : ""}
-          </summary>
-          <div className="mt-2 space-y-2">
-            <div data-ltm-review-evidence>
-              <span className="font-medium">
-                {localizeUi("ui.longTermMemory.reviewqueue.evidence_3ef3540")}
-              </span>{" "}
-              {row.mutation.evidence.join(" | ")}
-            </div>
-            {previewChanges.length ? (
-              <div data-ltm-review-changes className="space-y-1">
-                {previewChanges.map((change) => (
-                  <p key={`${change.kind}-${change.key}`}>
-                    <span className="font-medium">
-                      {humanizeLabel(change.kind)} {humanizeLabel(change.key)}:
-                    </span>{" "}
-                    {change.before
-                      ? localizeUi("ui.longTermMemory.reviewqueue.value1", {
-                          value1: change.before,
-                        })
-                      : ""}
-                    {change.after}
+        {expanded ? (
+          <div
+            id={`ltm-review-mutation-details-${row.mutation.id}`}
+            data-ltm-review-mutation-details
+            className="space-y-2 pl-10 pt-3 text-xs"
+          >
+            <details data-ltm-review-preview className="text-xs">
+              <summary className="cursor-pointer font-medium">
+                {localizeUi("ui.longTermMemory.reviewqueue.evidenceAndPreview")}{" "}
+                {row.mutation.evidence.length}{" "}
+                {localizeUi("ui.longTermMemory.reviewqueue.evidence")}
+                {previewChanges.length
+                  ? localizeUi("ui.longTermMemory.reviewqueue.value1Changes", {
+                      value1: previewChanges.length,
+                    })
+                  : ""}
+              </summary>
+              <div className="mt-2 space-y-2">
+                <div data-ltm-review-evidence className="space-y-1">
+                  <span className="font-medium">
+                    {localizeUi(
+                      "ui.longTermMemory.reviewqueue.evidence_3ef3540",
+                    )}
+                  </span>
+                  {row.mutation.evidence.map((evidence, index) => (
+                    <blockquote
+                      key={`${evidence}-${index}`}
+                      className="border-l border-[var(--border)] pl-2 text-[var(--muted-foreground)]"
+                    >
+                      {humanizeText(evidence)}
+                    </blockquote>
+                  ))}
+                </div>
+                {previewChanges.length ? (
+                  <div data-ltm-review-changes className="space-y-1">
+                    {previewChanges.map((change) => (
+                      <p key={`${change.kind}-${change.key}`}>
+                        <span className="font-medium">
+                          {humanizeLabel(change.kind)}{" "}
+                          {humanizeLabel(change.key)}:
+                        </span>{" "}
+                        {change.before
+                          ? localizeUi("ui.longTermMemory.reviewqueue.value1", {
+                              value1: change.before,
+                            })
+                          : ""}
+                        {change.after}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </details>
+            {row.diagnostics.length ? (
+              <div
+                data-ltm-review-diagnostics
+                className="space-y-1 text-xs text-[var(--destructive)]"
+              >
+                {row.diagnostics.map((diagnostic, index) => (
+                  <p key={`${diagnostic.code}-${index}`}>
+                    {humanizeLabel(diagnostic.code)}: {humanizeText(diagnostic.message)}
                   </p>
                 ))}
               </div>
             ) : null}
-          </div>
-        </details>
-        {row.diagnostics.length ? (
-          <div
-            data-ltm-review-diagnostics
-            className="space-y-1 text-xs text-[var(--destructive)]"
-          >
-            {row.diagnostics.map((diagnostic, index) => (
-              <p key={`${diagnostic.code}-${index}`}>
-                {humanizeLabel(diagnostic.code)}: {diagnostic.message}
+            {hideProjection ? (
+              <p
+                data-ltm-review-preview-stale
+                role="status"
+                className="text-xs text-[var(--muted-foreground)]"
+              >
+                {localizeUi(
+                  "ui.longTermMemory.reviewqueue.projectionPreviewIsStaleBecauseThisTargetHasEdited",
+                )}
               </p>
-            ))}
+            ) : null}
+            <MutationEditor
+              mutation={mutation}
+              canEditTitle={canEditTitle}
+              onChange={(next) => updateMutation(row.mutation, next)}
+            />
+            {!valid ? (
+              <p role="alert" className="text-xs text-[var(--destructive)]">
+                {localizeUi(
+                  "ui.longTermMemory.reviewqueue.sectionTextCannotBeEmpty",
+                )}
+              </p>
+            ) : null}
           </div>
         ) : null}
-        {hideProjection ? (
-          <p
-            data-ltm-review-preview-stale
-            role="status"
-            className="text-xs text-[var(--muted-foreground)]"
-          >
-            {localizeUi(
-              "ui.longTermMemory.reviewqueue.projectionPreviewIsStaleBecauseThisTargetHasEdited",
-            )}
-          </p>
-        ) : null}
-        <MutationEditor
-          mutation={mutation}
-          canEditTitle={canEditTitle}
-          onChange={(next) => updateMutation(row.mutation, next)}
-        />
-        {!valid ? (
-          <p role="alert" className="text-xs text-[var(--destructive)]">
-            {localizeUi(
-              "ui.longTermMemory.reviewqueue.sectionTextCannotBeEmpty",
-            )}
-          </p>
-        ) : null}
-        <div
-          role="group"
-          aria-label={localizeUi(
-            "ui.longTermMemory.reviewqueue.mutationActions",
-          )}
-          className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-2"
-        >
-          <Button
-            primary
-            disabled={
-              !eligibleIds.has(row.mutation.id) || !valid || running !== null
-            }
-            onClick={() => void runBatch("accept", [row])}
-          >
-            {localizeUi("ui.longTermMemory.reviewqueue.accept")}
-          </Button>
-          <Button
-            destructive
-            disabled={running !== null}
-            onClick={() => void runBatch("skip", [row])}
-          >
-            {localizeUi("ui.longTermMemory.longtermmemorydetail.skip")}
-          </Button>
-        </div>
       </article>
     );
   };
 
   return (
     <section
+      ref={reviewRef}
       data-ltm-surface="review-queue"
       aria-label={localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
       className="space-y-4"
     >
       {review.isLoading ? (
         <StatusSurface busy>
-          {localizeUi("ui.longTermMemory.reviewqueue.loadingPendingReviewDrafts")}
+          {localizeUi(
+            "ui.longTermMemory.reviewqueue.loadingPendingReviewDrafts",
+          )}
         </StatusSurface>
       ) : null}
       {review.isError ? (
@@ -1181,107 +1724,6 @@ export default function ReviewQueue({
             : localizeUi(
                 "ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad",
               )}
-        </StatusSurface>
-      ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 p-3">
-        <div>
-          <h2 className="text-sm font-semibold">
-            {localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
-          </h2>
-          <p
-            data-ltm-review-summary
-            className="text-xs text-[var(--muted-foreground)]"
-          >
-            {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
-              sources: review.data?.counts.sources ?? 0,
-              source:
-                review.data?.counts.sources === 1
-                  ? localizeUi("ui.longTermMemory.reviewqueue.source")
-                  : localizeUi("ui.longTermMemory.reviewqueue.sources"),
-              pending: review.data?.counts.mutations ?? 0,
-              ready: eligibleIds.size,
-              blocked: review.data?.counts.blockedDrafts ?? 0,
-            })}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SelectionCheckbox
-            checked={allSelected}
-            indeterminate={someSelected}
-            label={localizeUi("ui.longTermMemory.reviewqueue.selectAll")}
-            onChange={() =>
-              allSelected
-                ? setSelectedIds((current) => {
-                    const next = new Set(current);
-                    rows.forEach((row) => next.delete(row.mutation.id));
-                    return next;
-                  })
-                : setSelectedIds(
-                    (current) =>
-                      new Set([
-                        ...current,
-                        ...rows.map((row) => row.mutation.id),
-                      ]),
-                  )
-            }
-          />
-          {selectedRows.length ? (
-            <div
-              data-ltm-review-batch-actions
-              role="group"
-              aria-label={localizeUi(
-                "ui.longTermMemory.reviewqueue.batchActions",
-              )}
-              className="flex flex-wrap items-center gap-2"
-            >
-              <Button
-                disabled={running !== null}
-                onClick={() => setSelectedIds(new Set())}
-              >
-                {localizeUi("ui.longTermMemory.activityview.clear")}
-              </Button>
-              <Button
-                primary
-                disabled={
-                  !eligibleSelectedRows.length ||
-                  invalidSelectedEdits.length > 0 ||
-                  running !== null
-                }
-                onClick={() => void runBatch("accept")}
-              >
-                {running === "accept"
-                  ? localizeUi("ui.longTermMemory.reviewqueue.accepting")
-                  : localizeUi(
-                      "ui.longTermMemory.reviewqueue.acceptEligibleValue1",
-                      { value1: eligibleSelectedRows.length },
-                    )}
-              </Button>
-              <Button
-                destructive
-                disabled={running !== null}
-                onClick={() => void runBatch("skip")}
-              >
-                {running === "skip"
-                  ? localizeUi("ui.longTermMemory.reviewqueue.skipping")
-                  : localizeUi(
-                      "ui.longTermMemory.reviewqueue.skipSelectedValue1",
-                      { value1: selectedRows.length },
-                    )}
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-      {sourceNoteId ? (
-        <StatusSurface>
-          {localizeUi("ui.longTermMemory.reviewqueue.filteredToThisSource")}{" "}
-          <button
-            type="button"
-            className="underline"
-            onClick={() => setSourceNoteId(null)}
-          >
-            {localizeUi("ui.longTermMemory.reviewqueue.showAll")}
-          </button>
         </StatusSurface>
       ) : null}
       {result ? (
@@ -1341,16 +1783,16 @@ export default function ReviewQueue({
                 value1: result.messages.join(" "),
               })
             : ""}
-          {result.cascadeMutationIds.length
+          {result.cascadeMutationLabels.length
             ? localizeUi(
                 "ui.longTermMemory.reviewqueue.cascadeSkippedMutations",
                 {
-                  count: result.cascadeMutationIds.length,
+                  count: result.cascadeMutationLabels.length,
                   mutation:
-                    result.cascadeMutationIds.length === 1
+                    result.cascadeMutationLabels.length === 1
                       ? localizeUi("ui.longTermMemory.reviewqueue.mutation")
                       : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
-                  ids: result.cascadeMutationIds.join(", "),
+                  labels: result.cascadeMutationLabels.join(", "),
                 },
               )
             : ""}
@@ -1361,10 +1803,17 @@ export default function ReviewQueue({
       ) : null}
       {rejectedSuggestions.isLoading ? (
         <StatusSurface busy>
-          {localizeUi("ui.longTermMemory.reviewqueue.loadingRejectedSuggestions")}
+          {localizeUi(
+            "ui.longTermMemory.reviewqueue.loadingRejectedSuggestions",
+          )}
         </StatusSurface>
       ) : null}
-      {!review.isLoading && !review.isError && !rejectedSuggestions.isLoading && !rejectedSuggestions.isError && !review.data?.sources.length && !rejectedSuggestions.data?.suggestions.length ? (
+      {!review.isLoading &&
+      !review.isError &&
+      !rejectedSuggestions.isLoading &&
+      !rejectedSuggestions.isError &&
+      !review.data?.sources.length &&
+      !rejectedSuggestions.data?.suggestions.length ? (
         <StatusSurface>
           {localizeUi(
             "ui.longTermMemory.reviewqueue.noProposedMemoriesNeedReviewYetImportASource",
@@ -1373,304 +1822,645 @@ export default function ReviewQueue({
       ) : null}
       {rejectedSuggestions.isError ? (
         <StatusSurface tone="danger">
-          {localizeUi("ui.longTermMemory.reviewqueue.rejectedSuggestionsCouldNotLoad")}
+          {localizeUi(
+            "ui.longTermMemory.reviewqueue.rejectedSuggestionsCouldNotLoad",
+          )}
         </StatusSurface>
       ) : null}
-      {rejectedSuggestions.data?.suggestions.length ? (
-        <section
-          data-ltm-rejected-suggestions
-          aria-label={localizeUi("ui.longTermMemory.reviewqueue.suggestionsThatWerentSaved")}
-          className="space-y-3"
-        >
-          <header>
-            <h2 className="text-sm font-semibold">
-              {localizeUi("ui.longTermMemory.reviewqueue.suggestionsThatWerentSaved")}
-            </h2>
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {localizeUi("ui.longTermMemory.reviewqueue.rejectedSuggestionsRemainUntilAction")}
-            </p>
-          </header>
-          {[...new Set(rejectedSuggestions.data.suggestions.map((item) => item.source.sourceNoteId))].map((sourceNoteId) => {
-            const items = rejectedSuggestions.data!.suggestions.filter((item) => item.source.sourceNoteId === sourceNoteId);
-            return (
-              <article key={sourceNoteId} data-ltm-rejected-source={sourceNoteId} className="space-y-3 rounded-lg border border-[var(--border)] p-3">
-                <h3 className="text-sm font-semibold">
-                  {noteById.get(sourceNoteId)?.title || localizeUi("ui.longTermMemory.reviewqueue.untitledMemory")}
-                </h3>
-                {items.map((item) => (
-                  <div key={item.id} data-ltm-rejected-suggestion={item.id} className="space-y-2 border-t border-[var(--border)] pt-3">
-                    <p className="text-xs font-semibold">{localizeUi("ui.longTermMemory.reviewqueue.proposedContent")}</p>
-                    <p className="text-sm">{item.candidate.snippet || item.candidate.message}</p>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      <span className="font-medium">{localizeUi("ui.longTermMemory.reviewqueue.whyItWasntSaved")}:</span>{" "}
-                      {localizeUi(
-                        rejectionReasonLabels[item.candidate.reason] ??
-                          "ui.longTermMemory.reviewqueue.rejectionReasonOther",
-                      )}
-                    </p>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      <span className="font-medium">{localizeUi("ui.longTermMemory.reviewqueue.whatWasExpected")}:</span>{" "}
-                      {item.candidate.recovery ? recoveryLabel(item.candidate.recovery, localizeUi) : localizeUi("ui.longTermMemory.reviewqueue.reviewAndCorrectSuggestion")}
-                    </p>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      <span className="font-medium">{localizeUi("ui.longTermMemory.reviewqueue.recommendedFix")}:</span>{" "}
-                      {localizeUi(
-                        rejectionRecommendedLabels[item.candidate.reason] ??
-                          "ui.longTermMemory.reviewqueue.recommendedFixOther",
-                      )}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {onRecoverCandidate ? (
-                        <Button
-                          aria-label={localizeUi("ui.longTermMemory.reviewqueue.recoverSuggestionNamed", { value1: item.candidate.message })}
-                          onClick={() => onRecoverCandidate(item.candidate, item.scope, item.modes, item.id)}
-                        >
-                          {localizeUi("ui.longTermMemory.reviewqueue.recoverManually")}
-                        </Button>
-                      ) : null}
-                      <Button
-                        destructive
-                        aria-label={localizeUi("ui.longTermMemory.reviewqueue.deleteSuggestionNamed", { value1: item.candidate.message })}
-                        disabled={dismissingId !== null}
-                        onClick={() => void deleteRejectedSuggestion(item)}
-                      >
-                        {localizeUi("ui.longTermMemory.reviewqueue.delete")}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </article>
-            );
-          })}
-        </section>
-      ) : null}
-      {review.data?.sources.map((source) => {
-        const projectedIds = new Set(
-          source.targets.flatMap((target) =>
-            target.rows.map((row) => row.mutation.id),
-          ),
-        );
-        const fallbackTargets = new Map<string, ReviewRow[]>();
-        for (const item of source.drafts) {
-          for (const mutation of item.draft.mutations) {
-            if (projectedIds.has(mutation.id)) continue;
-            const row = rowByMutationId.get(mutation.id)!;
-            fallbackTargets.set(row.targetId, [
-              ...(fallbackTargets.get(row.targetId) ?? []),
-              row,
-            ]);
-          }
-        }
-        return (
-          <article
-            key={source.sourceNoteId}
-            data-ltm-review-source={source.sourceNoteId}
-            className="space-y-3 rounded-lg border border-[var(--border)] p-3"
-          >
-            <header className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold">
-                  {localizeUi("ui.longTermMemory.reviewqueue.source_922acd2")}{" "}
-                  {noteById.get(source.sourceNoteId)?.title ||
-                    localizeUi("ui.longTermMemory.reviewqueue.untitledMemory")}
-                </h3>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.reviewqueue.modes")}{" "}
-                  {source.modes.map(humanizeLabel).join(", ")}
+      <LtmWorkspace
+        activeMobilePane={mobilePane}
+        onMobilePaneChange={setMobilePane}
+        switcherLabel={localizeUi(
+          "ui.longTermMemory.longtermmemorynavigation.workspacePanes",
+        )}
+        navigator={{
+          label: localizeUi("ui.longTermMemory.reviewqueue.reviewQueue"),
+          content: (
+            <div data-ltm-review-navigator className="space-y-3">
+              <header>
+                <h2 className="text-sm font-semibold">
+                  {localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
+                </h2>
+                <p
+                  data-ltm-review-summary
+                  className="text-xs text-[var(--muted-foreground)]"
+                >
+                  {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
+                    sources: review.data?.counts.sources ?? 0,
+                    source:
+                      review.data?.counts.sources === 1
+                        ? localizeUi("ui.longTermMemory.reviewqueue.source")
+                        : localizeUi("ui.longTermMemory.reviewqueue.sources"),
+                    pending: review.data?.counts.mutations ?? 0,
+                    ready: eligibleIds.size,
+                    blocked: review.data?.counts.blockedDrafts ?? 0,
+                  })}
                 </p>
-              </div>
-              {onOpenMemory ? (
-                <Button onClick={() => onOpenMemory(source.sourceNoteId)}>
-                  {localizeUi("ui.longTermMemory.reviewqueue.openSource")}
-                </Button>
-              ) : null}
-            </header>
-            <div className="space-y-2">
-              {source.drafts.map((item, index) => {
-                const diagnosticsOnly = item.draft.mutations.length === 0;
-                return (
-                  <section
-                    key={item.draft.id}
-                    data-ltm-review-draft={item.draft.id}
-                    className="space-y-2 border-b border-[var(--border)] pb-3 last:border-b-0 last:pb-0"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="text-xs font-semibold">
-                            {localizeUi("ui.longTermMemory.reviewqueue.draft")}{" "}
-                            {index + 1}
-                          </h4>
-                          {diagnosticsOnly ? (
-                            <span
-                              data-ltm-diagnostics-only
-                              className="rounded-full border border-[var(--border)] px-2 py-1 text-xs font-medium"
-                            >
-                              {localizeUi(
-                                "ui.longTermMemory.reviewqueue.diagnosticsOnly",
-                              )}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          {localizeUi("ui.longTermMemory.memoryvault.created")}{" "}
-                          {formatTimestamp(item.draft.createdAt, locale)}.{" "}
-                          {item.draft.summary ||
+              </header>
+      <div className="mari-editor-panel overflow-hidden">
+                {sourceIds.map((id) => {
+                  const source = review.data?.sources.find(
+                    (item) => item.sourceNoteId === id,
+                  );
+                  const rejectedCount =
+                    rejectedSuggestions.data?.suggestions.filter(
+                      (item) => item.source.sourceNoteId === id,
+                    ).length ?? 0;
+                  const active = effectiveSourceId === id;
+                  const expanded = active && !sourceCollapsed;
+                  const panelId = `ltm-review-source-panel-${id}`;
+                  return (
+                    <div key={id} className="group">
+                      <button
+                        type="button"
+                        data-ltm-review-source-select={id}
+                        aria-current={active || undefined}
+                        aria-expanded={expanded}
+                        aria-controls={panelId}
+                        onClick={() => {
+                          setSelectedSourceId(id);
+                          setSelectedDraftId(null);
+                          setSourceCollapsed((current) =>
+                            active ? !current : false,
+                          );
+                          setMobilePaneAndFocus("workbench");
+                        }}
+                        className={`flex min-h-12 cursor-pointer list-none items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-sm ${active ? "bg-[var(--primary)]/10" : ""}`}
+                      >
+                        <ChevronRight
+                          aria-hidden="true"
+                          size="0.875rem"
+                          className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
+                        />
+                        <span className="min-w-0 flex-1 truncate font-semibold">
+                          {noteById.get(id)?.title ||
                             localizeUi(
-                              "ui.longTermMemory.reviewqueue.noDraftSummary",
+                              "ui.longTermMemory.reviewqueue.untitledMemory",
                             )}
-                        </p>
-                      </div>
-                      <span
-                        data-ltm-freshness={item.freshness}
-                        className="rounded-full border border-[var(--border)] px-2 py-1 text-xs font-medium"
-                      >
-                        {localizeUi(freshnessLabel[item.freshness])}
-                      </span>
-                    </div>
-                    {item.blockReasons.length ? (
-                      <div
-                        data-ltm-review-blocks
-                        className="space-y-1 text-xs text-[var(--destructive)]"
-                      >
-                        {item.blockReasons.map((reason) => (
-                          <p key={reason.code}>
-                            {humanizeLabel(reason.code)}: {reason.message}
-                          </p>
+                        </span>
+                        <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
+                          {(source?.drafts.length ?? 0) + rejectedCount}
+                        </span>
+                      </button>
+                      <div id={panelId} hidden={!expanded}>
+                        {source?.drafts.map((item, index) => (
+                          <button
+                            key={item.draft.id}
+                            type="button"
+                            data-ltm-review-draft-select={item.draft.id}
+                            aria-current={
+                              selectedDraft?.draft.id === item.draft.id ||
+                              undefined
+                            }
+                            onClick={() => {
+                              setSelectedDraftId(item.draft.id);
+                              setMobilePaneAndFocus("workbench");
+                            }}
+                            className={`flex min-h-14 w-full items-start gap-3 border-b border-[var(--border)]/70 px-8 py-3 text-left last:border-b-0 ${selectedDraft?.draft.id === item.draft.id ? "bg-[var(--accent)]" : ""}`}
+                          >
+                            <span className="min-w-0 flex-1">
+                               <span className="flex items-center justify-between gap-2 text-xs font-semibold">
+                                <span>
+                                  {localizeUi(
+                                    "ui.longTermMemory.reviewqueue.draft",
+                                  )}{" "}
+                                  {index + 1}
+                                </span>
+                                 <span className="text-[var(--muted-foreground)]">{item.draft.mutations.length}</span>
+                              </span>
+                              <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">
+                                 {reviewDraftTitle(item)}
+                              </span>
+                            </span>
+                            <span
+                              data-ltm-freshness={item.freshness}
+                                className={`shrink-0 rounded-full border px-2 py-0.5 text-[0.6875rem] font-semibold ${freshnessClass(item.freshness)}`}
+                            >
+                              {localizeUi(freshnessLabel[item.freshness])}
+                            </span>
+                          </button>
                         ))}
-                      </div>
-                    ) : null}
-                    <ExtractionDetails
-                      item={item}
-                      onRecoverCandidate={
-                        onRecoverCandidate
-                          ? (candidate) =>
-                              onRecoverCandidate(
-                                candidate,
-                                item.draft.scope,
-                                item.draft.modes,
-                              )
-                          : undefined
-                      }
-                    />
-                    {diagnosticsOnly ? (
-                      <Button
-                        destructive
-                        disabled={dismissingId !== null || running !== null}
-                        onClick={() => void dismissReport(item.draft.id)}
-                      >
-                        {dismissingId === item.draft.id
-                          ? localizeUi(
-                              "ui.longTermMemory.reviewqueue.dismissing",
-                            )
-                          : localizeUi(
-                              "ui.longTermMemory.reviewqueue.dismissReport",
+                        {source?.drafts.length || rejectedCount ? null : (
+                          <p className="px-8 py-3 text-xs text-[var(--muted-foreground)]">
+                            {localizeUi(
+                              "ui.longTermMemory.reviewqueue.noProposedMemoriesAwaitReviewForSource",
                             )}
-                      </Button>
-                    ) : null}
-                  </section>
-                );
-              })}
-            </div>
-            <div className="space-y-3">
-              {source.targets.map((target) => {
-                const projectionEdited = target.rows.some((row) =>
-                  editedById.has(row.mutation.id),
-                );
-                return (
-                  <section
-                    key={target.noteId}
-                    data-ltm-review-target={target.noteId}
-                    className="space-y-2"
-                  >
-                    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2">
-                      <div>
-                        <h4 className="text-sm font-semibold">
-                          {noteById.get(target.noteId)?.title ||
-                            (!projectionEdited ? target.title : null) ||
-                            (projectionEdited
-                              ? localizeUi(
-                                  "ui.longTermMemory.reviewqueue.editedProjectionPending",
-                                )
-                              : localizeUi(
-                                  "ui.longTermMemory.reviewqueue.untitledMemory",
-                                ))}
-                        </h4>
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          {humanizeLabel(target.noteType)}
-                        </p>
+                          </p>
+                        )}
                       </div>
-                      {onOpenMemory && noteById.has(target.noteId) ? (
-                        <Button onClick={() => onOpenMemory(target.noteId)}>
-                          {localizeUi(
-                            "ui.longTermMemory.reviewqueue.openMemory",
-                          )}
-                        </Button>
-                      ) : null}
-                    </header>
-                    <div className="space-y-2">
-                      {target.rows.map((projectedRow) =>
-                        renderRow(
-                          rowByMutationId.get(projectedRow.mutation.id)!,
-                          projectionEdited,
-                        ),
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ),
+        }}
+        workbench={{
+          label: localizeUi("ui.longTermMemory.reviewqueue.reviewQueue"),
+          content: (
+            <div
+              data-ltm-review-workbench
+              className="mari-editor-panel space-y-4 p-3 sm:p-4"
+            >
+              <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-semibold tracking-tight">
+                    {noteById.get(effectiveSourceId ?? "")?.title ||
+                      localizeUi(
+                        "ui.longTermMemory.reviewqueue.untitledMemory",
                       )}
-                    </div>
-                  </section>
-                );
-              })}
-              {[...fallbackTargets].map(([targetId, targetRows]) => {
-                const note = noteById.get(targetId);
-                const created = targetRows.find(
-                  (row) => row.mutation.kind === "create_note",
-                )?.mutation;
-                const title =
-                  note?.title ||
-                  (created?.kind === "create_note"
-                    ? created.note.title
-                    : undefined) ||
-                  localizeUi("ui.longTermMemory.reviewqueue.unprojectedTarget");
-                const type =
-                  note?.type ||
-                  (created?.kind === "create_note"
-                    ? created.note.type
-                    : undefined);
-                return (
-                  <section
-                    key={`fallback-${targetId}`}
-                    data-ltm-review-target={targetId}
-                    data-ltm-unprojected-target
-                    className="space-y-2"
-                  >
-                    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2">
-                      <div>
-                        <h4 className="text-sm font-semibold">{title}</h4>
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          {type
-                            ? humanizeLabel(type)
-                            : localizeUi(
-                                "ui.longTermMemory.reviewqueue.previewUnavailable",
+                  </h2>
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                    {selectedDraft
+                      ? `${localizeUi("ui.longTermMemory.reviewqueue.draft")} ${Math.max(0, (selectedReviewSource?.drafts.findIndex((item) => item.draft.id === selectedDraft.draft.id) ?? 0) + 1)} / ${selectedDraft.draft.mutations.length} ${localizeUi("ui.longTermMemory.reviewqueue.mutations")}`
+                      : localizeUi(
+                          "ui.longTermMemory.reviewqueue.noProposedMemoriesAwaitReviewForSource",
+                        )}
+                  </p>
+                  {selectedReviewSource ? (
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {localizeUi("ui.longTermMemory.reviewqueue.modes")}{" "}
+                      {selectedReviewSource.modes.map(humanizeLabel).join(", ")}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedDraft && hasExtractionDetails(selectedDraft) ? (
+                    <Button
+                      aria-pressed={detailsOpen}
+                      data-ltm-details-toggle
+                      onClick={() => {
+                        const next = !detailsOpen;
+                        setDetailsOpen(next);
+                        setMobilePaneAndFocus(next ? "inspector" : "workbench");
+                      }}
+                      className="aria-pressed:bg-[var(--accent)]"
+                    >
+                      {localizeUi("ui.longTermMemory.reviewqueue.details")}
+                    </Button>
+                  ) : null}
+                  {onOpenMemory && effectiveSourceId ? (
+                    <Button onClick={() => onOpenMemory(effectiveSourceId)}>
+                      {localizeUi("ui.longTermMemory.reviewqueue.openSource")}
+                    </Button>
+                  ) : null}
+                </div>
+              </header>
+              {sourceRejectedSuggestions.length ? (
+                <details
+                  data-ltm-rejected-suggestions
+                  aria-label={localizeUi(
+                    "ui.longTermMemory.reviewqueue.suggestionsThatWerentSaved",
+                  )}
+                  className="group space-y-3"
+                >
+                  <summary className="flex cursor-pointer list-none items-start gap-2">
+                    <ChevronRight
+                      aria-hidden="true"
+                      size="0.875rem"
+                      className="mt-1 shrink-0 transition-transform group-open:rotate-90"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold">
+                        {localizeUi(
+                          "ui.longTermMemory.reviewqueue.suggestionsThatWerentSaved",
+                        )}
+                      </span>
+                      <span className="block text-xs text-[var(--muted-foreground)]">
+                        {localizeUi(
+                          "ui.longTermMemory.reviewqueue.rejectedSuggestionsRemainUntilAction",
+                        )}
+                      </span>
+                    </span>
+                  </summary>
+                  {(effectiveSourceId ? [effectiveSourceId] : []).map(
+                    (sourceNoteId) => {
+                      const items = sourceRejectedSuggestions;
+                      return (
+                        <article
+                          key={sourceNoteId}
+                          data-ltm-rejected-source={sourceNoteId}
+                          className="space-y-3 pt-3"
+                        >
+                          <h3 className="text-sm font-semibold">
+                            {noteById.get(sourceNoteId)?.title ||
+                              localizeUi(
+                                "ui.longTermMemory.reviewqueue.untitledMemory",
                               )}
-                        </p>
+                          </h3>
+                          {items.map((item) => (
+                            <div
+                              key={item.id}
+                              data-ltm-rejected-suggestion={item.id}
+                              className="space-y-2 border-t border-[var(--border)] pt-3"
+                            >
+                              <p className="text-xs font-semibold">
+                                {localizeUi(
+                                  "ui.longTermMemory.reviewqueue.proposedContent",
+                                )}
+                              </p>
+                              <p className="text-sm">
+                                {item.candidate.snippet ||
+                                  item.candidate.message}
+                              </p>
+                              <p className="text-xs text-[var(--muted-foreground)]">
+                                <span className="font-medium">
+                                  {localizeUi(
+                                    "ui.longTermMemory.reviewqueue.whyItWasntSaved",
+                                  )}
+                                  :
+                                </span>{" "}
+                                {localizeUi(
+                                  rejectionReasonLabels[
+                                    item.candidate.reason
+                                  ] ??
+                                    "ui.longTermMemory.reviewqueue.rejectionReasonOther",
+                                )}
+                              </p>
+                              <p className="text-xs text-[var(--muted-foreground)]">
+                                <span className="font-medium">
+                                  {localizeUi(
+                                    "ui.longTermMemory.reviewqueue.whatWasExpected",
+                                  )}
+                                  :
+                                </span>{" "}
+                                {item.candidate.recovery
+                                  ? recoveryLabel(
+                                      item.candidate.recovery,
+                                      localizeUi,
+                                      noteById,
+                                    )
+                                  : localizeUi(
+                                      "ui.longTermMemory.reviewqueue.reviewAndCorrectSuggestion",
+                                    )}
+                              </p>
+                              <p className="text-xs text-[var(--muted-foreground)]">
+                                <span className="font-medium">
+                                  {localizeUi(
+                                    "ui.longTermMemory.reviewqueue.recommendedFix",
+                                  )}
+                                  :
+                                </span>{" "}
+                                {localizeUi(
+                                  rejectionRecommendedLabels[
+                                    item.candidate.reason
+                                  ] ??
+                                    "ui.longTermMemory.reviewqueue.recommendedFixOther",
+                                )}
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {onRecoverCandidate ? (
+                                  <Button
+                                    aria-label={localizeUi(
+                                      "ui.longTermMemory.reviewqueue.recoverSuggestionNamed",
+                                      { value1: item.candidate.message },
+                                    )}
+                                    onClick={() =>
+                                      onRecoverCandidate(
+                                        item.candidate,
+                                        item.scope,
+                                        item.modes,
+                                        item.id,
+                                      )
+                                    }
+                                  >
+                                    {localizeUi(
+                                      "ui.longTermMemory.reviewqueue.recoverManually",
+                                    )}
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  destructive
+                                  aria-label={localizeUi(
+                                    "ui.longTermMemory.reviewqueue.deleteSuggestionNamed",
+                                    { value1: item.candidate.message },
+                                  )}
+                                  disabled={dismissingId !== null}
+                                  onClick={() =>
+                                    void deleteRejectedSuggestion(item)
+                                  }
+                                >
+                                  {localizeUi(
+                                    "ui.longTermMemory.reviewqueue.delete",
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </article>
+                      );
+                    },
+                  )}
+                </details>
+              ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <SelectionCheckbox
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  label={localizeUi("ui.longTermMemory.reviewqueue.selectAll")}
+                  onChange={() =>
+                    allSelected
+                      ? setSelectedIds((current) => {
+                          const next = new Set(current);
+                          activeDraftRows.forEach((row) =>
+                            next.delete(row.mutation.id),
+                          );
+                          return next;
+                        })
+                      : setSelectedIds(
+                          (current) =>
+                            new Set([
+                              ...current,
+                              ...activeDraftRows.map((row) => row.mutation.id),
+                            ]),
+                        )
+                  }
+                />
+                <span className="text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
+                    sources: review.data?.counts.sources ?? 0,
+                    source:
+                      review.data?.counts.sources === 1
+                        ? localizeUi("ui.longTermMemory.reviewqueue.source")
+                        : localizeUi("ui.longTermMemory.reviewqueue.sources"),
+                    pending: review.data?.counts.mutations ?? 0,
+                    ready: eligibleIds.size,
+                    blocked: review.data?.counts.blockedDrafts ?? 0,
+                  })}
+                </span>
+              </div>
+              {selectedRows.length ? (
+                <div
+                  data-ltm-review-batch-actions
+                  role="group"
+                  aria-label={localizeUi(
+                    "ui.longTermMemory.reviewqueue.batchActions",
+                  )}
+                  className="sticky bottom-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 shadow-md md:static md:z-auto md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+                >
+                  <Button
+                    disabled={running !== null}
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    {localizeUi("ui.longTermMemory.activityview.clear")}
+                  </Button>
+                  <Button
+                    primary
+                    disabled={
+                      !eligibleSelectedRows.length ||
+                      invalidSelectedEdits.length > 0 ||
+                      running !== null
+                    }
+                    onClick={() => void runBatch("accept")}
+                  >
+                    {running === "accept"
+                      ? localizeUi("ui.longTermMemory.reviewqueue.accepting")
+                      : localizeUi(
+                          "ui.longTermMemory.reviewqueue.acceptEligibleValue1",
+                          { value1: eligibleSelectedRows.length },
+                        )}
+                  </Button>
+                  <Button
+                    destructive
+                    disabled={running !== null}
+                    onClick={() => void runBatch("skip")}
+                  >
+                    {running === "skip"
+                      ? localizeUi("ui.longTermMemory.reviewqueue.skipping")
+                      : localizeUi(
+                          "ui.longTermMemory.reviewqueue.skipSelectedValue1",
+                          { value1: selectedRows.length },
+                        )}
+                  </Button>
+                </div>
+              ) : null}
+              {review.data?.sources
+                .filter((source) => source.sourceNoteId === effectiveSourceId)
+                .map((source) => {
+                  return (
+                    <article
+                      key={source.sourceNoteId}
+                      data-ltm-review-source={source.sourceNoteId}
+                      className="space-y-3"
+                    >
+                      <div className="space-y-2">
+                        {source.drafts
+                          .filter(
+                            (item) => item.draft.id === selectedDraft?.draft.id,
+                          )
+                          .map((item) => {
+                            const projectedIds = new Set(
+                              source.targets.flatMap((target) =>
+                                target.rows
+                                  .filter((row) => row.draftId === item.draft.id)
+                                  .map((row) => row.mutation.id),
+                              ),
+                            );
+                            const fallbackTargets = new Map<string, ReviewRow[]>();
+                            for (const mutation of item.draft.mutations) {
+                              if (projectedIds.has(mutation.id)) continue;
+                              const row = rowByMutationId.get(mutation.id)!;
+                              fallbackTargets.set(row.targetId, [
+                                ...(fallbackTargets.get(row.targetId) ?? []),
+                                row,
+                              ]);
+                            }
+                            const draftIndex = source.drafts.findIndex(
+                              (draft) => draft.draft.id === item.draft.id,
+                            );
+                            const diagnosticsOnly =
+                              item.draft.mutations.length === 0;
+                            const draftTitle = reviewDraftTitle(item);
+                            return (
+                              <section
+                                key={item.draft.id}
+                                data-ltm-review-draft={item.draft.id}
+                                className="mari-editor-panel space-y-3 p-3 sm:p-4"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <h4 className="text-xs font-semibold">
+                                        {localizeUi(
+                                          "ui.longTermMemory.reviewqueue.draft",
+                                        )}{" "}
+                                        {draftIndex + 1}
+                                      </h4>
+                                      {diagnosticsOnly ? (
+                                        <span
+                                          data-ltm-diagnostics-only
+                                          className="rounded-full border border-[var(--border)] px-2 py-1 text-xs font-medium"
+                                        >
+                                          {localizeUi(
+                                            "ui.longTermMemory.reviewqueue.diagnosticsOnly",
+                                          )}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p
+                                      data-ltm-review-draft-title
+                                      className="mt-1 text-base font-semibold tracking-tight"
+                                    >
+                                      {draftTitle ||
+                                        localizeUi(
+                                          "ui.longTermMemory.reviewqueue.noDraftSummary",
+                                        )}
+                                    </p>
+                                     {item.draft.summary.trim() ? (
+                                       <p
+                                         data-ltm-review-draft-summary
+                                         className="mt-1 truncate text-xs text-[var(--muted-foreground)]"
+                                       >
+                                         {item.draft.summary}
+                                       </p>
+                                     ) : null}
+                                  </div>
+                                  <span
+                                    data-ltm-freshness={item.freshness}
+                                    className={`rounded-full border px-2 py-1 text-xs font-medium ${freshnessClass(item.freshness)}`}
+                                  >
+                                    {localizeUi(freshnessLabel[item.freshness])}
+                                  </span>
+                                </div>
+                                {item.blockReasons.length ? (
+                                  <div
+                                    data-ltm-review-blocks
+                                    className="space-y-1 text-xs text-[var(--destructive)]"
+                                  >
+                                    {item.blockReasons.map((reason) => (
+                                      <p key={reason.code}>
+                                        {humanizeLabel(reason.code)}:{" "}
+                                        {humanizeText(reason.message)}
+                                      </p>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {diagnosticsOnly ? (
+                                  <Button
+                                    destructive
+                                    disabled={
+                                      dismissingId !== null || running !== null
+                                    }
+                                    onClick={() =>
+                                      void dismissReport(item.draft.id)
+                                    }
+                                  >
+                                    {dismissingId === item.draft.id
+                                      ? localizeUi(
+                                          "ui.longTermMemory.reviewqueue.dismissing",
+                                        )
+                                      : localizeUi(
+                                          "ui.longTermMemory.reviewqueue.dismissReport",
+                                        )}
+                                  </Button>
+                                ) : null}
+                                <div className="space-y-3 pt-1">
+                                  {source.targets.map((target) => {
+                                    const targetRows = target.rows.filter(
+                                      (row) => row.draftId === item.draft.id,
+                                    );
+                                    if (!targetRows.length) return null;
+                                    const projectionEdited = targetRows.some((row) =>
+                                      editedById.has(row.mutation.id),
+                                    );
+                                    return (
+                                      <div
+                                         key={target.noteId}
+                                         data-ltm-review-target={target.noteId}
+                                         className="space-y-2"
+                                       >
+                                        {onOpenMemory && noteById.has(target.noteId) ? (
+                                          <Button
+                                            onClick={() => onOpenMemory(target.noteId)}
+                                          >
+                                            {localizeUi(
+                                              "ui.longTermMemory.reviewqueue.openMemory",
+                                            )}
+                                          </Button>
+                                        ) : null}
+                                        {targetRows.map((projectedRow) =>
+                                          renderRow(
+                                            rowByMutationId.get(
+                                              projectedRow.mutation.id,
+                                            )!,
+                                            projectionEdited,
+                                            item.draft.summary,
+                                          ),
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                  {[...fallbackTargets].map(([targetId, targetRows]) => {
+                                    return (
+                                      <div
+                                        key={`fallback-${targetId}`}
+                                       data-ltm-review-target={targetId}
+                                       data-ltm-unprojected-target
+                                       className="space-y-2"
+                                     >
+                                      {onOpenMemory && noteById.has(targetId) ? (
+                                        <Button
+                                          onClick={() => onOpenMemory(targetId)}
+                                        >
+                                          {localizeUi(
+                                            "ui.longTermMemory.reviewqueue.openMemory",
+                                          )}
+                                        </Button>
+                                      ) : null}
+                                      {targetRows.map((row) =>
+                                          renderRow(row, false, item.draft.summary),
+                                      )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </section>
+                              );
+                           })}
                       </div>
-                      {onOpenMemory && note ? (
-                        <Button onClick={() => onOpenMemory(targetId)}>
-                          {localizeUi(
-                            "ui.longTermMemory.reviewqueue.openMemory",
-                          )}
-                        </Button>
-                      ) : null}
-                    </header>
-                    <div className="space-y-2">
-                      {targetRows.map((row) => renderRow(row))}
-                    </div>
-                  </section>
-                );
-              })}
+                    </article>
+                  );
+                })}
+              {effectiveSourceId && !selectedReviewSource ? (
+                <StatusSurface>
+                  {localizeUi(
+                    "ui.longTermMemory.reviewqueue.noProposedMemoriesAwaitReviewForSource",
+                  )}
+                </StatusSurface>
+              ) : null}
             </div>
-          </article>
-        );
-      })}
+          ),
+        }}
+        inspector={
+          selectedDraft && detailsOpen
+            ? {
+                label: localizeUi("ui.longTermMemory.reviewqueue.details"),
+                content: (
+                  <ExtractionDetails
+                    item={selectedDraft}
+                    onRecoverCandidate={
+                      onRecoverCandidate
+                        ? (candidate, rejectedSuggestionId) =>
+                            onRecoverCandidate(
+                              candidate,
+                              selectedDraft.draft.scope,
+                              selectedDraft.draft.modes,
+                              rejectedSuggestionId,
+                            )
+                        : undefined
+                    }
+                    rejectedSuggestionIdForCandidate={
+                      rejectedSuggestionIdForCandidate
+                    }
+                    recoveryReady={rejectedSuggestions.isSuccess}
+                    noteById={noteById}
+                    humanizeText={humanizeText}
+                  />
+                ),
+              }
+            : undefined
+        }
+      />
     </section>
   );
 }

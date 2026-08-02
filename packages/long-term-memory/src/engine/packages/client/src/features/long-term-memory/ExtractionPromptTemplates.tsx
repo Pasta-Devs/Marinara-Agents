@@ -206,7 +206,7 @@ export function ExtractionPromptTemplates({
   return (
     <section
       aria-labelledby={promptTemplatesLabelId}
-      className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/20 p-3"
+      className="mari-editor-panel mari-editor-panel--soft space-y-3 p-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>

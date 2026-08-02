@@ -568,7 +568,7 @@ export default function ActivityView({
 
       <details
         data-ltm-recall-workflow
-        className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30"
+        className="mari-editor-panel mari-editor-panel--soft"
         onToggle={(event) => setRecallOpen(event.currentTarget.open)}
       >
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
@@ -808,7 +808,7 @@ export default function ActivityView({
             return (
               <li
                 key={operation.operationId}
-                className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/25"
+                 className="mari-editor-panel mari-editor-panel--soft"
               >
                 <details className="group">
                   <summary className="flex min-h-11 cursor-pointer list-none items-start gap-2 p-3 marker:content-none">
