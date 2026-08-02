@@ -2252,8 +2252,10 @@ test("Map editor fills missing location artwork with one image per location", as
     await expect(workspace.getByLabel("Positive prompt for Shrouded Coast")).toHaveValue(editedPositive);
     await refreshDialog.getByRole("button", { name: "Refresh prompts" }).click();
     await expect.poll(() => previewRequests.length).toBe(4);
+    const refreshedCoastRequest = previewRequests.slice(2).find((request) => request.title === "Shrouded Coast");
+    expect(refreshedCoastRequest).toBeDefined();
     await expect(workspace.getByLabel("Positive prompt for Shrouded Coast")).toHaveValue(
-      "Engine campaign style. Wide establishing image of Shrouded Coast",
+      `Engine campaign style. ${refreshedCoastRequest!.prompt}`,
     );
     await expect(workspace.getByLabel("Negative prompt for Shrouded Coast")).toHaveValue(
       "global negative, campaign hard negative",
