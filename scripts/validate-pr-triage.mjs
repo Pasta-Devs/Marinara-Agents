@@ -7,7 +7,7 @@ function extractNamedStep(workflow, stepName) {
   const start = workflow.indexOf(marker);
   assert.notEqual(start, -1, `Missing workflow step: ${stepName}`);
 
-  const nextStep = workflow.indexOf("\n      - name:", start + marker.length);
+  const nextStep = workflow.indexOf("\n      - ", start + marker.length);
   return workflow.slice(start, nextStep === -1 ? undefined : nextStep);
 }
 
@@ -18,14 +18,17 @@ export function validatePullRequestTriage() {
   );
   const codeOwners = readFileSync(new URL("../.github/CODEOWNERS", import.meta.url), "utf8");
   const untrustedReviewGate = new URL("../.github/workflows/owner-approval-review.yml", import.meta.url);
+  const triggersSectionStart = triageWorkflow.indexOf("\non:\n");
+  const triggersSectionEnd = triageWorkflow.indexOf("\nconcurrency:\n", triggersSectionStart);
   const jobsSectionStart = triageWorkflow.indexOf("\njobs:\n");
 
+  assert.notEqual(triggersSectionStart, -1, "Missing workflow trigger section");
+  assert.notEqual(triggersSectionEnd, -1, "Missing end of workflow trigger section");
   assert.notEqual(jobsSectionStart, -1, "Missing workflow jobs section");
-  assert.match(
-    triageWorkflow,
-    /on:\n  pull_request_target:\n    types: \[opened, reopened, edited, synchronize, ready_for_review\]\n    branches: \[staging, main\]/u,
+  assert.equal(
+    triageWorkflow.slice(triggersSectionStart + 1, triggersSectionEnd),
+    "on:\n  pull_request_target:\n    types: [opened, reopened, edited, synchronize, ready_for_review]\n    branches: [staging, main]\n",
   );
-  assert.doesNotMatch(triageWorkflow, /^\s+pull_request_review:/mu);
 
   const jobIds = [
     ...triageWorkflow
