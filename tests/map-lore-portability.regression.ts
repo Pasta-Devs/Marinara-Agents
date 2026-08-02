@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import {
   buildPortableLoreBundle,
   importPortableLoreBundle,
@@ -10,7 +8,6 @@ import {
   type PortableLoreApi,
 } from "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/portable-lore";
 
-const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const definition = {
   schemaVersion: 1,
   ownerMode: "roleplay",
@@ -106,6 +103,19 @@ assert.deepEqual(
 );
 assert.equal(linked.books[0]?.settings.enabled, false);
 assert.equal(linked.books[0]?.entries[0]?.data.enabled, false);
+assert.deepEqual(parsePortableLoreBundle(linked), linked);
+
+const tamperedLinked = structuredClone(linked);
+tamperedLinked.books[0]!.settings.id = "injected-book-id";
+tamperedLinked.books[0]!.entries[0]!.data.userId = "injected-user-id";
+Object.assign(tamperedLinked.books[0]!.folders[0]!.data, {
+  lorebookId: "injected-lorebook-id",
+});
+const sanitizedLinked = parsePortableLoreBundle(tamperedLinked);
+assert.ok(sanitizedLinked);
+assert.equal("id" in sanitizedLinked.books[0]!.settings, false);
+assert.equal("userId" in sanitizedLinked.books[0]!.entries[0]!.data, false);
+assert.equal("lorebookId" in sanitizedLinked.books[0]!.folders[0]!.data, false);
 
 const complete = buildPortableLoreBundle({
   definition,
@@ -119,10 +129,22 @@ assert.deepEqual(parsePortableLoreBundle(complete), complete);
 
 const exactPlan = planPortableLoreImport(complete, [lorebook], [harborEntry]);
 assert.equal(exactPlan.exactMatches, 1);
-assert.equal(exactPlan.entries.find((entry) => entry.originalEntryId === "entry-harbor")?.candidates[0]?.reason, "exact-id");
+assert.equal(
+  exactPlan.entries.find((entry) => entry.originalEntryId === "entry-harbor")
+    ?.candidates[0]?.reason,
+  "exact-id",
+);
 
-const sameContent = { ...harborEntry, id: "entry-copy", lorebookId: "book-destination" } as never;
-const uniquePlan = planPortableLoreImport(linked, [{ ...lorebook, id: "book-destination" } as never], [sameContent]);
+const sameContent = {
+  ...harborEntry,
+  id: "entry-copy",
+  lorebookId: "book-destination",
+} as never;
+const uniquePlan = planPortableLoreImport(
+  linked,
+  [{ ...lorebook, id: "book-destination" } as never],
+  [sameContent],
+);
 assert.equal(uniquePlan.uniqueContentMatches, 1);
 const ambiguousPlan = planPortableLoreImport(
   linked,
@@ -133,99 +155,152 @@ assert.equal(ambiguousPlan.ambiguousMatches, 1);
 const nameOnlyPlan = planPortableLoreImport(
   linked,
   [{ ...lorebook, id: "book-destination" } as never],
-  [{ ...sameContent, id: "entry-name-only", content: "Different content" } as never],
+  [
+    {
+      ...sameContent,
+      id: "entry-name-only",
+      content: "Different content",
+    } as never,
+  ],
 );
-assert.equal(nameOnlyPlan.newEntries, 1, "A matching name alone must never attach a map lore link");
+assert.equal(
+  nameOnlyPlan.newEntries,
+  1,
+  "A matching name alone must never attach a map lore link",
+);
 
 async function main() {
-const requests: Array<{ method: string; path: string; body?: unknown }> = [];
-let nextFolder = 0;
-const api: PortableLoreApi = {
-  async post<T>(path: string, body?: unknown): Promise<T> {
-    requests.push({ method: "POST", path, body });
-    if (path === "/lorebooks") return { id: "imported-book" } as T;
-    if (path.endsWith("/folders")) {
-      nextFolder += 1;
-      return { id: `imported-folder-${nextFolder}` } as T;
-    }
-    if (path.endsWith("/entries/bulk")) {
-      const entries = (body as { entries: unknown[] }).entries;
-      return entries.map((_, index) => ({ id: `imported-entry-${index + 1}` })) as T;
-    }
-    throw new Error(`Unexpected POST ${path}`);
-  },
-  async patch<T>(path: string, body?: unknown): Promise<T> {
-    requests.push({ method: "PATCH", path, body });
-    return {} as T;
-  },
-  async delete<T>(path: string, body?: unknown): Promise<T> {
-    requests.push({ method: "DELETE", path, body });
-    return undefined as T;
-  },
-};
-const imported = await importPortableLoreBundle({
-  api,
-  bundle: complete,
-  plan: planPortableLoreImport(complete, [], []),
-  strategy: "separate",
-});
-assert.equal(imported.importedLorebooks, 1);
-assert.equal(imported.importedEntries, 2);
-assert.deepEqual(imported.createdLorebookIds, ["imported-book"]);
-assert.equal(requests.some((request) => request.method === "DELETE"), false, "Imported lorebooks remain after success");
-const bulkBody = requests.find((request) => request.path.endsWith("/entries/bulk"))?.body as {
-  entries: Array<Record<string, unknown>>;
-};
-assert.equal(bulkBody.entries[0]?.enabled, false);
-assert.equal(bulkBody.entries[0]?.relationships && Object.keys(bulkBody.entries[0].relationships as object).length, 0);
-assert.equal(bulkBody.entries[0]?.folderId, "imported-folder-2");
-const relationshipPatch = requests.find((request) => request.method === "PATCH")?.body as {
-  relationships: Record<string, string>;
-};
-assert.equal(relationshipPatch.relationships["imported-entry-2"], "supplies");
-const remapped = remapPortableLoreReferences(definition, complete, imported.entryIdMap);
-assert.deepEqual(remapped.locations[0]?.lorebookEntryIds, ["imported-entry-1"]);
-
-const rollbackRequests: string[] = [];
-await assert.rejects(
-  importPortableLoreBundle({
-    api: {
-      async post<T>(path: string): Promise<T> {
-        if (path === "/lorebooks") return { id: "rollback-book" } as T;
-        if (path.endsWith("/folders")) return { id: "rollback-folder" } as T;
-        throw new Error("Synthetic bulk failure");
-      },
-      async patch<T>(): Promise<T> {
-        return {} as T;
-      },
-      async delete<T>(path: string): Promise<T> {
-        rollbackRequests.push(path);
-        return undefined as T;
-      },
+  const requests: Array<{ method: string; path: string; body?: unknown }> = [];
+  let nextFolder = 0;
+  const api: PortableLoreApi = {
+    async post<T>(path: string, body?: unknown): Promise<T> {
+      requests.push({ method: "POST", path, body });
+      if (path === "/lorebooks") return { id: "imported-book" } as T;
+      if (path.endsWith("/folders")) {
+        nextFolder += 1;
+        return { id: `imported-folder-${nextFolder}` } as T;
+      }
+      if (path.endsWith("/entries/bulk")) {
+        const entries = (body as { entries: unknown[] }).entries;
+        return entries.map((_, index) => ({
+          id: `imported-entry-${index + 1}`,
+        })) as T;
+      }
+      throw new Error(`Unexpected POST ${path}`);
     },
-    bundle: linked,
-    plan: planPortableLoreImport(linked, [], []),
+    async patch<T>(path: string, body?: unknown): Promise<T> {
+      requests.push({ method: "PATCH", path, body });
+      return {} as T;
+    },
+    async delete<T>(path: string, body?: unknown): Promise<T> {
+      requests.push({ method: "DELETE", path, body });
+      return undefined as T;
+    },
+  };
+  const imported = await importPortableLoreBundle({
+    api,
+    bundle: complete,
+    plan: planPortableLoreImport(complete, [], []),
     strategy: "separate",
-  }),
-  /Synthetic bulk failure/u,
-);
-assert.deepEqual(rollbackRequests, ["/lorebooks/rollback-book"]);
+  });
+  assert.equal(imported.importedLorebooks, 1);
+  assert.equal(imported.importedEntries, 2);
+  assert.deepEqual(imported.createdLorebookIds, ["imported-book"]);
+  assert.equal(
+    requests.some((request) => request.method === "DELETE"),
+    false,
+    "Imported lorebooks remain after success",
+  );
+  const bulkBody = requests.find((request) =>
+    request.path.endsWith("/entries/bulk"),
+  )?.body as {
+    entries: Array<Record<string, unknown>>;
+  };
+  assert.equal(bulkBody.entries[0]?.enabled, false);
+  assert.equal(
+    bulkBody.entries[0]?.relationships &&
+      Object.keys(bulkBody.entries[0].relationships as object).length,
+    0,
+  );
+  assert.equal(bulkBody.entries[0]?.folderId, "imported-folder-2");
+  const relationshipPatch = requests.find(
+    (request) =>
+      request.method === "PATCH" &&
+      request.path === "/lorebooks/imported-book/entries/imported-entry-1",
+  )?.body as { relationships: Record<string, string> } | undefined;
+  assert.ok(
+    relationshipPatch,
+    "The harbor entry must receive a relationship patch",
+  );
+  assert.equal(relationshipPatch.relationships["imported-entry-2"], "supplies");
+  const remapped = remapPortableLoreReferences(
+    definition,
+    complete,
+    imported.entryIdMap,
+  );
+  assert.deepEqual(remapped.locations[0]?.lorebookEntryIds, [
+    "imported-entry-1",
+  ]);
 
-const workspaceSource = readFileSync(
-  resolve(
-    repoRoot,
-    "packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx",
-  ),
-  "utf8",
-);
-assert.match(workspaceSource, /formatVersion:\s*4/u);
-assert.match(workspaceSource, /Map \+ linked entries/u);
-assert.match(workspaceSource, /No name-only match was made/u);
-assert.match(workspaceSource, /parsePortableLoreBundle/u);
+  const rollbackRequests: string[] = [];
+  await assert.rejects(
+    importPortableLoreBundle({
+      api: {
+        async post<T>(path: string): Promise<T> {
+          if (path === "/lorebooks") return { id: "rollback-book" } as T;
+          if (path.endsWith("/folders")) return { id: "rollback-folder" } as T;
+          throw new Error("Synthetic bulk failure");
+        },
+        async patch<T>(): Promise<T> {
+          return {} as T;
+        },
+        async delete<T>(path: string): Promise<T> {
+          rollbackRequests.push(path);
+          return undefined as T;
+        },
+      },
+      bundle: linked,
+      plan: planPortableLoreImport(linked, [], []),
+      strategy: "separate",
+    }),
+    /Synthetic bulk failure/u,
+  );
+  assert.deepEqual(rollbackRequests, ["/lorebooks/rollback-book"]);
 
-console.info(
-  "World Maps portable lore regression passed: export scopes, readable provenance, exact/content/ambiguous matching, no name-only attachment, folder/settings preservation, relationship remapping, atomic rollback, and map-link rewrite.",
-);
+  let rollbackFailure: unknown;
+  try {
+    await importPortableLoreBundle({
+      api: {
+        async post<T>(path: string): Promise<T> {
+          if (path === "/lorebooks") return { id: "orphaned-book" } as T;
+          if (path.endsWith("/folders")) return { id: "orphaned-folder" } as T;
+          throw new Error("Synthetic import failure");
+        },
+        async patch<T>(): Promise<T> {
+          return {} as T;
+        },
+        async delete<T>(): Promise<T> {
+          throw new Error("Synthetic cleanup failure");
+        },
+      },
+      bundle: linked,
+      plan: planPortableLoreImport(linked, [], []),
+      strategy: "separate",
+    });
+  } catch (error) {
+    rollbackFailure = error;
+  }
+  assert.ok(rollbackFailure instanceof Error);
+  assert.match(rollbackFailure.message, /orphaned-book/u);
+  assert.deepEqual(
+    (rollbackFailure as Error & { orphanedLorebookIds?: string[] })
+      .orphanedLorebookIds,
+    ["orphaned-book"],
+  );
+
+  console.info(
+    "World Maps portable lore regression passed: export scopes, readable provenance, exact/content/ambiguous matching, no name-only attachment, folder/settings preservation, relationship remapping, atomic rollback, and map-link rewrite.",
+  );
 }
 
 void main().catch((error: unknown) => {

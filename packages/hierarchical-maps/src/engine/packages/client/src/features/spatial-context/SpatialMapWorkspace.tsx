@@ -68,6 +68,7 @@ import {
 import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
 import { SpatialLocationIcon } from "./components/SpatialLocationIcon";
 import { PortableLoreImportDialog } from "./components/PortableLoreImportDialog";
+import { useModalKeyboardNavigation } from "./components/use-modal-keyboard-navigation";
 import {
   addSpatialLocation,
   archiveSpatialLocation,
@@ -443,6 +444,8 @@ export function SpatialMapWorkspace({
   const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const confirmationDialogRef = useRef<HTMLDivElement>(null);
   const confirmationCancelRef = useRef<HTMLButtonElement>(null);
+  const exportDialogRef = useRef<HTMLDivElement>(null);
+  const exportCloseRef = useRef<HTMLButtonElement>(null);
   const [initialized, setInitialized] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [baseTemplateName, setBaseTemplateName] = useState("");
@@ -513,46 +516,12 @@ export function SpatialMapWorkspace({
     });
   }, []);
 
-  useEffect(() => {
-    if (!pendingConfirmation) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusFrame = window.requestAnimationFrame(() => confirmationCancelRef.current?.focus());
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        resolveConfirmation(false);
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(
-        confirmationDialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      );
-      const first = focusable[0];
-      const last = focusable.at(-1);
-      if (!first || !last) return;
-      if (
-        event.shiftKey &&
-        (document.activeElement === first || !confirmationDialogRef.current?.contains(document.activeElement))
-      ) {
-        event.preventDefault();
-        last.focus();
-      } else if (
-        !event.shiftKey &&
-        (document.activeElement === last || !confirmationDialogRef.current?.contains(document.activeElement))
-      ) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      window.removeEventListener("keydown", handleKeyDown);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, [pendingConfirmation, resolveConfirmation]);
+  useModalKeyboardNavigation({
+    dialogRef: confirmationDialogRef,
+    initialFocusRef: confirmationCancelRef,
+    open: Boolean(pendingConfirmation),
+    onEscape: () => resolveConfirmation(false),
+  });
 
   useEffect(
     () => () => {
@@ -1266,7 +1235,7 @@ export function SpatialMapWorkspace({
 
   const portableExportBundle = useMemo(
     () =>
-      draft
+      exportDialogOpen && draft
         ? buildPortableLoreBundle({
             definition: draft,
             mode: exportLoreMode,
@@ -1275,8 +1244,26 @@ export function SpatialMapWorkspace({
             foldersByLorebookId: exportFoldersByLorebookId,
           })
         : null,
-    [draft, exportFoldersByLorebookId, exportLoreMode, lorebookEntriesQuery.entries, lorebooks],
+    [draft, exportDialogOpen, exportFoldersByLorebookId, exportLoreMode, lorebookEntriesQuery.entries, lorebooks],
   );
+  const portableExportEntryCount = useMemo(
+    () => portableExportBundle?.books.reduce((count, book) => count + book.entries.length, 0) ?? 0,
+    [portableExportBundle],
+  );
+  const portableExportKilobytes = useMemo(
+    () =>
+      portableExportBundle
+        ? Math.max(1, Math.ceil(portableLoreApproximateBytes(portableExportBundle) / 1024))
+        : 0,
+    [portableExportBundle],
+  );
+  useModalKeyboardNavigation({
+    dialogRef: exportDialogRef,
+    initialFocusRef: exportCloseRef,
+    open: exportDialogOpen && Boolean(portableExportBundle),
+    disabled: isExporting,
+    onEscape: () => setExportDialogOpen(false),
+  });
 
   const openExportDialog = useCallback(async () => {
     if (!draft || isExporting) return;
@@ -1421,6 +1408,7 @@ export function SpatialMapWorkspace({
       definition: SpatialContextDefinition,
       portableLore: PortableLoreBundle | null,
       entryIdMap: ReadonlyMap<string, string>,
+      onDraftApplied?: () => void,
     ) => {
       const loreRemappedDefinition = portableLore
         ? remapPortableLoreReferences(definition, portableLore, entryIdMap)
@@ -1465,6 +1453,7 @@ export function SpatialMapWorkspace({
       };
       const importedProfile = normalizeHierarchyProfile(rawRecord?.hierarchyProfile, imported);
       applyDraft(imported);
+      onDraftApplied?.();
       setDraftHierarchyProfile(importedProfile);
       setImportIdReport(null);
       setFirstMapGenerationSession(null);
@@ -1523,8 +1512,9 @@ export function SpatialMapWorkspace({
             `Campaign history uses ${missing.length} location ID${missing.length === 1 ? "" : "s"} missing from this file. Review the repair steps shown in the editor.`,
           );
         }
-        const hasPortableLore = Boolean(rawRecord && "portableLore" in rawRecord);
-        const portableLore = hasPortableLore ? parsePortableLoreBundle(rawRecord?.portableLore) : null;
+        const portableLoreValue = rawRecord?.portableLore;
+        const hasPortableLore = portableLoreValue !== null && portableLoreValue !== undefined;
+        const portableLore = hasPortableLore ? parsePortableLoreBundle(portableLoreValue) : null;
         if (hasPortableLore && !portableLore) {
           throw new Error("This file contains invalid or unsupported portable lore data.");
         }
@@ -1565,6 +1555,7 @@ export function SpatialMapWorkspace({
       if (!pendingPortableLoreImport || isImporting) return;
       setIsImporting(true);
       let createdLorebookIds: string[] = [];
+      let draftApplied = false;
       try {
         const result = await importPortableLoreBundle({
           api: packageApi,
@@ -1579,6 +1570,9 @@ export function SpatialMapWorkspace({
           pendingPortableLoreImport.definition,
           pendingPortableLoreImport.bundle,
           result.entryIdMap,
+          () => {
+            draftApplied = true;
+          },
         );
         setPendingPortableLoreImport(null);
         await lorebooksQuery.refetch();
@@ -1586,7 +1580,7 @@ export function SpatialMapWorkspace({
           `${result.reusedEntries} lore link${result.reusedEntries === 1 ? " was" : "s were"} reused; ${result.importedEntries} entr${result.importedEntries === 1 ? "y was" : "ies were"} imported. Imported lorebooks remain in your library if this map is later deleted.`,
         );
       } catch (error) {
-        if (createdLorebookIds.length > 0) {
+        if (!draftApplied && createdLorebookIds.length > 0) {
           await Promise.allSettled(
             createdLorebookIds.map((lorebookId) => packageApi.delete(`/lorebooks/${lorebookId}`)),
           );
@@ -2515,6 +2509,7 @@ export function SpatialMapWorkspace({
 
       {exportDialogOpen && portableExportBundle && (
         <div
+          ref={exportDialogRef}
           data-chat-floating-panel
           role="dialog"
           aria-modal="true"
@@ -2533,6 +2528,7 @@ export function SpatialMapWorkspace({
                 </p>
               </div>
               <button
+                ref={exportCloseRef}
                 type="button"
                 onClick={() => setExportDialogOpen(false)}
                 disabled={isExporting}
@@ -2589,10 +2585,10 @@ export function SpatialMapWorkspace({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
                     {portableExportBundle.books.length} lorebook{portableExportBundle.books.length === 1 ? "" : "s"} ·{" "}
-                    {portableExportBundle.books.reduce((count, book) => count + book.entries.length, 0)} entries
+                    {portableExportEntryCount} {portableExportEntryCount === 1 ? "entry" : "entries"}
                   </span>
                   <span className="text-[var(--marinara-chat-chrome-panel-muted)]">
-                    About {Math.max(1, Math.ceil(portableLoreApproximateBytes(portableExportBundle) / 1024))} KB
+                    About {portableExportKilobytes} KB
                   </span>
                 </div>
                 {portableExportBundle.books.length > 0 && (
@@ -3614,7 +3610,9 @@ export function SpatialMapWorkspace({
               </div>
               <button
                 type="button"
+                disabled={isImporting}
                 onClick={() => {
+                  if (isImporting) return;
                   const unresolvedByLocation = new Map<string, Set<string>>();
                   for (const reference of unresolvedLoreReferences) {
                     const ids = unresolvedByLocation.get(reference.locationId) ?? new Set<string>();
@@ -3633,7 +3631,7 @@ export function SpatialMapWorkspace({
                   setUnresolvedLoreReferences([]);
                   toast.success("Unresolved lore links detached from the working copy. Click Save to keep the change.");
                 }}
-                className="mari-chrome-control min-h-11 px-3 text-xs"
+                className="mari-chrome-control min-h-11 px-3 text-xs disabled:opacity-45"
               >
                 Detach unresolved links
               </button>

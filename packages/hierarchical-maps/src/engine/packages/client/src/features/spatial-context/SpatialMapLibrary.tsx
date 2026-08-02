@@ -57,6 +57,7 @@ import {
 import { cn, WORLD_MAPS_GUIDE_URL } from "./package-utils";
 import { packageApi } from "./package-api";
 import { PortableLoreImportDialog } from "./components/PortableLoreImportDialog";
+import { useModalKeyboardNavigation } from "./components/use-modal-keyboard-navigation";
 import {
   importPortableLoreBundle,
   parsePortableLoreBundle,
@@ -131,9 +132,19 @@ export function SpatialMapLibrary({
   const linkSharedWorld = useLinkSpatialSharedWorld();
   const replaceWithIndependentWorld = useReplaceWithIndependentSpatialWorld();
   const globalGalleryImages = useSpatialGlobalGalleryImages();
+  const [isImporting, setIsImporting] = useState(false);
+  const [pendingPortableLoreImport, setPendingPortableLoreImport] =
+    useState<PendingLibraryPortableLoreImport | null>(null);
   const lorebooksQuery = useSpatialLorebooks();
   const { data: lorebooks = [] } = lorebooksQuery;
-  const lorebookEntriesQuery = useSpatialLorebookEntries(lorebooks.map((lorebook) => lorebook.id));
+  const portableLorebookIds = useMemo(
+    () =>
+      isImporting || pendingPortableLoreImport
+        ? lorebooks.map((lorebook) => lorebook.id)
+        : [],
+    [isImporting, lorebooks, pendingPortableLoreImport],
+  );
+  const lorebookEntriesQuery = useSpatialLorebookEntries(portableLorebookIds);
   const spatial = useSpatialContext(chatId);
   const updateSpatial = useUpdateSpatialContext();
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -141,9 +152,6 @@ export function SpatialMapLibrary({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingSharedWorldId, setEditingSharedWorldId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [isImporting, setIsImporting] = useState(false);
-  const [pendingPortableLoreImport, setPendingPortableLoreImport] =
-    useState<PendingLibraryPortableLoreImport | null>(null);
   const [editingUnresolvedLoreReferences, setEditingUnresolvedLoreReferences] =
     useState<PortableLoreReference[]>([]);
   const [pendingConfirmation, setPendingConfirmation] = useState<LibraryConfirmationOptions | null>(null);
@@ -179,46 +187,12 @@ export function SpatialMapLibrary({
     });
   }, []);
 
-  useEffect(() => {
-    if (!pendingConfirmation) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusFrame = window.requestAnimationFrame(() => confirmationCancelRef.current?.focus());
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        resolveConfirmation(false);
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(
-        confirmationDialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      );
-      const first = focusable[0];
-      const last = focusable.at(-1);
-      if (!first || !last) return;
-      if (
-        event.shiftKey &&
-        (document.activeElement === first || !confirmationDialogRef.current?.contains(document.activeElement))
-      ) {
-        event.preventDefault();
-        last.focus();
-      } else if (
-        !event.shiftKey &&
-        (document.activeElement === last || !confirmationDialogRef.current?.contains(document.activeElement))
-      ) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      window.removeEventListener("keydown", handleKeyDown);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, [pendingConfirmation, resolveConfirmation]);
+  useModalKeyboardNavigation({
+    dialogRef: confirmationDialogRef,
+    initialFocusRef: confirmationCancelRef,
+    open: Boolean(pendingConfirmation),
+    onEscape: () => resolveConfirmation(false),
+  });
 
   useEffect(
     () => () => {
@@ -325,13 +299,14 @@ export function SpatialMapLibrary({
     );
     if (options.target === "shared-world") setEditingSharedWorldId(created.id);
     else setEditingId(created.id);
+    return created.id;
   };
 
   const importTemplate = async (event: ChangeEvent<HTMLInputElement>) => {
     const target = importTargetRef.current;
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || isImporting) return;
+    if (!file || isImporting || pendingPortableLoreImport) return;
     setIsImporting(true);
     try {
       const raw = JSON.parse(await file.text()) as unknown;
@@ -343,10 +318,14 @@ export function SpatialMapLibrary({
       const candidate = data && "definition" in data ? data.definition : raw;
       const parsed = spatialContextDefinitionSchema.safeParse(candidate);
       if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "This is not a valid map file.");
-      const hasPortableLore = Boolean(record && "portableLore" in record);
-      const portableLore = hasPortableLore ? parsePortableLoreBundle(record?.portableLore) : null;
+      const portableLoreValue = record?.portableLore;
+      const hasPortableLore = portableLoreValue !== null && portableLoreValue !== undefined;
+      const portableLore = hasPortableLore ? parsePortableLoreBundle(portableLoreValue) : null;
       if (hasPortableLore && !portableLore) {
         throw new Error("This file contains invalid or unsupported portable lore data.");
+      }
+      if (portableLore && portableLore.references.length > 0 && !lorebookEntriesQuery.entries) {
+        throw new Error("Lore entries are still loading. Try the import again in a moment.");
       }
       if (portableLore && portableLore.books.length > 0) {
         const entries = lorebookEntriesQuery.entries;
@@ -385,6 +364,11 @@ export function SpatialMapLibrary({
     if (!pendingPortableLoreImport || isImporting) return;
     setIsImporting(true);
     let createdLorebookIds: string[] = [];
+    let createdRecordId: string | null = null;
+    let importSummary: {
+      reusedEntries: number;
+      importedEntries: number;
+    } | null = null;
     try {
       const result = await importPortableLoreBundle({
         api: packageApi,
@@ -394,7 +378,7 @@ export function SpatialMapLibrary({
         ambiguousSelections: selections,
       });
       createdLorebookIds = result.createdLorebookIds;
-      await finishLibraryImport({
+      createdRecordId = await finishLibraryImport({
         record: pendingPortableLoreImport.record,
         data: pendingPortableLoreImport.data,
         definition: pendingPortableLoreImport.definition,
@@ -404,20 +388,28 @@ export function SpatialMapLibrary({
         entryIdMap: result.entryIdMap,
       });
       setPendingPortableLoreImport(null);
-      await lorebooksQuery.refetch();
-      toast.success(
-        `${result.reusedEntries} lore link${result.reusedEntries === 1 ? " was" : "s were"} reused; ${result.importedEntries} entr${result.importedEntries === 1 ? "y was" : "ies were"} imported. Imported lorebooks stay independent of the map.`,
-      );
+      importSummary = result;
     } catch (error) {
-      if (createdLorebookIds.length > 0) {
+      if (!createdRecordId && createdLorebookIds.length > 0) {
         await Promise.allSettled(
           createdLorebookIds.map((lorebookId) => packageApi.delete(`/lorebooks/${lorebookId}`)),
         );
       }
       toast.error(error instanceof Error ? error.message : "The portable lore could not be restored.");
-    } finally {
       setIsImporting(false);
+      return;
     }
+    try {
+      await lorebooksQuery.refetch();
+    } catch {
+      toast.error("The map was imported, but the lorebook list could not be refreshed.");
+    }
+    if (importSummary) {
+      toast.success(
+        `${importSummary.reusedEntries} lore link${importSummary.reusedEntries === 1 ? " was" : "s were"} reused; ${importSummary.importedEntries} entr${importSummary.importedEntries === 1 ? "y was" : "ies were"} imported. Imported lorebooks stay independent of the map.`,
+      );
+    }
+    setIsImporting(false);
   };
 
   const removeTemplate = async (template: SpatialMapTemplateRecord) => {

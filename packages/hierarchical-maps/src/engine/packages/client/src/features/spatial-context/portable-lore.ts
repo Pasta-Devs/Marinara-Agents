@@ -266,6 +266,7 @@ export function buildPortableLoreBundle(options: {
     .map((entryId) => entriesById.get(entryId))
     .filter((entry): entry is LorebookEntry => Boolean(entry));
   const linkedBookIds = new Set(linkedEntries.map((entry) => entry.lorebookId));
+  const linkedEntryIds = new Set(linkedEntries.map((entry) => entry.id));
   const selectedBooks = options.lorebooks
     .filter((book) => linkedBookIds.has(book.id))
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -279,9 +280,7 @@ export function buildPortableLoreBundle(options: {
     return (
       options.mode === "complete-lorebooks"
         ? bookEntries
-        : bookEntries.filter((entry) =>
-            linkedEntries.some((linked) => linked.id === entry.id),
-          )
+        : bookEntries.filter((entry) => linkedEntryIds.has(entry.id))
     ).sort((left, right) => left.id.localeCompare(right.id));
   });
   const entryKeyById = new Map(
@@ -470,7 +469,8 @@ export function parsePortableLoreBundle(
       typeof reference.originalEntryId !== "string" ||
       typeof reference.originalEntryName !== "string" ||
       typeof reference.originalLorebookName !== "string" ||
-      (reference.originalLorebookId !== null && typeof reference.originalLorebookId !== "string") ||
+      (reference.originalLorebookId !== null &&
+        typeof reference.originalLorebookId !== "string") ||
       (reference.entryKey !== null && typeof reference.entryKey !== "string")
     ) {
       return null;
@@ -478,7 +478,46 @@ export function parsePortableLoreBundle(
     if (reference.entryKey !== null && !entryKeys.has(reference.entryKey))
       return null;
   }
-  return { schemaVersion: 1, mode: value.mode, books, references };
+  return {
+    schemaVersion: 1,
+    mode: value.mode,
+    books: books.map((book) => ({
+      key: book.key,
+      originalId: book.originalId,
+      name: book.name,
+      settings: pickRecord(book.settings, LOREBOOK_SETTING_KEYS),
+      folders: book.folders.map((folder) => ({
+        key: folder.key,
+        originalId: folder.originalId,
+        parentKey: folder.parentKey,
+        data: {
+          name: folder.data.name,
+          enabled: folder.data.enabled,
+          order: folder.data.order,
+        },
+      })),
+      entries: book.entries.map((entry) => ({
+        key: entry.key,
+        originalId: entry.originalId,
+        name: entry.name,
+        folderKey: entry.folderKey,
+        fingerprint: entry.fingerprint,
+        data: {
+          name: entry.name,
+          ...pickRecord(entry.data, ENTRY_SETTING_KEYS),
+        },
+      })),
+    })),
+    references: references.map((reference) => ({
+      locationId: reference.locationId,
+      locationName: reference.locationName,
+      entryKey: reference.entryKey,
+      originalLorebookId: reference.originalLorebookId,
+      originalLorebookName: reference.originalLorebookName,
+      originalEntryId: reference.originalEntryId,
+      originalEntryName: reference.originalEntryName,
+    })),
+  };
 }
 
 export function planPortableLoreImport(
@@ -491,10 +530,9 @@ export function planPortableLoreImport(
   const entriesByFingerprint = new Map<string, LorebookEntry[]>();
   for (const entry of entries) {
     const fingerprint = portableEntryFingerprint(portableEntryData(entry));
-    entriesByFingerprint.set(fingerprint, [
-      ...(entriesByFingerprint.get(fingerprint) ?? []),
-      entry,
-    ]);
+    const matches = entriesByFingerprint.get(fingerprint);
+    if (matches) matches.push(entry);
+    else entriesByFingerprint.set(fingerprint, [entry]);
   }
   const planEntries = bundle.books.flatMap((book) =>
     book.entries.map((entry): PortableLoreImportPlanEntry => {
@@ -673,34 +711,46 @@ export async function importPortableLoreBundle(options: {
         book.entries.map((entry) => [entry.originalId, entry.key] as const),
       ),
     );
-    await Promise.all(
-      options.bundle.books.flatMap((book) =>
-        book.entries.flatMap((entry) => {
-          const destination = importedDestinations.get(entry.key);
-          if (!destination || !isRecord(entry.data.relationships)) return [];
-          const relationships = Object.fromEntries(
-            Object.entries(entry.data.relationships).map(
-              ([relatedEntryId, relationship]) => {
-                const relatedKey = entryKeyByOriginalId.get(relatedEntryId);
-                return [
-                  relatedKey
-                    ? (entryIdMap.get(relatedKey) ?? relatedEntryId)
-                    : relatedEntryId,
-                  relationship,
-                ];
-              },
-            ),
-          );
-          if (Object.keys(relationships).length === 0) return [];
-          return [
-            options.api.patch(
-              `/lorebooks/${destination.lorebookId}/entries/${destination.entryId}`,
-              { relationships },
-            ),
-          ];
-        }),
-      ),
+    const relationshipPatches = options.bundle.books.flatMap((book) =>
+      book.entries.flatMap((entry) => {
+        const destination = importedDestinations.get(entry.key);
+        if (!destination || !isRecord(entry.data.relationships)) return [];
+        const relationships = Object.fromEntries(
+          Object.entries(entry.data.relationships).map(
+            ([relatedEntryId, relationship]) => {
+              const relatedKey = entryKeyByOriginalId.get(relatedEntryId);
+              return [
+                relatedKey
+                  ? (entryIdMap.get(relatedKey) ?? relatedEntryId)
+                  : relatedEntryId,
+                relationship,
+              ];
+            },
+          ),
+        );
+        if (Object.keys(relationships).length === 0) return [];
+        return [
+          {
+            path: `/lorebooks/${destination.lorebookId}/entries/${destination.entryId}`,
+            body: { relationships },
+          },
+        ];
+      }),
     );
+    const relationshipPatchChunkSize = 10;
+    for (
+      let index = 0;
+      index < relationshipPatches.length;
+      index += relationshipPatchChunkSize
+    ) {
+      const results = await Promise.allSettled(
+        relationshipPatches
+          .slice(index, index + relationshipPatchChunkSize)
+          .map((request) => options.api.patch(request.path, request.body)),
+      );
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure?.status === "rejected") throw failure.reason;
+    }
     return {
       entryIdMap,
       reusedEntries,
@@ -709,11 +759,23 @@ export async function importPortableLoreBundle(options: {
       createdLorebookIds,
     };
   } catch (error) {
-    await Promise.allSettled(
+    const cleanupResults = await Promise.allSettled(
       createdLorebookIds.map((lorebookId) =>
         options.api.delete(`/lorebooks/${lorebookId}`),
       ),
     );
+    const orphanedLorebookIds = createdLorebookIds.filter(
+      (_lorebookId, index) => cleanupResults[index]?.status === "rejected",
+    );
+    if (orphanedLorebookIds.length > 0) {
+      const importError =
+        error instanceof Error
+          ? error
+          : new Error("The portable lore import failed.");
+      Object.assign(importError, { orphanedLorebookIds });
+      importError.message = `${importError.message} Cleanup also failed for lorebook ID${orphanedLorebookIds.length === 1 ? "" : "s"} ${orphanedLorebookIds.join(", ")}; remove ${orphanedLorebookIds.length === 1 ? "it" : "them"} manually.`;
+      throw importError;
+    }
     throw error;
   }
 }
@@ -725,10 +787,9 @@ export function remapPortableLoreReferences(
 ): SpatialContextDefinition {
   const referencesByLocation = new Map<string, PortableLoreReference[]>();
   for (const reference of bundle.references) {
-    referencesByLocation.set(reference.locationId, [
-      ...(referencesByLocation.get(reference.locationId) ?? []),
-      reference,
-    ]);
+    const locationReferences = referencesByLocation.get(reference.locationId);
+    if (locationReferences) locationReferences.push(reference);
+    else referencesByLocation.set(reference.locationId, [reference]);
   }
   return {
     ...definition,

@@ -2645,9 +2645,15 @@ test("portable map export restores linked lore with new IDs before save", async 
     await expect(workspace).toBeVisible();
     await workspace.getByRole("button", { name: /More map actions/u }).click();
     await workspace.getByRole("button", { name: "Export world map" }).click();
-    const exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+    let exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+    await expect(exportDialog.getByRole("button", { name: "Cancel map export" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(exportDialog).toHaveCount(0);
+    await workspace.getByRole("button", { name: /More map actions/u }).click();
+    await workspace.getByRole("button", { name: "Export world map" }).click();
+    exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
     await expect(exportDialog).toContainText(`${lorebookName}`);
-    await expect(exportDialog).toContainText("1 entries");
+    await expect(exportDialog).toContainText("1 entry");
     const downloadPromise = page.waitForEvent("download");
     await exportDialog.getByRole("button", { name: "Download export" }).click();
     const download = await downloadPromise;
@@ -2682,6 +2688,7 @@ test("portable map export restores linked lore with new IDs before save", async 
       buffer: Buffer.from(exportedMapText),
     });
     const importDialog = page.getByRole("dialog", { name: "Restore portable map lore" });
+    await expect(importDialog.getByRole("button", { name: "Cancel portable lore import" })).toBeFocused();
     await expect(importDialog).toContainText("1 entry");
     await expect(importDialog).toContainText("New entries");
     await importDialog.getByRole("button", { name: "Import separate copies" }).click();

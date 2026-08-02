@@ -1,10 +1,11 @@
 import { AlertTriangle, BookOpen, Copy, Link2, Loader2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   PortableLoreBundle,
   PortableLoreImportPlan,
   PortableLoreImportStrategy,
 } from "../portable-lore";
+import { useModalKeyboardNavigation } from "./use-modal-keyboard-navigation";
 
 interface PortableLoreImportDialogProps {
   bundle: PortableLoreBundle;
@@ -24,6 +25,15 @@ export function PortableLoreImportDialog({
   onCancel,
   onImport,
 }: PortableLoreImportDialogProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useModalKeyboardNavigation({
+    dialogRef,
+    initialFocusRef: cancelRef,
+    open: true,
+    disabled: busy,
+    onEscape: onCancel,
+  });
   const ambiguousEntries = useMemo(
     () => plan.entries.filter((entry) => entry.candidates.length > 1),
     [plan.entries],
@@ -46,6 +56,7 @@ export function PortableLoreImportDialog({
 
   return (
     <div
+      ref={dialogRef}
       data-chat-floating-panel
       role="dialog"
       aria-modal="true"
@@ -70,6 +81,7 @@ export function PortableLoreImportDialog({
             </p>
           </div>
           <button
+            ref={cancelRef}
             type="button"
             onClick={onCancel}
             disabled={busy}
