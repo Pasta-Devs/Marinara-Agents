@@ -1530,8 +1530,11 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     const globalGalleryBeforeImport = await page.request.get("/api/global-gallery");
     expect(globalGalleryBeforeImport.ok(), await globalGalleryBeforeImport.text()).toBeTruthy();
     const globalImageCountBeforeImport = ((await globalGalleryBeforeImport.json()) as Array<unknown>).length;
-    const downloadPromise = page.waitForEvent("download");
     await workspace.getByRole("button", { name: "Export world map" }).click();
+    const exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+    await expect(exportDialog.getByRole("radio", { name: /Map \+ linked entries/u })).toBeChecked();
+    const downloadPromise = page.waitForEvent("download");
+    await exportDialog.getByRole("button", { name: "Download export" }).click();
     const download = await downloadPromise;
     const downloadPath = await download.path();
     expect(downloadPath).not.toBeNull();
@@ -2558,6 +2561,197 @@ test("missing location lore explains the problem without exposing opaque entry I
   }
 });
 
+test("portable map export restores linked lore with new IDs before save", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The portable import contract is viewport-independent.");
+  test.setTimeout(120_000);
+  const suffix = `${testInfo.project.name}-${Date.now()}`;
+  const lorebookName = `Portable Coast ${suffix}`;
+  const lorebookResponse = await page.request.post("/api/lorebooks", {
+    data: {
+      name: lorebookName,
+      description: "Portable map lore regression fixture.",
+      category: "world",
+      enabled: false,
+      tokenBudget: 1234,
+    },
+  });
+  expect(lorebookResponse.ok(), await lorebookResponse.text()).toBeTruthy();
+  const originalLorebook = (await lorebookResponse.json()) as { id: string };
+  const folderResponse = await page.request.post(`/api/lorebooks/${originalLorebook.id}/folders`, {
+    data: { name: "Harbor records", enabled: false, parentFolderId: null, order: 7 },
+  });
+  expect(folderResponse.ok(), await folderResponse.text()).toBeTruthy();
+  const originalFolder = (await folderResponse.json()) as { id: string };
+  const entryResponse = await page.request.post(`/api/lorebooks/${originalLorebook.id}/entries`, {
+    data: {
+      name: "Portable harbor ledger",
+      content: "The harbor master keeps a portable smuggling ledger.",
+      keys: ["portable harbor"],
+      enabled: false,
+      order: 19,
+      folderId: originalFolder.id,
+    },
+  });
+  expect(entryResponse.ok(), await entryResponse.text()).toBeTruthy();
+  const originalEntry = (await entryResponse.json()) as { id: string };
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: `Portable Lore Map ${suffix}`, mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: {
+        ...generatedDefinition,
+        enabled: true,
+        startingLocationId: "ai_harbor",
+        locations: generatedDefinition.locations.map((location) =>
+          location.id === "ai_harbor"
+            ? { ...location, lorebookEntryIds: [originalEntry.id] }
+            : location,
+        ),
+      },
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+  let importedLorebookId: string | null = null;
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    await expect(workspace).toBeVisible();
+    await workspace.getByRole("button", { name: /More map actions/u }).click();
+    await workspace.getByRole("button", { name: "Export world map" }).click();
+    let exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+    await expect(exportDialog.getByRole("button", { name: "Cancel map export" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(exportDialog).toHaveCount(0);
+    await workspace.getByRole("button", { name: /More map actions/u }).click();
+    await workspace.getByRole("button", { name: "Export world map" }).click();
+    exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+    await expect(exportDialog).toContainText(`${lorebookName}`);
+    await expect(exportDialog).toContainText("1 entry");
+    const downloadPromise = page.waitForEvent("download");
+    await exportDialog.getByRole("button", { name: "Download export" }).click();
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const exportedMapText = await readFile(downloadPath!, "utf8");
+    const exportedMap = JSON.parse(exportedMapText) as {
+      formatVersion: number;
+      portableLore: {
+        mode: string;
+        books: Array<{ name: string; entries: Array<{ originalId: string }> }>;
+        references: Array<{ originalEntryId: string; originalEntryName: string }>;
+      };
+    };
+    expect(exportedMap).toMatchObject({
+      formatVersion: 4,
+      portableLore: {
+        mode: "linked-entries",
+        books: [{ name: lorebookName, entries: [{ originalId: originalEntry.id }] }],
+        references: [{ originalEntryId: originalEntry.id, originalEntryName: "Portable harbor ledger" }],
+      },
+    });
+
+    const deleteLorebookResponse = await page.request.delete(`/api/lorebooks/${originalLorebook.id}`);
+    expect(deleteLorebookResponse.ok(), await deleteLorebookResponse.text()).toBeTruthy();
+    await page.reload();
+    await dismissOnboardingTutorial(page);
+    await expect(workspace).toBeVisible();
+    await workspace.locator("[data-marinara-map-import-input]").setInputFiles({
+      name: download.suggestedFilename(),
+      mimeType: "application/json",
+      buffer: Buffer.from(exportedMapText),
+    });
+    const importDialog = page.getByRole("dialog", { name: "Restore portable map lore" });
+    await expect(importDialog.getByRole("button", { name: "Cancel portable lore import" })).toBeFocused();
+    await expect(importDialog).toContainText("1 entry");
+    await expect(importDialog).toContainText("New entries");
+    await importDialog.getByRole("button", { name: "Import separate copies" }).click();
+    await expect(page.getByText(/1 entry was imported/u)).toBeVisible();
+    await expect(workspace.locator("[data-marinara-portable-lore-unresolved]")).toHaveCount(0);
+    const saveButton = workspace.getByRole("button", { name: "Save", exact: true });
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+    await expect(workspace).toContainText("Saved");
+
+    const lorebooksAfterImportResponse = await page.request.get("/api/lorebooks");
+    expect(lorebooksAfterImportResponse.ok(), await lorebooksAfterImportResponse.text()).toBeTruthy();
+    const importedLorebook = ((await lorebooksAfterImportResponse.json()) as Array<{
+      id: string;
+      name: string;
+      enabled: boolean;
+      tokenBudget: number;
+    }>).find((candidate) => candidate.name === lorebookName);
+    expect(importedLorebook).toMatchObject({ enabled: false, tokenBudget: 1234 });
+    importedLorebookId = importedLorebook?.id ?? null;
+    expect(importedLorebookId).not.toBeNull();
+    expect(importedLorebookId).not.toBe(originalLorebook.id);
+    const importedEntriesResponse = await page.request.get(`/api/lorebooks/${importedLorebookId}/entries`);
+    expect(importedEntriesResponse.ok(), await importedEntriesResponse.text()).toBeTruthy();
+    const importedEntries = (await importedEntriesResponse.json()) as Array<{
+      id: string;
+      name: string;
+      enabled: boolean;
+      folderId: string | null;
+    }>;
+    expect(importedEntries).toHaveLength(1);
+    expect(importedEntries[0]).toMatchObject({ name: "Portable harbor ledger", enabled: false });
+    expect(importedEntries[0]?.id).not.toBe(originalEntry.id);
+    const importedFoldersResponse = await page.request.get(`/api/lorebooks/${importedLorebookId}/folders`);
+    expect(importedFoldersResponse.ok(), await importedFoldersResponse.text()).toBeTruthy();
+    expect(await importedFoldersResponse.json()).toEqual([
+      expect.objectContaining({ name: "Harbor records", enabled: false, order: 7 }),
+    ]);
+    expect(importedEntries[0]?.folderId).not.toBeNull();
+    const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(storedResponse.ok(), await storedResponse.text()).toBeTruthy();
+    const stored = (await storedResponse.json()) as {
+      definition: { locations: Array<{ id: string; lorebookEntryIds: string[] }> };
+    };
+    expect(stored.definition.locations.find((location) => location.id === "ai_harbor")?.lorebookEntryIds).toEqual([
+      importedEntries[0]?.id,
+    ]);
+
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+    const retainedLorebookResponse = await page.request.get(`/api/lorebooks/${importedLorebookId}`);
+    expect(retainedLorebookResponse.ok(), await retainedLorebookResponse.text()).toBeTruthy();
+  } finally {
+    const chatCheck = await page.request.get(`/api/chats/${chat.id}`);
+    if (chatCheck.ok()) await expectDeleted(page, `/api/chats/${chat.id}`);
+    const originalLorebookCheck = await page.request.get(`/api/lorebooks/${originalLorebook.id}`);
+    if (originalLorebookCheck.ok()) await expectDeleted(page, `/api/lorebooks/${originalLorebook.id}`);
+    if (importedLorebookId) {
+      const importedLorebookCheck = await page.request.get(`/api/lorebooks/${importedLorebookId}`);
+      if (importedLorebookCheck.ok()) await expectDeleted(page, `/api/lorebooks/${importedLorebookId}`);
+    }
+  }
+});
+
 test("opening linked lore protects unsaved map edits", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "The guarded navigation contract is viewport-independent.");
   test.setTimeout(90_000);
@@ -3539,9 +3733,12 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(exportMap.locator("svg")).toHaveClass(/lucide-upload/);
     await expect(importMap.locator("svg")).toHaveClass(/lucide-download/);
     if (!mobile) {
-      await expect(page.getByRole("checkbox", { name: "Include map artwork" })).toBeChecked();
-      const downloadPromise = page.waitForEvent("download");
       await exportMap.click();
+      const exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+      await expect(exportDialog.getByRole("checkbox", { name: "Include map artwork" })).toBeChecked();
+      await expect(exportDialog.getByRole("radio", { name: /Map \+ linked entries/u })).toBeChecked();
+      const downloadPromise = page.waitForEvent("download");
+      await exportDialog.getByRole("button", { name: "Download export" }).click();
       const download = await downloadPromise;
       expect(download.suggestedFilename()).toMatch(/\.world-map\.json$/u);
       const downloadPath = await download.path();
@@ -3550,11 +3747,13 @@ test("AI map expansion preserves a campaign map and its current location", async
       const exportedMap = JSON.parse(exportedMapText) as {
         format: string;
         formatVersion: number;
+        portableLore: { schemaVersion: number; mode: string };
         artwork: Array<{ sourceImageId: string; filename: string; data: string }>;
       };
       expect(exportedMap).toMatchObject({
         format: "marinara-hierarchical-map",
-        formatVersion: 3,
+        formatVersion: 4,
+        portableLore: { schemaVersion: 1, mode: "linked-entries" },
       });
       expect(exportedMap.artwork).toHaveLength(1);
       expect(exportedMap.artwork[0]).toMatchObject({
