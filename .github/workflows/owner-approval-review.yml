@@ -1,0 +1,77 @@
+name: Owner Approval Review Refresh
+
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+
+concurrency:
+  group: owner-approval-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  refresh-owner-approval:
+    name: "${{ github.event.pull_request.base.ref == 'staging' && github.event.review.user.login == 'SpicyMarinara' && 'Owner approval for outside contributors' || 'Ignore unrelated approval review' }}"
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    env:
+      REVIEW_EVENT_RELEVANT: "${{ github.event.pull_request.base.ref == 'staging' && github.event.review.user.login == 'SpicyMarinara' }}"
+    steps:
+      - name: Ignore unrelated review event
+        if: env.REVIEW_EVENT_RELEVANT != 'true'
+        run: exit 0
+
+      - name: Classify pull request author
+        if: env.REVIEW_EVENT_RELEVANT == 'true'
+        id: internal-author
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const ownerLogin = 'SpicyMarinara';
+            const authorLogin = context.payload.pull_request.user.login;
+            const association = context.payload.pull_request.author_association;
+
+            if (authorLogin.toLowerCase() === ownerLogin.toLowerCase()) {
+              core.notice(`${authorLogin} is the repository owner; owner approval is not required.`);
+              core.setOutput('internal', 'true');
+              return;
+            }
+
+            if (association === 'MEMBER' || association === 'OWNER') {
+              core.notice(`${authorLogin} is a trusted repository member; owner approval is not required.`);
+              core.setOutput('internal', 'true');
+              return;
+            }
+
+            core.notice(`${authorLogin} requires owner approval.`);
+            core.setOutput('internal', 'false');
+
+      - name: Require owner approval for outside staging contributions
+        if: env.REVIEW_EVENT_RELEVANT == 'true' && steps.internal-author.outputs.internal != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const pullNumber = context.payload.pull_request.number;
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber,
+            });
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber,
+              per_page: 100,
+            });
+            const ownerReviews = reviews
+              .filter((review) => review.user?.login?.toLowerCase() === 'spicymarinara')
+              .sort((left, right) => left.id - right.id);
+            const latestOwnerReview = ownerReviews.at(-1);
+
+            if (latestOwnerReview?.state === 'APPROVED' && latestOwnerReview.commit_id === pr.head?.sha) {
+              core.notice('Outside contribution approved by SpicyMarinara.');
+              return;
+            }
+
+            core.setFailed('Outside and first-time contributions to staging require an approving review from SpicyMarinara.');

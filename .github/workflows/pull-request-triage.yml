@@ -4,8 +4,6 @@ on:
   pull_request_target:
     types: [opened, reopened, edited, synchronize, ready_for_review]
     branches: [staging, main]
-  pull_request_review:
-    types: [submitted, edited, dismissed]
 
 concurrency:
   group: pull-request-triage-${{ github.event.pull_request.number }}
@@ -62,18 +60,6 @@ jobs:
             if (authorLogin.toLowerCase() === ownerLogin.toLowerCase()) {
               core.notice(`${authorLogin} is the repository owner; owner approval is not required.`);
               core.setOutput('internal', 'true');
-              return;
-            }
-
-            if (context.eventName === 'pull_request_review') {
-              const association = context.payload.pull_request.author_association;
-              if (association === 'MEMBER' || association === 'OWNER') {
-                core.notice(`${authorLogin} is a trusted repository member on a review event; owner approval is not required.`);
-                core.setOutput('internal', 'true');
-              } else {
-                core.notice(`${authorLogin} requires owner approval; membership lookup is unavailable on review events.`);
-                core.setOutput('internal', 'false');
-              }
               return;
             }
 
@@ -205,15 +191,22 @@ jobs:
   template-check:
     name: Pull Request template check
     runs-on: ubuntu-latest
-    if: >-
-      github.event.pull_request.author_association != 'MEMBER' &&
-      github.event.pull_request.author_association != 'OWNER' &&
-      github.event.pull_request.author_association != 'COLLABORATOR'
     permissions:
       contents: read
       pull-requests: read
     steps:
+      - name: Exempt trusted contributor
+        if: >-
+          github.event.pull_request.author_association == 'MEMBER' ||
+          github.event.pull_request.author_association == 'OWNER' ||
+          github.event.pull_request.author_association == 'COLLABORATOR'
+        run: echo "Trusted contributor; pull request template validation is not required."
+
       - name: Check Pull Request body against template
+        if: >-
+          github.event.pull_request.author_association != 'MEMBER' &&
+          github.event.pull_request.author_association != 'OWNER' &&
+          github.event.pull_request.author_association != 'COLLABORATOR'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
