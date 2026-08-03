@@ -56,6 +56,7 @@ import {
   useUpdateSpatialSharedWorld,
 } from "../../hooks/use-spatial-context";
 import { cn, WORLD_MAPS_GUIDE_URL } from "./package-utils";
+import { locationArtworkGaps, replacementArtworkPatch } from "./location-artwork";
 import { nextAvailableSharedWorldName } from "./shared-world-naming";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
@@ -430,6 +431,10 @@ export function SpatialMapWorkspace({
     () => spatialArtworkImages(galleryImages.data, globalGalleryImages.data),
     [galleryImages.data, globalGalleryImages.data],
   );
+  const availableArtworkReferenceIds = useMemo(
+    () => new Set(availableArtworkImages.map((image) => image.referenceId)),
+    [availableArtworkImages],
+  );
   const generateGalleryImage = useGenerateSpatialGalleryImage(chatId ?? "");
   const previewGalleryImages = usePreviewSpatialGalleryImages(chatId ?? "");
   const pendingSetupReview = !templateMode && pendingDraftReview?.chatId === chatId ? pendingDraftReview : null;
@@ -701,18 +706,21 @@ export function SpatialMapWorkspace({
   const routePlan = useSpatialRoutePlan(templateMode ? null : chatId);
   const pendingTransition = usePendingSpatialTransition(templateMode ? null : chatId);
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
-  const missingArtworkLocations = useMemo(
+  const artworkReferencesResolved = globalGalleryImages.isSuccess && (templateMode || galleryImages.isSuccess);
+  const missingArtworkAssignments = useMemo(
     () =>
-      draft?.locations.filter(
-        (location) =>
-          location.status === "active" &&
-          (!location.referenceImageId || (location.childPresentation === "map" && !location.mapBackgroundImageId)),
-      ) ?? [],
-    [draft],
+      locationArtworkGaps(
+        draft?.locations ?? [],
+        availableArtworkReferenceIds,
+        artworkReferencesResolved,
+      ),
+    [artworkReferencesResolved, availableArtworkReferenceIds, draft?.locations],
   );
-  const artworkImagesToGenerate = missingArtworkLocations.filter(
-    (location) => !location.referenceImageId && !location.mapBackgroundImageId,
-  ).length;
+  const missingArtworkLocations = useMemo(
+    () => missingArtworkAssignments.map((assignment) => assignment.location),
+    [missingArtworkAssignments],
+  );
+  const artworkImagesToGenerate = missingArtworkAssignments.length;
   const linkedSharedWorld =
     !templateMode && spatial.data?.sharedWorld.mode === "linked" ? spatial.data.sharedWorld : null;
   const archivedDeletion = useMemo(() => {
@@ -769,12 +777,13 @@ export function SpatialMapWorkspace({
   const mobileMapNoticeCount =
     Number(missingArtworkLocations.length > 0) +
     Number(Boolean(linkedSharedWorld?.missing || linkedSharedWorld?.conflict || linkedSharedWorld?.pendingChanges));
-  const artworkPreviewSignature = missingArtworkLocations
-    .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
-    .map((location) =>
+  const artworkPreviewSignature = missingArtworkAssignments
+    .map(({ location, referenceMissing, mapBackgroundMissing }) =>
       [
         location.id,
         location.name,
+        referenceMissing ? "reference" : "",
+        mapBackgroundMissing ? "background" : "",
         defaultLocationReferencePrompt(location),
         JSON.stringify(locationArtworkContext(draft!, draftHierarchyProfile, location)),
       ].join("\u0000"),
@@ -860,54 +869,42 @@ export function SpatialMapWorkspace({
       currentName: "",
     });
 
-    for (const [index, target] of missingArtworkLocations.entries()) {
+    for (const [index, assignment] of missingArtworkAssignments.entries()) {
+      const target = assignment.location;
       setArtworkProgress({
         completed: index,
         total: missingArtworkLocations.length,
         currentName: target.name,
       });
 
-      let imageId = target.referenceImageId ?? target.mapBackgroundImageId ?? null;
-      if (!imageId) {
-        try {
-          const reviewed = reviewedItems.get(target.id);
-          const image = await generateGalleryImage.mutateAsync({
-            prompt: reviewed?.sourcePrompt ?? defaultLocationReferencePrompt(target),
-            title: target.name,
-            mapsArtworkContext: locationArtworkContext(draft, draftHierarchyProfile, target),
-            ...(reviewed
-              ? {
-                  promptOverride: reviewed.prompt,
-                  negativePromptOverride: reviewed.negativePrompt,
-                }
-              : {}),
-            debugMode,
-          });
-          imageId = image.id;
-        } catch {
-          failedImages += 1;
-          continue;
-        }
+      let imageId: string;
+      try {
+        const reviewed = reviewedItems.get(target.id);
+        const image = await generateGalleryImage.mutateAsync({
+          prompt: reviewed?.sourcePrompt ?? defaultLocationReferencePrompt(target),
+          title: target.name,
+          mapsArtworkContext: locationArtworkContext(draft, draftHierarchyProfile, target),
+          ...(reviewed
+            ? {
+                promptOverride: reviewed.prompt,
+                negativePromptOverride: reviewed.negativePrompt,
+              }
+            : {}),
+          debugMode,
+        });
+        imageId = image.id;
+      } catch {
+        failedImages += 1;
+        continue;
       }
 
       const current = next.locations.find((location) => location.id === target.id);
       if (!current) continue;
-      const shouldSetReference = !current.referenceImageId;
-      const shouldSetBackground = current.childPresentation === "map" && !current.mapBackgroundImageId;
-      if (!shouldSetReference && !shouldSetBackground) continue;
-
-      next = updateSpatialLocation(next, current.id, {
-        ...(shouldSetReference ? { referenceImageId: imageId, useReferenceImage: true } : {}),
-        ...(shouldSetBackground
-          ? {
-              mapBackgroundImageId: imageId,
-              mapBackgroundPosition: current.mapBackgroundPosition ?? {
-                x: 50,
-                y: 50,
-              },
-            }
-          : {}),
-      });
+      next = updateSpatialLocation(
+        next,
+        current.id,
+        replacementArtworkPatch(assignment, imageId, current.mapBackgroundPosition),
+      );
       updatedLocations += 1;
     }
 
@@ -931,20 +928,19 @@ export function SpatialMapWorkspace({
     draft,
     draftHierarchyProfile,
     generateGalleryImage,
+    missingArtworkAssignments,
     missingArtworkLocations,
     previewGalleryImages.isPending,
   ]);
 
   const prepareArtworkPreview = useCallback(async () => {
     if (artworkProgress || previewGalleryImages.isPending || artworkImagesToGenerate === 0) return;
-    const items = missingArtworkLocations
-      .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
-      .map((location) => ({
-        id: location.id,
-        title: location.name,
-        prompt: defaultLocationReferencePrompt(location),
-        mapsArtworkContext: locationArtworkContext(draft!, draftHierarchyProfile, location),
-      }));
+    const items = missingArtworkLocations.map((location) => ({
+      id: location.id,
+      title: location.name,
+      prompt: defaultLocationReferencePrompt(location),
+      mapsArtworkContext: locationArtworkContext(draft!, draftHierarchyProfile, location),
+    }));
     try {
       const preview = await previewGalleryImages.mutateAsync({
         items,
@@ -2735,7 +2731,7 @@ export function SpatialMapWorkspace({
               <button
                 type="button"
                 data-marinara-fill-map-artwork
-                onClick={() => void (artworkImagesToGenerate > 0 ? prepareArtworkPreview() : fillMissingArtwork())}
+                onClick={() => void prepareArtworkPreview()}
                 disabled={
                   artworkProgress !== null ||
                   previewGalleryImages.isPending ||
@@ -2751,9 +2747,8 @@ export function SpatialMapWorkspace({
                 ) : (
                   <ImageIcon size="0.8125rem" />
                 )}
-                {artworkImagesToGenerate > 0
-                  ? `${artworkImagesToGenerate} art request${artworkImagesToGenerate === 1 ? "" : "s"}`
-                  : "Apply artwork"}
+                {missingArtworkLocations.length} incomplete · {artworkImagesToGenerate} request
+                {artworkImagesToGenerate === 1 ? "" : "s"}
               </button>
             )}
             {linkedSharedWorld && (
@@ -2965,7 +2960,7 @@ export function SpatialMapWorkspace({
                 data-marinara-map-compact-only
                 onClick={() => {
                   setMobileActionsOpen(false);
-                  void (artworkImagesToGenerate > 0 ? prepareArtworkPreview() : fillMissingArtwork());
+                  void prepareArtworkPreview();
                 }}
                 disabled={
                   artworkProgress !== null ||
@@ -2983,7 +2978,8 @@ export function SpatialMapWorkspace({
                     <ImageIcon size="0.8125rem" className="shrink-0" />
                   )}
                   <span className="truncate">
-                    {missingArtworkLocations.length} {missingArtworkLocations.length === 1 ? "location needs" : "locations need"} artwork
+                    {missingArtworkLocations.length} incomplete · {artworkImagesToGenerate} request
+                    {artworkImagesToGenerate === 1 ? "" : "s"}
                   </span>
                 </span>
                 <span className="shrink-0 font-semibold text-[var(--marinara-chat-chrome-accent)]">Review</span>
@@ -3363,9 +3359,9 @@ export function SpatialMapWorkspace({
                   </p>
                   <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                     This will send {artworkPreview.requestCount} separate request
-                    {artworkPreview.requestCount === 1 ? "" : "s"} to your image provider. Existing artwork is reused,
-                    nothing is replaced, and each new image becomes both the location reference and its child-map
-                    background. Prompts use the relevant Chat Settings and global image-generation settings.
+                    {artworkPreview.requestCount === 1 ? "" : "s"} to your image provider. Existing available artwork
+                    is not replaced. Each new image fills only the missing role, or both roles when both are missing.
+                    Prompts use the relevant Chat Settings and global image-generation settings.
                   </p>
                 </div>
               </div>
@@ -3537,15 +3533,16 @@ export function SpatialMapWorkspace({
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">Location artwork</p>
                 <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                  {artworkImagesToGenerate > 0
-                    ? `Review ${artworkImagesToGenerate} missing image request${artworkImagesToGenerate === 1 ? "" : "s"} before anything is generated. Each location uses the same image for its reference and child-map background.`
-                    : "Reuse existing location art for missing references and child-map backgrounds."}
+                  Review {missingArtworkLocations.length} incomplete location
+                  {missingArtworkLocations.length === 1 ? "" : "s"} and {artworkImagesToGenerate} provider request
+                  {artworkImagesToGenerate === 1 ? "" : "s"} before anything is generated. A new image fills only the
+                  missing role, or both roles when both are missing.
                 </p>
               </div>
               <button
                 type="button"
                 data-marinara-fill-map-artwork
-                onClick={() => void (artworkImagesToGenerate > 0 ? prepareArtworkPreview() : fillMissingArtwork())}
+                onClick={() => void prepareArtworkPreview()}
                 disabled={
                   artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
                 }
@@ -3560,9 +3557,7 @@ export function SpatialMapWorkspace({
                   ? `Creating ${Math.min(artworkProgress.completed + 1, artworkProgress.total)} of ${artworkProgress.total}`
                   : previewGalleryImages.isPending
                     ? "Preparing preview"
-                    : artworkImagesToGenerate > 0
-                      ? `Review ${artworkImagesToGenerate} request${artworkImagesToGenerate === 1 ? "" : "s"}`
-                      : "Apply existing artwork"}
+                    : `Review ${artworkImagesToGenerate} request${artworkImagesToGenerate === 1 ? "" : "s"}`}
               </button>
                 {artworkProgress?.currentName && (
                   <span className="sr-only" role="status" aria-live="polite">
