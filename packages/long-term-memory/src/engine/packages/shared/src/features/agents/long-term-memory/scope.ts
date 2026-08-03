@@ -38,18 +38,35 @@ export function ltmScopesOverlap(
   }
 
   const noteChatIds = getLtmScopeChatIds(noteScope);
+  const targetChatIds = getLtmScopeChatIds(targetScope);
+  const noteCharacterIds = uniqueStrings(noteScope?.characterIds ?? []);
+  if (
+    noteCharacterIds.length > 0 &&
+    targetCharacterIds.length > 0 &&
+    !noteCharacterIds.some((id) => targetCharacterIds.includes(id))
+  )
+    return false;
+
   if (noteChatIds.length > 0) {
     const noteChatIdSet = new Set(noteChatIds);
-    const targetChatIds = getLtmScopeChatIds(targetScope);
-    if (!targetChatIds.some((chatId) => noteChatIdSet.has(chatId))) return false;
-    if (!noteScope?.personaId) return true;
-    return noteScope.personaId === (targetScope?.personaId ?? options.personaId);
+    if (
+      targetChatIds.length > 0 &&
+      !targetChatIds.some((chatId) => noteChatIdSet.has(chatId))
+    )
+      return false;
+    if (
+      !targetChatIds.length &&
+      (!targetCharacterIds.length || !noteCharacterIds.length)
+    )
+      return false;
+    const targetPersonaId = targetScope?.personaId ?? options.personaId;
+    return !noteScope?.personaId || !targetPersonaId || noteScope.personaId === targetPersonaId;
   }
 
   if (noteScope?.groupId) {
     if (noteScope.groupId !== targetScope?.groupId) return false;
-    if (!noteScope.personaId) return true;
-    return noteScope.personaId === (targetScope?.personaId ?? options.personaId);
+    const targetPersonaId = targetScope?.personaId ?? options.personaId;
+    return !noteScope.personaId || !targetPersonaId || noteScope.personaId === targetPersonaId;
   }
 
   if (noteScope?.personaId) {
@@ -82,7 +99,11 @@ export function matchesLtmScope(
     return noteHasScope ? false : input?.includeGlobal !== false;
   }
 
-  if (!noteHasScope) return input?.includeGlobal !== false;
+  if (!noteHasScope)
+    return (
+      (note.type === "character" && targetCharacterIds.includes(note.id)) ||
+      input?.includeGlobal !== false
+    );
 
   return ltmScopesOverlap(note.scope, targetScope, {
     noteId: note.id,

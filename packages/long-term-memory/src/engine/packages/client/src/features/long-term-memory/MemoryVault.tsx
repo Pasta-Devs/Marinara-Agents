@@ -434,32 +434,33 @@ export default function MemoryVault({
       ),
   });
   useEffect(() => {
-    if (!target && props.chatId)
+    if (!target && scopeTargets.isSuccess) {
+      const currentChat = scopeTargets.data?.chats.find(
+        (chat) => chat.id === props.chatId,
+      );
       setTarget({
-        id: `chat:${props.chatId}`,
-        label:
-          props.chatName ??
-          localizeUi("ui.longTermMemory.memoryvault.currentChat"),
-        scope: { chatId: props.chatId, chatIds: [props.chatId] },
+        id: currentChat ? `chat:${currentChat.id}` : "all",
+        label: currentChat
+          ? props.chatName ??
+            localizeUi("ui.longTermMemory.memoryvault.currentChat")
+          : localizeUi("ui.longTermMemory.memoryvault.allMemories"),
+        ...(currentChat && scopeTargets.data?.currentScope
+          ? { scope: scopeTargets.data.currentScope }
+          : {}),
       });
-  }, [localizeUi, props.chatId, props.chatName, target]);
+    }
+  }, [localizeUi, props.chatId, props.chatName, scopeTargets.data, scopeTargets.isSuccess, target]);
   useEffect(() => {
-    if (props.chatId && !target && scopeTargets.data?.currentScope)
-      setTarget({
-        id: "current",
-        label:
-          props.chatName ??
-          localizeUi("ui.longTermMemory.memoryvault.currentChat"),
-        scope: scopeTargets.data.currentScope,
-      });
-  }, [localizeUi, props.chatId, scopeTargets.data, target, props.chatName]);
-  useEffect(() => {
-    if (!target && !props.chatId && scopeTargets.isSuccess)
+    if (
+      target?.id === `chat:${props.chatId}` &&
+      scopeTargets.isSuccess &&
+      !scopeTargets.data?.chats.some((chat) => chat.id === props.chatId)
+    )
       setTarget({
         id: "all",
         label: localizeUi("ui.longTermMemory.memoryvault.allMemories"),
       });
-  }, [localizeUi, props.chatId, scopeTargets.isSuccess, target]);
+  }, [localizeUi, props.chatId, scopeTargets.data, scopeTargets.isSuccess, target?.id]);
   useEffect(() => {
     if (target && targetContextKey.current === contextKey)
       sessionTargets.set(contextKey, target);
@@ -482,15 +483,7 @@ export default function MemoryVault({
     targetContextKey.current = contextKey;
     setTarget(
       sessionTargets.get(contextKey) ??
-        (props.chatId
-          ? {
-              id: `chat:${props.chatId}`,
-              label:
-                props.chatName ??
-                localizeUi("ui.longTermMemory.memoryvault.currentChat"),
-              scope: { chatId: props.chatId, chatIds: [props.chatId] },
-            }
-          : null),
+        null,
     );
     setDraft(null);
     setSaved("");
@@ -515,6 +508,7 @@ export default function MemoryVault({
   useEffect(() => {
     if (
       target?.id === `chat:${props.chatId}` &&
+      scopeTargets.data?.chats.some((chat) => chat.id === props.chatId) &&
       scopeTargets.data?.currentScope
     ) {
       setTarget((current) =>
@@ -1449,15 +1443,15 @@ export default function MemoryVault({
                     character
                       ? {
                           id: `character:${character.id}`,
-                          label: character.label,
-                          scope: {
-                            characterIds: [character.id],
-                            chatIds: (scopeTargets.data?.chats ?? [])
-                              .filter((chat) =>
-                                chat.characterIds.includes(character.id),
-                              )
-                              .map((chat) => chat.id),
-                          },
+                        label: character.label,
+                        scope: {
+                          characterIds: [character.id],
+                          chatIds: (scopeTargets.data?.chats ?? [])
+                            .filter((chat) =>
+                              chat.characterIds.includes(character.id),
+                            )
+                            .map((chat) => chat.id),
+                        },
                         }
                       : targets[0]!,
                   );
@@ -1514,6 +1508,7 @@ export default function MemoryVault({
                     scope: {
                       chatId: branch.id,
                       chatIds: [branch.id],
+                      ...(branch.groupId ? { groupId: branch.groupId } : {}),
                       ...(selectedCharacterId
                         ? { characterIds: [selectedCharacterId] }
                         : {}),
