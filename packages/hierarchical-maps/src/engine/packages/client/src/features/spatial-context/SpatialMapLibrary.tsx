@@ -81,6 +81,7 @@ interface SpatialMapLibraryProps {
   onSelectForSetup?: (template: SpatialMapTemplateRecord) => void;
   onSelectSharedWorldForSetup?: (world: SpatialSharedWorldRecord) => void;
   onOpenLorebook?: (lorebookId: string) => void;
+  onLorebooksChanged?: () => void | Promise<void>;
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
 }
 
@@ -122,6 +123,7 @@ export function SpatialMapLibrary({
   onSelectForSetup,
   onSelectSharedWorldForSetup,
   onOpenLorebook,
+  onLorebooksChanged,
   onEnabledForChatChange,
 }: SpatialMapLibraryProps) {
   const templates = useSpatialMapTemplates();
@@ -426,7 +428,7 @@ export function SpatialMapLibrary({
       return;
     }
     try {
-      await lorebooksQuery.refetch();
+      await Promise.all([lorebooksQuery.refetch(), onLorebooksChanged?.()]);
     } catch {
       toast.error("The map was imported, but the lorebook list could not be refreshed.");
     }
@@ -657,6 +659,7 @@ export function SpatialMapLibrary({
         sharedWorld={editingSharedWorld}
         initialUnresolvedLoreReferences={editingUnresolvedLoreReferences}
         onOpenLorebook={onOpenLorebook}
+        onLorebooksChanged={onLorebooksChanged}
         onClose={() => {
           setEditingSharedWorldId(null);
           setEditingUnresolvedLoreReferences([]);
@@ -672,6 +675,7 @@ export function SpatialMapLibrary({
         template={editingTemplate}
         initialUnresolvedLoreReferences={editingUnresolvedLoreReferences}
         onOpenLorebook={onOpenLorebook}
+        onLorebooksChanged={onLorebooksChanged}
         onClose={() => {
           setEditingId(null);
           setEditingUnresolvedLoreReferences([]);

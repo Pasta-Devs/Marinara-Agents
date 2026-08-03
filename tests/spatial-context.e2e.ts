@@ -2561,7 +2561,7 @@ test("missing location lore explains the problem without exposing opaque entry I
   }
 });
 
-test("portable map export restores linked lore with new IDs before save", async ({ page }, testInfo) => {
+test("portable map import refreshes host lorebooks and linked navigation without reload", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "The portable import contract is viewport-independent.");
   test.setTimeout(120_000);
   const suffix = `${testInfo.project.name}-${Date.now()}`;
@@ -2627,7 +2627,8 @@ test("portable map export restores linked lore with new IDs before save", async 
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
-            rightPanelOpen: false,
+            rightPanelOpen: true,
+            rightPanel: "lorebooks",
             sidebarOpen: false,
             spatialMapDetailChatId: chatId,
           },
@@ -2643,6 +2644,8 @@ test("portable map export restores linked lore with new IDs before save", async 
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
     await expect(workspace).toBeVisible();
+    const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await expect(rightPanel.getByText(lorebookName, { exact: true })).toHaveCount(1);
     await workspace.getByRole("button", { name: /More map actions/u }).click();
     await workspace.getByRole("button", { name: "Export world map" }).click();
     let exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
@@ -2679,9 +2682,6 @@ test("portable map export restores linked lore with new IDs before save", async 
 
     const deleteLorebookResponse = await page.request.delete(`/api/lorebooks/${originalLorebook.id}`);
     expect(deleteLorebookResponse.ok(), await deleteLorebookResponse.text()).toBeTruthy();
-    await page.reload();
-    await dismissOnboardingTutorial(page);
-    await expect(workspace).toBeVisible();
     await workspace.locator("[data-marinara-map-import-input]").setInputFiles({
       name: download.suggestedFilename(),
       mimeType: "application/json",
@@ -2737,6 +2737,33 @@ test("portable map export restores linked lore with new IDs before save", async 
       importedEntries[0]?.id,
     ]);
 
+    await workspace.getByRole("button", { name: "Back to chat", exact: true }).click();
+    await expect(workspace).toHaveCount(0);
+    const importedLorebookRow = rightPanel.locator('[data-touch-drag-card="lorebook"]', {
+      hasText: lorebookName,
+    });
+    await expect(importedLorebookRow).toHaveCount(1);
+    await importedLorebookRow.click({ position: { x: 120, y: 32 } });
+    await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
+    await page.locator(".mari-editor-header").getByRole("button").first().click();
+
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await agentsPanel
+      .locator('[data-agent-name="World Maps"]')
+      .getByText("World Maps", { exact: true })
+      .click();
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(home).toBeVisible();
+    await home.getByRole("button", { name: "Edit map", exact: true }).click();
+    await expect(workspace).toBeVisible();
+    const details = workspace.locator('section[aria-label="Details for Gloam Harbor"]');
+    await details.getByText("Linked lore", { exact: true }).click();
+    await expect(details.getByText("Portable harbor ledger", { exact: true }).first()).toBeVisible();
+    await details.getByRole("button", { name: "Open", exact: true }).click();
+    await expect(workspace).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
+
     await expectDeleted(page, `/api/chats/${chat.id}`);
     const retainedLorebookResponse = await page.request.get(`/api/lorebooks/${importedLorebookId}`);
     expect(retainedLorebookResponse.ok(), await retainedLorebookResponse.text()).toBeTruthy();
@@ -2751,6 +2778,218 @@ test("portable map export restores linked lore with new IDs before save", async 
     }
   }
 });
+
+for (const libraryTarget of ["template", "shared-world"] as const) {
+  test(`portable lore refresh reaches the host from a ${libraryTarget} library editor`, async ({ page }, testInfo) => {
+    test.skip(!testInfo.project.name.includes("desktop"), "The library callback bridge is viewport-independent.");
+    test.setTimeout(120_000);
+    const suffix = `${libraryTarget}-${testInfo.project.name}-${Date.now()}`;
+    const lorebookName = `Library refresh ${suffix}`;
+    const recordName = `Callback ${libraryTarget} ${suffix}`;
+    const lorebookResponse = await page.request.post("/api/lorebooks", {
+      data: {
+        name: lorebookName,
+        description: "Portable lore callback forwarding fixture.",
+        category: "world",
+        enabled: false,
+      },
+    });
+    expect(lorebookResponse.ok(), await lorebookResponse.text()).toBeTruthy();
+    const originalLorebook = (await lorebookResponse.json()) as { id: string };
+    const entryResponse = await page.request.post(`/api/lorebooks/${originalLorebook.id}/entries`, {
+      data: {
+        name: `Library ledger ${suffix}`,
+        content: "The library editor must refresh the host after restoring this ledger.",
+        keys: ["library refresh"],
+        enabled: false,
+        order: 3,
+      },
+    });
+    expect(entryResponse.ok(), await entryResponse.text()).toBeTruthy();
+    const originalEntry = (await entryResponse.json()) as { id: string };
+    const chatResponse = await page.request.post("/api/chats", {
+      data: { name: `Library callback ${suffix}`, mode: "roleplay", characterIds: [] },
+    });
+    expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+    const chat = (await chatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, chat.id);
+    const spatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(spatialResponse.ok(), await spatialResponse.text()).toBeTruthy();
+    const spatial = (await spatialResponse.json()) as { hierarchyProfile: unknown };
+    const recordEndpoint =
+      libraryTarget === "template"
+        ? "/api/chats/spatial-context/templates"
+        : "/api/chats/spatial-context/shared-worlds";
+    const recordResponse = await page.request.post(recordEndpoint, {
+      data: {
+        name: recordName,
+        description: "Nested World Maps library callback fixture.",
+        definition: { ...generatedDefinition, enabled: true, revision: 0 },
+        hierarchyProfile: spatial.hierarchyProfile,
+      },
+    });
+    expect(recordResponse.ok(), await recordResponse.text()).toBeTruthy();
+    const libraryRecord = (await recordResponse.json()) as { id: string; revision: number };
+    let importedLorebookId: string | null = null;
+
+    try {
+      await page.addInitScript((chatId) => {
+        localStorage.setItem("marinara-active-chat-id", chatId);
+        localStorage.setItem(
+          "marinara-engine-ui",
+          JSON.stringify({
+            state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+            version: 75,
+          }),
+        );
+      }, chat.id);
+      await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+        await route.fulfill({ status: 204, body: "" });
+      });
+      await page.goto("/");
+      await dismissOnboardingTutorial(page);
+      await page.locator('[data-tour="panel-agents"]').click();
+      const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+      await rightPanel
+        .locator('[data-agent-name="World Maps"]')
+        .getByText("World Maps", { exact: true })
+        .click();
+      const home = page.locator("[data-marinara-maps-home]");
+      await expect(home).toBeVisible();
+
+      await page.locator('[data-tour="panel-lorebooks"]').click();
+      await expect(rightPanel.getByText(lorebookName, { exact: true })).toHaveCount(1);
+      const deleteOriginalResponse = await page.request.delete(`/api/lorebooks/${originalLorebook.id}`);
+      expect(deleteOriginalResponse.ok(), await deleteOriginalResponse.text()).toBeTruthy();
+
+      await home.getByRole("button", { name: "Open world library" }).click();
+      const library = page.locator("[data-marinara-map-template-library]");
+      await expect(library).toBeVisible();
+      const recordCard = library.getByRole("heading", { name: recordName, exact: true }).locator("xpath=ancestor::article");
+      await recordCard
+        .getByRole("button", { name: libraryTarget === "template" ? "Edit" : "Edit canonical", exact: true })
+        .click();
+
+      const workspace = page.locator("[data-marinara-maps-workspace-root]");
+      await expect(workspace).toBeVisible();
+      const importedDefinition = {
+        ...generatedDefinition,
+        enabled: true,
+        revision: 0,
+        startingLocationId: "ai_harbor",
+        locations: generatedDefinition.locations.map((location) =>
+          location.id === "ai_harbor" ? { ...location, lorebookEntryIds: [originalEntry.id] } : location,
+        ),
+      };
+      const entryKey = `entry:${originalEntry.id}`;
+      const portableMap = {
+        format: "marinara-hierarchical-map",
+        formatVersion: 4,
+        definition: importedDefinition,
+        portableLore: {
+          schemaVersion: 1,
+          mode: "linked-entries",
+          books: [
+            {
+              key: `book:${originalLorebook.id}`,
+              originalId: originalLorebook.id,
+              name: lorebookName,
+              settings: {
+                description: "Portable lore callback forwarding fixture.",
+                category: "world",
+                enabled: false,
+              },
+              folders: [],
+              entries: [
+                {
+                  key: entryKey,
+                  originalId: originalEntry.id,
+                  name: `Library ledger ${suffix}`,
+                  folderKey: null,
+                  fingerprint: `entry-v1:${"0".repeat(16)}`,
+                  data: {
+                    name: `Library ledger ${suffix}`,
+                    content: "The library editor must refresh the host after restoring this ledger.",
+                    keys: ["library refresh"],
+                    enabled: false,
+                    order: 3,
+                  },
+                },
+              ],
+            },
+          ],
+          references: [
+            {
+              locationId: "ai_harbor",
+              locationName: "Gloam Harbor",
+              entryKey,
+              originalLorebookId: originalLorebook.id,
+              originalLorebookName: lorebookName,
+              originalEntryId: originalEntry.id,
+              originalEntryName: `Library ledger ${suffix}`,
+            },
+          ],
+        },
+      };
+      await workspace.locator("[data-marinara-map-import-input]").setInputFiles({
+        name: `${suffix}.world-map.json`,
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(portableMap)),
+      });
+      const importDialog = page.getByRole("dialog", { name: "Restore portable map lore" });
+      await expect(importDialog).toContainText("1 lorebook · 1 entry");
+      await importDialog.getByRole("button", { name: "Import separate copies" }).click();
+      await expect(page.getByText(/1 entry was imported/u)).toBeVisible();
+      const details = workspace.locator('section[aria-label="Details for Gloam Harbor"]');
+      await details.getByText("Linked lore", { exact: true }).click();
+      await expect(details.getByText(`Library ledger ${suffix}`, { exact: true }).first()).toBeVisible();
+      await expect(details.getByText("Missing lore entry", { exact: true })).toHaveCount(0);
+
+      const saveLabel = libraryTarget === "template" ? "Save template" : "Update shared world";
+      await workspace.getByRole("button", { name: saveLabel, exact: true }).click();
+      await expect(workspace).toContainText("Saved");
+      await workspace.getByRole("button", { name: "Back to map library" }).click();
+      await expect(library).toBeVisible();
+      await library.getByRole("button", { name: "Back to Maps" }).click();
+      await expect(home).toBeVisible();
+
+      const lorebooksAfterImportResponse = await page.request.get("/api/lorebooks");
+      expect(lorebooksAfterImportResponse.ok(), await lorebooksAfterImportResponse.text()).toBeTruthy();
+      const importedLorebook = ((await lorebooksAfterImportResponse.json()) as Array<{ id: string; name: string }>).find(
+        (candidate) => candidate.name === lorebookName,
+      );
+      importedLorebookId = importedLorebook?.id ?? null;
+      expect(importedLorebookId).not.toBeNull();
+      expect(importedLorebookId).not.toBe(originalLorebook.id);
+
+      const refreshedRow = rightPanel.locator('[data-touch-drag-card="lorebook"]', { hasText: lorebookName });
+      await expect(refreshedRow).toHaveCount(1);
+      await refreshedRow.click({ position: { x: 120, y: 32 } });
+      await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
+    } finally {
+      const recordsResponse = await page.request.get(recordEndpoint);
+      if (recordsResponse.ok()) {
+        const currentRecord = ((await recordsResponse.json()) as Array<{ id: string; revision: number }>).find(
+          (candidate) => candidate.id === libraryRecord.id,
+        );
+        if (currentRecord) {
+          const response = await page.request.delete(`${recordEndpoint}/${currentRecord.id}`, {
+            data: { expectedRevision: currentRecord.revision },
+          });
+          expect(response.ok(), await response.text()).toBeTruthy();
+        }
+      }
+      const chatCheck = await page.request.get(`/api/chats/${chat.id}`);
+      if (chatCheck.ok()) await expectDeleted(page, `/api/chats/${chat.id}`);
+      const originalLorebookCheck = await page.request.get(`/api/lorebooks/${originalLorebook.id}`);
+      if (originalLorebookCheck.ok()) await expectDeleted(page, `/api/lorebooks/${originalLorebook.id}`);
+      if (importedLorebookId) {
+        const importedLorebookCheck = await page.request.get(`/api/lorebooks/${importedLorebookId}`);
+        if (importedLorebookCheck.ok()) await expectDeleted(page, `/api/lorebooks/${importedLorebookId}`);
+      }
+    }
+  });
+}
 
 test("opening linked lore protects unsaved map edits", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "The guarded navigation contract is viewport-independent.");

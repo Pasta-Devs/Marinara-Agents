@@ -342,6 +342,7 @@ interface SpatialMapWorkspaceProps {
   onClearPendingDraftReview?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenLorebook?: (lorebookId: string) => void;
+  onLorebooksChanged?: () => void | Promise<void>;
   onOpenTemplates?: () => void;
   onClose: () => void;
 }
@@ -405,6 +406,7 @@ export function SpatialMapWorkspace({
   onClearPendingDraftReview,
   onDirtyChange,
   onOpenLorebook,
+  onLorebooksChanged,
   onOpenTemplates,
   onClose,
 }: SpatialMapWorkspaceProps) {
@@ -1586,7 +1588,7 @@ export function SpatialMapWorkspace({
         );
         setPendingPortableLoreImport(null);
         try {
-          await lorebooksQuery.refetch();
+          await Promise.all([lorebooksQuery.refetch(), onLorebooksChanged?.()]);
         } catch {
           toast.error("The lore was restored, but the lorebook list could not be refreshed.");
         }
@@ -1604,7 +1606,7 @@ export function SpatialMapWorkspace({
         setIsImporting(false);
       }
     },
-    [applyImportedMap, isImporting, lorebooksQuery, pendingPortableLoreImport],
+    [applyImportedMap, isImporting, lorebooksQuery, onLorebooksChanged, pendingPortableLoreImport],
   );
 
   const saveAsTemplate = useCallback(async () => {
