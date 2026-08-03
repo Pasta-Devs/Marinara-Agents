@@ -68,6 +68,8 @@ async function main() {
   const completionMessages: any[] = [];
   const debugOverrides: any[] = [];
   let failGameRefine = false;
+  let failGrammarOnce = false;
+  let grammarErrorMessage = "";
   let fitContextMode: "normal" | "reduced" | "trimmed" = "normal";
   let abortInFlight = false;
   let abortReachedChatComplete = false;
@@ -232,6 +234,10 @@ async function main() {
                   modelCalls += 1;
                   completionMessages.push(_messages);
                   completionOptions.push(options);
+                  if (failGrammarOnce && options.responseFormat) {
+                    failGrammarOnce = false;
+                    throw new Error(`Custom OpenAIcompatible endpoint error 400: ${grammarErrorMessage}`);
+                  }
                   if (abortInFlight) {
                     abortReachedChatComplete = true;
                     notifyAbortChatComplete?.();
@@ -1356,6 +1362,35 @@ async function main() {
         ),
       true,
     );
+    const grammarErrors = [
+      "Failed to initialize samplers: failed to parse grammar",
+      "Failed to parse grammar",
+      "Error parsing grammar",
+    ];
+    for (const errorMessage of grammarErrors) {
+      grammarErrorMessage = errorMessage;
+      failGrammarOnce = true;
+      const grammarFallback = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes/source_route_extract/extract",
+        headers,
+        payload: { chatId: "chat-a" },
+      });
+      assert.equal(grammarFallback.statusCode, 200, grammarFallback.body);
+      assert.deepEqual(
+        grammarFallback
+          .json()
+          .draft?.mutations.map((mutation: any) => mutation.note?.id)
+          .sort(),
+        [
+          "char_mara",
+          "timeline_observatory_gate_sealed_1bbd9d3c48",
+          "world_observatory_gate",
+        ],
+      );
+      assert.equal(completionOptions.at(-2)?.responseFormat?.type, "json_schema");
+      assert.equal("responseFormat" in completionOptions.at(-1), false);
+    }
     fitContextMode = "reduced";
     const reducedBudget = await app.inject({
       method: "POST",
