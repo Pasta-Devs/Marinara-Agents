@@ -118,6 +118,10 @@ function artifactFixture(version: string): ArtifactFixture {
       assert.match(clientSource, /spatial_transition_committed/u);
       assert.match(clientSource, /marinara-capability-server-event/u);
       assert.match(clientSource, /The current location changed\. Review the available destinations\./u);
+      assert.match(clientSource, /new Map\(\[\["spatial_transition_stale_definition"/u);
+      const packageBuilderSource = readFileSync(join(repoRoot, "scripts", "build-feature-packages.mjs"), "utf8");
+      assert.match(packageBuilderSource, /spatialTransitionReviewMessages\.get\(data\.code\)/u);
+      assert.doesNotMatch(packageBuilderSource, /spatialTransitionReviewMessages\[data\.code\]/u);
     }
   }
   return {
@@ -340,7 +344,9 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               },
             ],
           })
-        : "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.";
+        : providerPrompt.includes("Repeat the already committed move into Lifecycle Harbor.")
+          ? "RETRY_PROVIDER_RESPONSE_SHOULD_NOT_PERSIST"
+          : "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.";
     return new Response(
       JSON.stringify({
         id: `chatcmpl-maps-lifecycle-${generationProviderRequestCount}`,
@@ -2846,6 +2852,36 @@ async function main() {
     // The queued transition is browser-local rather than part of the chat API.
     // Its ready-state preservation across /guided is covered by spatial-context.e2e.ts.
 
+    const providerRequestsBeforeGuidedMove = generationProviderRequestCount;
+    const guidedMoveGeneration = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: impersonateChat.id,
+        connectionId: impersonateConnection.id,
+        generationGuide: "Move the NPC into Lifecycle Harbor.",
+        generationGuideSource: "guide",
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+        pendingSpatialTransition: {
+          destinationId: "lifecycle_harbor",
+          expectedDefinitionRevision: impersonateSpatial.definition.revision,
+          expectedCurrentLocationId: "lifecycle_world",
+          commandId: "guided-must-not-consume-owner-move",
+        },
+      },
+    });
+    assert.equal(guidedMoveGeneration.statusCode, 400, guidedMoveGeneration.body);
+    assert.match(guidedMoveGeneration.body, /spatial_transition_requires_new_turn/u);
+    assert.equal(generationProviderRequestCount, providerRequestsBeforeGuidedMove);
+    const afterGuidedMoveSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(afterGuidedMoveSpatial.currentLocationId, "lifecycle_world");
+
     const impersonateGeneration = await app.inject({
       method: "POST",
       url: "/api/generate",
@@ -2877,7 +2913,7 @@ async function main() {
     const impersonateMessages = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${impersonateChat.id}/messages`,
-    })) as Array<{ id: string; role: string; content: string }>;
+    })) as Array<{ id: string; role: string; content: string; extra: unknown }>;
     assert.equal(impersonateMessages.length, 2);
     const impersonatedUserMessage = impersonateMessages.find((message) => message.role === "user");
     assert.ok(impersonatedUserMessage);
@@ -2906,13 +2942,27 @@ async function main() {
     assert.equal(repeatedImpersonateGeneration.statusCode, 200, repeatedImpersonateGeneration.body);
     assert.match(repeatedImpersonateGeneration.body, /spatial_transition_committed/u);
     assert.match(repeatedImpersonateGeneration.body, /message_saved/u);
+    assert.match(repeatedImpersonateGeneration.body, /content_replace/u);
     assert.doesNotMatch(repeatedImpersonateGeneration.body, /spatial_transition_rejected/u);
     assert.doesNotMatch(repeatedImpersonateGeneration.body, /"type":"error"/u);
+    const repeatedImpersonateEvents = repeatedImpersonateGeneration.body
+      .split("\n\n")
+      .filter((event) => event.startsWith("data: "))
+      .map((event) => JSON.parse(event.slice("data: ".length)) as { type: string; data: unknown });
+    const authoritativeReplacement = repeatedImpersonateEvents.find((event) => event.type === "content_replace");
+    assert.equal(authoritativeReplacement?.data, impersonatedUserMessage.content);
     const afterRepeatedImpersonateMessages = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${impersonateChat.id}/messages`,
-    })) as Array<{ id: string }>;
+    })) as Array<{ id: string; role: string; content: string; extra: unknown }>;
     assert.equal(afterRepeatedImpersonateMessages.length, impersonateMessages.length);
+    const recoveredUserMessage = afterRepeatedImpersonateMessages.find(
+      (message) => message.id === impersonatedUserMessage.id,
+    );
+    assert.ok(recoveredUserMessage);
+    assert.equal(recoveredUserMessage.content, impersonatedUserMessage.content);
+    assert.doesNotMatch(recoveredUserMessage.content, /RETRY_PROVIDER_RESPONSE_SHOULD_NOT_PERSIST/u);
+    assert.deepEqual(recoveredUserMessage.extra, impersonatedUserMessage.extra);
 
     generationProviderFailure = true;
     let failedImpersonateGeneration: Awaited<ReturnType<NonNullable<typeof app>["inject"]>>;

@@ -687,10 +687,10 @@ class CapabilityClientErrorBoundary extends React.Component {
   static getDerivedStateFromError(error) { return { error }; }
 }
 const spatialEventSequence = new Map();
-const spatialTransitionReviewMessages = {
-  spatial_transition_stale_definition: "The world map changed. Review the available destinations.",
-  spatial_transition_stale_location: "The current location changed. Review the available destinations.",
-};
+const spatialTransitionReviewMessages = new Map([
+  ["spatial_transition_stale_definition", "The world map changed. Review the available destinations."],
+  ["spatial_transition_stale_location", "The current location changed. Review the available destinations."],
+]);
 async function reconcileSpatialCapabilityEvent(detail) {
   if (detail?.packageId !== "hierarchical-maps" || typeof detail.chatId !== "string") return;
   const chatId = detail.chatId;
@@ -705,7 +705,7 @@ async function reconcileSpatialCapabilityEvent(detail) {
         typeof data?.message === "string" && data.message.trim()
           ? data.message.trim()
           : typeof data?.code === "string"
-            ? spatialTransitionReviewMessages[data.code]
+            ? spatialTransitionReviewMessages.get(data.code)
             : undefined;
       setPendingSpatialTransitionStatus(chatId, "needs_review", reviewMessage);
       markSpatialRouteNeedsReview(chatId, undefined, reviewMessage);
