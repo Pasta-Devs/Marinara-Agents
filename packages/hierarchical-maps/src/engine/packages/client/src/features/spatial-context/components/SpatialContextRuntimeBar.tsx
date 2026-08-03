@@ -64,10 +64,6 @@ export function SpatialContextRuntimeBar({
       return;
     }
     if (!pending) return;
-    if (data.currentLocationId === pending.transition.destinationId) {
-      clearPendingSpatialTransition(chatId, pending.transition.commandId);
-      return;
-    }
     const destinationStillAvailable = data.destinations.some(
       (destination) => destination.id === pending.transition.destinationId,
     );

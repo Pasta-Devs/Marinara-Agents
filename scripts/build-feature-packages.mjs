@@ -724,10 +724,6 @@ async function reconcileSpatialCapabilityEvent(detail) {
       reconcileSpatialRoutePlan(chatId, spatial);
       return;
     }
-    const pending = getPendingSpatialTransition(chatId);
-    if (pending && spatial.currentLocationId === pending.transition.destinationId) {
-      clearPendingSpatialTransition(chatId, pending.transition.commandId);
-    }
   } catch {
     void client.invalidateQueries({ queryKey: ["spatial-context", chatId] });
   }

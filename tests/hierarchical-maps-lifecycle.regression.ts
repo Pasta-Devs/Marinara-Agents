@@ -122,6 +122,18 @@ function artifactFixture(version: string): ArtifactFixture {
       const packageBuilderSource = readFileSync(join(repoRoot, "scripts", "build-feature-packages.mjs"), "utf8");
       assert.match(packageBuilderSource, /spatialTransitionReviewMessages\.get\(data\.code\)/u);
       assert.doesNotMatch(packageBuilderSource, /spatialTransitionReviewMessages\[data\.code\]/u);
+      assert.doesNotMatch(
+        packageBuilderSource,
+        /spatial\.currentLocationId === pending\.transition\.destinationId/u,
+      );
+      const runtimeBarSource = readFileSync(
+        join(
+          repoRoot,
+          "packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx",
+        ),
+        "utf8",
+      );
+      assert.doesNotMatch(runtimeBarSource, /data\.currentLocationId === pending\.transition\.destinationId/u);
     }
   }
   return {
