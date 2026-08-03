@@ -2919,6 +2919,7 @@ async function main() {
     assert.ok(impersonatedUserMessage);
     assert.match(impersonatedUserMessage.content, /GAME_HISTORY_PROVIDER_RESPONSE/u);
 
+    const providerRequestsBeforeRepeatedImpersonate = generationProviderRequestCount;
     const repeatedImpersonateGeneration = await app.inject({
       method: "POST",
       url: "/api/generate",
@@ -2945,6 +2946,7 @@ async function main() {
     assert.match(repeatedImpersonateGeneration.body, /content_replace/u);
     assert.doesNotMatch(repeatedImpersonateGeneration.body, /spatial_transition_rejected/u);
     assert.doesNotMatch(repeatedImpersonateGeneration.body, /"type":"error"/u);
+    assert.equal(generationProviderRequestCount, providerRequestsBeforeRepeatedImpersonate);
     const repeatedImpersonateEvents = repeatedImpersonateGeneration.body
       .split("\n\n")
       .filter((event) => event.startsWith("data: "))
