@@ -59,14 +59,14 @@ export function ltmScopesOverlap(
       (!targetCharacterIds.length || !noteCharacterIds.length)
     )
       return false;
-    if (!noteScope?.personaId) return true;
-    return noteScope.personaId === (targetScope?.personaId ?? options.personaId);
+    const targetPersonaId = targetScope?.personaId ?? options.personaId;
+    return !noteScope?.personaId || !targetPersonaId || noteScope.personaId === targetPersonaId;
   }
 
   if (noteScope?.groupId) {
     if (noteScope.groupId !== targetScope?.groupId) return false;
-    if (!noteScope.personaId) return true;
-    return noteScope.personaId === (targetScope?.personaId ?? options.personaId);
+    const targetPersonaId = targetScope?.personaId ?? options.personaId;
+    return !noteScope.personaId || !targetPersonaId || noteScope.personaId === targetPersonaId;
   }
 
   if (noteScope?.personaId) {
@@ -99,7 +99,11 @@ export function matchesLtmScope(
     return noteHasScope ? false : input?.includeGlobal !== false;
   }
 
-  if (!noteHasScope) return input?.includeGlobal !== false;
+  if (!noteHasScope)
+    return (
+      (note.type === "character" && targetCharacterIds.includes(note.id)) ||
+      input?.includeGlobal !== false
+    );
 
   return ltmScopesOverlap(note.scope, targetScope, {
     noteId: note.id,

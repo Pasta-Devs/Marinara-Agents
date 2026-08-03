@@ -808,9 +808,66 @@ async function main() {
         "world_scope_group",
       ].sort(),
     );
+    await storageService.storage.createNote({
+      id: "world_character_persona_scoped",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: {
+        chatId: "chat-a",
+        chatIds: ["chat-a"],
+        characterIds: ["character-mara"],
+        personaId: "persona-fixture",
+      },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        facts: {
+          text: "Character filtering does not require a selected persona.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const characterWithoutPersona = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=chat-a&scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.equal(
+      characterWithoutPersona
+        .json()
+        .some((note: any) => note.id === "world_character_persona_scoped"),
+      true,
+    );
     assert.equal(
       new Set(characterAllChats.json().map((note: any) => note.id)).size,
       characterAllChats.json().length,
+    );
+    await storageService.storage.createNote({
+      id: "character-mara",
+      type: "character",
+      status: "active",
+      modes: ["roleplay"],
+      scope: {},
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        persona: {
+          text: "Mara's unscoped character memory is selected by character ID.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const characterMemory = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.equal(
+      characterMemory.json().some((note: any) => note.id === "character-mara"),
+      true,
     );
     const characterAllBranches = await app.inject({
       method: "GET",

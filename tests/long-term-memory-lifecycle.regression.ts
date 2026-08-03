@@ -147,6 +147,8 @@ async function main() {
     const rejectedSuggestionId = "2a1b5c7d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
     let savedNote: Record<string, unknown> | null = null;
     let deletedSuggestionId: string | null = null;
+    const scopeTargetQueries: string[] = [];
+    const noteQueries: string[] = [];
     const reviewActionCalls: Array<{
       action: "accept" | "skip";
       draftId: string;
@@ -399,10 +401,24 @@ async function main() {
             deduplications: 0,
           },
         });
-      if (request.method === "GET" && url.pathname.endsWith("/scope-targets"))
-        return send(200, { currentScope: null, chats: [], groups: [], characters: [] });
-      if (request.method === "GET" && url.pathname.endsWith("/notes"))
-        return send(200, [
+      if (request.method === "GET" && url.pathname.endsWith("/scope-targets")) {
+        scopeTargetQueries.push(url.search);
+        return send(200, {
+          currentScope: { chatId: "empty-chat", chatIds: ["empty-chat"] },
+          chats: [{
+            id: "memory-chat",
+            label: "Memory chat",
+            mode: "roleplay",
+            groupId: null,
+            characterIds: ["character-a"],
+          }],
+          groups: [],
+          characters: [{ id: "character-a", label: "Character A" }],
+        });
+      }
+      if (request.method === "GET" && url.pathname.endsWith("/notes")) {
+        noteQueries.push(url.search);
+        const notes = [
           {
             id: "source_mobile_review",
             title: "Mobile review source",
@@ -444,7 +460,14 @@ async function main() {
             updatedAt: "2026-07-30T00:00:00.000Z",
             version: 1,
           },
-        ]);
+        ];
+        return send(
+          200,
+          url.searchParams.get("scopeCharacterIds") === "character-a"
+            ? notes.filter((note) => note.id === "world_second_mobile")
+            : notes,
+        );
+      }
       if (request.method === "GET" && url.pathname.endsWith("/notes/world_second_mobile"))
         return send(200, {
           id: "world_second_mobile",
@@ -570,10 +593,34 @@ async function main() {
     await page.evaluate((version) => {
       const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
       element.setAttribute("view", "detail");
-      element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+      element.capabilityProps = {
+        agent: { name: "Long-Term Memory" },
+        chatId: "empty-chat",
+        package: { version },
+      };
       document.body.append(element);
     }, packageManifest.version);
     await page.locator('[data-ltm-surface="detail"]').waitFor();
+    await page.waitForFunction(() =>
+      document.querySelector('[data-ltm-browser-controls]') &&
+      document.querySelectorAll('[data-ltm-browser-controls] select')[1]
+        ?.value === "",
+    );
+    await page.waitForFunction(() =>
+      document.body.textContent?.includes("Second mobile review memory"),
+    );
+    assert.deepEqual(scopeTargetQueries, ["?chatId=empty-chat"]);
+    await page.locator('[aria-label="Character"]').selectOption("character-a");
+    await page.waitForFunction(() =>
+      document.querySelector('[aria-label="Character"]')?.value === "character-a",
+    );
+    await page.waitForFunction(() =>
+      document.body.textContent?.includes("Second mobile review memory"),
+    );
+    const characterNoteQuery = new URLSearchParams(noteQueries.at(-1));
+    assert.equal(characterNoteQuery.get("scopeCharacterIds"), "character-a");
+    assert.equal(characterNoteQuery.get("scopeChatIds"), "memory-chat");
+    assert.equal(characterNoteQuery.get("includeGlobal"), "false");
     assert.equal(await page.locator('[data-ltm-surface="overview"]').count(), 0);
     assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
     const desktopNavigationLayout = await page
