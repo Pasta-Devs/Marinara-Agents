@@ -1867,10 +1867,9 @@ export function SpatialMapWorkspace({
         });
         if (!discard) return;
       }
-      await onLorebooksChanged?.();
       onOpenLorebook(lorebookId);
     },
-    [confirmAction, dirty, onLorebooksChanged, onOpenLorebook, sharedWorldMode, templateMode],
+    [confirmAction, dirty, onOpenLorebook, sharedWorldMode, templateMode],
   );
 
   const handleClose = useCallback(async () => {

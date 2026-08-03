@@ -2561,7 +2561,7 @@ test("missing location lore explains the problem without exposing opaque entry I
   }
 });
 
-test("portable map export restores linked lore with new IDs before save", async ({ page }, testInfo) => {
+test("portable map import refreshes host lorebooks and linked navigation without reload", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "The portable import contract is viewport-independent.");
   test.setTimeout(120_000);
   const suffix = `${testInfo.project.name}-${Date.now()}`;
@@ -2627,7 +2627,8 @@ test("portable map export restores linked lore with new IDs before save", async 
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
-            rightPanelOpen: false,
+            rightPanelOpen: true,
+            rightPanel: "lorebooks",
             sidebarOpen: false,
             spatialMapDetailChatId: chatId,
           },
@@ -2643,6 +2644,8 @@ test("portable map export restores linked lore with new IDs before save", async 
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
     await expect(workspace).toBeVisible();
+    const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await expect(rightPanel.getByText(lorebookName, { exact: true })).toHaveCount(1);
     await workspace.getByRole("button", { name: /More map actions/u }).click();
     await workspace.getByRole("button", { name: "Export world map" }).click();
     let exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
@@ -2679,9 +2682,6 @@ test("portable map export restores linked lore with new IDs before save", async 
 
     const deleteLorebookResponse = await page.request.delete(`/api/lorebooks/${originalLorebook.id}`);
     expect(deleteLorebookResponse.ok(), await deleteLorebookResponse.text()).toBeTruthy();
-    await page.reload();
-    await dismissOnboardingTutorial(page);
-    await expect(workspace).toBeVisible();
     await workspace.locator("[data-marinara-map-import-input]").setInputFiles({
       name: download.suggestedFilename(),
       mimeType: "application/json",
@@ -2736,6 +2736,33 @@ test("portable map export restores linked lore with new IDs before save", async 
     expect(stored.definition.locations.find((location) => location.id === "ai_harbor")?.lorebookEntryIds).toEqual([
       importedEntries[0]?.id,
     ]);
+
+    await workspace.getByRole("button", { name: "Back to chat", exact: true }).click();
+    await expect(workspace).toHaveCount(0);
+    const importedLorebookRow = rightPanel.locator('[data-touch-drag-card="lorebook"]', {
+      hasText: lorebookName,
+    });
+    await expect(importedLorebookRow).toHaveCount(1);
+    await importedLorebookRow.click({ position: { x: 120, y: 32 } });
+    await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
+    await page.locator(".mari-editor-header").getByRole("button").first().click();
+
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await agentsPanel
+      .locator('[data-agent-name="World Maps"]')
+      .getByText("World Maps", { exact: true })
+      .click();
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(home).toBeVisible();
+    await home.getByRole("button", { name: "Edit map", exact: true }).click();
+    await expect(workspace).toBeVisible();
+    const details = workspace.locator('section[aria-label="Details for Gloam Harbor"]');
+    await details.getByText("Linked lore", { exact: true }).click();
+    await expect(details.getByText("Portable harbor ledger", { exact: true }).first()).toBeVisible();
+    await details.getByRole("button", { name: "Open", exact: true }).click();
+    await expect(workspace).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
 
     await expectDeleted(page, `/api/chats/${chat.id}`);
     const retainedLorebookResponse = await page.request.get(`/api/lorebooks/${importedLorebookId}`);
