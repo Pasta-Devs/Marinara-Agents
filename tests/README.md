@@ -17,7 +17,7 @@ privileged routes, debug logging, and the exact release artifact lifecycle:
 ```bash
 cd ../Marinara-Engine
  set -e
- for test in storage extraction-graph runtime routes debug-log lifecycle; do
+ for test in storage extraction-graph runtime routes conversation-summary-import debug-log lifecycle; do
   MARINARA_ENGINE_ROOT="$PWD" pnpm --filter @marinara-engine/server exec tsx \
     "$PWD/../Marinara-Agents/tests/long-term-memory-${test}.regression.ts"
 done
