@@ -4766,6 +4766,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       chatId: string;
       userMessage?: string;
       generationGuide?: string;
+      impersonate?: boolean;
       pendingSpatialTransition?: {
         destinationId: string;
         expectedDefinitionRevision: number;
@@ -4776,6 +4777,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     expect(request.chatId).toBe(chat.id);
     if (generationRequestCount === 1) {
       expect(request.generationGuide).toContain("Let the NPC wait at the current location");
+      expect(request.impersonate).not.toBe(true);
       expect(request.pendingSpatialTransition).toBeUndefined();
       await route.fulfill({
         status: 200,
@@ -4789,6 +4791,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     expect(pendingSpatialTransition).toBeDefined();
     if (!pendingSpatialTransition) throw new Error("Owner movement request did not include its queued transition");
     if (generationRequestCount === 2) {
+      expect(request.impersonate).toBe(true);
       expect(pendingSpatialTransition).toMatchObject({
         destinationId: "ai_harbor",
         expectedDefinitionRevision: saved.definition.revision,
@@ -5035,7 +5038,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     expect(afterGuidedResponse.ok(), await afterGuidedResponse.text()).toBeTruthy();
     expect(((await afterGuidedResponse.json()) as { currentLocationId: string }).currentLocationId).toBe("ai_world");
 
-    await input.fill("I follow the harbor road.");
+    await input.fill("/impersonate I follow the harbor road.");
     await page.locator("button.mari-chat-send-btn").click();
     await expect(page.getByText("Moves with your next turn")).toHaveCount(0);
     await expect(input).toHaveValue("");
