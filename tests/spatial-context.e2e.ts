@@ -882,7 +882,7 @@ test("World Maps activates inside its Tracker Agents entry", async ({ page }, te
     await expect(activation).toHaveAttribute("aria-checked", "true");
     const activationHeight = await activation.evaluate((element) => element.getBoundingClientRect().height);
     expect(activationHeight).toBeGreaterThanOrEqual(44);
-    await expect(agentEntry.getByRole("button", { name: "Create world map" })).toBeVisible();
+    await expect(agentEntry.getByRole("button", { name: "Set up world map" })).toBeVisible();
 
     await expect
       .poll(async () => {
@@ -1530,8 +1530,11 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     const globalGalleryBeforeImport = await page.request.get("/api/global-gallery");
     expect(globalGalleryBeforeImport.ok(), await globalGalleryBeforeImport.text()).toBeTruthy();
     const globalImageCountBeforeImport = ((await globalGalleryBeforeImport.json()) as Array<unknown>).length;
-    const downloadPromise = page.waitForEvent("download");
     await workspace.getByRole("button", { name: "Export world map" }).click();
+    const exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+    await expect(exportDialog.getByRole("radio", { name: /Map \+ linked entries/u })).toBeChecked();
+    const downloadPromise = page.waitForEvent("download");
+    await exportDialog.getByRole("button", { name: "Download export" }).click();
     const download = await downloadPromise;
     const downloadPath = await download.path();
     expect(downloadPath).not.toBeNull();
@@ -1565,7 +1568,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await page.locator('[data-tour="panel-agents"]').click();
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-    await agentEntry.getByRole("button", { name: "Create world map" }).click();
+    await agentEntry.getByRole("button", { name: "Set up world map" }).click();
     await workspace.getByRole("button", { name: "Open shared worlds and map templates" }).click();
 
     const chatSettingsLibrary = page.locator("[data-marinara-map-template-library]");
@@ -1677,7 +1680,7 @@ test("detached chat maps create distinguishable shared-world copies and expose p
     await dismissOnboardingTutorial(page);
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-    await agentEntry.getByRole("button", { name: "Edit world map" }).click();
+    await agentEntry.getByRole("button", { name: "Set up world map" }).click();
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
     await expect(workspace).toContainText(`${chatName} · Independent chat map`);
@@ -2246,6 +2249,23 @@ test("Map editor fills missing location artwork with one image per location", as
     await workspace.getByLabel("Positive prompt for Shrouded Coast").fill(editedPositive);
     await workspace.getByLabel("Negative prompt for Shrouded Coast").fill(editedNegative);
 
+    await workspace.getByRole("button", { name: "Refresh prompts" }).click();
+    const refreshDialog = page.getByRole("dialog", { name: "Refresh artwork prompts?" });
+    await expect(refreshDialog).toContainText("replaces any prompt or negative-prompt edits");
+    await expect(workspace.getByLabel("Positive prompt for Shrouded Coast")).toHaveValue(editedPositive);
+    await refreshDialog.getByRole("button", { name: "Refresh prompts" }).click();
+    await expect.poll(() => previewRequests.length).toBe(4);
+    const refreshedCoastRequest = previewRequests.slice(2).find((request) => request.title === "Shrouded Coast");
+    expect(refreshedCoastRequest).toBeDefined();
+    await expect(workspace.getByLabel("Positive prompt for Shrouded Coast")).toHaveValue(
+      `Engine campaign style. ${refreshedCoastRequest!.prompt}`,
+    );
+    await expect(workspace.getByLabel("Negative prompt for Shrouded Coast")).toHaveValue(
+      "global negative, campaign hard negative",
+    );
+    await workspace.getByLabel("Positive prompt for Shrouded Coast").fill(editedPositive);
+    await workspace.getByLabel("Negative prompt for Shrouded Coast").fill(editedNegative);
+
     await workspace.locator("[data-marinara-confirm-map-artwork]").click();
     await expect.poll(() => generatedRequests.length).toBe(2);
     const generatedRequestsByTitle = new Map(generatedRequests.map((request) => [request.title, request]));
@@ -2538,6 +2558,197 @@ test("missing location lore explains the problem without exposing opaque entry I
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}`);
+  }
+});
+
+test("portable map export restores linked lore with new IDs before save", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The portable import contract is viewport-independent.");
+  test.setTimeout(120_000);
+  const suffix = `${testInfo.project.name}-${Date.now()}`;
+  const lorebookName = `Portable Coast ${suffix}`;
+  const lorebookResponse = await page.request.post("/api/lorebooks", {
+    data: {
+      name: lorebookName,
+      description: "Portable map lore regression fixture.",
+      category: "world",
+      enabled: false,
+      tokenBudget: 1234,
+    },
+  });
+  expect(lorebookResponse.ok(), await lorebookResponse.text()).toBeTruthy();
+  const originalLorebook = (await lorebookResponse.json()) as { id: string };
+  const folderResponse = await page.request.post(`/api/lorebooks/${originalLorebook.id}/folders`, {
+    data: { name: "Harbor records", enabled: false, parentFolderId: null, order: 7 },
+  });
+  expect(folderResponse.ok(), await folderResponse.text()).toBeTruthy();
+  const originalFolder = (await folderResponse.json()) as { id: string };
+  const entryResponse = await page.request.post(`/api/lorebooks/${originalLorebook.id}/entries`, {
+    data: {
+      name: "Portable harbor ledger",
+      content: "The harbor master keeps a portable smuggling ledger.",
+      keys: ["portable harbor"],
+      enabled: false,
+      order: 19,
+      folderId: originalFolder.id,
+    },
+  });
+  expect(entryResponse.ok(), await entryResponse.text()).toBeTruthy();
+  const originalEntry = (await entryResponse.json()) as { id: string };
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: `Portable Lore Map ${suffix}`, mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: {
+        ...generatedDefinition,
+        enabled: true,
+        startingLocationId: "ai_harbor",
+        locations: generatedDefinition.locations.map((location) =>
+          location.id === "ai_harbor"
+            ? { ...location, lorebookEntryIds: [originalEntry.id] }
+            : location,
+        ),
+      },
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+  let importedLorebookId: string | null = null;
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+
+    const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    await expect(workspace).toBeVisible();
+    await workspace.getByRole("button", { name: /More map actions/u }).click();
+    await workspace.getByRole("button", { name: "Export world map" }).click();
+    let exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+    await expect(exportDialog.getByRole("button", { name: "Cancel map export" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(exportDialog).toHaveCount(0);
+    await workspace.getByRole("button", { name: /More map actions/u }).click();
+    await workspace.getByRole("button", { name: "Export world map" }).click();
+    exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+    await expect(exportDialog).toContainText(`${lorebookName}`);
+    await expect(exportDialog).toContainText("1 entry");
+    const downloadPromise = page.waitForEvent("download");
+    await exportDialog.getByRole("button", { name: "Download export" }).click();
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const exportedMapText = await readFile(downloadPath!, "utf8");
+    const exportedMap = JSON.parse(exportedMapText) as {
+      formatVersion: number;
+      portableLore: {
+        mode: string;
+        books: Array<{ name: string; entries: Array<{ originalId: string }> }>;
+        references: Array<{ originalEntryId: string; originalEntryName: string }>;
+      };
+    };
+    expect(exportedMap).toMatchObject({
+      formatVersion: 4,
+      portableLore: {
+        mode: "linked-entries",
+        books: [{ name: lorebookName, entries: [{ originalId: originalEntry.id }] }],
+        references: [{ originalEntryId: originalEntry.id, originalEntryName: "Portable harbor ledger" }],
+      },
+    });
+
+    const deleteLorebookResponse = await page.request.delete(`/api/lorebooks/${originalLorebook.id}`);
+    expect(deleteLorebookResponse.ok(), await deleteLorebookResponse.text()).toBeTruthy();
+    await page.reload();
+    await dismissOnboardingTutorial(page);
+    await expect(workspace).toBeVisible();
+    await workspace.locator("[data-marinara-map-import-input]").setInputFiles({
+      name: download.suggestedFilename(),
+      mimeType: "application/json",
+      buffer: Buffer.from(exportedMapText),
+    });
+    const importDialog = page.getByRole("dialog", { name: "Restore portable map lore" });
+    await expect(importDialog.getByRole("button", { name: "Cancel portable lore import" })).toBeFocused();
+    await expect(importDialog).toContainText("1 entry");
+    await expect(importDialog).toContainText("New entries");
+    await importDialog.getByRole("button", { name: "Import separate copies" }).click();
+    await expect(page.getByText(/1 entry was imported/u)).toBeVisible();
+    await expect(workspace.locator("[data-marinara-portable-lore-unresolved]")).toHaveCount(0);
+    const saveButton = workspace.getByRole("button", { name: "Save", exact: true });
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+    await expect(workspace).toContainText("Saved");
+
+    const lorebooksAfterImportResponse = await page.request.get("/api/lorebooks");
+    expect(lorebooksAfterImportResponse.ok(), await lorebooksAfterImportResponse.text()).toBeTruthy();
+    const importedLorebook = ((await lorebooksAfterImportResponse.json()) as Array<{
+      id: string;
+      name: string;
+      enabled: boolean;
+      tokenBudget: number;
+    }>).find((candidate) => candidate.name === lorebookName);
+    expect(importedLorebook).toMatchObject({ enabled: false, tokenBudget: 1234 });
+    importedLorebookId = importedLorebook?.id ?? null;
+    expect(importedLorebookId).not.toBeNull();
+    expect(importedLorebookId).not.toBe(originalLorebook.id);
+    const importedEntriesResponse = await page.request.get(`/api/lorebooks/${importedLorebookId}/entries`);
+    expect(importedEntriesResponse.ok(), await importedEntriesResponse.text()).toBeTruthy();
+    const importedEntries = (await importedEntriesResponse.json()) as Array<{
+      id: string;
+      name: string;
+      enabled: boolean;
+      folderId: string | null;
+    }>;
+    expect(importedEntries).toHaveLength(1);
+    expect(importedEntries[0]).toMatchObject({ name: "Portable harbor ledger", enabled: false });
+    expect(importedEntries[0]?.id).not.toBe(originalEntry.id);
+    const importedFoldersResponse = await page.request.get(`/api/lorebooks/${importedLorebookId}/folders`);
+    expect(importedFoldersResponse.ok(), await importedFoldersResponse.text()).toBeTruthy();
+    expect(await importedFoldersResponse.json()).toEqual([
+      expect.objectContaining({ name: "Harbor records", enabled: false, order: 7 }),
+    ]);
+    expect(importedEntries[0]?.folderId).not.toBeNull();
+    const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(storedResponse.ok(), await storedResponse.text()).toBeTruthy();
+    const stored = (await storedResponse.json()) as {
+      definition: { locations: Array<{ id: string; lorebookEntryIds: string[] }> };
+    };
+    expect(stored.definition.locations.find((location) => location.id === "ai_harbor")?.lorebookEntryIds).toEqual([
+      importedEntries[0]?.id,
+    ]);
+
+    await expectDeleted(page, `/api/chats/${chat.id}`);
+    const retainedLorebookResponse = await page.request.get(`/api/lorebooks/${importedLorebookId}`);
+    expect(retainedLorebookResponse.ok(), await retainedLorebookResponse.text()).toBeTruthy();
+  } finally {
+    const chatCheck = await page.request.get(`/api/chats/${chat.id}`);
+    if (chatCheck.ok()) await expectDeleted(page, `/api/chats/${chat.id}`);
+    const originalLorebookCheck = await page.request.get(`/api/lorebooks/${originalLorebook.id}`);
+    if (originalLorebookCheck.ok()) await expectDeleted(page, `/api/lorebooks/${originalLorebook.id}`);
+    if (importedLorebookId) {
+      const importedLorebookCheck = await page.request.get(`/api/lorebooks/${importedLorebookId}`);
+      if (importedLorebookCheck.ok()) await expectDeleted(page, `/api/lorebooks/${importedLorebookId}`);
+    }
   }
 });
 
@@ -2991,11 +3202,15 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
       const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-      await agentEntry.getByRole("button", { name: "Create world map" }).click();
+      await agentEntry.getByRole("button", { name: "Set up world map" }).click();
     }
 
     await expectWorkspaceFillsOverlay(page);
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
+    await expect(workspace.getByRole("button", { name: "Draft with AI" })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Build manually" })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Use template or shared world" })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Import map file" })).toBeVisible();
     await page.getByRole("button", { name: "Draft with AI" }).click();
     await expect(page.getByRole("heading", { name: "Draft the map with AI" })).toBeVisible();
     await expectAiBuilderLayout(page, mobile);
@@ -3363,6 +3578,104 @@ test("Roleplay minimap keeps selected locations opaque over map artwork", async 
   }
 });
 
+test("installed World Maps package keeps the editor canvas visible at 16:9", async ({ page, request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The package CSS is shared across viewports.");
+  test.setTimeout(120_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "World Map Canvas Geometry",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+
+  const artworkUpload = await page.request.post(`/api/gallery/${chat.id}/upload`, {
+    multipart: {
+      prompt: "A fogbound anime harbor.",
+      provider: "world-map-e2e",
+      model: "fixture",
+      width: "1",
+      height: "1",
+      file: {
+        name: "gloam-harbor.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2SIAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      },
+    },
+  });
+  expect(artworkUpload.ok(), await artworkUpload.text()).toBeTruthy();
+  const uploadedArtwork = (await artworkUpload.json()) as { id: string };
+  const definition = {
+    ...generatedDefinition,
+    locations: generatedDefinition.locations.map((location) => {
+      if (location.id === "ai_harbor") {
+        return {
+          ...location,
+          childPresentation: "map" as const,
+          mapBackgroundImageId: uploadedArtwork.id,
+        };
+      }
+      if (location.id === "ai_lighthouse") {
+        return { ...location, parentId: "ai_harbor", sortOrder: 0 };
+      }
+      return location;
+    }),
+  };
+  const initialSave = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: { ...definition, enabled: true },
+    },
+  });
+  expect(initialSave.ok(), await initialSave.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await agentsPanel
+      .locator('[data-agent-name="World Maps"]')
+      .getByText("World Maps", { exact: true })
+      .click();
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(home).toBeVisible();
+    await home.getByRole("button", { name: "Edit map", exact: true }).click();
+
+    const locationHierarchy = page.getByRole("region", { name: "Location hierarchy" });
+    await locationHierarchy.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    await locationHierarchy.getByRole("button", { name: "Enter Shrouded Coast" }).click();
+    await locationHierarchy.getByRole("button", { name: "Enter Gloam Harbor" }).click();
+    await page.getByRole("button", { name: "Arrange map" }).click();
+
+    const canvas = page.locator('[data-marinara-maps-editor-canvas][data-layout-editing="true"]:visible');
+    const background = canvas.locator('img[aria-hidden="true"]');
+    await expect(background).toBeVisible();
+    await expect.poll(() => background.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+    const canvasBox = await canvas.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    expect(canvasBox!.height).toBeGreaterThan(100);
+    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(16 / 9, 1);
+  } finally {
+    await page.close();
+    const deleteResponse = await request.delete(`/api/chats/${chat.id}?force=true`);
+    expect(deleteResponse.ok(), await deleteResponse.text()).toBeTruthy();
+  }
+});
+
 test("AI map expansion preserves a campaign map and its current location", async ({ page }, testInfo) => {
   test.setTimeout(150_000);
   const response = await page.request.post("/api/chats", {
@@ -3498,7 +3811,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     if (!mobile) {
       await page.getByRole("button", { name: "Chat Settings" }).click();
       const { agentEntry } = await openHierarchicalMapsAgentControls(page);
-      await agentEntry.getByRole("button", { name: "Edit world map" }).click();
+      await agentEntry.getByRole("button", { name: "Set up world map" }).click();
     } else {
       const mobileMusicLayer = page.locator('[data-component="MobileMusicWidgetLayer"]');
       const mobileMusicWidget = mobileMusicLayer.locator(".fixed");
@@ -3518,9 +3831,12 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(exportMap.locator("svg")).toHaveClass(/lucide-upload/);
     await expect(importMap.locator("svg")).toHaveClass(/lucide-download/);
     if (!mobile) {
-      await expect(page.getByRole("checkbox", { name: "Include map artwork" })).toBeChecked();
-      const downloadPromise = page.waitForEvent("download");
       await exportMap.click();
+      const exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+      await expect(exportDialog.getByRole("checkbox", { name: "Include map artwork" })).toBeChecked();
+      await expect(exportDialog.getByRole("radio", { name: /Map \+ linked entries/u })).toBeChecked();
+      const downloadPromise = page.waitForEvent("download");
+      await exportDialog.getByRole("button", { name: "Download export" }).click();
       const download = await downloadPromise;
       expect(download.suggestedFilename()).toMatch(/\.world-map\.json$/u);
       const downloadPath = await download.path();
@@ -3529,11 +3845,13 @@ test("AI map expansion preserves a campaign map and its current location", async
       const exportedMap = JSON.parse(exportedMapText) as {
         format: string;
         formatVersion: number;
+        portableLore: { schemaVersion: number; mode: string };
         artwork: Array<{ sourceImageId: string; filename: string; data: string }>;
       };
       expect(exportedMap).toMatchObject({
         format: "marinara-hierarchical-map",
-        formatVersion: 3,
+        formatVersion: 4,
+        portableLore: { schemaVersion: 1, mode: "linked-entries" },
       });
       expect(exportedMap.artwork).toHaveLength(1);
       expect(exportedMap.artwork[0]).toMatchObject({
@@ -3617,6 +3935,8 @@ test("AI map expansion preserves a campaign map and its current location", async
     const [canvasBox, nodeBox] = await Promise.all([arrangedCanvas.boundingBox(), lighthouseNode.boundingBox()]);
     expect(canvasBox).not.toBeNull();
     expect(nodeBox).not.toBeNull();
+    expect(canvasBox!.height).toBeGreaterThan(100);
+    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(16 / 9, 1);
     const unselectedBorderColor = await lighthouseNode.evaluate((element) => getComputedStyle(element).borderColor);
     await lighthouseNode.focus();
     await lighthouseNode.click();
@@ -4103,6 +4423,20 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       },
       { ...generatedDefinition.locations[2], childPresentation: "layers" as const, links: [] },
       {
+        id: "ai_edge",
+        parentId: "ai_world",
+        name: "World's Edge",
+        kind: "place",
+        description: "The exact edge of the charted coast.",
+        modelMemory: "The mapped road begins at the extreme southwest edge.",
+        icon: "🧭",
+        childPresentation: "list" as const,
+        placement: { x: 0, y: 100 },
+        links: [{ targetId: "ai_harbor", label: "Coastal road", bidirectional: true, state: "available" as const }],
+        status: "active" as const,
+        sortOrder: 2,
+      },
+      {
         id: "ai_lighthouse_ground",
         parentId: "ai_lighthouse",
         name: "Ground Level",
@@ -4316,13 +4650,35 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await openStoryMap.click();
     let roleplayMap = storyLocation.getByRole("region", { name: "Hierarchical world map" });
     await expect(roleplayMap).toBeVisible();
+    const runtimeCanvas = roleplayMap.locator("[data-marinara-maps-world-canvas]");
+    const runtimeCanvasBox = await runtimeCanvas.boundingBox();
+    expect(runtimeCanvasBox, "Runtime map canvas must have browser geometry").not.toBeNull();
+    expect(runtimeCanvasBox!.width / runtimeCanvasBox!.height).toBeCloseTo(16 / 9, 1);
+    const harborMarker = roleplayMap.getByRole("button", { name: /Inspect Gloam Harbor/ });
+    expect(await harborMarker.evaluate((element) => (element as HTMLElement).style.left)).toBe("25%");
+    expect(await harborMarker.evaluate((element) => (element as HTMLElement).style.top)).toBe("60%");
     const connectionLine = roleplayMap.locator(
       'line[data-marinara-map-connection="ai_harbor|ai_lighthouse"]',
     );
     await expect(connectionLine).toHaveCount(1);
+    await expect(connectionLine).toHaveAttribute("x1", "25%");
+    await expect(connectionLine).toHaveAttribute("y1", "60%");
+    await expect(connectionLine).toHaveAttribute("x2", "72%");
+    await expect(connectionLine).toHaveAttribute("y2", "25%");
     await expect(connectionLine).toHaveAttribute("data-line-style", "dotted");
     await expect(connectionLine).toHaveAttribute("stroke", "#22C55E");
     await expect(connectionLine).toHaveAttribute("stroke-dasharray", "1 5");
+    const edgeMarker = roleplayMap.getByRole("button", { name: /Inspect World's Edge/ });
+    expect(await edgeMarker.evaluate((element) => (element as HTMLElement).style.left)).toBe("0%");
+    expect(await edgeMarker.evaluate((element) => (element as HTMLElement).style.top)).toBe("100%");
+    const edgeConnectionLine = roleplayMap.locator(
+      'line[data-marinara-map-connection="ai_edge|ai_harbor"]',
+    );
+    await expect(edgeConnectionLine).toHaveCount(1);
+    await expect(edgeConnectionLine).toHaveAttribute("x1", "0%");
+    await expect(edgeConnectionLine).toHaveAttribute("y1", "100%");
+    await expect(edgeConnectionLine).toHaveAttribute("x2", "25%");
+    await expect(edgeConnectionLine).toHaveAttribute("y2", "60%");
     await expect(roleplayMap.getByRole("button", { name: /connections/u })).toHaveCount(0);
     const visibleMapPopover = storyLocation.locator("[data-marinara-maps-runtime-popover]:visible");
     await expect(visibleMapPopover).toBeVisible();

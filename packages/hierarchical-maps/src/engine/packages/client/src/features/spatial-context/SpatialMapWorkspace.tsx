@@ -35,6 +35,7 @@ import {
   validateSpatialArchive,
   type GameMap,
   type GenerateSpatialMapDraftResponse,
+  type LorebookFolder,
   type SpatialContextDefinition,
   type SpatialDefinitionIssue,
   type SpatialLocationPlacement,
@@ -66,6 +67,8 @@ import {
 } from "./components/LocationInspector";
 import { SpatialMapAiBuilder, type SpatialMapAiBuilderSession } from "./components/SpatialMapAiBuilder";
 import { SpatialLocationIcon } from "./components/SpatialLocationIcon";
+import { PortableLoreImportDialog } from "./components/PortableLoreImportDialog";
+import { useModalKeyboardNavigation } from "./components/use-modal-keyboard-navigation";
 import {
   addSpatialLocation,
   archiveSpatialLocation,
@@ -101,6 +104,20 @@ import { packageApi } from "./package-api";
 import { usePendingSpatialTransition } from "./pending-spatial-transitions";
 import { cancelSpatialRoute, useSpatialRoutePlan } from "./spatial-route-plans";
 import {
+  buildPortableLoreBundle,
+  importPortableLoreBundle,
+  parsePortableLoreBundle,
+  planPortableLoreImport,
+  portableLoreApproximateBytes,
+  remapPortableLoreReferences,
+  unresolvedPortableLoreReferences,
+  type PortableLoreBundle,
+  type PortableLoreExportMode,
+  type PortableLoreImportPlan,
+  type PortableLoreImportStrategy,
+  type PortableLoreReference,
+} from "./portable-lore";
+import {
   defaultGenerationPreferences,
   defaultHierarchyProfile,
   globalGallerySpatialReferenceId,
@@ -125,6 +142,15 @@ type FirstSaveResult = {
 type ImportIdReport = {
   missing: Array<{ id: string; name: string }>;
 };
+
+type PendingPortableLoreImport = {
+  rawRecord: Record<string, unknown>;
+  definition: SpatialContextDefinition;
+  bundle: PortableLoreBundle;
+  plan: PortableLoreImportPlan;
+};
+
+const EMPTY_PORTABLE_LORE_REFERENCES: PortableLoreReference[] = [];
 
 type ArtworkProgress = {
   completed: number;
@@ -312,6 +338,7 @@ interface SpatialMapWorkspaceProps {
     chatId: string;
     result: GenerateSpatialMapDraftResponse;
   } | null;
+  initialUnresolvedLoreReferences?: PortableLoreReference[];
   onClearPendingDraftReview?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenLorebook?: (lorebookId: string) => void;
@@ -374,6 +401,7 @@ export function SpatialMapWorkspace({
   stagedTemplate = null,
   debugMode = false,
   pendingDraftReview = null,
+  initialUnresolvedLoreReferences = EMPTY_PORTABLE_LORE_REFERENCES,
   onClearPendingDraftReview,
   onDirtyChange,
   onOpenLorebook,
@@ -416,6 +444,8 @@ export function SpatialMapWorkspace({
   const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const confirmationDialogRef = useRef<HTMLDivElement>(null);
   const confirmationCancelRef = useRef<HTMLButtonElement>(null);
+  const exportDialogRef = useRef<HTMLDivElement>(null);
+  const exportCloseRef = useRef<HTMLButtonElement>(null);
   const [initialized, setInitialized] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [baseTemplateName, setBaseTemplateName] = useState("");
@@ -433,7 +463,8 @@ export function SpatialMapWorkspace({
   const [archiveRequestId, setArchiveRequestId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [archiveReplacementId, setArchiveReplacementId] = useState("");
-  const { data: lorebooks = [] } = useSpatialLorebooks();
+  const lorebooksQuery = useSpatialLorebooks();
+  const { data: lorebooks = [] } = lorebooksQuery;
   const lorebookEntriesQuery = useSpatialLorebookEntries(lorebooks.map((lorebook) => lorebook.id));
   const excludedLorebookIds = useMemo(() => (chat ? getSpatialExcludedLorebookIds(chat) : []), [chat]);
   const [replacementCurrentLocationId, setReplacementCurrentLocationId] = useState<string | null>(null);
@@ -442,8 +473,17 @@ export function SpatialMapWorkspace({
   const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
   const [includeArtworkInExport, setIncludeArtworkInExport] = useState(true);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportMappingOpen, setExportMappingOpen] = useState(false);
+  const [exportLoreMode, setExportLoreMode] = useState<PortableLoreExportMode>("linked-entries");
+  const [exportFoldersByLorebookId, setExportFoldersByLorebookId] = useState<ReadonlyMap<string, LorebookFolder[]>>(
+    new Map(),
+  );
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [pendingPortableLoreImport, setPendingPortableLoreImport] = useState<PendingPortableLoreImport | null>(null);
+  const [unresolvedLoreReferences, setUnresolvedLoreReferences] =
+    useState<PortableLoreReference[]>(initialUnresolvedLoreReferences);
   const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
   const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
   const backgroundMoveFrameRef = useRef<number | null>(null);
@@ -451,6 +491,16 @@ export function SpatialMapWorkspace({
     locationId: string;
     position: SpatialLocationPlacement;
   } | null>(null);
+
+  useEffect(() => {
+    if (!draft || unresolvedLoreReferences.length === 0) return;
+    const next = unresolvedLoreReferences.filter((reference) =>
+      draft.locations
+        .find((location) => location.id === reference.locationId)
+        ?.lorebookEntryIds.includes(reference.originalEntryId),
+    );
+    if (next.length !== unresolvedLoreReferences.length) setUnresolvedLoreReferences(next);
+  }, [draft, unresolvedLoreReferences]);
 
   const resolveConfirmation = useCallback((confirmed: boolean) => {
     const resolve = confirmationResolverRef.current;
@@ -467,46 +517,12 @@ export function SpatialMapWorkspace({
     });
   }, []);
 
-  useEffect(() => {
-    if (!pendingConfirmation) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusFrame = window.requestAnimationFrame(() => confirmationCancelRef.current?.focus());
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        resolveConfirmation(false);
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(
-        confirmationDialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      );
-      const first = focusable[0];
-      const last = focusable.at(-1);
-      if (!first || !last) return;
-      if (
-        event.shiftKey &&
-        (document.activeElement === first || !confirmationDialogRef.current?.contains(document.activeElement))
-      ) {
-        event.preventDefault();
-        last.focus();
-      } else if (
-        !event.shiftKey &&
-        (document.activeElement === last || !confirmationDialogRef.current?.contains(document.activeElement))
-      ) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      window.removeEventListener("keydown", handleKeyDown);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, [pendingConfirmation, resolveConfirmation]);
+  useModalKeyboardNavigation({
+    dialogRef: confirmationDialogRef,
+    initialFocusRef: confirmationCancelRef,
+    open: Boolean(pendingConfirmation),
+    onEscape: () => resolveConfirmation(false),
+  });
 
   useEffect(
     () => () => {
@@ -570,10 +586,14 @@ export function SpatialMapWorkspace({
     setRegenerateRequestId(0);
     setLayoutEditingMode(null);
     setImportIdReport(null);
+    setExportDialogOpen(false);
+    setExportMappingOpen(false);
+    setPendingPortableLoreImport(null);
+    setUnresolvedLoreReferences(initialUnresolvedLoreReferences);
     setArtworkProgress(null);
     setTemplateName(libraryRecord?.name ?? "");
     setBaseTemplateName(libraryRecord?.name ?? "");
-  }, [chatId, libraryRecord?.id, resolveConfirmation, stagedTemplate?.id]);
+  }, [chatId, initialUnresolvedLoreReferences, libraryRecord?.id, resolveConfirmation, stagedTemplate?.id]);
 
   useEffect(() => {
     if (initialized) return;
@@ -818,7 +838,14 @@ export function SpatialMapWorkspace({
   }, []);
 
   const fillMissingArtwork = useCallback(async () => {
-    if (!draft || artworkProgress || missingArtworkLocations.length === 0) return;
+    if (
+      !draft ||
+      artworkProgress ||
+      previewGalleryImages.isPending ||
+      missingArtworkLocations.length === 0
+    ) {
+      return;
+    }
 
     let next = draft;
     let updatedLocations = 0;
@@ -903,9 +930,10 @@ export function SpatialMapWorkspace({
     draftHierarchyProfile,
     generateGalleryImage,
     missingArtworkLocations,
+    previewGalleryImages.isPending,
   ]);
 
-  const reviewMissingArtwork = useCallback(async () => {
+  const prepareArtworkPreview = useCallback(async () => {
     if (artworkProgress || previewGalleryImages.isPending || artworkImagesToGenerate === 0) return;
     const items = missingArtworkLocations
       .filter((location) => !location.referenceImageId && !location.mapBackgroundImageId)
@@ -933,6 +961,18 @@ export function SpatialMapWorkspace({
     missingArtworkLocations,
     previewGalleryImages,
   ]);
+
+  const refreshArtworkPreview = useCallback(async () => {
+    if (!artworkPreview || artworkProgress || previewGalleryImages.isPending) return;
+    const confirmed = await confirmAction({
+      title: "Refresh artwork prompts?",
+      message:
+        "Refresh every request from the current map and image settings? This replaces any prompt or negative-prompt edits you made in this review.",
+      confirmLabel: "Refresh prompts",
+    });
+    if (!confirmed) return;
+    await prepareArtworkPreview();
+  }, [artworkPreview, artworkProgress, confirmAction, prepareArtworkPreview, previewGalleryImages.isPending]);
 
   const flushBackgroundMove = useCallback(() => {
     backgroundMoveFrameRef.current = null;
@@ -1195,8 +1235,86 @@ export function SpatialMapWorkspace({
     spatial.data?.hasCommittedSpatialHistory,
   ]);
 
-  const handleExport = useCallback(async () => {
+  const portableExportBundle = useMemo(
+    () =>
+      exportDialogOpen && draft
+        ? buildPortableLoreBundle({
+            definition: draft,
+            mode: exportLoreMode,
+            lorebooks,
+            entries: lorebookEntriesQuery.entries ?? [],
+            foldersByLorebookId: exportFoldersByLorebookId,
+          })
+        : null,
+    [draft, exportDialogOpen, exportFoldersByLorebookId, exportLoreMode, lorebookEntriesQuery.entries, lorebooks],
+  );
+  const portableExportEntryCount = useMemo(
+    () => portableExportBundle?.books.reduce((count, book) => count + book.entries.length, 0) ?? 0,
+    [portableExportBundle],
+  );
+  const portableExportKilobytes = useMemo(
+    () =>
+      portableExportBundle
+        ? Math.max(1, Math.ceil(portableLoreApproximateBytes(portableExportBundle) / 1024))
+        : 0,
+    [portableExportBundle],
+  );
+  useModalKeyboardNavigation({
+    dialogRef: exportDialogRef,
+    initialFocusRef: exportCloseRef,
+    open: exportDialogOpen && Boolean(portableExportBundle),
+    disabled: isExporting,
+    onEscape: () => {
+      setExportMappingOpen(false);
+      setExportDialogOpen(false);
+    },
+  });
+
+  const openExportDialog = useCallback(async () => {
     if (!draft || isExporting) return;
+    if (lorebookEntriesQuery.isLoading) {
+      toast.error("Lore entries are still loading. Try the export again in a moment.");
+      return;
+    }
+    if (lorebookEntriesQuery.isError || !lorebookEntriesQuery.entries) {
+      toast.error("Lore entries could not be loaded, so a portable export cannot be created safely.");
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const entriesById = new Map((lorebookEntriesQuery.entries ?? []).map((entry) => [entry.id, entry]));
+      const linkedLorebookIds = Array.from(
+        new Set(
+          draft.locations
+            .flatMap((location) => location.lorebookEntryIds)
+            .map((entryId) => entriesById.get(entryId)?.lorebookId)
+            .filter((lorebookId): lorebookId is string => Boolean(lorebookId)),
+        ),
+      );
+      const folderRows = await Promise.all(
+        linkedLorebookIds.map(
+          async (lorebookId) =>
+            [lorebookId, await packageApi.get<LorebookFolder[]>(`/lorebooks/${lorebookId}/folders`)] as const,
+        ),
+      );
+      setExportFoldersByLorebookId(new Map(folderRows));
+      setExportMappingOpen(false);
+      setExportDialogOpen(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lore folders could not be prepared for export.");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [
+    draft,
+    isExporting,
+    lorebookEntriesQuery.entries,
+    lorebookEntriesQuery.isError,
+    lorebookEntriesQuery.isLoading,
+  ]);
+
+  const handleExport = useCallback(async () => {
+    if (!draft || !portableExportBundle || isExporting) return;
     setIsExporting(true);
     try {
       const shouldIncludeArtwork = includeArtworkInExport;
@@ -1239,9 +1357,10 @@ export function SpatialMapWorkspace({
           JSON.stringify(
             {
               format: "marinara-hierarchical-map",
-              formatVersion: shouldIncludeArtwork ? 3 : 2,
+              formatVersion: 4,
               definition: draft,
               hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+              portableLore: portableExportBundle,
               ...(shouldIncludeArtwork ? { artwork } : {}),
             },
             null,
@@ -1260,6 +1379,8 @@ export function SpatialMapWorkspace({
       link.download = `${safeName}.world-map.json`;
       link.click();
       URL.revokeObjectURL(url);
+      setExportMappingOpen(false);
+      setExportDialogOpen(false);
       if (shouldIncludeArtwork) {
         const includedCopy = `${artwork.length} artwork file${artwork.length === 1 ? "" : "s"} included`;
         const missingCopy =
@@ -1267,6 +1388,8 @@ export function SpatialMapWorkspace({
             ? `; ${missingArtworkCount} missing artwork link${missingArtworkCount === 1 ? " was" : "s were"} skipped`
             : "";
         toast.success(`World map exported: ${includedCopy}${missingCopy}.`);
+      } else {
+        toast.success("World map exported.");
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The world map could not be exported.");
@@ -1281,9 +1404,95 @@ export function SpatialMapWorkspace({
     globalGalleryImages,
     includeArtworkInExport,
     isExporting,
+    portableExportBundle,
     templateMode,
     templateName,
   ]);
+
+  const applyImportedMap = useCallback(
+    async (
+      rawRecord: Record<string, unknown> | null,
+      definition: SpatialContextDefinition,
+      portableLore: PortableLoreBundle | null,
+      entryIdMap: ReadonlyMap<string, string>,
+      onDraftApplied?: () => void,
+    ) => {
+      const loreRemappedDefinition = portableLore
+        ? remapPortableLoreReferences(definition, portableLore, entryIdMap)
+        : definition;
+      const bundledArtwork = parseBundledArtwork(rawRecord?.artwork);
+      const referencedIds = new Set(referencedArtworkIds(loreRemappedDefinition));
+      const applicableArtwork = bundledArtwork.filter((artwork) => referencedIds.has(artwork.sourceImageId));
+      const artworkIdMap = new Map<string, string>();
+      const currentGlobalImages = [...(globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [])];
+      let sharedArtworkAdded = 0;
+      let sharedArtworkReused = 0;
+      let chatArtworkRestored = 0;
+      let failedArtworkCount = 0;
+      for (const artwork of applicableArtwork) {
+        try {
+          const file = bundledArtworkFile(artwork);
+          if (templateMode || isGlobalGallerySpatialReferenceId(artwork.sourceImageId)) {
+            const result = await reuseOrUploadSpatialGlobalGalleryImage(file, artwork, currentGlobalImages);
+            artworkIdMap.set(artwork.sourceImageId, globalGallerySpatialReferenceId(result.image.id));
+            if (!currentGlobalImages.some((candidate) => candidate.id === result.image.id)) {
+              currentGlobalImages.push(result.image);
+            }
+            if (result.reused) sharedArtworkReused += 1;
+            else sharedArtworkAdded += 1;
+          } else if (chatId) {
+            const uploaded = await uploadSpatialGalleryImage(chatId, file, artwork);
+            artworkIdMap.set(artwork.sourceImageId, uploaded.id);
+            chatArtworkRestored += 1;
+          }
+        } catch {
+          failedArtworkCount += 1;
+        }
+      }
+      if (chatArtworkRestored > 0) await galleryImages.refetch();
+      if (sharedArtworkAdded > 0) await globalGalleryImages.refetch();
+      const remappedDefinition = remapArtworkReferences(loreRemappedDefinition, artworkIdMap);
+      const imported: SpatialContextDefinition = {
+        ...remappedDefinition,
+        ownerMode,
+        enabled: draft?.enabled ?? remappedDefinition.enabled,
+        revision: baseDefinition?.revision ?? 0,
+      };
+      const importedProfile = normalizeHierarchyProfile(rawRecord?.hierarchyProfile, imported);
+      applyDraft(imported);
+      onDraftApplied?.();
+      setDraftHierarchyProfile(importedProfile);
+      setImportIdReport(null);
+      setFirstMapGenerationSession(null);
+      setSelectedId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
+      setEnteredParentId(null);
+      setMobilePane("hierarchy");
+      const existingLoreEntryIds = new Set((lorebookEntriesQuery.entries ?? []).map((entry) => entry.id));
+      setUnresolvedLoreReferences(
+        portableLore
+          ? unresolvedPortableLoreReferences(portableLore, entryIdMap).filter(
+              (reference) => reference.entryKey !== null || !existingLoreEntryIds.has(reference.originalEntryId),
+            )
+          : [],
+      );
+      toast.success(
+        templateMode
+          ? `World map imported into this template. Review it, then Save template.${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`
+          : `World map imported into the working copy. Review it, then Save.${chatArtworkRestored > 0 ? ` ${chatArtworkRestored} artwork file${chatArtworkRestored === 1 ? " was" : "s were"} restored to this chat's Gallery.` : ""}${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} shared artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
+      );
+    },
+    [
+      applyDraft,
+      baseDefinition?.revision,
+      chatId,
+      draft?.enabled,
+      galleryImages,
+      globalGalleryImages,
+      lorebookEntriesQuery.entries,
+      ownerMode,
+      templateMode,
+    ],
+  );
 
   const handleImport = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1310,57 +1519,27 @@ export function SpatialMapWorkspace({
             `Campaign history uses ${missing.length} location ID${missing.length === 1 ? "" : "s"} missing from this file. Review the repair steps shown in the editor.`,
           );
         }
-        const bundledArtwork = parseBundledArtwork(rawRecord?.artwork);
-        const referencedIds = new Set(referencedArtworkIds(parsed.data));
-        const applicableArtwork = bundledArtwork.filter((artwork) => referencedIds.has(artwork.sourceImageId));
-        const artworkIdMap = new Map<string, string>();
-        const currentGlobalImages = [...(globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [])];
-        let sharedArtworkAdded = 0;
-        let sharedArtworkReused = 0;
-        let chatArtworkRestored = 0;
-        let failedArtworkCount = 0;
-        for (const artwork of applicableArtwork) {
-          try {
-            const file = bundledArtworkFile(artwork);
-            if (templateMode || isGlobalGallerySpatialReferenceId(artwork.sourceImageId)) {
-              const result = await reuseOrUploadSpatialGlobalGalleryImage(file, artwork, currentGlobalImages);
-              artworkIdMap.set(artwork.sourceImageId, globalGallerySpatialReferenceId(result.image.id));
-              if (!currentGlobalImages.some((candidate) => candidate.id === result.image.id)) {
-                currentGlobalImages.push(result.image);
-              }
-              if (result.reused) sharedArtworkReused += 1;
-              else sharedArtworkAdded += 1;
-            } else if (chatId) {
-              const uploaded = await uploadSpatialGalleryImage(chatId, file, artwork);
-              artworkIdMap.set(artwork.sourceImageId, uploaded.id);
-              chatArtworkRestored += 1;
-            }
-          } catch {
-            failedArtworkCount += 1;
-          }
+        const portableLoreValue = rawRecord?.portableLore;
+        const hasPortableLore = portableLoreValue !== null && portableLoreValue !== undefined;
+        const portableLore = hasPortableLore ? parsePortableLoreBundle(portableLoreValue) : null;
+        if (hasPortableLore && !portableLore) {
+          throw new Error("This file contains invalid or unsupported portable lore data.");
         }
-        if (chatArtworkRestored > 0) await galleryImages.refetch();
-        if (sharedArtworkAdded > 0) await globalGalleryImages.refetch();
-        const remappedDefinition = remapArtworkReferences(parsed.data, artworkIdMap);
-        const imported: SpatialContextDefinition = {
-          ...remappedDefinition,
-          ownerMode,
-          enabled: draft.enabled,
-          revision: baseDefinition?.revision ?? 0,
-        };
-        const importedProfile = normalizeHierarchyProfile(rawRecord?.hierarchyProfile, imported);
-        applyDraft(imported);
-        setDraftHierarchyProfile(importedProfile);
-        setImportIdReport(null);
-        setFirstMapGenerationSession(null);
-        setSelectedId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
-        setEnteredParentId(null);
-        setMobilePane("hierarchy");
-        toast.success(
-          templateMode
-            ? `World map imported into this template. Review it, then Save template.${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`
-            : `World map imported into the working copy. Review it, then Save.${chatArtworkRestored > 0 ? ` ${chatArtworkRestored} artwork file${chatArtworkRestored === 1 ? " was" : "s were"} restored to this chat's Gallery.` : ""}${sharedArtworkAdded > 0 ? ` ${sharedArtworkAdded} shared artwork file${sharedArtworkAdded === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${sharedArtworkReused > 0 ? ` ${sharedArtworkReused} existing shared image${sharedArtworkReused === 1 ? " was" : "s were"} reused.` : ""}${failedArtworkCount > 0 ? ` ${failedArtworkCount} artwork file${failedArtworkCount === 1 ? "" : "s"} could not be restored.` : ""}`,
-        );
+        if (portableLore && portableLore.references.length > 0 && !lorebookEntriesQuery.entries) {
+          throw new Error("Lore entries are still loading. Try the import again in a moment.");
+        }
+        if (portableLore && portableLore.books.length > 0) {
+          const entries = lorebookEntriesQuery.entries;
+          if (!entries) throw new Error("Lore entries are still loading. Try the import again in a moment.");
+          setPendingPortableLoreImport({
+            rawRecord: rawRecord ?? {},
+            definition: parsed.data,
+            bundle: portableLore,
+            plan: planPortableLoreImport(portableLore, lorebooks, entries),
+          });
+          return;
+        }
+        await applyImportedMap(rawRecord, parsed.data, portableLore, new Map());
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "The world map could not be imported.");
       } finally {
@@ -1368,17 +1547,64 @@ export function SpatialMapWorkspace({
       }
     },
     [
-      applyDraft,
+      applyImportedMap,
       baseDefinition,
-      chatId,
       draft,
-      galleryImages,
-      globalGalleryImages,
       isImporting,
-      ownerMode,
+      lorebookEntriesQuery.entries,
+      lorebooks,
       spatial.data?.hasCommittedSpatialHistory,
-      templateMode,
     ],
+  );
+
+  const confirmPortableLoreImport = useCallback(
+    async (
+      strategy: PortableLoreImportStrategy,
+      ambiguousSelections: ReadonlyMap<string, string | null>,
+    ) => {
+      if (!pendingPortableLoreImport || isImporting) return;
+      setIsImporting(true);
+      let createdLorebookIds: string[] = [];
+      let draftApplied = false;
+      try {
+        const result = await importPortableLoreBundle({
+          api: packageApi,
+          bundle: pendingPortableLoreImport.bundle,
+          plan: pendingPortableLoreImport.plan,
+          strategy,
+          ambiguousSelections,
+        });
+        createdLorebookIds = result.createdLorebookIds;
+        await applyImportedMap(
+          pendingPortableLoreImport.rawRecord,
+          pendingPortableLoreImport.definition,
+          pendingPortableLoreImport.bundle,
+          result.entryIdMap,
+          () => {
+            draftApplied = true;
+          },
+        );
+        setPendingPortableLoreImport(null);
+        try {
+          await lorebooksQuery.refetch();
+        } catch {
+          toast.error("The lore was restored, but the lorebook list could not be refreshed.");
+        }
+        toast.success(
+          `${result.reusedEntries} lore link${result.reusedEntries === 1 ? " was" : "s were"} reused; ${result.importedEntries} entr${result.importedEntries === 1 ? "y was" : "ies were"} imported. Imported lorebooks remain in your library if this map is later deleted.`,
+        );
+      } catch (error) {
+        if (!draftApplied && createdLorebookIds.length > 0) {
+          await Promise.allSettled(
+            createdLorebookIds.map((lorebookId) => packageApi.delete(`/lorebooks/${lorebookId}`)),
+          );
+        }
+        toast.error(error instanceof Error ? error.message : "The portable lore could not be restored.");
+      } finally {
+        setIsImporting(false);
+      }
+    },
+    [applyImportedMap, isImporting, lorebooksQuery, pendingPortableLoreImport],
   );
 
   const saveAsTemplate = useCallback(async () => {
@@ -2285,6 +2511,170 @@ export function SpatialMapWorkspace({
         </div>
       )}
 
+      {pendingPortableLoreImport && (
+        <PortableLoreImportDialog
+          bundle={pendingPortableLoreImport.bundle}
+          plan={pendingPortableLoreImport.plan}
+          busy={isImporting}
+          onCancel={() => setPendingPortableLoreImport(null)}
+          onImport={(strategy, selections) => void confirmPortableLoreImport(strategy, selections)}
+        />
+      )}
+
+      {exportDialogOpen && portableExportBundle && (
+        <div
+          ref={exportDialogRef}
+          data-chat-floating-panel
+          role="dialog"
+          aria-modal="true"
+          aria-label="Export portable world map"
+          className="fixed inset-0 z-[105] flex items-center justify-center bg-[var(--background)]/90 p-3 sm:p-4"
+        >
+          <div className="flex max-h-[min(90vh,48rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] shadow-2xl">
+            <div className="flex min-h-12 items-center gap-3 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-4 py-3">
+              <Upload size="0.9375rem" className="text-[var(--marinara-chat-chrome-accent)]" />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                  Export portable world map
+                </h2>
+                <p className="text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                  Choose how much linked lore travels with this map.
+                </p>
+              </div>
+              <button
+                ref={exportCloseRef}
+                type="button"
+                onClick={() => {
+                  setExportMappingOpen(false);
+                  setExportDialogOpen(false);
+                }}
+                disabled={isExporting}
+                className="mari-chrome-control h-11 w-11 shrink-0 justify-center p-0 disabled:opacity-45"
+                aria-label="Cancel map export"
+              >
+                <X size="0.875rem" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              <fieldset className="grid gap-2">
+                <legend className="mb-2 text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                  Lore to include
+                </legend>
+                {(
+                  [
+                    ["map-only", "Map only", "Keep readable lore-link provenance, but do not include lorebook content."],
+                    ["linked-entries", "Map + linked entries", "Recommended. Include only entries this map links to and their folder paths."],
+                    ["complete-lorebooks", "Map + complete lorebooks", "Include every entry and folder from each linked lorebook."],
+                  ] as const
+                ).map(([mode, title, description]) => (
+                  <label
+                    key={mode}
+                    className="flex min-h-14 cursor-pointer items-start gap-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3"
+                  >
+                    <input
+                      type="radio"
+                      name="portable-lore-export-mode"
+                      value={mode}
+                      checked={exportLoreMode === mode}
+                      onChange={() => setExportLoreMode(mode)}
+                      className="mt-1"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                        {title}
+                      </span>
+                      <span className="mt-0.5 block text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                        {description}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+              {exportLoreMode === "complete-lorebooks" && (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                  <AlertCircle size="0.875rem" className="mt-0.5 shrink-0" />
+                  <p>
+                    Complete lorebooks may contain private notes unrelated to this map. Review the file before sharing it.
+                  </p>
+                </div>
+              )}
+              <div className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] p-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                    {portableExportBundle.books.length} lorebook{portableExportBundle.books.length === 1 ? "" : "s"} ·{" "}
+                    {portableExportEntryCount} {portableExportEntryCount === 1 ? "entry" : "entries"}
+                  </span>
+                  <span className="text-[var(--marinara-chat-chrome-panel-muted)]">
+                    About {portableExportKilobytes} KB
+                  </span>
+                </div>
+                {portableExportBundle.books.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                    {portableExportBundle.books.map((book) => (
+                      <li key={book.key} className="flex justify-between gap-3">
+                        <span className="truncate" title={book.name}>{book.name}</span>
+                        <span className="shrink-0">{book.entries.length} entries</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] px-3 text-xs">
+                <span>
+                  <span className="block font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Include map artwork</span>
+                  <span className="text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">Makes the export file larger.</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={includeArtworkInExport}
+                  disabled={isExporting}
+                  onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
+                />
+              </label>
+              <details
+                onToggle={(event) => setExportMappingOpen(event.currentTarget.open)}
+                className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] p-3"
+              >
+                <summary className="cursor-pointer text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                  Inspect location-to-lore mapping ({portableExportBundle.references.length})
+                </summary>
+                {exportMappingOpen && (
+                  <div className="mt-3 max-h-44 space-y-1 overflow-y-auto font-mono text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                    {portableExportBundle.references.map((reference, index) => (
+                      <p key={`${reference.locationId}-${reference.originalEntryId}-${index}`}>
+                        {reference.locationName} → {reference.originalLorebookName} → {reference.originalEntryName} → {reference.originalEntryId}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </details>
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setExportMappingOpen(false);
+                  setExportDialogOpen(false);
+                }}
+                disabled={isExporting}
+                className="mari-chrome-control min-h-11 justify-center px-4 text-xs disabled:opacity-45"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExport()}
+                disabled={isExporting}
+                className="mari-chrome-control mari-chrome-control--primary min-h-11 justify-center px-4 text-xs disabled:opacity-45"
+              >
+                {isExporting ? <Loader2 size="0.75rem" className="animate-spin" /> : <Download size="0.75rem" />}
+                Download export
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mari-editor-header relative z-50">
         <button
           type="button"
@@ -2343,7 +2733,7 @@ export function SpatialMapWorkspace({
               <button
                 type="button"
                 data-marinara-fill-map-artwork
-                onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
+                onClick={() => void (artworkImagesToGenerate > 0 ? prepareArtworkPreview() : fillMissingArtwork())}
                 disabled={
                   artworkProgress !== null ||
                   previewGalleryImages.isPending ||
@@ -2573,7 +2963,7 @@ export function SpatialMapWorkspace({
                 data-marinara-map-compact-only
                 onClick={() => {
                   setMobileActionsOpen(false);
-                  void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork());
+                  void (artworkImagesToGenerate > 0 ? prepareArtworkPreview() : fillMissingArtwork());
                 }}
                 disabled={
                   artworkProgress !== null ||
@@ -2703,7 +3093,7 @@ export function SpatialMapWorkspace({
               type="button"
               onClick={() => {
                 setMobileActionsOpen(false);
-                void handleExport();
+                void openExportDialog();
               }}
               disabled={isExporting}
               className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
@@ -2724,18 +3114,6 @@ export function SpatialMapWorkspace({
               {isImporting ? <Loader2 size="0.8125rem" className="animate-spin" /> : <Download size="0.8125rem" />}{" "}
               Import
             </button>
-            <label
-              className="mari-editor-action col-span-2 inline-flex min-h-11 w-full cursor-pointer justify-between gap-2 px-3 text-xs"
-              title="Bundle referenced location and map background images. This makes the export file larger."
-            >
-              <span>Include map artwork</span>
-              <input
-                type="checkbox"
-                checked={includeArtworkInExport}
-                disabled={isExporting}
-                onChange={(event) => setIncludeArtworkInExport(event.target.checked)}
-              />
-            </label>
             {!templateMode && onOpenTemplates && (
               <button
                 type="button"
@@ -2872,7 +3250,7 @@ export function SpatialMapWorkspace({
                   </button>
                   <button
                     type="button"
-                    onClick={() => void handleExport()}
+                    onClick={() => void openExportDialog()}
                     disabled={isExporting}
                     className="mari-chrome-control min-h-11 justify-start px-3 text-xs disabled:opacity-45"
                   >
@@ -3123,9 +3501,28 @@ export function SpatialMapWorkspace({
                 </button>
                 <button
                   type="button"
+                  data-marinara-refresh-map-artwork-prompts
+                  onClick={() => void refreshArtworkPreview()}
+                  disabled={artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending}
+                  className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                >
+                  {previewGalleryImages.isPending ? (
+                    <Loader2 size="0.8125rem" className="animate-spin" />
+                  ) : (
+                    <RefreshCw size="0.8125rem" />
+                  )}
+                  {previewGalleryImages.isPending ? "Refreshing prompts" : "Refresh prompts"}
+                </button>
+                <button
+                  type="button"
                   data-marinara-confirm-map-artwork
                   onClick={() => void fillMissingArtwork()}
-                  disabled={artworkProgress !== null || conflict || updateSpatial.isPending}
+                  disabled={
+                    artworkProgress !== null ||
+                    previewGalleryImages.isPending ||
+                    conflict ||
+                    updateSpatial.isPending
+                  }
                   className="mari-editor-action mari-editor-action--primary min-h-11 justify-center px-3 text-xs disabled:opacity-45"
                 >
                   <Sparkles size="0.8125rem" /> Generate {artworkPreview.requestCount} image
@@ -3146,7 +3543,7 @@ export function SpatialMapWorkspace({
               <button
                 type="button"
                 data-marinara-fill-map-artwork
-                onClick={() => void (artworkImagesToGenerate > 0 ? reviewMissingArtwork() : fillMissingArtwork())}
+                onClick={() => void (artworkImagesToGenerate > 0 ? prepareArtworkPreview() : fillMissingArtwork())}
                 disabled={
                   artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
                 }
@@ -3215,6 +3612,82 @@ export function SpatialMapWorkspace({
             >
               Dismiss
             </button>
+          </div>
+        </section>
+      )}
+
+      {!aiBuilderOpen && unresolvedLoreReferences.length > 0 && (
+        <section
+          data-marinara-portable-lore-unresolved
+          className="border-b border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-amber-100"
+          role="alert"
+        >
+          <div className="mx-auto max-w-5xl">
+            <div className="flex flex-wrap items-start gap-3">
+              <AlertCircle size="0.875rem" className="mt-0.5 shrink-0" />
+              <div className="min-w-52 flex-1">
+                <p className="font-semibold">
+                  {unresolvedLoreReferences.length} lore link{unresolvedLoreReferences.length === 1 ? " needs" : "s need"} review
+                </p>
+                <p className="mt-1 leading-relaxed text-amber-100/80">
+                  No name-only match was made. Select a location to relink it in Lore links, or explicitly detach the unresolved IDs.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isImporting}
+                onClick={() => {
+                  if (isImporting) return;
+                  const unresolvedByLocation = new Map<string, Set<string>>();
+                  for (const reference of unresolvedLoreReferences) {
+                    const ids = unresolvedByLocation.get(reference.locationId) ?? new Set<string>();
+                    ids.add(reference.originalEntryId);
+                    unresolvedByLocation.set(reference.locationId, ids);
+                  }
+                  applyDraft({
+                    ...draft,
+                    locations: draft.locations.map((location) => ({
+                      ...location,
+                      lorebookEntryIds: location.lorebookEntryIds.filter(
+                        (entryId) => !unresolvedByLocation.get(location.id)?.has(entryId),
+                      ),
+                    })),
+                  });
+                  setUnresolvedLoreReferences([]);
+                  toast.success("Unresolved lore links detached from the working copy. Click Save to keep the change.");
+                }}
+                className="mari-chrome-control min-h-11 px-3 text-xs disabled:opacity-45"
+              >
+                Detach unresolved links
+              </button>
+            </div>
+            <div className="mt-3 max-h-48 space-y-1 overflow-y-auto font-mono text-[0.625rem] leading-relaxed">
+              {unresolvedLoreReferences.map((reference, index) => (
+                <div
+                  key={`${reference.locationId}-${reference.originalEntryId}-${index}`}
+                  className="flex flex-wrap items-center gap-2 rounded bg-black/10 px-2 py-1"
+                >
+                  <button
+                    type="button"
+                    onClick={() => selectLocation(reference.locationId)}
+                    className="min-h-8 min-w-0 flex-1 text-left underline decoration-current/40 underline-offset-2"
+                  >
+                    {reference.locationName} → {reference.originalLorebookName} → {reference.originalEntryName} → {reference.originalEntryId}
+                  </button>
+                  {reference.originalLorebookId &&
+                    onOpenLorebook &&
+                    lorebooks.some((book) => book.id === reference.originalLorebookId) && (
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenLorebook(reference.originalLorebookId!)}
+                        className="mari-chrome-control min-h-8 px-2 text-[0.625rem]"
+                      >
+                        Open lorebook
+                      </button>
+                    )}
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}
@@ -3445,26 +3918,50 @@ export function SpatialMapWorkspace({
                     : "Describe a fandom or setting for Maps to draft without a chat, or start manually with one broad place."
                   : "Let AI draft the full hierarchy from the game or chat setup, add a saved template, or start manually with one broad place."}
               </p>
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <button
-                type="button"
-                onClick={() => setAiBuilderOpen(true)}
-                className="mari-chrome-control mari-chrome-control--primary min-h-11 px-5 text-sm"
-              >
-                <Sparkles size="0.875rem" /> {templateMode ? "Create with AI" : "Draft with AI"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const result = addSpatialLocation(draft);
-                  applyDraft(result.definition);
-                  selectLocation(result.location.id);
-                }}
-                className="mari-chrome-control min-h-11 px-5 text-sm"
-              >
-                <Plus size="0.875rem" /> Build manually
-              </button>
-            </div>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setAiBuilderOpen(true)}
+                  className="mari-chrome-control mari-chrome-control--primary min-h-11 justify-center px-5 text-sm"
+                >
+                  <Sparkles size="0.875rem" /> {templateMode ? "Create with AI" : "Draft with AI"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const result = addSpatialLocation(draft);
+                    applyDraft(result.definition);
+                    selectLocation(result.location.id);
+                  }}
+                  className="mari-chrome-control min-h-11 justify-center px-5 text-sm"
+                >
+                  <Plus size="0.875rem" /> Build manually
+                </button>
+                {!templateMode && onOpenTemplates && (
+                  <button
+                    type="button"
+                    onClick={onOpenTemplates}
+                    className="mari-chrome-control min-h-11 justify-center px-5 text-sm"
+                  >
+                    <MapIcon size="0.875rem" /> Use template or shared world
+                  </button>
+                )}
+                {!templateMode && (
+                  <button
+                    type="button"
+                    onClick={() => importInputRef.current?.click()}
+                    disabled={isImporting}
+                    className="mari-chrome-control min-h-11 justify-center px-5 text-sm disabled:opacity-45"
+                  >
+                    {isImporting ? (
+                      <Loader2 size="0.875rem" className="animate-spin" />
+                    ) : (
+                      <Download size="0.875rem" />
+                    )}
+                    Import map file
+                  </button>
+                )}
+              </div>
           </div>
         </div>
       ) : (

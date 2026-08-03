@@ -114,7 +114,7 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 const features = [
   {
     id: "long-term-memory",
-    version: "1.0.8",
+    version: "1.1.0",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -138,7 +138,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.6",
+    version: "1.2.9",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -450,6 +450,12 @@ async function bundleSpecialClient(feature, output) {
   touch-action: manipulation;
 }
 
+[data-marinara-maps-workspace-overlay] [data-marinara-maps-editor-canvas] {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  width: 100%;
+}
+
 [data-marinara-maps-workspace-overlay] .mari-editor-action,
 [data-marinara-maps-workspace-overlay] .mari-chrome-control {
   min-width: 2.75rem;
@@ -556,16 +562,9 @@ async function bundleSpecialClient(feature, output) {
 `;
       const worldMapStyles = `
 [data-marinara-maps-world-canvas] {
-  height: 13rem;
-}
-
-[data-marinara-maps-world-canvas][data-compact="true"] {
-  height: min(14rem, 32dvh);
-}
-
-[data-marinara-maps-world-overlay] [data-marinara-maps-world-canvas] {
-  height: min(32rem, 55dvh);
-  min-height: 18rem;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  width: 100%;
 }
 `;
       const runtimeStyles = `

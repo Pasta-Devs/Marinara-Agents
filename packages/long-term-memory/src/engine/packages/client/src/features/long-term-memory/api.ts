@@ -2,6 +2,7 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
 const CSRF_HEADER = "x-marinara-csrf";
 const CSRF_HEADER_VALUE = "1";
+const ADMIN_SECRET_STORAGE_KEY = "marinara_admin_secret";
 
 export const API_ROOT = "/api/long-term-memory";
 
@@ -26,6 +27,28 @@ export const queryKeys = {
     ["long-term-memory", "last-injection", chatId] as const,
 } as const;
 
+function getAdminSecretHeader(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const secret = window.localStorage.getItem(ADMIN_SECRET_STORAGE_KEY)?.trim();
+    return secret ? { "X-Admin-Secret": secret } : {};
+  } catch {
+    return {};
+  }
+}
+
+export function requestRaw(path: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  for (const [name, value] of Object.entries(getAdminSecretHeader())) {
+    headers.set(name, value);
+  }
+  return fetch(`${API_ROOT}${path}`, {
+    ...init,
+    headers,
+    cache: "no-store",
+  });
+}
+
 export async function request<TResponse, TBody = unknown>(
   path: string,
   method = "GET",
@@ -36,10 +59,9 @@ export async function request<TResponse, TBody = unknown>(
   if (method !== "GET") headers.set(CSRF_HEADER, CSRF_HEADER_VALUE);
   if (body !== undefined) headers.set("Content-Type", "application/json");
 
-  const response = await fetch(`${API_ROOT}${path}`, {
+  const response = await requestRaw(path, {
     method,
     headers,
-    cache: "no-store",
     signal,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });

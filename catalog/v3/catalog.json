@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-02T06:45:20.331Z",
+  "generatedAt": "2026-08-03T00:07:03.838Z",
   "packages": [
     {
       "manifest": {
@@ -805,7 +805,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.0.8",
+        "version": "1.1.0",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, and Game modes.",
         "engine": {
           "min": "2.3.5",
@@ -842,8 +842,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "ceb8992a161068fadcb2349fac95ece88f4c5b3e83579e83c5ba17d2ffe0a078",
-            "bytes": 561428
+            "sha256": "f474b9f6533b5270d6ccd9d8215eda6b103dcdf0dcdec6cd6fa6b8aaff9e5904",
+            "bytes": 560232
           }
         ],
         "permissions": [
@@ -859,9 +859,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.0.8.zip",
-        "sha256": "790f14191046a1afc6bf3b8999f202355719c4c49543c7630354666407e0259a",
-        "bytes": 251772
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.1.0.zip",
+        "sha256": "88d38b41d776a41b9a06e48a1cba6c86ce5ae61e6402ad881b7b720b1f38058d",
+        "bytes": 251500
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -1447,7 +1447,7 @@
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.2.6",
+        "version": "1.2.9",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.5",
@@ -1488,8 +1488,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "d1023fe29f68e5a848f855acfa93cbafa12140c97151481b6279f5c7f71575ce",
-            "bytes": 921766
+            "sha256": "d1dee28c5daf5c0d2cbfe39efdb617fc3ac5ffa24e554720d5ae8cf23fb50c21",
+            "bytes": 951972
           }
         ],
         "permissions": [
@@ -1507,9 +1507,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.6.zip",
-        "sha256": "120c9770b167cfca4f248b0d080e0fb45f601d3c5b7f39096fa0f2cb4d0b6eb4",
-        "bytes": 334949
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.9.zip",
+        "sha256": "002f4dd2e85775260adc8175e3869eaaba05023a9ea9d9d130922b087729f721",
+        "bytes": 343033
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },

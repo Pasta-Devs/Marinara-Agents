@@ -74,10 +74,6 @@ function defaultViewLocationId(spatial: MapsSpatialContextResponse): string | nu
   return hasActiveChildren ? current.id : (current.parentId ?? current.id);
 }
 
-function displayCoordinate(value: number): number {
-  return Math.min(86, Math.max(14, value));
-}
-
 export function GameWorldMap({
   chatId,
   spatial,
@@ -448,10 +444,7 @@ export function GameWorldMap({
           <div
             data-marinara-maps-world-canvas
             data-compact={compact ? "true" : "false"}
-            className={cn(
-              "relative overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]",
-              compact ? "h-56" : "h-52",
-            )}
+            className="relative aspect-[16/9] w-full overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]"
           >
             {mapBackgroundImageUrl && (
               <img
@@ -491,10 +484,10 @@ export function GameWorldMap({
                       key={link.key}
                       data-marinara-map-connection={link.key}
                       data-line-style={linkPresentation.lineStyle}
-                      x1={`${displayCoordinate(from.x)}%`}
-                      y1={`${displayCoordinate(from.y)}%`}
-                      x2={`${displayCoordinate(to.x)}%`}
-                      y2={`${displayCoordinate(to.y)}%`}
+                      x1={`${from.x}%`}
+                      y1={`${from.y}%`}
+                      x2={`${to.x}%`}
+                      y2={`${to.y}%`}
                       stroke={linkPresentation.color ?? "var(--marinara-chat-chrome-accent)"}
                       strokeWidth={linkIsSelected ? "3" : "2.25"}
                       strokeDasharray={spatialLinkStrokeDasharray(linkPresentation.lineStyle)}
@@ -518,7 +511,7 @@ export function GameWorldMap({
                   type="button"
                   onClick={() => setSelectedId(location.id)}
                   className="absolute z-10 flex w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-lg p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
-                  style={{ left: `${displayCoordinate(placement.x)}%`, top: `${displayCoordinate(placement.y)}%` }}
+                  style={{ left: `${placement.x}%`, top: `${placement.y}%` }}
                   aria-label={`Inspect ${location.name}${isCurrent ? ", current story location" : ""}${isPending ? ", pending destination" : ""}`}
                   aria-pressed={isSelected}
                 >
