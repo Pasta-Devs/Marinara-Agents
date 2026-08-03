@@ -686,16 +686,29 @@ class CapabilityClientErrorBoundary extends React.Component {
   }
   static getDerivedStateFromError(error) { return { error }; }
 }
+const spatialEventSequence = new Map();
+const spatialTransitionReviewMessages = {
+  spatial_transition_stale_definition: "The world map changed. Review the available destinations.",
+  spatial_transition_stale_location: "The current location changed. Review the available destinations.",
+};
 async function reconcileSpatialCapabilityEvent(detail) {
   if (detail?.packageId !== "hierarchical-maps" || typeof detail.chatId !== "string") return;
   const chatId = detail.chatId;
+  const sequence = (spatialEventSequence.get(chatId) || 0) + 1;
+  spatialEventSequence.set(chatId, sequence);
   const data = detail.data && typeof detail.data === "object" ? detail.data : null;
   const commandId = typeof data?.commandId === "string" ? data.commandId : null;
   if (detail.type === "spatial_transition_rejected") {
     const pending = getPendingSpatialTransition(chatId);
     if (commandId && pending?.transition.commandId === commandId) {
-      setPendingSpatialTransitionStatus(chatId, "needs_review");
-      markSpatialRouteNeedsReview(chatId);
+      const reviewMessage =
+        typeof data?.message === "string" && data.message.trim()
+          ? data.message.trim()
+          : typeof data?.code === "string"
+            ? spatialTransitionReviewMessages[data.code]
+            : undefined;
+      setPendingSpatialTransitionStatus(chatId, "needs_review", reviewMessage);
+      markSpatialRouteNeedsReview(chatId, undefined, reviewMessage);
     }
     void client.invalidateQueries({ queryKey: ["spatial-context", chatId] });
     return;
@@ -705,7 +718,7 @@ async function reconcileSpatialCapabilityEvent(detail) {
   }
   try {
     const spatial = await packageApi.get("/chats/" + encodeURIComponent(chatId) + "/spatial-context");
-    if (!spatial) return;
+    if (!spatial || spatialEventSequence.get(chatId) !== sequence) return;
     client.setQueryData(["spatial-context", chatId], spatial);
     if (getSpatialRoutePlan(chatId)) {
       reconcileSpatialRoutePlan(chatId, spatial);

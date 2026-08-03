@@ -4764,8 +4764,9 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     generationRequestCount += 1;
     const request = route.request().postDataJSON() as {
       chatId: string;
-      userMessage: string;
-      pendingSpatialTransition: {
+      userMessage?: string;
+      generationGuide?: string;
+      pendingSpatialTransition?: {
         destinationId: string;
         expectedDefinitionRevision: number;
         expectedCurrentLocationId: string;
@@ -4773,9 +4774,22 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       };
     };
     expect(request.chatId).toBe(chat.id);
-    expect(request.userMessage).not.toContain("moves to");
     if (generationRequestCount === 1) {
-      expect(request.pendingSpatialTransition).toMatchObject({
+      expect(request.generationGuide).toContain("Let the NPC wait at the current location");
+      expect(request.pendingSpatialTransition).toBeUndefined();
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `data: ${JSON.stringify({ type: "done", data: "" })}\n\n`,
+      });
+      return;
+    }
+    expect(request.userMessage).not.toContain("moves to");
+    const pendingSpatialTransition = request.pendingSpatialTransition;
+    expect(pendingSpatialTransition).toBeDefined();
+    if (!pendingSpatialTransition) throw new Error("Owner movement request did not include its queued transition");
+    if (generationRequestCount === 2) {
+      expect(pendingSpatialTransition).toMatchObject({
         destinationId: "ai_harbor",
         expectedDefinitionRevision: saved.definition.revision,
         expectedCurrentLocationId: "ai_world",
@@ -4783,7 +4797,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       const commitResponse = await page.request.post(`/api/chats/${chat.id}/spatial-context/turn`, {
         data: {
           content: request.userMessage,
-          transition: request.pendingSpatialTransition,
+          transition: pendingSpatialTransition,
         },
       });
       expect(commitResponse.ok()).toBeTruthy();
@@ -4795,7 +4809,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
             type: "spatial_transition_committed",
             data: {
               chatId: chat.id,
-              commandId: request.pendingSpatialTransition.commandId,
+              commandId: pendingSpatialTransition.commandId,
               currentLocationId: "ai_harbor",
               definitionRevision: saved.definition.revision,
             },
@@ -4803,8 +4817,8 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       });
       return;
     }
-    if (generationRequestCount === 2) {
-      expect(request.pendingSpatialTransition).toMatchObject({
+    if (generationRequestCount === 3) {
+      expect(pendingSpatialTransition).toMatchObject({
         destinationId: "ai_world",
         expectedDefinitionRevision: saved.definition.revision,
         expectedCurrentLocationId: "ai_harbor",
@@ -4821,17 +4835,17 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       });
       return;
     }
-    expect(generationRequestCount).toBe(3);
+    expect(generationRequestCount).toBe(4);
     const expectedRouteHop = {
       destinationId: "ai_lighthouse_upper",
       expectedCurrentLocationId: "ai_lighthouse",
     };
-    expect(request.pendingSpatialTransition).toMatchObject({
+    expect(pendingSpatialTransition).toMatchObject({
       ...expectedRouteHop,
       expectedDefinitionRevision: saved.definition.revision,
     });
     const commitResponse = await page.request.post(`/api/chats/${chat.id}/spatial-context/turn`, {
-      data: { content: request.userMessage, transition: request.pendingSpatialTransition },
+      data: { content: request.userMessage, transition: pendingSpatialTransition },
     });
     expect(commitResponse.ok(), await commitResponse.text()).toBeTruthy();
     await route.fulfill({
@@ -4842,7 +4856,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
           type: "spatial_transition_committed",
           data: {
             chatId: chat.id,
-            commandId: request.pendingSpatialTransition.commandId,
+            commandId: pendingSpatialTransition.commandId,
             currentLocationId: expectedRouteHop.destinationId,
             definitionRevision: saved.definition.revision,
           },
@@ -5013,6 +5027,14 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await page.reload();
     await expect(page.getByRole("region", { name: "Story location" }).getByText("Moves with your next turn")).toBeVisible();
     const input = page.locator("textarea.mari-chat-input-textarea");
+    await input.fill("/guided Let the NPC wait at the current location.");
+    await page.locator("button.mari-chat-send-btn").click();
+    await expect(input).toHaveValue("");
+    await expect(storyLocation.getByText("Moves with your next turn")).toBeVisible();
+    const afterGuidedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(afterGuidedResponse.ok(), await afterGuidedResponse.text()).toBeTruthy();
+    expect(((await afterGuidedResponse.json()) as { currentLocationId: string }).currentLocationId).toBe("ai_world");
+
     await input.fill("I follow the harbor road.");
     await page.locator("button.mari-chat-send-btn").click();
     await expect(page.getByText("Moves with your next turn")).toHaveCount(0);

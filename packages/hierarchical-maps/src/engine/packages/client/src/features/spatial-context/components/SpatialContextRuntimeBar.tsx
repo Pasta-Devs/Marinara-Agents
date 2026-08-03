@@ -376,7 +376,7 @@ export function SpatialContextRuntimeBar({
             </span>
             <span className="block truncate text-[0.625rem] opacity-75">
               {pending.status === "needs_review" || routePlan?.status === "needs_review"
-                ? "Needs review — choose the destination again"
+                ? `Needs review — ${pending.reviewMessage ?? routePlan?.reviewMessage ?? "choose the destination again"}`
                 : routePlan
                   ? `Next step ${Math.min(routePlan.currentIndex + 1, routePlan.steps.length)} of ${routePlan.steps.length} · ${pending.destinationName}`
                   : "Moves with your next turn"}

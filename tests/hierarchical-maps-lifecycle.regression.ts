@@ -115,9 +115,9 @@ function artifactFixture(version: string): ArtifactFixture {
     }
     if (version === "1.3.1") {
       assert.match(clientSource, /spatial_transition_rejected/u);
+      assert.match(clientSource, /spatial_transition_committed/u);
       assert.match(clientSource, /marinara-capability-server-event/u);
-      assert.doesNotMatch(clientSource, /const turnStarted=/u);
-      assert.doesNotMatch(clientSource, /const turnFinished=/u);
+      assert.match(clientSource, /The current location changed\. Review the available destinations\./u);
     }
   }
   return {
@@ -2822,6 +2822,30 @@ async function main() {
     })) as { currentLocationId: string; definition: { revision: number } };
     assert.equal(impersonateSpatial.currentLocationId, "lifecycle_world");
 
+    const guidedGeneration = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: impersonateChat.id,
+        connectionId: impersonateConnection.id,
+        generationGuide: "Keep the scene at Lifecycle World while the NPC waits.",
+        generationGuideSource: "narrator",
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+      },
+    });
+    assert.equal(guidedGeneration.statusCode, 200, guidedGeneration.body);
+    assert.doesNotMatch(guidedGeneration.body, /spatial_transition_(?:committed|rejected)/u);
+    const afterGuidedSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(afterGuidedSpatial.currentLocationId, "lifecycle_world");
+    // The queued transition is browser-local rather than part of the chat API.
+    // Its ready-state preservation across /guided is covered by spatial-context.e2e.ts.
+
     const impersonateGeneration = await app.inject({
       method: "POST",
       url: "/api/generate",
@@ -2854,32 +2878,37 @@ async function main() {
       method: "GET",
       url: `/api/chats/${impersonateChat.id}/messages`,
     })) as Array<{ id: string; role: string; content: string }>;
-    assert.equal(impersonateMessages.length, 1);
-    assert.equal(impersonateMessages[0]?.role, "user");
-    assert.match(impersonateMessages[0]?.content ?? "", /GAME_HISTORY_PROVIDER_RESPONSE/u);
+    assert.equal(impersonateMessages.length, 2);
+    const impersonatedUserMessage = impersonateMessages.find((message) => message.role === "user");
+    assert.ok(impersonatedUserMessage);
+    assert.match(impersonatedUserMessage.content, /GAME_HISTORY_PROVIDER_RESPONSE/u);
 
     generationProviderFailure = true;
-    const failedImpersonateGeneration = await app.inject({
-      method: "POST",
-      url: "/api/generate",
-      headers: csrfHeaders,
-      payload: {
-        chatId: impersonateChat.id,
-        connectionId: impersonateConnection.id,
-        impersonate: true,
-        userMessage: "Try to return to Lifecycle World.",
-        streaming: false,
-        skipPresenceDelay: true,
-        musicPlayerEnabled: false,
-        pendingSpatialTransition: {
-          destinationId: "lifecycle_world",
-          expectedDefinitionRevision: impersonateSpatial.definition.revision,
-          expectedCurrentLocationId: "lifecycle_harbor",
-          commandId: "failed-roleplay-impersonate-to-world",
+    let failedImpersonateGeneration: Awaited<ReturnType<NonNullable<typeof app>["inject"]>>;
+    try {
+      failedImpersonateGeneration = await app.inject({
+        method: "POST",
+        url: "/api/generate",
+        headers: csrfHeaders,
+        payload: {
+          chatId: impersonateChat.id,
+          connectionId: impersonateConnection.id,
+          impersonate: true,
+          userMessage: "Try to return to Lifecycle World.",
+          streaming: false,
+          skipPresenceDelay: true,
+          musicPlayerEnabled: false,
+          pendingSpatialTransition: {
+            destinationId: "lifecycle_world",
+            expectedDefinitionRevision: impersonateSpatial.definition.revision,
+            expectedCurrentLocationId: "lifecycle_harbor",
+            commandId: "failed-roleplay-impersonate-to-world",
+          },
         },
-      },
-    });
-    generationProviderFailure = false;
+      });
+    } finally {
+      generationProviderFailure = false;
+    }
     assert.equal(failedImpersonateGeneration.statusCode, 200, failedImpersonateGeneration.body);
     assert.doesNotMatch(failedImpersonateGeneration.body, /spatial_transition_committed/u);
     assert.doesNotMatch(failedImpersonateGeneration.body, /spatial_transition_rejected/u);
@@ -3678,7 +3707,7 @@ async function main() {
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, shared template artwork, canonical shared worlds, private linked-chat drafts, publish/conflict/fork protection, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, Roleplay impersonate movement success/failure/stale rejection, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, shared template artwork, canonical shared worlds, private linked-chat drafts, publish/conflict/fork protection, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, Roleplay /guided queue isolation and impersonate movement success/failure/stale rejection, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);
