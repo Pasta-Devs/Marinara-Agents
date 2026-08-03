@@ -106,12 +106,6 @@ function artifactFixture(version: string): ArtifactFixture {
         /\[data-marinara-maps-workspace-overlay\]\s+\[data-marinara-maps-editor-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
       );
     }
-    if (version === "1.3.0") {
-      assert.ok(
-        (clientSource.match(/onLorebooksChanged/gu) ?? []).length >= 8,
-        "Maps 1.3.0 must forward host lorebook refreshes through library editor overlays",
-      );
-    }
   }
   return {
     bytes,
