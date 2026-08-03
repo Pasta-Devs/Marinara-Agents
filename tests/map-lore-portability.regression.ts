@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   buildPortableLoreBundle,
   importPortableLoreBundle,
@@ -192,6 +193,24 @@ assert.equal(
 );
 
 async function main() {
+  const librarySource = await readFile(
+    new URL(
+      "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/SpatialMapLibrary.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    librarySource,
+    /on(?:PointerDown|KeyDown)=\{[^}]*setImportEntriesPrimed/u,
+    "Canceled pointer and keyboard activation must not prime every lorebook entry query",
+  );
+  assert.match(
+    librarySource,
+    /flushSync\(\(\) => setImportEntriesPrimed\(true\)\);[\s\S]{0,800}importInput\.click\(\)/u,
+    "Lorebook entry loading must be flushed only when the import picker actually opens",
+  );
+
   const requests: Array<{ method: string; path: string; body?: unknown }> = [];
   let nextFolder = 0;
   const api: PortableLoreApi = {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { flushSync } from "react-dom";
 import {
   ArrowLeft,
   CircleHelp,
@@ -363,7 +364,12 @@ export function SpatialMapLibrary({
   };
 
   const openImportPicker = (target: "template" | "shared-world") => {
-    setImportEntriesPrimed(true);
+    const importInput = importInputRef.current;
+    if (!importInput) {
+      setImportEntriesPrimed(false);
+      return;
+    }
+    flushSync(() => setImportEntriesPrimed(true));
     importTargetRef.current = target;
     window.addEventListener(
       "focus",
@@ -374,7 +380,7 @@ export function SpatialMapLibrary({
       },
       { once: true },
     );
-    importInputRef.current?.click();
+    importInput.click();
   };
 
   const confirmPortableLoreImport = async (
@@ -766,10 +772,6 @@ export function SpatialMapLibrary({
           </a>
           <button
             type="button"
-            onPointerDown={() => setImportEntriesPrimed(true)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") setImportEntriesPrimed(true);
-            }}
             onClick={() => openImportPicker("shared-world")}
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
           >
@@ -790,10 +792,6 @@ export function SpatialMapLibrary({
           </button>
           <button
             type="button"
-            onPointerDown={() => setImportEntriesPrimed(true)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") setImportEntriesPrimed(true);
-            }}
             onClick={() => openImportPicker("template")}
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
           >
