@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { flushSync } from "react-dom";
 import {
   ArrowLeft,
   CircleHelp,
@@ -133,16 +134,17 @@ export function SpatialMapLibrary({
   const replaceWithIndependentWorld = useReplaceWithIndependentSpatialWorld();
   const globalGalleryImages = useSpatialGlobalGalleryImages();
   const [isImporting, setIsImporting] = useState(false);
+  const [importEntriesPrimed, setImportEntriesPrimed] = useState(false);
   const [pendingPortableLoreImport, setPendingPortableLoreImport] =
     useState<PendingLibraryPortableLoreImport | null>(null);
   const lorebooksQuery = useSpatialLorebooks();
   const { data: lorebooks = [] } = lorebooksQuery;
   const portableLorebookIds = useMemo(
     () =>
-      isImporting || pendingPortableLoreImport
+      importEntriesPrimed || isImporting || pendingPortableLoreImport
         ? lorebooks.map((lorebook) => lorebook.id)
         : [],
-    [isImporting, lorebooks, pendingPortableLoreImport],
+    [importEntriesPrimed, isImporting, lorebooks, pendingPortableLoreImport],
   );
   const lorebookEntriesQuery = useSpatialLorebookEntries(portableLorebookIds);
   const spatial = useSpatialContext(chatId);
@@ -306,8 +308,12 @@ export function SpatialMapLibrary({
     const target = importTargetRef.current;
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || isImporting || pendingPortableLoreImport) return;
+    if (!file || isImporting || pendingPortableLoreImport) {
+      setImportEntriesPrimed(false);
+      return;
+    }
     setIsImporting(true);
+    setImportEntriesPrimed(false);
     try {
       const raw = JSON.parse(await file.text()) as unknown;
       const record = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
@@ -355,6 +361,26 @@ export function SpatialMapLibrary({
     } finally {
       setIsImporting(false);
     }
+  };
+
+  const openImportPicker = (target: "template" | "shared-world") => {
+    const importInput = importInputRef.current;
+    if (!importInput) {
+      setImportEntriesPrimed(false);
+      return;
+    }
+    flushSync(() => setImportEntriesPrimed(true));
+    importTargetRef.current = target;
+    window.addEventListener(
+      "focus",
+      () => {
+        window.setTimeout(() => {
+          if (!importInputRef.current?.files?.length) setImportEntriesPrimed(false);
+        }, 0);
+      },
+      { once: true },
+    );
+    importInput.click();
   };
 
   const confirmPortableLoreImport = async (
@@ -746,10 +772,7 @@ export function SpatialMapLibrary({
           </a>
           <button
             type="button"
-            onClick={() => {
-              importTargetRef.current = "shared-world";
-              importInputRef.current?.click();
-            }}
+            onClick={() => openImportPicker("shared-world")}
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
           >
             <Download size="0.8125rem" /> Import shared
@@ -769,10 +792,7 @@ export function SpatialMapLibrary({
           </button>
           <button
             type="button"
-            onClick={() => {
-              importTargetRef.current = "template";
-              importInputRef.current?.click();
-            }}
+            onClick={() => openImportPicker("template")}
             className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
           >
             <Download size="0.8125rem" /> Import template

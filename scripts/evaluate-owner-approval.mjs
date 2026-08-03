@@ -12,6 +12,7 @@ function requireValue(value, name) {
 async function githubRequest({ token, method = "GET", path, body }) {
   const response = await fetch(`https://api.github.com${path}`, {
     method,
+    signal: AbortSignal.timeout(30_000),
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${token}`,
@@ -59,27 +60,14 @@ export async function evaluateOwnerApproval({ env = process.env, request = githu
   }
 
   const repositoryPath = `${encodeURIComponent(organization)}/${encodeURIComponent(repositoryName)}`;
-  const pullRequest = await request({
-    token: githubToken,
-    path: `/repos/${repositoryPath}/pulls/${pullNumber}`,
-  });
+  let state = "error";
+  let description = "Owner approval evaluation failed unexpectedly; failing closed.";
+  let internal = false;
+  let headSha = null;
 
-  if (pullRequest.state !== "open" || pullRequest.base?.ref !== "staging") {
-    console.info(`Skipping #${pullNumber}; it is not an open pull request targeting staging.`);
-    return { skipped: true };
-  }
-
-  const authorLogin = pullRequest.user?.login;
-  const headSha = pullRequest.head?.sha;
-  requireValue(authorLogin, "pull request author login");
-  requireValue(headSha, "pull request head SHA");
-
-  let state = "failure";
-  let description = "Outside contribution requires current SpicyMarinara approval.";
-  let internal = authorLogin.toLowerCase() === "spicymarinara";
-
-  const publishStatus = () =>
-    request({
+  const publishStatus = async () => {
+    if (!headSha) return;
+    await request({
       token: githubToken,
       method: "POST",
       path: `/repos/${repositoryPath}/statuses/${encodeURIComponent(headSha)}`,
@@ -90,8 +78,25 @@ export async function evaluateOwnerApproval({ env = process.env, request = githu
         target_url: env.RUN_URL,
       },
     });
+  };
 
   try {
+    const pullRequest = await request({
+      token: githubToken,
+      path: `/repos/${repositoryPath}/pulls/${pullNumber}`,
+    });
+
+    if (pullRequest.state !== "open" || pullRequest.base?.ref !== "staging") {
+      console.info(`Skipping #${pullNumber}; it is not an open pull request targeting staging.`);
+      return { skipped: true };
+    }
+
+    const authorLogin = requireValue(pullRequest.user?.login, "pull request author login");
+    headSha = requireValue(pullRequest.head?.sha, "pull request head SHA");
+    state = "failure";
+    description = "Outside contribution requires current SpicyMarinara approval.";
+    internal = authorLogin.toLowerCase() === "spicymarinara";
+
     if (!internal) {
       if (env.MEMBERS_TOKEN_CONFIGURED !== "true" || !env.PASTA_DEVS_MEMBERS_TOKEN) {
         state = "error";
@@ -122,6 +127,9 @@ export async function evaluateOwnerApproval({ env = process.env, request = githu
       const reviews = await listPullRequestReviews(request, githubToken, repositoryPath, pullNumber);
       const latestOwnerReview = reviews
         .filter((review) => review.user?.login?.toLowerCase() === "spicymarinara")
+        .filter((review) =>
+          ["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(review.state),
+        )
         .sort((left, right) => left.id - right.id)
         .at(-1);
 
@@ -138,7 +146,13 @@ export async function evaluateOwnerApproval({ env = process.env, request = githu
     console.error(
       `Owner approval evaluation failed with status ${error?.status ?? "unknown"}; publishing error status.`,
     );
-    await publishStatus();
+    try {
+      await publishStatus();
+    } catch (publishError) {
+      console.error(
+        `Error status publication failed with status ${publishError?.status ?? "unknown"}.`,
+      );
+    }
   }
 
   console.info(`${OWNER_APPROVAL_CONTEXT}: ${state} (${description})`);
