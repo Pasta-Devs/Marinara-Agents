@@ -2883,6 +2883,37 @@ async function main() {
     assert.ok(impersonatedUserMessage);
     assert.match(impersonatedUserMessage.content, /GAME_HISTORY_PROVIDER_RESPONSE/u);
 
+    const repeatedImpersonateGeneration = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: impersonateChat.id,
+        connectionId: impersonateConnection.id,
+        impersonate: true,
+        userMessage: "Repeat the already committed move into Lifecycle Harbor.",
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+        pendingSpatialTransition: {
+          destinationId: "lifecycle_harbor",
+          expectedDefinitionRevision: impersonateSpatial.definition.revision,
+          expectedCurrentLocationId: "lifecycle_world",
+          commandId: "roleplay-impersonate-to-harbor",
+        },
+      },
+    });
+    assert.equal(repeatedImpersonateGeneration.statusCode, 200, repeatedImpersonateGeneration.body);
+    assert.match(repeatedImpersonateGeneration.body, /spatial_transition_committed/u);
+    assert.match(repeatedImpersonateGeneration.body, /message_saved/u);
+    assert.doesNotMatch(repeatedImpersonateGeneration.body, /spatial_transition_rejected/u);
+    assert.doesNotMatch(repeatedImpersonateGeneration.body, /"type":"error"/u);
+    const afterRepeatedImpersonateMessages = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/messages`,
+    })) as Array<{ id: string }>;
+    assert.equal(afterRepeatedImpersonateMessages.length, impersonateMessages.length);
+
     generationProviderFailure = true;
     let failedImpersonateGeneration: Awaited<ReturnType<NonNullable<typeof app>["inject"]>>;
     try {
