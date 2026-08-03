@@ -68,6 +68,7 @@ async function main() {
   const completionMessages: any[] = [];
   const debugOverrides: any[] = [];
   let failGameRefine = false;
+  let failGrammarOnce = false;
   let fitContextMode: "normal" | "reduced" | "trimmed" = "normal";
   let abortInFlight = false;
   let abortReachedChatComplete = false;
@@ -232,6 +233,12 @@ async function main() {
                   modelCalls += 1;
                   completionMessages.push(_messages);
                   completionOptions.push(options);
+                  if (failGrammarOnce && options.responseFormat) {
+                    failGrammarOnce = false;
+                    throw new Error(
+                      "Custom OpenAIcompatible endpoint error 400: Failed to initialize samplers: failed to parse grammar",
+                    );
+                  }
                   if (abortInFlight) {
                     abortReachedChatComplete = true;
                     notifyAbortChatComplete?.();
@@ -1356,6 +1363,16 @@ async function main() {
         ),
       true,
     );
+    failGrammarOnce = true;
+    const grammarFallback = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/source_route_extract/extract",
+      headers,
+      payload: { chatId: "chat-a" },
+    });
+    assert.equal(grammarFallback.statusCode, 200, grammarFallback.body);
+    assert.equal(completionOptions.at(-2)?.responseFormat?.type, "json_schema");
+    assert.equal("responseFormat" in completionOptions.at(-1), false);
     fitContextMode = "reduced";
     const reducedBudget = await app.inject({
       method: "POST",
