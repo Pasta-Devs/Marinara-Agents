@@ -107,7 +107,10 @@ function artifactFixture(version: string): ArtifactFixture {
       );
     }
     if (version === "1.3.0") {
-      assert.match(clientSource, /onLorebooksChanged/u);
+      assert.ok(
+        (clientSource.match(/onLorebooksChanged/gu) ?? []).length >= 8,
+        "Maps 1.3.0 must forward host lorebook refreshes through library editor overlays",
+      );
     }
   }
   return {

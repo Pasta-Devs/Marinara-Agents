@@ -659,6 +659,7 @@ export function SpatialMapLibrary({
         sharedWorld={editingSharedWorld}
         initialUnresolvedLoreReferences={editingUnresolvedLoreReferences}
         onOpenLorebook={onOpenLorebook}
+        onLorebooksChanged={onLorebooksChanged}
         onClose={() => {
           setEditingSharedWorldId(null);
           setEditingUnresolvedLoreReferences([]);
@@ -674,6 +675,7 @@ export function SpatialMapLibrary({
         template={editingTemplate}
         initialUnresolvedLoreReferences={editingUnresolvedLoreReferences}
         onOpenLorebook={onOpenLorebook}
+        onLorebooksChanged={onLorebooksChanged}
         onClose={() => {
           setEditingId(null);
           setEditingUnresolvedLoreReferences([]);
