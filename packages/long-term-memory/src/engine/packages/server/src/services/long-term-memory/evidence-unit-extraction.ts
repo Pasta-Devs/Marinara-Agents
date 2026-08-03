@@ -355,9 +355,11 @@ async function chatCompleteWithReasoningFallback({
           appliedResponseFormat: "none",
         },
       });
+      const fallbackChatOptions = { ...chatOptions };
+      delete fallbackChatOptions.responseFormat;
       return chatCompleteWithReasoningFallback({
         messages,
-        chatOptions: { ...chatOptions, responseFormat: undefined },
+        chatOptions: fallbackChatOptions,
         extractionOptions,
       });
     }
