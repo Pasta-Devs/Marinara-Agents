@@ -109,6 +109,7 @@ import {
   parsePortableLoreBundle,
   planPortableLoreImport,
   portableLoreApproximateBytes,
+  portableLoreImportResultMessage,
   remapPortableLoreReferences,
   unresolvedPortableLoreReferences,
   type PortableLoreBundle,
@@ -1360,6 +1361,10 @@ export function SpatialMapWorkspace({
             {
               format: "marinara-hierarchical-map",
               formatVersion: 4,
+              name:
+                (templateMode ? templateName : chat?.name)?.trim() ||
+                draft.locations.find((location) => location.parentId === null)?.name ||
+                "World Map",
               definition: draft,
               hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
               portableLore: portableExportBundle,
@@ -1511,6 +1516,11 @@ export function SpatialMapWorkspace({
         if (!parsed.success) {
           throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid world map.");
         }
+        const importedMapName =
+          (typeof rawRecord?.name === "string" ? rawRecord.name.trim() : "") ||
+          parsed.data.locations.find((location) => location.parentId === null)?.name.trim() ||
+          file.name.replace(/(?:\.world-map)?\.json$/iu, "").trim() ||
+          "Imported Map";
         const importedIds = new Set(parsed.data.locations.map((location) => location.id));
         const missing = (baseDefinition?.locations ?? [])
           .filter((location) => !importedIds.has(location.id))
@@ -1537,7 +1547,12 @@ export function SpatialMapWorkspace({
             rawRecord: rawRecord ?? {},
             definition: parsed.data,
             bundle: portableLore,
-            plan: planPortableLoreImport(portableLore, lorebooks, entries),
+            plan: planPortableLoreImport(
+              portableLore,
+              lorebooks,
+              entries,
+              importedMapName,
+            ),
           });
           return;
         }
@@ -1592,9 +1607,7 @@ export function SpatialMapWorkspace({
         } catch {
           toast.error("The lore was restored, but the lorebook list could not be refreshed.");
         }
-        toast.success(
-          `${result.reusedEntries} lore link${result.reusedEntries === 1 ? " was" : "s were"} reused; ${result.importedEntries} entr${result.importedEntries === 1 ? "y was" : "ies were"} imported. Imported lorebooks remain in your library if this map is later deleted.`,
-        );
+        toast.success(portableLoreImportResultMessage(result));
       } catch (error) {
         if (!draftApplied && createdLorebookIds.length > 0) {
           await Promise.allSettled(
