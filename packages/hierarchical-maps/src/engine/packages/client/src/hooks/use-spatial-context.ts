@@ -661,12 +661,15 @@ export function usePublishSpatialSharedWorldDraft() {
         spatial: MapsSpatialContextResponse;
       }>(`/chats/${chatId}/spatial-context/shared-world/publish`, body);
     },
-    onSuccess: ({ world, spatial }, variables) => {
+    onSuccess: async ({ world, spatial }, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), spatial);
       queryClient.setQueryData<SpatialSharedWorldRecord[]>(spatialContextKeys.sharedWorlds, (current = []) =>
         current.map((candidate) => (candidate.id === world.id ? world : candidate)),
       );
-      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.all });
+      await queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.all,
+        refetchType: "all",
+      });
     },
   });
 }

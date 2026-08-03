@@ -104,6 +104,7 @@ import {
 import { packageApi } from "./package-api";
 import { usePendingSpatialTransition } from "./pending-spatial-transitions";
 import { cancelSpatialRoute, useSpatialRoutePlan } from "./spatial-route-plans";
+import { shouldRefreshSpatialWorkspace } from "./spatial-workspace-refresh";
 import {
   buildPortableLoreBundle,
   importPortableLoreBundle,
@@ -685,6 +686,50 @@ export function SpatialMapWorkspace({
       templateName,
     ],
   );
+
+  useEffect(() => {
+    if (
+      !spatial.isSuccess ||
+      !shouldRefreshSpatialWorkspace({
+        initialized,
+        templateMode,
+        dirty,
+        baseDefinition,
+        serverDefinition: spatial.data.definition,
+        baseHierarchyProfile,
+        serverHierarchyProfile: spatial.data.hierarchyProfile,
+      })
+    ) {
+      return;
+    }
+    const server = spatial.data.definition;
+    const nextDraft = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
+    const hierarchyProfile = normalizeHierarchyProfile(spatial.data.hierarchyProfile, nextDraft);
+    setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
+    setDraft(nextDraft);
+    setBaseHierarchyProfile(hierarchyProfile);
+    setDraftHierarchyProfile(hierarchyProfile);
+    setServerIssues(spatial.data.warnings);
+    setConflict(false);
+    setSelectedId((current) =>
+      current && nextDraft.locations.some((location) => location.id === current)
+        ? current
+        : nextDraft.startingLocationId ?? nextDraft.locations[0]?.id ?? null,
+    );
+    setEnteredParentId((current) =>
+      current && nextDraft.locations.some((location) => location.id === current) ? current : null,
+    );
+  }, [
+    baseDefinition,
+    baseHierarchyProfile,
+    dirty,
+    initialized,
+    ownerMode,
+    spatial.data,
+    spatial.isSuccess,
+    templateMode,
+  ]);
+
   const selected = draft?.locations.find((location) => location.id === selectedId) ?? null;
   const currentContext = enteredParentId
     ? (draft?.locations.find((location) => location.id === enteredParentId) ?? null)
@@ -1758,7 +1803,7 @@ export function SpatialMapWorkspace({
     }
     const confirmed = await confirmAction({
       title: "Publish changes to the shared world?",
-      message: `Publish this chat's reviewed map changes to “${sharedStatus.worldName ?? "the shared world"}”? Every linked chat will receive the new canonical definition. Referenced chat artwork will be promoted to Global Gallery first.`,
+      message: `Publish this chat's reviewed map changes to “${sharedStatus.worldName ?? "the shared world"}”? Clean linked chats cached in this window will refresh automatically. Chats with unpublished drafts keep them and show a conflict; reopen other tabs or windows to refresh them. Referenced chat artwork will be promoted to Global Gallery first.`,
       confirmLabel: "Publish changes",
     });
     if (!confirmed) return;
@@ -1782,7 +1827,7 @@ export function SpatialMapWorkspace({
       setServerIssues(result.spatial.warnings);
       setSavedFlash(true);
       toast.success(
-        `Shared world published to ${result.world.linkedChatCount} linked chat${result.world.linkedChatCount === 1 ? "" : "s"}.${promotion.promoted > 0 ? ` ${promotion.promoted} artwork file${promotion.promoted === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${promotion.reused > 0 ? ` ${promotion.reused} shared image${promotion.reused === 1 ? " was" : "s were"} reused.` : ""}`,
+        `Canonical revision ${result.world.revision} saved for ${result.world.linkedChatCount} linked chat${result.world.linkedChatCount === 1 ? "" : "s"}. Cached chats in this window were refreshed; reopen other tabs or windows to load it.${promotion.promoted > 0 ? ` ${promotion.promoted} artwork file${promotion.promoted === 1 ? " was" : "s were"} added to Global Gallery.` : ""}${promotion.reused > 0 ? ` ${promotion.reused} shared image${promotion.reused === 1 ? " was" : "s were"} reused.` : ""}`,
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The shared-world changes could not be published.");
