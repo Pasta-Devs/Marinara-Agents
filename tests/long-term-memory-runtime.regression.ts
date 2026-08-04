@@ -763,16 +763,15 @@ async function main() {
       }))?.text ?? "",
       /belongs to character A/,
     );
-    assert.doesNotMatch(
-      (await runtime.recall({
-        chatId: "chat-other-persona",
-        chatMode: "roleplay",
-        characterIds: ["character-a"],
-        messages: [{ role: "user", content: scopedRecallText }],
-        debugMode: false,
-      }))?.text ?? "",
-      /belongs to persona A/,
-    );
+    const personaCharacterRecall = (await runtime.recall({
+      chatId: "chat-other-persona",
+      chatMode: "roleplay",
+      characterIds: ["character-a"],
+      messages: [{ role: "user", content: scopedRecallText }],
+      debugMode: false,
+    }))?.text ?? "";
+    assert.match(personaCharacterRecall, /belongs to character A/);
+    assert.doesNotMatch(personaCharacterRecall, /belongs to persona A/);
     assert.doesNotMatch(
       (await runtime.recall({
         chatId: "chat-other-group",

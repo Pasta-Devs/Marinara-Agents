@@ -54,7 +54,11 @@ export function ltmScopesOverlap(
     const chatOverlap = targetChatIds.some((chatId) => noteChatIdSet.has(chatId));
     const targetPersonaId = targetScope?.personaId ?? options.personaId;
     if (noteScope?.groupId && !chatOverlap && noteScope.groupId !== targetScope?.groupId) return false;
-    if ((!noteCharacterIds.length || !chatOverlap) && noteScope?.personaId !== targetPersonaId) return false;
+    if (
+      noteScope?.personaId &&
+      ((!targetPersonaId && targetCharacterIds.length === 0) ||
+        (!chatOverlap && noteScope.personaId !== targetPersonaId))
+    ) return false;
     if (targetChatIds.length > 0 && !chatOverlap && !characterOverlap) return false;
     if (
       !targetChatIds.length &&
