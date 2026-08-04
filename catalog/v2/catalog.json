@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-04T17:25:27.636Z",
+  "generatedAt": "2026-08-04T20:56:46.793Z",
   "packages": [
     {
       "manifest": {
@@ -1442,15 +1442,15 @@
           "minor": 4
         },
         "builtAgainst": {
-          "engineVersion": "2.3.5",
-          "engineCommit": "ed0e2422b17b747aa5c392d9019bb92a71b00260"
+          "engineVersion": "2.4.1",
+          "engineCommit": "367d06fd0ed433c1e61d4a8891258490f79c8116"
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
         "version": "1.3.1",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
-          "min": "2.3.5",
+          "min": "2.4.1",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -1483,13 +1483,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "ea0af5f7c206aff577db94a2ee854b21d79c2e79776bb74bcd70ceb4f512ee76",
-            "bytes": 354473
+            "sha256": "42b0decc8e1ef550204d05c9ba024b7f254013aec580515b08af10a8fc34eb70",
+            "bytes": 354248
           },
           {
             "path": "client.js",
-            "sha256": "cc74f11979213c6f6fed54db60493bd9b84e069082126865741afcdcdf1e5773",
-            "bytes": 961106
+            "sha256": "e0673830a2a60684ca7d93a8a0d40a86ba245bc7d4d5e91513e46246b5cc4f89",
+            "bytes": 961379
           }
         ],
         "permissions": [
@@ -1508,8 +1508,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.3.1.zip",
-        "sha256": "7c296732b9c4a1fd30f507794a3d96645d67378e14ef7ea156df41096fae614b",
-        "bytes": 346571
+        "sha256": "5cecd8b4c60ea2496568f5fd0f237c65655bcbcb32af1a64d6c46956683b2904",
+        "bytes": 346668
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },

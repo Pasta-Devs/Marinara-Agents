@@ -124,7 +124,12 @@ async function main() {
         conversation: conversationChat,
         game: gameChat,
       };
-      for (const mode of agents[0]?.modeAllowlist ?? []) {
+      const declaredModes = agents[0]?.modeAllowlist ?? [];
+      assert.ok(
+        declaredModes.length > 0,
+        "agents.json must declare a non-empty modeAllowlist for mode coverage",
+      );
+      for (const mode of declaredModes) {
         const chat = fixtureByMode[mode];
         assert.ok(chat, `missing fixture for declared mode ${mode}`);
         const modeCandidates = await previewPackageInterop(

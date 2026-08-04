@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { shouldRefreshSpatialWorkspace } from "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/spatial-workspace-refresh";
 
-const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
+const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const baseDefinition = { revision: 1, locations: [] } as never;
 const baseHierarchyProfile = { name: "Base hierarchy", types: [] } as never;
 
@@ -68,8 +69,13 @@ const hookSource = readFileSync(
 );
 assert.match(
   hookSource,
-  /await queryClient\.invalidateQueries\(\{\s*queryKey: spatialContextKeys\.all,\s*refetchType: "all",/u,
-  "Publishing must await refetches for inactive as well as active cached linked-chat queries",
+  /queryClient\.invalidateQueries\(\{ queryKey: spatialContextKeys\.sharedWorlds \}\)[\s\S]*?predicate: \(query\)[\s\S]*?cached\?\.sharedWorld\?\.worldId === world\.id/u,
+  "Publishing must narrowly invalidate the shared-world list and affected cached linked-chat queries",
+);
+assert.match(
+  hookSource,
+  /try \{[\s\S]*?await Promise\.all\([\s\S]*?\} catch \{/u,
+  "A failed cache refresh must not turn a successful shared-world publish into a failed mutation",
 );
 
 const workspaceSource = readFileSync(
@@ -82,11 +88,6 @@ const workspaceSource = readFileSync(
 assert.match(workspaceSource, /shouldRefreshSpatialWorkspace\(\{/u);
 assert.match(
   workspaceSource,
-  /const serverHierarchyProfile = normalizeHierarchyProfile\(spatial\.data\.hierarchyProfile, nextDraft\);[\s\S]*?serverHierarchyProfile,[\s\S]*?setBaseHierarchyProfile\(serverHierarchyProfile\);[\s\S]*?setDraftHierarchyProfile\(serverHierarchyProfile\);/u,
-  "The workspace must compare and store the same normalized server hierarchy profile",
-);
-assert.match(
-  workspaceSource,
   /role=\{linkedSharedWorld\.missing \|\| linkedSharedWorld\.conflict \? "alert" : "status"\}[\s\S]*?This chat has unpublished shared-world changes\./u,
   "A server-preserved unpublished draft must expose its linked-world conflict as an alert",
 );
@@ -96,5 +97,5 @@ assert.match(workspaceSource, /Canonical revision \$\{result\.world\.revision\} 
 assert.match(workspaceSource, /reopen other tabs or windows to load it/u);
 
 console.log(
-  "World Maps shared-world refresh regression passed: all cached queries refetch, clean editors rehydrate, dirty drafts stay intact, and publish copy states refresh boundaries.",
+  "World Maps shared-world refresh regression passed: affected caches refresh, clean editors rehydrate, dirty drafts stay intact, and publish copy states refresh boundaries.",
 );

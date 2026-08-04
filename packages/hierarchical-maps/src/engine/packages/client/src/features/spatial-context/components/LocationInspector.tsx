@@ -581,7 +581,8 @@ export function LocationInspector({
           {sharedArtworkReferenceId && (
             <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-text)]">
               This Gallery image fills both the location reference and child-map background. Removing only one role
-              keeps the other link; reject both roles to create one clean replacement.
+              keeps the other link.
+              {allowChatArtwork ? " Reject both roles to create one clean replacement." : ""}
             </div>
           )}
 

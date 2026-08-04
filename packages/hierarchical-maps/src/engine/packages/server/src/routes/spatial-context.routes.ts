@@ -7,6 +7,7 @@ import {
   updateSpatialContextRequestSchema,
   type CapabilityChatRecord,
   type CapabilityDocumentRecord,
+  type CapabilityResolvedLanguageModel,
   type CapabilityResourceHost,
   type GenerateSpatialMapDraftResponse,
   type SpatialContextDefinition,
@@ -103,6 +104,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function withoutKeys(value: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
   const omitted = new Set(keys);
   return Object.fromEntries(Object.entries(value).filter(([key]) => !omitted.has(key)));
+}
+
+function spatialMapJsonRepairRequest(
+  resolved: CapabilityResolvedLanguageModel,
+  maxTokens: number,
+  debugMode: boolean,
+) {
+  return async (malformedRaw: string) => {
+    const repairPrompt = resolved.fitContext(
+      buildSpatialMapJsonRepairMessages(malformedRaw),
+      { maxTokens },
+    );
+    if (repairPrompt.trimmed) {
+      throw new Error(
+        "The malformed response could not fit in a complete formatting-repair request.",
+      );
+    }
+    return resolved.chatComplete(repairPrompt.messages, {
+      temperature: 0,
+      maxTokens,
+      debugMode,
+    });
+  };
 }
 
 const GAME_LOREBOOK_KEEPER_SOURCE_ID = "game-lorebook-keeper";
@@ -1178,22 +1202,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         raw,
         finishReason: result.finishReason,
         parse: json.parseJsonish,
-        repair: async (malformedRaw) => {
-          const repairPrompt = resolved.fitContext(
-            buildSpatialMapJsonRepairMessages(malformedRaw),
-            { maxTokens: prompt.maxTokens },
-          );
-          if (repairPrompt.trimmed) {
-            throw new Error(
-              "The malformed response could not fit in a complete formatting-repair request.",
-            );
-          }
-          return resolved.chatComplete(repairPrompt.messages, {
-            temperature: 0,
-            maxTokens: prompt.maxTokens,
-            debugMode: debugOverrideEnabled,
-          });
-        },
+        repair: spatialMapJsonRepairRequest(resolved, prompt.maxTokens, debugOverrideEnabled),
       });
       if (!parsedResponse.ok) {
         const payload = spatialMapJsonErrorPayload(parsedResponse);
@@ -1685,22 +1694,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         raw,
         finishReason: result.finishReason,
         parse: json.parseJsonish,
-        repair: async (malformedRaw) => {
-          const repairPrompt = resolved.fitContext(
-            buildSpatialMapJsonRepairMessages(malformedRaw),
-            { maxTokens: prompt.maxTokens },
-          );
-          if (repairPrompt.trimmed) {
-            throw new Error(
-              "The malformed response could not fit in a complete formatting-repair request.",
-            );
-          }
-          return resolved.chatComplete(repairPrompt.messages, {
-            temperature: 0,
-            maxTokens: prompt.maxTokens,
-            debugMode: debugOverrideEnabled,
-          });
-        },
+        repair: spatialMapJsonRepairRequest(resolved, prompt.maxTokens, debugOverrideEnabled),
       });
       if (!parsedResponse.ok) {
         const payload = spatialMapJsonErrorPayload(parsedResponse);

@@ -139,7 +139,7 @@ const features = [
   {
     id: "hierarchical-maps",
     version: "1.3.1",
-    minEngineVersion: "2.3.5",
+    minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
     description: "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game.",
@@ -717,17 +717,16 @@ async function reconcileSpatialCapabilityEvent(detail) {
   if (detail.type === "spatial_transition_committed" && commandId) {
     clearPendingSpatialTransition(chatId, commandId);
   }
+  let spatial;
   try {
-    const spatial = await packageApi.get("/chats/" + encodeURIComponent(chatId) + "/spatial-context");
-    if (!spatial || spatialEventSequence.get(chatId) !== sequence) return;
-    client.setQueryData(["spatial-context", chatId], spatial);
-    if (getSpatialRoutePlan(chatId)) {
-      reconcileSpatialRoutePlan(chatId, spatial);
-      return;
-    }
+    spatial = await packageApi.get("/chats/" + encodeURIComponent(chatId) + "/spatial-context");
   } catch {
     void client.invalidateQueries({ queryKey: ["spatial-context", chatId] });
+    return;
   }
+  if (!spatial || spatialEventSequence.get(chatId) !== sequence) return;
+  client.setQueryData(["spatial-context", chatId], spatial);
+  if (getSpatialRoutePlan(chatId)) reconcileSpatialRoutePlan(chatId, spatial);
 }
 window.addEventListener("marinara-capability-server-event", (event) => { void reconcileSpatialCapabilityEvent(event.detail); });
 function PendingBridge({ chatId, onChange }) { const pending = usePendingSpatialTransition(chatId); const onChangeRef = useRef(onChange); useEffect(() => { onChangeRef.current = onChange; }, [onChange]); useEffect(() => { if (typeof onChangeRef.current === "function") onChangeRef.current(pending); }, [pending]); return null; }
