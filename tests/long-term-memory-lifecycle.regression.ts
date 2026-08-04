@@ -136,6 +136,16 @@ async function main() {
   await runWithSafeCleanup("LTM lifecycle", async () => {
     assert.equal(artifactManifest.id, "long-term-memory");
     assert.equal(artifactManifest.version, packageManifest.version);
+    assert.match(
+      String(artifactManifest.description),
+      /Chat Settings → Agents → Long-Term Memory/u,
+      "Long-Term Memory guidance must name its dedicated activation path",
+    );
+    assert.doesNotMatch(
+      String(artifactManifest.description),
+      /Misc Agents for Conversation/u,
+      "Long-Term Memory guidance must not send Conversation users to Misc Agents",
+    );
     assert.doesNotMatch(
       artifactClient,
       /crypto\.randomUUID/u,
