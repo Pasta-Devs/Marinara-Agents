@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **31 first-party packages**: 6 Writer Agents, 8 Tracker Agents, and 17 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; World Maps, Long-Term Memory, and Storyboard remain available to staging users on **v2.3.5** and accept the stable **v2.4.0** release. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **32 first-party packages**: 6 Writer Agents, 8 Tracker Agents, and 18 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; World Maps, Long-Term Memory, Storyboard, and Virtual Phone remain available to staging users on **v2.3.5** and accept the stable **v2.4.0** release. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -53,6 +53,7 @@ Across its Engine compatibility lanes, the catalog currently contains **31 first
 | Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game and Roleplay storyboards with provider-tuned prompt chains. |
 | Tic-Tac-Toe | [`tic-tac-toe`](packages/tic-tac-toe/manifest.json) | Adds one-on-one Conversation matches and the `/tictactoe` command. |
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
+| Virtual Phone | [`virtual-phone`](packages/virtual-phone/manifest.json) | Adds an in-story phone with a home screen, an App Store, and generated app screens, including simulated chat-scoped Noodle and Noodler. |
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
 
@@ -80,7 +81,7 @@ node scripts/build-feature-packages.mjs
 node scripts/validate-catalog.mjs
 ```
 
-The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, World Maps and Long-Term Memory source live under their respective `packages/<id>/src/engine/` trees and are overlaid on those generic dependencies during each build.
+The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, World Maps, Long-Term Memory, and Virtual Phone source live under their respective `packages/<id>/src/engine/` trees and are overlaid on those generic dependencies during each build.
 
 ---
 

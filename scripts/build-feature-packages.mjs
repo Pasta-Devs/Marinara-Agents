@@ -41,6 +41,11 @@ const longTermMemoryOwnedSourcePaths = [
   "packages/client/src/features/long-term-memory",
 ];
 const longTermMemorySourceRoot = join(packagesDir, "long-term-memory/src/engine");
+const virtualPhoneOwnedSourcePaths = [
+  "packages/server/src/services/virtual-phone",
+  "packages/client/src/features/virtual-phone",
+];
+const virtualPhoneSourceRoot = join(packagesDir, "virtual-phone/src/engine");
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
   String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "").split(",").filter(Boolean),
@@ -52,7 +57,8 @@ const featureSource = (relativePath, buildRoot = sourceRoot) => {
 };
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "long-term-memory") {
+  // Packages that own their whole source tree build from a copy of it.
+  if (feature.packageSourceRoot) {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -134,6 +140,27 @@ const features = [
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"] },
       slots: ["chat-settings"],
+    },
+  },
+  {
+    id: "virtual-phone",
+    version: "1.0.0",
+    minEngineVersion: "2.3.5",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Virtual Phone",
+    description:
+      "Adds an in-story phone with a home screen, an App Store, and generated app screens. Includes simulated, chat-scoped Noodle and Noodler.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["roleplay", "conversation"],
+    permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/virtual-phone/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/features/virtual-phone/client-entry.tsx",
+    packageSourceRoot: virtualPhoneSourceRoot,
+    ownedSourcePaths: virtualPhoneOwnedSourcePaths,
+    contributions: {
+      slots: ["conversation-toolbar", "conversation-surface"],
     },
   },
   {
@@ -326,7 +353,7 @@ export async function selfCheck() {
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
     }
-    if (feature.id === "long-term-memory") {
+    if (feature.packageSourceRoot) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
     } else {
       await captureEngineSources(
@@ -970,7 +997,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
     const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
     if (result.status !== 0) throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
-    if (feature.id === "long-term-memory") {
+    if (feature.packageSourceRoot) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
     } else {
       await captureEngineSources(
