@@ -5,6 +5,7 @@ import type {
   PortableLoreImportPlan,
   PortableLoreImportStrategy,
 } from "../portable-lore";
+import { portableLoreImportOutcome } from "../portable-lore";
 import { useModalKeyboardNavigation } from "./use-modal-keyboard-navigation";
 
 interface PortableLoreImportDialogProps {
@@ -47,13 +48,24 @@ export function PortableLoreImportDialog({
   );
   const selectionMap = () =>
     new Map(
-      ambiguousEntries.map((entry) => [
-        entry.entryKey,
-        selections[entry.entryKey] === "__new__"
-          ? null
-          : selections[entry.entryKey]!,
-      ]),
+      ambiguousEntries
+        .filter((entry) => Boolean(selections[entry.entryKey]))
+        .map((entry): [string, string | null] => [
+          entry.entryKey,
+          selections[entry.entryKey] === "__new__"
+            ? null
+            : selections[entry.entryKey]!,
+        ]),
     );
+  const separateOutcome = portableLoreImportOutcome(
+    plan,
+    "separate",
+  );
+  const reuseOutcome = portableLoreImportOutcome(
+    plan,
+    "reuse",
+    selectionMap(),
+  );
 
   return (
     <div
@@ -187,6 +199,65 @@ export function PortableLoreImportDialog({
               </div>
             )}
           </details>
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+              Expected outcome
+            </h3>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
+                <p className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                  Import separate copies
+                </p>
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                  Reuse 0 entries. Import {separateOutcome.importedEntries} entr
+                  {separateOutcome.importedEntries === 1 ? "y" : "ies"} into{" "}
+                  {separateOutcome.createdLorebooks.length} new lorebook
+                  {separateOutcome.createdLorebooks.length === 1 ? "" : "s"}.
+                </p>
+                <ul className="mt-2 space-y-1 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-text)]">
+                  {separateOutcome.createdLorebooks.map((book) => (
+                    <li key={book.name}>Create “{book.name}”</li>
+                  ))}
+                </ul>
+              </div>
+              <div
+                role="status"
+                className="rounded-xl border border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] p-3"
+              >
+                <p className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                  Reuse matches & import the rest
+                </p>
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+                  Reuse {reuseOutcome.reusedEntries} entr
+                  {reuseOutcome.reusedEntries === 1 ? "y" : "ies"} from{" "}
+                  {reuseOutcome.reusedLorebooks.length} existing lorebook
+                  {reuseOutcome.reusedLorebooks.length === 1 ? "" : "s"}; import{" "}
+                  {reuseOutcome.importedEntries} entr
+                  {reuseOutcome.importedEntries === 1 ? "y" : "ies"} into{" "}
+                  {reuseOutcome.createdLorebooks.length} new lorebook
+                  {reuseOutcome.createdLorebooks.length === 1 ? "" : "s"}.
+                </p>
+                {reuseOutcome.unresolvedEntries > 0 && (
+                  <p className="mt-2 text-[0.6875rem] text-amber-400">
+                    Choose {reuseOutcome.unresolvedEntries} ambiguous entr
+                    {reuseOutcome.unresolvedEntries === 1 ? "y" : "ies"} to finalize this outcome.
+                  </p>
+                )}
+                <ul className="mt-2 space-y-1 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-text)]">
+                  {reuseOutcome.reusedLorebooks.map((book) => (
+                    <li key={book.id}>Reuse “{book.name}”</li>
+                  ))}
+                  {reuseOutcome.createdLorebooks.map((book) => (
+                    <li key={book.name}>Create “{book.name}”</li>
+                  ))}
+                  {reuseOutcome.reusedLorebooks.length === 0 &&
+                    reuseOutcome.createdLorebooks.length === 0 &&
+                    reuseOutcome.unresolvedEntries === 0 && <li>Create no lorebooks</li>}
+                </ul>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div className="grid gap-2 border-t border-[var(--marinara-chat-chrome-panel-divider)] p-3 sm:grid-cols-2">

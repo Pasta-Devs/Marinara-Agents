@@ -33,6 +33,9 @@ jobs:
       - name: Validate catalogs, packages, artifacts, and README coverage
         run: node scripts/validate-catalog.mjs
 
+      - name: Test World Maps UI contracts
+        run: node tests/world-maps-ui-contract.regression.mjs
+
       - name: Validate pull request gate topology
         run: node scripts/validate-pr-triage.mjs
 

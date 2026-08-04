@@ -3085,6 +3085,15 @@ test("opening linked lore protects unsaved map edits", async ({ page }, testInfo
     await expect(workspace).toBeVisible();
     const details = workspace.locator('section[aria-label^="Details for "]:visible');
     const nameInput = details.getByLabel("Name", { exact: true });
+    await details.getByText("Linked lore", { exact: true }).click();
+    await expect(details.getByText("Harbor navigation lore", { exact: true })).toBeVisible();
+    await details.getByRole("button", { name: "Open", exact: true }).click();
+    await expect(workspace).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
+
+    await page.reload();
+    await dismissOnboardingTutorial(page);
+    await expect(workspace).toBeVisible();
     await nameInput.fill("Unsaved harbor name");
     await expect(workspace.getByText("Unsaved", { exact: true })).toBeVisible();
     await details.getByText("Linked lore", { exact: true }).click();
@@ -4070,8 +4079,19 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(exportMap.locator("svg")).toHaveClass(/lucide-upload/);
     await expect(importMap.locator("svg")).toHaveClass(/lucide-download/);
     if (!mobile) {
+      const displayedMapArtwork = page.locator("[data-marinara-maps-editor-canvas] > img");
+      await expect(displayedMapArtwork).toBeVisible();
       await exportMap.click();
       const exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+      await expect(exportDialog).toHaveCSS("z-index", "105");
+      expect(
+        await exportDialog.evaluate((dialog) => {
+          const rect = dialog.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return hit === dialog || Boolean(hit && dialog.contains(hit));
+        }),
+        "The export dialog must own the interaction layer above displayed map artwork",
+      ).toBe(true);
       await expect(exportDialog.getByRole("checkbox", { name: "Include map artwork" })).toBeChecked();
       await expect(exportDialog.getByRole("radio", { name: /Map \+ linked entries/u })).toBeChecked();
       const downloadPromise = page.waitForEvent("download");
@@ -4764,8 +4784,10 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     generationRequestCount += 1;
     const request = route.request().postDataJSON() as {
       chatId: string;
-      userMessage: string;
-      pendingSpatialTransition: {
+      userMessage?: string;
+      generationGuide?: string;
+      impersonate?: boolean;
+      pendingSpatialTransition?: {
         destinationId: string;
         expectedDefinitionRevision: number;
         expectedCurrentLocationId: string;
@@ -4773,9 +4795,24 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       };
     };
     expect(request.chatId).toBe(chat.id);
-    expect(request.userMessage).not.toContain("moves to");
     if (generationRequestCount === 1) {
-      expect(request.pendingSpatialTransition).toMatchObject({
+      expect(request.generationGuide).toContain("Let the NPC wait at the current location");
+      expect(request.impersonate).not.toBe(true);
+      expect(request.pendingSpatialTransition).toBeUndefined();
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `data: ${JSON.stringify({ type: "done", data: "" })}\n\n`,
+      });
+      return;
+    }
+    expect(request.userMessage).not.toContain("moves to");
+    const pendingSpatialTransition = request.pendingSpatialTransition;
+    expect(pendingSpatialTransition).toBeDefined();
+    if (!pendingSpatialTransition) throw new Error("Owner movement request did not include its queued transition");
+    if (generationRequestCount === 2) {
+      expect(request.impersonate).toBe(true);
+      expect(pendingSpatialTransition).toMatchObject({
         destinationId: "ai_harbor",
         expectedDefinitionRevision: saved.definition.revision,
         expectedCurrentLocationId: "ai_world",
@@ -4783,7 +4820,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       const commitResponse = await page.request.post(`/api/chats/${chat.id}/spatial-context/turn`, {
         data: {
           content: request.userMessage,
-          transition: request.pendingSpatialTransition,
+          transition: pendingSpatialTransition,
         },
       });
       expect(commitResponse.ok()).toBeTruthy();
@@ -4795,7 +4832,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
             type: "spatial_transition_committed",
             data: {
               chatId: chat.id,
-              commandId: request.pendingSpatialTransition.commandId,
+              commandId: pendingSpatialTransition.commandId,
               currentLocationId: "ai_harbor",
               definitionRevision: saved.definition.revision,
             },
@@ -4803,8 +4840,8 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       });
       return;
     }
-    if (generationRequestCount === 2) {
-      expect(request.pendingSpatialTransition).toMatchObject({
+    if (generationRequestCount === 3) {
+      expect(pendingSpatialTransition).toMatchObject({
         destinationId: "ai_world",
         expectedDefinitionRevision: saved.definition.revision,
         expectedCurrentLocationId: "ai_harbor",
@@ -4821,17 +4858,17 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       });
       return;
     }
-    expect(generationRequestCount).toBe(3);
+    expect(generationRequestCount).toBe(4);
     const expectedRouteHop = {
       destinationId: "ai_lighthouse_upper",
       expectedCurrentLocationId: "ai_lighthouse",
     };
-    expect(request.pendingSpatialTransition).toMatchObject({
+    expect(pendingSpatialTransition).toMatchObject({
       ...expectedRouteHop,
       expectedDefinitionRevision: saved.definition.revision,
     });
     const commitResponse = await page.request.post(`/api/chats/${chat.id}/spatial-context/turn`, {
-      data: { content: request.userMessage, transition: request.pendingSpatialTransition },
+      data: { content: request.userMessage, transition: pendingSpatialTransition },
     });
     expect(commitResponse.ok(), await commitResponse.text()).toBeTruthy();
     await route.fulfill({
@@ -4842,7 +4879,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
           type: "spatial_transition_committed",
           data: {
             chatId: chat.id,
-            commandId: request.pendingSpatialTransition.commandId,
+            commandId: pendingSpatialTransition.commandId,
             currentLocationId: expectedRouteHop.destinationId,
             definitionRevision: saved.definition.revision,
           },
@@ -5013,7 +5050,15 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await page.reload();
     await expect(page.getByRole("region", { name: "Story location" }).getByText("Moves with your next turn")).toBeVisible();
     const input = page.locator("textarea.mari-chat-input-textarea");
-    await input.fill("I follow the harbor road.");
+    await input.fill("/guided Let the NPC wait at the current location.");
+    await page.locator("button.mari-chat-send-btn").click();
+    await expect(input).toHaveValue("");
+    await expect(storyLocation.getByText("Moves with your next turn")).toBeVisible();
+    const afterGuidedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+    expect(afterGuidedResponse.ok(), await afterGuidedResponse.text()).toBeTruthy();
+    expect(((await afterGuidedResponse.json()) as { currentLocationId: string }).currentLocationId).toBe("ai_world");
+
+    await input.fill("/impersonate I follow the harbor road.");
     await page.locator("button.mari-chat-send-btn").click();
     await expect(page.getByText("Moves with your next turn")).toHaveCount(0);
     await expect(input).toHaveValue("");

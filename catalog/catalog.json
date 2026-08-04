@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-04T00:03:01.931Z",
+  "generatedAt": "2026-08-04T04:46:33.835Z",
   "packages": [
     {
       "manifest": {
@@ -1447,7 +1447,7 @@
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.3.0",
+        "version": "1.3.1",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.3.5",
@@ -1483,13 +1483,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "8e09ac8f1a29b943fee1ff021eb372d48e5c108e1a51134f573e8a4227b67648",
-            "bytes": 349815
+            "sha256": "ea0af5f7c206aff577db94a2ee854b21d79c2e79776bb74bcd70ceb4f512ee76",
+            "bytes": 354473
           },
           {
             "path": "client.js",
-            "sha256": "bc37791c4fc636b54d9d02721dee5a9286a08d10b7ffc4d20e3f4ee47fa0bd50",
-            "bytes": 952174
+            "sha256": "cc74f11979213c6f6fed54db60493bd9b84e069082126865741afcdcdf1e5773",
+            "bytes": 961106
           }
         ],
         "permissions": [
@@ -1507,9 +1507,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.3.0.zip",
-        "sha256": "89bd61883609ede01365fd5446b1d2d16f3b4d54d31f1ebec97f2d47d7359e75",
-        "bytes": 343088
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.3.1.zip",
+        "sha256": "7c296732b9c4a1fd30f507794a3d96645d67378e14ef7ea156df41096fae614b",
+        "bytes": 346571
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },
