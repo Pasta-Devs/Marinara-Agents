@@ -3,7 +3,9 @@ export interface LocationArtworkAssignment {
   status: string;
   childPresentation: string;
   referenceImageId?: string | null;
+  useReferenceImage?: boolean;
   mapBackgroundImageId?: string | null;
+  mapBackgroundPosition?: { x: number; y: number };
 }
 
 export interface LocationArtworkGap<
@@ -70,4 +72,29 @@ export function replacementArtworkPatch(
         }
       : {}),
   };
+}
+
+/** Preserve artwork roles changed after generation began while filling roles that remain unchanged and missing. */
+export function replacementArtworkPatchForCurrentLocation<
+  TLocation extends LocationArtworkAssignment,
+>(
+  originalGap: LocationArtworkGap<TLocation>,
+  currentLocation: TLocation,
+  imageId: string,
+): LocationArtworkReplacement | null {
+  if (currentLocation.status !== "active") return null;
+  const referenceMissing =
+    originalGap.referenceMissing &&
+    currentLocation.referenceImageId === originalGap.location.referenceImageId &&
+    currentLocation.useReferenceImage === originalGap.location.useReferenceImage;
+  const mapBackgroundMissing =
+    originalGap.mapBackgroundMissing &&
+    currentLocation.childPresentation === "map" &&
+    currentLocation.mapBackgroundImageId === originalGap.location.mapBackgroundImageId;
+  if (!referenceMissing && !mapBackgroundMissing) return null;
+  return replacementArtworkPatch(
+    { referenceMissing, mapBackgroundMissing },
+    imageId,
+    currentLocation.mapBackgroundPosition,
+  );
 }

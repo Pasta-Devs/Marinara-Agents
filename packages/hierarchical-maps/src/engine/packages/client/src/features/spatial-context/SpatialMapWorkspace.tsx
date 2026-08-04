@@ -56,7 +56,7 @@ import {
   useUpdateSpatialSharedWorld,
 } from "../../hooks/use-spatial-context";
 import { cn, WORLD_MAPS_GUIDE_URL } from "./package-utils";
-import { locationArtworkGaps, replacementArtworkPatch } from "./location-artwork";
+import { locationArtworkGaps, replacementArtworkPatchForCurrentLocation } from "./location-artwork";
 import { nextAvailableSharedWorldName } from "./shared-world-naming";
 import { HierarchyNavigator } from "./components/HierarchyNavigator";
 import { LayerSelector } from "./components/LayerSelector";
@@ -904,8 +904,10 @@ export function SpatialMapWorkspace({
       return;
     }
 
-    let next = draft;
-    let updatedLocations = 0;
+    const generatedArtwork: Array<{
+      assignment: (typeof missingArtworkAssignments)[number];
+      imageId: string;
+    }> = [];
     let failedImages = 0;
     const reviewedItems = new globalThis.Map(artworkPreview?.items.map((item) => [item.id, item]) ?? []);
     setArtworkPreview(null);
@@ -944,20 +946,25 @@ export function SpatialMapWorkspace({
         continue;
       }
 
-      const current = next.locations.find((location) => location.id === target.id);
-      if (!current) continue;
-      next = updateSpatialLocation(
-        next,
-        current.id,
-        replacementArtworkPatch(assignment, imageId, current.mapBackgroundPosition),
-      );
-      updatedLocations += 1;
+      generatedArtwork.push({ assignment, imageId });
     }
 
-    if (updatedLocations > 0) {
-      applyDraft(next);
+    if (generatedArtwork.length > 0) {
+      setDraft((currentDraft) => {
+        if (!currentDraft) return currentDraft;
+        return generatedArtwork.reduce((nextDraft, generated) => {
+          const current = nextDraft.locations.find((location) => location.id === generated.assignment.location.id);
+          if (!current) return nextDraft;
+          const patch = replacementArtworkPatchForCurrentLocation(generated.assignment, current, generated.imageId);
+          return patch ? updateSpatialLocation(nextDraft, current.id, patch) : nextDraft;
+        }, currentDraft);
+      });
+      setServerIssues([]);
+      setSavedFlash(false);
+      setFirstSaveResult(null);
+      setArtworkPreview(null);
       toast.success(
-        `Added artwork to ${updatedLocations} location${updatedLocations === 1 ? "" : "s"}. Review it, then Save.`,
+        `Created artwork for ${generatedArtwork.length} location${generatedArtwork.length === 1 ? "" : "s"}. Missing roles were filled where still needed; newer artwork choices were preserved. Review it, then Save.`,
       );
     }
     if (failedImages > 0) {
@@ -967,7 +974,6 @@ export function SpatialMapWorkspace({
     }
     setArtworkProgress(null);
   }, [
-    applyDraft,
     artworkPreview,
     artworkProgress,
     debugMode,

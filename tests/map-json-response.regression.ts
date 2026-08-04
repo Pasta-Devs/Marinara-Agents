@@ -24,14 +24,28 @@ assert.equal(hasIncompleteJsonStructure('{"description": "unfinished'), true);
 assert.equal(hasIncompleteJsonStructure('{"locations": ]}'), false);
 assert.equal(hasIncompleteJsonStructure('{"locations": []}\nTrailing [text'), false);
 const prefixedBalancedMalformed = `Model note [unfinished\n${balancedMalformed}`;
+const bracePrefixedBalancedMalformed = `Model note {unfinished\n${balancedMalformed}`;
 assert.equal(
   hasIncompleteJsonStructure(prefixedBalancedMalformed),
   false,
   "An unmatched prose bracket before the map object must not look like truncated map JSON",
 );
 assert.equal(
+  hasIncompleteJsonStructure(bracePrefixedBalancedMalformed),
+  false,
+  "An unmatched prose brace before the map object must not look like truncated map JSON",
+);
+assert.equal(
   classifySpatialMapJsonParseFailure({
     raw: prefixedBalancedMalformed,
+    finishReason: "stop",
+    error: new SyntaxError("Unexpected token"),
+  }).kind,
+  "malformed",
+);
+assert.equal(
+  classifySpatialMapJsonParseFailure({
+    raw: bracePrefixedBalancedMalformed,
     finishReason: "stop",
     error: new SyntaxError("Unexpected token"),
   }).kind,
@@ -70,6 +84,19 @@ const prefixedRepair = await parseSpatialMapJsonWithRepair({
 });
 assert.equal(repairCalls, 1, "Prefix prose brackets must not suppress one controlled repair");
 assert.equal(prefixedRepair.ok, true);
+
+repairCalls = 0;
+const bracePrefixedRepair = await parseSpatialMapJsonWithRepair({
+  raw: bracePrefixedBalancedMalformed,
+  finishReason: "stop",
+  parse: JSON.parse,
+  repair: async () => {
+    repairCalls += 1;
+    return { content: '{"locations":[]}', finishReason: "stop" };
+  },
+});
+assert.equal(repairCalls, 1, "Prefix prose braces must not suppress one controlled repair");
+assert.equal(bracePrefixedRepair.ok, true);
 
 repairCalls = 0;
 const repaired = await parseSpatialMapJsonWithRepair({

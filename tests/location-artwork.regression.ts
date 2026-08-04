@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   locationArtworkGaps,
   replacementArtworkPatch,
+  replacementArtworkPatchForCurrentLocation,
 } from "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/location-artwork";
 
 const locations = [
@@ -83,6 +84,58 @@ assert.deepEqual(
     mapBackgroundPosition: { x: 50, y: 50 },
   },
   "One generated image must replace both dangling roles",
+);
+assert.equal(
+  replacementArtworkPatchForCurrentLocation(
+    resolved[0]!,
+    {
+      ...resolved[0]!.location,
+      referenceImageId: "gallery-user-selection",
+    },
+    "gallery-generated-late",
+  ),
+  null,
+  "A user artwork assignment made during generation must not be overwritten",
+);
+assert.equal(
+  replacementArtworkPatchForCurrentLocation(
+    resolved[0]!,
+    {
+      ...resolved[0]!.location,
+      useReferenceImage: false,
+    },
+    "gallery-generated-late",
+  ),
+  null,
+  "A reference toggle changed during generation must not be overwritten",
+);
+assert.equal(
+  replacementArtworkPatchForCurrentLocation(
+    resolved[1]!,
+    {
+      ...resolved[1]!.location,
+      status: "archived",
+    },
+    "gallery-generated-late",
+  ),
+  null,
+  "Artwork generation must not modify a location archived while its request was pending",
+);
+assert.deepEqual(
+  replacementArtworkPatchForCurrentLocation(
+    resolved[1]!,
+    {
+      ...resolved[1]!.location,
+      referenceImageId: "gallery-user-reference",
+      mapBackgroundPosition: { x: 24, y: 76 },
+    },
+    "gallery-generated-late",
+  ),
+  {
+    mapBackgroundImageId: "gallery-generated-late",
+    mapBackgroundPosition: { x: 24, y: 76 },
+  },
+  "Generation must fill only the unchanged missing role and preserve the latest background position",
 );
 
 console.info(

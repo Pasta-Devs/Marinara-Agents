@@ -93,12 +93,16 @@ assert.match(
 );
 assert.match(
   mapJsonSource,
-  /const start = raw\.indexOf\("\{"\);/u,
-  "Map truncation detection must ignore arbitrary prose brackets before the JSON object.",
+  /const trimmed = raw\.trimStart\(\);[\s\S]*?!trimmed\.startsWith\("\{"\)/u,
+  "Map truncation detection must only inspect responses that begin with a JSON object.",
 );
+const templateRouteStart = routeSource.indexOf('app.post("/spatial-context/templates/generate"');
+const templateRouteEnd = routeSource.indexOf('app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generate"');
+assert.ok(templateRouteStart >= 0, "Template route marker is missing.");
+assert.ok(templateRouteEnd > templateRouteStart, "Chat route marker must follow the template route.");
 const templateGenerateSource = routeSource.slice(
-  routeSource.indexOf('app.post("/spatial-context/templates/generate"'),
-  routeSource.indexOf('app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generate"'),
+  templateRouteStart,
+  templateRouteEnd,
 );
 assert.match(
   templateGenerateSource,

@@ -63,14 +63,13 @@ function normalizedFinishReason(finishReason: unknown): string {
 }
 
 export function hasIncompleteJsonStructure(raw: string): boolean {
-  const start = raw.indexOf("{");
-  if (start < 0) return false;
+  const trimmed = raw.trimStart();
+  if (!trimmed.startsWith("{")) return false;
 
   const stack: string[] = [];
   let inString = false;
   let escaped = false;
-  for (let index = start; index < raw.length; index += 1) {
-    const character = raw[index]!;
+  for (const character of trimmed) {
     if (inString) {
       if (escaped) {
         escaped = false;
