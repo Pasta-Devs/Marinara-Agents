@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "virtual-phone",
   "name": "Virtual Phone",
-  "version": "1.0.1",
-  "description": "Adds an in-story phone with a home screen, an App Store, and generated app screens. Includes simulated, chat-scoped Noodle and Noodler. Open Agents → Virtual Phone while a Conversation or Roleplay chat is active, then enable it for that chat.",
+  "version": "1.0.2",
+  "description": "Adds an in-story phone with a home screen, an App Store, and generated app screens. Includes simulated, chat-scoped Noodle and Noodler. Enable it in Agents → Virtual Phone for an active Conversation or Roleplay chat, then use the phone button in the chat toolbar.",
   "engine": {
-    "min": "2.3.5",
+    "min": "2.4.1",
     "maxExclusive": "4.0.0"
   },
   "kind": [
@@ -30,8 +30,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "7ea5c01024adc642a1abd927954bdc3ca1f808a0555e12162267a6ba558b600c",
-      "bytes": 658
+      "sha256": "a23ee18e3514df01543937d1267a9be8dec15c21765f5ae02bc91b3a84c82e9a",
+      "bytes": 679
     },
     {
       "path": "server.mjs",
@@ -40,8 +40,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "6c6a5c95c8bab09a4468337dae2abd645b90bf1acab13a3b82c2c7f69e6babd6",
-      "bytes": 210333
+      "sha256": "4f702c218eb2cfd15cc3de4a2b0b768124d2f74cdbf9c4af31be2e72d8d320ae",
+      "bytes": 211999
     }
   ],
   "permissions": [

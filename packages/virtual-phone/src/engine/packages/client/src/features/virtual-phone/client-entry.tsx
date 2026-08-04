@@ -1,7 +1,14 @@
-import React, { useEffect, useState, type ReactNode } from "react";
+import React, { useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { PhoneShell } from "./PhoneShell";
-import type { CapabilityElement } from "./types";
+import type { CapabilityElement, CapabilityProps } from "./types";
+
+const PHONE_VISIBILITY_EVENT = "marinara-virtual-phone-visibility";
+
+function setPhoneVisible(chatId: string | undefined, visible: boolean) {
+  if (!chatId) return;
+  window.dispatchEvent(new CustomEvent(PHONE_VISIBILITY_EVENT, { detail: { chatId, visible } }));
+}
 
 class CapabilityClientErrorBoundary extends React.Component<
   { element: CapabilityElement; children: ReactNode },
@@ -58,16 +65,19 @@ function ToolbarButton({ element }: { element: CapabilityElement }) {
       aria-label="Open phone"
       title="Open the phone for this chat"
       className={props.toolbarButtonClass || ""}
-      onClick={() => props.openSurface?.()}
+      onClick={() => setPhoneVisible(props.chatId, true)}
       style={
         props.toolbarButtonClass
-          ? undefined
-          : {
-              display: "inline-flex",
+           ? undefined
+           : {
+               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
+              width: 40,
+              height: 40,
               padding: 0,
               border: 0,
+              borderRadius: 10,
               background: "transparent",
               color: "currentColor",
               cursor: "pointer",
@@ -79,6 +89,83 @@ function ToolbarButton({ element }: { element: CapabilityElement }) {
         <path d="M11 18h2" />
       </svg>
     </button>
+  );
+}
+
+function SurfacePhone({ props }: { props: CapabilityProps }) {
+  const [visible, setVisible] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const update = (event: Event) => {
+      const detail = (event as CustomEvent<{ chatId?: string; visible?: boolean }>).detail;
+      if (detail?.chatId === props.chatId) setVisible(detail.visible === true);
+    };
+    window.addEventListener(PHONE_VISIBILITY_EVENT, update);
+    return () => window.removeEventListener(PHONE_VISIBILITY_EVENT, update);
+  }, [props.chatId]);
+
+  useEffect(() => {
+    if (!visible) return;
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPhoneVisible(props.chatId, false);
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.getClientRects().length > 0);
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      returnFocusRef.current?.focus();
+    };
+  }, [props.chatId, visible]);
+
+  if (!visible) return null;
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Virtual Phone"
+      tabIndex={-1}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 80,
+        display: "flex",
+        justifyContent: "flex-end",
+        background: "rgb(0 0 0 / 48%)",
+        backdropFilter: "blur(4px)",
+      }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) setPhoneVisible(props.chatId, false);
+      }}
+    >
+      <PhoneShell props={{ ...props, onClose: () => setPhoneVisible(props.chatId, false) }} />
+    </div>
   );
 }
 
@@ -94,6 +181,7 @@ function CapabilityRoot({ element }: { element: CapabilityElement }) {
   const view = element.getAttribute("view") || props.view || "toolbar";
   if (view === "toolbar") return <ToolbarButton element={element} />;
   if (view !== "surface" && view !== "detail") return null;
+  if (view === "surface") return <SurfacePhone props={props} />;
   if (view === "detail" && !props.chatId) {
     return (
       <div role="status" style={{ margin: "auto", padding: 24, textAlign: "center", fontSize: 13 }}>

@@ -2,7 +2,7 @@
   {
     "id": "virtual-phone",
     "name": "Virtual Phone",
-    "description": "Adds an in-story phone with a home screen, an App Store, and generated app screens. Includes simulated, chat-scoped Noodle and Noodler. Open Agents → Virtual Phone while a Conversation or Roleplay chat is active, then enable it for that chat.",
+    "description": "Adds an in-story phone with a home screen, an App Store, and generated app screens. Includes simulated, chat-scoped Noodle and Noodler. Enable it in Agents → Virtual Phone for an active Conversation or Roleplay chat, then use the phone button in the chat toolbar.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

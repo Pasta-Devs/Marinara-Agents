@@ -126,7 +126,7 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   "virtual-phone": {
     modes: ["conversation", "roleplay"],
-    activation: "Open Agents → Virtual Phone while a Conversation or Roleplay chat is active, then enable it for that chat.",
+    activation: "Enable it in Agents → Virtual Phone for an active Conversation or Roleplay chat, then use the phone button in the chat toolbar.",
   },
 });
 
