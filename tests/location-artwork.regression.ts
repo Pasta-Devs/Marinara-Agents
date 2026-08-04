@@ -33,7 +33,7 @@ const locations = [
   },
 ] as const;
 
-const loading = locationArtworkGaps(locations, new Set(), false);
+const loading = locationArtworkGaps(locations, new Set<string>(), false);
 assert.deepEqual(
   loading.map((gap) => gap.location.id),
   ["reference-rejected"],

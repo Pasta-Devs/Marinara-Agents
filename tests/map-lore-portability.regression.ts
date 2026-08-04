@@ -207,13 +207,23 @@ assert.equal(
   "Shrouded Coast - Gloam Harbor (World Map) (copy)",
   "Created lorebook names must avoid case-insensitive library collisions",
 );
+const truncatedBaseName = nextPortableLorebookName(
+  "S".repeat(200),
+  "M".repeat(200),
+  new Set(),
+);
 assert.ok(
-  nextPortableLorebookName(
-    "S".repeat(200),
-    "M".repeat(200),
-    new Set(),
-  ).length <= 200,
+  truncatedBaseName.length <= 200 && truncatedBaseName.endsWith(" (World Map)"),
   "World Map provenance and collision suffixes must preserve the Engine lorebook name limit",
+);
+const truncatedCopyName = nextPortableLorebookName(
+  "S".repeat(200),
+  "M".repeat(200),
+  new Set([truncatedBaseName]),
+);
+assert.ok(
+  truncatedCopyName.length <= 200 && truncatedCopyName.endsWith(" (World Map) (copy)"),
+  "A maximum-length collision name must preserve both the World Map marker and copy suffix",
 );
 const namedPlan = planPortableLoreImport(
   complete,
@@ -317,6 +327,25 @@ async function main() {
   assert.deepEqual(reused.reusedLorebooks, [
     { id: "book-destination", name: "Shrouded Coast" },
   ]);
+  const importedCopy = await importPortableLoreBundle({
+    api,
+    bundle: linked,
+    plan: ambiguousPlan,
+    strategy: "reuse",
+    ambiguousSelections: new Map([[ambiguousEntry.entryKey, null]]),
+  });
+  assert.equal(importedCopy.reusedEntries, 0);
+  assert.equal(importedCopy.importedEntries, 1);
+  assert.equal(importedCopy.importedLorebooks, 1);
+  assert.deepEqual(importedCopy.createdLorebookIds, ["imported-book"]);
+  assert.deepEqual(importedCopy.createdLorebooks, [
+    {
+      id: "imported-book",
+      name: "Shrouded Coast - Imported Map (World Map)",
+    },
+  ]);
+  requests.length = 0;
+  nextFolder = 0;
   await assert.rejects(
     importPortableLoreBundle({
       api,

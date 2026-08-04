@@ -198,18 +198,16 @@ export function nextPortableLorebookName(
 ): string {
   const normalizedOriginalName = originalName.trim() || "Untitled lorebook";
   const normalizedMapName = mapName.trim() || "Imported Map";
+  const nameStem = `${normalizedOriginalName} - ${normalizedMapName}`;
   const worldMapSuffix = " (World Map)";
-  const baseName = fitNameSuffix(
-    `${normalizedOriginalName} - ${normalizedMapName}`,
-    worldMapSuffix,
-  );
+  const baseName = fitNameSuffix(nameStem, worldMapSuffix);
   const reserved = new Set(
     [...reservedNames].map((name) => name.trim().toLocaleLowerCase()),
   );
   if (!reserved.has(baseName.toLocaleLowerCase())) return baseName;
   for (let copy = 1; copy < 10_000; copy += 1) {
     const copySuffix = copy === 1 ? " (copy)" : ` (copy ${copy})`;
-    const candidate = fitNameSuffix(baseName, copySuffix);
+    const candidate = fitNameSuffix(nameStem, `${worldMapSuffix}${copySuffix}`);
     if (!reserved.has(candidate.toLocaleLowerCase())) return candidate;
   }
   throw new Error("A collision-safe World Map lorebook name could not be created.");
@@ -761,7 +759,9 @@ export async function importPortableLoreBundle(options: {
         const selectedId =
           entry.candidates.length <= 1
             ? (entry.candidates[0]?.entryId ?? null)
-            : (options.ambiguousSelections?.get(entry.entryKey) ?? undefined);
+            : options.ambiguousSelections?.has(entry.entryKey)
+              ? (options.ambiguousSelections.get(entry.entryKey) ?? null)
+              : undefined;
         if (selectedId === undefined) {
           throw new Error(
             `Choose how to resolve the duplicate match for “${entry.entryName}”.`,

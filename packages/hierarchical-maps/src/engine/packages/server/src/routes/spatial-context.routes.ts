@@ -1174,7 +1174,48 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         raw.length,
         raw,
       );
-      const parsedPlan = json.parseJsonish(raw);
+      const parsedResponse = await parseSpatialMapJsonWithRepair({
+        raw,
+        finishReason: result.finishReason,
+        parse: json.parseJsonish,
+        repair: async (malformedRaw) => {
+          const repairPrompt = resolved.fitContext(
+            buildSpatialMapJsonRepairMessages(malformedRaw),
+            { maxTokens: prompt.maxTokens },
+          );
+          if (repairPrompt.trimmed) {
+            throw new Error(
+              "The malformed response could not fit in a complete formatting-repair request.",
+            );
+          }
+          return resolved.chatComplete(repairPrompt.messages, {
+            temperature: 0,
+            maxTokens: prompt.maxTokens,
+            debugMode: debugOverrideEnabled,
+          });
+        },
+      });
+      if (!parsedResponse.ok) {
+        const payload = spatialMapJsonErrorPayload(parsedResponse);
+        logger.warn(
+          "[spatial/map-template] Model response was not valid JSON (finishReason=%s chars=%d parser=%s kind=%s repairAttempted=%s)",
+          parsedResponse.primaryFailure.finishReason,
+          parsedResponse.primaryFailure.responseLength,
+          parsedResponse.primaryFailure.parserDetail,
+          parsedResponse.failure.kind,
+          parsedResponse.repairAttempted,
+        );
+        return reply.status(502).send(payload);
+      }
+      const parsedPlan = parsedResponse.value;
+      if (parsedResponse.repaired) {
+        logger.warn(
+          "[spatial/map-template] Repaired malformed JSON (finishReason=%s chars=%d parser=%s)",
+          parsedResponse.primaryFailure?.finishReason ?? "unknown",
+          parsedResponse.primaryFailure?.responseLength ?? raw.length,
+          parsedResponse.primaryFailure?.parserDetail ?? "unknown",
+        );
+      }
       const definition = normalizeSpatialMapPlan(parsedPlan, {
         ownerMode: "roleplay",
         revision: 0,

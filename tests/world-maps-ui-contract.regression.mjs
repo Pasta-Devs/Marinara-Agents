@@ -15,6 +15,34 @@ const inspectorSource = readFileSync(
   ),
   "utf8",
 );
+const portableLoreDialogSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/PortableLoreImportDialog.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const portableLoreSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/portable-lore.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const mapJsonSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/server/src/services/spatial-context/map-json-response.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const routeSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/server/src/routes/spatial-context.routes.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const browserRegressionSource = readFileSync(new URL("./spatial-context.e2e.ts", import.meta.url), "utf8");
 const builtClient = readFileSync(new URL("../packages/hierarchical-maps/client.js", import.meta.url), "utf8");
 
@@ -43,6 +71,40 @@ assert.match(
   /toHaveCSS\("z-index", "105"\)[\s\S]*?document\.elementFromPoint/u,
   "The browser suite must prove portable export owns the interaction layer.",
 );
+assert.match(
+  portableLoreDialogSource,
+  /\.filter\(\(entry\) => Boolean\(selections\[entry\.entryKey\]\)\)[\s\S]*?role="status"/u,
+  "Portable-lore previews must omit unchosen ambiguity rows and announce recalculated outcomes.",
+);
+assert.match(
+  portableLoreSource,
+  /const nameStem = `[\s\S]*?fitNameSuffix\(nameStem, `\$\{worldMapSuffix\}\$\{copySuffix\}`\)/u,
+  "Collision-safe lorebook names must preserve the World Map marker before the copy suffix.",
+);
+assert.match(
+  portableLoreSource,
+  /options\.ambiguousSelections\?\.has\(entry\.entryKey\)[\s\S]*?options\.ambiguousSelections\.get\(entry\.entryKey\) \?\? null/u,
+  "Explicit import-a-new-copy choices must survive from preview through execution.",
+);
+assert.match(
+  workspaceSource,
+  /const serverHierarchyProfile = normalizeHierarchyProfile\(spatial\.data\.hierarchyProfile, nextDraft\);[\s\S]*?serverHierarchyProfile,[\s\S]*?setDraftHierarchyProfile\(serverHierarchyProfile\);/u,
+  "Workspace refresh must compare and store one normalized server hierarchy profile.",
+);
+assert.match(
+  mapJsonSource,
+  /const start = raw\.indexOf\("\{"\);/u,
+  "Map truncation detection must ignore arbitrary prose brackets before the JSON object.",
+);
+const templateGenerateSource = routeSource.slice(
+  routeSource.indexOf('app.post("/spatial-context/templates/generate"'),
+  routeSource.indexOf('app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generate"'),
+);
+assert.match(
+  templateGenerateSource,
+  /parseSpatialMapJsonWithRepair\([\s\S]*?buildSpatialMapJsonRepairMessages[\s\S]*?spatialMapJsonErrorPayload/u,
+  "Template generation must use the same repair-aware JSON parsing and diagnostics as chat map generation.",
+);
 assert.match(builtClient, /zIndex:105/u, "The built World Maps client must include the export overlay z-index.");
 assert.match(
   builtClient,
@@ -50,4 +112,6 @@ assert.match(
   "The built World Maps client must include guarded linked-lore navigation.",
 );
 
-console.log("World Maps UI contract regression passed: linked-lore navigation and export overlay ownership.");
+console.log(
+  "World Maps UI contract regression passed: linked-lore/export ownership, portable-lore choices, normalized refresh, and JSON repair parity.",
+);

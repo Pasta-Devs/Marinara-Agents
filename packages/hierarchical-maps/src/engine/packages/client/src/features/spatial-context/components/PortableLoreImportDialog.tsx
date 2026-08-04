@@ -48,12 +48,14 @@ export function PortableLoreImportDialog({
   );
   const selectionMap = () =>
     new Map(
-      ambiguousEntries.map((entry) => [
-        entry.entryKey,
-        selections[entry.entryKey] === "__new__"
-          ? null
-          : selections[entry.entryKey]!,
-      ]),
+      ambiguousEntries
+        .filter((entry) => Boolean(selections[entry.entryKey]))
+        .map((entry): [string, string | null] => [
+          entry.entryKey,
+          selections[entry.entryKey] === "__new__"
+            ? null
+            : selections[entry.entryKey]!,
+        ]),
     );
   const separateOutcome = portableLoreImportOutcome(
     plan,
@@ -219,7 +221,10 @@ export function PortableLoreImportDialog({
                   ))}
                 </ul>
               </div>
-              <div className="rounded-xl border border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] p-3">
+              <div
+                role="status"
+                className="rounded-xl border border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] p-3"
+              >
                 <p className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
                   Reuse matches & import the rest
                 </p>

@@ -59,12 +59,6 @@ assert.equal(
   true,
   "A clean workspace must also accept canonical hierarchy-profile changes",
 );
-assert.equal(
-  shouldRefreshSpatialWorkspace(common),
-  false,
-  "A server-preserved unpublished draft remains unchanged while query status exposes its conflict",
-);
-
 const hookSource = readFileSync(
   resolve(
     repoRoot,
@@ -86,6 +80,16 @@ const workspaceSource = readFileSync(
   "utf8",
 );
 assert.match(workspaceSource, /shouldRefreshSpatialWorkspace\(\{/u);
+assert.match(
+  workspaceSource,
+  /const serverHierarchyProfile = normalizeHierarchyProfile\(spatial\.data\.hierarchyProfile, nextDraft\);[\s\S]*?serverHierarchyProfile,[\s\S]*?setBaseHierarchyProfile\(serverHierarchyProfile\);[\s\S]*?setDraftHierarchyProfile\(serverHierarchyProfile\);/u,
+  "The workspace must compare and store the same normalized server hierarchy profile",
+);
+assert.match(
+  workspaceSource,
+  /role=\{linkedSharedWorld\.missing \|\| linkedSharedWorld\.conflict \? "alert" : "status"\}[\s\S]*?This chat has unpublished shared-world changes\./u,
+  "A server-preserved unpublished draft must expose its linked-world conflict as an alert",
+);
 assert.match(workspaceSource, /Clean linked chats cached in this window will refresh automatically/u);
 assert.match(workspaceSource, /Chats with unpublished drafts keep them and show a conflict/u);
 assert.match(workspaceSource, /Canonical revision \$\{result\.world\.revision\} saved/u);

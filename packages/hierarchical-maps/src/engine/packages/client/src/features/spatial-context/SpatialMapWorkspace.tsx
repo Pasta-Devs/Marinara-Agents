@@ -688,27 +688,27 @@ export function SpatialMapWorkspace({
   );
 
   useEffect(() => {
+    if (!spatial.isSuccess) return;
+    const server = spatial.data.definition;
+    const nextDraft = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
+    const serverHierarchyProfile = normalizeHierarchyProfile(spatial.data.hierarchyProfile, nextDraft);
     if (
-      !spatial.isSuccess ||
       !shouldRefreshSpatialWorkspace({
         initialized,
         templateMode,
         dirty,
         baseDefinition,
-        serverDefinition: spatial.data.definition,
+        serverDefinition: server,
         baseHierarchyProfile,
-        serverHierarchyProfile: spatial.data.hierarchyProfile,
+        serverHierarchyProfile,
       })
     ) {
       return;
     }
-    const server = spatial.data.definition;
-    const nextDraft = server ? cloneSpatialDefinition(server) : createEmptySpatialDefinition(ownerMode);
-    const hierarchyProfile = normalizeHierarchyProfile(spatial.data.hierarchyProfile, nextDraft);
     setBaseDefinition(server ? cloneSpatialDefinition(server) : null);
     setDraft(nextDraft);
-    setBaseHierarchyProfile(hierarchyProfile);
-    setDraftHierarchyProfile(hierarchyProfile);
+    setBaseHierarchyProfile(serverHierarchyProfile);
+    setDraftHierarchyProfile(serverHierarchyProfile);
     setServerIssues(spatial.data.warnings);
     setConflict(false);
     setSelectedId((current) =>
@@ -2807,8 +2807,8 @@ export function SpatialMapWorkspace({
                 ) : (
                   <ImageIcon size="0.8125rem" />
                 )}
-                {missingArtworkLocations.length} incomplete · {artworkImagesToGenerate} request
-                {artworkImagesToGenerate === 1 ? "" : "s"}
+                {missingArtworkLocations.length} incomplete location
+                {missingArtworkLocations.length === 1 ? "" : "s"}
               </button>
             )}
             {linkedSharedWorld && (
@@ -3038,8 +3038,8 @@ export function SpatialMapWorkspace({
                     <ImageIcon size="0.8125rem" className="shrink-0" />
                   )}
                   <span className="truncate">
-                    {missingArtworkLocations.length} incomplete · {artworkImagesToGenerate} request
-                    {artworkImagesToGenerate === 1 ? "" : "s"}
+                    {missingArtworkLocations.length} incomplete location
+                    {missingArtworkLocations.length === 1 ? "" : "s"}
                   </span>
                 </span>
                 <span className="shrink-0 font-semibold text-[var(--marinara-chat-chrome-accent)]">Review</span>
@@ -3594,9 +3594,8 @@ export function SpatialMapWorkspace({
                 <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">Location artwork</p>
                 <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
                   Review {missingArtworkLocations.length} incomplete location
-                  {missingArtworkLocations.length === 1 ? "" : "s"} and {artworkImagesToGenerate} provider request
-                  {artworkImagesToGenerate === 1 ? "" : "s"} before anything is generated. A new image fills only the
-                  missing role, or both roles when both are missing.
+                  {missingArtworkLocations.length === 1 ? "" : "s"} before anything is generated. Each provider
+                  request fills only the missing role, or both roles when both are missing.
                 </p>
               </div>
               <button

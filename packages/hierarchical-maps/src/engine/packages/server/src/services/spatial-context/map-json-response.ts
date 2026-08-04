@@ -63,14 +63,7 @@ function normalizedFinishReason(finishReason: unknown): string {
 }
 
 export function hasIncompleteJsonStructure(raw: string): boolean {
-  const firstObject = raw.indexOf("{");
-  const firstArray = raw.indexOf("[");
-  const start =
-    firstObject < 0
-      ? firstArray
-      : firstArray < 0
-        ? firstObject
-        : Math.min(firstObject, firstArray);
+  const start = raw.indexOf("{");
   if (start < 0) return false;
 
   const stack: string[] = [];
