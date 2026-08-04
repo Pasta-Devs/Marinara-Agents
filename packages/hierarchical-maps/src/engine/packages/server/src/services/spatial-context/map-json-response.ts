@@ -106,7 +106,7 @@ export function classifySpatialMapJsonParseFailure(options: {
   const structurallyIncomplete = hasIncompleteJsonStructure(options.raw);
   return {
     kind:
-      OUTPUT_LIMIT_FINISH_REASONS.has(finishReason.toLocaleLowerCase()) ||
+      OUTPUT_LIMIT_FINISH_REASONS.has(finishReason.toLowerCase()) ||
       structurallyIncomplete
         ? "truncated"
         : "malformed",

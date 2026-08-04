@@ -338,6 +338,10 @@ export function SpatialMapLibrary({
       if (portableLore && portableLore.books.length > 0) {
         const entries = lorebookEntriesQuery.entries;
         if (!entries) throw new Error("Lore entries are still loading. Try the import again in a moment.");
+        const importedMapName =
+          typeof record?.name === "string" && record.name.trim()
+            ? record.name.trim()
+            : importedTemplateName(file.name);
         setPendingPortableLoreImport({
           record,
           data,
@@ -345,7 +349,7 @@ export function SpatialMapLibrary({
           fileName: file.name,
           target,
           bundle: portableLore,
-          plan: planPortableLoreImport(portableLore, lorebooks, entries),
+          plan: planPortableLoreImport(portableLore, lorebooks, entries, importedMapName),
         });
         return;
       }

@@ -44,6 +44,14 @@ const routeSource = readFileSync(
   "utf8",
 );
 const browserRegressionSource = readFileSync(new URL("./spatial-context.e2e.ts", import.meta.url), "utf8");
+const packageBuilderSource = readFileSync(new URL("../scripts/build-feature-packages.mjs", import.meta.url), "utf8");
+const runtimeBarSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const builtClient = readFileSync(new URL("../packages/hierarchical-maps/client.js", import.meta.url), "utf8");
 
 assert.match(
@@ -91,6 +99,13 @@ assert.match(
   /const serverHierarchyProfile = normalizeHierarchyProfile\(spatial\.data\.hierarchyProfile, nextDraft\);[\s\S]*?serverHierarchyProfile,[\s\S]*?setDraftHierarchyProfile\(serverHierarchyProfile\);/u,
   "Workspace refresh must compare and store one normalized server hierarchy profile.",
 );
+assert.match(packageBuilderSource, /spatialTransitionReviewMessages\.get\(data\.code\)/u);
+assert.doesNotMatch(packageBuilderSource, /spatialTransitionReviewMessages\[data\.code\]/u);
+assert.doesNotMatch(
+  packageBuilderSource,
+  /spatial\.currentLocationId === pending\.transition\.destinationId/u,
+);
+assert.doesNotMatch(runtimeBarSource, /data\.currentLocationId === pending\.transition\.destinationId/u);
 assert.match(
   mapJsonSource,
   /const trimmed = raw\.trimStart\(\);[\s\S]*?!trimmed\.startsWith\("\{"\)/u,
@@ -106,8 +121,13 @@ const templateGenerateSource = routeSource.slice(
 );
 assert.match(
   templateGenerateSource,
-  /parseSpatialMapJsonWithRepair\([\s\S]*?buildSpatialMapJsonRepairMessages[\s\S]*?spatialMapJsonErrorPayload/u,
+  /parseSpatialMapJsonWithRepair\([\s\S]*?repair: spatialMapJsonRepairRequest\([\s\S]*?spatialMapJsonErrorPayload/u,
   "Template generation must use the same repair-aware JSON parsing and diagnostics as chat map generation.",
+);
+assert.match(
+  routeSource,
+  /function spatialMapJsonRepairRequest\([\s\S]*?buildSpatialMapJsonRepairMessages\(malformedRaw\)[\s\S]*?temperature: 0/u,
+  "Map-generation routes must share one bounded formatting-repair callback.",
 );
 assert.match(builtClient, /zIndex:105/u, "The built World Maps client must include the export overlay z-index.");
 assert.match(

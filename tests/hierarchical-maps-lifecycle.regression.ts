@@ -119,21 +119,6 @@ function artifactFixture(version: string): ArtifactFixture {
       assert.match(clientSource, /marinara-capability-server-event/u);
       assert.match(clientSource, /The current location changed\. Review the available destinations\./u);
       assert.match(clientSource, /new Map\(\[\["spatial_transition_stale_definition"/u);
-      const packageBuilderSource = readFileSync(join(repoRoot, "scripts", "build-feature-packages.mjs"), "utf8");
-      assert.match(packageBuilderSource, /spatialTransitionReviewMessages\.get\(data\.code\)/u);
-      assert.doesNotMatch(packageBuilderSource, /spatialTransitionReviewMessages\[data\.code\]/u);
-      assert.doesNotMatch(
-        packageBuilderSource,
-        /spatial\.currentLocationId === pending\.transition\.destinationId/u,
-      );
-      const runtimeBarSource = readFileSync(
-        join(
-          repoRoot,
-          "packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx",
-        ),
-        "utf8",
-      );
-      assert.doesNotMatch(runtimeBarSource, /data\.currentLocationId === pending\.transition\.destinationId/u);
     }
   }
   return {
@@ -193,8 +178,8 @@ assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds,
 const currentFixture = fixtures.get("1.3.1");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
-  engineVersion: "2.3.5",
-  engineCommit: "ed0e2422b17b747aa5c392d9019bb92a71b00260",
+  engineVersion: "2.4.1",
+  engineCommit: "367d06fd0ed433c1e61d4a8891258490f79c8116",
 });
 
 function seedInstalledProfile(version: string) {

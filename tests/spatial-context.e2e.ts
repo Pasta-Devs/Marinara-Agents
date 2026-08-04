@@ -2743,7 +2743,7 @@ test("portable map import refreshes host lorebooks and linked navigation without
       hasText: lorebookName,
     });
     await expect(importedLorebookRow).toHaveCount(1);
-    await importedLorebookRow.click({ position: { x: 120, y: 32 } });
+    await importedLorebookRow.getByText(lorebookName, { exact: true }).click();
     await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
     await page.locator(".mari-editor-header").getByRole("button").first().click();
 
@@ -2964,7 +2964,7 @@ for (const libraryTarget of ["template", "shared-world"] as const) {
 
       const refreshedRow = rightPanel.locator('[data-touch-drag-card="lorebook"]', { hasText: lorebookName });
       await expect(refreshedRow).toHaveCount(1);
-      await refreshedRow.click({ position: { x: 120, y: 32 } });
+      await refreshedRow.getByText(lorebookName, { exact: true }).click();
       await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
     } finally {
       const recordsResponse = await page.request.get(recordEndpoint);
