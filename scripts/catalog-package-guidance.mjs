@@ -124,6 +124,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation"],
     activation: "Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
+  "virtual-phone": {
+    modes: ["conversation", "roleplay"],
+    activation: "Add the Agent in Chat Settings → Agents → Misc Agents for Conversation and Roleplay modes, then open the phone from the chat toolbar.",
+  },
 });
 
 export function withPackageActivationGuidance(packageId, description) {

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "virtual-phone",
+    "name": "Virtual Phone",
+    "description": "Adds an in-story phone with a home screen, an App Store, and generated app screens. Includes simulated, chat-scoped Noodle and Noodler. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation and Roleplay modes, then open the phone from the chat toolbar.",
+    "author": "Pasta Devs",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "misc",
+    "runtimeDisabled": true,
+    "modeAllowlist": [
+      "roleplay",
+      "conversation"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {},
+    "defaultPromptTemplate": "",
+    "execution": "feature"
+  }
+]
