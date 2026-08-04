@@ -1921,9 +1921,10 @@ export function SpatialMapWorkspace({
         });
         if (!discard) return;
       }
+      onClose();
       onOpenLorebook(lorebookId);
     },
-    [confirmAction, dirty, onOpenLorebook, sharedWorldMode, templateMode],
+    [confirmAction, dirty, onClose, onOpenLorebook, sharedWorldMode, templateMode],
   );
 
   const handleClose = useCallback(async () => {
@@ -2585,6 +2586,7 @@ export function SpatialMapWorkspace({
           aria-modal="true"
           aria-label="Export portable world map"
           className="fixed inset-0 z-[105] flex items-center justify-center bg-[var(--background)]/90 p-3 sm:p-4"
+          style={{ zIndex: 105 }}
         >
           <div className="flex max-h-[min(90vh,48rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] shadow-2xl">
             <div className="flex min-h-12 items-center gap-3 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-4 py-3">

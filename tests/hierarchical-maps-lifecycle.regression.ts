@@ -358,6 +358,8 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
           })
         : providerPrompt.includes("Repeat the already committed move into Lifecycle Harbor.")
           ? "RETRY_PROVIDER_RESPONSE_SHOULD_NOT_PERSIST"
+          : providerPrompt.includes("Move into Lifecycle Harbor.")
+            ? 'GAME_HISTORY_PROVIDER_RESPONSE: The party reaches Lifecycle Harbor.\n[spatial_move: destination_id="lifecycle_harbor"]'
           : "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.";
     return new Response(
       JSON.stringify({
@@ -2930,6 +2932,11 @@ async function main() {
     const impersonatedUserMessage = impersonateMessages.find((message) => message.role === "user");
     assert.ok(impersonatedUserMessage);
     assert.match(impersonatedUserMessage.content, /GAME_HISTORY_PROVIDER_RESPONSE/u);
+    assert.doesNotMatch(
+      impersonatedUserMessage.content,
+      /\[spatial_(?:move|discover):/u,
+      "Impersonated owner turns must not persist package-owned spatial directives in visible user text",
+    );
 
     const providerRequestsBeforeRepeatedImpersonate = generationProviderRequestCount;
     const repeatedImpersonateGeneration = await app.inject({

@@ -3085,6 +3085,15 @@ test("opening linked lore protects unsaved map edits", async ({ page }, testInfo
     await expect(workspace).toBeVisible();
     const details = workspace.locator('section[aria-label^="Details for "]:visible');
     const nameInput = details.getByLabel("Name", { exact: true });
+    await details.getByText("Linked lore", { exact: true }).click();
+    await expect(details.getByText("Harbor navigation lore", { exact: true })).toBeVisible();
+    await details.getByRole("button", { name: "Open", exact: true }).click();
+    await expect(workspace).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: lorebookName, exact: true })).toBeVisible();
+
+    await page.reload();
+    await dismissOnboardingTutorial(page);
+    await expect(workspace).toBeVisible();
     await nameInput.fill("Unsaved harbor name");
     await expect(workspace.getByText("Unsaved", { exact: true })).toBeVisible();
     await details.getByText("Linked lore", { exact: true }).click();
@@ -4070,8 +4079,19 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(exportMap.locator("svg")).toHaveClass(/lucide-upload/);
     await expect(importMap.locator("svg")).toHaveClass(/lucide-download/);
     if (!mobile) {
+      const displayedMapArtwork = page.locator("[data-marinara-maps-editor-canvas] > img");
+      await expect(displayedMapArtwork).toBeVisible();
       await exportMap.click();
       const exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
+      await expect(exportDialog).toHaveCSS("z-index", "105");
+      expect(
+        await exportDialog.evaluate((dialog) => {
+          const rect = dialog.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return hit === dialog || Boolean(hit && dialog.contains(hit));
+        }),
+        "The export dialog must own the interaction layer above displayed map artwork",
+      ).toBe(true);
       await expect(exportDialog.getByRole("checkbox", { name: "Include map artwork" })).toBeChecked();
       await expect(exportDialog.getByRole("radio", { name: /Map \+ linked entries/u })).toBeChecked();
       const downloadPromise = page.waitForEvent("download");
