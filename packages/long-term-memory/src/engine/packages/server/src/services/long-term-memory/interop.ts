@@ -192,7 +192,11 @@ function conversationSummaries(metadata: Record<string, unknown>) {
   return [
     ...conversationSummaryEntries(metadata.daySummaries, "day"),
     ...conversationSummaryEntries(metadata.weekSummaries, "week"),
-  ];
+  ].sort(
+    (left, right) =>
+      conversationDate(left.range)!.getTime() -
+      conversationDate(right.range)!.getTime(),
+  );
 }
 function summaries(metadata: Record<string, unknown>, chatMode: LtmMode) {
   if (chatMode === "conversation") return conversationSummaries(metadata);

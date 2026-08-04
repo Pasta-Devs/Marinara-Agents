@@ -90,10 +90,22 @@ async function main() {
         candidates.samples.map((candidate) => candidate.sourceId),
         [
           "chat-conversation:day:27.07.2026",
+          "chat-conversation:week:27.07.2026",
           "chat-conversation:day:02.08.2026",
+        ],
+        "day and week DD.MM.YYYY keys must share one chronological order",
+      );
+      const limitedCandidates = await previewPackageInterop(
+        { ...request, limit: 2 },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(
+        limitedCandidates.samples.map((candidate) => candidate.sourceId),
+        [
+          "chat-conversation:day:27.07.2026",
           "chat-conversation:week:27.07.2026",
         ],
-        "DD.MM.YYYY keys must order chronologically, not lexically",
+        "preview limits must preserve the globally earliest summaries",
       );
       assert.ok(
         candidates.samples.some(
