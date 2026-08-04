@@ -159,6 +159,8 @@ async function main() {
         join(dataDir, "long-term-memory"),
         new AbortController().signal,
       );
+      assert.equal(importedAgain.imported.length, 3);
+      assert.equal(importedAgain.counts.sourceNotesWritten, 3);
       assert.ok(importedAgain.imported.every((item) => !item.created));
       assert.equal((await storage.listNotes({ type: "source" })).length, 3);
     },
