@@ -9,6 +9,7 @@ export type PendingSpatialTransitionDraft = {
   relation: SpatialDestinationRelation;
   label?: string;
   status: "ready" | "needs_review";
+  reviewMessage?: string;
 };
 
 const listeners = new Set<() => void>();
@@ -83,8 +84,19 @@ export function clearPendingSpatialTransition(chatId: string, commandId?: string
 export function setPendingSpatialTransitionStatus(
   chatId: string,
   status: PendingSpatialTransitionDraft["status"],
+  reviewMessage?: string,
 ): void {
   const current = pendingTransitions.get(chatId);
-  if (!current || current.status === status) return;
-  setPendingSpatialTransition(chatId, { ...current, status });
+  if (!current) return;
+  const normalizedReviewMessage = reviewMessage?.trim() || undefined;
+  if (
+    current.status === status &&
+    (status === "ready" || !normalizedReviewMessage || current.reviewMessage === normalizedReviewMessage)
+  ) {
+    return;
+  }
+  const next = { ...current, status };
+  if (status === "ready") delete next.reviewMessage;
+  else if (normalizedReviewMessage) next.reviewMessage = normalizedReviewMessage;
+  setPendingSpatialTransition(chatId, next);
 }

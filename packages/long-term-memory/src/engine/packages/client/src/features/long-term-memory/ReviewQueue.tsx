@@ -862,22 +862,14 @@ export default function ReviewQueue({
     setDetailsOpen(false);
   }, [reviewSourceNoteId]);
   const review = useQuery({
-    queryKey: [...queryKeys.review, props.chatId],
+    queryKey: queryKeys.review,
     queryFn: () =>
-      request<LtmDraftReviewResponse>(
-        `/drafts/review?status=pending${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
-      ),
+      request<LtmDraftReviewResponse>("/drafts/review?status=pending"),
   });
   const rejectedSuggestions = useQuery({
-    queryKey: [...queryKeys.rejectedSuggestions, props.chatId],
+    queryKey: queryKeys.rejectedSuggestions,
     queryFn: () =>
-      request<LtmRejectedSuggestionsResponse>(
-        `/rejected-suggestions${props.chatId ? "?" : ""}${[
-          props.chatId ? `chatId=${encodeURIComponent(props.chatId)}` : "",
-        ]
-          .filter(Boolean)
-          .join("&")}`,
-      ),
+      request<LtmRejectedSuggestionsResponse>("/rejected-suggestions"),
   });
   const notes = useQuery({
     queryKey: queryKeys.notes,

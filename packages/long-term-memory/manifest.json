@@ -5,15 +5,15 @@
     "minor": 6
   },
   "builtAgainst": {
-    "engineVersion": "2.3.5",
-    "engineCommit": "4e651e9c63722b40ebd5b785cbf22541e3095f39"
+    "engineVersion": "2.4.1",
+    "engineCommit": "c0ce4d8849e072db2bfe300bbed22aa700ce7b49"
   },
   "id": "long-term-memory",
   "name": "Long-Term Memory",
-  "version": "1.1.0",
-  "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, and Game modes.",
+  "version": "1.1.6",
+  "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
   "engine": {
-    "min": "2.3.5",
+    "min": "2.4.1",
     "maxExclusive": "4.0.0"
   },
   "kind": [
@@ -37,18 +37,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "265dd5e220b501a1adf9159e290f5d8a4cc9d27d247ae9584d28cc856eee2623",
-      "bytes": 674
+      "sha256": "60e58e7e67b3a65696dbbd1bdcc81d7a4fdb8bf596a3fbb80cafe4e24830df5b",
+      "bytes": 732
     },
     {
       "path": "server.mjs",
-      "sha256": "a8d1a40dfcc1692c7339fb8ab2aa5dc930314791e8dd665ecd3bdcaee28179dc",
-      "bytes": 347011
+      "sha256": "d6dd9fe3d30d2d2c9fb87dbea09b14490ca44823118b5a29f4025bc5bd832b26",
+      "bytes": 348273
     },
     {
       "path": "client.js",
-      "sha256": "f474b9f6533b5270d6ccd9d8215eda6b103dcdf0dcdec6cd6fa6b8aaff9e5904",
-      "bytes": 560232
+      "sha256": "1ae94a861c00cd22d9a429ba48befebdca36adb2c4fb57261aab57fbe7aa5929",
+      "bytes": 560068
     }
   ],
   "permissions": [

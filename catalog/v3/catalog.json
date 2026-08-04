@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T00:07:03.838Z",
+  "generatedAt": "2026-08-04T20:56:46.793Z",
   "packages": [
     {
       "manifest": {
@@ -120,10 +120,10 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.8",
+        "version": "1.0.9",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
-          "min": "2.3.0",
+          "min": "2.4.1",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -150,13 +150,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "3837a966042501ec0d5bbe9a99a670b33cab94d0ed6e6c18a533506e08e96790",
-            "bytes": 2380966
+            "sha256": "26a531e079127609f455de895b32f2ed502f8338d38dfc28ea0dfe8be19314b5",
+            "bytes": 2394555
           },
           {
             "path": "client.js",
-            "sha256": "88822953e621b854014b98d9c6208431bd527c5f41bce18ee7d50d3a8ccda1d5",
-            "bytes": 902263
+            "sha256": "f67dce6eaaf8fb1421798154e852c3bbd11dfe5efedcc0b8b6aa3026916d4b5a",
+            "bytes": 903567
           }
         ],
         "permissions": [
@@ -173,9 +173,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.8.zip",
-        "sha256": "cc0a8acc09ab37e0fc1b00fb851909a257f4df187251595799dddec4079d0869",
-        "bytes": 916007
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.9.zip",
+        "sha256": "a8b2f8e2f3f79be1cd19f202eaf1cb542a8bcf39f2558ec78b4724005499ca52",
+        "bytes": 920280
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -800,15 +800,15 @@
           "minor": 6
         },
         "builtAgainst": {
-          "engineVersion": "2.3.5",
-          "engineCommit": "4e651e9c63722b40ebd5b785cbf22541e3095f39"
+          "engineVersion": "2.4.1",
+          "engineCommit": "c0ce4d8849e072db2bfe300bbed22aa700ce7b49"
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.1.0",
-        "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, and Game modes.",
+        "version": "1.1.6",
+        "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
-          "min": "2.3.5",
+          "min": "2.4.1",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -832,18 +832,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "265dd5e220b501a1adf9159e290f5d8a4cc9d27d247ae9584d28cc856eee2623",
-            "bytes": 674
+            "sha256": "60e58e7e67b3a65696dbbd1bdcc81d7a4fdb8bf596a3fbb80cafe4e24830df5b",
+            "bytes": 732
           },
           {
             "path": "server.mjs",
-            "sha256": "a8d1a40dfcc1692c7339fb8ab2aa5dc930314791e8dd665ecd3bdcaee28179dc",
-            "bytes": 347011
+            "sha256": "d6dd9fe3d30d2d2c9fb87dbea09b14490ca44823118b5a29f4025bc5bd832b26",
+            "bytes": 348273
           },
           {
             "path": "client.js",
-            "sha256": "f474b9f6533b5270d6ccd9d8215eda6b103dcdf0dcdec6cd6fa6b8aaff9e5904",
-            "bytes": 560232
+            "sha256": "1ae94a861c00cd22d9a429ba48befebdca36adb2c4fb57261aab57fbe7aa5929",
+            "bytes": 560068
           }
         ],
         "permissions": [
@@ -859,9 +859,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.1.0.zip",
-        "sha256": "88d38b41d776a41b9a06e48a1cba6c86ce5ae61e6402ad881b7b720b1f38058d",
-        "bytes": 251500
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.1.6.zip",
+        "sha256": "9adc85220dc5a7ae929986778314161cf9a3c9c15a52413f85beb7caa2450390",
+        "bytes": 252027
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -1442,15 +1442,15 @@
           "minor": 4
         },
         "builtAgainst": {
-          "engineVersion": "2.3.5",
-          "engineCommit": "ed0e2422b17b747aa5c392d9019bb92a71b00260"
+          "engineVersion": "2.4.1",
+          "engineCommit": "367d06fd0ed433c1e61d4a8891258490f79c8116"
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.2.9",
+        "version": "1.3.1",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
-          "min": "2.3.5",
+          "min": "2.4.1",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -1483,13 +1483,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "8e09ac8f1a29b943fee1ff021eb372d48e5c108e1a51134f573e8a4227b67648",
-            "bytes": 349815
+            "sha256": "42b0decc8e1ef550204d05c9ba024b7f254013aec580515b08af10a8fc34eb70",
+            "bytes": 354248
           },
           {
             "path": "client.js",
-            "sha256": "d1dee28c5daf5c0d2cbfe39efdb617fc3ac5ffa24e554720d5ae8cf23fb50c21",
-            "bytes": 951972
+            "sha256": "e0673830a2a60684ca7d93a8a0d40a86ba245bc7d4d5e91513e46246b5cc4f89",
+            "bytes": 961379
           }
         ],
         "permissions": [
@@ -1507,9 +1507,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.2.9.zip",
-        "sha256": "002f4dd2e85775260adc8175e3869eaaba05023a9ea9d9d130922b087729f721",
-        "bytes": 343033
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.3.1.zip",
+        "sha256": "5cecd8b4c60ea2496568f5fd0f237c65655bcbcb32af1a64d6c46956683b2904",
+        "bytes": 346668
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },

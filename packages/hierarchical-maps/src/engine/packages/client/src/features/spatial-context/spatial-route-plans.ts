@@ -31,6 +31,7 @@ export interface SpatialRoutePlan {
   currentIndex: number;
   expectedDefinitionRevision: number;
   status: "ready" | "needs_review";
+  reviewMessage?: string;
 }
 
 type GraphEdge = SpatialRouteStep;
@@ -61,7 +62,8 @@ function isRoutePlan(value: unknown): value is SpatialRoutePlan {
     (plan.currentIndex ?? -1) >= 0 &&
     (plan.currentIndex ?? Number.POSITIVE_INFINITY) < plan.locationIds.length &&
     Number.isInteger(plan.expectedDefinitionRevision) &&
-    (plan.status === "ready" || plan.status === "needs_review")
+    (plan.status === "ready" || plan.status === "needs_review") &&
+    (plan.reviewMessage === undefined || typeof plan.reviewMessage === "string")
   );
 }
 
@@ -230,14 +232,26 @@ function queueRouteDestination(
     relation: destination.relation,
     ...(destination.label ? { label: destination.label } : {}),
     status: plan.status === "needs_review" ? "needs_review" : "ready",
+    ...(plan.status === "needs_review" && plan.reviewMessage ? { reviewMessage: plan.reviewMessage } : {}),
   });
 }
 
-function markSpatialRouteNeedsReview(chatId: string, plan: SpatialRoutePlan): void {
-  if (plan.status !== "needs_review") {
-    setSpatialRoutePlan(chatId, { ...plan, status: "needs_review" });
+export function markSpatialRouteNeedsReview(
+  chatId: string,
+  candidate?: SpatialRoutePlan,
+  reviewMessage?: string,
+): void {
+  const plan = candidate ?? getSpatialRoutePlan(chatId);
+  if (!plan) return;
+  const normalizedReviewMessage = reviewMessage?.trim() || plan.reviewMessage;
+  if (plan.status !== "needs_review" || normalizedReviewMessage !== plan.reviewMessage) {
+    setSpatialRoutePlan(chatId, {
+      ...plan,
+      status: "needs_review",
+      ...(normalizedReviewMessage ? { reviewMessage: normalizedReviewMessage } : {}),
+    });
   }
-  setPendingSpatialTransitionStatus(chatId, "needs_review");
+  setPendingSpatialTransitionStatus(chatId, "needs_review", normalizedReviewMessage);
 }
 
 export function startSpatialRoute(

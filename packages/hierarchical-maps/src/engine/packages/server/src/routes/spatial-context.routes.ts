@@ -7,6 +7,7 @@ import {
   updateSpatialContextRequestSchema,
   type CapabilityChatRecord,
   type CapabilityDocumentRecord,
+  type CapabilityResolvedLanguageModel,
   type CapabilityResourceHost,
   type GenerateSpatialMapDraftResponse,
   type SpatialContextDefinition,
@@ -28,6 +29,11 @@ import {
   createSpatialContextService,
   SpatialContextServiceError,
 } from "../services/spatial-context/definition.service.js";
+import {
+  buildSpatialMapJsonRepairMessages,
+  parseSpatialMapJsonWithRepair,
+  spatialMapJsonErrorPayload,
+} from "../services/spatial-context/map-json-response.js";
 import { commitSpatialOwnerTurn, SpatialOwnerTurnError } from "../services/spatial-context/owner-turn.js";
 import {
   buildGameMapDraftReference,
@@ -98,6 +104,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function withoutKeys(value: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
   const omitted = new Set(keys);
   return Object.fromEntries(Object.entries(value).filter(([key]) => !omitted.has(key)));
+}
+
+function spatialMapJsonRepairRequest(
+  resolved: CapabilityResolvedLanguageModel,
+  maxTokens: number,
+  debugMode: boolean,
+) {
+  return async (malformedRaw: string) => {
+    const repairPrompt = resolved.fitContext(
+      buildSpatialMapJsonRepairMessages(malformedRaw),
+      { maxTokens },
+    );
+    if (repairPrompt.trimmed) {
+      throw new Error(
+        "The malformed response could not fit in a complete formatting-repair request.",
+      );
+    }
+    return resolved.chatComplete(repairPrompt.messages, {
+      temperature: 0,
+      maxTokens,
+      debugMode,
+    });
+  };
 }
 
 const GAME_LOREBOOK_KEEPER_SOURCE_ID = "game-lorebook-keeper";
@@ -1169,7 +1198,33 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         raw.length,
         raw,
       );
-      const parsedPlan = json.parseJsonish(raw);
+      const parsedResponse = await parseSpatialMapJsonWithRepair({
+        raw,
+        finishReason: result.finishReason,
+        parse: json.parseJsonish,
+        repair: spatialMapJsonRepairRequest(resolved, prompt.maxTokens, debugOverrideEnabled),
+      });
+      if (!parsedResponse.ok) {
+        const payload = spatialMapJsonErrorPayload(parsedResponse);
+        logger.warn(
+          "[spatial/map-template] Model response was not valid JSON (finishReason=%s chars=%d parser=%s kind=%s repairAttempted=%s)",
+          parsedResponse.primaryFailure.finishReason,
+          parsedResponse.primaryFailure.responseLength,
+          parsedResponse.primaryFailure.parserDetail,
+          parsedResponse.failure.kind,
+          parsedResponse.repairAttempted,
+        );
+        return reply.status(502).send(payload);
+      }
+      const parsedPlan = parsedResponse.value;
+      if (parsedResponse.repaired) {
+        logger.warn(
+          "[spatial/map-template] Repaired malformed JSON (finishReason=%s chars=%d parser=%s)",
+          parsedResponse.primaryFailure?.finishReason ?? "unknown",
+          parsedResponse.primaryFailure?.responseLength ?? raw.length,
+          parsedResponse.primaryFailure?.parserDetail ?? "unknown",
+        );
+      }
       const definition = normalizeSpatialMapPlan(parsedPlan, {
         ownerMode: "roleplay",
         revision: 0,
@@ -1635,20 +1690,34 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         raw.length,
         raw,
       );
-      let parsedPlan: unknown;
-      try {
-        parsedPlan = json.parseJsonish(raw);
-      } catch {
+      const parsedResponse = await parseSpatialMapJsonWithRepair({
+        raw,
+        finishReason: result.finishReason,
+        parse: json.parseJsonish,
+        repair: spatialMapJsonRepairRequest(resolved, prompt.maxTokens, debugOverrideEnabled),
+      });
+      if (!parsedResponse.ok) {
+        const payload = spatialMapJsonErrorPayload(parsedResponse);
         logger.warn(
-          "[spatial/map-draft] Model response was not valid JSON for chat %s (%d chars, likely truncated)",
+          "[spatial/map-draft] Model response was not valid JSON for chat %s (finishReason=%s chars=%d parser=%s kind=%s repairAttempted=%s)",
           chat.id,
-          raw.length,
+          parsedResponse.primaryFailure.finishReason,
+          parsedResponse.primaryFailure.responseLength,
+          parsedResponse.primaryFailure.parserDetail,
+          parsedResponse.failure.kind,
+          parsedResponse.repairAttempted,
         );
-        return reply.status(502).send({
-          error:
-            "The model's map draft was not valid JSON, most likely because the response was cut off. Raise the connection's Max Output Tokens or choose a smaller map size, then try again.",
-          code: "spatial_ai_generation_failed",
-        });
+        return reply.status(502).send(payload);
+      }
+      const parsedPlan = parsedResponse.value;
+      if (parsedResponse.repaired) {
+        logger.warn(
+          "[spatial/map-draft] Repaired malformed JSON for chat %s (finishReason=%s chars=%d parser=%s)",
+          chat.id,
+          parsedResponse.primaryFailure?.finishReason ?? "unknown",
+          parsedResponse.primaryFailure?.responseLength ?? raw.length,
+          parsedResponse.primaryFailure?.parserDetail ?? "unknown",
+        );
       }
       let definition: SpatialContextDefinition;
       try {

@@ -66,6 +66,7 @@ export interface PortableLoreCandidate {
 }
 
 export interface PortableLoreImportPlanEntry {
+  bookKey: string;
   entryKey: string;
   originalEntryId: string;
   entryName: string;
@@ -73,12 +74,34 @@ export interface PortableLoreImportPlanEntry {
   candidates: PortableLoreCandidate[];
 }
 
+export interface PortableLoreImportPlanBook {
+  bookKey: string;
+  originalName: string;
+  createdName: string;
+  entryKeys: string[];
+}
+
 export interface PortableLoreImportPlan {
+  mapName: string;
+  books: PortableLoreImportPlanBook[];
   entries: PortableLoreImportPlanEntry[];
   exactMatches: number;
   uniqueContentMatches: number;
   ambiguousMatches: number;
   newEntries: number;
+}
+
+export interface PortableLoreImportOutcome {
+  reusedEntries: number;
+  importedEntries: number;
+  reusedLorebooks: Array<{ id: string; name: string }>;
+  createdLorebooks: Array<{ name: string; originalName: string }>;
+  unresolvedEntries: number;
+}
+
+export interface PortableLorebookImportSummary {
+  id: string;
+  name: string;
 }
 
 export interface PortableLoreImportResult {
@@ -87,6 +110,8 @@ export interface PortableLoreImportResult {
   importedEntries: number;
   importedLorebooks: number;
   createdLorebookIds: string[];
+  createdLorebooks: PortableLorebookImportSummary[];
+  reusedLorebooks: PortableLorebookImportSummary[];
 }
 
 export interface PortableLoreApi {
@@ -156,6 +181,37 @@ const ENTRY_SETTING_KEYS = [
   "schedule",
   "excludeFromVectorization",
 ] as const;
+
+const LOREBOOK_NAME_MAX_LENGTH = 200;
+const WORLD_MAPS_SOURCE_AGENT_ID = "hierarchical-maps";
+
+function fitNameSuffix(stem: string, suffix: string): string {
+  const available = Math.max(1, LOREBOOK_NAME_MAX_LENGTH - suffix.length);
+  const fitted = stem.trim().slice(0, available).trimEnd() || "Lorebook";
+  return `${fitted}${suffix}`;
+}
+
+export function nextPortableLorebookName(
+  originalName: string,
+  mapName: string,
+  reservedNames: ReadonlySet<string>,
+): string {
+  const normalizedOriginalName = originalName.trim() || "Untitled lorebook";
+  const normalizedMapName = mapName.trim() || "Imported Map";
+  const nameStem = `${normalizedOriginalName} - ${normalizedMapName}`;
+  const worldMapSuffix = " (World Map)";
+  const baseName = fitNameSuffix(nameStem, worldMapSuffix);
+  const reserved = new Set(
+    [...reservedNames].map((name) => name.trim().toLocaleLowerCase()),
+  );
+  if (!reserved.has(baseName.toLocaleLowerCase())) return baseName;
+  for (let copy = 1; copy < 10_000; copy += 1) {
+    const copySuffix = copy === 1 ? " (copy)" : ` (copy ${copy})`;
+    const candidate = fitNameSuffix(nameStem, `${worldMapSuffix}${copySuffix}`);
+    if (!reserved.has(candidate.toLocaleLowerCase())) return candidate;
+  }
+  throw new Error("A collision-safe World Map lorebook name could not be created.");
+}
 
 function pickRecord(
   source: Record<string, unknown>,
@@ -516,6 +572,7 @@ export function planPortableLoreImport(
   bundle: PortableLoreBundle,
   lorebooks: Lorebook[],
   entries: LorebookEntry[],
+  mapName = "Imported Map",
 ): PortableLoreImportPlan {
   const lorebookNames = new Map(lorebooks.map((book) => [book.id, book.name]));
   const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
@@ -536,6 +593,7 @@ export function planPortableLoreImport(
       );
       const matched = exact ? [exact] : contentMatches;
       return {
+        bookKey: book.key,
         entryKey: entry.key,
         originalEntryId: entry.originalId,
         entryName: entry.name,
@@ -551,7 +609,24 @@ export function planPortableLoreImport(
       };
     }),
   );
+  const reservedNames = new Set(lorebooks.map((book) => book.name));
+  const planBooks = bundle.books.map((book) => {
+    const createdName = nextPortableLorebookName(
+      book.name,
+      mapName,
+      reservedNames,
+    );
+    reservedNames.add(createdName);
+    return {
+      bookKey: book.key,
+      originalName: book.name,
+      createdName,
+      entryKeys: book.entries.map((entry) => entry.key),
+    };
+  });
   return {
+    mapName: mapName.trim() || "Imported Map",
+    books: planBooks,
     entries: planEntries,
     exactMatches: planEntries.filter(
       (entry) => entry.candidates[0]?.reason === "exact-id",
@@ -566,6 +641,81 @@ export function planPortableLoreImport(
     newEntries: planEntries.filter((entry) => entry.candidates.length === 0)
       .length,
   };
+}
+
+export function portableLoreImportOutcome(
+  plan: PortableLoreImportPlan,
+  strategy: PortableLoreImportStrategy,
+  ambiguousSelections: ReadonlyMap<string, string | null> = new Map(),
+): PortableLoreImportOutcome {
+  const reusedLorebooks = new Map<string, { id: string; name: string }>();
+  const importedEntryKeys = new Set<string>();
+  let reusedEntries = 0;
+  let unresolvedEntries = 0;
+
+  for (const entry of plan.entries) {
+    if (strategy === "separate") {
+      importedEntryKeys.add(entry.entryKey);
+      continue;
+    }
+    const selectedId =
+      entry.candidates.length <= 1
+        ? (entry.candidates[0]?.entryId ?? null)
+        : ambiguousSelections.has(entry.entryKey)
+          ? (ambiguousSelections.get(entry.entryKey) ?? null)
+          : undefined;
+    if (selectedId === undefined) {
+      unresolvedEntries += 1;
+      continue;
+    }
+    if (selectedId === null) {
+      importedEntryKeys.add(entry.entryKey);
+      continue;
+    }
+    const candidate = entry.candidates.find(
+      (item) => item.entryId === selectedId,
+    );
+    if (!candidate) {
+      unresolvedEntries += 1;
+      continue;
+    }
+    reusedEntries += 1;
+    reusedLorebooks.set(candidate.lorebookId, {
+      id: candidate.lorebookId,
+      name: candidate.lorebookName,
+    });
+  }
+
+  const createdLorebooks = plan.books
+    .filter((book) =>
+      book.entryKeys.some((entryKey) => importedEntryKeys.has(entryKey)),
+    )
+    .map((book) => ({
+      name: book.createdName,
+      originalName: book.originalName,
+    }));
+
+  return {
+    reusedEntries,
+    importedEntries: importedEntryKeys.size,
+    reusedLorebooks: [...reusedLorebooks.values()].sort((left, right) =>
+      left.name.localeCompare(right.name),
+    ),
+    createdLorebooks,
+    unresolvedEntries,
+  };
+}
+
+export function portableLoreImportResultMessage(
+  result: PortableLoreImportResult,
+): string {
+  const reusedLorebookNames =
+    result.reusedLorebooks.map((book) => `“${book.name}”`).join(", ") ||
+    "none";
+  const createdLorebookNames =
+    result.createdLorebooks.map((book) => `“${book.name}”`).join(", ") ||
+    "none";
+  return `${result.reusedEntries} lore link${result.reusedEntries === 1 ? " was" : "s were"} reused; ${result.importedEntries} entr${result.importedEntries === 1 ? "y was" : "ies were"} imported. Reused lorebooks: ${reusedLorebookNames}. Created lorebooks: ${createdLorebookNames}. Created copies retain World Map provenance and remain in your library if this map is later deleted.`;
 }
 
 function foldersInParentOrder(
@@ -596,6 +746,7 @@ export async function importPortableLoreBundle(options: {
 }): Promise<PortableLoreImportResult> {
   const entryIdMap = new Map<string, string>();
   const createdLorebookIds: string[] = [];
+  const createdLorebooks: PortableLorebookImportSummary[] = [];
   const importedDestinations = new Map<
     string,
     { lorebookId: string; entryId: string }
@@ -608,7 +759,9 @@ export async function importPortableLoreBundle(options: {
         const selectedId =
           entry.candidates.length <= 1
             ? (entry.candidates[0]?.entryId ?? null)
-            : (options.ambiguousSelections?.get(entry.entryKey) ?? undefined);
+            : options.ambiguousSelections?.has(entry.entryKey)
+              ? (options.ambiguousSelections.get(entry.entryKey) ?? null)
+              : undefined;
         if (selectedId === undefined) {
           throw new Error(
             `Choose how to resolve the duplicate match for “${entry.entryName}”.`,
@@ -635,12 +788,46 @@ export async function importPortableLoreBundle(options: {
         (entry) => !entryIdMap.has(entry.key),
       );
       if (entriesToImport.length === 0) continue;
+      const plannedBook = options.plan.books.find(
+        (candidate) => candidate.bookKey === book.key,
+      );
+      if (!plannedBook) {
+        throw new Error(
+          `The import plan is missing the destination for “${book.name}”.`,
+        );
+      }
+      const existingDescription =
+        typeof book.settings.description === "string"
+          ? book.settings.description.trim()
+          : "";
+      const provenanceDescription = `Imported from World Map “${options.plan.mapName}”. Original lorebook: “${book.name}”.`;
+      const existingTags = Array.isArray(book.settings.tags)
+        ? book.settings.tags.filter(
+            (tag): tag is string => typeof tag === "string" && tag.trim().length > 0,
+          )
+        : [];
       const createdBook = await options.api.post<{ id: string }>("/lorebooks", {
         ...pickRecord(book.settings, LOREBOOK_SETTING_KEYS),
-        name: book.name,
+        name: plannedBook.createdName,
+        description: existingDescription
+          ? `${existingDescription}\n\n${provenanceDescription}`
+          : provenanceDescription,
+        tags: Array.from(
+          new Set([
+            ...existingTags,
+            "World Map",
+            `World Map: ${options.plan.mapName}`,
+          ]),
+        ),
+        generatedBy: "import",
+        sourceAgentId: WORLD_MAPS_SOURCE_AGENT_ID,
         imagePath: null,
       });
       createdLorebookIds.push(createdBook.id);
+      createdLorebooks.push({
+        id: createdBook.id,
+        name: plannedBook.createdName,
+      });
       const folderIdMap = new Map<string, string>();
       const requiredFolderKeys = new Set(
         entriesToImport
@@ -749,6 +936,12 @@ export async function importPortableLoreBundle(options: {
       importedEntries,
       importedLorebooks: createdLorebookIds.length,
       createdLorebookIds,
+      createdLorebooks,
+      reusedLorebooks: portableLoreImportOutcome(
+        options.plan,
+        options.strategy,
+        options.ambiguousSelections,
+      ).reusedLorebooks,
     };
   } catch (error) {
     const cleanupResults = await Promise.allSettled(

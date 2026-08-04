@@ -661,12 +661,27 @@ export function usePublishSpatialSharedWorldDraft() {
         spatial: MapsSpatialContextResponse;
       }>(`/chats/${chatId}/spatial-context/shared-world/publish`, body);
     },
-    onSuccess: ({ world, spatial }, variables) => {
+    onSuccess: async ({ world, spatial }, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), spatial);
       queryClient.setQueryData<SpatialSharedWorldRecord[]>(spatialContextKeys.sharedWorlds, (current = []) =>
         current.map((candidate) => (candidate.id === world.id ? world : candidate)),
       );
-      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.all });
+      try {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: spatialContextKeys.sharedWorlds }),
+          queryClient.invalidateQueries({
+            predicate: (query) => {
+              const [scope, chatId] = query.queryKey;
+              if (scope !== spatialContextKeys.all[0] || typeof chatId !== "string") return false;
+              const cached = query.state.data as MapsSpatialContextResponse | undefined;
+              return chatId === variables.chatId || cached?.sharedWorld?.worldId === world.id;
+            },
+          }),
+        ]);
+      } catch {
+        // The publish already succeeded and the canonical records above are current.
+        // A rejected cache refresh must not turn that durable success into an error.
+      }
     },
   });
 }

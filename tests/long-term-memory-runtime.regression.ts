@@ -73,6 +73,50 @@ async function main() {
     metadata: { enableLongTermMemory: true, longTermMemoryBudgetTokens: 2048 },
     lastMessageAt: null,
     updatedAt: "2026-07-16T00:00:00.000Z",
+  }, {
+    id: "chat-new",
+    name: "New character chat",
+    mode: "roleplay",
+    characterIds: ["character-a"],
+    groupId: null,
+    personaId: null,
+    connectionId: null,
+    metadata: {},
+    lastMessageAt: null,
+    updatedAt: "2026-07-17T00:00:00.000Z",
+  }, {
+    id: "chat-other-character",
+    name: "Other character chat",
+    mode: "roleplay",
+    characterIds: ["character-b"],
+    groupId: null,
+    personaId: null,
+    connectionId: null,
+    metadata: {},
+    lastMessageAt: null,
+    updatedAt: "2026-07-17T00:00:00.000Z",
+  }, {
+    id: "chat-other-persona",
+    name: "Other persona chat",
+    mode: "roleplay",
+    characterIds: ["character-a"],
+    groupId: null,
+    personaId: "persona-b",
+    connectionId: null,
+    metadata: {},
+    lastMessageAt: null,
+    updatedAt: "2026-07-17T00:00:00.000Z",
+  }, {
+    id: "chat-other-group",
+    name: "Other group chat",
+    mode: "roleplay",
+    characterIds: ["character-a"],
+    groupId: "group-b",
+    personaId: null,
+    connectionId: null,
+    metadata: {},
+    lastMessageAt: null,
+    updatedAt: "2026-07-17T00:00:00.000Z",
   }];
   let metadataUpdates = 0;
   let agentConfigReads = 0;
@@ -685,6 +729,59 @@ async function main() {
       messages: [{ role: "user", content: "Where is the cobalt archive key?" }],
       debugMode: false,
     };
+    const scopedRecallText = "character-bound cobalt memory";
+    await storage.createNote(note("world_character_cross_chat", "chat-a", `The ${scopedRecallText} belongs to character A.`, {
+      scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"] },
+    }));
+    await storage.createNote(note("world_character_wrong_chat", "chat-a", `The ${scopedRecallText} belongs to character B.`, {
+      scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-b"] },
+    }));
+    await storage.createNote(note("world_pure_chat_cross_chat", "chat-a", `The ${scopedRecallText} is old-chat-only.`));
+    await storage.createNote(note("world_persona_cross_chat", "chat-a", `The ${scopedRecallText} belongs to persona A.`, {
+      scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"], personaId: "persona-a" },
+    }));
+    await storage.createNote(note("world_group_cross_chat", "chat-a", `The ${scopedRecallText} belongs to group A.`, {
+      scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"], groupId: "group-a" },
+    }));
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const newCharacterRecall = await runtime.recall({
+      chatId: "chat-new",
+      chatMode: "roleplay",
+      characterIds: ["character-a"],
+      messages: [{ role: "user", content: scopedRecallText }],
+      debugMode: false,
+    });
+    assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
+    assert.doesNotMatch(newCharacterRecall?.text ?? "", /old-chat-only|belongs to character B|belongs to persona A|belongs to group A/);
+    assert.doesNotMatch(
+      (await runtime.recall({
+        chatId: "chat-other-character",
+        chatMode: "roleplay",
+        characterIds: ["character-b"],
+        messages: [{ role: "user", content: scopedRecallText }],
+        debugMode: false,
+      }))?.text ?? "",
+      /belongs to character A/,
+    );
+    const personaCharacterRecall = (await runtime.recall({
+      chatId: "chat-other-persona",
+      chatMode: "roleplay",
+      characterIds: ["character-a"],
+      messages: [{ role: "user", content: scopedRecallText }],
+      debugMode: false,
+    }))?.text ?? "";
+    assert.match(personaCharacterRecall, /belongs to character A/);
+    assert.doesNotMatch(personaCharacterRecall, /belongs to persona A/);
+    assert.doesNotMatch(
+      (await runtime.recall({
+        chatId: "chat-other-group",
+        chatMode: "roleplay",
+        characterIds: ["character-a"],
+        messages: [{ role: "user", content: scopedRecallText }],
+        debugMode: false,
+      }))?.text ?? "",
+      /belongs to group A/,
+    );
     const legacyReadable = await runtime.recall(input);
     assert.match(legacyReadable.text, /beneath the observatory/);
     const first = await runtime.recall(input);

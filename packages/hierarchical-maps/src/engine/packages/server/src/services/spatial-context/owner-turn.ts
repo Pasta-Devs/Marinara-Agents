@@ -48,6 +48,8 @@ export interface CommitSpatialOwnerTurnInput {
   attachments?: MessageAttachment[];
 }
 
+export type AppliedSpatialOwnerTurn = { messageId: string; snapshot: SpatialContextSnapshot };
+
 function transitionPayloadHash(transition: PendingSpatialTransition): string {
   return createHash("sha256")
     .update(
@@ -69,6 +71,24 @@ function messageExtra(attachments?: MessageAttachment[]) {
     generationInfo: null,
     ...(attachments?.length ? { attachments } : {}),
   };
+}
+
+export async function findAppliedSpatialOwnerTurn(
+  input: Pick<CommitSpatialOwnerTurnInput, "chatId" | "transition">,
+): Promise<AppliedSpatialOwnerTurn | null> {
+  const existing = await getPackagePersistence().spatialSnapshots.getByCommand(
+    input.chatId,
+    input.transition.commandId,
+  );
+  if (!existing) return null;
+  if (existing.transitionPayloadHash !== transitionPayloadHash(input.transition)) {
+    throw new SpatialOwnerTurnError(
+      "spatial_transition_command_mismatch",
+      "This movement command was already used for a different destination.",
+      409,
+    );
+  }
+  return { messageId: existing.messageId, snapshot: existing };
 }
 
 export async function commitSpatialOwnerTurn(input: CommitSpatialOwnerTurnInput): Promise<{

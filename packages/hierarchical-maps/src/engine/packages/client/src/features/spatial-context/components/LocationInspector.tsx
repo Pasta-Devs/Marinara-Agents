@@ -302,6 +302,10 @@ export function LocationInspector({
     globalGalleryImages.isSuccess &&
     (!allowChatArtwork || galleryImages.isSuccess) &&
     mapBackgroundImage === null;
+  const sharedArtworkReferenceId =
+    location?.referenceImageId && location.referenceImageId === location.mapBackgroundImageId
+      ? location.referenceImageId
+      : null;
   const descendants = useMemo(
     () => (location ? getSpatialDescendantIds(definition, location.id) : new Set<string>()),
     [definition, location],
@@ -574,6 +578,13 @@ export function LocationInspector({
           <p className="mb-3 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
             Choose a reviewed image from this chat or the shared Global Gallery. One image anchors this location&apos;s look.
           </p>
+          {sharedArtworkReferenceId && (
+            <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-text)]">
+              This Gallery image fills both the location reference and child-map background. Removing only one role
+              keeps the other link.
+              {allowChatArtwork ? " Reject both roles to create one clean replacement." : ""}
+            </div>
+          )}
 
           <div className="overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)]">
             {referenceImage ? (
@@ -659,7 +670,28 @@ export function LocationInspector({
               onClick={() => onUpdate({ referenceImageId: undefined, useReferenceImage: false })}
               className="mari-chrome-control mt-2 min-h-11 w-full justify-center px-3 text-xs"
             >
-              <Trash2 size="0.75rem" /> Remove reference
+              <Trash2 size="0.75rem" /> {sharedArtworkReferenceId ? "Remove reference only" : "Remove reference"}
+            </button>
+          )}
+          {sharedArtworkReferenceId && allowChatArtwork && (
+            <button
+              type="button"
+              onClick={() => {
+                onUpdate({
+                  referenceImageId: undefined,
+                  useReferenceImage: false,
+                  mapBackgroundImageId: undefined,
+                  mapBackgroundPosition: undefined,
+                });
+                setGalleryPickerTarget(null);
+                setGeneratedReferenceImage(null);
+                setReferenceGenerationPrompt(defaultLocationReferencePrompt(location));
+                setReferenceGeneratorOpen(true);
+                generateReferenceImage.reset();
+              }}
+              className="mari-chrome-control mt-2 min-h-11 w-full justify-center border-amber-500/35 bg-amber-500/10 px-3 text-xs"
+            >
+              <RefreshCw size="0.75rem" /> Reject both and create replacement
             </button>
           )}
 
@@ -756,7 +788,7 @@ export function LocationInspector({
                   <p className="px-3 pt-2 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
                     Saved to Gallery. Review it before making it this location&apos;s reference.
                   </p>
-                  <div className="grid grid-cols-2 gap-2 p-2">
+                  <div className={cn("grid gap-2 p-2", location.childPresentation === "map" ? "grid-cols-3" : "grid-cols-2")}>
                     <button
                       type="button"
                       onClick={() => {
@@ -778,6 +810,24 @@ export function LocationInspector({
                     >
                       <Check size="0.75rem" /> Use as reference
                     </button>
+                    {location.childPresentation === "map" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdate({
+                            referenceImageId: generatedReferenceImage.id,
+                            useReferenceImage: true,
+                            mapBackgroundImageId: generatedReferenceImage.id,
+                            mapBackgroundPosition: location.mapBackgroundPosition ?? { x: 50, y: 50 },
+                          });
+                          setReferenceGeneratorOpen(false);
+                          setGeneratedReferenceImage(null);
+                        }}
+                        className="mari-chrome-control min-h-11 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs"
+                      >
+                        <Check size="0.75rem" /> Use for both
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

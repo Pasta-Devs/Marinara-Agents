@@ -180,8 +180,9 @@ function isReasoningNoneUnsupportedError(error: unknown) {
 function isResponseFormatUnsupportedError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return (
-    /\b(?:response_format|response format|json_schema|json schema|structured output|schema)\b/i.test(message) &&
-    /\b(?:unsupported|invalid|unrecognized|not supported|bad request|400)\b/i.test(message)
+    (/\b(?:response_format|response format|json_schema|json schema|structured output|schema)\b/i.test(message) &&
+      /\b(?:unsupported|invalid|unrecognized|not supported|bad request|400)\b/i.test(message)) ||
+    /\b(?:failed to initialize samplers|failed to parse grammar|error parsing grammar)\b/i.test(message)
   );
 }
 
@@ -354,9 +355,11 @@ async function chatCompleteWithReasoningFallback({
           appliedResponseFormat: "none",
         },
       });
+      const fallbackChatOptions = { ...chatOptions };
+      delete fallbackChatOptions.responseFormat;
       return chatCompleteWithReasoningFallback({
         messages,
-        chatOptions: { ...chatOptions, responseFormat: undefined },
+        chatOptions: fallbackChatOptions,
         extractionOptions,
       });
     }
