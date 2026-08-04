@@ -131,7 +131,7 @@
   "ui.longTermMemory.longtermmemorydetail.memoryStatus": "Memory status",
   "ui.longTermMemory.longtermmemorydetail.next": "Next",
   "ui.longTermMemory.longtermmemorydetail.oneOffDurableContext": "One-off durable context",
-  "ui.longTermMemory.longtermmemorydetail.openASupportedChatThenUseChatSettingsAgents": "Open a supported chat, then use Chat Settings > Agents > Misc Agents to add Long-Term Memory.",
+  "ui.longTermMemory.longtermmemorydetail.openASupportedChatThenUseChatSettingsAgents": "Open a supported chat, then use Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
   "ui.longTermMemory.longtermmemorydetail.professorMariSSetupGuide": "Professor Mari's setup guide",
   "ui.longTermMemory.longtermmemorydetail.recommended": "Recommended",
   "ui.longTermMemory.longtermmemorydetail.reviewProposedChangesBeforeSavingThemEditAnythingThat": "Review proposed changes before saving them. Edit anything that needs correction, then accept the memories you want to keep.",
