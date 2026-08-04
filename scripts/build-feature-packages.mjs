@@ -934,9 +934,11 @@ function Settings({ props }) {
     updateConfig.mutate({ ...value, callSttConnectionId: "", callSttModel: "", ...next });
   };
   const callsEnabled = metadata.conversationCallsEnabled === true;
-  const connections = Array.isArray(props.connections) ? props.connections.filter((connection) => connection && typeof connection.id === "string") : [];
+  const connectionsKnown = Array.isArray(props.connections);
+  const connections = connectionsKnown ? props.connections.filter((connection) => connection && typeof connection.id === "string") : [];
   const summaryConnectionId = typeof metadata.conversationCallSummaryConnectionId === "string" ? metadata.conversationCallSummaryConnectionId : "";
-  const summaryConnectionMissing = summaryConnectionId && !connections.some((connection) => connection.id === summaryConnectionId);
+  const summaryConnectionPending = !connectionsKnown && summaryConnectionId;
+  const summaryConnectionMissing = connectionsKnown && summaryConnectionId && !connections.some((connection) => connection.id === summaryConnectionId);
   const audio = value?.callAudioEnabled === true;
   const videoInput = value?.callVideoInputEnabled === true;
   const videoPresence = value?.callCharacterVideoEnabled === true;
@@ -958,6 +960,7 @@ function Settings({ props }) {
           <span className="text-[0.6875rem] font-medium text-[var(--foreground)]">Call summary connection</span>
           <select value={summaryConnectionId} onChange={(event) => updateMetadata({ conversationCallSummaryConnectionId: event.target.value || null })} className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50">
             <option value="">Agent default (falls back to chat connection)</option>
+            {summaryConnectionPending ? <option value={summaryConnectionId}>Loading connection…</option> : null}
             {summaryConnectionMissing ? <option value={summaryConnectionId}>Missing connection</option> : null}
             {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name || "Connection"}{connection.model ? " · " + connection.model : ""}</option>)}
           </select>

@@ -65,6 +65,11 @@ import {
 } from "../services/conversation/character-commands.js";
 import { resolveConversationSelfieSystemPrompt } from "../services/conversation/selfie-prompt.js";
 import { stripConversationPromptTimestamps } from "../services/conversation/transcript-sanitize.js";
+import {
+  buildCallSummaryCompletionOptions,
+  buildConversationCallProviderArguments,
+  resolveCallSummaryConnection,
+} from "../services/conversation/call-summary-routing.js";
 import { resolveConnectionImageDefaults } from "../services/image/image-generation-defaults.js";
 import { loadImageGenerationUserSettings } from "../services/image/image-generation-settings.js";
 import { compileImagePrompt } from "../services/image/image-prompt-compiler.js";
@@ -137,17 +142,7 @@ async function createConversationCallProvider(
   const fallbackConnection =
     category === "main" ? await connections.getFallbackForMain() : await connections.getFallbackForAgents();
   return withConnectionFallbackProvider({
-    primary: createLLMProvider(
-      connection.provider,
-      resolveBaseUrl(connection),
-      connection.apiKey,
-      connection.maxContext,
-      connection.openrouterProvider,
-      connection.maxTokensOverride,
-      connection.claudeFastMode === "true",
-      connection.treatAsLocalEndpoint === "true",
-      connection.defaultParameters,
-    ),
+    primary: createLLMProvider(...buildConversationCallProviderArguments(connection, resolveBaseUrl)),
     primaryConnectionId: connection.id,
     fallbackConnection,
     fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
@@ -176,41 +171,6 @@ function parseJsonRecord(value: unknown): Record<string, unknown> {
     }
   }
   return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
-
-async function resolveCallSummaryConnection(
-  connections: ConnectionsStorage,
-  chat: NonNullable<ChatRow>,
-): Promise<{ connection: ConnectionWithKey; source: "selected" | "agent-default" | "chat" } | null> {
-  const metadata = parseJsonRecord(chat.metadata);
-  const selectedId =
-    typeof metadata.conversationCallSummaryConnectionId === "string"
-      ? metadata.conversationCallSummaryConnectionId.trim()
-      : "";
-  const candidates: Array<{ connection: ConnectionWithKey | null; source: "selected" | "agent-default" | "chat" }> = [
-    {
-      connection: selectedId ? await connections.getWithKey(selectedId) : null,
-      source: "selected",
-    },
-    {
-      connection: await connections.getDefaultForAgents(),
-      source: "agent-default",
-    },
-    {
-      connection: chat.connectionId ? await connections.getWithKey(chat.connectionId) : null,
-      source: "chat",
-    },
-  ];
-  const seen = new Set<string>();
-  for (const candidate of candidates) {
-    const connection = candidate.connection;
-    if (!connection || seen.has(connection.id)) continue;
-    seen.add(connection.id);
-    if (connection.provider === "image_generation" || connection.provider === "video_generation") continue;
-    if (!resolveBaseUrl(connection)) continue;
-    return { connection, source: candidate.source };
-  }
-  return null;
 }
 
 function parseCallVideoClipKinds(body: Record<string, unknown>): ConversationCallCharacterVideoClipKind[] | null {
@@ -2180,7 +2140,7 @@ async function summarizeCall(input: {
   const connections = createConnectionsStorage(input.app.db);
   const messages = await calls.listMessages(input.session.id);
   if (messages.length === 0) return "No substantial conversation occurred during the call.";
-  const resolvedConnection = await resolveCallSummaryConnection(connections, input.chat);
+  const resolvedConnection = await resolveCallSummaryConnection(connections, input.chat, resolveBaseUrl);
   if (!resolvedConnection) {
     return messages
       .slice(-12)
@@ -2200,7 +2160,7 @@ async function summarizeCall(input: {
         },
         { role: "user", content: transcript },
       ],
-      { model: conn.model, maxTokens: 4096, temperature: 0.2 },
+      buildCallSummaryCompletionOptions(conn.model),
     );
     logger.debug(
       "[conversation-call] Summarized call %s with connection %s source=%s",
