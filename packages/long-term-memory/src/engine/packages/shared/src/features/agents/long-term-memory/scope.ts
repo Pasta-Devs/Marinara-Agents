@@ -40,27 +40,28 @@ export function ltmScopesOverlap(
   const noteChatIds = getLtmScopeChatIds(noteScope);
   const targetChatIds = getLtmScopeChatIds(targetScope);
   const noteCharacterIds = uniqueStrings(noteScope?.characterIds ?? []);
+  const characterOverlap = noteCharacterIds.length > 0 && targetCharacterIds.length > 0 &&
+    noteCharacterIds.some((id) => targetCharacterIds.includes(id));
   if (
     noteCharacterIds.length > 0 &&
     targetCharacterIds.length > 0 &&
-    !noteCharacterIds.some((id) => targetCharacterIds.includes(id))
+    !characterOverlap
   )
     return false;
 
   if (noteChatIds.length > 0) {
     const noteChatIdSet = new Set(noteChatIds);
-    if (
-      targetChatIds.length > 0 &&
-      !targetChatIds.some((chatId) => noteChatIdSet.has(chatId))
-    )
-      return false;
+    const chatOverlap = targetChatIds.some((chatId) => noteChatIdSet.has(chatId));
+    const targetPersonaId = targetScope?.personaId ?? options.personaId;
+    if (noteScope?.groupId && !chatOverlap && noteScope.groupId !== targetScope?.groupId) return false;
+    if ((!noteCharacterIds.length || !chatOverlap) && noteScope?.personaId !== targetPersonaId) return false;
+    if (targetChatIds.length > 0 && !chatOverlap && !characterOverlap) return false;
     if (
       !targetChatIds.length &&
       (!targetCharacterIds.length || !noteCharacterIds.length)
     )
       return false;
-    const targetPersonaId = targetScope?.personaId ?? options.personaId;
-    return !noteScope?.personaId || !targetPersonaId || noteScope.personaId === targetPersonaId;
+    return chatOverlap || characterOverlap;
   }
 
   if (noteScope?.groupId) {
