@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-04T04:46:33.835Z",
+  "generatedAt": "2026-08-04T06:53:33.744Z",
   "packages": [
     {
       "manifest": {
@@ -120,10 +120,10 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.8",
+        "version": "1.0.9",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
-          "min": "2.3.0",
+          "min": "2.4.1",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -150,13 +150,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "3837a966042501ec0d5bbe9a99a670b33cab94d0ed6e6c18a533506e08e96790",
-            "bytes": 2380966
+            "sha256": "e0f9a316fb4fb6cb55e2283952e6059ba2346eb3595eaf51512956b3e024dc07",
+            "bytes": 2394288
           },
           {
             "path": "client.js",
-            "sha256": "88822953e621b854014b98d9c6208431bd527c5f41bce18ee7d50d3a8ccda1d5",
-            "bytes": 902263
+            "sha256": "0e42770b58c5786ee245e52be0dd8f694e5be4e883fe320792164d8e4f8958c6",
+            "bytes": 903479
           }
         ],
         "permissions": [
@@ -173,9 +173,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.8.zip",
-        "sha256": "cc0a8acc09ab37e0fc1b00fb851909a257f4df187251595799dddec4079d0869",
-        "bytes": 916007
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.9.zip",
+        "sha256": "c7826a9463f7d069795c7297760ce41e60c2bc34e2969be3a5b8ac1fd4325faf",
+        "bytes": 920201
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },

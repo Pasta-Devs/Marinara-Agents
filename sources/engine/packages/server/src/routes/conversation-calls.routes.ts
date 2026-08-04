@@ -146,6 +146,7 @@ async function createConversationCallProvider(
       connection.maxTokensOverride,
       connection.claudeFastMode === "true",
       connection.treatAsLocalEndpoint === "true",
+      connection.defaultParameters,
     ),
     primaryConnectionId: connection.id,
     fallbackConnection,
@@ -175,6 +176,41 @@ function parseJsonRecord(value: unknown): Record<string, unknown> {
     }
   }
   return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+async function resolveCallSummaryConnection(
+  connections: ConnectionsStorage,
+  chat: NonNullable<ChatRow>,
+): Promise<{ connection: ConnectionWithKey; source: "selected" | "agent-default" | "chat" } | null> {
+  const metadata = parseJsonRecord(chat.metadata);
+  const selectedId =
+    typeof metadata.conversationCallSummaryConnectionId === "string"
+      ? metadata.conversationCallSummaryConnectionId.trim()
+      : "";
+  const candidates: Array<{ connection: ConnectionWithKey | null; source: "selected" | "agent-default" | "chat" }> = [
+    {
+      connection: selectedId ? await connections.getWithKey(selectedId) : null,
+      source: "selected",
+    },
+    {
+      connection: await connections.getDefaultForAgents(),
+      source: "agent-default",
+    },
+    {
+      connection: chat.connectionId ? await connections.getWithKey(chat.connectionId) : null,
+      source: "chat",
+    },
+  ];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const connection = candidate.connection;
+    if (!connection || seen.has(connection.id)) continue;
+    seen.add(connection.id);
+    if (connection.provider === "image_generation" || connection.provider === "video_generation") continue;
+    if (!resolveBaseUrl(connection)) continue;
+    return { connection, source: candidate.source };
+  }
+  return null;
 }
 
 function parseCallVideoClipKinds(body: Record<string, unknown>): ConversationCallCharacterVideoClipKind[] | null {
@@ -2144,15 +2180,14 @@ async function summarizeCall(input: {
   const connections = createConnectionsStorage(input.app.db);
   const messages = await calls.listMessages(input.session.id);
   if (messages.length === 0) return "No substantial conversation occurred during the call.";
-  const connectionId = input.chat.connectionId;
-  if (!connectionId) {
+  const resolvedConnection = await resolveCallSummaryConnection(connections, input.chat);
+  if (!resolvedConnection) {
     return messages
       .slice(-12)
       .map((message) => `${message.participantKind === "user" ? "User" : "Character"}: ${message.content}`)
       .join("\n");
   }
-  const conn = await connections.getWithKey(connectionId);
-  if (!conn) return "Call ended. Summary unavailable because the chat connection could not be resolved.";
+  const conn = resolvedConnection.connection;
   const provider = await createConversationCallProvider(connections, conn, "agents");
   const transcript = messages.map((message) => `${message.participantKind}:${message.content}`).join("\n");
   try {
@@ -2165,7 +2200,13 @@ async function summarizeCall(input: {
         },
         { role: "user", content: transcript },
       ],
-      { model: conn.model, maxTokens: 600, temperature: 0.2 },
+      { model: conn.model, maxTokens: 4096, temperature: 0.2 },
+    );
+    logger.debug(
+      "[conversation-call] Summarized call %s with connection %s source=%s",
+      input.session.id,
+      conn.id,
+      resolvedConnection.source,
     );
     return (result.content ?? "").trim() || "Call ended. No summary was generated.";
   } catch (error) {
