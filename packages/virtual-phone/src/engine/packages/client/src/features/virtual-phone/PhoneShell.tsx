@@ -92,6 +92,8 @@ export function PhoneShell({ props }: { props: CapabilityProps }) {
   const [index, setIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
   const pageNotes = useRef(new Map<string, string>());
 
   const current = index >= 0 ? entries[index] : undefined;
@@ -100,6 +102,8 @@ export function PhoneShell({ props }: { props: CapabilityProps }) {
 
   useEffect(() => {
     let cancelled = false;
+    setCatalogLoading(true);
+    setCatalogError("");
     fetchApps()
       .then((catalog) => {
         if (cancelled) return;
@@ -107,7 +111,10 @@ export function PhoneShell({ props }: { props: CapabilityProps }) {
         setInstalled(readInstalled(chatId, catalog.defaults));
       })
       .catch((cause: unknown) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+        if (!cancelled) setCatalogError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
       });
     return () => {
       cancelled = true;
@@ -219,6 +226,9 @@ export function PhoneShell({ props }: { props: CapabilityProps }) {
         alignItems: "center",
         justifyContent: "center",
         height: "100%",
+        width: "100%",
+        maxWidth: 414,
+        flex: "0 0 auto",
         minHeight: 0,
         padding: 12,
         background: "var(--background, #101010)",
@@ -315,7 +325,13 @@ export function PhoneShell({ props }: { props: CapabilityProps }) {
           {screen.kind === "home" ? (
             <HomeScreen apps={homeApps} onOpen={(app) => void open(app, `https://${app.domain}/`)} onStore={() => setScreen({ kind: "store" })} />
           ) : screen.kind === "store" ? (
-            <AppStore apps={apps} installed={installed} onToggle={toggleInstall} />
+            <AppStore
+              apps={apps}
+              installed={installed}
+              loading={catalogLoading}
+              error={catalogError}
+              onToggle={toggleInstall}
+            />
           ) : (
             <AppFrame current={current} loading={loading} error={error} />
           )}
@@ -426,10 +442,14 @@ function HomeScreen({ apps, onOpen, onStore }: { apps: PhoneApp[]; onOpen: (app:
 function AppStore({
   apps,
   installed,
+  loading,
+  error,
   onToggle,
 }: {
   apps: PhoneApp[];
   installed: string[];
+  loading: boolean;
+  error: string;
   onToggle: (appId: string) => void;
 }) {
   return (
@@ -445,8 +465,14 @@ function AppStore({
         App Store
       </header>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 0" }}>
-        {apps.length === 0 ? (
+        {error ? (
+          <p role="alert" style={{ padding: 24, color: "#fca5a5", fontSize: 13, lineHeight: 1.5 }}>
+            {error}
+          </p>
+        ) : loading ? (
           <p style={{ padding: 24, color: "#a0a0aa", fontSize: 13 }}>Loading apps…</p>
+        ) : apps.length === 0 ? (
+          <p style={{ padding: 24, color: "#a0a0aa", fontSize: 13 }}>No apps are available.</p>
         ) : (
           apps.map((app) => {
             const isInstalled = installed.includes(app.id);

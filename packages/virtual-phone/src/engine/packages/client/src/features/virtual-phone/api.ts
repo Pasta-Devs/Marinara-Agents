@@ -3,10 +3,32 @@ import type { HistoryEntry, PhoneApp, PhonePage } from "./types";
 const API_ROOT = "/api/virtual-phone";
 const CSRF_HEADER = "x-marinara-csrf";
 const INSTALL_STORAGE_PREFIX = "marinara-virtual-phone:";
+const ADMIN_SECRET_STORAGE_KEY = "marinara_admin_secret";
+
+function getAdminSecretHeader(): Record<string, string> {
+  try {
+    const secret = window.localStorage.getItem(ADMIN_SECRET_STORAGE_KEY)?.trim();
+    return secret ? { "X-Admin-Secret": secret } : {};
+  } catch {
+    return {};
+  }
+}
+
+async function readError(response: Response, fallback: string): Promise<string> {
+  const payload = (await response.json().catch(() => null)) as { error?: unknown; message?: unknown } | null;
+  if (typeof payload?.message === "string" && payload.message.trim()) return payload.message;
+  if (typeof payload?.error === "string" && payload.error.trim()) return payload.error;
+  return fallback;
+}
 
 export async function fetchApps(): Promise<{ apps: PhoneApp[]; defaults: string[] }> {
-  const response = await fetch(`${API_ROOT}/apps`);
-  if (!response.ok) throw new Error("Could not load the app catalog.");
+  const response = await fetch(`${API_ROOT}/apps`, {
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: getAdminSecretHeader(),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(await readError(response, "Could not load the app catalog."));
   return response.json() as Promise<{ apps: PhoneApp[]; defaults: string[] }>;
 }
 
@@ -25,11 +47,12 @@ export async function fetchPage(input: {
 }): Promise<PhonePage> {
   const response = await fetch(`${API_ROOT}/page`, {
     method: "POST",
-    headers: { "content-type": "application/json", [CSRF_HEADER]: "1" },
+    headers: { "content-type": "application/json", [CSRF_HEADER]: "1", ...getAdminSecretHeader() },
+    credentials: "same-origin",
     body: JSON.stringify(input),
   });
-  const result = (await response.json()) as PhonePage & { error?: string };
-  if (!response.ok) throw new Error(result.error || `The phone could not open that screen (${response.status}).`);
+  const result = (await response.json()) as PhonePage & { error?: string; message?: string };
+  if (!response.ok) throw new Error(result.message || result.error || `The phone could not open that screen (${response.status}).`);
   return result;
 }
 
