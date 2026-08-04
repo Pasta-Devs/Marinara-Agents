@@ -65,6 +65,11 @@ import {
 } from "../services/conversation/character-commands.js";
 import { resolveConversationSelfieSystemPrompt } from "../services/conversation/selfie-prompt.js";
 import { stripConversationPromptTimestamps } from "../services/conversation/transcript-sanitize.js";
+import {
+  buildCallSummaryCompletionOptions,
+  buildConversationCallProviderArguments,
+  resolveCallSummaryConnection,
+} from "../services/conversation/call-summary-routing.js";
 import { resolveConnectionImageDefaults } from "../services/image/image-generation-defaults.js";
 import { loadImageGenerationUserSettings } from "../services/image/image-generation-settings.js";
 import { compileImagePrompt } from "../services/image/image-prompt-compiler.js";
@@ -137,16 +142,7 @@ async function createConversationCallProvider(
   const fallbackConnection =
     category === "main" ? await connections.getFallbackForMain() : await connections.getFallbackForAgents();
   return withConnectionFallbackProvider({
-    primary: createLLMProvider(
-      connection.provider,
-      resolveBaseUrl(connection),
-      connection.apiKey,
-      connection.maxContext,
-      connection.openrouterProvider,
-      connection.maxTokensOverride,
-      connection.claudeFastMode === "true",
-      connection.treatAsLocalEndpoint === "true",
-    ),
+    primary: createLLMProvider(...buildConversationCallProviderArguments(connection, resolveBaseUrl)),
     primaryConnectionId: connection.id,
     fallbackConnection,
     fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
@@ -2144,15 +2140,14 @@ async function summarizeCall(input: {
   const connections = createConnectionsStorage(input.app.db);
   const messages = await calls.listMessages(input.session.id);
   if (messages.length === 0) return "No substantial conversation occurred during the call.";
-  const connectionId = input.chat.connectionId;
-  if (!connectionId) {
+  const resolvedConnection = await resolveCallSummaryConnection(connections, input.chat, resolveBaseUrl);
+  if (!resolvedConnection) {
     return messages
       .slice(-12)
       .map((message) => `${message.participantKind === "user" ? "User" : "Character"}: ${message.content}`)
       .join("\n");
   }
-  const conn = await connections.getWithKey(connectionId);
-  if (!conn) return "Call ended. Summary unavailable because the chat connection could not be resolved.";
+  const conn = resolvedConnection.connection;
   const provider = await createConversationCallProvider(connections, conn, "agents");
   const transcript = messages.map((message) => `${message.participantKind}:${message.content}`).join("\n");
   try {
@@ -2165,7 +2160,13 @@ async function summarizeCall(input: {
         },
         { role: "user", content: transcript },
       ],
-      { model: conn.model, maxTokens: 600, temperature: 0.2 },
+      buildCallSummaryCompletionOptions(conn.model),
+    );
+    logger.debug(
+      "[conversation-call] Summarized call %s with connection %s source=%s",
+      input.session.id,
+      conn.id,
+      resolvedConnection.source,
     );
     return (result.content ?? "").trim() || "Call ended. No summary was generated.";
   } catch (error) {

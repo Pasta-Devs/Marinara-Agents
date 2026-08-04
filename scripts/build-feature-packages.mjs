@@ -154,7 +154,8 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.8",
+    version: "1.0.9",
+    minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -933,6 +934,11 @@ function Settings({ props }) {
     updateConfig.mutate({ ...value, callSttConnectionId: "", callSttModel: "", ...next });
   };
   const callsEnabled = metadata.conversationCallsEnabled === true;
+  const connectionsKnown = Array.isArray(props.connections);
+  const connections = connectionsKnown ? props.connections.filter((connection) => connection && typeof connection.id === "string") : [];
+  const summaryConnectionId = typeof metadata.conversationCallSummaryConnectionId === "string" ? metadata.conversationCallSummaryConnectionId : "";
+  const summaryConnectionPending = !connectionsKnown && summaryConnectionId;
+  const summaryConnectionMissing = connectionsKnown && summaryConnectionId && !connections.some((connection) => connection.id === summaryConnectionId);
   const audio = value?.callAudioEnabled === true;
   const videoInput = value?.callVideoInputEnabled === true;
   const videoPresence = value?.callCharacterVideoEnabled === true;
@@ -950,6 +956,16 @@ function Settings({ props }) {
     {callsEnabled ? <>
       <div className="space-y-1.5 border-t border-[var(--border)]/60 pt-3">
         <Toggle label="Generate voice cues in [tags]" description="Ask call models for cues like [whispering], [laughing], and [sighs] for TTS/video timing." enabled={metadata.conversationCallVoiceCues !== false} onClick={() => updateMetadata({ conversationCallVoiceCues: metadata.conversationCallVoiceCues === false })} />
+        <label className="flex flex-col gap-1.5 rounded-lg bg-[var(--background)]/35 px-2.5 py-2">
+          <span className="text-[0.6875rem] font-medium text-[var(--foreground)]">Call summary connection</span>
+          <select value={summaryConnectionId} onChange={(event) => updateMetadata({ conversationCallSummaryConnectionId: event.target.value || null })} className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50">
+            <option value="">Agent default (falls back to chat connection)</option>
+            {summaryConnectionPending ? <option value={summaryConnectionId}>Loading connection…</option> : null}
+            {summaryConnectionMissing ? <option value={summaryConnectionId}>Missing connection</option> : null}
+            {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name || "Connection"}{connection.model ? " · " + connection.model : ""}</option>)}
+          </select>
+          <span className="text-[0.55rem] leading-snug text-[var(--muted-foreground)]">Used after a call ends. Connection custom parameters and reasoning settings are preserved.</span>
+        </label>
         <Toggle label="Call Audio Pipeline" description="Request microphone access, listen while unmuted, and transcribe speech into the call." enabled={audio} disabled={disabled} pending={updateConfig.isPending} onClick={() => patch({ callAudioEnabled: !audio, ...(!audio ? { callAudioInputMode: "local_whisper" } : {}) })} />
       </div>
       {audio ? <div className="space-y-2 border-t border-[var(--border)]/60 pt-3">
