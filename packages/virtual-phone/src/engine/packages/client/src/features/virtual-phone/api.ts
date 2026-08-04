@@ -4,8 +4,8 @@ const API_ROOT = "/api/virtual-phone";
 const CSRF_HEADER = "x-marinara-csrf";
 const INSTALL_STORAGE_PREFIX = "marinara-virtual-phone:";
 
-export async function fetchApps(allowAdult: boolean): Promise<{ apps: PhoneApp[]; defaults: string[] }> {
-  const response = await fetch(`${API_ROOT}/apps?allowAdult=${allowAdult ? "true" : "false"}`);
+export async function fetchApps(): Promise<{ apps: PhoneApp[]; defaults: string[] }> {
+  const response = await fetch(`${API_ROOT}/apps`);
   if (!response.ok) throw new Error("Could not load the app catalog.");
   return response.json() as Promise<{ apps: PhoneApp[]; defaults: string[] }>;
 }
@@ -16,7 +16,6 @@ export async function fetchPage(input: {
   url?: string;
   connectionId?: string;
   chatConnectionId?: string;
-  allowAdult: boolean;
   refresh?: boolean;
   lastAction?: string;
   formData?: Record<string, unknown>;

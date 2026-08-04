@@ -29,6 +29,8 @@ export type CapabilityProps = {
   context?: Record<string, unknown>;
   openSurface?: () => void;
   onClose?: () => void;
+  enabledForChat?: boolean;
+  onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
   onObserver?: (input: { text: string; name: string; url: string }) => void;
   updateMetadata?: (patch: Record<string, unknown>) => void;
 };

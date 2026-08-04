@@ -144,7 +144,7 @@ const features = [
   },
   {
     id: "virtual-phone",
-    version: "1.0.0",
+    version: "1.0.1",
     minEngineVersion: "2.3.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Virtual Phone",
@@ -160,6 +160,7 @@ const features = [
     packageSourceRoot: virtualPhoneSourceRoot,
     ownedSourcePaths: virtualPhoneOwnedSourcePaths,
     contributions: {
+      agentDetail: { agentIds: ["virtual-phone"] },
       slots: ["conversation-toolbar", "conversation-surface"],
     },
   },

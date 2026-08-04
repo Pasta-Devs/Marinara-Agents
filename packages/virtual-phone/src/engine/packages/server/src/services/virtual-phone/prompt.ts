@@ -22,7 +22,6 @@ export type PhonePageContext = {
   /** Observer text from the last visit to this same URL, for continuity. */
   pageHistory?: string;
   navHistory?: Array<{ url: string; title: string }>;
-  allowAdult?: boolean;
 };
 
 const PHONE_RULES = [

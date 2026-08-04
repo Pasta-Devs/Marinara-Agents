@@ -93,7 +93,38 @@ function CapabilityRoot({ element }: { element: CapabilityElement }) {
   const props = element.capabilityProps ?? {};
   const view = element.getAttribute("view") || props.view || "toolbar";
   if (view === "toolbar") return <ToolbarButton element={element} />;
-  if (view !== "surface") return null;
+  if (view !== "surface" && view !== "detail") return null;
+  if (view === "detail" && !props.chatId) {
+    return (
+      <div role="status" style={{ margin: "auto", padding: 24, textAlign: "center", fontSize: 13 }}>
+        Open a Conversation or Roleplay chat to use this phone.
+      </div>
+    );
+  }
+  if (view === "detail" && props.enabledForChat === false) {
+    return (
+      <div style={{ margin: "auto", maxWidth: 360, padding: 24, textAlign: "center", fontSize: 13 }}>
+        <p style={{ margin: 0 }}>Enable Virtual Phone for this chat to open its home screen and apps.</p>
+        <button
+          type="button"
+          onClick={() => void props.onEnabledForChatChange?.(true)}
+          style={{
+            marginTop: 16,
+            minHeight: 44,
+            padding: "0 18px",
+            border: "1px solid var(--border, #444)",
+            borderRadius: 10,
+            background: "var(--primary, #ffb3d9)",
+            color: "var(--primary-foreground, #171117)",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Enable for this chat
+        </button>
+      </div>
+    );
+  }
   return <PhoneShell props={props} />;
 }
 

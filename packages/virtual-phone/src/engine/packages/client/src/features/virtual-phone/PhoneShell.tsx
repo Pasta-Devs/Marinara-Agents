@@ -83,7 +83,6 @@ function AppIcon({ app, size = 56 }: { app: Pick<PhoneApp, "icon" | "name">; siz
 
 export function PhoneShell({ props }: { props: CapabilityProps }) {
   const chatId = props.chatId;
-  const allowAdult = props.metadata?.allowAdultContent === true;
   const observerEnabled = props.metadata?.virtualPhoneObserverEnabled === true;
 
   const [apps, setApps] = useState<PhoneApp[]>([]);
@@ -101,7 +100,7 @@ export function PhoneShell({ props }: { props: CapabilityProps }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchApps(allowAdult)
+    fetchApps()
       .then((catalog) => {
         if (cancelled) return;
         setApps(catalog.apps);
@@ -113,7 +112,7 @@ export function PhoneShell({ props }: { props: CapabilityProps }) {
     return () => {
       cancelled = true;
     };
-  }, [allowAdult, chatId]);
+  }, [chatId]);
 
   useEffect(() => {
     const session = readSession(chatId);
@@ -138,7 +137,6 @@ export function PhoneShell({ props }: { props: CapabilityProps }) {
           url,
           connectionId: props.connectionId,
           chatConnectionId: typeof props.metadata?.connectionId === "string" ? props.metadata.connectionId : undefined,
-          allowAdult,
           refresh: options.refresh,
           lastAction: options.lastAction,
           formData: options.formData,
@@ -165,7 +163,7 @@ export function PhoneShell({ props }: { props: CapabilityProps }) {
         setLoading(false);
       }
     },
-    [allowAdult, chatId, entries, index, observerEnabled, props],
+    [chatId, entries, index, observerEnabled, props],
   );
 
   // Navigation intents from inside the sandboxed frame.

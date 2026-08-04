@@ -18,7 +18,11 @@ export type PhoneApp = {
   description: string;
   /** Preinstalled on a fresh phone. */
   preinstalled?: boolean;
-  /** Hidden until the chat allows adult content. */
+  /**
+   * Adult-oriented. Never preinstalled, and labelled in the App Store. The gate
+   * itself is the app's own in-universe age screen, matching how the Engine's
+   * own Noodler works; there is no chat-level adult flag to key off.
+   */
   adult?: boolean;
 };
 
@@ -152,7 +156,7 @@ export function defaultInstalledApps(): string[] {
   return PHONE_APPS.filter((app) => app.preinstalled).map((app) => app.id);
 }
 
-/** The App Store hides adult apps unless the chat has opted in. */
-export function visibleApps(allowAdult: boolean): PhoneApp[] {
-  return PHONE_APPS.filter((app) => allowAdult || !app.adult);
+/** Every app is listed; adult ones are simply never preinstalled. */
+export function listApps(): readonly PhoneApp[] {
+  return PHONE_APPS;
 }

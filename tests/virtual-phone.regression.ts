@@ -11,12 +11,13 @@
 // ──────────────────────────────────────────────
 import assert from "node:assert/strict";
 
+async function main() {
 const base = new URL(
   "../packages/virtual-phone/src/engine/packages/server/src/services/virtual-phone/",
   import.meta.url,
 );
 
-const { PHONE_APPS, defaultInstalledApps, findApp, findAppByUrl, visibleApps } = await import(
+const { PHONE_APPS, defaultInstalledApps, findApp, findAppByUrl, listApps } = await import(
   new URL("apps.ts", base).href
 );
 const { PHONE_TEMPLATES, extractSlots, fillSlots, findTemplate } = await import(
@@ -43,11 +44,8 @@ const { selfCheck } = await import(new URL("server-entry.ts", base).href);
   assert.ok(preinstalled.includes("noodle"), "noodle should be preinstalled");
   assert.ok(!preinstalled.includes("noodler"), "noodler must not be preinstalled");
 
-  // The adult app is hidden from the store until the chat allows it.
-  const sfw = visibleApps(false).map((app) => app.id);
-  assert.ok(!sfw.includes("noodler"), "noodler leaked into the SFW catalog");
-  assert.ok(visibleApps(true).map((app) => app.id).includes("noodler"), "noodler missing from the adult catalog");
-  for (const app of visibleApps(false)) assert.ok(!app.adult, `${app.id} is adult but visible`);
+  // Noodler is store-visible but never preinstalled; its own page owns the age gate.
+  assert.ok(listApps().some((app) => app.id === "noodler" && app.adult), "noodler missing from the catalog");
 
   // URL ownership, including subdomains and the miss case.
   assert.equal(findAppByUrl("https://noodle.social/@mira_k")?.id, "noodle");
@@ -134,3 +132,9 @@ const { selfCheck } = await import(new URL("server-entry.ts", base).href);
 }
 
 console.log("ok — virtual-phone catalog, templates, prompts, parsing");
+}
+
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});
