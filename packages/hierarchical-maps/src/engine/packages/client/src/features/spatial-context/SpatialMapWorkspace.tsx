@@ -2591,7 +2591,7 @@ export function SpatialMapWorkspace({
           role="dialog"
           aria-modal="true"
           aria-label="Export portable world map"
-          className="fixed inset-0 z-[105] flex items-center justify-center bg-[var(--background)]/90 p-3 sm:p-4"
+          className="fixed inset-0 flex items-center justify-center bg-[var(--background)]/90 p-3 sm:p-4"
           style={{ zIndex: 105 }}
         >
           <div className="flex max-h-[min(90vh,48rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] shadow-2xl">

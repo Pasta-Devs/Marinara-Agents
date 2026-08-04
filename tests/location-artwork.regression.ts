@@ -121,7 +121,7 @@ assert.equal(
   null,
   "Artwork generation must not modify a location archived while its request was pending",
 );
-assert.deepEqual(
+assert.deepStrictEqual(
   replacementArtworkPatchForCurrentLocation(
     resolved[1]!,
     {
