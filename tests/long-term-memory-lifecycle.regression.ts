@@ -159,6 +159,8 @@ async function main() {
     let deletedSuggestionId: string | null = null;
     const scopeTargetQueries: string[] = [];
     const noteQueries: string[] = [];
+    const reviewQueries: string[] = [];
+    const rejectedSuggestionQueries: string[] = [];
     const reviewActionCalls: Array<{
       action: "accept" | "skip";
       draftId: string;
@@ -380,7 +382,21 @@ async function main() {
           },
         });
       if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count")) return send(200, { count: 2 });
-      if (request.method === "GET" && url.pathname.endsWith("/drafts/review"))
+      if (request.method === "GET" && url.pathname.endsWith("/drafts/review")) {
+        reviewQueries.push(url.search);
+        if (url.searchParams.has("chatId"))
+          return send(200, {
+            generatedAt: "2026-07-30T00:00:00.000Z",
+            sources: [],
+            counts: {
+              sources: 0,
+              drafts: 0,
+              mutations: 0,
+              blockedDrafts: 0,
+              candidateRejections: 0,
+              deduplications: 0,
+            },
+          });
         return send(200, {
           generatedAt: "2026-07-30T00:00:00.000Z",
           sources: reviewSources,
@@ -411,6 +427,7 @@ async function main() {
             deduplications: 0,
           },
         });
+      }
       if (request.method === "GET" && url.pathname.endsWith("/scope-targets")) {
         scopeTargetQueries.push(url.search);
         return send(200, {
@@ -529,7 +546,10 @@ async function main() {
             }],
           }],
         });
-      if (request.method === "GET" && url.pathname.endsWith("/rejected-suggestions"))
+      if (request.method === "GET" && url.pathname.endsWith("/rejected-suggestions")) {
+        rejectedSuggestionQueries.push(url.search);
+        if (url.searchParams.has("chatId"))
+          return send(200, { suggestions: [], total: 0 });
         return send(200, {
           suggestions: [{
             id: rejectedSuggestionId,
@@ -547,6 +567,7 @@ async function main() {
           }],
           total: 1,
         });
+      }
       if (request.method === "POST" && url.pathname.endsWith("/notes")) {
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -669,6 +690,10 @@ async function main() {
       ),
       ["vault", "review", "sources", "settings"],
     );
+    await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+    await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+    assert.deepEqual(reviewQueries, ["?status=pending"]);
+    assert.deepEqual(rejectedSuggestionQueries, [""]);
     await page.setViewportSize({ width: 390, height: 844 });
     healthState = "degraded";
     await page.reload();
