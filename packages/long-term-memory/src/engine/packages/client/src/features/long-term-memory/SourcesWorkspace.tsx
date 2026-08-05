@@ -485,6 +485,7 @@ export default function SourcesWorkspace({
   props,
   onOpenMemory,
   onOpenReview,
+  initialSource,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi } = useLtmTranslation();
   const importScopeLabelId = useId();
@@ -496,7 +497,7 @@ export default function SourcesWorkspace({
     null,
   );
   const importControllerRef = useRef<AbortController | null>(null);
-  const [source, setSource] = useState<Source>("chats");
+  const [source, setSource] = useState<Source>(initialSource ?? "chats");
   const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(
     null,
   );
@@ -811,6 +812,10 @@ export default function SourcesWorkspace({
     setImportCharacterId(null);
     setTransferDestinationId(props.chatId ?? "");
   }, [props.chatId]);
+
+  useEffect(() => {
+    if (initialSource) setSource(initialSource);
+  }, [initialSource]);
 
   useEffect(() => () => importControllerRef.current?.abort(), []);
 
@@ -1391,6 +1396,19 @@ export default function SourcesWorkspace({
           </button>
         ))}
       </div>
+      <StatusSurface data-ltm-source-guidance>
+        {source === "characters"
+          ? localizeUi(
+              "ui.longTermMemory.sourcesworkspace.characterGuidedImport",
+            )
+          : source === "chats"
+            ? localizeUi(
+                "ui.longTermMemory.sourcesworkspace.chatSummaryGuidedImport",
+              )
+            : localizeUi(
+                "ui.longTermMemory.sourcesworkspace.lorebookGuidedImport",
+              )}
+      </StatusSurface>
       <p className="text-xs text-[var(--muted-foreground)]">
         {localizeUi(sourceDescriptionKeys[source])}
       </p>

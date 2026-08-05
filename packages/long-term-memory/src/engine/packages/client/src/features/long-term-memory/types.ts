@@ -22,6 +22,7 @@ export type CapabilityProps = {
   localization?: LtmLocalizationContext;
   chatId?: string | null;
   chatName?: string | null;
+  chatMode?: string | null;
   enabledForChat?: boolean;
   chatSettings?: {
     longTermMemoryRecallStyle?: string;
@@ -66,6 +67,7 @@ export type LtmRecoveryHandoff = {
 
 export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
+  initialSource?: "characters" | "lorebooks" | "chats";
   onDirtyChange?: (dirty: boolean) => void;
   onOpenMemory?: (noteId: string) => void;
   onOpenVault?: () => void;

@@ -116,6 +116,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     useState<LtmRecoveryHandoff | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
+  const [initialSource, setInitialSource] = useState<
+    "characters" | "lorebooks" | "chats"
+  >("chats");
   const Destination = destinations[destination];
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
@@ -235,11 +238,14 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestinationDirty(false);
     setDestination("vault");
   };
-  const openSources = async () => {
+  const openSources = async (
+    source: "characters" | "lorebooks" | "chats" = "chats",
+  ) => {
     if (!(await confirmDestinationChange(destinationLabel("sources"))))
       return false;
     setDestinationDirty(false);
     setAddOpen(false);
+    setInitialSource(source);
     setDestination("sources");
     return true;
   };
@@ -839,6 +845,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       "ui.longTermMemory.longtermmemorydetail.acceptedMemoriesAppearInMemoryVaultAndCanBe",
                                     )}
                         </p>
+                        {onboardingStep === 1 &&
+                        (props.chatMode === "roleplay" ||
+                          props.chatMode === "game") ? (
+                          <p className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]">
+                            {localizeUi(
+                              "ui.longTermMemory.longtermmemorydetail.promptBlockPlacement",
+                            )}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {onboardingStep > 0 ? (
@@ -852,7 +867,19 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             )}
                           </Button>
                         ) : null}
-                        {onboardingStep < onboardingSteps.length - 1 ? (
+                        {onboardingStep === 2 ? (
+                          <Button
+                            primary
+                            onClick={async () => {
+                              if (await openSources("characters"))
+                                completeOnboarding();
+                            }}
+                          >
+                            {localizeUi(
+                              "ui.longTermMemory.longtermmemorydetail.openCharacters",
+                            )}
+                          </Button>
+                        ) : onboardingStep < onboardingSteps.length - 1 ? (
                           <Button
                             primary
                             onClick={() =>
@@ -860,18 +887,20 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             }
                           >
                             {localizeUi(
-                              "ui.longTermMemory.longtermmemorydetail.next",
+                              onboardingStep === 1 &&
+                                props.chatId &&
+                                !props.enabledForChat
+                                ? "ui.longTermMemory.longtermmemorydetail.continueAnyway"
+                                : "ui.longTermMemory.longtermmemorydetail.next",
                             )}
                           </Button>
                         ) : (
                           <Button
                             primary
-                            onClick={async () => {
-                              if (await openSources()) completeOnboarding();
-                            }}
+                            onClick={completeOnboarding}
                           >
                             {localizeUi(
-                              "ui.longTermMemory.longtermmemorydetail.importASource",
+                              "ui.longTermMemory.longtermmemorydetail.exploreMemoryVault",
                             )}
                           </Button>
                         )}
@@ -947,6 +976,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   }
                   reviewSourceNoteId={reviewSourceNoteId}
                   recoveryHandoff={recoveryHandoff}
+                  initialSource={initialSource}
                 />
               </Suspense>
               </div>

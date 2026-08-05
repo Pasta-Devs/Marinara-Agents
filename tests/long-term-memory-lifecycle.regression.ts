@@ -176,11 +176,16 @@ async function main() {
       "Stable appearance can help the character remain visually consistent",
       "This source note preserves the imported material for evidence. It is not recalled directly.",
       "Saved memories are not added to every reply.",
+      "Open Characters",
+      "Summary Prompt -> Chat Summary -> Long-Term Memory",
+      "Prompt Preset Editor: Sections -> Add Section -> Agent Sections -> Long-Term Memory",
+      "{{agent::long-term-memory}}",
+      "Last Injection Summary to verify which saved memories actually reached model context",
     ])
-      assert.match(artifactClient, new RegExp(copy, "u"));
+      assert.ok(artifactClient.includes(copy), `Generated client is missing: ${copy}`);
     assert.match(
       artifactClient,
-      /extract:se!=="refresh"/u,
+      /extract:\w+!=="refresh"/u,
       "Normal imports must continue extracting source notes",
     );
     assert.match(
@@ -1111,6 +1116,16 @@ async function main() {
     assert.equal(savedNote?.type, "world");
     await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
     await page.locator('[data-ltm-source-tab="chats"]').click();
+    const characterGuidance = page.locator('[data-ltm-source-guidance]');
+    await page.locator('[data-ltm-source-tab="characters"]').click();
+    await characterGuidance.waitFor();
+    assert.match(await characterGuidance.innerText(), /character card.*source note/iu);
+    assert.doesNotMatch(await characterGuidance.innerText(), /Summary Prompt/iu);
+    await page.locator('[data-ltm-source-tab="chats"]').click();
+    assert.match(
+      await characterGuidance.innerText(),
+      /Summary Prompt -> Chat Summary -> Long-Term Memory/u,
+    );
     await page.locator('[data-ltm-source-section="imported"]').click();
     const desktopReextractRow = page.locator(
       '[data-ltm-source-id="chat-a:summary-desktop-reextract"]',
