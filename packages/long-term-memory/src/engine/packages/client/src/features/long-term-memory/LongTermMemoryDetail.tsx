@@ -118,7 +118,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [initialSource, setInitialSource] = useState<
     "characters" | "lorebooks" | "chats"
-  >("chats");
+  >();
   const Destination = destinations[destination];
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
@@ -195,8 +195,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         );
   };
   const selectDestination = async (next: LongTermMemoryDestination) => {
-    if (next === destination) return;
-    if (!(await confirmDestinationChange(destinationLabel(next)))) return;
+    if (next === destination) return true;
+    if (!(await confirmDestinationChange(destinationLabel(next)))) return false;
     if (onboardingOpen) completeOnboarding();
     setDestinationDirty(false);
     if (next === "review") setReviewSourceNoteId(null);
@@ -204,6 +204,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     if (next !== "vault") setRecoveryHandoff(null);
     setAddOpen(false);
     setDestination(next);
+    return true;
   };
   const close = async () => {
     if (
@@ -868,17 +869,28 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           </Button>
                         ) : null}
                         {onboardingStep === 2 ? (
-                          <Button
-                            primary
-                            onClick={async () => {
-                              if (await openSources("characters"))
-                                completeOnboarding();
-                            }}
-                          >
-                            {localizeUi(
-                              "ui.longTermMemory.longtermmemorydetail.openCharacters",
-                            )}
-                          </Button>
+                          <>
+                            <Button
+                              primary
+                              onClick={async () => {
+                                if (await openSources("characters"))
+                                  completeOnboarding();
+                              }}
+                            >
+                              {localizeUi(
+                                "ui.longTermMemory.longtermmemorydetail.openCharacters",
+                              )}
+                            </Button>
+                            <Button
+                              onClick={() =>
+                                setOnboardingStep((step) => step + 1)
+                              }
+                            >
+                              {localizeUi(
+                                "ui.longTermMemory.longtermmemorydetail.next",
+                              )}
+                            </Button>
+                          </>
                         ) : onboardingStep < onboardingSteps.length - 1 ? (
                           <Button
                             primary
@@ -897,7 +909,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                         ) : (
                           <Button
                             primary
-                            onClick={completeOnboarding}
+                            onClick={async () => {
+                              if (await selectDestination("vault"))
+                                completeOnboarding();
+                            }}
                           >
                             {localizeUi(
                               "ui.longTermMemory.longtermmemorydetail.exploreMemoryVault",
@@ -977,7 +992,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   reviewSourceNoteId={reviewSourceNoteId}
                   recoveryHandoff={recoveryHandoff}
                   initialSource={initialSource}
-                />
+                  onInitialSourceHandled={() => setInitialSource(undefined)}
+                 />
               </Suspense>
               </div>
             </div>

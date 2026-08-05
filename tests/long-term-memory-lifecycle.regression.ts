@@ -723,6 +723,33 @@ async function main() {
     await page.waitForFunction(() =>
       document.body.textContent?.includes("Second mobile review memory"),
     );
+    const setupGuide = page.getByRole("button", { name: "Show setup guide" });
+    await setupGuide.click();
+    const onboardingTitle = page.locator("#ltm-onboarding-title");
+    const onboardingNext = page.getByRole("button", { name: "Next" });
+    await onboardingNext.click();
+    await onboardingNext.click();
+    assert.equal(await onboardingTitle.innerText(), "Import sources");
+    assert.equal(
+      await page.getByRole("button", { name: "Open Characters" }).count(),
+      1,
+    );
+    await onboardingNext.click();
+    assert.equal(await onboardingTitle.innerText(), "Review Proposed Memories");
+    await onboardingNext.click();
+    assert.equal(await onboardingTitle.innerText(), "Save And Recall");
+    await page.getByRole("button", { name: "Explore Memory Vault" }).first().click();
+    await page.locator('[data-ltm-destination-content][aria-label="Memory Vault"]').waitFor();
+    await setupGuide.click();
+    await onboardingNext.click();
+    await onboardingNext.click();
+    await page.getByRole("button", { name: "Open Characters" }).click();
+    await page.locator('[data-ltm-source-tab="characters"][aria-selected="true"]').waitFor();
+    await page.locator('[data-ltm-source-tab="chats"]').click();
+    await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+    await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+    await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]').click();
+    await page.locator('[data-ltm-source-tab="chats"][aria-selected="true"]').waitFor();
     assert.deepEqual(scopeTargetQueries, ["?chatId=desktop-chat"]);
     const desktopActivation = page.locator('[data-ltm-control="activation"]');
     await desktopActivation.waitFor();

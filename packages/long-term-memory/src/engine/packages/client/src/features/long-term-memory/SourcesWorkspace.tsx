@@ -486,6 +486,7 @@ export default function SourcesWorkspace({
   onOpenMemory,
   onOpenReview,
   initialSource,
+  onInitialSourceHandled,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi } = useLtmTranslation();
   const importScopeLabelId = useId();
@@ -814,8 +815,10 @@ export default function SourcesWorkspace({
   }, [props.chatId]);
 
   useEffect(() => {
-    if (initialSource) setSource(initialSource);
-  }, [initialSource]);
+    if (!initialSource) return;
+    setSource(initialSource);
+    onInitialSourceHandled?.();
+  }, [initialSource, onInitialSourceHandled]);
 
   useEffect(() => () => importControllerRef.current?.abort(), []);
 

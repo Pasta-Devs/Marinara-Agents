@@ -68,6 +68,7 @@ export type LtmRecoveryHandoff = {
 export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
   initialSource?: "characters" | "lorebooks" | "chats";
+  onInitialSourceHandled?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenMemory?: (noteId: string) => void;
   onOpenVault?: () => void;
