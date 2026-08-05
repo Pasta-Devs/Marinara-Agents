@@ -110,6 +110,8 @@
   "ui.longTermMemory.longtermmemorydetail.acceptedMemoriesAppearInMemoryVaultAndCanBe": "Relevant saved memories may be included in model context for a reply. Last Injection Summary shows what was actually included.",
   "ui.longTermMemory.longtermmemorydetail.activeIn": "Active in",
   "ui.longTermMemory.longtermmemorydetail.activeInValue1": "Active in {{value1}}",
+  "ui.longTermMemory.longtermmemorydetail.inactiveIn": "Inactive in",
+  "ui.longTermMemory.longtermmemorydetail.inactiveInValue1": "Inactive in {{value1}}",
   "ui.longTermMemory.longtermmemorydetail.addMemories": "Add memories",
   "ui.longTermMemory.longtermmemorydetail.back": "Back",
   "ui.longTermMemory.longtermmemorydetail.backToAgents": "Back to Agents",

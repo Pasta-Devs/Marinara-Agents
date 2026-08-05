@@ -379,10 +379,14 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           </div>
         </div>
         <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
-          {props.chatId ? (
+          {props.chatId || props.onEnabledForChatChange ? (
             <div className="mr-1 inline-flex items-center gap-2 whitespace-nowrap text-xs text-[var(--marinara-editor-muted)]">
               <span>
-                {localizeUi("ui.longTermMemory.longtermmemorydetail.activeIn")}{" "}
+                {localizeUi(
+                  props.enabledForChat === true
+                    ? "ui.longTermMemory.longtermmemorydetail.activeIn"
+                    : "ui.longTermMemory.longtermmemorydetail.inactiveIn",
+                )}{" "}
                 <strong
                   className="text-[var(--marinara-editor-text)]"
                   style={{
@@ -405,7 +409,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 role="switch"
                 aria-checked={props.enabledForChat === true}
                 aria-label={localizeUi(
-                  "ui.longTermMemory.longtermmemorydetail.activeInValue1",
+                  props.enabledForChat === true
+                    ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
+                    : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
                   {
                     value1:
                       props.chatName ??

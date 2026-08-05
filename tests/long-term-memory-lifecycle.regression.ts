@@ -1157,7 +1157,7 @@ async function main() {
       () => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-checked") === "false",
     );
     assert.equal(await activation.getAttribute("aria-checked"), "false");
-    assert.match(await activationLabel.innerText(), /active in kirei/i);
+    assert.match(await activationLabel.innerText(), /inactive in kirei/i);
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).display), "none");
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).visibility), "hidden");
     const longChatName = "A".repeat(200);
@@ -1167,7 +1167,7 @@ async function main() {
       element.dispatchEvent(new CustomEvent("marinara-capability-props"));
     }, longChatName);
     await mobilePage.waitForFunction(
-      (chatName) => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") === `Active in ${chatName}`,
+      (chatName) => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") === `Inactive in ${chatName}`,
       longChatName,
     );
     const longNameBox = await activation.boundingBox();
@@ -1178,6 +1178,20 @@ async function main() {
       await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
       true,
     );
+    await mobilePage.evaluate(() => {
+      const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: Record<string, unknown> };
+      element.capabilityProps = {
+        ...element.capabilityProps,
+        chatId: null,
+        chatName: null,
+      };
+      element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+    });
+    await mobilePage.waitForFunction(
+      () => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") === "Inactive in this chat",
+    );
+    assert.equal(await activation.count(), 1);
+    assert.equal(await activation.getAttribute("aria-checked"), "false");
     const mobileNavigation = mobilePage.locator('[data-ltm-navigation="mobile"]');
     const mobileNavigationItems = mobileNavigation.locator('[data-ltm-control="navigation"]');
     assert.equal(await mobileNavigationItems.count(), 4);
