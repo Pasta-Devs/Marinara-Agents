@@ -68,6 +68,7 @@ export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenMemory?: (noteId: string) => void;
+  onOpenVault?: () => void;
   onOpenReview?: (sourceNoteId?: string) => void;
   onRecoverCandidate?: (
     candidate: LtmExtractionDroppedCandidate,
