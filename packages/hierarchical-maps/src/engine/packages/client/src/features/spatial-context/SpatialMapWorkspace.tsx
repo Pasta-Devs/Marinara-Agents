@@ -499,6 +499,7 @@ export function SpatialMapWorkspace({
   );
   const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
   const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
+  const [artworkPreviewSourceSignature, setArtworkPreviewSourceSignature] = useState<string | null>(null);
   const backgroundMoveFrameRef = useRef<number | null>(null);
   const pendingBackgroundMoveRef = useRef<{
     locationId: string;
@@ -829,6 +830,10 @@ export function SpatialMapWorkspace({
       ].join("\u0000"),
     )
     .join("\u0001");
+  const artworkPreviewStale =
+    artworkPreview !== null && artworkPreviewSourceSignature !== artworkPreviewSignature;
+  const artworkActionsDisabled =
+    artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending;
   const canEnable =
     !!draft?.startingLocationId &&
     draft.locations.some((location) => location.id === draft.startingLocationId && location.status === "active");
@@ -866,10 +871,6 @@ export function SpatialMapWorkspace({
   }, [savedFlash]);
 
   useEffect(() => {
-    setArtworkPreview(null);
-  }, [artworkPreviewSignature]);
-
-  useEffect(() => {
     if (
       layoutEditingMode !== "background" ||
       (localPresentation === "map" && localMapBackgroundImageUrl) ||
@@ -886,10 +887,17 @@ export function SpatialMapWorkspace({
     setSavedFlash(false);
     setFirstSaveResult(null);
     setArtworkPreview(null);
+    setArtworkPreviewSourceSignature(null);
   }, []);
 
   const fillMissingArtwork = useCallback(async () => {
-    if (!draft || artworkProgress || previewGalleryImages.isPending || missingArtworkLocations.length === 0) {
+    if (
+      !draft ||
+      artworkProgress ||
+      previewGalleryImages.isPending ||
+      artworkPreviewStale ||
+      missingArtworkLocations.length === 0
+    ) {
       return;
     }
 
@@ -900,6 +908,7 @@ export function SpatialMapWorkspace({
     let failedImages = 0;
     const reviewedItems = new globalThis.Map(artworkPreview?.items.map((item) => [item.id, item]) ?? []);
     setArtworkPreview(null);
+    setArtworkPreviewSourceSignature(null);
     setArtworkProgress({
       completed: 0,
       total: missingArtworkLocations.length,
@@ -952,6 +961,7 @@ export function SpatialMapWorkspace({
       setSavedFlash(false);
       setFirstSaveResult(null);
       setArtworkPreview(null);
+      setArtworkPreviewSourceSignature(null);
       toast.success(
         `Created artwork for ${generatedArtwork.length} location${generatedArtwork.length === 1 ? "" : "s"}. Missing roles were filled where still needed; newer artwork choices were preserved. Review it, then Save.`,
       );
@@ -971,11 +981,13 @@ export function SpatialMapWorkspace({
     generateGalleryImage,
     missingArtworkAssignments,
     missingArtworkLocations,
+    artworkPreviewStale,
     previewGalleryImages.isPending,
   ]);
 
   const prepareArtworkPreview = useCallback(async () => {
     if (artworkProgress || previewGalleryImages.isPending || artworkImagesToGenerate === 0) return;
+    const sourceSignature = artworkPreviewSignature;
     const items = missingArtworkLocations.map((location) => ({
       id: location.id,
       title: location.name,
@@ -988,6 +1000,7 @@ export function SpatialMapWorkspace({
         debugMode,
       });
       setArtworkPreview(preview);
+      setArtworkPreviewSourceSignature(sourceSignature);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not prepare the image request preview.");
     }
@@ -999,6 +1012,7 @@ export function SpatialMapWorkspace({
     draftHierarchyProfile,
     missingArtworkLocations,
     previewGalleryImages,
+    artworkPreviewSignature,
   ]);
 
   const refreshArtworkPreview = useCallback(async () => {
@@ -2804,9 +2818,7 @@ export function SpatialMapWorkspace({
                 type="button"
                 data-marinara-fill-map-artwork
                 onClick={() => void prepareArtworkPreview()}
-                disabled={
-                  artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
-                }
+                disabled={artworkActionsDisabled}
                 className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
                 aria-label={`Review artwork for ${missingArtworkLocations.length} ${missingArtworkLocations.length === 1 ? "location" : "locations"}`}
                 title={`${missingArtworkLocations.length} ${missingArtworkLocations.length === 1 ? "location needs" : "locations need"} artwork`}
@@ -3031,9 +3043,7 @@ export function SpatialMapWorkspace({
                   setMobileActionsOpen(false);
                   void prepareArtworkPreview();
                 }}
-                disabled={
-                  artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
-                }
+                disabled={artworkActionsDisabled}
                 className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-between px-3 text-xs disabled:opacity-45"
                 aria-label={`Review artwork for ${missingArtworkLocations.length} ${missingArtworkLocations.length === 1 ? "location" : "locations"}`}
               >
@@ -3441,6 +3451,12 @@ export function SpatialMapWorkspace({
                       is not replaced. Each new image fills only the missing role, or both roles when both are missing.
                       Prompts use the relevant Chat Settings and global image-generation settings.
                     </p>
+                    {artworkPreviewStale && (
+                      <p className="mt-2 text-[0.6875rem] font-semibold text-amber-200" role="status">
+                        The map or image settings changed. Your prompt edits are preserved as stale data; refresh prompts
+                        before generating artwork.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -3583,9 +3599,7 @@ export function SpatialMapWorkspace({
                     type="button"
                     data-marinara-refresh-map-artwork-prompts
                     onClick={() => void refreshArtworkPreview()}
-                    disabled={
-                      artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
-                    }
+                    disabled={artworkActionsDisabled}
                     className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
                   >
                     {previewGalleryImages.isPending ? (
@@ -3599,9 +3613,7 @@ export function SpatialMapWorkspace({
                     type="button"
                     data-marinara-confirm-map-artwork
                     onClick={() => void fillMissingArtwork()}
-                    disabled={
-                      artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
-                    }
+                    disabled={artworkActionsDisabled || artworkPreviewStale}
                     className="mari-editor-action mari-editor-action--primary min-h-11 justify-center px-3 text-xs disabled:opacity-45"
                   >
                     <Sparkles size="0.8125rem" /> Generate {artworkPreview.requestCount} image
@@ -3623,9 +3635,7 @@ export function SpatialMapWorkspace({
                   type="button"
                   data-marinara-fill-map-artwork
                   onClick={() => void prepareArtworkPreview()}
-                  disabled={
-                    artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
-                  }
+                  disabled={artworkActionsDisabled}
                   className="mari-chrome-control min-h-11 shrink-0 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
                 >
                   {artworkProgress || previewGalleryImages.isPending ? (

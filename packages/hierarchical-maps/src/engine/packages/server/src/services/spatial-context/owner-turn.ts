@@ -32,6 +32,7 @@ export class SpatialOwnerTurnError extends Error {
     readonly details?: {
       snapshot?: SpatialContextSnapshot;
       messageId?: string;
+      travel?: ResolvedSpatialTravel;
       currentRevision?: number;
       currentLocationId?: string | null;
       currentBreadcrumb?: Array<{ id: string; name: string }>;
@@ -73,9 +74,10 @@ function transitionPayloadHash(transition: PendingSpatialTransition): string {
 async function resolveAppliedTravel(
   chatId: string,
   transition: PendingSpatialTransition,
+  transaction?: CapabilityPersistenceSession,
 ): Promise<ResolvedSpatialTravel | undefined> {
   if (!transition.travelMode || !transition.expectedCurrentLocationId) return undefined;
-  const state = await resolveEffectiveSpatialState(chatId, {});
+  const state = await resolveEffectiveSpatialState(chatId, {}, transaction);
   const definition = state.definition;
   const routeLocationIds = definition
     ? resolveSpatialRoute(definition, transition.expectedCurrentLocationId, transition.destinationId)
@@ -117,10 +119,13 @@ export async function findAppliedSpatialOwnerTurn(
       409,
     );
   }
+  const travel = input.transition.travelMode
+    ? await resolveAppliedTravel(input.chatId, input.transition)
+    : undefined;
   return {
     messageId: existing.messageId,
     snapshot: existing,
-    ...(input.transition.travelMode ? { travel: await resolveAppliedTravel(input.chatId, input.transition) } : {}),
+    ...(travel ? { travel } : {}),
   };
 }
 
@@ -153,11 +158,18 @@ export async function commitSpatialOwnerTurn(input: CommitSpatialOwnerTurnInput)
             409,
           );
         }
+        const recoveredTravel = input.transition.travelMode
+          ? await resolveAppliedTravel(input.chatId, input.transition, transaction)
+          : undefined;
         throw new SpatialOwnerTurnError(
           "spatial_transition_already_applied",
           "This movement was already applied.",
           409,
-          { snapshot: existing, messageId: existing.messageId },
+          {
+            snapshot: existing,
+            messageId: existing.messageId,
+            ...(recoveredTravel ? { travel: recoveredTravel } : {}),
+          },
         );
       }
 

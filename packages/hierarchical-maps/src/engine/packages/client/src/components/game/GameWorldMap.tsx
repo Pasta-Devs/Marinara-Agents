@@ -32,6 +32,7 @@ import {
   setPendingSpatialTransition,
   usePendingSpatialTransition,
 } from "../../features/spatial-context/pending-spatial-transitions";
+import { useMapConfirmation } from "../../features/spatial-context/components/use-map-confirmation";
 import {
   hierarchyTypeForLocation,
   resolveSpatialLinkPresentation,
@@ -88,6 +89,7 @@ export function GameWorldMap({
   const [selectedId, setSelectedId] = useState<string | null>(spatial.currentLocationId);
   const [showListView, setShowListView] = useState(false);
   const pending = usePendingSpatialTransition(chatId);
+  const { confirmAction, confirmationDialog } = useMapConfirmation();
   useEffect(() => {
     setViewLocationId(centeredViewLocationId);
     setSelectedId(spatial.currentLocationId);
@@ -216,14 +218,15 @@ export function GameWorldMap({
     setSelectedId(spatial.currentLocationId);
   };
 
-  const queueDestination = (travelMode: "step_by_step" | "travel_now") => {
+  const queueDestination = async (travelMode: "step_by_step" | "travel_now"): Promise<void> => {
     if (!definition || !spatial.currentLocationId || !selectedTravelTarget || disabled) return;
-    if (
-      pending &&
-      pending.transition.destinationId !== selectedTravelTarget.id &&
-      !window.confirm(`Replace the pending move to ${pending.destinationName}?`)
-    ) {
-      return;
+    if (pending && pending.transition.destinationId !== selectedTravelTarget.id) {
+      const confirmed = await confirmAction({
+        title: "Replace pending move?",
+        message: `Replace the pending move to ${pending.destinationName}?`,
+        confirmLabel: "Replace move",
+      });
+      if (!confirmed) return;
     }
     setPendingSpatialTransition(chatId, {
       transition: {
@@ -285,6 +288,7 @@ export function GameWorldMap({
 
   return (
     <section aria-label="Hierarchical world map" className="min-w-0">
+      {confirmationDialog}
       <div className="border-b border-[var(--marinara-chat-chrome-panel-divider)] px-1 pb-2">
         <div className="flex items-center gap-1">
           <button
@@ -392,7 +396,7 @@ export function GameWorldMap({
           <button
             type="button"
             onClick={() => clearPendingSpatialTransition(chatId, pending.transition.commandId)}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-foreground/10"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
             aria-label={`Cancel move to ${pending.destinationName}`}
           >
             <X size="0.75rem" />
@@ -629,7 +633,7 @@ export function GameWorldMap({
                 <div className="flex flex-wrap justify-end gap-1.5">
                   <button
                     type="button"
-                    onClick={() => queueDestination("step_by_step")}
+                    onClick={() => void queueDestination("step_by_step")}
                     disabled={disabled}
                     className="flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-3 text-[0.6875rem] font-semibold text-[var(--marinara-chat-chrome-button-text-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label={`Step by step to ${selected.name}`}
@@ -638,7 +642,7 @@ export function GameWorldMap({
                   </button>
                   <button
                     type="button"
-                    onClick={() => queueDestination("travel_now")}
+                    onClick={() => void queueDestination("travel_now")}
                     disabled={disabled}
                     className="flex min-h-11 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[0.6875rem] font-bold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label={`Travel now to ${selected.name}`}

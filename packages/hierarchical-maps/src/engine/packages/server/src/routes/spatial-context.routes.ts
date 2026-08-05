@@ -34,7 +34,11 @@ import {
   parseSpatialMapJsonWithRepair,
   spatialMapJsonErrorPayload,
 } from "../services/spatial-context/map-json-response.js";
-import { commitSpatialOwnerTurn, SpatialOwnerTurnError } from "../services/spatial-context/owner-turn.js";
+import {
+  commitSpatialOwnerTurn,
+  findAppliedSpatialOwnerTurn,
+  SpatialOwnerTurnError,
+} from "../services/spatial-context/owner-turn.js";
 import {
   buildGameMapDraftReference,
   type GameMapDraftReference,
@@ -99,6 +103,13 @@ interface ChatSpatialParams {
 
 interface ChatSpatialCommandParams extends ChatSpatialParams {
   commandId: string;
+}
+
+interface SpatialTurnRecoveryQuery {
+  destinationId?: string;
+  travelMode?: string;
+  expectedDefinitionRevision?: string;
+  expectedCurrentLocationId?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1564,7 +1575,9 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get<{ Params: ChatSpatialCommandParams }>("/:chatId/spatial-context/turn/:commandId", async (req, reply) => {
+  app.get<{ Params: ChatSpatialCommandParams; Querystring: SpatialTurnRecoveryQuery }>(
+    "/:chatId/spatial-context/turn/:commandId",
+    async (req, reply) => {
     const commandId = z.string().trim().min(1).max(200).safeParse(req.params.commandId);
     if (!commandId.success) {
       return reply.status(400).send({
@@ -1579,13 +1592,50 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         code: "spatial_transition_not_applied",
       });
     }
+    let recoveredTravel;
+    const hasRecoveryQuery = Object.values(req.query).some((value) => value !== undefined);
+    if (hasRecoveryQuery) {
+      const expectedDefinitionRevision = Number(req.query.expectedDefinitionRevision);
+      const parsedTransition = pendingSpatialTransitionSchema.safeParse({
+        destinationId: req.query.destinationId,
+        ...(req.query.travelMode ? { travelMode: req.query.travelMode } : {}),
+        expectedDefinitionRevision,
+        expectedCurrentLocationId: req.query.expectedCurrentLocationId ?? null,
+        commandId: commandId.data,
+      });
+      if (!parsedTransition.success) {
+        return reply.status(400).send({
+          error: parsedTransition.error.issues[0]?.message ?? "Invalid movement recovery request.",
+          code: "spatial_request_invalid",
+          issues: parsedTransition.error.issues,
+        });
+      }
+      try {
+        const applied = await findAppliedSpatialOwnerTurn({
+          chatId: req.params.chatId,
+          transition: parsedTransition.data,
+        });
+        recoveredTravel = applied?.travel;
+      } catch (error) {
+        if (error instanceof SpatialOwnerTurnError) {
+          return reply.status(error.statusCode).send({
+            error: error.message,
+            code: error.code,
+            ...(error.details ?? {}),
+          });
+        }
+        throw error;
+      }
+    }
     return {
       applied: true,
       messageId: snapshot.messageId,
       currentLocationId: snapshot.currentLocationId,
       definitionRevision: snapshot.definitionRevision,
+      ...(recoveredTravel ? { travel: recoveredTravel } : {}),
     };
-  });
+    },
+  );
 
   app.put<{ Params: ChatSpatialParams }>("/:chatId/spatial-context", async (req, reply) => {
     const body = isRecord(req.body) ? req.body : {};

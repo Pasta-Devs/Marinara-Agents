@@ -199,7 +199,13 @@ function discoverLocation(
     locations: [...definition.locations, discovered],
   };
   if (directive.relation === "link") {
-    if (!directive.direction) return null;
+    if (!directive.direction) {
+      logger.warn(
+        { currentLocationId, destinationId, directive },
+        "[spatial/assistant] Ignored link discovery without an explicit direction",
+      );
+      return null;
+    }
     const linked = addAvailableLink(
       { ...nextDefinition, revision: definition.revision },
       currentLocationId,

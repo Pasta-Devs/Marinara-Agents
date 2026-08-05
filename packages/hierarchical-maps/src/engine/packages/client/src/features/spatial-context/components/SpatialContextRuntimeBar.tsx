@@ -24,6 +24,7 @@ import {
 } from "../pending-spatial-transitions";
 import { findSpatialRoute } from "../spatial-route-plans";
 import { SpatialLocationIcon } from "./SpatialLocationIcon";
+import { useMapConfirmation } from "./use-map-confirmation";
 
 interface SpatialContextRuntimeBarProps {
   chatId: string | null;
@@ -63,6 +64,7 @@ export function SpatialContextRuntimeBar({
   const spatial = useSpatialContext(chatId);
   const pending = usePendingSpatialTransition(chatId);
   const data = spatial.data;
+  const { confirmAction, confirmationDialog } = useMapConfirmation();
 
   useEffect(() => {
     if (!chatId || !data) return;
@@ -122,14 +124,18 @@ export function SpatialContextRuntimeBar({
     setMapOpen(false);
   }, [chatId]);
 
-  const queueDestination = (destination: SpatialDestination, travelMode: "step_by_step" | "travel_now") => {
+  const queueDestination = async (
+    destination: SpatialDestination,
+    travelMode: "step_by_step" | "travel_now",
+  ): Promise<void> => {
     if (!chatId || !data?.definition || !data.currentLocationId || disabled) return;
-    if (
-      pending &&
-      pending.transition.destinationId !== destination.id &&
-      !window.confirm(`Replace the pending move to ${pending.destinationName}?`)
-    ) {
-      return;
+    if (pending && pending.transition.destinationId !== destination.id) {
+      const confirmed = await confirmAction({
+        title: "Replace pending move?",
+        message: `Replace the pending move to ${pending.destinationName}?`,
+        confirmLabel: "Replace move",
+      });
+      if (!confirmed) return;
     }
     setPendingSpatialTransition(chatId, {
       transition: {
@@ -220,6 +226,7 @@ export function SpatialContextRuntimeBar({
             ),
       )}
     >
+      {confirmationDialog}
       <div data-marinara-maps-runtime-desktop className="hidden min-h-11 items-center gap-1.5 px-2 sm:flex">
         <button
           type="button"
@@ -617,7 +624,7 @@ export function SpatialContextRuntimeBar({
                 <div className="flex flex-wrap justify-end gap-1.5">
                   <button
                     type="button"
-                    onClick={() => queueDestination(selectedDestination, "step_by_step")}
+                    onClick={() => void queueDestination(selectedDestination, "step_by_step")}
                     disabled={disabled}
                     className="flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-3 text-xs font-semibold text-[var(--marinara-chat-chrome-button-text-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:opacity-50"
                     aria-label={`Step by step to ${selectedDestination.name}`}
@@ -626,7 +633,7 @@ export function SpatialContextRuntimeBar({
                   </button>
                   <button
                     type="button"
-                    onClick={() => queueDestination(selectedDestination, "travel_now")}
+                    onClick={() => void queueDestination(selectedDestination, "travel_now")}
                     disabled={disabled}
                     className="flex min-h-11 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)] disabled:opacity-50"
                     aria-label={`Travel now to ${selectedDestination.name}`}
