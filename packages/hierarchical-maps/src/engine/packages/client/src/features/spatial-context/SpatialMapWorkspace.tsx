@@ -520,6 +520,7 @@ export function SpatialMapWorkspace({
   const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
   const [artworkPreviewSourceSignature, setArtworkPreviewSourceSignature] = useState<string | null>(null);
   const [artworkPreviewSourceEnvironment, setArtworkPreviewSourceEnvironment] = useState<string | null>(null);
+  const artworkGenerationOperationRef = useRef(0);
   const backgroundMoveFrameRef = useRef<number | null>(null);
   const pendingBackgroundMoveRef = useRef<{
     locationId: string;
@@ -860,6 +861,13 @@ export function SpatialMapWorkspace({
       })),
     [draft, draftHierarchyProfile, missingArtworkLocations],
   );
+  const invalidateArtworkGeneration = useCallback(() => {
+    artworkGenerationOperationRef.current += 1;
+  }, []);
+  useEffect(() => {
+    invalidateArtworkGeneration();
+  }, [artworkPreviewInputSignature, chatId, invalidateArtworkGeneration]);
+  useEffect(() => () => invalidateArtworkGeneration(), [invalidateArtworkGeneration]);
   const artworkPreviewStale =
     artworkPreview !== null &&
     (artworkPreviewSourceSignature !== artworkPreviewInputSignature || artworkPreviewSourceEnvironment === null);
@@ -913,13 +921,14 @@ export function SpatialMapWorkspace({
   }, [galleryImagesInitiallyLoading, layoutEditingMode, localMapBackgroundImageUrl, localPresentation]);
 
   const applyDraft = useCallback((next: SpatialContextDefinition) => {
+    invalidateArtworkGeneration();
     setDraft(next);
     setServerIssues([]);
     setSavedFlash(false);
     setFirstSaveResult(null);
     setArtworkPreview(null);
     setArtworkPreviewSourceSignature(null);
-  }, []);
+  }, [invalidateArtworkGeneration]);
 
   const fillMissingArtwork = useCallback(async () => {
     if (
@@ -932,11 +941,14 @@ export function SpatialMapWorkspace({
       return;
     }
 
+    const operation = artworkGenerationOperationRef.current + 1;
+    artworkGenerationOperationRef.current = operation;
     try {
       const currentPreview = await previewGalleryImages.mutateAsync({
         items: artworkPreviewRequestItems,
         debugMode,
       });
+      if (artworkGenerationOperationRef.current !== operation) return;
       if (artworkPreviewSourceEnvironment !== artworkPreviewEnvironmentSignature(currentPreview)) {
         setArtworkPreviewSourceEnvironment(null);
         toast.error("Image or Chat Settings changed. Refresh prompts before creating artwork.");
@@ -1101,12 +1113,13 @@ export function SpatialMapWorkspace({
   const applyHierarchyProfile = useCallback(
     (next: SpatialHierarchyProfile) => {
       if (!draft) return;
+      invalidateArtworkGeneration();
       setDraftHierarchyProfile(normalizeHierarchyProfile(next, draft));
       setServerIssues([]);
       setSavedFlash(false);
       setFirstSaveResult(null);
     },
-    [draft],
+    [draft, invalidateArtworkGeneration],
   );
 
   const selectLocation = useCallback((locationId: string, showDetails = true) => {
@@ -3568,7 +3581,8 @@ export function SpatialMapWorkspace({
                               value={item.prompt}
                               maxLength={200_000}
                               rows={5}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                invalidateArtworkGeneration();
                                 setArtworkPreview((current) =>
                                   current
                                     ? {
@@ -3583,8 +3597,8 @@ export function SpatialMapWorkspace({
                                         ),
                                       }
                                     : current,
-                                )
-                              }
+                                );
+                              }}
                               className="mari-editor-field mt-1 max-h-40 min-h-24 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
                             />
                           </div>
@@ -3602,7 +3616,8 @@ export function SpatialMapWorkspace({
                               maxLength={200_000}
                               rows={3}
                               placeholder="None"
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                invalidateArtworkGeneration();
                                 setArtworkPreview((current) =>
                                   current
                                     ? {
@@ -3617,8 +3632,8 @@ export function SpatialMapWorkspace({
                                         ),
                                       }
                                     : current,
-                                )
-                              }
+                                );
+                              }}
                               className="mari-editor-field mt-1 max-h-32 min-h-20 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
                             />
                           </div>
@@ -3631,7 +3646,10 @@ export function SpatialMapWorkspace({
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   <button
                     type="button"
-                    onClick={() => setArtworkPreview(null)}
+                    onClick={() => {
+                      invalidateArtworkGeneration();
+                      setArtworkPreview(null);
+                    }}
                     className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
                   >
                     Cancel

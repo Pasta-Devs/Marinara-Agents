@@ -2045,6 +2045,29 @@ test("Map editor fills missing location artwork with one image per location", as
   expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
   const chat = (await chatResponse.json()) as { id: string };
   await activateHierarchicalMaps(page, chat.id);
+  const uploadExistingArtwork = async (name: string) => {
+    const response = await page.request.post(`/api/gallery/${chat.id}/upload`, {
+      multipart: {
+        prompt: `Existing artwork for ${name}.`,
+        provider: "world-map-e2e",
+        model: "fixture",
+        width: "1",
+        height: "1",
+        file: {
+          name: `${name}.png`,
+          mimeType: "image/png",
+          buffer: Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2SIAAAAASUVORK5CYII=",
+            "base64",
+          ),
+        },
+      },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    return (await response.json()) as { id: string };
+  };
+  const lighthouseArtwork = await uploadExistingArtwork("lighthouse");
+  const sewersArtwork = await uploadExistingArtwork("sewers");
   const artworkDefinition = {
     ...generatedDefinition,
     enabled: true,
@@ -2053,15 +2076,19 @@ test("Map editor fills missing location artwork with one image per location", as
         return {
           ...location,
           childPresentation: "map" as const,
-          referenceImageId: "existing-lighthouse-art",
+          referenceImageId: lighthouseArtwork.id,
           useReferenceImage: true,
+          mapBackgroundImageId: lighthouseArtwork.id,
+          mapBackgroundPosition: { x: 50, y: 50 },
         };
       }
       if (location.id === "ai_sewers") {
         return {
           ...location,
           childPresentation: "map" as const,
-          mapBackgroundImageId: "existing-sewers-art",
+          referenceImageId: sewersArtwork.id,
+          useReferenceImage: true,
+          mapBackgroundImageId: sewersArtwork.id,
           mapBackgroundPosition: { x: 40, y: 65 },
         };
       }
@@ -2104,7 +2131,25 @@ test("Map editor fills missing location artwork with one image per location", as
       locationPath: string;
     };
   }> = [];
+  let pendingPreviewResponse: { markStarted: () => void; release: Promise<void> } | null = null;
+  const blockNextPreviewResponse = () => {
+    let markStarted = () => {};
+    let releaseResponse = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = () => resolve();
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseResponse = () => resolve();
+    });
+    pendingPreviewResponse = { markStarted, release };
+    return { started, release: releaseResponse };
+  };
+  const packageClientRoute = "**/api/capability-packages/hierarchical-maps/client*";
+  const packageClientSource = await readFile(new URL("../packages/hierarchical-maps/client.js", import.meta.url), "utf8");
   try {
+    await page.route(packageClientRoute, async (route) => {
+      await route.fulfill({ status: 200, contentType: "text/javascript; charset=utf-8", body: packageClientSource });
+    });
     await page.route(`**/api/gallery/${chat.id}/generate-image/preview`, async (route) => {
       const payload = route.request().postDataJSON() as {
         items?: Array<{
@@ -2120,6 +2165,12 @@ test("Map editor fills missing location artwork with one image per location", as
         prompt: typeof item.prompt === "string" ? item.prompt : "",
         mapsArtworkContext: item.mapsArtworkContext,
       }));
+      const blockedResponse = pendingPreviewResponse;
+      pendingPreviewResponse = null;
+      if (blockedResponse) {
+        blockedResponse.markStarted();
+        await blockedResponse.release;
+      }
       previewRequests.push(...items);
       await route.fulfill({
         status: 200,
@@ -2209,9 +2260,9 @@ test("Map editor fills missing location artwork with one image per location", as
     await dismissOnboardingTutorial(page);
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
-    const fillArtwork = workspace.getByRole("button", { name: "Review artwork for 4 locations" });
+    const fillArtwork = workspace.getByRole("button", { name: "Review artwork for 2 locations" });
     await expect(workspace.locator("[data-marinara-map-artwork-reminder]")).toHaveCount(0);
-    await expect(fillArtwork).toContainText("2 art requests");
+    await expect(fillArtwork).toContainText("2 incomplete locations");
     await fillArtwork.click();
     await expect(fillArtwork).toHaveCount(0);
     await expect(workspace.getByLabel("Review location artwork image requests")).toBeVisible();
@@ -2266,6 +2317,36 @@ test("Map editor fills missing location artwork with one image per location", as
     await workspace.getByLabel("Positive prompt for Shrouded Coast").fill(editedPositive);
     await workspace.getByLabel("Negative prompt for Shrouded Coast").fill(editedNegative);
 
+    const cancellationValidation = blockNextPreviewResponse();
+    await workspace.locator("[data-marinara-confirm-map-artwork]").click();
+    await cancellationValidation.started;
+    await workspace
+      .getByLabel("Review location artwork image requests")
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
+    cancellationValidation.release();
+    const fillArtworkAfterCancellation = workspace.locator("[data-marinara-fill-map-artwork]");
+    await expect(fillArtworkAfterCancellation).toBeEnabled();
+    expect(generatedRequests).toHaveLength(0);
+
+    await fillArtworkAfterCancellation.click();
+    await expect(workspace.getByLabel("Review location artwork image requests")).toBeVisible();
+    const mapEditValidation = blockNextPreviewResponse();
+    await workspace.locator("[data-marinara-confirm-map-artwork]").click();
+    await mapEditValidation.started;
+    const raceDetails = workspace.locator('section[aria-label^="Details for "]:visible');
+    const description = raceDetails.getByLabel("Public description");
+    await description.fill("A coast changed while artwork validation is pending.");
+    mapEditValidation.release();
+    await expect(fillArtworkAfterCancellation).toBeEnabled();
+    expect(generatedRequests).toHaveLength(0);
+
+    await description.fill("A coast hidden beneath sea fog.");
+    await fillArtworkAfterCancellation.click();
+    await expect(workspace.getByLabel("Review location artwork image requests")).toBeVisible();
+    await workspace.getByLabel("Positive prompt for Shrouded Coast").fill(editedPositive);
+    await workspace.getByLabel("Negative prompt for Shrouded Coast").fill(editedNegative);
+
     await workspace.locator("[data-marinara-confirm-map-artwork]").click();
     await expect.poll(() => generatedRequests.length).toBe(2);
     const generatedRequestsByTitle = new Map(generatedRequests.map((request) => [request.title, request]));
@@ -2314,18 +2395,18 @@ test("Map editor fills missing location artwork with one image per location", as
       useReferenceImage: true,
     });
     expect(locations.get("ai_lighthouse")).toMatchObject({
-      referenceImageId: "existing-lighthouse-art",
-      mapBackgroundImageId: "existing-lighthouse-art",
+      referenceImageId: lighthouseArtwork.id,
+      mapBackgroundImageId: lighthouseArtwork.id,
     });
     expect(locations.get("ai_sewers")).toMatchObject({
-      referenceImageId: "existing-sewers-art",
+      referenceImageId: sewersArtwork.id,
       useReferenceImage: true,
-      mapBackgroundImageId: "existing-sewers-art",
+      mapBackgroundImageId: sewersArtwork.id,
     });
 
     const hierarchy = workspace.locator('section[aria-label="Location hierarchy"]:visible');
     await hierarchy.getByRole("button", { name: "Shrouded Coast region" }).click();
-    const details = workspace.locator('section[aria-label="Location details"]:visible');
+    const details = workspace.locator('section[aria-label^="Details for "]:visible');
     const uploadReference = details.getByRole("button", { name: "Upload location reference" });
     await expectMinimumInteractiveSize(uploadReference, "Direct location artwork upload");
     const fileChooserPromise = page.waitForEvent("filechooser");
@@ -2365,6 +2446,7 @@ test("Map editor fills missing location artwork with one image per location", as
       model: "user-upload",
     });
   } finally {
+    await page.unroute(packageClientRoute);
     await page.unroute(`**/api/gallery/${chat.id}/generate-image/preview`);
     await page.unroute(`**/api/gallery/${chat.id}/generate-image`);
     await expectDeleted(page, `/api/chats/${chat.id}`);
