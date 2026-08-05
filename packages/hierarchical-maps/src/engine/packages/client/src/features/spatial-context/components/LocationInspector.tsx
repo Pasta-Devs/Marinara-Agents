@@ -11,6 +11,10 @@ import type {
 } from "@marinara-engine/shared";
 import { cn } from "../package-utils";
 import { getSpatialDescendantIds, resolveSpatialBreadcrumb } from "@marinara-engine/shared";
+import {
+  canonicalizeSpatialDirectLinks,
+  type SpatialDirectLinkDirection,
+} from "../editor-state";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
 import {
   DEFAULT_SPATIAL_LINK_PICKER_COLOR,
@@ -213,7 +217,13 @@ interface LocationInspectorProps {
   onHierarchyTypeChange: (typeId: string) => void;
   onHierarchyProfileChange: (profile: SpatialHierarchyProfile) => void;
   onUpdate: (patch: Partial<SpatialLocation>) => void;
-  onUpdateLocation: (locationId: string, patch: Partial<SpatialLocation>) => void;
+  onUpdateDirectLink: (
+    firstLocationId: string,
+    secondLocationId: string,
+    patch: Partial<Omit<SpatialLocation["links"][number], "targetId" | "bidirectional">>,
+  ) => void;
+  onSetDirectLinkDirection: (relatedLocationId: string, direction: SpatialDirectLinkDirection) => void;
+  onRemoveDirectLink: (firstLocationId: string, secondLocationId: string) => void;
   onSelectLocation: (locationId: string) => void;
   lorebooks?: Lorebook[];
   lorebookEntries?: LorebookEntry[];
@@ -238,48 +248,39 @@ interface LocationDirectLinkRow {
   source: SpatialLocation;
   related: SpatialLocation | null;
   link: SpatialLocation["links"][number];
-  linkIndex: number;
-  direction: "outgoing" | "incoming";
+  direction: SpatialDirectLinkDirection;
 }
 
 export function resolveLocationDirectLinkRows(
   definition: SpatialContextDefinition,
   location: SpatialLocation,
 ): LocationDirectLinkRow[] {
-  const locationsById = new Map(definition.locations.map((candidate) => [candidate.id, candidate]));
-  const outgoingTargetIds = new Set<string>();
-  const outgoing: LocationDirectLinkRow[] = [];
-  location.links.forEach((link, linkIndex) => {
-    // A malformed/legacy definition can contain the same target more than once.
-    if (outgoingTargetIds.has(link.targetId)) return;
-    outgoingTargetIds.add(link.targetId);
-    outgoing.push({
-      source: location,
-      related: locationsById.get(link.targetId) ?? null,
-      link,
-      linkIndex,
-      direction: "outgoing",
-    });
-  });
+  const canonical = canonicalizeSpatialDirectLinks(definition);
+  const locationsById = new Map(canonical.locations.map((candidate) => [candidate.id, candidate]));
+  const current = locationsById.get(location.id);
+  if (!current) return [];
+  const outgoing: LocationDirectLinkRow[] = current.links.map((link) => ({
+    source: current,
+    related: locationsById.get(link.targetId) ?? null,
+    link,
+    direction: link.bidirectional ? "both" : "outgoing",
+  }));
   const incoming: LocationDirectLinkRow[] = [];
-  const incomingSourceIds = new Set<string>();
-  for (const source of definition.locations) {
-    if (source.id === location.id) continue;
-    source.links.forEach((link, linkIndex) => {
-      if (link.targetId !== location.id) return;
-      // A bidirectional relationship may be persisted at both endpoints. The
-      // current endpoint's outgoing row is the canonical editable row; avoid
-      // showing the reciprocal record a second time.
-      const reverse = location.links.find((candidate) => candidate.targetId === source.id);
-      if (link.bidirectional && reverse?.bidirectional) return;
-      if (incomingSourceIds.has(source.id)) return;
-      incomingSourceIds.add(source.id);
-      incoming.push({ source, related: source, link, linkIndex, direction: "incoming" });
+  for (const source of canonical.locations) {
+    if (source.id === current.id) continue;
+    source.links.forEach((link) => {
+      if (link.targetId !== current.id) return;
+      incoming.push({
+        source,
+        related: source,
+        link,
+        direction: link.bidirectional ? "both" : "incoming",
+      });
     });
   }
   incoming.sort((left, right) => {
     const nameOrder = (left.related?.name ?? "").localeCompare(right.related?.name ?? "");
-    return nameOrder || left.source.id.localeCompare(right.source.id) || left.linkIndex - right.linkIndex;
+    return nameOrder || left.source.id.localeCompare(right.source.id);
   });
   return [...outgoing, ...incoming];
 }
@@ -297,7 +298,9 @@ export function LocationInspector({
   onHierarchyTypeChange,
   onHierarchyProfileChange,
   onUpdate,
-  onUpdateLocation,
+  onUpdateDirectLink,
+  onSetDirectLinkDirection,
+  onRemoveDirectLink,
   onSelectLocation,
   onReparent,
   lorebooks = [],
@@ -502,31 +505,13 @@ export function LocationInspector({
   }
 
   const issueFor = (field: string) => issues.find((issue) => issue.path.at(-1) === field)?.message;
-  const updateLink = (
-    source: SpatialLocation,
-    index: number,
-    patch: Partial<SpatialLocation["links"][number]>,
-  ) => {
-    onUpdateLocation(source.id, {
-      links: source.links.map((link, linkIndex) => (index === linkIndex ? { ...link, ...patch } : link)),
-    });
-  };
-  const removeLink = (source: SpatialLocation, index: number) => {
-    const link = source.links[index];
-    if (!link) return;
-    onUpdateLocation(source.id, { links: source.links.filter((_, linkIndex) => linkIndex !== index) });
-    const reverseLinkRemains = definition.locations
-      .find((candidate) => candidate.id === link.targetId)
-      ?.links.some((candidate) => candidate.targetId === source.id);
-    if (!reverseLinkRemains) {
-      onHierarchyProfileChange(withoutSpatialLinkPresentation(hierarchyProfile, source.id, link.targetId));
-    }
+  const removeLink = (sourceId: string, targetId: string) => {
+    onRemoveDirectLink(sourceId, targetId);
+    onHierarchyProfileChange(withoutSpatialLinkPresentation(hierarchyProfile, sourceId, targetId));
   };
   const addLink = () => {
     if (!newLinkTarget) return;
-    onUpdateLocation(location.id, {
-      links: [...location.links, { targetId: newLinkTarget, bidirectional: false, state: "available" }],
-    });
+    onSetDirectLinkDirection(newLinkTarget, "outgoing");
     setNewLinkTarget("");
   };
 
@@ -1265,8 +1250,8 @@ export function LocationInspector({
             <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Direct links</h3>
           </div>
           <div className="space-y-2">
-            {directLinkRows.map(({ source, related, link, linkIndex, direction }) => {
-              const editable = direction === "outgoing" || link.bidirectional;
+            {directLinkRows.map(({ source, related, link, direction }) => {
+              const editable = direction !== "incoming";
               const relatedName = related?.name || "Missing location";
               const relatedPath = related
                 ? resolveSpatialBreadcrumb(definition, related.id)
@@ -1274,12 +1259,12 @@ export function LocationInspector({
                     .filter(Boolean)
                     .join(" > ")
                 : "Missing location";
-              const directionLabel = link.bidirectional
+              const directionLabel = direction === "both"
                 ? "Both ways"
                 : direction === "incoming"
                   ? "Incoming one-way"
                   : "Outgoing one-way";
-              const DirectionIcon = link.bidirectional
+              const DirectionIcon = direction === "both"
                 ? ArrowLeftRight
                 : direction === "incoming"
                   ? ArrowLeft
@@ -1287,7 +1272,7 @@ export function LocationInspector({
               const presentation = resolveSpatialLinkPresentation(hierarchyProfile, source.id, link.targetId);
               return (
                 <div
-                  key={`${source.id}-${link.targetId}-${linkIndex}`}
+                  key={[source.id, link.targetId].sort().join(":")}
                   role="group"
                   aria-label={`${directionLabel} direct link with ${relatedName}`}
                   data-marinara-direct-link-source={source.id}
@@ -1323,7 +1308,7 @@ export function LocationInspector({
                     {editable && (
                       <button
                         type="button"
-                        onClick={() => removeLink(source, linkIndex)}
+                        onClick={() => removeLink(source.id, link.targetId)}
                         aria-label={`Remove Direct Link with ${relatedName}`}
                         title={`Remove Direct Link with ${relatedName}`}
                         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-red-500/10 hover:text-[var(--destructive)]"
@@ -1350,7 +1335,9 @@ export function LocationInspector({
                         aria-label={`Link label for ${relatedName}`}
                         placeholder="Optional direction label"
                         onChange={(event) =>
-                          updateLink(source, linkIndex, { label: event.target.value || undefined })
+                          onUpdateDirectLink(source.id, link.targetId, {
+                            label: event.target.value || undefined,
+                          })
                         }
                       />
                       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -1359,24 +1346,31 @@ export function LocationInspector({
                           value={link.state}
                           aria-label={`Link state for ${relatedName}`}
                           onChange={(event) =>
-                            updateLink(source, linkIndex, { state: event.target.value as SpatialLinkState })
+                            onUpdateDirectLink(source.id, link.targetId, {
+                              state: event.target.value as SpatialLinkState,
+                            })
                           }
                         >
                           <option value="available">Available</option>
                           <option value="hidden">Hidden</option>
                           <option value="blocked">Blocked</option>
                         </select>
-                        <label className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] px-3 text-xs">
-                          <input
-                            type="checkbox"
-                            aria-label={`Both ways with ${relatedName}`}
-                            checked={link.bidirectional}
-                            onChange={(event) =>
-                              updateLink(source, linkIndex, { bidirectional: event.target.checked })
-                            }
-                          />
-                          Both ways
-                        </label>
+                        <select
+                          className={INPUT_CLASS}
+                          value={direction}
+                          aria-label={`Direction for ${relatedName}`}
+                          onChange={(event) =>
+                            related &&
+                            onSetDirectLinkDirection(
+                              related.id,
+                              event.target.value as SpatialDirectLinkDirection,
+                            )
+                          }
+                        >
+                          <option value="outgoing">Outgoing</option>
+                          <option value="both">Both ways</option>
+                          <option value="incoming">Incoming</option>
+                        </select>
                       </div>
                       <div className="mt-2 grid grid-cols-2 gap-2">
                         <select

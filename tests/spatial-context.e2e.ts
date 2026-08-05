@@ -3779,6 +3779,19 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
       if (location.id === "ai_lighthouse") {
         return { ...location, parentId: "ai_harbor", placement: undefined, sortOrder: 0 };
       }
+      if (location.id === "ai_sewers") {
+        return {
+          ...location,
+          links: [
+            {
+              targetId: "ai_lighthouse",
+              label: "Duplicate tunnel",
+              bidirectional: true,
+              state: "available" as const,
+            },
+          ],
+        };
+      }
       return location;
     }),
   };
@@ -3823,10 +3836,12 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
     const reciprocal = sewersDetails.locator(
       '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
     );
-    await expect(reciprocal).toHaveAttribute("data-marinara-direct-link-direction", "incoming");
+    await expect(reciprocal).toHaveCount(1);
+    await expect(reciprocal).toHaveAttribute("data-marinara-direct-link-direction", "both");
     await expect(reciprocal).toHaveAttribute("data-marinara-direct-link-editable", "true");
     await expect(reciprocal).toContainText("Both ways");
     await expect(reciprocal).toContainText("Shrouded Coast > Gloam Harbor > Blackglass Lighthouse");
+    await expect(reciprocal.getByLabel("Direction for Blackglass Lighthouse")).toHaveValue("both");
 
     const incomingOneWay = sewersDetails.locator(
       '[data-marinara-direct-link-source="ai_harbor"][data-marinara-direct-link-target="ai_sewers"]',
@@ -3845,15 +3860,45 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
 
     await reciprocal.getByLabel("Link label for Blackglass Lighthouse").fill("Target-edited tunnel");
     await reciprocal.getByLabel("Link state for Blackglass Lighthouse").selectOption("available");
-    await reciprocal.getByRole("button", { name: "View linked location Blackglass Lighthouse" }).click();
+    await reciprocal.getByLabel("Direction for Blackglass Lighthouse").selectOption("outgoing");
+    const outgoingFromSewers = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_sewers"][data-marinara-direct-link-target="ai_lighthouse"]',
+    );
+    await expect(outgoingFromSewers).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
+    await outgoingFromSewers.getByRole("button", { name: "View linked location Blackglass Lighthouse" }).click();
     const lighthouseDetails = workspace.locator('section[aria-label="Details for Blackglass Lighthouse"]:visible');
-    const reciprocalAtSource = lighthouseDetails.locator(
+    const incomingAtLighthouse = lighthouseDetails.locator(
+      '[data-marinara-direct-link-source="ai_sewers"][data-marinara-direct-link-target="ai_lighthouse"]',
+    );
+    await expect(incomingAtLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "incoming");
+    await expect(incomingAtLighthouse).toHaveAttribute("data-marinara-direct-link-editable", "false");
+    await incomingAtLighthouse.getByRole("button", { name: "View source Old Sewers" }).click();
+
+    await outgoingFromSewers.getByLabel("Direction for Blackglass Lighthouse").selectOption("both");
+    await expect(outgoingFromSewers).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await outgoingFromSewers.getByRole("button", { name: "View linked location Blackglass Lighthouse" }).click();
+    const bothAtLighthouse = lighthouseDetails.locator(
+      '[data-marinara-direct-link-source="ai_sewers"][data-marinara-direct-link-target="ai_lighthouse"]',
+    );
+    await expect(bothAtLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await bothAtLighthouse.getByLabel("Direction for Old Sewers").selectOption("outgoing");
+    const outgoingFromLighthouse = lighthouseDetails.locator(
       '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
     );
-    await expect(reciprocalAtSource).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
-    await expect(reciprocalAtSource.getByLabel("Link label for Old Sewers")).toHaveValue("Target-edited tunnel");
-    await reciprocalAtSource.getByRole("button", { name: "View linked location Old Sewers" }).click();
-    await expect(reciprocal).toBeVisible();
+    await expect(outgoingFromLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
+    await expect(outgoingFromLighthouse.getByLabel("Link label for Old Sewers")).toHaveValue(
+      "Target-edited tunnel",
+    );
+    await outgoingFromLighthouse.getByLabel("Direction for Old Sewers").selectOption("both");
+    await outgoingFromLighthouse.getByRole("button", { name: "View linked location Old Sewers" }).click();
+    const bothAtSewers = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(bothAtSewers).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await bothAtSewers.getByLabel("Direction for Blackglass Lighthouse").selectOption("incoming");
+    await expect(bothAtSewers).toHaveAttribute("data-marinara-direct-link-direction", "incoming");
+    await expect(bothAtSewers).toHaveAttribute("data-marinara-direct-link-editable", "false");
+
     await workspace.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .poll(async () => {
@@ -3862,17 +3907,34 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
           definition: {
             locations: Array<{
               id: string;
-              links: Array<{ targetId: string; label?: string; state: string }>;
+              links: Array<{ targetId: string; label?: string; bidirectional: boolean; state: string }>;
             }>;
           };
         };
-        return stored.definition.locations
-          .find((location) => location.id === "ai_lighthouse")
-          ?.links.find((link) => link.targetId === "ai_sewers");
+        return stored.definition.locations.flatMap((location) =>
+          location.links
+            .filter(
+              (link) =>
+                (location.id === "ai_lighthouse" && link.targetId === "ai_sewers") ||
+                (location.id === "ai_sewers" && link.targetId === "ai_lighthouse"),
+            )
+            .map((link) => ({ sourceId: location.id, ...link })),
+        );
       })
-      .toMatchObject({ label: "Target-edited tunnel", state: "available" });
+      .toEqual([
+        {
+          sourceId: "ai_lighthouse",
+          targetId: "ai_sewers",
+          label: "Target-edited tunnel",
+          bidirectional: false,
+          state: "available",
+        },
+      ]);
 
-    await reciprocal.getByRole("button", { name: "Remove Direct Link with Blackglass Lighthouse" }).click();
+    await bothAtSewers.getByRole("button", { name: "View source Blackglass Lighthouse" }).click();
+    await outgoingFromLighthouse
+      .getByRole("button", { name: "Remove Direct Link with Old Sewers" })
+      .click();
     await workspace.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .poll(async () => {
@@ -3880,14 +3942,19 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
         const stored = (await storedResponse.json()) as {
           definition: { locations: Array<{ id: string; links: Array<{ targetId: string }> }> };
         };
-        return (
-          stored.definition.locations
-            .find((location) => location.id === "ai_lighthouse")
-            ?.links.some((link) => link.targetId === "ai_sewers") ?? false
-        );
+        return stored.definition.locations.flatMap((location) =>
+          location.links.filter(
+            (link) =>
+              (location.id === "ai_lighthouse" && link.targetId === "ai_sewers") ||
+              (location.id === "ai_sewers" && link.targetId === "ai_lighthouse"),
+          ),
+        ).length;
       })
-      .toBe(false);
-    await expect(reciprocal).toHaveCount(0);
+      .toBe(0);
+    const hierarchyPaneButton = workspace.getByRole("button", { name: "hierarchy", exact: true });
+    if (await hierarchyPaneButton.isVisible()) await hierarchyPaneButton.click();
+    await hierarchy.getByRole("button", { name: /^Old Sewers/u }).click();
+    await expect(bothAtSewers).toHaveCount(0);
     await expect(incomingOneWay).toBeVisible();
     await expect(linkTargetPicker.locator('option[value="ai_lighthouse"]')).toHaveCount(1);
     await expect(linkTargetPicker.locator('option[value="ai_harbor"]')).toHaveCount(0);
