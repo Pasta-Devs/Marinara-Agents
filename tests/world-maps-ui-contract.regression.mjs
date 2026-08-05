@@ -61,6 +61,13 @@ const runtimeBarSource = readFileSync(
 );
 const builtClient = readFileSync(new URL("../packages/hierarchical-maps/client.js", import.meta.url), "utf8");
 
+assert.match(runtimeBarSource, /travelMode/u, "Runtime location controls must persist the selected travel mode.");
+assert.match(runtimeBarSource, /Step by step/u, "Runtime location controls must expose step-by-step travel.");
+assert.match(runtimeBarSource, /Travel now/u, "Runtime location controls must expose immediate travel.");
+assert.doesNotMatch(runtimeBarSource, /Set destination/u, "Runtime location controls must replace the legacy destination-only action.");
+assert.match(builtClient, /Step by step/u, "The built client must include the travel-mode control.");
+assert.match(builtClient, /Travel now/u, "The built client must include the immediate-travel control.");
+
 assert.match(
   workspaceSource,
   /const handleOpenLorebook = useCallback\([\s\S]*?onClose\(\);\s*onOpenLorebook\(lorebookId\);/u,

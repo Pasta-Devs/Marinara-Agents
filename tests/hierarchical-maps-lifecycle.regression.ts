@@ -186,7 +186,7 @@ const currentFixture = fixtures.get("1.3.2");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
   engineVersion: "2.4.1",
-  engineCommit: "367d06fd0ed433c1e61d4a8891258490f79c8116",
+  engineCommit: "6ed85990b294048c61a762503241fff3171f448b",
 });
 
 function seedInstalledProfile(version: string) {

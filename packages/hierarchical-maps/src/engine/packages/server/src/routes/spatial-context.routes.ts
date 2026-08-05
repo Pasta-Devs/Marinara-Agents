@@ -106,20 +106,11 @@ function withoutKeys(value: Record<string, unknown>, keys: readonly string[]): R
   return Object.fromEntries(Object.entries(value).filter(([key]) => !omitted.has(key)));
 }
 
-function spatialMapJsonRepairRequest(
-  resolved: CapabilityResolvedLanguageModel,
-  maxTokens: number,
-  debugMode: boolean,
-) {
+function spatialMapJsonRepairRequest(resolved: CapabilityResolvedLanguageModel, maxTokens: number, debugMode: boolean) {
   return async (malformedRaw: string) => {
-    const repairPrompt = resolved.fitContext(
-      buildSpatialMapJsonRepairMessages(malformedRaw),
-      { maxTokens },
-    );
+    const repairPrompt = resolved.fitContext(buildSpatialMapJsonRepairMessages(malformedRaw), { maxTokens });
     if (repairPrompt.trimmed) {
-      throw new Error(
-        "The malformed response could not fit in a complete formatting-repair request.",
-      );
+      throw new Error("The malformed response could not fit in a complete formatting-repair request.");
     }
     return resolved.chatComplete(repairPrompt.messages, {
       temperature: 0,
@@ -1482,24 +1473,21 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
   });
 
-  app.put<{ Params: ChatSpatialParams }>(
-    "/:chatId/spatial-context/generation-preferences",
-    async (req, reply) => {
-      const parsed = spatialGenerationPreferencesSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.status(400).send({
-          error: parsed.error.issues[0]?.message ?? "Invalid generation prompt preference.",
-          code: "spatial_request_invalid",
-          issues: parsed.error.issues,
-        });
-      }
-      try {
-        return await service.updateGenerationPreferences(req.params.chatId, parsed.data);
-      } catch (error) {
-        return sendServiceError(reply, error);
-      }
-    },
-  );
+  app.put<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generation-preferences", async (req, reply) => {
+    const parsed = spatialGenerationPreferencesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message ?? "Invalid generation prompt preference.",
+        code: "spatial_request_invalid",
+        issues: parsed.error.issues,
+      });
+    }
+    try {
+      return await service.updateGenerationPreferences(req.params.chatId, parsed.data);
+    } catch (error) {
+      return sendServiceError(reply, error);
+    }
+  });
 
   app.get<{ Params: ChatSpatialParams }>(
     "/:chatId/spatial-context/game-map-bindings/reconciliation",
@@ -1558,6 +1546,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       return {
         message: committed.message,
         spatial: await service.get(req.params.chatId),
+        ...(committed.travel ? { travel: committed.travel } : {}),
       };
     } catch (error) {
       if (error instanceof SpatialOwnerTurnError) {
@@ -1601,27 +1590,24 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post<{ Params: ChatSpatialParams }>(
-    "/:chatId/spatial-context/generation-prompt/preview",
-    async (req, reply) => {
-      try {
-        const prepared = await prepareSpatialMapPrompt(req.params.chatId, req.body, {
-          allowDraftPreviewWithExistingMap: true,
-        });
-        return {
-          ownerMode: prepared.ownerMode,
-          operation: prepared.operation,
-          size: prepared.request.size,
-          maxTokens: prepared.prompt.maxTokens,
-          containsPrivateContext: true,
-          system: prepared.prompt.messages.find((message) => message.role === "system")?.content ?? "",
-          user: prepared.prompt.messages.find((message) => message.role === "user")?.content ?? "",
-        };
-      } catch (error) {
-        return sendPromptRequestError(reply, error);
-      }
-    },
-  );
+  app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generation-prompt/preview", async (req, reply) => {
+    try {
+      const prepared = await prepareSpatialMapPrompt(req.params.chatId, req.body, {
+        allowDraftPreviewWithExistingMap: true,
+      });
+      return {
+        ownerMode: prepared.ownerMode,
+        operation: prepared.operation,
+        size: prepared.request.size,
+        maxTokens: prepared.prompt.maxTokens,
+        containsPrivateContext: true,
+        system: prepared.prompt.messages.find((message) => message.role === "system")?.content ?? "",
+        user: prepared.prompt.messages.find((message) => message.role === "user")?.content ?? "",
+      };
+    } catch (error) {
+      return sendPromptRequestError(reply, error);
+    }
+  });
 
   app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generate", async (req, reply) => {
     let prepared;

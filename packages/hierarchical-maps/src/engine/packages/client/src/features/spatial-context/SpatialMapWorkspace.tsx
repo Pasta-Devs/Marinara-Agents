@@ -106,8 +106,7 @@ import {
   type SpatialGalleryImagePromptPreview,
 } from "./use-spatial-resources";
 import { packageApi } from "./package-api";
-import { usePendingSpatialTransition } from "./pending-spatial-transitions";
-import { cancelSpatialRoute, useSpatialRoutePlan } from "./spatial-route-plans";
+import { clearPendingSpatialTransition, usePendingSpatialTransition } from "./pending-spatial-transitions";
 import { shouldRefreshSpatialWorkspace } from "./spatial-workspace-refresh";
 import {
   buildPortableLoreBundle,
@@ -495,8 +494,9 @@ export function SpatialMapWorkspace({
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [pendingPortableLoreImport, setPendingPortableLoreImport] = useState<PendingPortableLoreImport | null>(null);
-  const [unresolvedLoreReferences, setUnresolvedLoreReferences] =
-    useState<PortableLoreReference[]>(initialUnresolvedLoreReferences);
+  const [unresolvedLoreReferences, setUnresolvedLoreReferences] = useState<PortableLoreReference[]>(
+    initialUnresolvedLoreReferences,
+  );
   const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
   const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
   const backgroundMoveFrameRef = useRef<number | null>(null);
@@ -718,7 +718,7 @@ export function SpatialMapWorkspace({
     setSelectedId((current) =>
       current && nextDraft.locations.some((location) => location.id === current)
         ? current
-        : nextDraft.startingLocationId ?? nextDraft.locations[0]?.id ?? null,
+        : (nextDraft.startingLocationId ?? nextDraft.locations[0]?.id ?? null),
     );
     setEnteredParentId((current) =>
       current && nextDraft.locations.some((location) => location.id === current) ? current : null,
@@ -753,17 +753,11 @@ export function SpatialMapWorkspace({
       : layoutEditingMode;
   const currentLocationId = templateMode ? null : (spatial.data?.currentLocationId ?? null);
   const effectiveCurrentLocationId = replacementCurrentLocationId ?? currentLocationId;
-  const routePlan = useSpatialRoutePlan(templateMode ? null : chatId);
   const pendingTransition = usePendingSpatialTransition(templateMode ? null : chatId);
   const activeLocations = draft?.locations.filter((location) => location.status === "active") ?? [];
   const artworkReferencesResolved = globalGalleryImages.isSuccess && (templateMode || galleryImages.isSuccess);
   const missingArtworkAssignments = useMemo(
-    () =>
-      locationArtworkGaps(
-        draft?.locations ?? [],
-        availableArtworkReferenceIds,
-        artworkReferencesResolved,
-      ),
+    () => locationArtworkGaps(draft?.locations ?? [], availableArtworkReferenceIds, artworkReferencesResolved),
     [artworkReferencesResolved, availableArtworkReferenceIds, draft?.locations],
   );
   const missingArtworkLocations = useMemo(
@@ -803,9 +797,6 @@ export function SpatialMapWorkspace({
         `Remove ${gameMapBindingCount} Game map binding${gameMapBindingCount === 1 ? "" : "s"} before deleting this branch.`,
       );
     }
-    if (routePlan?.locationIds.some((locationId) => locationIds.has(locationId))) {
-      reasons.push("Cancel the planned route before deleting this branch.");
-    }
     if (pendingTransition && locationIds.has(pendingTransition.transition.destinationId)) {
       reasons.push("Cancel the queued destination before deleting this branch.");
     }
@@ -819,7 +810,6 @@ export function SpatialMapWorkspace({
     effectiveCurrentLocationId,
     linkedSharedWorld,
     pendingTransition,
-    routePlan,
     selected,
     spatial.data?.locationDeletionProtections,
     templateMode,
@@ -899,12 +889,7 @@ export function SpatialMapWorkspace({
   }, []);
 
   const fillMissingArtwork = useCallback(async () => {
-    if (
-      !draft ||
-      artworkProgress ||
-      previewGalleryImages.isPending ||
-      missingArtworkLocations.length === 0
-    ) {
+    if (!draft || artworkProgress || previewGalleryImages.isPending || missingArtworkLocations.length === 0) {
       return;
     }
 
@@ -1163,10 +1148,7 @@ export function SpatialMapWorkspace({
     );
     applyDraft(next);
     applyHierarchyProfile(
-      normalizeHierarchyProfile(
-        { ...draftHierarchyProfile, locationTypeIds: retainedLocationTypeIds },
-        next,
-      ),
+      normalizeHierarchyProfile({ ...draftHierarchyProfile, locationTypeIds: retainedLocationTypeIds }, next),
     );
     const nextSelection =
       selected.parentId ?? next.locations.find((location) => location.status === "active")?.id ?? null;
@@ -1308,9 +1290,7 @@ export function SpatialMapWorkspace({
   );
   const portableExportKilobytes = useMemo(
     () =>
-      portableExportBundle
-        ? Math.max(1, Math.ceil(portableLoreApproximateBytes(portableExportBundle) / 1024))
-        : 0,
+      portableExportBundle ? Math.max(1, Math.ceil(portableLoreApproximateBytes(portableExportBundle) / 1024)) : 0,
     [portableExportBundle],
   );
   useModalKeyboardNavigation({
@@ -1359,13 +1339,7 @@ export function SpatialMapWorkspace({
     } finally {
       setIsExporting(false);
     }
-  }, [
-    draft,
-    isExporting,
-    lorebookEntriesQuery.entries,
-    lorebookEntriesQuery.isError,
-    lorebookEntriesQuery.isLoading,
-  ]);
+  }, [draft, isExporting, lorebookEntriesQuery.entries, lorebookEntriesQuery.isError, lorebookEntriesQuery.isLoading]);
 
   const handleExport = useCallback(async () => {
     if (!draft || !portableExportBundle || isExporting) return;
@@ -1599,12 +1573,7 @@ export function SpatialMapWorkspace({
             rawRecord: rawRecord ?? {},
             definition: parsed.data,
             bundle: portableLore,
-            plan: planPortableLoreImport(
-              portableLore,
-              lorebooks,
-              entries,
-              importedMapName,
-            ),
+            plan: planPortableLoreImport(portableLore, lorebooks, entries, importedMapName),
           });
           return;
         }
@@ -1627,10 +1596,7 @@ export function SpatialMapWorkspace({
   );
 
   const confirmPortableLoreImport = useCallback(
-    async (
-      strategy: PortableLoreImportStrategy,
-      ambiguousSelections: ReadonlyMap<string, string | null>,
-    ) => {
+    async (strategy: PortableLoreImportStrategy, ambiguousSelections: ReadonlyMap<string, string | null>) => {
       if (!pendingPortableLoreImport || isImporting) return;
       setIsImporting(true);
       let createdLorebookIds: string[] = [];
@@ -1984,10 +1950,10 @@ export function SpatialMapWorkspace({
           const savedDefinition = cloneSpatialDefinition(saved.data.definition);
           const savedProfile = normalizeHierarchyProfile(saved.data.hierarchyProfile, savedDefinition);
           setBaseDefinition(savedDefinition);
-        setDraft(cloneSpatialDefinition(savedDefinition));
-        setBaseHierarchyProfile(savedProfile);
-        setDraftHierarchyProfile(savedProfile);
-        setTemplateName(saved.name);
+          setDraft(cloneSpatialDefinition(savedDefinition));
+          setBaseHierarchyProfile(savedProfile);
+          setDraftHierarchyProfile(savedProfile);
+          setTemplateName(saved.name);
           setBaseTemplateName(saved.name);
           setSavedFlash(true);
           onDirtyChange?.(false);
@@ -2002,16 +1968,16 @@ export function SpatialMapWorkspace({
         }
         return;
       }
-    if (!chatId) return;
-    const completingFirstMap = enableForFirstSave && baseDefinition === null;
-    if (completingFirstMap && !canEnable) return;
-    const definitionToSave = completingFirstMap ? { ...canonicalDraft, enabled: true } : canonicalDraft;
-    setServerIssues([]);
-    setConflict(false);
-    setReviewConflict(false);
-    try {
-      const response = await updateSpatial.mutateAsync({
-        chatId,
+      if (!chatId) return;
+      const completingFirstMap = enableForFirstSave && baseDefinition === null;
+      if (completingFirstMap && !canEnable) return;
+      const definitionToSave = completingFirstMap ? { ...canonicalDraft, enabled: true } : canonicalDraft;
+      setServerIssues([]);
+      setConflict(false);
+      setReviewConflict(false);
+      try {
+        const response = await updateSpatial.mutateAsync({
+          chatId,
           expectedRevision: baseDefinition?.revision ?? 0,
           expectedCurrentLocationId: currentLocationId,
           ...(replacementCurrentLocationId ? { replacementCurrentLocationId } : {}),
@@ -2023,21 +1989,21 @@ export function SpatialMapWorkspace({
           hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, definitionToSave),
         });
         const saved = response.definition;
-      if (!saved) throw new Error("The server did not return the saved map.");
-      setBaseDefinition(cloneSpatialDefinition(saved));
-      setDraft(cloneSpatialDefinition(saved));
-      setBaseHierarchyProfile(response.hierarchyProfile);
-      setDraftHierarchyProfile(response.hierarchyProfile);
-      setServerIssues(response.warnings);
-      if (replacementCurrentLocationId !== null) cancelSpatialRoute(chatId);
-      setReplacementCurrentLocationId(null);
-      setSavedFlash(true);
-      setFirstMapGenerationSession(null);
-      if (completingFirstMap) {
-        const startingLocation = saved.locations.find((location) => location.id === saved.startingLocationId);
-        setFirstSaveResult({
-          locationCount: saved.locations.length,
-          startingLocationName: startingLocation?.name ?? "the starting location",
+        if (!saved) throw new Error("The server did not return the saved map.");
+        setBaseDefinition(cloneSpatialDefinition(saved));
+        setDraft(cloneSpatialDefinition(saved));
+        setBaseHierarchyProfile(response.hierarchyProfile);
+        setDraftHierarchyProfile(response.hierarchyProfile);
+        setServerIssues(response.warnings);
+        if (replacementCurrentLocationId !== null) clearPendingSpatialTransition(chatId);
+        setReplacementCurrentLocationId(null);
+        setSavedFlash(true);
+        setFirstMapGenerationSession(null);
+        if (completingFirstMap) {
+          const startingLocation = saved.locations.find((location) => location.id === saved.startingLocationId);
+          setFirstSaveResult({
+            locationCount: saved.locations.length,
+            startingLocationName: startingLocation?.name ?? "the starting location",
           });
         }
         onDirtyChange?.(false);
@@ -2051,10 +2017,10 @@ export function SpatialMapWorkspace({
       } catch (error) {
         const problem = getSpatialContextProblem(error);
         setServerIssues(problem.issues);
-      if (problem.conflict) {
-        setConflict(true);
-        void spatial.refetch();
-      } else {
+        if (problem.conflict) {
+          setConflict(true);
+          void spatial.refetch();
+        } else {
           toast.error(problem.message);
         }
       }
@@ -2063,8 +2029,8 @@ export function SpatialMapWorkspace({
       baseDefinition,
       canEnable,
       chatId,
-    currentLocationId,
-    dirty,
+      currentLocationId,
+      dirty,
       draft,
       draftHierarchyProfile,
       issues.length,
@@ -2149,7 +2115,7 @@ export function SpatialMapWorkspace({
         templateMode
           ? "AI map draft applied. Review it, choose a start, then save the template."
           : expandedExistingMap
-          ? "AI expansion added to the working map. Review it, then Save."
+            ? "AI expansion added to the working map. Review it, then Save."
             : "AI map draft applied. Review it, choose a start, then enable and save.",
       );
     },
@@ -2645,9 +2611,21 @@ export function SpatialMapWorkspace({
                 </legend>
                 {(
                   [
-                    ["map-only", "Map only", "Keep readable lore-link provenance, but do not include lorebook content."],
-                    ["linked-entries", "Map + linked entries", "Recommended. Include only entries this map links to and their folder paths."],
-                    ["complete-lorebooks", "Map + complete lorebooks", "Include every entry and folder from each linked lorebook."],
+                    [
+                      "map-only",
+                      "Map only",
+                      "Keep readable lore-link provenance, but do not include lorebook content.",
+                    ],
+                    [
+                      "linked-entries",
+                      "Map + linked entries",
+                      "Recommended. Include only entries this map links to and their folder paths.",
+                    ],
+                    [
+                      "complete-lorebooks",
+                      "Map + complete lorebooks",
+                      "Include every entry and folder from each linked lorebook.",
+                    ],
                   ] as const
                 ).map(([mode, title, description]) => (
                   <label
@@ -2677,15 +2655,17 @@ export function SpatialMapWorkspace({
                 <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
                   <AlertCircle size="0.875rem" className="mt-0.5 shrink-0" />
                   <p>
-                    Complete lorebooks may contain private notes unrelated to this map. Review the file before sharing it.
+                    Complete lorebooks may contain private notes unrelated to this map. Review the file before sharing
+                    it.
                   </p>
                 </div>
               )}
               <div className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] p-3 text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
-                    {portableExportBundle.books.length} lorebook{portableExportBundle.books.length === 1 ? "" : "s"} ·{" "}
-                    {portableExportEntryCount} {portableExportEntryCount === 1 ? "entry" : "entries"}
+                    {portableExportBundle.books.length} lorebook
+                    {portableExportBundle.books.length === 1 ? "" : "s"} · {portableExportEntryCount}{" "}
+                    {portableExportEntryCount === 1 ? "entry" : "entries"}
                   </span>
                   <span className="text-[var(--marinara-chat-chrome-panel-muted)]">
                     About {portableExportKilobytes} KB
@@ -2695,7 +2675,9 @@ export function SpatialMapWorkspace({
                   <ul className="mt-2 space-y-1 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
                     {portableExportBundle.books.map((book) => (
                       <li key={book.key} className="flex justify-between gap-3">
-                        <span className="truncate" title={book.name}>{book.name}</span>
+                        <span className="truncate" title={book.name}>
+                          {book.name}
+                        </span>
                         <span className="shrink-0">{book.entries.length} entries</span>
                       </li>
                     ))}
@@ -2704,8 +2686,12 @@ export function SpatialMapWorkspace({
               </div>
               <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] px-3 text-xs">
                 <span>
-                  <span className="block font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Include map artwork</span>
-                  <span className="text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">Makes the export file larger.</span>
+                  <span className="block font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                    Include map artwork
+                  </span>
+                  <span className="text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
+                    Makes the export file larger.
+                  </span>
                 </span>
                 <input
                   type="checkbox"
@@ -2725,7 +2711,8 @@ export function SpatialMapWorkspace({
                   <div className="mt-3 max-h-44 space-y-1 overflow-y-auto font-mono text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
                     {portableExportBundle.references.map((reference, index) => (
                       <p key={`${reference.locationId}-${reference.originalEntryId}-${index}`}>
-                        {reference.locationName} → {reference.originalLorebookName} → {reference.originalEntryName} → {reference.originalEntryId}
+                        {reference.locationName} → {reference.originalLorebookName} → {reference.originalEntryName} →{" "}
+                        {reference.originalEntryId}
                       </p>
                     ))}
                   </div>
@@ -2818,10 +2805,7 @@ export function SpatialMapWorkspace({
                 data-marinara-fill-map-artwork
                 onClick={() => void prepareArtworkPreview()}
                 disabled={
-                  artworkProgress !== null ||
-                  previewGalleryImages.isPending ||
-                  conflict ||
-                  updateSpatial.isPending
+                  artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
                 }
                 className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
                 aria-label={`Review artwork for ${missingArtworkLocations.length} ${missingArtworkLocations.length === 1 ? "location" : "locations"}`}
@@ -2866,7 +2850,7 @@ export function SpatialMapWorkspace({
                         ? "Shared conflict"
                         : linkedSharedWorld.pendingChanges
                           ? "Shared changes"
-                          : linkedSharedWorld.worldName ?? "Shared world"}
+                          : (linkedSharedWorld.worldName ?? "Shared world")}
                   </span>
                 </span>
                 {linkedSharedWorld.pendingChanges && !linkedSharedWorld.conflict && (
@@ -3048,10 +3032,7 @@ export function SpatialMapWorkspace({
                   void prepareArtworkPreview();
                 }}
                 disabled={
-                  artworkProgress !== null ||
-                  previewGalleryImages.isPending ||
-                  conflict ||
-                  updateSpatial.isPending
+                  artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
                 }
                 className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-between px-3 text-xs disabled:opacity-45"
                 aria-label={`Review artwork for ${missingArtworkLocations.length} ${missingArtworkLocations.length === 1 ? "location" : "locations"}`}
@@ -3286,7 +3267,8 @@ export function SpatialMapWorkspace({
                     Replace the current map
                   </h2>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-                    Preserve a reusable copy or export a backup first. A blank or AI-generated replacement remains a working copy until you click Save.
+                    Preserve a reusable copy or export a backup first. A blank or AI-generated replacement remains a
+                    working copy until you click Save.
                   </p>
                 </div>
                 <button
@@ -3300,28 +3282,37 @@ export function SpatialMapWorkspace({
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-3">
-                  <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-panel-muted)]">Current map</dt>
+                  <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-panel-muted)]">
+                    Current map
+                  </dt>
                   <dd className="mt-1 font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
                     {baseDefinition.locations.length} {baseDefinition.locations.length === 1 ? "location" : "locations"}
                   </dd>
                 </div>
                 <div className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-3">
-                  <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-panel-muted)]">Story location</dt>
-                  <dd className="mt-1 truncate font-semibold text-[var(--marinara-chat-chrome-panel-title)]" title={currentLocationName}>
+                  <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-[var(--marinara-chat-chrome-panel-muted)]">
+                    Story location
+                  </dt>
+                  <dd
+                    className="mt-1 truncate font-semibold text-[var(--marinara-chat-chrome-panel-title)]"
+                    title={currentLocationName}
+                  >
                     {currentLocationName}
                   </dd>
                 </div>
               </dl>
-              {(routePlan || pendingTransition) && (
+              {pendingTransition && (
                 <p className="mt-3 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[0.6875rem] leading-relaxed text-amber-300">
-                  A queued {routePlan ? `route to ${routePlan.targetLocationName}` : `move to ${pendingTransition?.destinationName}`} will be cleared when the replacement is saved.
+                  A queued move to {pendingTransition.destinationName} will be cleared when the replacement is saved.
                 </p>
               )}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] p-3">
-                <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Preserve this map</h3>
+                <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                  Preserve this map
+                </h3>
                 <div className="mt-3 grid gap-2">
                   <button
                     type="button"
@@ -3344,7 +3335,9 @@ export function SpatialMapWorkspace({
               </div>
 
               <div className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] p-3">
-                <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Choose a replacement</h3>
+                <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
+                  Choose a replacement
+                </h3>
                 <div className="mt-3 grid gap-2">
                   <button
                     type="button"
@@ -3425,233 +3418,236 @@ export function SpatialMapWorkspace({
         !aiBuilderOpen &&
         missingArtworkLocations.length > 0 &&
         (artworkPreview || artworkProgress !== null) && (
-        <section
-          data-marinara-map-artwork-reminder
-          className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3"
-        >
-          {artworkPreview ? (
-            <div
-              className="mx-auto flex min-h-0 w-full max-w-5xl flex-col gap-3 overflow-hidden rounded-xl border border-amber-500/35 bg-amber-500/10 p-3"
-              style={{ maxHeight: "calc(100dvh - 8rem)" }}
-              aria-label="Review location artwork image requests"
-            >
-              <div className="flex items-start gap-2.5">
-                <AlertCircle size="0.9375rem" className="mt-0.5 shrink-0 text-amber-300" />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">
-                    Review {artworkPreview.requestCount} image request
-                    {artworkPreview.requestCount === 1 ? "" : "s"}
-                  </p>
-                  <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                    This will send {artworkPreview.requestCount} separate request
-                    {artworkPreview.requestCount === 1 ? "" : "s"} to your image provider. Existing available artwork
-                    is not replaced. Each new image fills only the missing role, or both roles when both are missing.
-                    Prompts use the relevant Chat Settings and global image-generation settings.
-                  </p>
-                </div>
-              </div>
-
+          <section
+            data-marinara-map-artwork-reminder
+            className="border-b border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-surface)]/35 px-4 py-3"
+          >
+            {artworkPreview ? (
               <div
-                className="grid min-h-0 flex-1 gap-3 overflow-y-auto overscroll-contain pr-1"
-                data-marinara-map-artwork-review-scroll
+                className="mx-auto flex min-h-0 w-full max-w-5xl flex-col gap-3 overflow-hidden rounded-xl border border-amber-500/35 bg-amber-500/10 p-3"
+                style={{ maxHeight: "calc(100dvh - 8rem)" }}
+                aria-label="Review location artwork image requests"
               >
-                <dl className="grid gap-2 text-[0.6875rem] sm:grid-cols-2 lg:grid-cols-6">
-                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
-                  <dt className="text-[var(--marinara-editor-muted)]">Image connection</dt>
-                  <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
-                    {artworkPreview.connection.name}
-                  </dd>
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle size="0.9375rem" className="mt-0.5 shrink-0 text-amber-300" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">
+                      Review {artworkPreview.requestCount} image request
+                      {artworkPreview.requestCount === 1 ? "" : "s"}
+                    </p>
+                    <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                      This will send {artworkPreview.requestCount} separate request
+                      {artworkPreview.requestCount === 1 ? "" : "s"} to your image provider. Existing available artwork
+                      is not replaced. Each new image fills only the missing role, or both roles when both are missing.
+                      Prompts use the relevant Chat Settings and global image-generation settings.
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
-                  <dt className="text-[var(--marinara-editor-muted)]">Model</dt>
-                  <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
-                    {artworkPreview.connection.model}
-                  </dd>
-                </div>
-                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
-                  <dt className="text-[var(--marinara-editor-muted)]">Engine style</dt>
-                  <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
-                    {artworkPreview.styleProfile.name}
-                  </dd>
-                </div>
-                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
-                  <dt className="text-[var(--marinara-editor-muted)]">Campaign art style</dt>
-                  <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
-                    {artworkPreview.campaign.artStyleIncluded ? "Included" : "Off"}
-                  </dd>
-                </div>
-                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
-                  <dt className="text-[var(--marinara-editor-muted)]">Scene instructions</dt>
-                  <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
-                    {artworkPreview.chatSettings.imageInstructionsIncluded ? "Included" : "None saved"}
-                  </dd>
-                </div>
-                <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
-                  <dt className="text-[var(--marinara-editor-muted)]">Image size</dt>
-                  <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
-                    {artworkPreview.width} × {artworkPreview.height}
-                  </dd>
-                </div>
-                </dl>
 
-                <div className="grid gap-2">
-                  {artworkPreview.items.map((item, index) => (
-                  <details key={item.id} className="rounded-lg border border-white/10 bg-black/10" open={index === 0}>
-                    <summary className="cursor-pointer px-3 py-2 text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">
-                      {index + 1}. {item.title}
-                    </summary>
-                    <div className="grid gap-2 border-t border-white/10 px-3 py-2.5">
-                      <div>
-                        <label
-                          htmlFor={`map-artwork-positive-${item.id}`}
-                          className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]"
-                        >
-                          Prompt sent to provider
-                        </label>
-                        <textarea
-                          id={`map-artwork-positive-${item.id}`}
-                          aria-label={`Positive prompt for ${item.title}`}
-                          value={item.prompt}
-                          maxLength={200_000}
-                          rows={5}
-                          onChange={(event) =>
-                            setArtworkPreview((current) =>
-                              current
-                                ? {
-                                      ...current,
-                                      items: current.items.map((candidate) =>
-                                        candidate.id === item.id
-                                          ? {
-                                              ...candidate,
-                                              prompt: event.target.value,
-                                            }
-                                          : candidate,
-                                      ),
-                                    }
-                                : current,
-                            )
-                          }
-                          className="mari-editor-field mt-1 max-h-40 min-h-24 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
-                        />
-                      </div>
-                      <div>
-                        <label
-                          htmlFor={`map-artwork-negative-${item.id}`}
-                          className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]"
-                        >
-                          Negative prompt
-                        </label>
-                        <textarea
-                          id={`map-artwork-negative-${item.id}`}
-                          aria-label={`Negative prompt for ${item.title}`}
-                          value={item.negativePrompt}
-                          maxLength={200_000}
-                          rows={3}
-                          placeholder="None"
-                          onChange={(event) =>
-                            setArtworkPreview((current) =>
-                              current
-                                ? {
-                                      ...current,
-                                      items: current.items.map((candidate) =>
-                                        candidate.id === item.id
-                                          ? {
-                                              ...candidate,
-                                              negativePrompt: event.target.value,
-                                            }
-                                          : candidate,
-                                      ),
-                                    }
-                                : current,
-                            )
-                          }
-                          className="mari-editor-field mt-1 max-h-32 min-h-20 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
-                        />
-                      </div>
+                <div
+                  className="grid min-h-0 flex-1 gap-3 overflow-y-auto overscroll-contain pr-1"
+                  data-marinara-map-artwork-review-scroll
+                >
+                  <dl className="grid gap-2 text-[0.6875rem] sm:grid-cols-2 lg:grid-cols-6">
+                    <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                      <dt className="text-[var(--marinara-editor-muted)]">Image connection</dt>
+                      <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
+                        {artworkPreview.connection.name}
+                      </dd>
                     </div>
-                  </details>
-                  ))}
+                    <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                      <dt className="text-[var(--marinara-editor-muted)]">Model</dt>
+                      <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
+                        {artworkPreview.connection.model}
+                      </dd>
+                    </div>
+                    <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                      <dt className="text-[var(--marinara-editor-muted)]">Engine style</dt>
+                      <dd className="mt-0.5 truncate font-semibold text-[var(--marinara-editor-title)]">
+                        {artworkPreview.styleProfile.name}
+                      </dd>
+                    </div>
+                    <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                      <dt className="text-[var(--marinara-editor-muted)]">Campaign art style</dt>
+                      <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
+                        {artworkPreview.campaign.artStyleIncluded ? "Included" : "Off"}
+                      </dd>
+                    </div>
+                    <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                      <dt className="text-[var(--marinara-editor-muted)]">Scene instructions</dt>
+                      <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
+                        {artworkPreview.chatSettings.imageInstructionsIncluded ? "Included" : "None saved"}
+                      </dd>
+                    </div>
+                    <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+                      <dt className="text-[var(--marinara-editor-muted)]">Image size</dt>
+                      <dd className="mt-0.5 font-semibold text-[var(--marinara-editor-title)]">
+                        {artworkPreview.width} × {artworkPreview.height}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="grid gap-2">
+                    {artworkPreview.items.map((item, index) => (
+                      <details
+                        key={item.id}
+                        className="rounded-lg border border-white/10 bg-black/10"
+                        open={index === 0}
+                      >
+                        <summary className="cursor-pointer px-3 py-2 text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">
+                          {index + 1}. {item.title}
+                        </summary>
+                        <div className="grid gap-2 border-t border-white/10 px-3 py-2.5">
+                          <div>
+                            <label
+                              htmlFor={`map-artwork-positive-${item.id}`}
+                              className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]"
+                            >
+                              Prompt sent to provider
+                            </label>
+                            <textarea
+                              id={`map-artwork-positive-${item.id}`}
+                              aria-label={`Positive prompt for ${item.title}`}
+                              value={item.prompt}
+                              maxLength={200_000}
+                              rows={5}
+                              onChange={(event) =>
+                                setArtworkPreview((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        items: current.items.map((candidate) =>
+                                          candidate.id === item.id
+                                            ? {
+                                                ...candidate,
+                                                prompt: event.target.value,
+                                              }
+                                            : candidate,
+                                        ),
+                                      }
+                                    : current,
+                                )
+                              }
+                              className="mari-editor-field mt-1 max-h-40 min-h-24 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              htmlFor={`map-artwork-negative-${item.id}`}
+                              className="text-[0.625rem] font-semibold uppercase tracking-wide text-[var(--marinara-editor-muted)]"
+                            >
+                              Negative prompt
+                            </label>
+                            <textarea
+                              id={`map-artwork-negative-${item.id}`}
+                              aria-label={`Negative prompt for ${item.title}`}
+                              value={item.negativePrompt}
+                              maxLength={200_000}
+                              rows={3}
+                              placeholder="None"
+                              onChange={(event) =>
+                                setArtworkPreview((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        items: current.items.map((candidate) =>
+                                          candidate.id === item.id
+                                            ? {
+                                                ...candidate,
+                                                negativePrompt: event.target.value,
+                                              }
+                                            : candidate,
+                                        ),
+                                      }
+                                    : current,
+                                )
+                              }
+                              className="mari-editor-field mt-1 max-h-32 min-h-20 w-full resize-y overflow-auto whitespace-pre-wrap break-words p-2 font-mono text-[0.625rem] leading-relaxed"
+                            />
+                          </div>
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setArtworkPreview(null)}
+                    className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    data-marinara-refresh-map-artwork-prompts
+                    onClick={() => void refreshArtworkPreview()}
+                    disabled={
+                      artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
+                    }
+                    className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                  >
+                    {previewGalleryImages.isPending ? (
+                      <Loader2 size="0.8125rem" className="animate-spin" />
+                    ) : (
+                      <RefreshCw size="0.8125rem" />
+                    )}
+                    {previewGalleryImages.isPending ? "Refreshing prompts" : "Refresh prompts"}
+                  </button>
+                  <button
+                    type="button"
+                    data-marinara-confirm-map-artwork
+                    onClick={() => void fillMissingArtwork()}
+                    disabled={
+                      artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
+                    }
+                    className="mari-editor-action mari-editor-action--primary min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                  >
+                    <Sparkles size="0.8125rem" /> Generate {artworkPreview.requestCount} image
+                    {artworkPreview.requestCount === 1 ? "" : "s"}
+                  </button>
                 </div>
               </div>
-
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">Location artwork</p>
+                  <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                    Review {missingArtworkLocations.length} incomplete location
+                    {missingArtworkLocations.length === 1 ? "" : "s"} before anything is generated. Each provider
+                    request fills only the missing role, or both roles when both are missing.
+                  </p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setArtworkPreview(null)}
-                  className="mari-chrome-control min-h-11 justify-center px-3 text-xs"
+                  data-marinara-fill-map-artwork
+                  onClick={() => void prepareArtworkPreview()}
+                  disabled={
+                    artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
+                  }
+                  className="mari-chrome-control min-h-11 shrink-0 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  data-marinara-refresh-map-artwork-prompts
-                  onClick={() => void refreshArtworkPreview()}
-                  disabled={artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending}
-                  className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
-                >
-                  {previewGalleryImages.isPending ? (
+                  {artworkProgress || previewGalleryImages.isPending ? (
                     <Loader2 size="0.8125rem" className="animate-spin" />
                   ) : (
-                    <RefreshCw size="0.8125rem" />
+                    <ImageIcon size="0.8125rem" />
                   )}
-                  {previewGalleryImages.isPending ? "Refreshing prompts" : "Refresh prompts"}
+                  {artworkProgress
+                    ? `Creating ${Math.min(artworkProgress.completed + 1, artworkProgress.total)} of ${artworkProgress.total}`
+                    : previewGalleryImages.isPending
+                      ? "Preparing preview"
+                      : `Review ${artworkImagesToGenerate} request${artworkImagesToGenerate === 1 ? "" : "s"}`}
                 </button>
-                <button
-                  type="button"
-                  data-marinara-confirm-map-artwork
-                  onClick={() => void fillMissingArtwork()}
-                  disabled={
-                    artworkProgress !== null ||
-                    previewGalleryImages.isPending ||
-                    conflict ||
-                    updateSpatial.isPending
-                  }
-                  className="mari-editor-action mari-editor-action--primary min-h-11 justify-center px-3 text-xs disabled:opacity-45"
-                >
-                  <Sparkles size="0.8125rem" /> Generate {artworkPreview.requestCount} image
-                  {artworkPreview.requestCount === 1 ? "" : "s"}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-[var(--marinara-editor-title)]">Location artwork</p>
-                <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                  Review {missingArtworkLocations.length} incomplete location
-                  {missingArtworkLocations.length === 1 ? "" : "s"} before anything is generated. Each provider
-                  request fills only the missing role, or both roles when both are missing.
-                </p>
-              </div>
-              <button
-                type="button"
-                data-marinara-fill-map-artwork
-                onClick={() => void prepareArtworkPreview()}
-                disabled={
-                  artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending
-                }
-                className="mari-chrome-control min-h-11 shrink-0 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
-              >
-                {artworkProgress || previewGalleryImages.isPending ? (
-                  <Loader2 size="0.8125rem" className="animate-spin" />
-                ) : (
-                  <ImageIcon size="0.8125rem" />
-                )}
-                {artworkProgress
-                  ? `Creating ${Math.min(artworkProgress.completed + 1, artworkProgress.total)} of ${artworkProgress.total}`
-                  : previewGalleryImages.isPending
-                    ? "Preparing preview"
-                    : `Review ${artworkImagesToGenerate} request${artworkImagesToGenerate === 1 ? "" : "s"}`}
-              </button>
                 {artworkProgress?.currentName && (
                   <span className="sr-only" role="status" aria-live="polite">
                     Creating artwork for {artworkProgress.currentName}
                   </span>
                 )}
-            </div>
-          )}
-        </section>
-      )}
+              </div>
+            )}
+          </section>
+        )}
 
       {!aiBuilderOpen && importIdReport && (
         <section
@@ -3708,10 +3704,12 @@ export function SpatialMapWorkspace({
               <AlertCircle size="0.875rem" className="mt-0.5 shrink-0" />
               <div className="min-w-52 flex-1">
                 <p className="font-semibold">
-                  {unresolvedLoreReferences.length} lore link{unresolvedLoreReferences.length === 1 ? " needs" : "s need"} review
+                  {unresolvedLoreReferences.length} lore link
+                  {unresolvedLoreReferences.length === 1 ? " needs" : "s need"} review
                 </p>
                 <p className="mt-1 leading-relaxed text-amber-100/80">
-                  No name-only match was made. Select a location to relink it in Lore links, or explicitly detach the unresolved IDs.
+                  No name-only match was made. Select a location to relink it in Lore links, or explicitly detach the
+                  unresolved IDs.
                 </p>
               </div>
               <button
@@ -3753,7 +3751,8 @@ export function SpatialMapWorkspace({
                     onClick={() => selectLocation(reference.locationId)}
                     className="min-h-8 min-w-0 flex-1 text-left underline decoration-current/40 underline-offset-2"
                   >
-                    {reference.locationName} → {reference.originalLorebookName} → {reference.originalEntryName} → {reference.originalEntryId}
+                    {reference.locationName} → {reference.originalLorebookName} → {reference.originalEntryName} →{" "}
+                    {reference.originalEntryId}
                   </button>
                   {reference.originalLorebookId &&
                     onOpenLorebook &&
@@ -3890,13 +3889,13 @@ export function SpatialMapWorkspace({
                   type="button"
                   onClick={() => void reloadServerVersion()}
                   className="mari-chrome-control min-h-11 px-3 text-xs"
-            >
-              <RefreshCw size="0.75rem" /> Reload server version
-            </button>
-            <button
-              type="button"
-              onClick={() => setReviewConflict((value) => !value)}
-              className="mari-chrome-control min-h-11 px-3 text-xs"
+                >
+                  <RefreshCw size="0.75rem" /> Reload server version
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewConflict((value) => !value)}
+                  className="mari-chrome-control min-h-11 px-3 text-xs"
                 >
                   Review differences
                 </button>
@@ -4034,83 +4033,79 @@ export function SpatialMapWorkspace({
                     disabled={isImporting}
                     className="mari-chrome-control min-h-11 justify-center px-5 text-sm disabled:opacity-45"
                   >
-                    {isImporting ? (
-                      <Loader2 size="0.875rem" className="animate-spin" />
-                    ) : (
-                      <Download size="0.875rem" />
-                    )}
+                    {isImporting ? <Loader2 size="0.875rem" className="animate-spin" /> : <Download size="0.875rem" />}
                     Import map file
                   </button>
                 )}
               </div>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="mari-maps-workspace-grid hidden min-h-0 flex-1 divide-x divide-[var(--marinara-chat-chrome-panel-divider)] lg:grid">
-            <HierarchyNavigator
-              definition={draft}
-              hierarchyProfile={draftHierarchyProfile}
-              selectedId={selectedId}
-              currentLocationId={effectiveCurrentLocationId}
-              expandSelectedChildren={isFirstMapDraft}
-              onSelect={(id) => selectLocation(id, false)}
-              onEnter={enterLocation}
-              onAddChild={addChild}
-              onAddSibling={addSibling}
-              onDuplicate={duplicateSubtree}
-              onArchive={requestArchive}
-            />
-            {localView}
-            {inspector}
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col lg:hidden">
-            <nav
-              className="grid grid-cols-3 border-b border-[var(--marinara-chat-chrome-panel-divider)] p-2"
-              aria-label="Map editor panes"
-            >
-              {(["hierarchy", "local", "details"] as const).map((pane) => (
-                <button
-                  key={pane}
-                  type="button"
-                  aria-pressed={mobilePane === pane}
-                  onClick={() => setMobilePane(pane)}
-                  className={cn(
-                    "min-h-11 rounded-lg px-2 text-xs font-medium capitalize transition-colors duration-200",
-                    mobilePane === pane
-                      ? "bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)]"
-                      : "text-[var(--marinara-chat-chrome-panel-muted)]",
-                  )}
-                >
-                  {pane}
-                </button>
-              ))}
-            </nav>
-            <div className="min-h-0 flex-1">
-              {mobilePane === "hierarchy" ? (
-                <HierarchyNavigator
-                  definition={draft}
-                  hierarchyProfile={draftHierarchyProfile}
-                  selectedId={selectedId}
-                  currentLocationId={effectiveCurrentLocationId}
-                  expandSelectedChildren={isFirstMapDraft}
-                  onSelect={selectLocation}
-                  onEnter={enterLocation}
-                  onAddChild={addChild}
-                  onAddSibling={addSibling}
-                  onDuplicate={duplicateSubtree}
-                  onArchive={requestArchive}
-                />
-              ) : mobilePane === "local" ? (
-                localView
-              ) : (
-                inspector
-              )}
             </div>
           </div>
-        </>
-      ))}
+        ) : (
+          <>
+            <div className="mari-maps-workspace-grid hidden min-h-0 flex-1 divide-x divide-[var(--marinara-chat-chrome-panel-divider)] lg:grid">
+              <HierarchyNavigator
+                definition={draft}
+                hierarchyProfile={draftHierarchyProfile}
+                selectedId={selectedId}
+                currentLocationId={effectiveCurrentLocationId}
+                expandSelectedChildren={isFirstMapDraft}
+                onSelect={(id) => selectLocation(id, false)}
+                onEnter={enterLocation}
+                onAddChild={addChild}
+                onAddSibling={addSibling}
+                onDuplicate={duplicateSubtree}
+                onArchive={requestArchive}
+              />
+              {localView}
+              {inspector}
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col lg:hidden">
+              <nav
+                className="grid grid-cols-3 border-b border-[var(--marinara-chat-chrome-panel-divider)] p-2"
+                aria-label="Map editor panes"
+              >
+                {(["hierarchy", "local", "details"] as const).map((pane) => (
+                  <button
+                    key={pane}
+                    type="button"
+                    aria-pressed={mobilePane === pane}
+                    onClick={() => setMobilePane(pane)}
+                    className={cn(
+                      "min-h-11 rounded-lg px-2 text-xs font-medium capitalize transition-colors duration-200",
+                      mobilePane === pane
+                        ? "bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)]"
+                        : "text-[var(--marinara-chat-chrome-panel-muted)]",
+                    )}
+                  >
+                    {pane}
+                  </button>
+                ))}
+              </nav>
+              <div className="min-h-0 flex-1">
+                {mobilePane === "hierarchy" ? (
+                  <HierarchyNavigator
+                    definition={draft}
+                    hierarchyProfile={draftHierarchyProfile}
+                    selectedId={selectedId}
+                    currentLocationId={effectiveCurrentLocationId}
+                    expandSelectedChildren={isFirstMapDraft}
+                    onSelect={selectLocation}
+                    onEnter={enterLocation}
+                    onAddChild={addChild}
+                    onAddSibling={addSibling}
+                    onDuplicate={duplicateSubtree}
+                    onArchive={requestArchive}
+                  />
+                ) : mobilePane === "local" ? (
+                  localView
+                ) : (
+                  inspector
+                )}
+              </div>
+            </div>
+          </>
+        ))}
     </div>
   );
 }

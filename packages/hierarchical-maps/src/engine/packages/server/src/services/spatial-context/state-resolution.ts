@@ -6,6 +6,7 @@ import {
   spatialContextDefinitionSchema,
   type SpatialContextDefinition,
   type SpatialContextSnapshot,
+  type ResolvedSpatialTravel,
   type SpatialLocation,
 } from "@marinara-engine/shared";
 import { getPackagePersistence, logger, newId, newTimeSortableId, now } from "./package-runtime.js";
@@ -44,6 +45,7 @@ export interface ResolveSpatialStateOptions {
   exactAnchor?: SpatialMessageAnchor;
   throughMessageId?: string;
   beforeMessageId?: string;
+  acceptedTravel?: ResolvedSpatialTravel | null;
 }
 
 function normalizedLocationName(value: string): string {
