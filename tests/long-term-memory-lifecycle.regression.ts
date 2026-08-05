@@ -53,6 +53,9 @@ const engineStyles = readFileSync(
 const activationFixtureStyles = `
   [data-ltm-control="activation"] { width: 2.5rem; height: 2.25rem; }
   [data-ltm-surface="detail"] .hidden { display: none; }
+  @media (min-width: 768px) {
+    [data-ltm-surface="detail"] .md\\:flex { display: flex; }
+  }
   @media (min-width: 1024px) {
     [data-ltm-surface="detail"] .lg\\:inline { display: inline; }
   }
@@ -140,6 +143,7 @@ async function main() {
   } | null = null;
   let browser: { close: () => Promise<void> } | null = null;
   let browserServer: ReturnType<typeof createServer> | null = null;
+  let releaseReextraction: (() => void) | null = null;
   await runWithSafeCleanup("LTM lifecycle", async () => {
     assert.equal(artifactManifest.id, "long-term-memory");
     assert.equal(artifactManifest.version, packageManifest.version);
@@ -178,6 +182,11 @@ async function main() {
       artifactClient,
       /extract:se!=="refresh"/u,
       "Normal imports must continue extracting source notes",
+    );
+    assert.match(
+      artifactClient,
+      /Default agent connection/u,
+      "The null extraction connection option must identify the default agent connection",
     );
     const { chromium, devices } = await import(
       pathToFileURL(join(engineRoot, "node_modules/@playwright/test/index.mjs")).href,
@@ -557,7 +566,23 @@ async function main() {
           version: 1,
         });
       if (request.method === "POST" && url.pathname.endsWith("/import/preview"))
-        return send(200, { samples: [], scanned: 0, draftable: 0, importedCount: 0 });
+        return send(200, {
+          source: "chats",
+          scanned: 1,
+          draftable: 0,
+          importedCount: 1,
+          samples: [{
+            sourceId: "chat-a:summary-desktop-reextract",
+            title: "Desktop re-extract source",
+            mutationCount: 0,
+            summary: "An imported source held open for re-extraction.",
+            snippet: "The re-extract action should show progress.",
+            status: "imported",
+            freshness: "current",
+            existingNoteId: "source_desktop_reextract",
+            existingNoteTitle: "Desktop re-extract source",
+          }],
+        });
       if (request.method === "POST" && url.pathname.endsWith("/import/lorebooks/preview"))
         return send(200, {
           counts: { books: 1, entries: 1, candidates: 1, pending: 1, imported: 0 },
@@ -613,6 +638,14 @@ async function main() {
         savedNote = JSON.parse(Buffer.concat(chunks).toString("utf8"));
         return send(201, { note: { ...savedNote, createdAt: "2026-07-30T00:00:00.000Z", updatedAt: "2026-07-30T00:00:00.000Z", version: 1 } });
       }
+      if (request.method === "POST" && url.pathname.endsWith("/notes/source_desktop_reextract/extract"))
+        return await new Promise<void>((resolve) => {
+          releaseReextraction = () => {
+            releaseReextraction = null;
+            send(200, {});
+            resolve();
+          };
+        });
       if (
         request.method === "POST" &&
         (url.pathname.endsWith("/accept") || url.pathname.endsWith("/skip"))
@@ -1077,6 +1110,30 @@ async function main() {
     assert.equal(deletedSuggestionId, rejectedSuggestionId);
     assert.equal(savedNote?.type, "world");
     await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+    await page.locator('[data-ltm-source-tab="chats"]').click();
+    await page.locator('[data-ltm-source-section="imported"]').click();
+    const desktopReextractRow = page.locator(
+      '[data-ltm-source-id="chat-a:summary-desktop-reextract"]',
+    );
+    await desktopReextractRow.hover();
+    const desktopReextract = desktopReextractRow.locator(
+      '[data-ltm-source-action="re-extract"]',
+    );
+    await desktopReextract.click();
+    await page.waitForFunction(
+      () => document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") === "pending",
+    );
+    assert.equal(await desktopReextract.isDisabled(), true);
+    assert.match(
+      await desktopReextract.getAttribute("class") ?? "",
+      /\[&>svg\]:animate-spin/u,
+      "Desktop re-extraction must animate its pending loader",
+    );
+    releaseReextraction?.();
+    await page.waitForFunction(
+      () => document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") === "idle",
+    );
+    assert.equal(await desktopReextract.isDisabled(), false);
     await page.locator('[data-ltm-source-tab="lorebooks"]').click();
     const sourcesWorkspace = page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
     await sourcesWorkspace.waitFor();
@@ -1411,6 +1468,7 @@ async function main() {
       `Long-Term Memory ${packageManifest.version} lifecycle: install, offline restart, backup inclusion, uninstall, reinstall, and durable-byte preservation ok`,
     );
   }, [
+    () => releaseReextraction?.(),
     () => browser?.close(),
     () => new Promise<void>((resolveClose, reject) => {
       if (!browserServer) return resolveClose();

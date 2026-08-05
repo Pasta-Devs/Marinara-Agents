@@ -427,7 +427,7 @@
   "ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1": "Open source note: {{value1}}",
   "ui.longTermMemory.sourcesworkspace.parts": "parts",
   "ui.longTermMemory.sourcesworkspace.readyToImport": "Ready to import",
-  "ui.longTermMemory.sourcesworkspace.automatic": "Automatic",
+  "ui.longTermMemory.sourcesworkspace.automatic": "Default agent connection",
   "ui.longTermMemory.sourcesworkspace.deleteExtractedMemoriesTitle": "Delete extracted memories too?",
   "ui.longTermMemory.sourcesworkspace.deleteExtractedMemoriesMessage": "Delete the memories extracted from {{value1}} as well? Choose cancel to keep them.",
   "ui.longTermMemory.sourcesworkspace.deleteExtractedMemories": "Delete them too",
