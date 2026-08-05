@@ -73,15 +73,19 @@ import { useModalKeyboardNavigation } from "./components/use-modal-keyboard-navi
 import {
   addSpatialLocation,
   archiveSpatialLocation,
+  canonicalizeSpatialDirectLinks,
   cloneSpatialDefinition,
   compareSpatialDefinitions,
   createEmptySpatialDefinition,
   duplicateSpatialSubtree,
   isSpatialDefinitionDirty,
   reparentSpatialLocation,
+  removeSpatialDirectLink,
   removeSpatialSubtree,
+  setSpatialDirectLinkDirection,
   spatialDefinitionIssues,
   startNewSpatialMap,
+  updateSpatialDirectLink,
   updateSpatialLocation,
 } from "./editor-state";
 import {
@@ -1367,6 +1371,7 @@ export function SpatialMapWorkspace({
     if (!draft || !portableExportBundle || isExporting) return;
     setIsExporting(true);
     try {
+      const canonicalDraft = canonicalizeSpatialDirectLinks(draft);
       const shouldIncludeArtwork = includeArtworkInExport;
       const artwork: SpatialMapArtworkExport[] = [];
       let missingArtworkCount = 0;
@@ -1376,7 +1381,7 @@ export function SpatialMapWorkspace({
         const imagesById = new Map(
           spatialArtworkImages(chatArtwork, globalArtwork).map((image) => [image.referenceId, image]),
         );
-        for (const imageId of referencedArtworkIds(draft)) {
+        for (const imageId of referencedArtworkIds(canonicalDraft)) {
           const image = imagesById.get(imageId);
           if (!image) {
             missingArtworkCount += 1;
@@ -1410,10 +1415,10 @@ export function SpatialMapWorkspace({
               formatVersion: 4,
               name:
                 (templateMode ? templateName : chat?.name)?.trim() ||
-                draft.locations.find((location) => location.parentId === null)?.name ||
+                canonicalDraft.locations.find((location) => location.parentId === null)?.name ||
                 "World Map",
-              definition: draft,
-              hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+              definition: canonicalDraft,
+              hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, canonicalDraft),
               portableLore: portableExportBundle,
               ...(shouldIncludeArtwork ? { artwork } : {}),
             },
@@ -1679,9 +1684,10 @@ export function SpatialMapWorkspace({
     });
     if (!confirmed) return;
     try {
+      const canonicalDraft = canonicalizeSpatialDirectLinks(draft);
       const chatArtwork = galleryImages.data ?? (await galleryImages.refetch()).data ?? [];
       const globalArtwork = globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [];
-      const promotion = await promoteSpatialArtworkToGlobalGallery(draft, chatArtwork, globalArtwork);
+      const promotion = await promoteSpatialArtworkToGlobalGallery(canonicalDraft, chatArtwork, globalArtwork);
       if (promotion.promoted > 0) await globalGalleryImages.refetch();
       await createTemplate.mutateAsync({
         name,
@@ -1738,9 +1744,10 @@ export function SpatialMapWorkspace({
     });
     if (!confirmed) return;
     try {
+      const canonicalDraft = canonicalizeSpatialDirectLinks(draft);
       const chatArtwork = galleryImages.data ?? (await galleryImages.refetch()).data ?? [];
       const globalArtwork = globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [];
-      const promotion = await promoteSpatialArtworkToGlobalGallery(draft, chatArtwork, globalArtwork);
+      const promotion = await promoteSpatialArtworkToGlobalGallery(canonicalDraft, chatArtwork, globalArtwork);
       if (promotion.promoted > 0) await globalGalleryImages.refetch();
       const created = await createSharedWorld.mutateAsync({
         name,
@@ -1814,9 +1821,10 @@ export function SpatialMapWorkspace({
     });
     if (!confirmed) return;
     try {
+      const canonicalDraft = canonicalizeSpatialDirectLinks(draft);
       const chatArtwork = galleryImages.data ?? (await galleryImages.refetch()).data ?? [];
       const globalArtwork = globalGalleryImages.data ?? (await globalGalleryImages.refetch()).data ?? [];
-      const promotion = await promoteSpatialArtworkToGlobalGallery(draft, chatArtwork, globalArtwork);
+      const promotion = await promoteSpatialArtworkToGlobalGallery(canonicalDraft, chatArtwork, globalArtwork);
       if (promotion.promoted > 0) await globalGalleryImages.refetch();
       const result = await publishSharedWorld.mutateAsync({
         chatId,
@@ -1953,6 +1961,7 @@ export function SpatialMapWorkspace({
   const handleSave = useCallback(
     async (enableForFirstSave = false) => {
       if (!draft || !dirty || issues.length > 0) return;
+      const canonicalDraft = canonicalizeSpatialDirectLinks(draft);
       if (templateMode && libraryRecord) {
         const name = templateName.trim();
         if (!name) {
@@ -1966,8 +1975,8 @@ export function SpatialMapWorkspace({
             expectedRevision: libraryRecord.revision,
             name,
             description: libraryRecord.description,
-            definition: draft,
-            hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, draft),
+            definition: canonicalDraft,
+            hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, canonicalDraft),
           };
           const saved = sharedWorldMode
             ? await updateSharedWorld.mutateAsync(input)
@@ -1996,7 +2005,7 @@ export function SpatialMapWorkspace({
     if (!chatId) return;
     const completingFirstMap = enableForFirstSave && baseDefinition === null;
     if (completingFirstMap && !canEnable) return;
-    const definitionToSave = completingFirstMap ? { ...draft, enabled: true } : draft;
+    const definitionToSave = completingFirstMap ? { ...canonicalDraft, enabled: true } : canonicalDraft;
     setServerIssues([]);
     setConflict(false);
     setReviewConflict(false);
@@ -2477,6 +2486,16 @@ export function SpatialMapWorkspace({
       }}
       onHierarchyProfileChange={applyHierarchyProfile}
       onUpdate={(patch) => selected && applyDraft(updateSpatialLocation(draft, selected.id, patch))}
+      onUpdateDirectLink={(firstLocationId, secondLocationId, patch) =>
+        applyDraft(updateSpatialDirectLink(draft, firstLocationId, secondLocationId, patch))
+      }
+      onSetDirectLinkDirection={(relatedLocationId, direction) =>
+        selected && applyDraft(setSpatialDirectLinkDirection(draft, selected.id, relatedLocationId, direction))
+      }
+      onRemoveDirectLink={(firstLocationId, secondLocationId) =>
+        applyDraft(removeSpatialDirectLink(draft, firstLocationId, secondLocationId))
+      }
+      onSelectLocation={selectLocation}
       lorebooks={lorebooks}
       lorebookEntries={lorebookEntriesQuery.entries ?? []}
       excludedLorebookIds={excludedLorebookIds}

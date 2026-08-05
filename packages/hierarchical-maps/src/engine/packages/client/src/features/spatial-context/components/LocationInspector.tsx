@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Archive, BookOpen, Check, ChevronRight, ImageIcon, Link2, Loader2, LocateFixed, MapPin, Plus, RefreshCw, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BookOpen, Check, ChevronRight, ImageIcon, Link2, Loader2, LocateFixed, MapPin, Plus, RefreshCw, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
 import type {
   Lorebook,
   LorebookEntry,
@@ -11,6 +11,10 @@ import type {
 } from "@marinara-engine/shared";
 import { cn } from "../package-utils";
 import { getSpatialDescendantIds, resolveSpatialBreadcrumb } from "@marinara-engine/shared";
+import {
+  canonicalizeSpatialDirectLinks,
+  type SpatialDirectLinkDirection,
+} from "../editor-state";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
 import {
   DEFAULT_SPATIAL_LINK_PICKER_COLOR,
@@ -213,6 +217,14 @@ interface LocationInspectorProps {
   onHierarchyTypeChange: (typeId: string) => void;
   onHierarchyProfileChange: (profile: SpatialHierarchyProfile) => void;
   onUpdate: (patch: Partial<SpatialLocation>) => void;
+  onUpdateDirectLink: (
+    firstLocationId: string,
+    secondLocationId: string,
+    patch: Partial<Omit<SpatialLocation["links"][number], "targetId" | "bidirectional">>,
+  ) => void;
+  onSetDirectLinkDirection: (relatedLocationId: string, direction: SpatialDirectLinkDirection) => void;
+  onRemoveDirectLink: (firstLocationId: string, secondLocationId: string) => void;
+  onSelectLocation: (locationId: string) => void;
   lorebooks?: Lorebook[];
   lorebookEntries?: LorebookEntry[];
   excludedLorebookIds?: string[];
@@ -232,6 +244,47 @@ interface LocationInspectorProps {
   };
 }
 
+interface LocationDirectLinkRow {
+  source: SpatialLocation;
+  related: SpatialLocation | null;
+  link: SpatialLocation["links"][number];
+  direction: SpatialDirectLinkDirection;
+}
+
+export function resolveLocationDirectLinkRows(
+  definition: SpatialContextDefinition,
+  location: SpatialLocation,
+): LocationDirectLinkRow[] {
+  const canonical = canonicalizeSpatialDirectLinks(definition);
+  const locationsById = new Map(canonical.locations.map((candidate) => [candidate.id, candidate]));
+  const current = locationsById.get(location.id);
+  if (!current) return [];
+  const outgoing: LocationDirectLinkRow[] = current.links.map((link) => ({
+    source: current,
+    related: locationsById.get(link.targetId) ?? null,
+    link,
+    direction: link.bidirectional ? "both" : "outgoing",
+  }));
+  const incoming: LocationDirectLinkRow[] = [];
+  for (const source of canonical.locations) {
+    if (source.id === current.id) continue;
+    source.links.forEach((link) => {
+      if (link.targetId !== current.id) return;
+      incoming.push({
+        source,
+        related: source,
+        link,
+        direction: link.bidirectional ? "both" : "incoming",
+      });
+    });
+  }
+  incoming.sort((left, right) => {
+    const nameOrder = (left.related?.name ?? "").localeCompare(right.related?.name ?? "");
+    return nameOrder || left.source.id.localeCompare(right.source.id);
+  });
+  return [...outgoing, ...incoming];
+}
+
 export function LocationInspector({
   chatId,
   artworkEnabled = true,
@@ -245,6 +298,10 @@ export function LocationInspector({
   onHierarchyTypeChange,
   onHierarchyProfileChange,
   onUpdate,
+  onUpdateDirectLink,
+  onSetDirectLinkDirection,
+  onRemoveDirectLink,
+  onSelectLocation,
   onReparent,
   lorebooks = [],
   lorebookEntries = [],
@@ -313,11 +370,16 @@ export function LocationInspector({
   const eligibleParents = definition.locations
     .filter((candidate) => candidate.id !== location?.id && !descendants.has(candidate.id))
     .sort((left, right) => left.name.localeCompare(right.name));
+  const directLinkRows = useMemo(
+    () => (location ? resolveLocationDirectLinkRows(definition, location) : []),
+    [definition, location],
+  );
+  const linkedLocationIds = useMemo(
+    () => new Set(directLinkRows.flatMap(({ related }) => (related ? [related.id] : []))),
+    [directLinkRows],
+  );
   const eligibleLinks = definition.locations
-    .filter(
-      (candidate) =>
-        candidate.id !== location?.id && location?.links.every((existing) => existing.targetId !== candidate.id),
-    )
+    .filter((candidate) => candidate.id !== location?.id && !linkedLocationIds.has(candidate.id))
     .sort((left, right) => left.name.localeCompare(right.name));
 
   const lorebookById = useMemo(
@@ -443,25 +505,13 @@ export function LocationInspector({
   }
 
   const issueFor = (field: string) => issues.find((issue) => issue.path.at(-1) === field)?.message;
-  const updateLink = (index: number, patch: Partial<SpatialLocation["links"][number]>) => {
-    onUpdate({ links: location.links.map((link, linkIndex) => (index === linkIndex ? { ...link, ...patch } : link)) });
-  };
-  const removeLink = (index: number) => {
-    const link = location.links[index];
-    if (!link) return;
-    onUpdate({ links: location.links.filter((_, linkIndex) => linkIndex !== index) });
-    const reverseLinkRemains = definition.locations
-      .find((candidate) => candidate.id === link.targetId)
-      ?.links.some((candidate) => candidate.targetId === location.id);
-    if (!reverseLinkRemains) {
-      onHierarchyProfileChange(withoutSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId));
-    }
+  const removeLink = (sourceId: string, targetId: string) => {
+    onRemoveDirectLink(sourceId, targetId);
+    onHierarchyProfileChange(withoutSpatialLinkPresentation(hierarchyProfile, sourceId, targetId));
   };
   const addLink = () => {
     if (!newLinkTarget) return;
-    onUpdate({
-      links: [...location.links, { targetId: newLinkTarget, bidirectional: false, state: "available" }],
-    });
+    onSetDirectLinkDirection(newLinkTarget, "outgoing");
     setNewLinkTarget("");
   };
 
@@ -1200,103 +1250,198 @@ export function LocationInspector({
             <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Direct links</h3>
           </div>
           <div className="space-y-2">
-            {location.links.map((link, index) => {
-              const target = definition.locations.find((candidate) => candidate.id === link.targetId);
-              const presentation = resolveSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId);
+            {directLinkRows.map(({ source, related, link, direction }) => {
+              const editable = direction !== "incoming";
+              const relatedName = related?.name || "Missing location";
+              const relatedPath = related
+                ? resolveSpatialBreadcrumb(definition, related.id)
+                    .map((entry) => entry.name.trim())
+                    .filter(Boolean)
+                    .join(" > ")
+                : "Missing location";
+              const directionLabel = direction === "both"
+                ? "Both ways"
+                : direction === "incoming"
+                  ? "Incoming one-way"
+                  : "Outgoing one-way";
+              const DirectionIcon = direction === "both"
+                ? ArrowLeftRight
+                : direction === "incoming"
+                  ? ArrowLeft
+                  : ArrowRight;
+              const presentation = resolveSpatialLinkPresentation(hierarchyProfile, source.id, link.targetId);
               return (
                 <div
-                  key={`${link.targetId}-${index}`}
-                  className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-2.5"
+                  key={[source.id, link.targetId].sort().join(":")}
+                  role="group"
+                  aria-label={`${directionLabel} direct link with ${relatedName}`}
+                  data-marinara-direct-link-source={source.id}
+                  data-marinara-direct-link-target={link.targetId}
+                  data-marinara-direct-link-direction={direction}
+                  data-marinara-direct-link-editable={editable ? "true" : "false"}
+                  className={cn(
+                    "rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-2.5",
+                    !editable && "border-dashed bg-[var(--marinara-chat-chrome-panel-bg)]",
+                  )}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                      {target?.name ?? "Missing location"}
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium">{relatedName}</span>
+                      <span
+                        className="mt-0.5 block truncate text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]"
+                        title={relatedPath}
+                      >
+                        {relatedPath}
+                      </span>
+                    </div>
+                    {editable && related && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectLocation(related.id)}
+                        aria-label={`View linked location ${relatedName}`}
+                        title={`View linked location ${relatedName}`}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-[var(--marinara-chat-chrome-highlight-bg)] hover:text-[var(--marinara-chat-chrome-panel-title)]"
+                      >
+                        <LocateFixed size="0.75rem" />
+                      </button>
+                    )}
+                    {editable && (
+                      <button
+                        type="button"
+                        onClick={() => removeLink(source.id, link.targetId)}
+                        aria-label={`Remove Direct Link with ${relatedName}`}
+                        title={`Remove Direct Link with ${relatedName}`}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-red-500/10 hover:text-[var(--destructive)]"
+                      >
+                        <Trash2 size="0.75rem" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-2 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-panel-title)]">
+                      <DirectionIcon size="0.6875rem" /> {directionLabel}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => removeLink(index)}
-                      aria-label={`Remove link to ${target?.name ?? "missing location"}`}
-                      className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--marinara-chat-chrome-panel-muted)] hover:bg-red-500/10 hover:text-[var(--destructive)]"
-                    >
-                      <Trash2 size="0.75rem" />
-                    </button>
+                    {!editable && (
+                      <span className="inline-flex min-h-7 items-center rounded-full border border-[var(--marinara-chat-chrome-panel-border)] px-2 text-[0.625rem] capitalize text-[var(--marinara-chat-chrome-panel-muted)]">
+                        {link.state}
+                      </span>
+                    )}
                   </div>
-                  <input
-                    className={`${INPUT_CLASS} mt-2`}
-                    value={link.label ?? ""}
-                    placeholder="Optional direction label"
-                    onChange={(event) => updateLink(index, { label: event.target.value || undefined })}
-                  />
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <select
-                      className={INPUT_CLASS}
-                      value={link.state}
-                      aria-label="Link state"
-                      onChange={(event) => updateLink(index, { state: event.target.value as SpatialLinkState })}
-                    >
-                      <option value="available">Available</option>
-                      <option value="hidden">Hidden</option>
-                      <option value="blocked">Blocked</option>
-                    </select>
-                    <label className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] px-3 text-xs">
+                  {editable ? (
+                    <>
                       <input
-                        type="checkbox"
-                        checked={link.bidirectional}
-                        onChange={(event) => updateLink(index, { bidirectional: event.target.checked })}
-                      />
-                      Both ways
-                    </label>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <select
-                      className={INPUT_CLASS}
-                      value={presentation.lineStyle}
-                      aria-label={`Line style for ${target?.name ?? "missing location"}`}
-                      onChange={(event) =>
-                        onHierarchyProfileChange(
-                          withSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId, {
-                            lineStyle: event.target.value as SpatialLinkLineStyle,
-                          }),
-                        )
-                      }
-                    >
-                      <option value="solid">Solid line</option>
-                      <option value="dashed">Dashed line</option>
-                      <option value="dotted">Dotted line</option>
-                    </select>
-                    <div className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] px-2">
-                      <input
-                        type="color"
-                        value={presentation.color ?? DEFAULT_SPATIAL_LINK_PICKER_COLOR}
-                        aria-label={`Line color for ${target?.name ?? "missing location"}`}
-                        title="Choose line color"
+                        className={`${INPUT_CLASS} mt-2`}
+                        value={link.label ?? ""}
+                        aria-label={`Link label for ${relatedName}`}
+                        placeholder="Optional direction label"
                         onChange={(event) =>
-                          onHierarchyProfileChange(
-                            withSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId, {
-                              color: event.target.value,
-                            }),
-                          )
+                          onUpdateDirectLink(source.id, link.targetId, {
+                            label: event.target.value || undefined,
+                          })
                         }
-                        className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
                       />
-                      <span className="min-w-0 flex-1 text-xs">Color</span>
-                      {presentation.color && (
-                        <button
-                          type="button"
-                          onClick={() =>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <select
+                          className={INPUT_CLASS}
+                          value={link.state}
+                          aria-label={`Link state for ${relatedName}`}
+                          onChange={(event) =>
+                            onUpdateDirectLink(source.id, link.targetId, {
+                              state: event.target.value as SpatialLinkState,
+                            })
+                          }
+                        >
+                          <option value="available">Available</option>
+                          <option value="hidden">Hidden</option>
+                          <option value="blocked">Blocked</option>
+                        </select>
+                        <select
+                          className={INPUT_CLASS}
+                          value={direction}
+                          aria-label={`Direction for ${relatedName}`}
+                          onChange={(event) =>
+                            related &&
+                            onSetDirectLinkDirection(
+                              related.id,
+                              event.target.value as SpatialDirectLinkDirection,
+                            )
+                          }
+                        >
+                          <option value="outgoing">Outgoing</option>
+                          <option value="both">Both ways</option>
+                          <option value="incoming">Incoming</option>
+                        </select>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <select
+                          className={INPUT_CLASS}
+                          value={presentation.lineStyle}
+                          aria-label={`Line style for ${relatedName}`}
+                          onChange={(event) =>
                             onHierarchyProfileChange(
-                              withSpatialLinkPresentation(hierarchyProfile, location.id, link.targetId, {
-                                color: undefined,
+                              withSpatialLinkPresentation(hierarchyProfile, source.id, link.targetId, {
+                                lineStyle: event.target.value as SpatialLinkLineStyle,
                               }),
                             )
                           }
-                          className="min-h-11 rounded-md px-2 text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)] hover:text-[var(--marinara-chat-chrome-panel-title)]"
                         >
-                          Auto
+                          <option value="solid">Solid line</option>
+                          <option value="dashed">Dashed line</option>
+                          <option value="dotted">Dotted line</option>
+                        </select>
+                        <div className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] px-2">
+                          <input
+                            type="color"
+                            value={presentation.color ?? DEFAULT_SPATIAL_LINK_PICKER_COLOR}
+                            aria-label={`Line color for ${relatedName}`}
+                            title="Choose line color"
+                            onChange={(event) =>
+                              onHierarchyProfileChange(
+                                withSpatialLinkPresentation(hierarchyProfile, source.id, link.targetId, {
+                                  color: event.target.value,
+                                }),
+                              )
+                            }
+                            className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+                          />
+                          <span className="min-w-0 flex-1 text-xs">Color</span>
+                          {presentation.color && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onHierarchyProfileChange(
+                                  withSpatialLinkPresentation(hierarchyProfile, source.id, link.targetId, {
+                                    color: undefined,
+                                  }),
+                                )
+                              }
+                              className="min-h-11 rounded-md px-2 text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)] hover:text-[var(--marinara-chat-chrome-panel-title)]"
+                            >
+                              Auto
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {link.label && (
+                        <p className="mt-2 text-xs leading-relaxed text-[var(--marinara-chat-chrome-panel-text)]">
+                          {link.label}
+                        </p>
+                      )}
+                      {related && (
+                        <button
+                          type="button"
+                          onClick={() => onSelectLocation(source.id)}
+                          className="mari-chrome-control mt-2 min-h-11 w-full justify-center px-3 text-xs"
+                          aria-label={`View source ${relatedName}`}
+                        >
+                          <LocateFixed size="0.75rem" /> View source
                         </button>
                       )}
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </div>
               );
             })}

@@ -15,6 +15,13 @@ const inspectorSource = readFileSync(
   ),
   "utf8",
 );
+const editorStateSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/editor-state.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const portableLoreDialogSource = readFileSync(
   new URL(
     "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/PortableLoreImportDialog.tsx",
@@ -63,6 +70,46 @@ assert.match(
   inspectorSource,
   /onClick=\{\(\) => onOpenLorebook\(lorebook\.id\)\}[\s\S]*?>\s*Open\s*<\/button>/u,
   "The linked-lore action must retain its host navigation callback.",
+);
+assert.match(
+  editorStateSource,
+  /export function canonicalizeSpatialDirectLinks\([\s\S]*?oneWaySources\.size > 1/u,
+  "Direct Links must canonicalize duplicate and reciprocal records by unordered endpoint pair.",
+);
+assert.match(
+  editorStateSource,
+  /export function setSpatialDirectLinkDirection\([\s\S]*?direction === "incoming"[\s\S]*?direction === "outgoing"[\s\S]*?direction === "both"/u,
+  "Direction changes must rewrite one canonical relationship relative to the selected endpoint.",
+);
+assert.match(
+  editorStateSource,
+  /export function removeSpatialDirectLink\([\s\S]*?spatialDirectLinkPairKey\(location\.id, link\.targetId\) !== pairKey/u,
+  "Removing a Direct Link must delete every persisted record for the endpoint pair.",
+);
+assert.match(
+  inspectorSource,
+  /canonicalizeSpatialDirectLinks\(definition\)[\s\S]*?const editable = direction !== "incoming"[\s\S]*?Incoming one-way[\s\S]*?View source/u,
+  "Two-way links must remain editable from either endpoint while one-way targets expose source navigation.",
+);
+assert.match(
+  inspectorSource,
+  /aria-label=\{`Direction for \$\{relatedName\}`\}[\s\S]*?<option value="outgoing">Outgoing<\/option>[\s\S]*?<option value="both">Both ways<\/option>[\s\S]*?<option value="incoming">Incoming<\/option>/u,
+  "Editable Direct Links must expose all three endpoint-relative directions.",
+);
+assert.match(
+  inspectorSource,
+  /const linkedLocationIds = useMemo\([\s\S]*?directLinkRows\.flatMap[\s\S]*?!linkedLocationIds\.has\(candidate\.id\)/u,
+  "The Direct Link picker must exclude relationships already represented from either endpoint.",
+);
+assert.match(
+  workspaceSource,
+  /onUpdateDirectLink=\{[\s\S]*?updateSpatialDirectLink\(draft[\s\S]*?onSetDirectLinkDirection=\{[\s\S]*?setSpatialDirectLinkDirection\(draft[\s\S]*?onRemoveDirectLink=\{[\s\S]*?removeSpatialDirectLink\(draft/u,
+  "The workspace must apply each pair-level Direct Link mutation as one draft update.",
+);
+assert.match(
+  workspaceSource,
+  /const canonicalDraft = canonicalizeSpatialDirectLinks\(draft\)[\s\S]*?definition: canonicalDraft[\s\S]*?const definitionToSave = completingFirstMap/u,
+  "Export and save paths must persist canonical Direct Link relationships.",
 );
 assert.match(
   workspaceSource,
@@ -135,7 +182,13 @@ assert.match(
   /Open the linked lorebook and discard them\?/u,
   "The built World Maps client must include guarded linked-lore navigation.",
 );
+assert.match(builtClient, /Incoming one-way/u, "The built World Maps client must expose incoming Direct Links.");
+assert.match(
+  browserRegressionSource,
+  /reciprocal and incoming Direct Links stay visible from either endpoint/u,
+  "The browser suite must cover reciprocal editing, unlinking, and incoming source navigation.",
+);
 
 console.log(
-  "World Maps UI contract regression passed: linked-lore/export ownership, portable-lore choices, normalized refresh, and JSON repair parity.",
+  "World Maps UI contract regression passed: Direct Link endpoint parity, linked-lore/export ownership, portable-lore choices, normalized refresh, and JSON repair parity.",
 );
