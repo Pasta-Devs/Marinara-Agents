@@ -3746,6 +3746,233 @@ test("AI map builder previews a validated local draft before save", async ({ pag
   }
 });
 
+test("reciprocal and incoming Direct Links stay visible from either endpoint", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: `Direct Link Endpoint Parity ${testInfo.project.name}`,
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+
+  const definition = {
+    ...generatedDefinition,
+    enabled: true,
+    locations: generatedDefinition.locations.map((location) => {
+      if (location.id === "ai_harbor") {
+        return {
+          ...location,
+          links: [
+            {
+              targetId: "ai_sewers",
+              label: "Dock shuttle",
+              bidirectional: false,
+              state: "available" as const,
+            },
+          ],
+        };
+      }
+      if (location.id === "ai_lighthouse") {
+        return { ...location, parentId: "ai_harbor", placement: undefined, sortOrder: 0 };
+      }
+      if (location.id === "ai_sewers") {
+        return {
+          ...location,
+          links: [
+            {
+              targetId: "ai_lighthouse",
+              label: "Duplicate tunnel",
+              bidirectional: true,
+              state: "available" as const,
+            },
+          ],
+        };
+      }
+      return location;
+    }),
+  };
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition,
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await expectWorkspaceFillsOverlay(page);
+
+    const workspace = page.locator("[data-marinara-maps-workspace-overlay]");
+    const hierarchy = workspace.locator('section[aria-label="Location hierarchy"]:visible');
+    await hierarchy.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    await hierarchy.getByRole("button", { name: /^Old Sewers/u }).click();
+
+    const sewersDetails = workspace.locator('section[aria-label="Details for Old Sewers"]:visible');
+    const reciprocal = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(reciprocal).toHaveCount(1);
+    await expect(reciprocal).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await expect(reciprocal).toHaveAttribute("data-marinara-direct-link-editable", "true");
+    await expect(reciprocal).toContainText("Both ways");
+    await expect(reciprocal).toContainText("Shrouded Coast > Gloam Harbor > Blackglass Lighthouse");
+    await expect(reciprocal.getByLabel("Direction for Blackglass Lighthouse")).toHaveValue("both");
+
+    const incomingOneWay = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_harbor"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(incomingOneWay).toHaveAttribute("data-marinara-direct-link-direction", "incoming");
+    await expect(incomingOneWay).toHaveAttribute("data-marinara-direct-link-editable", "false");
+    await expect(incomingOneWay).toContainText("Incoming one-way");
+    await expect(incomingOneWay).toContainText("Dock shuttle");
+    await expect(incomingOneWay).toContainText("Shrouded Coast > Gloam Harbor");
+    await expect(incomingOneWay.getByLabel("Link label for Gloam Harbor")).toHaveCount(0);
+    const linkTargetPicker = sewersDetails.locator("select").filter({
+      has: page.locator('option[value=""]', { hasText: "Choose location" }),
+    });
+    await expect(linkTargetPicker.locator('option[value="ai_lighthouse"]')).toHaveCount(0);
+    await expect(linkTargetPicker.locator('option[value="ai_harbor"]')).toHaveCount(0);
+
+    await reciprocal.getByLabel("Link label for Blackglass Lighthouse").fill("Target-edited tunnel");
+    await reciprocal.getByLabel("Link state for Blackglass Lighthouse").selectOption("available");
+    await reciprocal.getByLabel("Direction for Blackglass Lighthouse").selectOption("outgoing");
+    const outgoingFromSewers = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_sewers"][data-marinara-direct-link-target="ai_lighthouse"]',
+    );
+    await expect(outgoingFromSewers).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
+    await outgoingFromSewers.getByRole("button", { name: "View linked location Blackglass Lighthouse" }).click();
+    const lighthouseDetails = workspace.locator('section[aria-label="Details for Blackglass Lighthouse"]:visible');
+    const incomingAtLighthouse = lighthouseDetails.locator(
+      '[data-marinara-direct-link-source="ai_sewers"][data-marinara-direct-link-target="ai_lighthouse"]',
+    );
+    await expect(incomingAtLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "incoming");
+    await expect(incomingAtLighthouse).toHaveAttribute("data-marinara-direct-link-editable", "false");
+    await incomingAtLighthouse.getByRole("button", { name: "View source Old Sewers" }).click();
+
+    await outgoingFromSewers.getByLabel("Direction for Blackglass Lighthouse").selectOption("both");
+    await expect(outgoingFromSewers).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await outgoingFromSewers.getByRole("button", { name: "View linked location Blackglass Lighthouse" }).click();
+    const bothAtLighthouse = lighthouseDetails.locator(
+      '[data-marinara-direct-link-source="ai_sewers"][data-marinara-direct-link-target="ai_lighthouse"]',
+    );
+    await expect(bothAtLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await bothAtLighthouse.getByLabel("Direction for Old Sewers").selectOption("outgoing");
+    const outgoingFromLighthouse = lighthouseDetails.locator(
+      '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(outgoingFromLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
+    await expect(outgoingFromLighthouse.getByLabel("Link label for Old Sewers")).toHaveValue(
+      "Target-edited tunnel",
+    );
+    await outgoingFromLighthouse.getByLabel("Direction for Old Sewers").selectOption("both");
+    await outgoingFromLighthouse.getByRole("button", { name: "View linked location Old Sewers" }).click();
+    const bothAtSewers = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(bothAtSewers).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await bothAtSewers.getByLabel("Direction for Blackglass Lighthouse").selectOption("incoming");
+    await expect(bothAtSewers).toHaveAttribute("data-marinara-direct-link-direction", "incoming");
+    await expect(bothAtSewers).toHaveAttribute("data-marinara-direct-link-editable", "false");
+
+    await workspace.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const stored = (await storedResponse.json()) as {
+          definition: {
+            locations: Array<{
+              id: string;
+              links: Array<{ targetId: string; label?: string; bidirectional: boolean; state: string }>;
+            }>;
+          };
+        };
+        return stored.definition.locations.flatMap((location) =>
+          location.links
+            .filter(
+              (link) =>
+                (location.id === "ai_lighthouse" && link.targetId === "ai_sewers") ||
+                (location.id === "ai_sewers" && link.targetId === "ai_lighthouse"),
+            )
+            .map((link) => ({ sourceId: location.id, ...link })),
+        );
+      })
+      .toEqual([
+        {
+          sourceId: "ai_lighthouse",
+          targetId: "ai_sewers",
+          label: "Target-edited tunnel",
+          bidirectional: false,
+          state: "available",
+        },
+      ]);
+
+    await bothAtSewers.getByRole("button", { name: "View source Blackglass Lighthouse" }).click();
+    await outgoingFromLighthouse
+      .getByRole("button", { name: "Remove Direct Link with Old Sewers" })
+      .click();
+    await workspace.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const stored = (await storedResponse.json()) as {
+          definition: { locations: Array<{ id: string; links: Array<{ targetId: string }> }> };
+        };
+        return stored.definition.locations.flatMap((location) =>
+          location.links.filter(
+            (link) =>
+              (location.id === "ai_lighthouse" && link.targetId === "ai_sewers") ||
+              (location.id === "ai_sewers" && link.targetId === "ai_lighthouse"),
+          ),
+        ).length;
+      })
+      .toBe(0);
+    const hierarchyPaneButton = workspace.getByRole("button", { name: "hierarchy", exact: true });
+    if (await hierarchyPaneButton.isVisible()) await hierarchyPaneButton.click();
+    await hierarchy.getByRole("button", { name: /^Old Sewers/u }).click();
+    await expect(bothAtSewers).toHaveCount(0);
+    await expect(incomingOneWay).toBeVisible();
+    await expect(linkTargetPicker.locator('option[value="ai_lighthouse"]')).toHaveCount(1);
+    await expect(linkTargetPicker.locator('option[value="ai_harbor"]')).toHaveCount(0);
+
+    await incomingOneWay.getByRole("button", { name: "View source Gloam Harbor" }).click();
+    const harborDetails = workspace.locator('section[aria-label="Details for Gloam Harbor"]:visible');
+    const outgoing = harborDetails.locator(
+      '[data-marinara-direct-link-source="ai_harbor"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(outgoing).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
+    await expect(outgoing).toHaveAttribute("data-marinara-direct-link-editable", "true");
+    await expect(outgoing).toContainText("Outgoing one-way");
+    await expect(outgoing.getByLabel("Link label for Old Sewers")).toHaveValue("Dock shuttle");
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+  }
+});
+
 test("Roleplay minimap keeps selected locations opaque over map artwork", async ({ page }) => {
   const response = await page.request.post("/api/chats", {
     data: {
