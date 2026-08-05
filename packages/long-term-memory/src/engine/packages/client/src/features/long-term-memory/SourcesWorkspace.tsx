@@ -487,6 +487,8 @@ export default function SourcesWorkspace({
   onOpenReview,
   initialSource,
   onInitialSourceHandled,
+  selectedSource,
+  onSourceChange,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi } = useLtmTranslation();
   const importScopeLabelId = useId();
@@ -498,7 +500,9 @@ export default function SourcesWorkspace({
     null,
   );
   const importControllerRef = useRef<AbortController | null>(null);
-  const [source, setSource] = useState<Source>(initialSource ?? "chats");
+  const [source, setSource] = useState<Source>(
+    initialSource ?? selectedSource ?? "chats",
+  );
   const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(
     null,
   );
@@ -820,6 +824,10 @@ export default function SourcesWorkspace({
     onInitialSourceHandled?.();
   }, [initialSource, onInitialSourceHandled]);
 
+  useEffect(() => {
+    if (selectedSource) setSource(selectedSource);
+  }, [selectedSource]);
+
   useEffect(() => () => importControllerRef.current?.abort(), []);
 
   useEffect(() => {
@@ -886,6 +894,7 @@ export default function SourcesWorkspace({
 
   const changeSource = (next: Source) => {
     setSource(next);
+    onSourceChange?.(next);
     if (next === "lorebooks") setLorebookMobilePane("navigator");
     clearImportResult();
   };

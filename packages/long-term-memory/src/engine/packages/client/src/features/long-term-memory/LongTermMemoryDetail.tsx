@@ -119,6 +119,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [initialSource, setInitialSource] = useState<
     "characters" | "lorebooks" | "chats"
   >();
+  const [selectedSource, setSelectedSource] = useState<
+    "characters" | "lorebooks" | "chats"
+  >("chats");
   const Destination = destinations[destination];
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
@@ -247,6 +250,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestinationDirty(false);
     setAddOpen(false);
     setInitialSource(source);
+    setSelectedSource(source);
     setDestination("sources");
     return true;
   };
@@ -992,6 +996,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   reviewSourceNoteId={reviewSourceNoteId}
                   recoveryHandoff={recoveryHandoff}
                   initialSource={initialSource}
+                  selectedSource={selectedSource}
+                  onSourceChange={setSelectedSource}
                   onInitialSourceHandled={() => setInitialSource(undefined)}
                  />
               </Suspense>

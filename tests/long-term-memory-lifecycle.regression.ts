@@ -745,11 +745,12 @@ async function main() {
     await onboardingNext.click();
     await page.getByRole("button", { name: "Open Characters" }).click();
     await page.locator('[data-ltm-source-tab="characters"][aria-selected="true"]').waitFor();
-    await page.locator('[data-ltm-source-tab="chats"]').click();
+    await page.locator('[data-ltm-source-tab="lorebooks"]').click();
     await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
     await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
     await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]').click();
-    await page.locator('[data-ltm-source-tab="chats"][aria-selected="true"]').waitFor();
+    await page.locator('[data-ltm-source-tab="lorebooks"][aria-selected="true"]').waitFor();
+    await page.locator('[data-ltm-source-tab="chats"]').click();
     assert.deepEqual(scopeTargetQueries, ["?chatId=desktop-chat"]);
     const desktopActivation = page.locator('[data-ltm-control="activation"]');
     await desktopActivation.waitFor();

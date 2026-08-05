@@ -69,6 +69,8 @@ export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
   initialSource?: "characters" | "lorebooks" | "chats";
   onInitialSourceHandled?: () => void;
+  selectedSource?: "characters" | "lorebooks" | "chats";
+  onSourceChange?: (source: "characters" | "lorebooks" | "chats") => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenMemory?: (noteId: string) => void;
   onOpenVault?: () => void;
