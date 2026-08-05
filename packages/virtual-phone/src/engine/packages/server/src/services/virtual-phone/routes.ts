@@ -22,8 +22,18 @@ type PageResult = {
 
 const pageCache = new Map<string, CachedPage>();
 
-function cacheKey(chatId: string, url: string) {
-  return `${chatId}\0${url}`;
+function cacheKey(input: {
+  chatId: string;
+  url: string;
+  phoneIdentity?: string;
+  owner?: { kind: "chat" | "character"; id: string };
+  personaId?: string;
+  characterIds?: string[];
+}) {
+  const owner = input.owner ? `${input.owner.kind}:${input.owner.id}` : `chat:${input.chatId}`;
+  const persona = input.personaId || "none";
+  const characters = [...(input.characterIds || [])].sort().join(",") || "none";
+  return [input.chatId, input.phoneIdentity || "", owner, `persona:${persona}`, `characters:${characters}`, input.url].join("\0");
 }
 
 function readCache(key: string): PageResult | null {
@@ -96,6 +106,14 @@ async function buildPageContext(
   const supplied = asRecord(body.context);
   const context: PhonePageContext = {
     url,
+    phoneOwner: (() => {
+      const owner = asRecord(body.phoneOwner);
+      const kind = owner.kind === "character" ? "character" : "chat";
+      const id = asString(owner.id);
+      return id ? { kind, id, name: asString(owner.name) || undefined } : undefined;
+    })(),
+    personaId: asString(supplied.personaId) || undefined,
+    characterIds: chat?.characterIds?.length ? [...chat.characterIds].sort() : undefined,
     chatSummary: asString(supplied.chatSummary) || undefined,
     worldInfo: asString(supplied.worldInfo) || undefined,
     persona: asString(supplied.persona) || undefined,
@@ -156,14 +174,27 @@ export function createVirtualPhoneRoutes(): FastifyPluginAsync {
       const chatId = asString(body.chatId);
       if (!chatId) return reply.code(400).send({ error: "Open a supported chat before using the phone." });
 
-      const key = cacheKey(chatId, url);
+      const chat = await readChat(chatId);
+      if (!chat) return reply.code(404).send({ error: "The active chat could not be found." });
+
+      const suppliedContext = asRecord(body.context);
+      const ownerRecord = asRecord(body.phoneOwner);
+      const ownerKind = ownerRecord.kind === "character" ? "character" : "chat";
+      const ownerId = asString(ownerRecord.id) || chatId;
+      const phoneIdentity = asString(body.phoneIdentity);
+      const personaId = asString(suppliedContext.personaId);
+      const key = cacheKey({
+        chatId,
+        url,
+        phoneIdentity,
+        owner: { kind: ownerKind, id: ownerId },
+        personaId,
+        characterIds: chat.characterIds,
+      });
       if (body.refresh !== true) {
         const cached = readCache(key);
         if (cached) return { ...cached, fromCache: true };
       }
-
-      const chat = await readChat(chatId);
-      if (!chat) return reply.code(404).send({ error: "The active chat could not be found." });
 
       const connectionId = asString(body.connectionId) || null;
       const chatConnectionId = asString(body.chatConnectionId) || chat.connectionId || null;

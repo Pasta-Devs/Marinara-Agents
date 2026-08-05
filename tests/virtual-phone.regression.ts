@@ -23,7 +23,7 @@ const { PHONE_APPS, defaultInstalledApps, findApp, findAppByUrl, listApps } = aw
 const { PHONE_TEMPLATES, extractSlots, fillSlots, findTemplate } = await import(
   new URL("templates.ts", base).href
 );
-const { buildFullPagePrompt, buildSlotFillPrompt, parseStructuredResponse } = await import(
+const { buildSlotFillPrompt, parseStructuredResponse } = await import(
   new URL("prompt.ts", base).href
 );
 const { selfCheck } = await import(new URL("server-entry.ts", base).href);
@@ -38,6 +38,10 @@ const { selfCheck } = await import(new URL("server-entry.ts", base).href);
   assert.ok(findApp("noodle"), "noodle app missing");
   assert.ok(findApp("noodler"), "noodler app missing");
   assert.equal(findApp("does-not-exist"), null);
+  for (const app of PHONE_APPS) {
+    assert.ok(app.storeCategory, `${app.id} missing App Store category`);
+    assert.ok(app.contentGuidance, `${app.id} missing LLM content guidance`);
+  }
 
   // Noodle ships preinstalled; Noodler must be opted into.
   const preinstalled = defaultInstalledApps();
@@ -71,9 +75,16 @@ const { selfCheck } = await import(new URL("server-entry.ts", base).href);
   // Routing: profile paths beat the catch-all feed, and each app keeps its own.
   assert.equal(findTemplate("noodle", "https://noodle.social/")?.id, "noodle/feed");
   assert.equal(findTemplate("noodle", "https://noodle.social/@mira_k")?.id, "noodle/profile");
+  assert.equal(findTemplate("noodle", "https://noodle.social/search?q=ramen")?.id, "noodle/search");
+  assert.equal(findTemplate("noodle", "https://noodle.social/messages")?.id, "noodle/messages");
   assert.equal(findTemplate("noodler", "https://noodler.social/feed")?.id, "noodler/home");
   assert.equal(findTemplate("noodler", "https://noodler.social/vexline")?.id, "noodler/profile");
-  assert.equal(findTemplate("notes", "https://notes.phone/"), null, "apps without templates must fall through");
+  assert.equal(findTemplate("noodler", "https://noodler.social/discover")?.id, "noodler/discover");
+  assert.equal(findTemplate("noodler", "https://noodler.social/subscriptions")?.id, "noodler/subscriptions");
+  assert.equal(findTemplate("notes", "https://notes.phone/")?.id, "notes/home");
+  assert.equal(findTemplate("notes", "https://notes.phone/item/meeting")?.id, "notes/detail");
+  assert.ok(PHONE_TEMPLATES.some((template) => template.id === "notes/settings"));
+  assert.ok(PHONE_TEMPLATES.some((template) => template.id === "messages/search"));
 
   // Slot filling drops unfilled slots rather than leaking the marker.
   const feed = PHONE_TEMPLATES.find((template) => template.id === "noodle/feed")!;
@@ -115,11 +126,12 @@ const { selfCheck } = await import(new URL("server-entry.ts", base).href);
   assert.match(noodlerPrompt, /Every creator on Noodler is an adult/);
   assert.match(noodlerPrompt, /Never escalate past the story/);
 
-  // Apps without a template still get the phone framing.
-  const full = buildFullPagePrompt(findApp("notes")!, { url: "https://notes.phone/" })[0].content;
-  assert.match(full, /390px wide in portrait/);
-  assert.match(full, /never look like bare unstyled HTML/);
-  assert.match(full, /"html"/);
+  // Every app now uses a stable template and slot-only generation.
+  const notes = findApp("notes")!;
+  const notesTemplate = findTemplate("notes", "https://notes.phone/")!;
+  const frameworkPrompt = buildSlotFillPrompt(notes, notesTemplate, { url: "https://notes.phone/" })[0].content;
+  assert.match(frameworkPrompt, /The page shell is fixed/);
+  assert.match(frameworkPrompt, /Do not recreate app chrome/);
 }
 
 // ── Tolerant response parsing ─────────────────────────────────────────────

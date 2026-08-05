@@ -2,14 +2,16 @@
 // Virtual Phone — page templates
 //
 // Noodle and Noodler ship as templates so their look stays stable across a
-// roleplay and the model only writes content, never chrome. Every other app is
-// generated as a full page. Templates are inlined strings: the package bundles
+// roleplay and the model only writes content, never chrome. Every other app uses
+// route-aware baseline templates. Templates are inlined strings: the package bundles
 // to a single server.mjs, so there is no asset directory to read at runtime.
 //
 // These are SIMULATED, scoped-to-the-chat versions of Noodle and Noodler. They
 // never read or write the Engine's own Noodle tables, so one roleplay's feed can
 // never leak into another chat.
 // ──────────────────────────────────────────────
+
+import { PHONE_APPS, type PhoneApp } from "./apps.js";
 
 export type PhoneTemplate = {
   id: string;
@@ -183,7 +185,7 @@ Never mention OnlyFans, Fansly, or any real platform — in this world Noodler i
   and in-world standing, not one generic flirty tone.
 - Pricing and follower counts should reflect standing, not be uniformly large.`;
 
-export const PHONE_TEMPLATES: readonly PhoneTemplate[] = [
+const SPECIAL_PHONE_TEMPLATES: readonly PhoneTemplate[] = [
   {
     id: "noodle/profile",
     appId: "noodle",
@@ -216,7 +218,7 @@ ${NOODLE_TABS}
   {
     id: "noodle/feed",
     appId: "noodle",
-    match: () => true,
+    match: (path) => !/^\/(search|notifications|messages)(?:\/|$)/i.test(path),
     name: "Noodle feed",
     slots: ["trending", "posts"],
     slotDoc: `${NOODLE_RULES}
@@ -241,6 +243,44 @@ ${NOODLE_POST_DOC}`,
   <main aria-label="Timeline"><!-- SLOT: posts --></main>
 ${NOODLE_TABS}
 </div></body></html>`,
+  },
+  {
+    id: "noodle/search",
+    appId: "noodle",
+    match: (path) => path.startsWith("/search"),
+    name: "Noodle search",
+    slots: ["query", "results"],
+    slotDoc: `${NOODLE_RULES}
+
+This is Noodle's search results page. The query comes from the URL and must be preserved.
+- query: one short line showing the exact searched phrase.
+- results: 6-10 posts or accounts relevant to the query, each using the standard Noodle post markup or a profile link.
+${NOODLE_POST_DOC}`,
+    html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Search / Noodle</title><style>${NOODLE_CSS}</style></head><body><div class="nd-app"><header class="nd-top"><div class="nd-wordmark"><span>🍜</span> noodle</div><a href="https://noodle.social/">Home</a></header><form class="nd-compose" action="https://noodle.social/search" method="get" aria-label="search Noodle"><input name="q" placeholder="Search Noodle" aria-label="Search phrase"><button type="submit">Search</button></form><section class="nd-trends"><h2>Results for</h2><div class="nd-trend-name"><!-- SLOT: query --></div></section><main aria-label="Search results"><!-- SLOT: results --></main>${NOODLE_TABS}</div></body></html>`,
+  },
+  {
+    id: "noodle/notifications",
+    appId: "noodle",
+    match: (path) => path.startsWith("/notifications"),
+    name: "Noodle notifications",
+    slots: ["notifications"],
+    slotDoc: `${NOODLE_RULES}
+
+This is the logged-in user's Noodle notifications page.
+- notifications: 6-12 notification rows. Include follows, replies, mentions, slurps, and noodle reactions when they fit the scene. Do not write as the user's persona.` ,
+    html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Notifications / Noodle</title><style>${NOODLE_CSS}</style></head><body><div class="nd-app"><header class="nd-top"><div class="nd-wordmark"><span>🍜</span> noodle</div><a href="https://noodle.social/">Home</a></header><section class="nd-trends"><h2>Notifications</h2></section><main aria-label="Notifications"><!-- SLOT: notifications --></main>${NOODLE_TABS}</div></body></html>`,
+  },
+  {
+    id: "noodle/messages",
+    appId: "noodle",
+    match: (path) => path.startsWith("/messages"),
+    name: "Noodle messages",
+    slots: ["conversations"],
+    slotDoc: `${NOODLE_RULES}
+
+This is Noodle direct messages.
+- conversations: 4-8 conversation rows with a display name, handle, last message, and relative time. Use links to https://noodle.social/messages/<handle>. Keep private messages in character and never write the user's persona's outgoing words.` ,
+    html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Messages / Noodle</title><style>${NOODLE_CSS}</style></head><body><div class="nd-app"><header class="nd-top"><div class="nd-wordmark"><span>🍜</span> noodle</div><a href="https://noodle.social/">Home</a></header><section class="nd-trends"><h2>Messages</h2></section><main aria-label="Direct messages"><!-- SLOT: conversations --></main>${NOODLE_TABS}</div></body></html>`,
   },
   {
     id: "noodler/profile",
@@ -278,9 +318,45 @@ ${NOODLER_TABS}
 </div></body></html>`,
   },
   {
+    id: "noodler/discover",
+    appId: "noodler",
+    match: (path) => path.startsWith("/discover"),
+    name: "Noodler discover",
+    slots: ["creators"],
+    slotDoc: `${NOODLER_RULES}
+
+This is Noodler's creator discovery page.
+- creators: 6-10 creator cards with an adult creator name, handle, short pitch, subscription price, and a link to their profile. Keep discovery suggestive but not automatically explicit.` ,
+    html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Discover / Noodler</title><style>${NOODLER_CSS}</style></head><body><div class="nr-app"><header class="nr-top"><div class="nr-wordmark"><span>🌶️</span> noodler</div><span class="nr-badge">18+</span></header><section class="nr-id"><h1>Discover creators</h1><p class="nr-bio">Find creators worth subscribing to.</p></section><main aria-label="Creators"><!-- SLOT: creators --></main>${NOODLER_TABS}</div></body></html>`,
+  },
+  {
+    id: "noodler/messages",
+    appId: "noodler",
+    match: (path) => path.startsWith("/messages"),
+    name: "Noodler messages",
+    slots: ["conversations"],
+    slotDoc: `${NOODLER_RULES}
+
+This is Noodler creator and subscriber messaging.
+- conversations: 4-8 rows with adult creator names, handles, a teasing but non-graphic preview, and a relative time. Never write as the user's persona.` ,
+    html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Messages / Noodler</title><style>${NOODLER_CSS}</style></head><body><div class="nr-app"><header class="nr-top"><div class="nr-wordmark"><span>🌶️</span> noodler</div><span class="nr-badge">18+</span></header><section class="nr-id"><h1>Messages</h1></section><main aria-label="Messages"><!-- SLOT: conversations --></main>${NOODLER_TABS}</div></body></html>`,
+  },
+  {
+    id: "noodler/subscriptions",
+    appId: "noodler",
+    match: (path) => path.startsWith("/subscriptions"),
+    name: "Noodler subscriptions",
+    slots: ["subscriptions"],
+    slotDoc: `${NOODLER_RULES}
+
+This is the user's Noodler subscriptions page.
+- subscriptions: 4-8 creator subscription rows with tier name, price, renewal status, and one recent post teaser. Locked media stays locked.` ,
+    html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Subscriptions / Noodler</title><style>${NOODLER_CSS}</style></head><body><div class="nr-app"><header class="nr-top"><div class="nr-wordmark"><span>🌶️</span> noodler</div><span class="nr-badge">18+</span></header><section class="nr-id"><h1>Your subscriptions</h1></section><main aria-label="Subscriptions"><!-- SLOT: subscriptions --></main>${NOODLER_TABS}</div></body></html>`,
+  },
+  {
     id: "noodler/home",
     appId: "noodler",
-    match: () => true,
+    match: (path) => !/^\/(discover|messages|subscriptions)(?:\/|$)/i.test(path),
     name: "Noodler feed",
     slots: ["gate", "posts"],
     slotDoc: `${NOODLER_RULES}
@@ -308,6 +384,70 @@ ${NOODLER_TABS}
 </div></body></html>`,
   },
 ];
+
+const FRAMEWORK_CSS = `
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #101116; color: #f3f4f6; font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  a { color: #8ec5ff; text-decoration: none; }
+  .vp-app { min-height: 100vh; padding-bottom: 58px; }
+  .vp-top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; background: #181a22; border-bottom: 1px solid #303442; }
+  .vp-brand { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; }
+  .vp-search { display: flex; gap: 8px; padding: 12px 16px; background: #14161d; border-bottom: 1px solid #292d38; }
+  .vp-search input { min-width: 0; flex: 1; padding: 9px 11px; border: 1px solid #3a3f4e; border-radius: 8px; background: #0f1117; color: inherit; }
+  .vp-search button, .vp-action { padding: 9px 12px; border: 0; border-radius: 8px; background: #8ec5ff; color: #101116; font-weight: 700; }
+  .vp-section { padding: 14px 16px; border-bottom: 1px solid #292d38; }
+  .vp-section h2 { margin: 0 0 9px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #aeb5c5; }
+  .vp-items { display: grid; gap: 9px; }
+  .vp-item { display: block; padding: 12px; border: 1px solid #303442; border-radius: 10px; background: #191c25; }
+  .vp-item strong { display: block; color: #f3f4f6; }
+  .vp-item small { display: block; margin-top: 4px; color: #aeb5c5; }
+  .vp-detail { display: grid; gap: 10px; color: #d8dce6; }
+  .vp-tabs { position: fixed; right: 0; bottom: 0; left: 0; display: flex; justify-content: space-around; padding: 9px 0 11px; background: #181a22; border-top: 1px solid #303442; }
+  .vp-tabs a { font-size: 11px; color: #aeb5c5; }
+  .vp-tabs a.active { color: #8ec5ff; font-weight: 700; }
+`;
+
+const FRAMEWORK_DOC = `
+The page shell is fixed and already includes its header, controls, section labels, item cards, and bottom navigation.
+Fill only the documented slots with content. Use absolute links on the app's own domain.
+- summary: one short app-specific summary or status line.
+- items: 5-10 complete item cards. Each card must be an <a class="vp-item" href="..."><strong>Title</strong><small>Useful detail</small></a>.
+- action: one short label for the primary action, or an empty string when no action fits.
+- detail: the body of one selected item, with 2-4 paragraphs or short rows.
+`;
+
+const FRAMEWORK_ROUTE_DOC = {
+  home: "Show the app's primary home/feed view with current, recommended, or recent content.",
+  search: "Show results for the submitted search query. Preserve the query in the result titles and links.",
+  detail: "Show one selected item, profile, conversation, product, event, or location in detail.",
+  settings: "Show practical account/app settings as compact rows. Do not invent dangerous account actions.",
+} as const;
+
+function frameworkTemplate(app: PhoneApp, route: keyof typeof FRAMEWORK_ROUTE_DOC): PhoneTemplate {
+  const routePath = route === "home" ? "/" : `/${route}`;
+  const pathLabel = route === "home" ? "Home" : route[0].toUpperCase() + route.slice(1);
+  const slotNames = route === "detail" ? ["summary", "detail", "action"] : route === "settings" ? ["summary", "items"] : ["summary", "items", "action"];
+  const detailSlot = route === "detail" ? '<section class="vp-section"><h2>Details</h2><div class="vp-detail"><!-- SLOT: detail --></div></section>' : "";
+  return {
+    id: `${app.id}/${route}`,
+    appId: app.id,
+    match: (path) => route === "home"
+      ? !/^\/(search|detail|settings|discover|saved|profile|item|product|event|thread)(?:\/|$)/i.test(path)
+      : route === "search" ? path.startsWith("/search")
+        : route === "settings" ? path.startsWith("/settings")
+          : /\/(detail|profile|item|product|event|thread)\b/i.test(path) || /^\/[^/]+$/.test(path),
+    name: `${app.name} ${pathLabel}`,
+    slots: slotNames,
+    slotDoc: `${app.description}\n\nContent brief: ${app.contentGuidance || app.description}\nStore category: ${app.storeCategory || "reference"}\n\n${FRAMEWORK_ROUTE_DOC[route]}\n\n${FRAMEWORK_DOC}`,
+    html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${app.name} ${pathLabel}</title><style>${FRAMEWORK_CSS}</style></head><body><div class="vp-app"><header class="vp-top"><div class="vp-brand"><span>${app.icon}</span>${app.name}</div><a href="https://${app.domain}${routePath}">${pathLabel}</a></header>${route === "search" ? `<form class="vp-search" action="https://${app.domain}/search" method="get" aria-label="Search ${app.name}"><input name="q" placeholder="Search ${app.name}" aria-label="Search"><button type="submit">Go</button></form>` : ""}<section class="vp-section"><h2>${route === "search" ? "Results" : route === "detail" ? "Overview" : route === "settings" ? "Account" : "Now"}</h2><div class="vp-item"><span><!-- SLOT: summary --></span></div></section>${detailSlot}${route !== "detail" ? `<main class="vp-section"><h2>${route === "settings" ? "Preferences" : route === "search" ? "Matches" : "For you"}</h2><div class="vp-items"><!-- SLOT: items --></div></main>` : ""}${route !== "settings" ? `<section class="vp-section"><!-- SLOT: action --></section>` : ""}<nav class="vp-tabs" aria-label="${app.name}"><a class="${route === "home" ? "active" : ""}" href="https://${app.domain}/">Home</a><a class="${route === "search" ? "active" : ""}" href="https://${app.domain}/search">Search</a><a class="${route === "detail" ? "active" : ""}" href="https://${app.domain}/discover">Discover</a><a class="${route === "settings" ? "active" : ""}" href="https://${app.domain}/settings">Settings</a></nav></div></body></html>`,
+  };
+}
+
+const FRAMEWORK_TEMPLATES = PHONE_APPS
+  .filter((app) => app.framework && app.id !== "noodle" && app.id !== "noodler")
+  .flatMap((app) => (Object.keys(FRAMEWORK_ROUTE_DOC) as Array<keyof typeof FRAMEWORK_ROUTE_DOC>).map((route) => frameworkTemplate(app, route)));
+
+export const PHONE_TEMPLATES: readonly PhoneTemplate[] = [...SPECIAL_PHONE_TEMPLATES, ...FRAMEWORK_TEMPLATES];
 
 /** First template whose app matches and whose path predicate accepts. */
 export function findTemplate(appId: string, url: string): PhoneTemplate | null {

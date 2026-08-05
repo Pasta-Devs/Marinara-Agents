@@ -1,4 +1,4 @@
-import type { HistoryEntry, PhoneApp, PhonePage } from "./types";
+import type { HistoryEntry, PhoneApp, PhoneBackground, PhonePage, PhoneOwner } from "./types";
 
 const API_ROOT = "/api/virtual-phone";
 const CSRF_HEADER = "x-marinara-csrf";
@@ -44,28 +44,71 @@ export async function fetchPage(input: {
   pageHistory?: string;
   navHistory?: Array<{ url: string; title: string }>;
   context?: Record<string, unknown>;
+  phoneOwner?: PhoneOwner;
+  phoneIdentity?: string;
 }): Promise<PhonePage> {
-  const response = await fetch(`${API_ROOT}/page`, {
-    method: "POST",
-    headers: { "content-type": "application/json", [CSRF_HEADER]: "1", ...getAdminSecretHeader() },
-    credentials: "same-origin",
-    body: JSON.stringify(input),
-  });
-  const result = (await response.json()) as PhonePage & { error?: string; message?: string };
-  if (!response.ok) throw new Error(result.message || result.error || `The phone could not open that screen (${response.status}).`);
-  return result;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await fetch(`${API_ROOT}/page`, {
+      method: "POST",
+      headers: { "content-type": "application/json", [CSRF_HEADER]: "1", ...getAdminSecretHeader() },
+      credentials: "same-origin",
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    });
+    const result = (await response.json()) as PhonePage & { error?: string; message?: string };
+    if (!response.ok) throw new Error(result.message || result.error || `The phone could not open that screen (${response.status}).`);
+    return result;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 // ── Installed apps ────────────────────────────────────────────────────────
-// Scoped per chat so one roleplay's phone is not another roleplay's phone.
+// Scoped per chat, phone owner, persona, and character set so phone state cannot leak.
 
-function installKey(chatId: string | undefined): string | null {
-  const trimmed = typeof chatId === "string" ? chatId.trim() : "";
-  return trimmed ? `${INSTALL_STORAGE_PREFIX}${trimmed}` : null;
+export function phoneStorageIdentity(input: {
+  chatId?: string;
+  owner?: PhoneOwner;
+  personaId?: string;
+  characterIds?: string[];
+}): string | null {
+  const chatId = input.chatId?.trim() || "";
+  if (!chatId) return null;
+  const owner = input.owner ? `${input.owner.kind}:${input.owner.id}` : "chat:${chatId}";
+  const persona = input.personaId?.trim() || "none";
+  const characters = [...(input.characterIds || [])].map((id) => id.trim()).filter(Boolean).sort().join(",") || "none";
+  return [chatId, owner, `persona:${persona}`, `characters:${characters}`].join("|");
 }
 
-export function readInstalled(chatId: string | undefined, defaults: string[]): string[] {
-  const key = installKey(chatId);
+function installKey(identity: string | null): string | null {
+  return identity ? `${INSTALL_STORAGE_PREFIX}${identity}` : null;
+}
+
+export function readBackground(identity: string | null): PhoneBackground {
+  const key = installKey(identity);
+  if (!key) return "aurora";
+  try {
+    const value = window.localStorage.getItem(`${key}:background`);
+    return value === "midnight" || value === "paper" || value === "ocean" || value === "sunset" ? value : "aurora";
+  } catch {
+    return "aurora";
+  }
+}
+
+export function writeBackground(identity: string | null, background: PhoneBackground): void {
+  const key = installKey(identity);
+  if (!key) return;
+  try {
+    window.localStorage.setItem(`${key}:background`, background);
+  } catch {
+    // The preference remains active in memory for this session.
+  }
+}
+
+export function readInstalled(identity: string | null, defaults: string[]): string[] {
+  const key = installKey(identity);
   if (!key) return [...defaults];
   try {
     const saved: unknown = JSON.parse(window.localStorage.getItem(key) || "null");
@@ -76,8 +119,8 @@ export function readInstalled(chatId: string | undefined, defaults: string[]): s
   return [...defaults];
 }
 
-export function writeInstalled(chatId: string | undefined, installed: string[]): void {
-  const key = installKey(chatId);
+export function writeInstalled(identity: string | null, installed: string[]): void {
+  const key = installKey(identity);
   if (!key) return;
   try {
     window.localStorage.setItem(key, JSON.stringify(installed));
@@ -88,8 +131,8 @@ export function writeInstalled(chatId: string | undefined, installed: string[]):
 
 // ── Session ───────────────────────────────────────────────────────────────
 
-export function readSession(chatId: string | undefined): { entries: HistoryEntry[]; index: number } | null {
-  const key = installKey(chatId);
+export function readSession(identity: string | null): { entries: HistoryEntry[]; index: number } | null {
+  const key = installKey(identity);
   if (!key) return null;
   try {
     const saved: unknown = JSON.parse(window.localStorage.getItem(`${key}:session`) || "null");
@@ -111,8 +154,8 @@ export function readSession(chatId: string | undefined): { entries: HistoryEntry
   }
 }
 
-export function writeSession(chatId: string | undefined, entries: HistoryEntry[], index: number): void {
-  const key = installKey(chatId);
+export function writeSession(identity: string | null, entries: HistoryEntry[], index: number): void {
+  const key = installKey(identity);
   if (!key) return;
   try {
     // Keep the tail only; full page HTML adds up fast in localStorage.

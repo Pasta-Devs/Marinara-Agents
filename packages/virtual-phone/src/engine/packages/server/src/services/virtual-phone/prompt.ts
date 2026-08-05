@@ -1,9 +1,8 @@
 // ──────────────────────────────────────────────
 // Virtual Phone — prompt construction
 //
-// Two shapes: fill the slots of a known template, or generate a whole page for
-// an app that has no template. Both return JSON so the route never has to parse
-// prose out of a page.
+// Page generation fills a known route template. The model supplies content only,
+// so stable app chrome is cached in the package rather than regenerated.
 // ──────────────────────────────────────────────
 import type { PhoneApp } from "./apps.js";
 import type { PhoneChatMessage } from "./package-runtime.js";
@@ -11,6 +10,9 @@ import type { PhoneTemplate } from "./templates.js";
 
 export type PhonePageContext = {
   url: string;
+  phoneOwner?: { kind: "chat" | "character"; id: string; name?: string };
+  personaId?: string;
+  characterIds?: string[];
   chatSummary?: string;
   characters?: string[];
   persona?: string;
@@ -41,6 +43,9 @@ function formatMessages(messages: Array<{ role: string; content: string }>): str
 
 function sceneBlock(context: PhonePageContext): string[] {
   const lines: string[] = [];
+  if (context.phoneOwner) lines.push(`Phone owner: ${context.phoneOwner.kind} ${context.phoneOwner.name || context.phoneOwner.id}`);
+  if (context.personaId) lines.push(`Phone persona identity: ${context.personaId}`);
+  if (context.characterIds?.length) lines.push(`Phone character identities: ${context.characterIds.join(", ")}`);
   if (context.characters?.length) lines.push(`Characters in the scene: ${context.characters.join(", ")}`);
   if (context.persona) lines.push(`The phone belongs to: ${context.persona}`);
   if (context.chatSummary) lines.push(`Scene: ${context.chatSummary}`);
@@ -68,6 +73,8 @@ export function buildSlotFillPrompt(
   const system = [
     `Fill the content slots of the ${app.name} app on a character's phone.`,
     `App: ${app.name} (${app.domain}) — URL: ${context.url}`,
+    `App content brief: ${app.contentGuidance || app.description}`,
+    `App category: ${app.storeCategory || "reference"}`,
     `Slots to fill: ${template.slots.join(", ")}`,
     "",
     template.slotDoc,
