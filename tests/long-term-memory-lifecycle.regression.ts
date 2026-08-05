@@ -50,6 +50,13 @@ const engineStyles = readFileSync(
   join(engineRoot, "packages/client/src/styles/globals.css"),
   "utf8",
 );
+const activationFixtureStyles = `
+  [data-ltm-control="activation"] { width: 2.5rem; height: 2.25rem; }
+  [data-ltm-surface="detail"] .hidden { display: none; }
+  @media (min-width: 1024px) {
+    [data-ltm-surface="detail"] .lg\\:inline { display: inline; }
+  }
+`;
 const originalFetch = globalThis.fetch;
 let catalogOnline = true;
 
@@ -366,7 +373,7 @@ async function main() {
       if (url.pathname === "/")
         return send(200, `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/globals.css"><script type="module" src="/client.js"></script>`, "text/html");
       if (url.pathname === "/globals.css")
-        return send(200, engineStyles, "text/css");
+        return send(200, `${engineStyles}\n${activationFixtureStyles}`, "text/css");
       if (url.pathname === "/client.js") return send(200, artifactClient, "application/javascript");
       if (!url.pathname.startsWith("/api/long-term-memory/")) return send(404, {});
       if (request.method === "GET" && url.pathname.endsWith("/status"))
@@ -1013,17 +1020,84 @@ async function main() {
       /blue lantern marks the safe channel/u,
     );
 
-    const mobileContext = await browser.newContext({ ...devices["Pixel 7"] });
+    const mobileContext = await browser.newContext({
+      ...devices["Pixel 7"],
+      viewport: { width: 390, height: 844 },
+    });
     const mobilePage = await mobileContext.newPage();
+    const activationChanges: boolean[] = [];
+    await mobilePage.exposeFunction("onMobileActivationChange", (enabled: boolean) => {
+      activationChanges.push(enabled);
+    });
     await mobilePage.goto(`http://127.0.0.1:${address.port}/`);
     await mobilePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
     await mobilePage.evaluate((version) => {
       const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
       element.setAttribute("view", "detail");
-      element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+      element.capabilityProps = {
+        agent: { name: "Long-Term Memory" },
+        chatId: "chat-mobile",
+        chatName: "kirei",
+        enabledForChat: true,
+        onEnabledForChatChange: (window as Window & {
+          onMobileActivationChange: (value: boolean) => void;
+        }).onMobileActivationChange,
+        package: { version },
+      };
       document.body.append(element);
     }, packageManifest.version);
     await mobilePage.locator('[data-ltm-surface="detail"]').waitFor();
+    const activation = mobilePage.locator('[data-ltm-control="activation"]');
+    assert.equal(await activation.count(), 1);
+    assert.equal(await activation.isVisible(), true);
+    assert.equal(await activation.getAttribute("aria-checked"), "true");
+    const activationMetrics = await activation.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const center = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return {
+        box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        display: style.display,
+        visibility: style.visibility,
+        opacity: style.opacity,
+        nearbyText: element.parentElement?.innerText ?? "",
+        withinViewport:
+          rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight,
+        centerCovered: center === element || element.contains(center),
+      };
+    });
+    console.log(`LTM mobile activation baseline: ${JSON.stringify(activationMetrics)}`);
+    await mobilePage.screenshot({ path: "/tmp/opencode/ltm-activation-mobile-before.png", fullPage: true });
+    assert.ok(activationMetrics.box.width > 0 && activationMetrics.box.height > 0);
+    assert.ok(activationMetrics.box.width >= 40 && activationMetrics.box.height >= 36);
+    assert.equal(activationMetrics.withinViewport, true);
+    assert.equal(activationMetrics.centerCovered, true);
+    const activationLabel = activation.locator("xpath=preceding-sibling::span");
+    assert.match(await activationLabel.innerText(), /active in kirei/i);
+    assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).display), "none");
+    assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).visibility), "hidden");
+    assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).opacity), "0");
+    assert.equal(
+      await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+      true,
+    );
+    await activation.click();
+    assert.deepEqual(activationChanges, [false]);
+    await mobilePage.evaluate(() => {
+      const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: Record<string, unknown> };
+      element.capabilityProps = {
+        ...element.capabilityProps,
+        enabledForChat: false,
+      };
+      element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+    });
+    await mobilePage.waitForFunction(
+      () => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-checked") === "false",
+    );
+    assert.equal(await activation.getAttribute("aria-checked"), "false");
+    assert.match(await activationLabel.innerText(), /active in kirei/i);
+    assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).display), "none");
+    assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).visibility), "hidden");
     const mobileNavigation = mobilePage.locator('[data-ltm-navigation="mobile"]');
     const mobileNavigationItems = mobileNavigation.locator('[data-ltm-control="navigation"]');
     assert.equal(await mobileNavigationItems.count(), 4);
@@ -1059,7 +1133,7 @@ async function main() {
           .map((pane) => pane.dataset.ltmWorkspacePane),
       })),
       {
-        innerWidth: 412,
+        innerWidth: 390,
         mobileMedia: true,
         visiblePanes: ["workbench"],
       },
