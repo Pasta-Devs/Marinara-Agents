@@ -46,13 +46,6 @@ const artifactClient = unzip(
   ["-p", artifactPath, "client.js"],
   `read ${artifactPath}/client.js`,
 );
-const lastInjectionSource = readFileSync(
-  join(
-    repoRoot,
-    "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LastInjectionSummary.tsx",
-  ),
-  "utf8",
-);
 const engineStyles = readFileSync(
   join(engineRoot, "packages/client/src/styles/globals.css"),
   "utf8",
@@ -181,14 +174,9 @@ async function main() {
       "Saved memories are not added to every reply.",
     ])
       assert.match(artifactClient, new RegExp(copy, "u"));
-    assert.ok(
-      lastInjectionSource.indexOf("error ?") <
-        lastInjectionSource.indexOf("!loading && !error && data?.memories"),
-      "Last Injection Summary must handle a failed latest query before retained data",
-    );
     assert.match(
       artifactClient,
-      /extract:ie!=="refresh"/u,
+      /extract:se!=="refresh"/u,
       "Normal imports must continue extracting source notes",
     );
     const { chromium, devices } = await import(
@@ -396,6 +384,7 @@ async function main() {
       },
     ];
     let healthState: "healthy" | "degraded" = "healthy";
+    let lastInjectionRequests = 0;
     browserServer = createServer(async (request, response) => {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       const send = (status: number, body: unknown, contentType = "application/json") => {
@@ -422,6 +411,16 @@ async function main() {
           },
         });
       if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count")) return send(200, { count: 2 });
+      if (request.method === "GET" && url.pathname.endsWith("/last-injection/chat-artifact")) {
+        lastInjectionRequests += 1;
+        return lastInjectionRequests === 1
+          ? send(200, {
+              memoryCount: 1,
+              tokenCount: 42,
+              memories: [{ noteId: "retained-memory", title: "Retained memory", tokenCount: 42 }],
+            })
+          : send(503, { error: "latest recall failed" });
+      }
       if (request.method === "GET" && url.pathname.endsWith("/drafts/review")) {
         reviewQueries.push(url.search);
         if (url.searchParams.has("chatId"))
@@ -681,6 +680,32 @@ async function main() {
       document.body.textContent?.includes("Second mobile review memory"),
     );
     assert.deepEqual(scopeTargetQueries, ["?chatId=empty-chat"]);
+    await page.evaluate((version) => {
+      const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
+      element.setAttribute("view", "settings");
+      element.capabilityProps = { chatId: "chat-artifact", package: { version } };
+      document.body.append(element);
+    }, packageManifest.version);
+    const chatSettings = page.locator('[data-ltm-surface="chat-settings"]').last();
+    await chatSettings.waitFor();
+    const lastInjection = chatSettings.locator("[data-ltm-last-injection]");
+    await lastInjection.getByText(/1 saved memory included in the latest model context/u).waitFor();
+    await lastInjection.click();
+    await lastInjection.getByText("Retained memory").waitFor();
+    await lastInjection.locator("summary").getByText("42 tokens").waitFor();
+    await page.evaluate(async () => {
+      const element = document.querySelectorAll("marinara-capability-long-term-memory").item(1)!;
+      element.remove();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      document.body.append(element);
+    });
+    await lastInjection.click();
+    await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
+    await lastInjection.getByRole("button", { name: /retry/i }).click();
+    await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
+    assert.equal(lastInjectionRequests, 3);
+    assert.equal(await lastInjection.getByText("Retained memory").count(), 0);
+    assert.equal(await lastInjection.getByText("42 tokens").count(), 0);
     await page.locator('[aria-label="Character"]').selectOption("character-a");
     await page.waitForFunction(() =>
       document.querySelector('[aria-label="Character"]')?.value === "character-a",

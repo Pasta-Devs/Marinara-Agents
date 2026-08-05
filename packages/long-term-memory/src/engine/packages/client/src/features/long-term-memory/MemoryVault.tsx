@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -375,6 +375,7 @@ export default function MemoryVault({
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const client = useQueryClient();
+  const statusInputId = useId();
   const vaultRef = useRef<HTMLElement>(null);
   const detailRef = useRef<HTMLElement>(null);
   const [search, setSearch] = useState("");
@@ -2070,15 +2071,18 @@ export default function MemoryVault({
                         }
                       />
                     </label>
-                    <label className="space-y-1 text-xs font-medium">
-                      <span className="flex items-center gap-1">
-                        {localizeUi("ui.longTermMemory.memoryvault.status")}
+                    <div className="space-y-1 text-xs font-medium">
+                      <div className="flex items-center gap-1">
+                        <label htmlFor={statusInputId}>
+                          {localizeUi("ui.longTermMemory.memoryvault.status")}
+                        </label>
                         <InfoPopover
                           label={localizeUi("ui.longTermMemory.memoryvault.status")}
                           content={localizeUi("ui.longTermMemory.memoryvault.statusHelp")}
                         />
-                      </span>
+                      </div>
                       <select
+                        id={statusInputId}
                         className={inputClass}
                         value={draft.status}
                         onChange={(event) =>
@@ -2091,7 +2095,7 @@ export default function MemoryVault({
                           </option>
                         ))}
                       </select>
-                    </label>
+                    </div>
                     {isNew ? (
                       <label className="space-y-1 text-xs font-medium">
                         {localizeUi("ui.longTermMemory.memoryvault.type")}
