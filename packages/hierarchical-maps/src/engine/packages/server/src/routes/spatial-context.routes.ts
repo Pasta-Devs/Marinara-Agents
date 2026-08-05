@@ -97,6 +97,10 @@ interface ChatSpatialParams {
   chatId: string;
 }
 
+interface ChatSpatialCommandParams extends ChatSpatialParams {
+  commandId: string;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -1558,6 +1562,29 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       }
       throw error;
     }
+  });
+
+  app.get<{ Params: ChatSpatialCommandParams }>("/:chatId/spatial-context/turn/:commandId", async (req, reply) => {
+    const commandId = z.string().trim().min(1).max(200).safeParse(req.params.commandId);
+    if (!commandId.success) {
+      return reply.status(400).send({
+        error: "Choose a valid movement command.",
+        code: "spatial_request_invalid",
+      });
+    }
+    const snapshot = await persistence.spatialSnapshots.getByCommand(req.params.chatId, commandId.data);
+    if (!snapshot) {
+      return reply.status(404).send({
+        error: "This movement command has not been applied.",
+        code: "spatial_transition_not_applied",
+      });
+    }
+    return {
+      applied: true,
+      messageId: snapshot.messageId,
+      currentLocationId: snapshot.currentLocationId,
+      definitionRevision: snapshot.definitionRevision,
+    };
   });
 
   app.put<{ Params: ChatSpatialParams }>("/:chatId/spatial-context", async (req, reply) => {

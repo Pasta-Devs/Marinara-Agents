@@ -186,7 +186,7 @@ const currentFixture = fixtures.get("1.3.2");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
   engineVersion: "2.4.1",
-  engineCommit: "6ed85990b294048c61a762503241fff3171f448b",
+  engineCommit: "bb40d3feba0cb96062526f19e11fbe3a97ced9c9",
 });
 
 function seedInstalledProfile(version: string) {
@@ -3495,11 +3495,13 @@ async function main() {
       },
     });
     assert.equal(knownLevelSnapshot?.currentLocationId, "lifecycle_level_5");
+    assert.match(knownLevelSnapshot?.transitionCommandId ?? "", /^assistant:/u);
     const routedKnownLevel = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${branch.id}/spatial-context`,
     })) as {
       definition: {
+        revision: number;
         locations: Array<{
           id: string;
           name: string;
@@ -3515,6 +3517,11 @@ async function main() {
       routedKnownLevel.definition.locations
         .find((location) => location.id === "lifecycle_harbor")
         ?.links.some((link) => link.targetId === "lifecycle_level_5" && link.state === "available"),
+    );
+    assert.equal(
+      routedKnownLevel.definition.revision,
+      knownLevelSnapshot?.definitionRevision,
+      "Matching a reachable known location must move without editing topology",
     );
 
     const returnToHarborMessage = (await expectJson(app, {
@@ -3549,10 +3556,25 @@ async function main() {
         type: "discover",
         name: "Deck A",
         relation: "link",
+        direction: "outgoing",
         description: "A lettered deck that is distinct from the generic Deck location.",
       },
     });
-    assert.equal(deckASnapshot?.currentLocationId, "lifecycle_deck_a");
+    assert.equal(deckASnapshot?.currentLocationId, "lifecycle_harbor");
+    assert.equal(deckASnapshot?.transitionCommandId, null);
+    const afterKnownDeckDiscovery = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as {
+      definition: { locations: Array<{ id: string; links: Array<{ targetId: string }> }> };
+    };
+    assert.equal(
+      afterKnownDeckDiscovery.definition.locations
+        .find((location) => location.id === "lifecycle_harbor")
+        ?.links.some((link) => link.targetId === "lifecycle_deck_a"),
+      false,
+      "Matching an unreachable known location must not synthesize a direct link",
+    );
 
     const deckReturnMessage = (await expectJson(app, {
       method: "POST",

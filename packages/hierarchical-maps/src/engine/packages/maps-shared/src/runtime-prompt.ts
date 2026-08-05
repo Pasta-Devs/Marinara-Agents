@@ -6,6 +6,7 @@ import {
   type ResolvedOwnerSpatialProjection,
   type ResolvedSpatialTravel,
   type SpatialContextDefinition,
+  type SpatialTravelPromptSummary,
 } from "@marinara-engine/shared";
 import { defaultSpatialTurnPromptTemplates, renderSpatialTurnPromptTemplate } from "./maps-model.js";
 
@@ -45,6 +46,29 @@ export function buildOwnerSpatialProjection(
       .map(({ name }) => boundedText(name, SPATIAL_CONTEXT_LIMITS.maxNameLength))
       .join(" > "),
   }));
+  const travelSummary: SpatialTravelPromptSummary | undefined = acceptedTravel
+    ? (() => {
+        const byId = buildSpatialLocationIndex(definition);
+        const nameFor = (locationId: string): string =>
+          boundedText(byId.get(locationId)?.name ?? locationId, SPATIAL_CONTEXT_LIMITS.maxNameLength);
+        return {
+          mode: acceptedTravel.mode,
+          fromLocationName: nameFor(acceptedTravel.fromLocationId),
+          acceptedLocationName: nameFor(
+            acceptedTravel.mode === "step_by_step"
+              ? (acceptedTravel.routeLocationIds[0] ?? acceptedTravel.targetLocationId)
+              : acceptedTravel.targetLocationId,
+          ),
+          targetLocationName: nameFor(acceptedTravel.targetLocationId),
+          routeLocationNames: acceptedTravel.routeLocationIds
+            .slice(0, SPATIAL_CONTEXT_LIMITS.maxRouteLocations)
+            .map(nameFor),
+          remainingLocationNames: acceptedTravel.remainingLocationIds
+            .slice(0, SPATIAL_CONTEXT_LIMITS.maxRouteLocations)
+            .map(nameFor),
+        };
+      })()
+    : undefined;
   return {
     kind: "owner",
     chatId,
@@ -69,6 +93,7 @@ export function buildOwnerSpatialProjection(
     lorebookEntryIds: current.lorebookEntryIds,
     omittedDestinationCount: Math.max(0, allDestinations.length - destinations.length),
     ...(acceptedTravel ? { travel: acceptedTravel } : {}),
+    ...(travelSummary ? { travelSummary } : {}),
   };
 }
 
@@ -107,20 +132,23 @@ export function formatOwnerSpatialPrompt(projection: ResolvedOwnerSpatialProject
     ...knownLocationLines,
     "",
   ].join("\n");
-  const travelFacts = projection.travel
-    ? [
-        "Accepted movement this turn:",
-        `- Mode: ${projection.travel.mode}`,
-        `- From: ${escapeXmlText(projection.travel.fromLocationId)}`,
-        `- Target: ${escapeXmlText(projection.travel.targetLocationId)}`,
-        `- Route IDs: ${projection.travel.routeLocationIds.map((id) => escapeXmlText(id)).join(" > ")}`,
-        `- Remaining after this turn: ${projection.travel.remainingLocationIds.length ? projection.travel.remainingLocationIds.map((id) => escapeXmlText(id)).join(" > ") : "None"}`,
-        `- Complete: ${projection.travel.complete ? "yes" : "no"}`,
-        "",
-      ].join("\n")
-    : "";
+  const travelFacts =
+    projection.travel && projection.travelSummary
+      ? [
+          `<movement_this_turn mode="${projection.travel.mode}">`,
+          `From: ${escapeXmlText(projection.travelSummary.fromLocationName)}`,
+          `Accepted destination: ${escapeXmlText(projection.travelSummary.acceptedLocationName)}`,
+          `Target: ${escapeXmlText(projection.travelSummary.targetLocationName)}`,
+          `Validated route: ${projection.travelSummary.routeLocationNames.map(escapeXmlText).join(" > ")}`,
+          `Remaining route: ${projection.travelSummary.remainingLocationNames.length ? projection.travelSummary.remainingLocationNames.map(escapeXmlText).join(" > ") : "None"}`,
+          `Complete: ${projection.travel.complete ? "yes" : "no"}`,
+          "Movement is already canonical for this turn. Do not emit another location change or topology mutation.",
+          "</movement_this_turn>",
+          "",
+        ].join("\n")
+      : "";
   const userLedTransitionInstruction =
-    'Use the latest user message as the authority for map changes. Treat direct present-tense or imperative movement by the focal party, such as “We go to the Kitchen” or “We follow her into the outdoor section,” as establishing arrival for this turn. When that user-led arrival matches a known map location, append [spatial_move: destination_id="exact_id"] as the final line, even when it was reached through a newly revealed or secret route; the application records that direct route. When the user explicitly establishes discovery or arrival at a significant named, durable, revisitable place that has no known match, such as “We discover a hidden room,” append [spatial_discover: name="Place Name" relation="enter" description="Short orientation"] as the final line; use relation="link" for a neighboring or travel-connected place rather than a place inside the current one. The visible response may narrate the consequence, but your own narration alone never authorizes either command. Do not emit either command for future intentions, failed or unfinished travel, mentions, NPC-only movement, imagined places, temporary camps, hallways, vehicles, or other transient scene details. These commands are hidden from the user and validated by the application.';
+    'Use the latest user message as the authority for map changes. Treat direct present-tense or imperative movement by the focal party, such as “We go to the Kitchen” or “We follow her into the outdoor section,” as establishing arrival for this turn. When that user-led arrival matches a known map location, append [spatial_move: destination_id="exact_id"] as the final line, even when it was reached through a newly revealed or secret route; the application records that direct route. When the user explicitly establishes discovery or arrival at a significant named, durable, revisitable place that has no known match, such as “We discover a hidden room,” append [spatial_discover: name="Place Name" relation="enter" description="Short orientation"] as the final line. For a newly discovered neighboring or travel-connected place, use relation="link" and include direction="outgoing", direction="incoming", or direction="both" relative to the current location; a link discovery without direction is invalid. A known but unreachable location is not discovery and must not create a link. The visible response may narrate the consequence, but your own narration alone never authorizes either command. Do not emit either command for future intentions, failed or unfinished travel, mentions, NPC-only movement, imagined places, temporary camps, hallways, vehicles, or other transient scene details. These commands are hidden from the user and validated by the application.';
   const authorityInstruction =
     projection.ownerMode === "game"
       ? `${knownLocationIndex}Treat this as the authoritative world location for the GM and party. A legacy Game map, when present, is only local/tactical detail inside this location. Keep the current location unless the latest user message establishes a change. ${userLedTransitionInstruction}`

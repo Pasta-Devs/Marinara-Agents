@@ -154,6 +154,16 @@ assert.match(
   "Workspace refresh must compare and store one normalized server hierarchy profile.",
 );
 assert.match(packageBuilderSource, /spatialTransitionReviewMessages\.get\(data\.code\)/u);
+assert.match(
+  packageBuilderSource,
+  /findSpatialRoute\(spatial\.definition, currentLocationId, targetLocationId\)[\s\S]*?remainingLocationIds: remainingRoute\.locationIds\.slice\(1\)/u,
+  "A command-ID recovery event must rebase stepwise travel from authoritative spatial state.",
+);
+assert.match(
+  routeSource,
+  /"\/:chatId\/spatial-context\/turn\/:commandId"[\s\S]*?spatialSnapshots\.getByCommand/u,
+  "Ambiguous failures must be recoverable by exact transition command ID.",
+);
 assert.doesNotMatch(packageBuilderSource, /spatialTransitionReviewMessages\[data\.code\]/u);
 assert.doesNotMatch(
   packageBuilderSource,

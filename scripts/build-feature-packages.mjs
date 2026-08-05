@@ -520,6 +520,10 @@ async function bundleSpecialClient(feature, output) {
         prepared.buildRoot,
         "packages/client/src/features/spatial-context/pending-spatial-transitions.ts",
       );
+      const routePlans = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/spatial-route-plans.ts",
+      );
       const workspaceStyles = `
 [data-marinara-maps-workspace-overlay] {
   display: flex;
@@ -760,6 +764,7 @@ import { GameWorldMap } from ${JSON.stringify(worldMap)};
 import { useSpatialContext } from ${JSON.stringify(spatialHooks)};
 import { packageApi } from ${JSON.stringify(packageApi)};
 import { clearPendingSpatialTransition, getPendingSpatialTransition, reconcileCommittedSpatialTravel, setPendingSpatialTransition, setPendingSpatialTransitionStatus, usePendingSpatialTransition } from ${JSON.stringify(pendingTransitions)};
+import { findSpatialRoute } from ${JSON.stringify(routePlans)};
 const workspaceStyles = ${JSON.stringify(workspaceStyles)};
 const worldMapStyles = ${JSON.stringify(worldMapStyles)};
 const runtimeStyles = ${JSON.stringify(runtimeStyles)};
@@ -818,10 +823,39 @@ async function reconcileSpatialCapabilityEvent(detail) {
   if (!spatial || spatialEventSequence.get(chatId) !== sequence) return;
   client.setQueryData(["spatial-context", chatId], spatial);
   if (detail.type === "spatial_transition_committed" && commandId) {
-    const stepwiseRouteRemainsQueued =
-      data?.travel?.mode === "step_by_step" && data.travel.complete === false;
-    if (stepwiseRouteRemainsQueued) {
-      reconcileCommittedSpatialTravel(chatId, spatial, data.travel);
+    const pending = getPendingSpatialTransition(chatId);
+    let travel = data?.travel;
+    if (!travel && pending?.transition.commandId === commandId && pending.transition.travelMode === "step_by_step") {
+      const currentLocationId = spatial.currentLocationId;
+      const targetLocationId = pending.transition.destinationId;
+      const remainingRoute = spatial.definition
+        ? findSpatialRoute(spatial.definition, currentLocationId, targetLocationId)
+        : null;
+      if (currentLocationId === targetLocationId) {
+        travel = {
+          mode: "step_by_step",
+          fromLocationId: pending.transition.expectedCurrentLocationId,
+          targetLocationId,
+          routeLocationIds: [targetLocationId],
+          remainingLocationIds: [],
+          complete: true,
+        };
+      } else if (currentLocationId && remainingRoute) {
+        travel = {
+          mode: "step_by_step",
+          fromLocationId: pending.transition.expectedCurrentLocationId,
+          targetLocationId,
+          routeLocationIds: remainingRoute.locationIds,
+          remainingLocationIds: remainingRoute.locationIds.slice(1),
+          complete: false,
+        };
+      } else {
+        setPendingSpatialTransitionStatus(chatId, "needs_review", "The accepted route could not be reconstructed.");
+        return;
+      }
+    }
+    if (travel?.mode === "step_by_step" && travel.complete === false) {
+      reconcileCommittedSpatialTravel(chatId, spatial, travel);
     } else {
       clearPendingSpatialTransition(chatId, commandId);
     }
