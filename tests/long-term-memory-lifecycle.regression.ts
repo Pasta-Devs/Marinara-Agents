@@ -1029,6 +1029,7 @@ async function main() {
     await mobilePage.exposeFunction("onMobileActivationChange", (enabled: boolean) => {
       activationChanges.push(enabled);
     });
+    await mobilePage.exposeFunction("onMobileManagePackage", () => {});
     await mobilePage.goto(`http://127.0.0.1:${address.port}/`);
     await mobilePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
     await mobilePage.evaluate((version) => {
@@ -1042,6 +1043,9 @@ async function main() {
         onEnabledForChatChange: (window as Window & {
           onMobileActivationChange: (value: boolean) => void;
         }).onMobileActivationChange,
+        onManagePackage: (window as Window & {
+          onMobileManagePackage: () => void;
+        }).onMobileManagePackage,
         package: { version },
       };
       document.body.append(element);
