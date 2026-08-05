@@ -98,6 +98,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     useState<LongTermMemoryDestination>("vault");
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
+  const [compactHeader, setCompactHeader] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
+  );
   const [addOpen, setAddOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
@@ -114,6 +117,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const Destination = destinations[destination];
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setCompactHeader(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const destinationLabel = (value: LongTermMemoryDestination) =>
     localizeUi(destinationLabelKeys[value]);
 
@@ -379,10 +389,17 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           </div>
         </div>
         <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
-          {props.chatId ? (
-            <div className="mr-1 inline-flex items-center gap-2 whitespace-nowrap text-xs text-[var(--marinara-editor-muted)]">
-              <span>
-                {localizeUi("ui.longTermMemory.longtermmemorydetail.activeIn")}{" "}
+          {props.chatId || props.onEnabledForChatChange ? (
+            <div className="mr-1 inline-flex h-9 items-center gap-2 whitespace-nowrap text-xs leading-5 text-[var(--marinara-editor-muted)] max-md:h-11">
+              <span
+                className="inline-flex h-9 items-center max-md:h-11"
+                style={{ paddingInline: "0.75rem" }}
+              >
+                {localizeUi(
+                  props.enabledForChat === true
+                    ? "ui.longTermMemory.longtermmemorydetail.activeIn"
+                    : "ui.longTermMemory.longtermmemorydetail.inactiveIn",
+                )}{" "}
                 <strong
                   className="text-[var(--marinara-editor-text)]"
                   style={{
@@ -405,7 +422,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 role="switch"
                 aria-checked={props.enabledForChat === true}
                 aria-label={localizeUi(
-                  "ui.longTermMemory.longtermmemorydetail.activeInValue1",
+                  props.enabledForChat === true
+                    ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
+                    : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
                   {
                     value1:
                       props.chatName ??
@@ -415,10 +434,54 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   },
                 )}
                 data-ltm-control="activation"
-                className="relative h-9 w-10 rounded-md bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] disabled:opacity-50 before:absolute before:left-0 before:top-1.5 before:h-6 before:w-10 before:rounded-full before:bg-[var(--marinara-editor-control-bg)] before:transition-colors aria-checked:before:bg-[var(--marinara-editor-accent)] after:absolute after:left-1 after:top-2.5 after:h-4 after:w-4 after:rounded-full after:bg-[var(--marinara-editor-text)] after:transition-transform aria-checked:after:translate-x-4"
+                className="h-9 w-12 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
+                style={{
+                  position: "relative",
+                  display: "inline-flex",
+                  width: "3rem",
+                  height: compactHeader ? "2.75rem" : "2.25rem",
+                  flexShrink: 0,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 0,
+                  border: 0,
+                  appearance: "none",
+                  background: "transparent",
+                  cursor: props.onEnabledForChatChange ? "pointer" : "not-allowed",
+                }}
                 disabled={activationPending || !props.onEnabledForChatChange}
                 onClick={() => void toggleActivation()}
-              />
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    left: "0.25rem",
+                    top: compactHeader ? "0.75rem" : "0.5rem",
+                    width: "2.5rem",
+                    height: "1.5rem",
+                    borderRadius: "9999px",
+                    backgroundColor:
+                      props.enabledForChat === true
+                        ? "var(--marinara-editor-accent)"
+                        : "var(--marinara-editor-control-bg)",
+                    transition: "background-color 150ms ease",
+                  }}
+                />
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    left: props.enabledForChat === true ? "1.5rem" : "0.5rem",
+                    top: compactHeader ? "1rem" : "0.75rem",
+                    width: "1rem",
+                    height: "1rem",
+                    borderRadius: "9999px",
+                    backgroundColor: "var(--marinara-editor-text)",
+                    transition: "left 150ms ease",
+                  }}
+                />
+              </button>
             </div>
           ) : null}
           {destination === "vault" ? (
