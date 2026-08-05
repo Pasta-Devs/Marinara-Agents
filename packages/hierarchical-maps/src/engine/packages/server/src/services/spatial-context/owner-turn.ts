@@ -3,9 +3,11 @@ import {
   type CapabilityMessageRecord,
   type CapabilityPersistenceSession,
   resolveSpatialBreadcrumb,
+  resolveSpatialRoute,
   validateSpatialTransition,
   type MessageAttachment,
   type PendingSpatialTransition,
+  type ResolvedSpatialTravel,
   type SpatialContextSnapshot,
   type SpatialTransitionErrorCode,
 } from "@marinara-engine/shared";
@@ -30,6 +32,7 @@ export class SpatialOwnerTurnError extends Error {
     readonly details?: {
       snapshot?: SpatialContextSnapshot;
       messageId?: string;
+      travel?: ResolvedSpatialTravel;
       currentRevision?: number;
       currentLocationId?: string | null;
       currentBreadcrumb?: Array<{ id: string; name: string }>;
@@ -48,19 +51,47 @@ export interface CommitSpatialOwnerTurnInput {
   attachments?: MessageAttachment[];
 }
 
-export type AppliedSpatialOwnerTurn = { messageId: string; snapshot: SpatialContextSnapshot };
+export type AppliedSpatialOwnerTurn = {
+  messageId: string;
+  snapshot: SpatialContextSnapshot;
+  travel?: ResolvedSpatialTravel;
+};
 
 function transitionPayloadHash(transition: PendingSpatialTransition): string {
   return createHash("sha256")
     .update(
       JSON.stringify({
         destinationId: transition.destinationId,
+        ...(transition.travelMode ? { travelMode: transition.travelMode } : {}),
         expectedDefinitionRevision: transition.expectedDefinitionRevision,
         expectedCurrentLocationId: transition.expectedCurrentLocationId,
         commandId: transition.commandId,
       }),
     )
     .digest("hex");
+}
+
+async function resolveAppliedTravel(
+  chatId: string,
+  transition: PendingSpatialTransition,
+  transaction?: CapabilityPersistenceSession,
+): Promise<ResolvedSpatialTravel | undefined> {
+  if (!transition.travelMode || !transition.expectedCurrentLocationId) return undefined;
+  const state = await resolveEffectiveSpatialState(chatId, {}, transaction);
+  const definition = state.definition;
+  const routeLocationIds = definition
+    ? resolveSpatialRoute(definition, transition.expectedCurrentLocationId, transition.destinationId)
+    : null;
+  if (!routeLocationIds || routeLocationIds.length === 0) return undefined;
+  const remainingLocationIds = transition.travelMode === "step_by_step" ? routeLocationIds.slice(1) : [];
+  return {
+    mode: transition.travelMode,
+    fromLocationId: transition.expectedCurrentLocationId,
+    targetLocationId: transition.destinationId,
+    routeLocationIds,
+    remainingLocationIds,
+    complete: remainingLocationIds.length === 0,
+  };
 }
 
 function messageExtra(attachments?: MessageAttachment[]) {
@@ -88,12 +119,20 @@ export async function findAppliedSpatialOwnerTurn(
       409,
     );
   }
-  return { messageId: existing.messageId, snapshot: existing };
+  const travel = input.transition.travelMode
+    ? await resolveAppliedTravel(input.chatId, input.transition)
+    : undefined;
+  return {
+    messageId: existing.messageId,
+    snapshot: existing,
+    ...(travel ? { travel } : {}),
+  };
 }
 
 export async function commitSpatialOwnerTurn(input: CommitSpatialOwnerTurnInput): Promise<{
   message: CapabilityMessageRecord;
   snapshot: SpatialContextSnapshot;
+  travel?: ResolvedSpatialTravel;
 }> {
   const persistence = getPackagePersistence();
   return persistence.withChatLock(input.chatId, async () =>
@@ -119,11 +158,18 @@ export async function commitSpatialOwnerTurn(input: CommitSpatialOwnerTurnInput)
             409,
           );
         }
+        const recoveredTravel = input.transition.travelMode
+          ? await resolveAppliedTravel(input.chatId, input.transition, transaction)
+          : undefined;
         throw new SpatialOwnerTurnError(
           "spatial_transition_already_applied",
           "This movement was already applied.",
           409,
-          { snapshot: existing, messageId: existing.messageId },
+          {
+            snapshot: existing,
+            messageId: existing.messageId,
+            ...(recoveredTravel ? { travel: recoveredTravel } : {}),
+          },
         );
       }
 
@@ -191,7 +237,11 @@ export async function commitSpatialOwnerTurn(input: CommitSpatialOwnerTurnInput)
         updatedAt: timestamp,
         ...(nextGameMetadata ? { metadata: nextGameMetadata } : {}),
       });
-      return { message, snapshot };
+      return {
+        message,
+        snapshot,
+        ...(validation.travel ? { travel: validation.travel } : {}),
+      };
     }),
   );
 }
