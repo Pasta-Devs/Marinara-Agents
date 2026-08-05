@@ -381,9 +381,19 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
           {props.chatId ? (
             <div className="mr-1 inline-flex items-center gap-2 whitespace-nowrap text-xs text-[var(--marinara-editor-muted)]">
-              <span className="hidden lg:inline">
+              <span>
                 {localizeUi("ui.longTermMemory.longtermmemorydetail.activeIn")}{" "}
-                <strong className="text-[var(--marinara-editor-text)]">
+                <strong
+                  className="text-[var(--marinara-editor-text)]"
+                  style={{
+                    display: "inline-block",
+                    maxWidth: "10rem",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    verticalAlign: "bottom",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {props.chatName ??
                     localizeUi(
                       "ui.longTermMemory.longtermmemorydetail.thisChat",

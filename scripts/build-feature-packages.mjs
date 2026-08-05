@@ -114,7 +114,7 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 const features = [
   {
     id: "long-term-memory",
-    version: "1.1.6",
+    version: "1.1.7",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
