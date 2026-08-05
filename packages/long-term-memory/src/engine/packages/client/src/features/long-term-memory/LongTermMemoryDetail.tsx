@@ -383,7 +383,17 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             <div className="mr-1 inline-flex items-center gap-2 whitespace-nowrap text-xs text-[var(--marinara-editor-muted)]">
               <span>
                 {localizeUi("ui.longTermMemory.longtermmemorydetail.activeIn")}{" "}
-                <strong className="text-[var(--marinara-editor-text)]">
+                <strong
+                  className="text-[var(--marinara-editor-text)]"
+                  style={{
+                    display: "inline-block",
+                    maxWidth: "10rem",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    verticalAlign: "bottom",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {props.chatName ??
                     localizeUi(
                       "ui.longTermMemory.longtermmemorydetail.thisChat",

@@ -1098,6 +1098,24 @@ async function main() {
     assert.match(await activationLabel.innerText(), /active in kirei/i);
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).display), "none");
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).visibility), "hidden");
+    const longChatName = "A".repeat(200);
+    await mobilePage.evaluate((chatName) => {
+      const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: Record<string, unknown> };
+      element.capabilityProps = { ...element.capabilityProps, chatName };
+      element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+    }, longChatName);
+    await mobilePage.waitForFunction(
+      (chatName) => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") === `Active in ${chatName}`,
+      longChatName,
+    );
+    const longNameBox = await activation.boundingBox();
+    assert.ok(longNameBox);
+    assert.ok(longNameBox.width >= 40 && longNameBox.height >= 36);
+    assert.equal(longNameBox.x + longNameBox.width <= 390, true);
+    assert.equal(
+      await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+      true,
+    );
     const mobileNavigation = mobilePage.locator('[data-ltm-navigation="mobile"]');
     const mobileNavigationItems = mobileNavigation.locator('[data-ltm-control="navigation"]');
     assert.equal(await mobileNavigationItems.count(), 4);
