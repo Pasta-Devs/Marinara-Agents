@@ -71,6 +71,16 @@ assert.match(
 );
 assert.match(
   inspectorSource,
+  /const outgoingTargetIds = new Set<string>\(\)[\s\S]*?if \(outgoingTargetIds\.has\(link\.targetId\)\) return/u,
+  "The inspector must collapse duplicate outgoing records for the same target.",
+);
+assert.match(
+  inspectorSource,
+  /const reverse = location\.links\.find\([\s\S]*?if \(link\.bidirectional && reverse\?\.bidirectional\) return/u,
+  "The inspector must collapse reciprocal bidirectional records into one logical row.",
+);
+assert.match(
+  inspectorSource,
   /const editable = direction === "outgoing" \|\| link\.bidirectional[\s\S]*?Incoming one-way[\s\S]*?View source/u,
   "Two-way links must remain editable from either endpoint while one-way targets expose source navigation.",
 );

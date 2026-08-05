@@ -247,18 +247,33 @@ export function resolveLocationDirectLinkRows(
   location: SpatialLocation,
 ): LocationDirectLinkRow[] {
   const locationsById = new Map(definition.locations.map((candidate) => [candidate.id, candidate]));
-  const outgoing: LocationDirectLinkRow[] = location.links.map((link, linkIndex) => ({
-    source: location,
-    related: locationsById.get(link.targetId) ?? null,
-    link,
-    linkIndex,
-    direction: "outgoing",
-  }));
+  const outgoingTargetIds = new Set<string>();
+  const outgoing: LocationDirectLinkRow[] = [];
+  location.links.forEach((link, linkIndex) => {
+    // A malformed/legacy definition can contain the same target more than once.
+    if (outgoingTargetIds.has(link.targetId)) return;
+    outgoingTargetIds.add(link.targetId);
+    outgoing.push({
+      source: location,
+      related: locationsById.get(link.targetId) ?? null,
+      link,
+      linkIndex,
+      direction: "outgoing",
+    });
+  });
   const incoming: LocationDirectLinkRow[] = [];
+  const incomingSourceIds = new Set<string>();
   for (const source of definition.locations) {
     if (source.id === location.id) continue;
     source.links.forEach((link, linkIndex) => {
       if (link.targetId !== location.id) return;
+      // A bidirectional relationship may be persisted at both endpoints. The
+      // current endpoint's outgoing row is the canonical editable row; avoid
+      // showing the reciprocal record a second time.
+      const reverse = location.links.find((candidate) => candidate.targetId === source.id);
+      if (link.bidirectional && reverse?.bidirectional) return;
+      if (incomingSourceIds.has(source.id)) return;
+      incomingSourceIds.add(source.id);
       incoming.push({ source, related: source, link, linkIndex, direction: "incoming" });
     });
   }
