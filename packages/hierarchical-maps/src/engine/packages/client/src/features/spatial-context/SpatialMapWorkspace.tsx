@@ -149,6 +149,25 @@ type ImportIdReport = {
   missing: Array<{ id: string; name: string }>;
 };
 
+function artworkPreviewEnvironmentSignature(preview: SpatialGalleryImagePromptPreview): string {
+  return JSON.stringify({
+    connection: preview.connection,
+    styleProfile: preview.styleProfile,
+    campaign: preview.campaign,
+    chatSettings: preview.chatSettings,
+    width: preview.width,
+    height: preview.height,
+    items: preview.items.map(({ id, sourcePrompt, prompt, negativePrompt, width, height }) => ({
+      id,
+      sourcePrompt,
+      prompt,
+      negativePrompt,
+      width,
+      height,
+    })),
+  });
+}
+
 type PendingPortableLoreImport = {
   rawRecord: Record<string, unknown>;
   definition: SpatialContextDefinition;
@@ -500,6 +519,7 @@ export function SpatialMapWorkspace({
   const [artworkProgress, setArtworkProgress] = useState<ArtworkProgress | null>(null);
   const [artworkPreview, setArtworkPreview] = useState<SpatialGalleryImagePromptPreview | null>(null);
   const [artworkPreviewSourceSignature, setArtworkPreviewSourceSignature] = useState<string | null>(null);
+  const [artworkPreviewSourceEnvironment, setArtworkPreviewSourceEnvironment] = useState<string | null>(null);
   const backgroundMoveFrameRef = useRef<number | null>(null);
   const pendingBackgroundMoveRef = useRef<{
     locationId: string;
@@ -818,7 +838,7 @@ export function SpatialMapWorkspace({
   const mobileMapNoticeCount =
     Number(missingArtworkLocations.length > 0) +
     Number(Boolean(linkedSharedWorld?.missing || linkedSharedWorld?.conflict || linkedSharedWorld?.pendingChanges));
-  const artworkPreviewSignature = missingArtworkAssignments
+  const artworkPreviewInputSignature = missingArtworkAssignments
     .map(({ location, referenceMissing, mapBackgroundMissing }) =>
       [
         location.id,
@@ -830,8 +850,19 @@ export function SpatialMapWorkspace({
       ].join("\u0000"),
     )
     .join("\u0001");
+  const artworkPreviewRequestItems = useMemo(
+    () =>
+      missingArtworkLocations.map((location) => ({
+        id: location.id,
+        title: location.name,
+        prompt: defaultLocationReferencePrompt(location),
+        mapsArtworkContext: locationArtworkContext(draft!, draftHierarchyProfile, location),
+      })),
+    [draft, draftHierarchyProfile, missingArtworkLocations],
+  );
   const artworkPreviewStale =
-    artworkPreview !== null && artworkPreviewSourceSignature !== artworkPreviewSignature;
+    artworkPreview !== null &&
+    (artworkPreviewSourceSignature !== artworkPreviewInputSignature || artworkPreviewSourceEnvironment === null);
   const artworkActionsDisabled =
     artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending;
   const canEnable =
@@ -898,6 +929,21 @@ export function SpatialMapWorkspace({
       artworkPreviewStale ||
       missingArtworkLocations.length === 0
     ) {
+      return;
+    }
+
+    try {
+      const currentPreview = await previewGalleryImages.mutateAsync({
+        items: artworkPreviewRequestItems,
+        debugMode,
+      });
+      if (artworkPreviewSourceEnvironment !== artworkPreviewEnvironmentSignature(currentPreview)) {
+        setArtworkPreviewSourceEnvironment(null);
+        toast.error("Image or Chat Settings changed. Refresh prompts before creating artwork.");
+        return;
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not verify the reviewed image requests.");
       return;
     }
 
@@ -974,6 +1020,8 @@ export function SpatialMapWorkspace({
     setArtworkProgress(null);
   }, [
     artworkPreview,
+    artworkPreviewRequestItems,
+    artworkPreviewSourceEnvironment,
     artworkProgress,
     debugMode,
     draft,
@@ -987,32 +1035,25 @@ export function SpatialMapWorkspace({
 
   const prepareArtworkPreview = useCallback(async () => {
     if (artworkProgress || previewGalleryImages.isPending || artworkImagesToGenerate === 0) return;
-    const sourceSignature = artworkPreviewSignature;
-    const items = missingArtworkLocations.map((location) => ({
-      id: location.id,
-      title: location.name,
-      prompt: defaultLocationReferencePrompt(location),
-      mapsArtworkContext: locationArtworkContext(draft!, draftHierarchyProfile, location),
-    }));
+    const sourceSignature = artworkPreviewInputSignature;
     try {
       const preview = await previewGalleryImages.mutateAsync({
-        items,
+        items: artworkPreviewRequestItems,
         debugMode,
       });
       setArtworkPreview(preview);
       setArtworkPreviewSourceSignature(sourceSignature);
+      setArtworkPreviewSourceEnvironment(artworkPreviewEnvironmentSignature(preview));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not prepare the image request preview.");
     }
   }, [
     artworkImagesToGenerate,
+    artworkPreviewInputSignature,
+    artworkPreviewRequestItems,
     artworkProgress,
     debugMode,
-    draft,
-    draftHierarchyProfile,
-    missingArtworkLocations,
     previewGalleryImages,
-    artworkPreviewSignature,
   ]);
 
   const refreshArtworkPreview = useCallback(async () => {
