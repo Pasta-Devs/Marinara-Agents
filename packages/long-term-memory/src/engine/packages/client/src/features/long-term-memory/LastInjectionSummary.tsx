@@ -7,11 +7,13 @@ export function LastInjectionSummary({
   loading = false,
   error = false,
   onOpenMemory,
+  onRetry,
 }: {
   data?: LtmLastInjectionResponse;
   loading?: boolean;
   error?: boolean;
   onOpenMemory?: (noteId: string) => void;
+  onRetry?: () => void;
 }) {
   const { t: localizeUi, locale } = useLtmTranslation();
   return (
@@ -63,6 +65,16 @@ export function LastInjectionSummary({
             {localizeUi(
               "ui.longTermMemory.lastinjectionsummary.theLastRecallCouldNotLoad",
             )}
+            {onRetry ? (
+              <button
+                type="button"
+                className="underline"
+                onClick={onRetry}
+                disabled={loading}
+              >
+                {localizeUi("ui.longTermMemory.activityview.retry")}
+              </button>
+            ) : null}
           </StatusSurface>
         ) : null}
         {!loading && !error && data?.memories.length ? (

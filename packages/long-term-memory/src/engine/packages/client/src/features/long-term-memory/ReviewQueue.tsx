@@ -924,6 +924,15 @@ export default function ReviewQueue({
     rejectedSuggestions.data?.suggestions.filter(
       (item) => item.source.sourceNoteId === effectiveSourceId,
     ) ?? [];
+  const needsSourceReextraction = Boolean(
+    selectedReviewSource?.drafts.some(
+      (item) =>
+        item.blockReasons.length > 0 ||
+        ["stale", "missing", "invalid", "superseded", "not_pending"].includes(
+          item.freshness,
+        ),
+    ),
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedById, setEditedById] = useState<Map<string, LtmDraftMutation>>(
     new Map(),
@@ -932,6 +941,13 @@ export default function ReviewQueue({
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [result, setResult] = useState<BatchResult | null>(null);
   const [deleteSuggestionError, setDeleteSuggestionError] = useState("");
+  const [extractingSourceId, setExtractingSourceId] = useState<string | null>(
+    null,
+  );
+  const [extractionMessage, setExtractionMessage] = useState<{
+    tone: "success" | "danger";
+    text: string;
+  } | null>(null);
   useEffect(() => {
     setSelectedIds(new Set());
     setEditedById(new Map());
@@ -1381,6 +1397,40 @@ export default function ReviewQueue({
     }
   };
 
+  const reextractSource = async () => {
+    if (!effectiveSourceId || extractingSourceId) return;
+    setExtractingSourceId(effectiveSourceId);
+    setExtractionMessage(null);
+    try {
+      await request(
+        `/notes/${encodeURIComponent(effectiveSourceId)}/extract`,
+        "POST",
+        {},
+      );
+      await invalidateLtmQueries(queryClient, [
+        queryKeys.review,
+        queryKeys.pendingDrafts,
+        queryKeys.rejectedSuggestions,
+      ]);
+      setExtractionMessage({
+        tone: "success",
+        text: localizeUi("ui.longTermMemory.reviewqueue.sourceReextracted"),
+      });
+    } catch (error) {
+      setExtractionMessage({
+        tone: "danger",
+        text:
+          error instanceof Error
+            ? error.message
+            : localizeUi(
+                "ui.longTermMemory.reviewqueue.sourceReextractionFailed",
+              ),
+      });
+    } finally {
+      setExtractingSourceId(null);
+    }
+  };
+
   const renderRow = (row: ReviewRow, projectionStale = false) => {
     const mutation = editedById.get(row.mutation.id) ?? row.mutation;
     const targetExists = noteById.has(row.targetId);
@@ -1540,7 +1590,7 @@ export default function ReviewQueue({
             />
             <IconButton
               icon={X}
-              label={`${localizeUi("ui.longTermMemory.longtermmemorydetail.skip")} ${targetTitle} (${mutationLabel})`}
+              label={`${localizeUi("ui.longTermMemory.reviewqueue.skipProposal")} ${targetTitle} (${mutationLabel})`}
               iconSize="1rem"
               className="!h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
@@ -1632,6 +1682,21 @@ export default function ReviewQueue({
                 )}
               </p>
             ) : null}
+            {targetType === "character" &&
+            ((mutation.kind === "create_note" &&
+              Object.prototype.hasOwnProperty.call(
+                mutation.note.sections,
+                "appearance",
+              )) ||
+              ((mutation.kind === "append_section" ||
+                mutation.kind === "update_section") &&
+                mutation.sectionKey === "appearance")) ? (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {localizeUi(
+                  "ui.longTermMemory.reviewqueue.appearanceProposalHelp",
+                )}
+              </p>
+            ) : null}
             <MutationEditor
               mutation={mutation}
               canEditTitle={canEditTitle}
@@ -1657,6 +1722,14 @@ export default function ReviewQueue({
       aria-label={localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
       className="space-y-4"
     >
+      <p className="text-xs text-[var(--muted-foreground)]">
+        {localizeUi("ui.longTermMemory.workflowCue")}
+      </p>
+      {extractionMessage ? (
+        <StatusSurface tone={extractionMessage.tone}>
+          {extractionMessage.text}
+        </StatusSurface>
+      ) : null}
       {review.isLoading ? (
         <StatusSurface busy>
           {localizeUi(
@@ -1670,7 +1743,15 @@ export default function ReviewQueue({
             ? review.error.message
             : localizeUi(
                 "ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad",
-              )}
+              )} {" "}
+          <button
+            type="button"
+            className="underline"
+            disabled={review.isFetching}
+            onClick={() => void review.refetch()}
+          >
+            {localizeUi("ui.longTermMemory.activityview.retry")}
+          </button>
         </StatusSurface>
       ) : null}
       {result ? (
@@ -1771,7 +1852,15 @@ export default function ReviewQueue({
         <StatusSurface tone="danger">
           {localizeUi(
             "ui.longTermMemory.reviewqueue.rejectedSuggestionsCouldNotLoad",
-          )}
+          )} {" "}
+          <button
+            type="button"
+            className="underline"
+            disabled={rejectedSuggestions.isFetching}
+            onClick={() => void rejectedSuggestions.refetch()}
+          >
+            {localizeUi("ui.longTermMemory.activityview.retry")}
+          </button>
         </StatusSurface>
       ) : null}
       <LtmWorkspace
@@ -1954,6 +2043,16 @@ export default function ReviewQueue({
                   {onOpenMemory && effectiveSourceId ? (
                     <Button onClick={() => onOpenMemory(effectiveSourceId)}>
                       {localizeUi("ui.longTermMemory.reviewqueue.openSource")}
+                    </Button>
+                  ) : null}
+                  {effectiveSourceId && needsSourceReextraction ? (
+                    <Button
+                      disabled={extractingSourceId !== null}
+                      onClick={() => void reextractSource()}
+                    >
+                      {localizeUi(
+                        "ui.longTermMemory.reviewqueue.reExtractSource",
+                      )}
                     </Button>
                   ) : null}
                 </div>

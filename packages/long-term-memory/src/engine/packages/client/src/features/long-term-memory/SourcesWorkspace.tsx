@@ -1626,9 +1626,14 @@ export default function SourcesWorkspace({
       ) : null}
       {!reviewMessage && !importResult && !importError ? (
         <StatusSurface>
-          {localizeUi(
-            "ui.longTermMemory.sourcesworkspace.importingSavesSourceMaterialFirstExtractProposedMemoriesThen",
-          )}
+          <span>
+            {localizeUi(
+              "ui.longTermMemory.sourcesworkspace.importingSavesSourceMaterialFirstExtractProposedMemoriesThen",
+            )}
+          </span>
+          <span className="text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.workflowCue")}
+          </span>
         </StatusSurface>
       ) : null}
 

@@ -172,6 +172,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         data={lastInjection.data}
         loading={lastInjection.isFetching}
         error={lastInjection.isError}
+        onRetry={() => void lastInjection.refetch()}
       />
       {props.onOpenAgentSettings ? (
         <button

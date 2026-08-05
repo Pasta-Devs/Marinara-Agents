@@ -657,7 +657,7 @@ export default function MemoryVault({
     if (kind === "source_note")
       return (
         allNotes.find((note) => note.id === id)?.title?.trim() ||
-        "Source memory"
+        localizeUi("ui.longTermMemory.memoryvault.sourceNote")
       );
     if (kind === "character") return scopeTargetLabel("character", id, targets);
     if (kind === "persona") return scopeTargetLabel("persona", id, targets);
@@ -1356,6 +1356,9 @@ export default function MemoryVault({
             {visible.length} {localizeUi("ui.longTermMemory.memoryvault.shown")}
           </span>
         </div>
+        <p className="col-span-2 text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.workflowCue")}
+        </p>
         <label className="relative col-span-2 block">
           <Search
             aria-hidden="true"
