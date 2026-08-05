@@ -655,6 +655,7 @@ async function main() {
     browser = await chromium.launch();
     const browserContext = await browser.newContext({ hasTouch: true });
     const page = await browserContext.newPage();
+    await page.exposeFunction("onDesktopActivationChange", () => {});
     await page.addInitScript(() => {
       Object.defineProperty(Crypto.prototype, "randomUUID", { configurable: true, value: undefined });
     });
@@ -665,7 +666,12 @@ async function main() {
       element.setAttribute("view", "detail");
       element.capabilityProps = {
         agent: { name: "Long-Term Memory" },
-        chatId: "empty-chat",
+        chatId: "desktop-chat",
+        chatName: "desktop chat",
+        enabledForChat: true,
+        onEnabledForChatChange: (window as Window & {
+          onDesktopActivationChange: () => void;
+        }).onDesktopActivationChange,
         package: { version },
       };
       document.body.append(element);
@@ -679,7 +685,20 @@ async function main() {
     await page.waitForFunction(() =>
       document.body.textContent?.includes("Second mobile review memory"),
     );
-    assert.deepEqual(scopeTargetQueries, ["?chatId=empty-chat"]);
+    assert.deepEqual(scopeTargetQueries, ["?chatId=desktop-chat"]);
+    const desktopActivation = page.locator('[data-ltm-control="activation"]');
+    await desktopActivation.waitFor();
+    const desktopActivationBox = await desktopActivation.boundingBox();
+    const desktopAddBox = await page.locator('[aria-label="Add memories"]').boundingBox();
+    assert.ok(desktopActivationBox);
+    assert.ok(desktopAddBox);
+    assert.equal(
+      Math.abs(
+        desktopActivationBox.y + desktopActivationBox.height / 2 - (desktopAddBox.y + desktopAddBox.height / 2),
+      ) <= 2,
+      true,
+    );
+    await page.screenshot({ path: "/tmp/opencode/ltm-activation-desktop-final.png", fullPage: true });
     await page.evaluate((version) => {
       const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
       element.setAttribute("view", "settings");
@@ -1113,6 +1132,44 @@ async function main() {
     assert.equal(await activation.count(), 1);
     assert.equal(await activation.isVisible(), true);
     assert.equal(await activation.getAttribute("aria-checked"), "true");
+    const activationParts = activation.locator("span");
+    assert.equal(await activationParts.count(), 2);
+    const activationGeometry = await activation.evaluate((element) => {
+      const button = element.getBoundingClientRect();
+      const track = element.firstElementChild!.getBoundingClientRect();
+      const knob = element.lastElementChild!.getBoundingClientRect();
+      const style = getComputedStyle(element.firstElementChild!);
+      return {
+        button: { width: button.width, height: button.height },
+        track: {
+          x: track.left - button.left,
+          y: track.top - button.top,
+          width: track.width,
+          height: track.height,
+        },
+        knob: {
+          x: knob.left - track.left,
+          y: knob.top - track.top,
+          width: knob.width,
+          height: knob.height,
+        },
+        backgroundColor: style.backgroundColor,
+      };
+    });
+    assert.deepEqual(activationGeometry.button, { width: 48, height: 44 });
+    assert.deepEqual(activationGeometry.track, { x: 4, y: 12, width: 40, height: 24 });
+    assert.deepEqual(activationGeometry.knob, { x: 20, y: 4, width: 16, height: 16 });
+    assert.notEqual(activationGeometry.backgroundColor, "rgba(0, 0, 0, 0)");
+    const activationTrack = await activationParts.first().evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return { width: rect.width, height: rect.height, backgroundColor: style.backgroundColor };
+    });
+    assert.deepEqual(
+      { width: activationTrack.width, height: activationTrack.height },
+      { width: 40, height: 24 },
+    );
+    assert.equal(activationTrack.backgroundColor, activationGeometry.backgroundColor);
     const activationMetrics = await activation.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -1129,12 +1186,20 @@ async function main() {
       };
     });
     console.log(`LTM mobile activation baseline: ${JSON.stringify(activationMetrics)}`);
-    await mobilePage.screenshot({ path: "/tmp/opencode/ltm-activation-mobile-before.png", fullPage: true });
+    await mobilePage.screenshot({ path: "/tmp/opencode/ltm-activation-mobile-final.png", fullPage: true });
     assert.ok(activationMetrics.box.width > 0 && activationMetrics.box.height > 0);
     assert.ok(activationMetrics.box.width >= 40 && activationMetrics.box.height >= 36);
     assert.equal(activationMetrics.withinViewport, true);
     assert.equal(activationMetrics.centerCovered, true);
-    const activationLabel = activation.locator("xpath=preceding-sibling::span");
+    const addMemoriesBox = await mobilePage.locator('[aria-label="Add memories"]').boundingBox();
+    assert.ok(addMemoriesBox);
+    assert.equal(
+      Math.abs(
+        (await activationParts.first().boundingBox())!.y + 12 - (addMemoriesBox.y + addMemoriesBox.height / 2),
+      ) <= 1,
+      true,
+    );
+    const activationLabel = activation.locator("xpath=preceding-sibling::span[1]");
     assert.match(await activationLabel.innerText(), /active in kirei/i);
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).display), "none");
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).visibility), "hidden");
