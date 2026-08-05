@@ -53,6 +53,9 @@ const engineStyles = readFileSync(
 const activationFixtureStyles = `
   [data-ltm-control="activation"] { width: 2.5rem; height: 2.25rem; }
   [data-ltm-surface="detail"] .hidden { display: none; }
+  @media (min-width: 768px) {
+    [data-ltm-surface="detail"] .md\\:flex { display: flex; }
+  }
   @media (min-width: 1024px) {
     [data-ltm-surface="detail"] .lg\\:inline { display: inline; }
   }
@@ -140,6 +143,7 @@ async function main() {
   } | null = null;
   let browser: { close: () => Promise<void> } | null = null;
   let browserServer: ReturnType<typeof createServer> | null = null;
+  let releaseReextraction: (() => void) | null = null;
   await runWithSafeCleanup("LTM lifecycle", async () => {
     assert.equal(artifactManifest.id, "long-term-memory");
     assert.equal(artifactManifest.version, packageManifest.version);
@@ -157,6 +161,32 @@ async function main() {
       artifactClient,
       /crypto\.randomUUID/u,
       "The mobile client must not require secure-context-only crypto.randomUUID",
+    );
+    assert.doesNotMatch(
+      artifactClient,
+      /1\. Import source -> 2\. Review proposals -> 3\. Accept saved memories -> 4\. Activate recall in chat/u,
+      "Workflow guidance must remain contextual rather than repeated on each destination",
+    );
+    for (const copy of [
+      "Preserves the character card, then proposes durable identity",
+      "Preserves selected lorebook entries, then proposes durable world",
+      "Preserves the summary, then proposes events, relationships, threads",
+      "The source note was saved and",
+      "Review what extraction found. Accept saves a proposal to Memory Vault",
+      "Stable appearance can help the character remain visually consistent",
+      "This source note preserves the imported material for evidence. It is not recalled directly.",
+      "Saved memories are not added to every reply.",
+    ])
+      assert.match(artifactClient, new RegExp(copy, "u"));
+    assert.match(
+      artifactClient,
+      /extract:se!=="refresh"/u,
+      "Normal imports must continue extracting source notes",
+    );
+    assert.match(
+      artifactClient,
+      /Default agent connection/u,
+      "The null extraction connection option must identify the default agent connection",
     );
     const { chromium, devices } = await import(
       pathToFileURL(join(engineRoot, "node_modules/@playwright/test/index.mjs")).href,
@@ -363,6 +393,7 @@ async function main() {
       },
     ];
     let healthState: "healthy" | "degraded" = "healthy";
+    let lastInjectionRequests = 0;
     browserServer = createServer(async (request, response) => {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       const send = (status: number, body: unknown, contentType = "application/json") => {
@@ -389,6 +420,16 @@ async function main() {
           },
         });
       if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count")) return send(200, { count: 2 });
+      if (request.method === "GET" && url.pathname.endsWith("/last-injection/chat-artifact")) {
+        lastInjectionRequests += 1;
+        return lastInjectionRequests === 1
+          ? send(200, {
+              memoryCount: 1,
+              tokenCount: 42,
+              memories: [{ noteId: "retained-memory", title: "Retained memory", tokenCount: 42 }],
+            })
+          : send(503, { error: "latest recall failed" });
+      }
       if (request.method === "GET" && url.pathname.endsWith("/drafts/review")) {
         reviewQueries.push(url.search);
         if (url.searchParams.has("chatId"))
@@ -525,7 +566,23 @@ async function main() {
           version: 1,
         });
       if (request.method === "POST" && url.pathname.endsWith("/import/preview"))
-        return send(200, { samples: [], scanned: 0, draftable: 0, importedCount: 0 });
+        return send(200, {
+          source: "chats",
+          scanned: 1,
+          draftable: 0,
+          importedCount: 1,
+          samples: [{
+            sourceId: "chat-a:summary-desktop-reextract",
+            title: "Desktop re-extract source",
+            mutationCount: 0,
+            summary: "An imported source held open for re-extraction.",
+            snippet: "The re-extract action should show progress.",
+            status: "imported",
+            freshness: "current",
+            existingNoteId: "source_desktop_reextract",
+            existingNoteTitle: "Desktop re-extract source",
+          }],
+        });
       if (request.method === "POST" && url.pathname.endsWith("/import/lorebooks/preview"))
         return send(200, {
           counts: { books: 1, entries: 1, candidates: 1, pending: 1, imported: 0 },
@@ -581,6 +638,14 @@ async function main() {
         savedNote = JSON.parse(Buffer.concat(chunks).toString("utf8"));
         return send(201, { note: { ...savedNote, createdAt: "2026-07-30T00:00:00.000Z", updatedAt: "2026-07-30T00:00:00.000Z", version: 1 } });
       }
+      if (request.method === "POST" && url.pathname.endsWith("/notes/source_desktop_reextract/extract"))
+        return await new Promise<void>((resolve) => {
+          releaseReextraction = () => {
+            releaseReextraction = null;
+            send(200, {});
+            resolve();
+          };
+        });
       if (
         request.method === "POST" &&
         (url.pathname.endsWith("/accept") || url.pathname.endsWith("/skip"))
@@ -623,6 +688,7 @@ async function main() {
     browser = await chromium.launch();
     const browserContext = await browser.newContext({ hasTouch: true });
     const page = await browserContext.newPage();
+    await page.exposeFunction("onDesktopActivationChange", () => {});
     await page.addInitScript(() => {
       Object.defineProperty(Crypto.prototype, "randomUUID", { configurable: true, value: undefined });
     });
@@ -633,7 +699,12 @@ async function main() {
       element.setAttribute("view", "detail");
       element.capabilityProps = {
         agent: { name: "Long-Term Memory" },
-        chatId: "empty-chat",
+        chatId: "desktop-chat",
+        chatName: "desktop chat",
+        enabledForChat: true,
+        onEnabledForChatChange: (window as Window & {
+          onDesktopActivationChange: () => void;
+        }).onDesktopActivationChange,
         package: { version },
       };
       document.body.append(element);
@@ -647,7 +718,46 @@ async function main() {
     await page.waitForFunction(() =>
       document.body.textContent?.includes("Second mobile review memory"),
     );
-    assert.deepEqual(scopeTargetQueries, ["?chatId=empty-chat"]);
+    assert.deepEqual(scopeTargetQueries, ["?chatId=desktop-chat"]);
+    const desktopActivation = page.locator('[data-ltm-control="activation"]');
+    await desktopActivation.waitFor();
+    const desktopActivationBox = await desktopActivation.boundingBox();
+    const desktopAddBox = await page.locator('[aria-label="Add memories"]').boundingBox();
+    assert.ok(desktopActivationBox);
+    assert.ok(desktopAddBox);
+    assert.equal(
+      Math.abs(
+        desktopActivationBox.y + desktopActivationBox.height / 2 - (desktopAddBox.y + desktopAddBox.height / 2),
+      ) <= 2,
+      true,
+    );
+    await page.screenshot({ path: "/tmp/opencode/ltm-activation-desktop-final.png", fullPage: true });
+    await page.evaluate((version) => {
+      const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
+      element.setAttribute("view", "settings");
+      element.capabilityProps = { chatId: "chat-artifact", package: { version } };
+      document.body.append(element);
+    }, packageManifest.version);
+    const chatSettings = page.locator('[data-ltm-surface="chat-settings"]').last();
+    await chatSettings.waitFor();
+    const lastInjection = chatSettings.locator("[data-ltm-last-injection]");
+    await lastInjection.getByText(/1 saved memory included in the latest model context/u).waitFor();
+    await lastInjection.click();
+    await lastInjection.getByText("Retained memory").waitFor();
+    await lastInjection.locator("summary").getByText("42 tokens").waitFor();
+    await page.evaluate(async () => {
+      const element = document.querySelectorAll("marinara-capability-long-term-memory").item(1)!;
+      element.remove();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      document.body.append(element);
+    });
+    await lastInjection.click();
+    await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
+    await lastInjection.getByRole("button", { name: /retry/i }).click();
+    await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
+    assert.equal(lastInjectionRequests, 3);
+    assert.equal(await lastInjection.getByText("Retained memory").count(), 0);
+    assert.equal(await lastInjection.getByText("42 tokens").count(), 0);
     await page.locator('[aria-label="Character"]').selectOption("character-a");
     await page.waitForFunction(() =>
       document.querySelector('[aria-label="Character"]')?.value === "character-a",
@@ -1000,6 +1110,30 @@ async function main() {
     assert.equal(deletedSuggestionId, rejectedSuggestionId);
     assert.equal(savedNote?.type, "world");
     await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+    await page.locator('[data-ltm-source-tab="chats"]').click();
+    await page.locator('[data-ltm-source-section="imported"]').click();
+    const desktopReextractRow = page.locator(
+      '[data-ltm-source-id="chat-a:summary-desktop-reextract"]',
+    );
+    await desktopReextractRow.hover();
+    const desktopReextract = desktopReextractRow.locator(
+      '[data-ltm-source-action="re-extract"]',
+    );
+    await desktopReextract.click();
+    await page.waitForFunction(
+      () => document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") === "pending",
+    );
+    assert.equal(await desktopReextract.isDisabled(), true);
+    assert.match(
+      await desktopReextract.getAttribute("class") ?? "",
+      /\[&>svg\]:animate-spin/u,
+      "Desktop re-extraction must animate its pending loader",
+    );
+    releaseReextraction?.();
+    await page.waitForFunction(
+      () => document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") === "idle",
+    );
+    assert.equal(await desktopReextract.isDisabled(), false);
     await page.locator('[data-ltm-source-tab="lorebooks"]').click();
     const sourcesWorkspace = page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
     await sourcesWorkspace.waitFor();
@@ -1055,6 +1189,44 @@ async function main() {
     assert.equal(await activation.count(), 1);
     assert.equal(await activation.isVisible(), true);
     assert.equal(await activation.getAttribute("aria-checked"), "true");
+    const activationParts = activation.locator("span");
+    assert.equal(await activationParts.count(), 2);
+    const activationGeometry = await activation.evaluate((element) => {
+      const button = element.getBoundingClientRect();
+      const track = element.firstElementChild!.getBoundingClientRect();
+      const knob = element.lastElementChild!.getBoundingClientRect();
+      const style = getComputedStyle(element.firstElementChild!);
+      return {
+        button: { width: button.width, height: button.height },
+        track: {
+          x: track.left - button.left,
+          y: track.top - button.top,
+          width: track.width,
+          height: track.height,
+        },
+        knob: {
+          x: knob.left - track.left,
+          y: knob.top - track.top,
+          width: knob.width,
+          height: knob.height,
+        },
+        backgroundColor: style.backgroundColor,
+      };
+    });
+    assert.deepEqual(activationGeometry.button, { width: 48, height: 44 });
+    assert.deepEqual(activationGeometry.track, { x: 4, y: 12, width: 40, height: 24 });
+    assert.deepEqual(activationGeometry.knob, { x: 20, y: 4, width: 16, height: 16 });
+    assert.notEqual(activationGeometry.backgroundColor, "rgba(0, 0, 0, 0)");
+    const activationTrack = await activationParts.first().evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return { width: rect.width, height: rect.height, backgroundColor: style.backgroundColor };
+    });
+    assert.deepEqual(
+      { width: activationTrack.width, height: activationTrack.height },
+      { width: 40, height: 24 },
+    );
+    assert.equal(activationTrack.backgroundColor, activationGeometry.backgroundColor);
     const activationMetrics = await activation.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -1071,12 +1243,20 @@ async function main() {
       };
     });
     console.log(`LTM mobile activation baseline: ${JSON.stringify(activationMetrics)}`);
-    await mobilePage.screenshot({ path: "/tmp/opencode/ltm-activation-mobile-before.png", fullPage: true });
+    await mobilePage.screenshot({ path: "/tmp/opencode/ltm-activation-mobile-final.png", fullPage: true });
     assert.ok(activationMetrics.box.width > 0 && activationMetrics.box.height > 0);
     assert.ok(activationMetrics.box.width >= 40 && activationMetrics.box.height >= 36);
     assert.equal(activationMetrics.withinViewport, true);
     assert.equal(activationMetrics.centerCovered, true);
-    const activationLabel = activation.locator("xpath=preceding-sibling::span");
+    const addMemoriesBox = await mobilePage.locator('[aria-label="Add memories"]').boundingBox();
+    assert.ok(addMemoriesBox);
+    assert.equal(
+      Math.abs(
+        (await activationParts.first().boundingBox())!.y + 12 - (addMemoriesBox.y + addMemoriesBox.height / 2),
+      ) <= 1,
+      true,
+    );
+    const activationLabel = activation.locator("xpath=preceding-sibling::span[1]");
     assert.match(await activationLabel.innerText(), /active in kirei/i);
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).display), "none");
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).visibility), "hidden");
@@ -1099,7 +1279,7 @@ async function main() {
       () => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-checked") === "false",
     );
     assert.equal(await activation.getAttribute("aria-checked"), "false");
-    assert.match(await activationLabel.innerText(), /active in kirei/i);
+    assert.match(await activationLabel.innerText(), /inactive in kirei/i);
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).display), "none");
     assert.notEqual(await activationLabel.evaluate((element) => getComputedStyle(element).visibility), "hidden");
     const longChatName = "A".repeat(200);
@@ -1109,7 +1289,7 @@ async function main() {
       element.dispatchEvent(new CustomEvent("marinara-capability-props"));
     }, longChatName);
     await mobilePage.waitForFunction(
-      (chatName) => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") === `Active in ${chatName}`,
+      (chatName) => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") === `Inactive in ${chatName}`,
       longChatName,
     );
     const longNameBox = await activation.boundingBox();
@@ -1120,6 +1300,20 @@ async function main() {
       await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
       true,
     );
+    await mobilePage.evaluate(() => {
+      const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: Record<string, unknown> };
+      element.capabilityProps = {
+        ...element.capabilityProps,
+        chatId: null,
+        chatName: null,
+      };
+      element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+    });
+    await mobilePage.waitForFunction(
+      () => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") === "Inactive in this chat",
+    );
+    assert.equal(await activation.count(), 1);
+    assert.equal(await activation.getAttribute("aria-checked"), "false");
     const mobileNavigation = mobilePage.locator('[data-ltm-navigation="mobile"]');
     const mobileNavigationItems = mobileNavigation.locator('[data-ltm-control="navigation"]');
     assert.equal(await mobileNavigationItems.count(), 4);
@@ -1274,6 +1468,7 @@ async function main() {
       `Long-Term Memory ${packageManifest.version} lifecycle: install, offline restart, backup inclusion, uninstall, reinstall, and durable-byte preservation ok`,
     );
   }, [
+    () => releaseReextraction?.(),
     () => browser?.close(),
     () => new Promise<void>((resolveClose, reject) => {
       if (!browserServer) return resolveClose();

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -375,6 +375,7 @@ export default function MemoryVault({
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const client = useQueryClient();
+  const statusInputId = useId();
   const vaultRef = useRef<HTMLElement>(null);
   const detailRef = useRef<HTMLElement>(null);
   const [search, setSearch] = useState("");
@@ -657,7 +658,7 @@ export default function MemoryVault({
     if (kind === "source_note")
       return (
         allNotes.find((note) => note.id === id)?.title?.trim() ||
-        "Source memory"
+        localizeUi("ui.longTermMemory.memoryvault.sourceNote")
       );
     if (kind === "character") return scopeTargetLabel("character", id, targets);
     if (kind === "persona") return scopeTargetLabel("persona", id, targets);
@@ -1973,13 +1974,6 @@ export default function MemoryVault({
                       "ui.longTermMemory.memoryvault.noSavedMemoriesYetImportASourceOrCreate",
                     )}
               </p>
-              {!allNotes.length ? (
-                <p>
-                  {localizeUi(
-                    "ui.longTermMemory.memoryvault.importASourceReviewProposedMemoriesThenSaveThe",
-                  )}
-                </p>
-              ) : null}
             </div>
           ) : null}
         </section>
@@ -2077,9 +2071,18 @@ export default function MemoryVault({
                         }
                       />
                     </label>
-                    <label className="space-y-1 text-xs font-medium">
-                      {localizeUi("ui.longTermMemory.memoryvault.status")}
+                    <div className="space-y-1 text-xs font-medium">
+                      <div className="flex items-center gap-1">
+                        <label htmlFor={statusInputId}>
+                          {localizeUi("ui.longTermMemory.memoryvault.status")}
+                        </label>
+                        <InfoPopover
+                          label={localizeUi("ui.longTermMemory.memoryvault.status")}
+                          content={localizeUi("ui.longTermMemory.memoryvault.statusHelp")}
+                        />
+                      </div>
                       <select
+                        id={statusInputId}
                         className={inputClass}
                         value={draft.status}
                         onChange={(event) =>
@@ -2092,7 +2095,7 @@ export default function MemoryVault({
                           </option>
                         ))}
                       </select>
-                    </label>
+                    </div>
                     {isNew ? (
                       <label className="space-y-1 text-xs font-medium">
                         {localizeUi("ui.longTermMemory.memoryvault.type")}
@@ -2128,10 +2131,14 @@ export default function MemoryVault({
                       </p>
                     )}
                     <fieldset className="sm:col-span-2">
-                      <legend className="text-xs font-medium">
+                      <legend className="flex items-center gap-1 text-xs font-medium">
                         {localizeUi(
                           "ui.longTermMemory.memoryvault.availableModes",
                         )}
+                        <InfoPopover
+                          label={localizeUi("ui.longTermMemory.memoryvault.availableModes")}
+                          content={localizeUi("ui.longTermMemory.memoryvault.modesHelp")}
+                        />
                       </legend>
                       <div className="mt-1 flex flex-wrap gap-3">
                         {modes.map((mode) => (
@@ -2275,6 +2282,11 @@ export default function MemoryVault({
                   )}
                   className="min-w-0"
                 >
+                  {draft.type !== "source" ? (
+                    <p className="border-b border-[var(--border)] pb-4 text-xs text-[var(--muted-foreground)]">
+                      {localizeUi("ui.longTermMemory.memoryvault.savedMemoryRecallHelp")}
+                    </p>
+                  ) : null}
                   <section className="space-y-3 border-t border-[var(--border)] pt-4">
                     <h4 className="flex items-center gap-1 text-xs font-medium">
                       {localizeUi(
@@ -2345,7 +2357,7 @@ export default function MemoryVault({
                               "ui.longTermMemory.memoryvault.confidence",
                             )}
                             help={localizeUi(
-                              "ui.longTermMemory.memoryvault.howStronglyTheStoredEvidenceSupportsThisSectionFrom",
+                              "ui.longTermMemory.memoryvault.confidenceHelp",
                             )}
                             value={section.confidence ?? 0}
                             min={0}
@@ -2364,7 +2376,7 @@ export default function MemoryVault({
                               "ui.longTermMemory.memoryvault.salience",
                             )}
                             help={localizeUi(
-                              "ui.longTermMemory.memoryvault.howLikelyThisSectionIsToMatterInFuture",
+                              "ui.longTermMemory.memoryvault.salienceHelp",
                             )}
                             value={section.salience ?? 0}
                             min={0}
@@ -2413,7 +2425,7 @@ export default function MemoryVault({
                           "ui.longTermMemory.memoryvault.scope",
                         )}
                         content={localizeUi(
-                          "ui.longTermMemory.memoryvault.chatsBranchesCharactersOrPersonasInWhichThisMemory",
+                          "ui.longTermMemory.memoryvault.scopeHelp",
                         )}
                       />
                     </h4>
@@ -2764,7 +2776,7 @@ export default function MemoryVault({
                               "ui.longTermMemory.memoryvault.provenance",
                             )}
                             content={localizeUi(
-                              "ui.longTermMemory.memoryvault.theCharacterChatSummaryOrLorebookFromWhichThis",
+                              "ui.longTermMemory.memoryvault.provenanceHelp",
                             )}
                           />
                         </dt>
@@ -2798,6 +2810,9 @@ export default function MemoryVault({
               </div>
               {draft.type === "source" ? (
                 <section className="space-y-2 border-t border-[var(--border)] pt-4">
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.memoryvault.sourceNoteRecallHelp")}
+                  </p>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h4 className="text-xs font-medium">
                       {localizeUi(
