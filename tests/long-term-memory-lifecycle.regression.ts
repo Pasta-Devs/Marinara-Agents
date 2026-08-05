@@ -46,6 +46,13 @@ const artifactClient = unzip(
   ["-p", artifactPath, "client.js"],
   `read ${artifactPath}/client.js`,
 );
+const lastInjectionSource = readFileSync(
+  join(
+    repoRoot,
+    "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LastInjectionSummary.tsx",
+  ),
+  "utf8",
+);
 const engineStyles = readFileSync(
   join(engineRoot, "packages/client/src/styles/globals.css"),
   "utf8",
@@ -157,6 +164,32 @@ async function main() {
       artifactClient,
       /crypto\.randomUUID/u,
       "The mobile client must not require secure-context-only crypto.randomUUID",
+    );
+    assert.doesNotMatch(
+      artifactClient,
+      /1\. Import source -> 2\. Review proposals -> 3\. Accept saved memories -> 4\. Activate recall in chat/u,
+      "Workflow guidance must remain contextual rather than repeated on each destination",
+    );
+    for (const copy of [
+      "Preserves the character card, then proposes durable identity",
+      "Preserves selected lorebook entries, then proposes durable world",
+      "Preserves the summary, then proposes events, relationships, threads",
+      "The source note was saved and",
+      "Review what extraction found. Accept saves a proposal to Memory Vault",
+      "Stable appearance can help the character remain visually consistent",
+      "This source note preserves the imported material for evidence. It is not recalled directly.",
+      "Saved memories are not added to every reply.",
+    ])
+      assert.match(artifactClient, new RegExp(copy, "u"));
+    assert.ok(
+      lastInjectionSource.indexOf("error ?") <
+        lastInjectionSource.indexOf("!loading && !error && data?.memories"),
+      "Last Injection Summary must handle a failed latest query before retained data",
+    );
+    assert.match(
+      artifactClient,
+      /extract:ie!=="refresh"/u,
+      "Normal imports must continue extracting source notes",
     );
     const { chromium, devices } = await import(
       pathToFileURL(join(engineRoot, "node_modules/@playwright/test/index.mjs")).href,

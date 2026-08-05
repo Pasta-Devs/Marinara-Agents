@@ -24,11 +24,15 @@ export function LastInjectionSummary({
     >
       <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
         <span>
-          {loading
+          {error
             ? localizeUi(
-                "ui.longTermMemory.lastinjectionsummary.loadingLastInjection",
+                "ui.longTermMemory.lastinjectionsummary.lastInjectionUnavailable",
               )
-            : data?.memoryCount
+            : loading
+              ? localizeUi(
+                  "ui.longTermMemory.lastinjectionsummary.loadingLastInjection",
+                )
+              : data?.memoryCount
               ? localizeUi(
                   selectLtmPluralForm(locale, data.memoryCount) === "one"
                     ? "ui.longTermMemory.lastinjectionsummary.injectedOne"
@@ -37,15 +41,11 @@ export function LastInjectionSummary({
                     count: data.memoryCount,
                   },
                 )
-              : error
-                ? localizeUi(
-                    "ui.longTermMemory.lastinjectionsummary.lastInjectionUnavailable",
-                  )
-                : localizeUi(
+              : localizeUi(
                     "ui.longTermMemory.lastinjectionsummary.noMemoriesInjectedYet",
                   )}
         </span>
-        {data ? (
+        {data && !error ? (
           <span className="shrink-0 text-[0.6875rem] font-normal text-[var(--muted-foreground)]">
             {data.tokenCount.toLocaleString(locale)}{" "}
             {localizeUi("ui.longTermMemory.activityview.tokens")}
@@ -53,13 +53,6 @@ export function LastInjectionSummary({
         ) : null}
       </summary>
       <div className="border-t border-[var(--border)] px-3 py-2">
-        {loading ? (
-          <StatusSurface busy>
-            {localizeUi(
-              "ui.longTermMemory.lastinjectionsummary.loadingRecalledMemories",
-            )}
-          </StatusSurface>
-        ) : null}
         {error ? (
           <StatusSurface tone="danger">
             {localizeUi(
@@ -75,6 +68,12 @@ export function LastInjectionSummary({
                 {localizeUi("ui.longTermMemory.activityview.retry")}
               </button>
             ) : null}
+          </StatusSurface>
+        ) : loading ? (
+          <StatusSurface busy>
+            {localizeUi(
+              "ui.longTermMemory.lastinjectionsummary.loadingRecalledMemories",
+            )}
           </StatusSurface>
         ) : null}
         {!loading && !error && data?.memories.length ? (

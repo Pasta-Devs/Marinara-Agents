@@ -64,6 +64,7 @@ type BatchResult = {
   indexRebuildFailures: string[];
   messages: string[];
   cascadeMutationLabels: string[];
+  savedMemoryIds: string[];
 };
 
 const importanceOptions: LtmImportance[] = [
@@ -826,6 +827,7 @@ export default function ReviewQueue({
   props,
   onDirtyChange,
   onOpenMemory,
+  onOpenVault,
   onRecoverCandidate,
   reviewSourceNoteId,
 }: LongTermMemoryDestinationProps) {
@@ -1200,6 +1202,7 @@ export default function ReviewQueue({
           ),
         ],
         cascadeMutationLabels: [],
+        savedMemoryIds: [],
       });
       return;
     }
@@ -1302,6 +1305,17 @@ export default function ReviewQueue({
         indexRebuildFailures,
         messages,
         cascadeMutationLabels: [...cascadeMutationLabels],
+        savedMemoryIds:
+          action === "accept"
+            ? [
+                ...new Set(
+                  [...completedIds].flatMap((id) => {
+                    const row = rowByMutationId.get(id);
+                    return row ? [row.targetId] : [];
+                  }),
+                ),
+              ]
+            : [],
       });
       if (completedIds.size) {
         await invalidateLtmQueries(queryClient, [
@@ -1349,6 +1363,7 @@ export default function ReviewQueue({
           }),
         ],
         cascadeMutationLabels: [],
+        savedMemoryIds: [],
       });
     } finally {
       setDismissingId(null);
@@ -1621,7 +1636,9 @@ export default function ReviewQueue({
           >
             <IconButton
               icon={Check}
-              label={`${localizeUi("ui.longTermMemory.reviewqueue.accept")} ${targetTitle} (${mutationLabel})`}
+              label={localizeUi("ui.longTermMemory.reviewqueue.acceptAndSave", {
+                title: targetTitle,
+              })}
               iconSize="1rem"
               className="mari-editor-action--primary !h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
@@ -1632,7 +1649,9 @@ export default function ReviewQueue({
             />
             <IconButton
               icon={X}
-              label={`${localizeUi("ui.longTermMemory.reviewqueue.skipProposal")} ${targetTitle} (${mutationLabel})`}
+              label={localizeUi("ui.longTermMemory.reviewqueue.skipProposalTitle", {
+                title: targetTitle,
+              })}
               iconSize="1rem"
               className="!h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
@@ -1739,6 +1758,15 @@ export default function ReviewQueue({
                 )}
               </p>
             ) : null}
+            <p className="text-[var(--muted-foreground)]">
+              {localizeUi(
+                row.disposition === "new"
+                  ? "ui.longTermMemory.reviewqueue.acceptCreatesSavedMemory"
+                  : row.disposition === "merge"
+                    ? "ui.longTermMemory.reviewqueue.acceptAddsToSavedMemory"
+                    : "ui.longTermMemory.reviewqueue.acceptReplacesSavedMemory",
+              )}
+            </p>
             <MutationEditor
               mutation={mutation}
               canEditTitle={canEditTitle}
@@ -1764,9 +1792,6 @@ export default function ReviewQueue({
       aria-label={localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
       className="space-y-4"
     >
-      <p className="text-xs text-[var(--muted-foreground)]">
-        {localizeUi("ui.longTermMemory.workflowCue")}
-      </p>
       {extractionMessage ? (
         <StatusSurface tone={extractionMessage.tone}>
           {extractionMessage.text}
@@ -1866,6 +1891,19 @@ export default function ReviewQueue({
                 },
               )
             : ""}
+          {result.action === "accepted" && result.completed && onOpenVault ? (
+            <Button
+              onClick={() => {
+                const noteId = result.savedMemoryIds.length === 1
+                  ? result.savedMemoryIds[0]
+                  : undefined;
+                if (noteId && onOpenMemory) onOpenMemory(noteId);
+                else onOpenVault();
+              }}
+            >
+              {localizeUi("ui.longTermMemory.reviewqueue.viewSavedMemories")}
+            </Button>
+          ) : null}
         </StatusSurface>
       ) : null}
       {deleteSuggestionError ? (
@@ -1934,6 +1972,11 @@ export default function ReviewQueue({
                     blocked: review.data?.counts.blockedDrafts ?? 0,
                   })}
                 </p>
+                {review.data?.sources.length ? (
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.reviewqueue.curationGuidance")}
+                  </p>
+                ) : null}
               </header>
               <div className="mari-editor-panel overflow-hidden">
                 {sourceIds.map((id) => {

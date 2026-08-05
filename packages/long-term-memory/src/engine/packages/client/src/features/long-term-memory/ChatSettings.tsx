@@ -80,6 +80,9 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         </StatusSurface>
       ) : null}
       <div className="grid gap-2">
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.chatsettings.recallExplanation")}
+        </p>
         <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
           <span id={recallStyleLabelId} className="flex items-center gap-1">
             {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}

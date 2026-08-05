@@ -81,6 +81,11 @@ const sourceTabs: Array<{ id: Source; labelKey: string }> = [
     labelKey: "ui.longTermMemory.sourcesworkspace.lorebooks",
   },
 ];
+const sourceDescriptionKeys: Record<Source, string> = {
+  characters: "ui.longTermMemory.sourcesworkspace.characterDescription",
+  lorebooks: "ui.longTermMemory.sourcesworkspace.lorebookDescription",
+  chats: "ui.longTermMemory.sourcesworkspace.chatSummaryDescription",
+};
 
 const flatPanelTabs: Array<{ id: FlatPanel; labelKey: string }> = [
   {
@@ -780,6 +785,21 @@ export default function SourcesWorkspace({
         item.draft?.status === "pending",
     ),
   );
+  const proposalCount = importResult?.imported.reduce(
+    (count, item) => count + (item.draft?.mutations.length ?? 0),
+    0,
+  ) ?? 0;
+  const importResultMessage = !importResult
+    ? ""
+    : importResult.counts.sourceNotesWritten === 0
+      ? localizeUi("ui.longTermMemory.sourcesworkspace.importFailedBeforeSaving")
+      : importResult.counts.failed || importResult.counts.cancelled
+        ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedExtractionFailed")
+        : proposalCount
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedProposalsReady", {
+              count: proposalCount,
+            })
+          : localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals");
 
   useEffect(() => {
     if (!importTargets.some((target) => target.id === importTargetId))
@@ -947,8 +967,9 @@ export default function SourcesWorkspace({
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
           ...(sourceScope?.chatId ? { chatId: sourceScope.chatId } : {}),
           selectionKey: selectionKeyOverride ?? selectionKey,
-        };
+      };
     setImporting(true);
+    setImportResultContract(contract);
     setImportError("");
     setReviewMessage("");
     setCancelledImport(null);
@@ -1369,6 +1390,9 @@ export default function SourcesWorkspace({
           </button>
         ))}
       </div>
+      <p className="text-xs text-[var(--muted-foreground)]">
+        {localizeUi(sourceDescriptionKeys[source])}
+      </p>
 
       <div className="mari-editor-panel mari-editor-panel--soft flex flex-wrap items-center gap-3 p-3">
         <div
@@ -1625,16 +1649,16 @@ export default function SourcesWorkspace({
         <StatusSurface tone="success">{reviewMessage}</StatusSurface>
       ) : null}
       {!reviewMessage && !importResult && !importError ? (
-        <StatusSurface>
-          <span>
-            {localizeUi(
-              "ui.longTermMemory.sourcesworkspace.importingSavesSourceMaterialFirstExtractProposedMemoriesThen",
-            )}
-          </span>
-          <span className="text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.workflowCue")}
-          </span>
-        </StatusSurface>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.importExplanation")}
+        </p>
+      ) : null}
+      {importing ? (
+        <p role="status" className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.savingAndExtracting", {
+            count: importResultContract?.sourceIds.length ?? 0,
+          })}
+        </p>
       ) : null}
 
       {source === "lorebooks" ? (
@@ -2327,13 +2351,9 @@ export default function SourcesWorkspace({
               "ui.longTermMemory.sourcesworkspace.sourceImportComplete",
             )}
           </h2>
-          {pendingDraftsProduced ? (
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {localizeUi(
-                "ui.longTermMemory.sourcesworkspace.proposedMemoriesAreReadyForReviewTheyAreNot",
-              )}
-            </p>
-          ) : null}
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {importResultMessage}
+          </p>
           <div className="flex flex-wrap gap-2">
             {retryableIds.length ? (
               <Button
