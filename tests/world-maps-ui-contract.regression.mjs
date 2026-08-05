@@ -76,8 +76,13 @@ assert.match(
 );
 assert.match(
   inspectorSource,
-  /onUpdateLocation\(source\.id,[\s\S]*?Remove Direct Link with/u,
-  "Reciprocal edits and removals must mutate the canonical source link.",
+  /const removeLink = \(source: SpatialLocation, index: number\) => \{[\s\S]*?onUpdateLocation\(source\.id, \{ links: source\.links\.filter\(\(_, linkIndex\) => linkIndex !== index\) \}\);[\s\S]*?\n  \};\n  const addLink/u,
+  "Reciprocal removals must mutate the canonical source link.",
+);
+assert.match(
+  inspectorSource,
+  /const linkedLocationIds = useMemo\([\s\S]*?directLinkRows\.flatMap[\s\S]*?!linkedLocationIds\.has\(candidate\.id\)/u,
+  "The Direct Link picker must exclude relationships already represented from either endpoint.",
 );
 assert.match(
   workspaceSource,

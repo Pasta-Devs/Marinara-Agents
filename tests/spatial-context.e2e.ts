@@ -3837,6 +3837,11 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
     await expect(incomingOneWay).toContainText("Dock shuttle");
     await expect(incomingOneWay).toContainText("Shrouded Coast > Gloam Harbor");
     await expect(incomingOneWay.getByLabel("Link label for Gloam Harbor")).toHaveCount(0);
+    const linkTargetPicker = sewersDetails.locator("select").filter({
+      has: page.locator('option[value=""]', { hasText: "Choose location" }),
+    });
+    await expect(linkTargetPicker.locator('option[value="ai_lighthouse"]')).toHaveCount(0);
+    await expect(linkTargetPicker.locator('option[value="ai_harbor"]')).toHaveCount(0);
 
     await reciprocal.getByLabel("Link label for Blackglass Lighthouse").fill("Target-edited tunnel");
     await reciprocal.getByLabel("Link state for Blackglass Lighthouse").selectOption("available");
@@ -3884,6 +3889,8 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
       .toBe(false);
     await expect(reciprocal).toHaveCount(0);
     await expect(incomingOneWay).toBeVisible();
+    await expect(linkTargetPicker.locator('option[value="ai_lighthouse"]')).toHaveCount(1);
+    await expect(linkTargetPicker.locator('option[value="ai_harbor"]')).toHaveCount(0);
 
     await incomingOneWay.getByRole("button", { name: "View source Gloam Harbor" }).click();
     const harborDetails = workspace.locator('section[aria-label="Details for Gloam Harbor"]:visible');

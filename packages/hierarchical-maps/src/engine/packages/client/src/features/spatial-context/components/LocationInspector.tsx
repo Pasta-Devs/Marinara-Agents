@@ -352,16 +352,17 @@ export function LocationInspector({
   const eligibleParents = definition.locations
     .filter((candidate) => candidate.id !== location?.id && !descendants.has(candidate.id))
     .sort((left, right) => left.name.localeCompare(right.name));
-  const eligibleLinks = definition.locations
-    .filter(
-      (candidate) =>
-        candidate.id !== location?.id && location?.links.every((existing) => existing.targetId !== candidate.id),
-    )
-    .sort((left, right) => left.name.localeCompare(right.name));
   const directLinkRows = useMemo(
     () => (location ? resolveLocationDirectLinkRows(definition, location) : []),
     [definition, location],
   );
+  const linkedLocationIds = useMemo(
+    () => new Set(directLinkRows.flatMap(({ related }) => (related ? [related.id] : []))),
+    [directLinkRows],
+  );
+  const eligibleLinks = definition.locations
+    .filter((candidate) => candidate.id !== location?.id && !linkedLocationIds.has(candidate.id))
+    .sort((left, right) => left.name.localeCompare(right.name));
 
   const lorebookById = useMemo(
     () => new Map(lorebooks.map((lorebook) => [lorebook.id, lorebook])),
