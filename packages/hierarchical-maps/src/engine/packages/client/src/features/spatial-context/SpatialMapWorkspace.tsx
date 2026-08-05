@@ -2477,6 +2477,8 @@ export function SpatialMapWorkspace({
       }}
       onHierarchyProfileChange={applyHierarchyProfile}
       onUpdate={(patch) => selected && applyDraft(updateSpatialLocation(draft, selected.id, patch))}
+      onUpdateLocation={(locationId, patch) => applyDraft(updateSpatialLocation(draft, locationId, patch))}
+      onSelectLocation={selectLocation}
       lorebooks={lorebooks}
       lorebookEntries={lorebookEntriesQuery.entries ?? []}
       excludedLorebookIds={excludedLorebookIds}

@@ -65,6 +65,26 @@ assert.match(
   "The linked-lore action must retain its host navigation callback.",
 );
 assert.match(
+  inspectorSource,
+  /export function resolveLocationDirectLinkRows\([\s\S]*?link\.targetId !== location\.id[\s\S]*?direction: "incoming"/u,
+  "The inspector must derive incoming Direct Links from the canonical source location.",
+);
+assert.match(
+  inspectorSource,
+  /const editable = direction === "outgoing" \|\| link\.bidirectional[\s\S]*?Incoming one-way[\s\S]*?View source/u,
+  "Two-way links must remain editable from either endpoint while one-way targets expose source navigation.",
+);
+assert.match(
+  inspectorSource,
+  /onUpdateLocation\(source\.id,[\s\S]*?Remove Direct Link with/u,
+  "Reciprocal edits and removals must mutate the canonical source link.",
+);
+assert.match(
+  workspaceSource,
+  /onUpdateLocation=\{\(locationId, patch\) =>[\s\S]*?updateSpatialLocation\(draft, locationId, patch\)[\s\S]*?onSelectLocation=\{selectLocation\}/u,
+  "The workspace must provide cross-location mutation and navigation to the inspector.",
+);
+assert.match(
   workspaceSource,
   /aria-label="Export portable world map"[\s\S]*?style=\{\{ zIndex: 105 \}\}/u,
   "The portable export overlay must carry an inline z-index that does not depend on host Tailwind scanning.",
@@ -135,7 +155,13 @@ assert.match(
   /Open the linked lorebook and discard them\?/u,
   "The built World Maps client must include guarded linked-lore navigation.",
 );
+assert.match(builtClient, /Incoming one-way/u, "The built World Maps client must expose incoming Direct Links.");
+assert.match(
+  browserRegressionSource,
+  /reciprocal and incoming Direct Links stay visible from either endpoint/u,
+  "The browser suite must cover reciprocal editing, unlinking, and incoming source navigation.",
+);
 
 console.log(
-  "World Maps UI contract regression passed: linked-lore/export ownership, portable-lore choices, normalized refresh, and JSON repair parity.",
+  "World Maps UI contract regression passed: Direct Link endpoint parity, linked-lore/export ownership, portable-lore choices, normalized refresh, and JSON repair parity.",
 );
