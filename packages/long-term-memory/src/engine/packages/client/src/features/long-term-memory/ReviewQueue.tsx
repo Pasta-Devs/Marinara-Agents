@@ -931,8 +931,10 @@ export default function ReviewQueue({
         ["stale", "missing", "invalid", "superseded", "not_pending"].includes(
           item.freshness,
         ),
-    ),
+      ),
   );
+  const selectedSourceIsExtractable =
+    noteById.get(effectiveSourceId ?? "")?.type === "source";
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedById, setEditedById] = useState<Map<string, LtmDraftMutation>>(
     new Map(),
@@ -1399,11 +1401,44 @@ export default function ReviewQueue({
 
   const reextractSource = async () => {
     if (!effectiveSourceId || extractingSourceId) return;
-    setExtractingSourceId(effectiveSourceId);
+    const sourceId = effectiveSourceId;
+    const editedSourceMutationIds = new Set(
+      [...editedById.keys()].filter(
+        (id) => rowByMutationId.get(id)?.sourceNoteId === sourceId,
+      ),
+    );
+    if (editedSourceMutationIds.size) {
+      const action = localizeUi(
+        "ui.longTermMemory.reviewqueue.reExtractSource",
+      );
+      const options = {
+        title: localizeUi(
+          "ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges",
+        ),
+        message: localizeUi(
+          "ui.longTermMemory.memoryvault.changesLostBeforeAction",
+          { action },
+        ),
+        confirmLabel: localizeUi(
+          "ui.longTermMemory.longtermmemorydetail.discardChanges",
+        ),
+        tone: "destructive" as const,
+      };
+      const confirmed = props.confirmAction
+        ? await props.confirmAction(options)
+        : window.confirm(
+            localizeUi(
+              "ui.longTermMemory.longtermmemorydetail.confirmationWithMessage",
+              { title: options.title, message: options.message },
+            ),
+          );
+      if (!confirmed) return;
+    }
+    setExtractingSourceId(sourceId);
     setExtractionMessage(null);
     try {
       await request(
-        `/notes/${encodeURIComponent(effectiveSourceId)}/extract`,
+        `/notes/${encodeURIComponent(sourceId)}/extract`,
         "POST",
         {},
       );
@@ -1412,6 +1447,13 @@ export default function ReviewQueue({
         queryKeys.pendingDrafts,
         queryKeys.rejectedSuggestions,
       ]);
+      if (editedSourceMutationIds.size) {
+        setEditedById((current) => {
+          const next = new Map(current);
+          editedSourceMutationIds.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
       setExtractionMessage({
         tone: "success",
         text: localizeUi("ui.longTermMemory.reviewqueue.sourceReextracted"),
@@ -2045,7 +2087,9 @@ export default function ReviewQueue({
                       {localizeUi("ui.longTermMemory.reviewqueue.openSource")}
                     </Button>
                   ) : null}
-                  {effectiveSourceId && needsSourceReextraction ? (
+                  {effectiveSourceId &&
+                  selectedSourceIsExtractable &&
+                  needsSourceReextraction ? (
                     <Button
                       disabled={extractingSourceId !== null}
                       onClick={() => void reextractSource()}
