@@ -1249,6 +1249,7 @@ export default function SourcesWorkspace({
           }}
           data-ltm-source-action="re-extract"
           data-ltm-source-note-id={noteId}
+          className={extractingId === noteId ? "[&>svg]:animate-spin" : ""}
         />
         <IconButton
           icon={BookOpen}
