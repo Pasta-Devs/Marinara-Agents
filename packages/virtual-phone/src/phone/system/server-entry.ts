@@ -7,6 +7,7 @@ import {
 } from "../device/identity";
 import { normalizeDeviceSettings, type DeviceSettings } from "../device/settings";
 import { PhoneMessagingService, unreadCount, unreadMessages, type ThreadDocument } from "./messaging";
+import { parseBoundedContent } from "../platform/content";
 
 interface CapabilityContext {
   api: {
@@ -22,6 +23,14 @@ interface CapabilityContext {
       resources: {
         listCharacters(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
         listPersonas(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
+      };
+      languageModels?: {
+        resolve(connectionId?: string | null): Promise<{
+          chatComplete(
+            messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+            options?: { temperature?: number; maxTokens?: number },
+          ): Promise<{ content: string }>;
+        }>;
       };
     };
     registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void>;
@@ -102,6 +111,37 @@ export async function activate({ api }: CapabilityContext) {
       unread: unreadCount(document, phoneId),
       messages: document.messages,
     };
+  };
+
+  // ponytail: reply generated inline with send; queue it if model latency hurts
+  const generateCharacterReply = async (senderPhoneId: string, recipientPhoneId: string) => {
+    try {
+      const recipient = await findPhone(recipientPhoneId);
+      if (recipient.document.identity.ownerType !== "character" || !recipient.document.provisioning.enabled) return null;
+      const model = await api.runtime.languageModels?.resolve();
+      if (!model) return null;
+      const sender = await findPhone(senderPhoneId);
+      const thread = (await messaging.threadsFor(recipientPhoneId))
+        .find(({ document }) => document.participants.includes(senderPhoneId));
+      if (!thread) return null;
+      const recipientName = recipient.document.identity.ownerName;
+      const senderName = sender.document.identity.ownerName;
+      const history = thread.document.messages.slice(-20)
+        .map((message) => `${message.from === recipientPhoneId ? recipientName : senderName}: ${message.text}`)
+        .join("\n");
+      const completion = await model.chatComplete([
+        {
+          role: "system",
+          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.`,
+        },
+        { role: "user", content: history },
+      ], { temperature: 0.9, maxTokens: 200 });
+      const { reply } = parseBoundedContent(completion.content, { fields: { reply: "string" }, defaults: { reply: "" } }) as { reply: string };
+      if (!reply.trim()) return null;
+      return await messaging.send(recipientPhoneId, senderPhoneId, reply);
+    } catch {
+      return null;
+    }
   };
 
   const routes: FastifyPluginAsync = async (app) => {
@@ -245,8 +285,9 @@ export async function activate({ api }: CapabilityContext) {
           return reply.status(400).send({ error: "That phone cannot be messaged from this chat" });
         }
         const thread = await messaging.send(request.params.phoneId, toPhoneId, String(body.text ?? ""));
+        const withReply = (await generateCharacterReply(request.params.phoneId, toPhoneId)) ?? thread;
         const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
-        return { thread: threadPayload(thread.record.id, thread.document, request.params.phoneId, names) };
+        return { thread: threadPayload(withReply.record.id, withReply.document, request.params.phoneId, names) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
       }

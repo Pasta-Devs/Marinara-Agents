@@ -4,7 +4,9 @@ First participant-shared app on the Virtual Phone platform, per `virtual-phone-2
 
 ## Purpose
 
-Direct text conversations between phones in the same chat. One thread per phone pair. No group chats, media, or model-generated replies in this milestone — a character "replying" stays a story event until the content contract wires in.
+Direct text conversations between phones in the same chat. One thread per phone pair. No group chats or media in this milestone.
+
+Character phones reply through the bounded content contract: when the recipient is an enabled character phone and a language model connection exists, the server asks for one short in-character reply as `{"reply":"…"}`, parsed with `parseBoundedContent` (strings capped, malformed output → deterministic empty fallback). No model, a failed call, or an empty reply all degrade to "no reply" — sending never breaks. Replies are generated inline with send; move to a queue if latency hurts.
 
 ## Routes
 
