@@ -147,6 +147,8 @@
   "ui.longTermMemory.longtermmemorydetail.nextTurnItOn": "Next: turn it on",
   "ui.longTermMemory.longtermmemorydetail.noChatGuidance": "You can still import and review memories. To activate later, open a supported chat and use Chat Settings -> Agents -> Long-Term Memory.",
   "ui.longTermMemory.longtermmemorydetail.openReviewQueue": "Open Review Queue",
+  "ui.longTermMemory.longtermmemorydetail.openChatSummarySettings": "Open Chat Summary settings",
+  "ui.longTermMemory.longtermmemorydetail.openPromptPresetSections": "Open prompt preset Sections",
   "ui.longTermMemory.longtermmemorydetail.reviewGuidance": "Accept saves the proposal to Memory Vault. Edit corrects it before saving. Skip discards only that proposal. Stable appearance can help continuity; edit or skip transient or unimportant detail. Accepted memories are eligible for relevant recall, not guaranteed in every reply.",
   "ui.longTermMemory.longtermmemorydetail.selectedIt": "I selected it",
   "ui.longTermMemory.longtermmemorydetail.sourceCharacters": "Character",
