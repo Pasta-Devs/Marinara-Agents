@@ -8,6 +8,7 @@ export interface PhoneThemeTokens {
   "--vp-accent": string;
   "--vp-bezel": string;
   "--vp-radius": string;
+  "--vp-border": string;
 }
 
 const themes: Record<PhoneBaselineTheme, PhoneThemeTokens> = {
@@ -19,6 +20,7 @@ const themes: Record<PhoneBaselineTheme, PhoneThemeTokens> = {
     "--vp-accent": "#2c8979",
     "--vp-bezel": "#11151d",
     "--vp-radius": "28px",
+    "--vp-border": "rgb(25 35 33 / 0.12)",
   },
   light: {
     "--vp-bg": "#f4f0e8",
@@ -28,6 +30,7 @@ const themes: Record<PhoneBaselineTheme, PhoneThemeTokens> = {
     "--vp-accent": "#a34d36",
     "--vp-bezel": "#29231e",
     "--vp-radius": "28px",
+    "--vp-border": "rgb(37 33 27 / 0.14)",
   },
   dark: {
     "--vp-bg": "#10151a",
@@ -37,6 +40,7 @@ const themes: Record<PhoneBaselineTheme, PhoneThemeTokens> = {
     "--vp-accent": "#69c8b3",
     "--vp-bezel": "#050709",
     "--vp-radius": "28px",
+    "--vp-border": "rgb(237 245 242 / 0.14)",
   },
 };
 

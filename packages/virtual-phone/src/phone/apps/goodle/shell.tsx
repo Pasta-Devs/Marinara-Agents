@@ -11,16 +11,16 @@ export function GoodleShell({ onBack, onClose }: { onBack: () => void; onClose: 
     setResults(fallbackSearchResults(query));
   };
   return (
-    <section aria-labelledby="goodle-title" className="absolute inset-0 z-10 overflow-y-auto bg-[var(--vp-bg)] p-5">
+    <section aria-labelledby="goodle-title" className="vp-appview">
       <PhoneAppHeader title="Goodle" titleId="goodle-title" closeLabel="Close Goodle" onBack={onBack} onClose={onClose} />
-      <form onSubmit={submit} className="flex gap-2">
-        <label className="min-w-0 flex-1"><span className="sr-only">Search Goodle</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="min-h-11 w-full rounded-lg border border-black/10 bg-[var(--vp-surface)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]" /></label>
-        <button type="submit" aria-label="Search" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[var(--vp-accent)] text-white"><Search size="1rem" aria-hidden="true" /></button>
+      <form onSubmit={submit} className="vp-search-row">
+        <label><span className="vp-sr-only">Search Goodle</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="vp-input" /></label>
+        <button type="submit" aria-label="Search" className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Search size="1rem" aria-hidden="true" /></button>
       </form>
-      <div className="mt-5">
-        <h3 className="text-sm font-semibold">{results.title}</h3>
-        <p className="mt-2 text-xs text-[var(--vp-muted)]">{results.summary}</p>
-        {results.items.length ? <ul className="mt-4 space-y-2">{results.items.map((item) => <li key={item} className="rounded-lg bg-[var(--vp-surface)] p-3 text-xs">{item}</li>)}</ul> : null}
+      <div>
+        <h3 className="vp-result-title">{results.title}</h3>
+        <p className="vp-result-summary">{results.summary}</p>
+        {results.items.length ? <ul className="vp-result-list">{results.items.map((item) => <li key={item}>{item}</li>)}</ul> : null}
       </div>
     </section>
   );
