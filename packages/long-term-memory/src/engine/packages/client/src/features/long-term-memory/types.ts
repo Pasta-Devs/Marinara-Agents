@@ -22,7 +22,7 @@ export type CapabilityProps = {
   localization?: LtmLocalizationContext;
   chatId?: string | null;
   chatName?: string | null;
-  chatMode?: string | null;
+  chatMode?: "conversation" | "roleplay" | "game" | null;
   enabledForChat?: boolean;
   chatSettings?: {
     longTermMemoryRecallStyle?: string;
@@ -52,10 +52,9 @@ export type CapabilityElement = HTMLElement & {
 };
 
 export type LongTermMemoryDestination =
-  | "vault"
-  | "review"
-  | "sources"
-  | "settings";
+  "vault" | "review" | "sources" | "settings";
+
+export type SourceTab = "characters" | "lorebooks" | "chats";
 
 export type LtmRecoveryHandoff = {
   key: number;
@@ -67,10 +66,10 @@ export type LtmRecoveryHandoff = {
 
 export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
-  initialSource?: "characters" | "lorebooks" | "chats";
-  onInitialSourceHandled?: () => void;
-  selectedSource?: "characters" | "lorebooks" | "chats";
-  onSourceChange?: (source: "characters" | "lorebooks" | "chats") => void;
+  requestedSource?: { key: number; source: SourceTab } | null;
+  onRequestedSourceHandled?: () => void;
+  selectedSource?: SourceTab;
+  onSourceChange?: (source: SourceTab) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenMemory?: (noteId: string) => void;
   onOpenVault?: () => void;

@@ -23,6 +23,7 @@ import type {
   LongTermMemoryDestination,
   LongTermMemoryDestinationProps,
   LtmRecoveryHandoff,
+  SourceTab,
 } from "./types";
 import { useLtmTranslation } from "./localization";
 
@@ -31,7 +32,7 @@ const onboardingStorageKey = "marinara-long-term-memory-onboarding-v1";
 const onboardingSteps = [
   {
     labelKey: "ui.longTermMemory.longtermmemorydetail.howItWorks",
-    titleKey: "ui.longTermMemory.longtermmemorydetail.howLongTermMemoryWorks",
+    titleKey: "ui.longTermMemory.longtermmemorydetail.howMemoryGetsSaved",
     mobileSprite: "Mari_wave.png",
     desktopSprite: "Mari_wave.png",
     mobileFlip: false,
@@ -39,7 +40,7 @@ const onboardingSteps = [
   },
   {
     labelKey: "ui.longTermMemory.longtermmemorydetail.activate",
-    titleKey: "ui.longTermMemory.longtermmemorydetail.activateForAChat",
+    titleKey: "ui.longTermMemory.longtermmemorydetail.turnItOnForThisChat",
     mobileSprite: "Mari_point_up_left.png",
     desktopSprite: "Mari_point_up_left.png",
     mobileFlip: true,
@@ -47,7 +48,7 @@ const onboardingSteps = [
   },
   {
     labelKey: "ui.longTermMemory.longtermmemorydetail.import",
-    titleKey: "ui.longTermMemory.longtermmemorydetail.importSources",
+    titleKey: "ui.longTermMemory.longtermmemorydetail.chooseWhatToRemember",
     mobileSprite: "Mari_point_down_left.png",
     desktopSprite: "Mari_point_middle_left.png",
     alt: "",
@@ -55,7 +56,7 @@ const onboardingSteps = [
   },
   {
     labelKey: "ui.longTermMemory.longtermmemorydetail.review",
-    titleKey: "ui.longTermMemory.longtermmemorydetail.reviewProposedMemories",
+    titleKey: "ui.longTermMemory.longtermmemorydetail.reviewBeforeSaving",
     mobileSprite: "Mari_point_down_left.png",
     desktopSprite: "Mari_point_up_left.png",
     mobileFlip: false,
@@ -63,7 +64,7 @@ const onboardingSteps = [
   },
   {
     labelKey: "ui.longTermMemory.longtermmemorydetail.recall",
-    titleKey: "ui.longTermMemory.longtermmemorydetail.saveAndRecall",
+    titleKey: "ui.longTermMemory.longtermmemorydetail.checkWhatTheChatUsed",
     mobileSprite: "Mari_explaining.png",
     desktopSprite: "Mari_explaining.png",
     mobileFlip: false,
@@ -98,8 +99,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     useState<LongTermMemoryDestination>("vault");
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
-  const [compactHeader, setCompactHeader] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
+  const [compactHeader, setCompactHeader] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches,
   );
   const [addOpen, setAddOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
@@ -116,12 +119,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     useState<LtmRecoveryHandoff | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
-  const [initialSource, setInitialSource] = useState<
-    "characters" | "lorebooks" | "chats"
-  >();
-  const [selectedSource, setSelectedSource] = useState<
-    "characters" | "lorebooks" | "chats"
-  >("chats");
+  const [requestedSource, setRequestedSource] = useState<{
+    key: number;
+    source: SourceTab;
+  } | null>(null);
+  const [selectedSource, setSelectedSource] = useState<SourceTab>("chats");
+  const [onboardingSource, setOnboardingSource] =
+    useState<SourceTab>("characters");
   const Destination = destinations[destination];
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
@@ -238,19 +242,25 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   > = async (candidate, scope, modes, rejectedSuggestionId) => {
     if (!(await confirmDestinationChange(destinationLabel("vault")))) return;
     setOpenedNoteId(null);
-    setRecoveryHandoff({ key: Date.now(), candidate, scope, modes, rejectedSuggestionId });
+    setRecoveryHandoff({
+      key: Date.now(),
+      candidate,
+      scope,
+      modes,
+      rejectedSuggestionId,
+    });
     setDestinationDirty(false);
     setDestination("vault");
   };
-  const openSources = async (
-    source: "characters" | "lorebooks" | "chats" = "chats",
-  ) => {
+  const openSources = async (source?: SourceTab) => {
     if (!(await confirmDestinationChange(destinationLabel("sources"))))
       return false;
     setDestinationDirty(false);
     setAddOpen(false);
-    setInitialSource(source);
-    setSelectedSource(source);
+    if (source) {
+      setRequestedSource({ key: Date.now(), source });
+      setSelectedSource(source);
+    }
     setDestination("sources");
     return true;
   };
@@ -316,7 +326,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         {healthLabel}
       </strong>
       <p>
-        {indexedChunks} {localizeUi("ui.longTermMemory.longtermmemorydetail.indexedChunks")}
+        {indexedChunks}{" "}
+        {localizeUi("ui.longTermMemory.longtermmemorydetail.indexedChunks")}
       </p>
       <p>
         {localizeUi(
@@ -325,6 +336,38 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       </p>
     </div>
   );
+  const chatLabel =
+    props.chatName ??
+    localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat");
+  const connectedChat = Boolean(props.chatId);
+  const activeChat = connectedChat && props.enabledForChat === true;
+  const modeGuidance =
+    props.chatMode === "conversation"
+      ? "ui.longTermMemory.longtermmemorydetail.conversationPlacement"
+      : props.chatMode === "roleplay" || props.chatMode === "game"
+        ? "ui.longTermMemory.longtermmemorydetail.promptBlockPlacement"
+        : null;
+  const advanceOnboarding = () =>
+    setOnboardingStep((step) => Math.min(step + 1, onboardingSteps.length - 1));
+  const activateForOnboarding = async () => {
+    if (!props.onEnabledForChatChange || activationPending) return;
+    setActivationPending(true);
+    setActivationError("");
+    try {
+      await props.onEnabledForChatChange(true);
+      advanceOnboarding();
+    } catch (error) {
+      setActivationError(
+        error instanceof Error
+          ? error.message
+          : localizeUi(
+              "ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat",
+            ),
+      );
+    } finally {
+      setActivationPending(false);
+    }
+  };
 
   return (
     <main
@@ -358,6 +401,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           min-height: 2.75rem;
           min-width: 0;
           width: 100%;
+        }
+        [data-ltm-navigation="mobile"] {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
         }
         [data-ltm-navigation="mobile"] [data-ltm-badge] {
           position: absolute;
@@ -458,7 +504,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   border: 0,
                   appearance: "none",
                   background: "transparent",
-                  cursor: props.onEnabledForChatChange ? "pointer" : "not-allowed",
+                  cursor: props.onEnabledForChatChange
+                    ? "pointer"
+                    : "not-allowed",
                 }}
                 disabled={activationPending || !props.onEnabledForChatChange}
                 onClick={() => void toggleActivation()}
@@ -709,24 +757,24 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   containerType: "inline-size",
                 }}
               >
-              {activationError ? (
-                <StatusSurface tone="danger">{activationError}</StatusSurface>
-              ) : null}
-              {status.isError ? (
-                <StatusSurface tone="danger">
-                  {localizeUi(
-                    "ui.longTermMemory.longtermmemorydetail.longTermMemoryStatusCouldNotLoad",
-                  )}
-                </StatusSurface>
-              ) : null}
-              {onboardingOpen ? (
-                <section
-                  aria-labelledby="ltm-onboarding-title"
-                  aria-describedby="ltm-onboarding-description"
-                  data-ltm-surface="onboarding"
-                  className="mari-editor-panel mari-editor-panel--soft overflow-hidden"
-                >
-                  <style>{`
+                {activationError ? (
+                  <StatusSurface tone="danger">{activationError}</StatusSurface>
+                ) : null}
+                {status.isError ? (
+                  <StatusSurface tone="danger">
+                    {localizeUi(
+                      "ui.longTermMemory.longtermmemorydetail.longTermMemoryStatusCouldNotLoad",
+                    )}
+                  </StatusSurface>
+                ) : null}
+                {onboardingOpen ? (
+                  <section
+                    aria-labelledby="ltm-onboarding-title"
+                    aria-describedby="ltm-onboarding-description"
+                    data-ltm-surface="onboarding"
+                    className="mari-editor-panel mari-editor-panel--soft overflow-hidden"
+                  >
+                    <style>{`
                 [data-ltm-onboarding-body] {
                   display: grid;
                   grid-template-columns: minmax(0, 1fr);
@@ -766,32 +814,32 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   }
                 }
               `}</style>
-                  <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
-                    <img
-                      src="/sprites/mari/chibi-professor-mari.png"
-                      alt=""
-                      draggable={false}
-                      className="h-10 w-10 shrink-0 object-contain"
-                    />
-                    <p className="min-w-0 flex-1 text-xs font-semibold">
-                      {localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.professorMariSSetupGuide",
-                      )}
-                    </p>
-                    <p className="shrink-0 text-xs text-[var(--muted-foreground)]">
-                      {localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.stepProgress",
-                        {
-                          current: onboardingStep + 1,
-                          total: onboardingSteps.length,
-                          label: localizeUi(
-                            onboardingSteps[onboardingStep].labelKey,
-                          ),
-                        },
-                      )}
-                    </p>
-                  </div>
-                  <div data-ltm-onboarding-body className="p-4 sm:p-6">
+                    <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
+                      <img
+                        src="/sprites/mari/chibi-professor-mari.png"
+                        alt=""
+                        draggable={false}
+                        className="h-10 w-10 shrink-0 object-contain"
+                      />
+                      <p className="min-w-0 flex-1 text-xs font-semibold">
+                        {localizeUi(
+                          "ui.longTermMemory.longtermmemorydetail.professorMariSSetupGuide",
+                        )}
+                      </p>
+                      <p className="shrink-0 text-xs text-[var(--muted-foreground)]">
+                        {localizeUi(
+                          "ui.longTermMemory.longtermmemorydetail.stepProgress",
+                          {
+                            current: onboardingStep + 1,
+                            total: onboardingSteps.length,
+                            label: localizeUi(
+                              onboardingSteps[onboardingStep].labelKey,
+                            ),
+                          },
+                        )}
+                      </p>
+                    </div>
+                    <div data-ltm-onboarding-body className="p-4 sm:p-6">
                       <div className="space-y-4">
                         <div
                           className="space-y-2"
@@ -801,206 +849,311 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           <h2
                             id="ltm-onboarding-title"
                             className="text-lg font-semibold"
-                        >
-                          {localizeUi(onboardingSteps[onboardingStep].titleKey)}
-                        </h2>
-                        <p
-                          id="ltm-onboarding-description"
-                          className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]"
-                        >
-                          {onboardingStep === 0
-                            ? localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.importInformationFromChatsCharactersOrLorebooksLongTerm",
-                              )
-                            : onboardingStep === 1
-                              ? props.chatId
-                                ? props.enabledForChat
-                                  ? localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.longTermMemoryIsActiveInValue1RelevantSaved",
-                                      {
-                                        value1:
-                                          props.chatName ??
-                                          localizeUi(
-                                            "ui.longTermMemory.longtermmemorydetail.thisChat",
-                                          ),
-                                      },
-                                    )
-                                  : localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.turnOnActiveInValue1AboveToLetThis",
-                                      {
-                                        value1:
-                                          props.chatName ??
-                                          localizeUi(
-                                            "ui.longTermMemory.longtermmemorydetail.thisChat",
-                                          ),
-                                      },
-                                    )
-                                : localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.openASupportedChatThenUseChatSettingsAgents",
-                                  )
-                              : onboardingStep === 2
-                                ? localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.chooseAChatSummaryCharacterOrLorebookToImport",
-                                  )
-                                : onboardingStep === 3
-                                  ? localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.reviewProposedChangesBeforeSavingThemEditAnythingThat",
-                                    )
-                                  : localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.acceptedMemoriesAppearInMemoryVaultAndCanBe",
-                                    )}
-                        </p>
-                        {onboardingStep === 1 &&
-                        (props.chatMode === "roleplay" ||
-                          props.chatMode === "game") ? (
-                          <p className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]">
-                            {localizeUi(
-                              "ui.longTermMemory.longtermmemorydetail.promptBlockPlacement",
-                            )}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {onboardingStep > 0 ? (
-                          <Button
-                            onClick={() =>
-                              setOnboardingStep((step) => step - 1)
-                            }
                           >
                             {localizeUi(
-                              "ui.longTermMemory.longtermmemorydetail.back",
+                              onboardingSteps[onboardingStep].titleKey,
                             )}
-                          </Button>
-                        ) : null}
-                        {onboardingStep === 2 ? (
-                          <>
+                          </h2>
+                          <p
+                            id="ltm-onboarding-description"
+                            className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]"
+                          >
+                            {onboardingStep === 0
+                              ? localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.memoryStatesGuidance",
+                                )
+                              : onboardingStep === 1
+                                ? activeChat
+                                  ? localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.activeChatGuidance",
+                                      { value1: chatLabel },
+                                    )
+                                  : connectedChat
+                                    ? localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.inactiveChatGuidance",
+                                        { value1: chatLabel },
+                                      )
+                                    : localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.noChatGuidance",
+                                      )
+                                : onboardingStep === 2
+                                  ? localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.sourceChoiceGuidance",
+                                    )
+                                  : onboardingStep === 3
+                                    ? localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.reviewGuidance",
+                                      )
+                                    : activeChat
+                                      ? localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.verifyChatGuidance",
+                                          { value1: chatLabel },
+                                        )
+                                      : localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.verifyWithoutChatGuidance",
+                                        )}
+                          </p>
+                          {onboardingStep === 1 && modeGuidance ? (
+                            <p className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]">
+                              {localizeUi(modeGuidance)}
+                            </p>
+                          ) : null}
+                          {onboardingStep === 2 ? (
+                            <>
+                              <div
+                                className="flex flex-wrap gap-2"
+                                role="group"
+                                aria-label={localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.sourceChoice",
+                                )}
+                              >
+                                {(
+                                  ["characters", "lorebooks", "chats"] as const
+                                ).map((source) => (
+                                  <Button
+                                    key={source}
+                                    primary={onboardingSource === source}
+                                    aria-pressed={onboardingSource === source}
+                                    onClick={() => setOnboardingSource(source)}
+                                  >
+                                    {localizeUi(
+                                      `ui.longTermMemory.longtermmemorydetail.source${source[0].toUpperCase()}${source.slice(1)}`,
+                                    )}
+                                  </Button>
+                                ))}
+                              </div>
+                              {onboardingSource === "chats" ? (
+                                <p className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]">
+                                  {localizeUi(
+                                    "ui.longTermMemory.longtermmemorydetail.chatSummarySetup",
+                                  )}
+                                </p>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {onboardingStep > 0 ? (
+                            <Button
+                              onClick={() =>
+                                setOnboardingStep((step) => step - 1)
+                              }
+                            >
+                              {localizeUi(
+                                "ui.longTermMemory.longtermmemorydetail.back",
+                              )}
+                            </Button>
+                          ) : null}
+                          {onboardingStep === 0 ? (
+                            <Button primary onClick={advanceOnboarding}>
+                              {localizeUi(
+                                "ui.longTermMemory.longtermmemorydetail.nextTurnItOn",
+                              )}
+                            </Button>
+                          ) : onboardingStep === 1 ? (
+                            activeChat ? (
+                              <Button primary onClick={advanceOnboarding}>
+                                {localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.nextChooseASource",
+                                )}
+                              </Button>
+                            ) : connectedChat ? (
+                              <>
+                                <Button
+                                  primary
+                                  disabled={
+                                    activationPending ||
+                                    !props.onEnabledForChatChange
+                                  }
+                                  onClick={() => void activateForOnboarding()}
+                                >
+                                  {localizeUi(
+                                    "ui.longTermMemory.longtermmemorydetail.turnOnForThisChat",
+                                  )}
+                                </Button>
+                                <Button onClick={advanceOnboarding}>
+                                  {localizeUi(
+                                    "ui.longTermMemory.longtermmemorydetail.continueWithoutActivating",
+                                  )}
+                                </Button>
+                              </>
+                            ) : (
+                              <Button primary onClick={advanceOnboarding}>
+                                {localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.continueWithoutAChat",
+                                )}
+                              </Button>
+                            )
+                          ) : onboardingStep === 2 ? (
+                            <>
+                              {onboardingSource === "chats" ? (
+                                <>
+                                  <Button
+                                    primary
+                                    onClick={async () => {
+                                      if (await openSources("chats"))
+                                        completeOnboarding();
+                                    }}
+                                  >
+                                    {localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.selectedIt",
+                                    )}
+                                  </Button>
+                                  <Button
+                                    onClick={async () => {
+                                      if (await openSources("chats"))
+                                        completeOnboarding();
+                                    }}
+                                  >
+                                    {localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.continueWithoutChangingIt",
+                                    )}
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  primary
+                                  onClick={async () => {
+                                    if (await openSources(onboardingSource))
+                                      completeOnboarding();
+                                  }}
+                                >
+                                  {localizeUi(
+                                    onboardingSource === "characters"
+                                      ? "ui.longTermMemory.longtermmemorydetail.importACharacter"
+                                      : "ui.longTermMemory.longtermmemorydetail.importALorebook",
+                                  )}
+                                </Button>
+                              )}
+                              <Button onClick={advanceOnboarding}>
+                                {localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.continueToReview",
+                                )}
+                              </Button>
+                            </>
+                          ) : onboardingStep === 3 ? (
+                            <>
+                              <Button
+                                primary
+                                onClick={async () => {
+                                  if (pendingDrafts.data?.count)
+                                    await openReview();
+                                  else await openSources();
+                                  completeOnboarding();
+                                }}
+                              >
+                                {localizeUi(
+                                  pendingDrafts.data?.count
+                                    ? "ui.longTermMemory.longtermmemorydetail.openReviewQueue"
+                                    : "ui.longTermMemory.longtermmemorydetail.chooseASource",
+                                )}
+                              </Button>
+                              <Button onClick={advanceOnboarding}>
+                                {localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.continueToCheck",
+                                )}
+                              </Button>
+                            </>
+                          ) : (
                             <Button
                               primary
                               onClick={async () => {
-                                if (await openSources("characters"))
+                                if (await selectDestination("vault"))
                                   completeOnboarding();
                               }}
                             >
                               {localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.openCharacters",
+                                "ui.longTermMemory.longtermmemorydetail.goToSavedMemories",
                               )}
                             </Button>
+                          )}
+                          {onboardingStep === 4 && !status.data?.notes.total ? (
                             <Button
-                              onClick={() =>
-                                setOnboardingStep((step) => step + 1)
-                              }
+                              onClick={() => void openSources("characters")}
                             >
                               {localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.next",
+                                "ui.longTermMemory.longtermmemorydetail.chooseASource",
                               )}
                             </Button>
-                          </>
-                        ) : onboardingStep < onboardingSteps.length - 1 ? (
+                          ) : null}
                           <Button
-                            primary
-                            onClick={() =>
-                              setOnboardingStep((step) => step + 1)
-                            }
-                          >
-                            {localizeUi(
-                              onboardingStep === 1 &&
-                                props.chatId &&
-                                !props.enabledForChat
-                                ? "ui.longTermMemory.longtermmemorydetail.continueAnyway"
-                                : "ui.longTermMemory.longtermmemorydetail.next",
-                            )}
-                          </Button>
-                        ) : (
-                          <Button
-                            primary
-                            onClick={async () => {
-                              if (await selectDestination("vault"))
+                            onClick={() => {
+                              if (
+                                onboardingStep < onboardingSteps.length - 1 ||
+                                destination === "vault"
+                              )
                                 completeOnboarding();
+                              else void selectDestination("vault");
                             }}
                           >
-                            {localizeUi(
-                              "ui.longTermMemory.longtermmemorydetail.exploreMemoryVault",
-                            )}
+                            {onboardingStep === onboardingSteps.length - 1
+                              ? localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.goToSavedMemories",
+                                )
+                              : localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.skip",
+                                )}
                           </Button>
-                        )}
-                        <Button
-                          onClick={() => {
-                            if (
-                              onboardingStep < onboardingSteps.length - 1 ||
-                              destination === "vault"
-                            )
-                              completeOnboarding();
-                            else void selectDestination("vault");
-                          }}
-                        >
-                          {onboardingStep === onboardingSteps.length - 1
-                            ? localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.exploreMemoryVault",
-                              )
-                            : localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.skip",
-                              )}
-                        </Button>
+                        </div>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          {localizeUi(
+                            "ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton",
+                          )}
+                        </p>
                       </div>
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton",
-                        )}
-                      </p>
+                      <div data-ltm-onboarding-sprite-wrap>
+                        <picture>
+                          <source
+                            media="(min-width: 768px)"
+                            srcSet={`/sprites/mari/${onboardingSteps[onboardingStep].desktopSprite}`}
+                          />
+                          <img
+                            src={`/sprites/mari/${onboardingSteps[onboardingStep].mobileSprite}`}
+                            alt={onboardingSteps[onboardingStep].alt}
+                            draggable={false}
+                            data-ltm-onboarding-sprite={
+                              onboardingSteps[onboardingStep].mobileSprite
+                            }
+                            data-ltm-onboarding-mobile-flip={
+                              onboardingSteps[onboardingStep].mobileFlip ||
+                              undefined
+                            }
+                          />
+                        </picture>
+                      </div>
                     </div>
-                    <div data-ltm-onboarding-sprite-wrap>
-                      <picture>
-                        <source
-                          media="(min-width: 768px)"
-                          srcSet={`/sprites/mari/${onboardingSteps[onboardingStep].desktopSprite}`}
-                        />
-                        <img
-                          src={`/sprites/mari/${onboardingSteps[onboardingStep].mobileSprite}`}
-                          alt={onboardingSteps[onboardingStep].alt}
-                          draggable={false}
-                          data-ltm-onboarding-sprite={
-                            onboardingSteps[onboardingStep].mobileSprite
-                          }
-                          data-ltm-onboarding-mobile-flip={
-                            onboardingSteps[onboardingStep].mobileFlip ||
-                            undefined
-                          }
-                        />
-                      </picture>
-                    </div>
-                  </div>
-                </section>
-              ) : null}
-              <Suspense
-                fallback={
-                  <StatusSurface busy>
-                    {localizeUi(
-                      "ui.longTermMemory.longtermmemorydetail.loadingDestination",
-                      { destination: destinationLabel(destination) },
-                    )}
-                  </StatusSurface>
-                }
-              >
-                <Destination
-                  props={props}
-                  onDirtyChange={setDestinationDirty}
-                  onOpenMemory={openMemory}
-                  onOpenVault={() => void selectDestination("vault")}
-                  onOpenReview={openReview}
-                  onRecoverCandidate={recoverCandidate}
-                  openedNoteId={openedNoteId}
-                  createMemoryRequest={createMemoryRequest}
-                  onCreateMemoryRequestHandled={() =>
-                    setCreateMemoryRequest(null)
+                  </section>
+                ) : null}
+                <Suspense
+                  fallback={
+                    <StatusSurface busy>
+                      {localizeUi(
+                        "ui.longTermMemory.longtermmemorydetail.loadingDestination",
+                        { destination: destinationLabel(destination) },
+                      )}
+                    </StatusSurface>
                   }
-                  reviewSourceNoteId={reviewSourceNoteId}
-                  recoveryHandoff={recoveryHandoff}
-                  initialSource={initialSource}
-                  selectedSource={selectedSource}
-                  onSourceChange={setSelectedSource}
-                  onInitialSourceHandled={() => setInitialSource(undefined)}
-                 />
-              </Suspense>
+                >
+                  <Destination
+                    props={props}
+                    onDirtyChange={setDestinationDirty}
+                    onOpenMemory={openMemory}
+                    onOpenVault={() => void selectDestination("vault")}
+                    onOpenReview={openReview}
+                    onRecoverCandidate={recoverCandidate}
+                    openedNoteId={openedNoteId}
+                    createMemoryRequest={createMemoryRequest}
+                    onCreateMemoryRequestHandled={() =>
+                      setCreateMemoryRequest(null)
+                    }
+                    reviewSourceNoteId={reviewSourceNoteId}
+                    recoveryHandoff={recoveryHandoff}
+                    requestedSource={requestedSource}
+                    onRequestedSourceHandled={() => setRequestedSource(null)}
+                    selectedSource={selectedSource}
+                    onSourceChange={setSelectedSource}
+                  />
+                </Suspense>
               </div>
             </div>
           </div>
