@@ -20,6 +20,11 @@ interface CapabilityContext {
           personaId: string | null;
           characterIds: string[];
         } | null>;
+        listMessages?(chatId: string): Promise<Array<{
+          role: string;
+          characterId: string | null;
+          content: string;
+        }>>;
       };
       resources: {
         listCharacters(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
@@ -130,10 +135,19 @@ export async function activate({ api }: CapabilityContext) {
       const history = thread.document.messages.slice(-20)
         .map((message) => `${message.from === recipientPhoneId ? recipientName : senderName}: ${message.text}`)
         .join("\n");
+      const sharedChatId = recipient.document.identity.chatScope
+        .find((chatId) => sender.document.identity.chatScope.includes(chatId));
+      let storyContext = "";
+      if (sharedChatId && api.runtime.persistence.listMessages) {
+        const recent = (await api.runtime.persistence.listMessages(sharedChatId)).slice(-10);
+        storyContext = recent
+          .map((message) => `${message.role === "user" ? senderName : recipientName}: ${message.content.slice(0, 240)}`)
+          .join("\n");
+      }
       const completion = await model.chatComplete([
         {
           role: "system",
-          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.`,
+          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${storyContext ? `\n\nRecent story events for context:\n${storyContext}` : ""}`,
         },
         { role: "user", content: history },
       ], { temperature: 0.9, maxTokens: 200 });
@@ -163,6 +177,19 @@ export async function activate({ api }: CapabilityContext) {
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid phone request" });
       }
+    });
+    app.get<{ Params: { chatId: string } }>("/chats/:chatId/unread", async (request, reply) => {
+      const chat = await api.runtime.persistence.getChat(request.params.chatId);
+      if (!chat) return reply.status(404).send({ error: "Chat not found" });
+      const inChat = (await phones.list()).filter(({ document }) =>
+        document.provisioning.enabled && document.identity.chatScope.includes(chat.id));
+      let unread = 0;
+      for (const { document } of inChat) {
+        for (const thread of await messaging.threadsFor(document.identity.phoneId)) {
+          unread += unreadCount(thread.document, document.identity.phoneId);
+        }
+      }
+      return { unread };
     });
     app.get<{ Params: { chatId: string } }>("/chats/:chatId/phones", async (request, reply) => {
       const chat = await api.runtime.persistence.getChat(request.params.chatId);

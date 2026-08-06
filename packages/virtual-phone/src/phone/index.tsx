@@ -326,13 +326,34 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   );
 }
 
-function VirtualPhoneToolbar({ className }: { className?: string }) {
+function VirtualPhoneToolbar({ className, chatId }: { className?: string; chatId: string | null }) {
+  const [unread, setUnread] = React.useState(0);
+  React.useEffect(() => {
+    if (!chatId) return;
+    let active = true;
+    const refresh = () => {
+      void phoneRequest<{ unread: number }>(`/chats/${encodeURIComponent(chatId)}/unread`)
+        .then((response) => { if (active) setUnread(response.unread); })
+        .catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener(PHONE_CLOSE_EVENT, refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener(PHONE_CLOSE_EVENT, refresh);
+    };
+  }, [chatId]);
   return (
-    <button type="button" title="Open Virtual Phone" aria-label="Open Virtual Phone" className={className ?? "inline-flex h-9 w-9 items-center justify-center rounded-lg"} onClick={(event) => {
+    <button type="button" title="Open Virtual Phone" aria-label={`Open Virtual Phone${unread > 0 ? `, ${unread} unread messages` : ""}`} style={{ position: "relative" }} className={className ?? "inline-flex h-9 w-9 items-center justify-center rounded-lg"} onClick={(event) => {
       phoneOpener = event.currentTarget;
       dispatchPhoneEvent(PHONE_OPEN_EVENT);
     }}>
       <Smartphone size="0.875rem" aria-hidden="true" />
+      {unread > 0 ? (
+        <span aria-hidden="true" style={{ position: "absolute", top: "0.125rem", right: "0.125rem", minWidth: "0.875rem", height: "0.875rem", padding: "0 0.1875rem", borderRadius: "999px", background: "#ff3b30", color: "#fff", fontSize: "0.5625rem", fontWeight: 700, lineHeight: "0.875rem", textAlign: "center" }}>{unread > 99 ? "99+" : unread}</span>
+      ) : null}
     </button>
   );
 }
@@ -372,7 +393,7 @@ class VirtualPhoneElement extends HTMLElement implements CapabilityElement {
     if (!this.__root) return;
     this.__root.render(
       this.getAttribute("view") === "detail" ? <PhonesSettings chatId={this.capabilityProps?.chatId ?? null} /> :
-        this.getAttribute("view") === "toolbar" ? <VirtualPhoneToolbar className={this.capabilityProps?.toolbarButtonClass} /> :
+        this.getAttribute("view") === "toolbar" ? <VirtualPhoneToolbar className={this.capabilityProps?.toolbarButtonClass} chatId={this.capabilityProps?.chatId ?? null} /> :
           this.getAttribute("view") === "surface" ? <PhoneOverlay chatId={this.capabilityProps?.chatId ?? null} /> : null,
     );
   };
