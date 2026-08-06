@@ -38,9 +38,13 @@ function parseThreadRecord(record: PhoneDocumentRecord) {
   return { record, document: record.data };
 }
 
-export function unreadCount(document: ThreadDocument, phoneId: string) {
+export function unreadMessages(document: ThreadDocument, phoneId: string) {
   const lastRead = document.lastRead[phoneId] ?? "";
-  return document.messages.filter((message) => message.from !== phoneId && message.at > lastRead).length;
+  return document.messages.filter((message) => message.from !== phoneId && message.at > lastRead);
+}
+
+export function unreadCount(document: ThreadDocument, phoneId: string) {
+  return unreadMessages(document, phoneId).length;
 }
 
 export class PhoneMessagingService {

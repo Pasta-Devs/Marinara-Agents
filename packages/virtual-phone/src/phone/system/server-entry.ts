@@ -6,7 +6,7 @@ import {
   type PhoneOwnerType,
 } from "../device/identity";
 import { normalizeDeviceSettings, type DeviceSettings } from "../device/settings";
-import { PhoneMessagingService, unreadCount, type ThreadDocument } from "./messaging";
+import { PhoneMessagingService, unreadCount, unreadMessages, type ThreadDocument } from "./messaging";
 
 interface CapabilityContext {
   api: {
@@ -209,6 +209,29 @@ export async function activate({ api }: CapabilityContext) {
         return { contacts, threads };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
+      }
+    });
+    app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/notifications", async (request, reply) => {
+      try {
+        const contacts = await contactsFor(request.params.phoneId);
+        const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
+        const notifications = (await messaging.threadsFor(request.params.phoneId)).flatMap(({ record, document }) => {
+          const unread = unreadMessages(document, request.params.phoneId);
+          const last = unread.at(-1);
+          if (!last) return [];
+          const otherPhoneId = document.participants.find((participant) => participant !== request.params.phoneId) ?? "";
+          return [{
+            id: record.id,
+            appId: "messages",
+            title: names.get(otherPhoneId) ?? "Unknown phone",
+            body: last.text,
+            count: unread.length,
+            at: last.at,
+          }];
+        });
+        return { notifications };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid notifications request" });
       }
     });
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/messaging/send", async (request, reply) => {

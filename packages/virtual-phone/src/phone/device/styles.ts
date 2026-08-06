@@ -44,6 +44,8 @@ export const phoneStylesheet = `
 .vp-lock-card { width: 100%; min-height: 5rem; display: flex; align-items: center; justify-content: center; padding: 1rem; border-radius: 1.375rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); font-size: 0.75rem; font-weight: 500; color: var(--vp-muted); box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 8px 24px rgb(0 0 0 / 0.1), inset 0 0 0 1px var(--vp-border); }
 .vp-unlock-btn { min-height: 2.875rem; padding: 0 1.75rem; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-accent) 90%, #ffffff), var(--vp-accent)); color: #fff; font-size: 0.8125rem; font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.15), 0 6px 16px color-mix(in srgb, var(--vp-accent) 40%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.25); transition: transform 120ms ease, box-shadow 120ms ease; }
 .vp-unlock-btn:active { transform: scale(0.97); }
+.vp-lock-list { display: grid; gap: 0.5rem; width: 100%; }
+.vp-lock-card--notification { display: grid; gap: 0.125rem; justify-items: start; min-height: 0; text-align: left; }
 
 .vp-home { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 1.25rem; }
 .vp-home-top { display: flex; justify-content: flex-end; }
@@ -56,7 +58,8 @@ export const phoneStylesheet = `
 .vp-search-bar::placeholder { color: var(--vp-muted); }
 .vp-home-spacer { flex: 1; min-height: 6rem; }
 .vp-app-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 0.75rem; row-gap: 1.125rem; padding: 0 0.25rem 0.75rem; }
-.vp-app { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 0.4375rem; min-width: 0; border-radius: 0.75rem; color: var(--vp-text); }
+.vp-app { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 0.4375rem; min-width: 0; border-radius: 0.75rem; color: var(--vp-text); }
+.vp-app-badge { position: absolute; top: -0.375rem; right: 4%; z-index: 1; }
 .vp-app-icon { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; width: 100%; max-width: 4.25rem; border-radius: 32%; color: #fff; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), inset 0 -1px 0 rgb(0 0 0 / 0.15), 0 5px 12px rgb(0 0 0 / 0.18); transition: transform 140ms cubic-bezier(0.2, 0.9, 0.3, 1.4), filter 140ms ease; }
 .vp-app:hover .vp-app-icon { filter: brightness(1.06); }
 .vp-app:active .vp-app-icon { transform: scale(0.92); }

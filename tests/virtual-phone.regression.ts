@@ -18,7 +18,7 @@ import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/p
 import { fallbackSearchResults, goodleManifest } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
 import { defaultDeviceSettings } from "../packages/virtual-phone/src/phone/device/settings";
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
-import { PhoneMessagingService, unreadCount } from "../packages/virtual-phone/src/phone/system/messaging";
+import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
 import { conditionOpacity, patternBackground } from "../packages/virtual-phone/src/phone/device/effects";
 
 class MemoryDocuments implements PhoneDocumentStore {
@@ -311,6 +311,7 @@ async function main() {
   assert.equal(replied.document.messages.length, 2);
   assert.equal(unreadCount(replied.document, "phone-persona"), 1);
   assert.equal(unreadCount(replied.document, "phone-character"), 0);
+  assert.deepEqual(unreadMessages(replied.document, "phone-persona").map((message) => message.text), ["Hey Alex"]);
   const read = await messaging.markRead(replied.record.id, "phone-persona");
   assert.equal(unreadCount(read.document, "phone-persona"), 0);
   assert.equal((await messaging.threadsFor("phone-persona")).length, 1);

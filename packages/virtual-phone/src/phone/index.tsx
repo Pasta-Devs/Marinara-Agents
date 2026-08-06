@@ -57,6 +57,15 @@ function dispatchPhoneEvent(type: string) {
 
 type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | null;
 
+interface PhoneNotification {
+  id: string;
+  appId: string;
+  title: string;
+  body: string;
+  count: number;
+  at: string;
+}
+
 function appIconStyle(appId: string) {
   if (appId === "settings" || appId === "app-store" || appId === "goodle" || appId === "messages") return `vp-app-icon--${appId}`;
   return "vp-app-icon--default";
@@ -83,6 +92,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [session, setSession] = React.useState(() => initialDeviceSession());
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [activeApp, setActiveApp] = React.useState<ActiveApp>(null);
+  const [notifications, setNotifications] = React.useState<PhoneNotification[]>([]);
   const routeStacks = React.useRef(new Map<string, AppRouteStackManager>());
   const activeApps = React.useRef(new Map<string, Exclude<ActiveApp, null>>());
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -158,6 +168,17 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   React.useEffect(() => {
     setActiveApp(selectedPhone ? activeApps.current.get(selectedPhone.phoneId) ?? null : null);
   }, [selectedPhone?.phoneId]);
+  React.useEffect(() => {
+    if (!open || !selectedPhone || activeApp !== null) {
+      if (!selectedPhone) setNotifications([]);
+      return;
+    }
+    let active = true;
+    void phoneRequest<{ notifications: PhoneNotification[] }>(`/phones/${encodeURIComponent(selectedPhone.phoneId)}/notifications`)
+      .then((response) => { if (active) setNotifications(response.notifications); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [open, selectedPhone?.phoneId, activeApp]);
   if (!open) return null;
   const deviceSettings = selectedPhone?.settings ?? defaultDeviceSettings(selectedPhone?.baselineTheme ?? "system");
   const updateSettings = async (patch: Record<string, unknown>) => {
@@ -191,6 +212,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
       closeApp();
     }
   };
+  const messagesUnread = notifications.filter((notification) => notification.appId === "messages").reduce((total, notification) => total + notification.count, 0);
   const theme = deviceSettings.theme === "system" ? selectedPhone?.baselineTheme ?? "system" : deviceSettings.theme;
   const clock = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return createPortal(
@@ -236,7 +258,17 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                     <p className="vp-lock-clock">{clock}</p>
                     <p className="vp-lock-date">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
                   </div>
-                  <div className="vp-lock-card">No notifications</div>
+                  {notifications.length === 0 ? <div className="vp-lock-card">No notifications</div> : (
+                    <div className="vp-lock-list" aria-label="Notifications">
+                      {notifications.slice(0, 3).map((notification) => (
+                        <div key={notification.id} className="vp-lock-card vp-lock-card--notification">
+                          <span className="vp-thread-name">{notification.title}</span>
+                          <span className="vp-thread-preview">{notification.body}</span>
+                          {notification.count > 1 ? <span className="vp-muted-note">{notification.count} new messages</span> : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <button type="button" onClick={() => setSession(unlockDevice)} className="vp-unlock-btn">Unlock</button>
                 </div>
               ) : (
@@ -259,8 +291,9 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                       <span className="vp-app-label">App Store</span>
                     </button>
                     {deviceSettings.installedApps.includes("messages") ? (
-                      <button type="button" aria-label="Open Messages" onClick={() => openAppRoute("messages", "/")} className="vp-app">
+                      <button type="button" aria-label={`Open Messages${messagesUnread > 0 ? `, ${messagesUnread} unread` : ""}`} onClick={() => openAppRoute("messages", "/")} className="vp-app">
                         <span className={`vp-app-icon ${appIconStyle("messages")}`}><MessageCircle size="1.5rem" aria-hidden="true" /></span>
+                        {messagesUnread > 0 ? <span className="vp-badge vp-app-badge" aria-hidden="true">{messagesUnread > 99 ? "99+" : messagesUnread}</span> : null}
                         <span className="vp-app-label">Messages</span>
                       </button>
                     ) : null}
