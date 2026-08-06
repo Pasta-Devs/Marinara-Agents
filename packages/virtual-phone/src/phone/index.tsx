@@ -181,12 +181,13 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
           <span className="vp-key vp-key--power" aria-hidden="true" />
           <div className="vp-screen">
             <header className="vp-statusbar">
-              <span className="vp-statusbar-cluster" aria-label="Full cellular signal and Wi-Fi off">
-                <Signal size="0.75rem" aria-hidden="true" />
-                <WifiOff size="0.75rem" aria-hidden="true" />
-              </span>
               <span id="virtual-phone-title" className="vp-statusbar-clock">{clock}</span>
+              <span aria-hidden="true" />
               <div className="vp-statusbar-end">
+                <span className="vp-statusbar-cluster" aria-label="Full cellular signal and Wi-Fi off">
+                  <Signal size="0.75rem" aria-hidden="true" />
+                  <WifiOff size="0.75rem" aria-hidden="true" />
+                </span>
                 <span className="vp-statusbar-cluster" aria-label={`${status.batteryLevel}% battery, not charging`}>
                   {status.batteryLevel}% <BatteryMedium size="0.875rem" aria-hidden="true" />
                 </span>
@@ -248,9 +249,12 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               {activeApp === "app-store" && selectedPhone ? <React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense> : null}
               {activeApp === "goodle" && deviceSettings.installedApps.includes("goodle") ? <React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Goodle...</div>}><GoodleApp onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense> : null}
             </main>
-            <footer className="vp-footer"><button ref={closeButtonRef} type="button" onClick={close} className="vp-putdown-btn">
-              <X size="0.875rem" aria-hidden="true" /> Put down
-            </button></footer>
+            <footer className="vp-footer">
+              <button ref={closeButtonRef} type="button" onClick={close} className="vp-putdown-btn">
+                <X size="0.875rem" aria-hidden="true" /> Put down
+              </button>
+              <span className="vp-home-indicator" aria-hidden="true" />
+            </footer>
           </div>
         </div>
       </section>
