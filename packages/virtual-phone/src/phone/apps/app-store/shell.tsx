@@ -14,13 +14,14 @@ function appIconClass(appId: string) {
 interface AppStoreShellProps {
   apps: Array<{ manifest: AppManifest; installed: boolean }>;
   onInstalledChange: (appId: string, installed: boolean) => void;
+  onBack: () => void;
   onClose: () => void;
 }
 
 export function AppStoreShell({ apps, onInstalledChange, onClose }: AppStoreShellProps) {
   return (
     <section aria-labelledby="app-store-title" className="absolute inset-0 z-10 overflow-y-auto bg-[var(--vp-bg)] p-5">
-      <PhoneAppHeader title="App Store" titleId="app-store-title" closeLabel="Close App Store" onClose={onClose} />
+      <PhoneAppHeader title="App Store" titleId="app-store-title" closeLabel="Close App Store" onBack={onBack} onClose={onClose} />
       <div className="space-y-2">
         {apps.map(({ manifest, installed }) => (
           <article key={manifest.id} className="flex min-h-20 items-center gap-3 rounded-lg border border-black/10 bg-[var(--vp-surface)] p-3">

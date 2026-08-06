@@ -7,6 +7,7 @@ import { PhoneAppHeader } from "../../platform/app-header";
 interface SettingsShellProps {
   phone: Phone;
   onPhoneChange: (phone: Phone) => void;
+  onBack: () => void;
   onClose: () => void;
 }
 
@@ -28,7 +29,7 @@ export function SettingsShell({ phone, onPhoneChange, onClose }: SettingsShellPr
   };
   return (
     <section aria-labelledby="device-settings-title" className="absolute inset-0 z-10 overflow-y-auto bg-[var(--vp-bg)] p-5">
-      <PhoneAppHeader title="Settings" titleId="device-settings-title" closeLabel="Close settings" onClose={onClose} />
+      <PhoneAppHeader title="Settings" titleId="device-settings-title" closeLabel="Close settings" onBack={onBack} onClose={onClose} />
       <div className="space-y-4 text-xs">
         <h3 className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[var(--vp-muted)]">Device</h3>
         <label className="block space-y-1.5"><span className="font-medium">Device name</span><input key={`${phone.phoneId}:${settings.deviceName}`} defaultValue={settings.deviceName} onBlur={(event) => void update({ deviceName: event.target.value })} className="min-h-11 w-full rounded-lg border border-black/10 bg-[var(--vp-surface)] px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]" /></label>

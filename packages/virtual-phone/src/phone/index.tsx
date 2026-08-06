@@ -9,6 +9,7 @@ import { initialDeviceSession, unlockDevice } from "./device/surfaces";
 import { phoneRequest } from "./platform/api";
 import { conditionOpacity, patternBackground } from "./device/effects";
 import { InstalledAppRegistry } from "./platform/app-registry";
+import { AppRouteStackManager } from "./platform/app-lifecycle";
 import { settingsManifest } from "./apps/settings/manifest";
 import { appStoreManifest } from "./apps/app-store/manifest";
 import { goodleManifest } from "./apps/goodle/manifest";
@@ -50,6 +51,8 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [session, setSession] = React.useState(() => initialDeviceSession());
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [activeApp, setActiveApp] = React.useState<ActiveApp>(null);
+  const routeStacks = React.useRef(new Map<string, AppRouteStackManager>());
+  const activeApps = React.useRef(new Map<string, Exclude<ActiveApp, null>>());
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
   const overlayRef = React.useRef<HTMLDivElement>(null);
   const status = defaultPhoneStatus();
@@ -117,8 +120,11 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     };
   }, [open]);
 
-  if (!open) return null;
   const selectedPhone = phones.find((phone) => phone.phoneId === session.selectedPhoneId) ?? phones[0] ?? null;
+  React.useEffect(() => {
+    setActiveApp(selectedPhone ? activeApps.current.get(selectedPhone.phoneId) ?? null : null);
+  }, [selectedPhone?.phoneId]);
+  if (!open) return null;
   const deviceSettings = selectedPhone?.settings ?? {
     deviceName: "", wallpaper: "gradient", theme: selectedPhone?.baselineTheme ?? "system",
     pattern: "none" as const, patternIntensity: 0 as const, reduceDeviceEffects: false,
@@ -135,8 +141,27 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     dispatchPhoneEvent(PHONE_CLOSE_EVENT);
     phoneOpener?.focus();
   };
-  const openApp = (app: Exclude<ActiveApp, null>) => setActiveApp(app);
-  const closeApp = () => setActiveApp(null);
+  const phoneRouteStacks = selectedPhone
+    ? (routeStacks.current.get(selectedPhone.phoneId) ?? (() => {
+      const manager = new AppRouteStackManager();
+      routeStacks.current.set(selectedPhone.phoneId, manager);
+      return manager;
+    })())
+    : null;
+  const openAppRoute = (app: Exclude<ActiveApp, null>, rootRoute: string) => {
+    phoneRouteStacks?.open(app, rootRoute);
+    if (selectedPhone) activeApps.current.set(selectedPhone.phoneId, app);
+    setActiveApp(app);
+  };
+  const closeApp = () => {
+    setActiveApp(null);
+  };
+  const backFromApp = (app: Exclude<ActiveApp, null>) => {
+    if (phoneRouteStacks?.back(app) === "home") {
+      if (selectedPhone) activeApps.current.delete(selectedPhone.phoneId);
+      closeApp();
+    }
+  };
   const theme = deviceSettings.theme === "system" ? selectedPhone?.baselineTheme ?? "system" : deviceSettings.theme;
   return createPortal(
     <div ref={overlayRef} className="fixed inset-0 z-[10020]" data-chat-floating-panel style={phoneThemeTokens(theme) as React.CSSProperties}>
@@ -185,7 +210,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               ) : (
                 <div className="flex min-h-0 flex-1 flex-col p-5">
                    <div className="flex justify-end">
-                     <button type="button" aria-label="Device settings" title="Device settings" onClick={() => openApp("settings")} className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--vp-surface)]/75 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><Settings size="1rem" aria-hidden="true" /></button>
+                     <button type="button" aria-label="Device settings" title="Device settings" onClick={() => openAppRoute("settings", "/")} className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--vp-surface)]/75 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><Settings size="1rem" aria-hidden="true" /></button>
                   </div>
                   <label className="mt-2 block">
                     <span className="sr-only">Web Search</span>
@@ -193,19 +218,19 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                   </label>
                    <div className="min-h-24 flex-1" aria-hidden="true" />
                    <div aria-label="Installed apps" className="grid grid-cols-4 gap-x-3 gap-y-5 px-1 pb-2">
-                     <button type="button" aria-label="Open Settings" onClick={() => openApp("settings")} className="group flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl text-[var(--vp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]">
+                      <button type="button" aria-label="Open Settings" onClick={() => openAppRoute("settings", "/")} className="group flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl text-[var(--vp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]">
                        <span className={`flex aspect-square w-full max-w-[4.25rem] items-center justify-center rounded-[18px] shadow-[inset_0_1px_rgb(255_255_255_/_0.35),0_4px_10px_rgb(0_0_0_/_0.12)] transition-transform group-active:scale-[0.96] ${appIconStyle("settings")}`}><Settings size="1.5rem" aria-hidden="true" /></span>
                        <span className="text-[0.625rem]">Settings</span>
                      </button>
-                     <button type="button" aria-label="Open App Store" onClick={() => openApp("app-store")} className="group flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl text-[var(--vp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><span className={`flex aspect-square w-full max-w-[4.25rem] items-center justify-center rounded-[18px] shadow-[inset_0_1px_rgb(255_255_255_/_0.35),0_4px_10px_rgb(0_0_0_/_0.12)] transition-transform group-active:scale-[0.96] ${appIconStyle("app-store")}`}><Store size="1.5rem" aria-hidden="true" /></span><span className="text-[0.625rem]">App Store</span></button>
-                     {deviceSettings.installedApps.includes("goodle") ? <button type="button" aria-label="Open Goodle" onClick={() => openApp("goodle")} className="group flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl text-[var(--vp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><span className={`flex aspect-square w-full max-w-[4.25rem] items-center justify-center rounded-[18px] shadow-[inset_0_1px_rgb(255_255_255_/_0.35),0_4px_10px_rgb(0_0_0_/_0.12)] transition-transform group-active:scale-[0.96] ${appIconStyle("goodle")}`}><Search size="1.5rem" aria-hidden="true" /></span><span className="text-[0.625rem]">Goodle</span></button> : null}
+                     <button type="button" aria-label="Open App Store" onClick={() => openAppRoute("app-store", "/")} className="group flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl text-[var(--vp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><span className={`flex aspect-square w-full max-w-[4.25rem] items-center justify-center rounded-[18px] shadow-[inset_0_1px_rgb(255_255_255_/_0.35),0_4px_10px_rgb(0_0_0_/_0.12)] transition-transform group-active:scale-[0.96] ${appIconStyle("app-store")}`}><Store size="1.5rem" aria-hidden="true" /></span><span className="text-[0.625rem]">App Store</span></button>
+                     {deviceSettings.installedApps.includes("goodle") ? <button type="button" aria-label="Open Goodle" onClick={() => openAppRoute("goodle", "/")} className="group flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl text-[var(--vp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><span className={`flex aspect-square w-full max-w-[4.25rem] items-center justify-center rounded-[18px] shadow-[inset_0_1px_rgb(255_255_255_/_0.35),0_4px_10px_rgb(0_0_0_/_0.12)] transition-transform group-active:scale-[0.96] ${appIconStyle("goodle")}`}><Search size="1.5rem" aria-hidden="true" /></span><span className="text-[0.625rem]">Goodle</span></button> : null}
                      {Array.from({ length: deviceSettings.installedApps.includes("goodle") ? 1 : 2 }, (_, index) => <span key={index} aria-hidden="true" className="aspect-square w-full max-w-[4.25rem] rounded-[18px] border border-dashed border-[var(--vp-muted)]/20" />)}
                    </div>
                  </div>
                )}
-               {activeApp === "settings" && selectedPhone ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading Settings...</div>}><SettingsApp phone={{ ...selectedPhone, settings: { ...deviceSettings, theme } }} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onClose={closeApp} /></React.Suspense> : null}
-               {activeApp === "app-store" && selectedPhone ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onClose={closeApp} /></React.Suspense> : null}
-               {activeApp === "goodle" && deviceSettings.installedApps.includes("goodle") ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading Goodle...</div>}><GoodleApp onClose={closeApp} /></React.Suspense> : null}
+               {activeApp === "settings" && selectedPhone ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading Settings...</div>}><SettingsApp phone={{ ...selectedPhone, settings: { ...deviceSettings, theme } }} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onBack={() => backFromApp("settings")} onClose={closeApp} /></React.Suspense> : null}
+               {activeApp === "app-store" && selectedPhone ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense> : null}
+               {activeApp === "goodle" && deviceSettings.installedApps.includes("goodle") ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading Goodle...</div>}><GoodleApp onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense> : null}
                <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 mix-blend-multiply" style={{ opacity: conditionOpacity(1, deviceSettings.reduceDeviceEffects), backgroundImage: "linear-gradient(35deg, transparent 47%, rgb(20 20 20 / 0.22) 48%, transparent 49%), linear-gradient(125deg, transparent 62%, rgb(20 20 20 / 0.16) 63%, transparent 64%)", backgroundSize: "52% 38%, 68% 55%" }} data-virtual-phone-condition="cracks" />
                <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 mix-blend-multiply" style={{ opacity: conditionOpacity(1, deviceSettings.reduceDeviceEffects), backgroundImage: "radial-gradient(ellipse at 20% 28%, rgb(20 20 20 / 0.12), transparent 24%), radial-gradient(ellipse at 78% 64%, rgb(20 20 20 / 0.09), transparent 20%)" }} data-virtual-phone-condition="smudge" />
                <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 mix-blend-multiply" style={{ opacity: conditionOpacity(1, deviceSettings.reduceDeviceEffects), backgroundImage: "radial-gradient(ellipse at 88% 18%, rgb(100 15 15 / 0.13), transparent 24%), radial-gradient(ellipse at 8% 82%, rgb(100 15 15 / 0.08), transparent 18%)" }} data-virtual-phone-condition="blood" />
