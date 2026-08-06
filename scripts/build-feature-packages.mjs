@@ -41,6 +41,7 @@ const longTermMemoryOwnedSourcePaths = [
   "packages/client/src/features/long-term-memory",
 ];
 const longTermMemorySourceRoot = join(packagesDir, "long-term-memory/src/engine");
+const virtualPhoneSourceRoot = join(packagesDir, "virtual-phone/src");
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
   String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "")
@@ -54,7 +55,7 @@ const featureSource = (relativePath, buildRoot = sourceRoot) => {
 };
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "long-term-memory") {
+  if (feature.packageSourceRoot) {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -149,6 +150,27 @@ const features = [
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"] },
       slots: ["chat-settings"],
+    },
+  },
+  {
+    id: "virtual-phone",
+    version: "2.0.3",
+    minEngineVersion: "2.4.1",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Virtual Phone",
+    description: "Adds persistent in-story phones for personas and configured characters, with per-phone baseline themes and a docked device shell.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    permissions: ["routes", "storage", "ui"],
+    serverImport: "phone/system/server-entry.ts",
+    serverEntry: true,
+    clientImport: "phone/index.tsx",
+    packageSourceRoot: virtualPhoneSourceRoot,
+    ownedSourcePaths: ["phone"],
+    contributions: {
+      agentDetail: { agentIds: ["virtual-phone"] },
+      slots: ["conversation-toolbar", "conversation-surface"],
     },
   },
   {
@@ -395,7 +417,7 @@ export async function selfCheck() {
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
     }
-    if (feature.id === "long-term-memory") {
+    if (feature.packageSourceRoot) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
     } else {
       await captureEngineSources(
@@ -1188,7 +1210,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     );
     if (result.status !== 0)
       throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
-    if (feature.id === "long-term-memory") {
+    if (feature.packageSourceRoot) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
     } else {
       await captureEngineSources(
@@ -1206,8 +1228,15 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
 const { catalog } = await readCatalogFamily(repoRoot);
 const featureIds = new Set(selectedFeatures.map((feature) => feature.id));
 const nonDownloadableCoreFeatures = new Set(["about-me-keeper"]);
+const retiredFeatureIds = new Set(["virtual-phone-2"]);
+for (const retiredFeatureId of retiredFeatureIds) {
+  await rm(join(artifactsDir, `${retiredFeatureId}-2.0.0.zip`), { force: true });
+}
 catalog.packages = catalog.packages.filter(
-  (entry) => !featureIds.has(entry.manifest.id) && !nonDownloadableCoreFeatures.has(entry.manifest.id),
+  (entry) =>
+    !featureIds.has(entry.manifest.id) &&
+    !retiredFeatureIds.has(entry.manifest.id) &&
+    !nonDownloadableCoreFeatures.has(entry.manifest.id),
 );
 
 for (const feature of selectedFeatures) {
@@ -1231,16 +1260,19 @@ for (const feature of selectedFeatures) {
     execution: "feature",
   };
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
-  const serverPath = join(sourceDir, "server.mjs");
-  const serverSourceRoot =
-    feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : (feature.packageSourceRoot ?? sourceRoot);
-  const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
-  if (!reuseExistingRuntime && existsSync(serverSource)) {
-    await bundleServer(feature, serverPath);
-  } else if (!existsSync(serverPath)) {
-    throw new Error(`Missing package-owned server source for ${feature.id}`);
+  const hasServer = Boolean(feature.serverImport || feature.engineImport);
+  const serverPath = hasServer ? join(sourceDir, "server.mjs") : null;
+  if (serverPath) {
+    const serverSourceRoot =
+      feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : (feature.packageSourceRoot ?? sourceRoot);
+    const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
+    if (!reuseExistingRuntime && existsSync(serverSource)) {
+      await bundleServer(feature, serverPath);
+    } else if (!existsSync(serverPath)) {
+      throw new Error(`Missing package-owned server source for ${feature.id}`);
+    }
   }
-  const serverBuffer = await readFile(serverPath);
+  const serverBuffer = serverPath ? await readFile(serverPath) : null;
   const hasClient = Boolean(
     feature.clientName ||
     feature.clientImport ||
@@ -1281,7 +1313,7 @@ for (const feature of selectedFeatures) {
     kind: feature.kind,
     entrypoints: {
       agents: "agents.json",
-      server: "server.mjs",
+      ...(serverBuffer ? { server: "server.mjs" } : {}),
       ...(clientBuffer ? { client: "client.js" } : {}),
     },
     ...(feature.clientName
@@ -1319,11 +1351,15 @@ for (const feature of selectedFeatures) {
         sha256: sha256(agentsBuffer),
         bytes: agentsBuffer.byteLength,
       },
-      {
-        path: "server.mjs",
-        sha256: sha256(serverBuffer),
-        bytes: serverBuffer.byteLength,
-      },
+      ...(serverBuffer
+        ? [
+            {
+              path: "server.mjs",
+              sha256: sha256(serverBuffer),
+              bytes: serverBuffer.byteLength,
+            },
+          ]
+        : []),
       ...(clientBuffer
         ? [
             {
@@ -1335,7 +1371,7 @@ for (const feature of selectedFeatures) {
         : []),
     ],
     permissions: feature.permissions,
-    restartRequired: true,
+    restartRequired: Boolean(serverBuffer),
   };
   await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
@@ -1343,9 +1379,14 @@ for (const feature of selectedFeatures) {
   try {
     await writeFile(join(temporary, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
     await writeFile(join(temporary, "agents.json"), agentsBuffer);
-    await writeFile(join(temporary, "server.mjs"), serverBuffer);
+    if (serverBuffer) await writeFile(join(temporary, "server.mjs"), serverBuffer);
     if (clientBuffer) await writeFile(join(temporary, "client.js"), clientBuffer);
-    const artifactFiles = ["manifest.json", "agents.json", "server.mjs", ...(clientBuffer ? ["client.js"] : [])];
+    const artifactFiles = [
+      "manifest.json",
+      "agents.json",
+      ...(serverBuffer ? ["server.mjs"] : []),
+      ...(clientBuffer ? ["client.js"] : []),
+    ];
     for (const artifactFile of artifactFiles) {
       const artifactSource = join(temporary, artifactFile);
       await chmod(artifactSource, 0o644);
@@ -1382,3 +1423,11 @@ for (const feature of selectedFeatures) {
 catalog.generatedAt = new Date().toISOString();
 catalog.packages.sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
 await writeCatalogFamily(repoRoot, catalog);
+if (selectedFeatures.some((feature) => feature.id === "virtual-phone")) {
+  const developmentCatalog = structuredClone(catalog);
+  const virtualPhone = developmentCatalog.packages.find((entry) => entry.manifest.id === "virtual-phone");
+  if (!virtualPhone) throw new Error("Virtual Phone is missing from the development catalog");
+  virtualPhone.iconUrl = virtualPhone.iconUrl.replace("/main/", "/hold-the-phone/");
+  virtualPhone.artifact.url = virtualPhone.artifact.url.replace("/main/", "/hold-the-phone/");
+  await writeFile(join(repoRoot, "test-catalog.json"), `${JSON.stringify(developmentCatalog, null, 2)}\n`);
+}

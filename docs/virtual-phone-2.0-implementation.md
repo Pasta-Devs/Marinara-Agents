@@ -21,7 +21,7 @@ The goal is the smallest complete device: a phone you can open, look at, switch,
 
 `chore(virtual-phone): scaffold 2.0 package at 2.0.0`
 
-Create `packages/virtual-phone-2/` with its package metadata at version `2.0.0`, the `src/phone/{device,platform,system,apps}/` directory boundary from the plan, and an entry that renders nothing. Register it with the package builder and produce one generated build to prove the pipeline works end to end.
+Create `packages/virtual-phone/` with its package metadata at version `2.0.0`, the `src/phone/{device,platform,system,apps}/` directory boundary from the plan, and an entry that renders nothing. Register it with the package builder and produce one generated build to prove the pipeline works end to end.
 
 Done when: the builder produces a valid package and the catalog validates. Nothing is visible in the Engine yet.
 

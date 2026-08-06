@@ -498,10 +498,12 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
   throw new Error("Official package activation guidance must cover exactly the downloadable catalog");
 }
 
-const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
+const agentOnly = catalog.packages.filter(
+  (entry) => !entry.manifest.entrypoints.server && !entry.manifest.entrypoints.client,
+).length;
 const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 31 || agentOnly !== 22 || features !== 9) {
-  throw new Error(`Expected 22 agents and 9 features, found ${agentOnly} and ${features}`);
+if (catalog.packages.length !== 32 || agentOnly !== 22 || features !== 10) {
+  throw new Error(`Expected 22 agents and 10 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 console.log(
