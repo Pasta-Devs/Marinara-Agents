@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { BatteryMedium, ChevronDown, Search, Settings, Signal, Smartphone, Store, WifiOff, X } from "lucide-react";
+import { BatteryMedium, ChevronDown, MessageCircle, Search, Settings, Signal, Smartphone, Store, WifiOff, X } from "lucide-react";
 import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/PhonesSettings";
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
@@ -15,14 +15,17 @@ import { AppRouteStackManager } from "./platform/app-lifecycle";
 import { settingsManifest } from "./apps/settings/manifest";
 import { appStoreManifest } from "./apps/app-store/manifest";
 import { goodleManifest } from "./apps/goodle/manifest";
+import { messagesManifest } from "./apps/messages/manifest";
 
 const SettingsApp = React.lazy(() => import("./apps/settings/shell").then((module) => ({ default: module.SettingsShell })));
 const AppStoreApp = React.lazy(() => import("./apps/app-store/shell").then((module) => ({ default: module.AppStoreShell })));
 const GoodleApp = React.lazy(() => import("./apps/goodle/shell").then((module) => ({ default: module.GoodleShell })));
+const MessagesApp = React.lazy(() => import("./apps/messages/shell").then((module) => ({ default: module.MessagesShell })));
 export const phoneAppRegistry = new InstalledAppRegistry();
 phoneAppRegistry.register({ manifest: settingsManifest, load: async () => import("./apps/settings/shell") });
 phoneAppRegistry.register({ manifest: appStoreManifest, load: async () => import("./apps/app-store/shell") });
 phoneAppRegistry.register({ manifest: goodleManifest, load: async () => import("./apps/goodle/shell") });
+phoneAppRegistry.register({ manifest: messagesManifest, load: async () => import("./apps/messages/shell") });
 
 class AppErrorBoundary extends React.Component<{ appName: string; children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -52,10 +55,10 @@ function dispatchPhoneEvent(type: string) {
   window.dispatchEvent(new CustomEvent(type));
 }
 
-type ActiveApp = "settings" | "app-store" | "goodle" | null;
+type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | null;
 
 function appIconStyle(appId: string) {
-  if (appId === "settings" || appId === "app-store" || appId === "goodle") return `vp-app-icon--${appId}`;
+  if (appId === "settings" || appId === "app-store" || appId === "goodle" || appId === "messages") return `vp-app-icon--${appId}`;
   return "vp-app-icon--default";
 }
 
@@ -255,19 +258,26 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                       <span className={`vp-app-icon ${appIconStyle("app-store")}`}><Store size="1.5rem" aria-hidden="true" /></span>
                       <span className="vp-app-label">App Store</span>
                     </button>
+                    {deviceSettings.installedApps.includes("messages") ? (
+                      <button type="button" aria-label="Open Messages" onClick={() => openAppRoute("messages", "/")} className="vp-app">
+                        <span className={`vp-app-icon ${appIconStyle("messages")}`}><MessageCircle size="1.5rem" aria-hidden="true" /></span>
+                        <span className="vp-app-label">Messages</span>
+                      </button>
+                    ) : null}
                     {deviceSettings.installedApps.includes("goodle") ? (
                       <button type="button" aria-label="Open Goodle" onClick={() => openAppRoute("goodle", "/")} className="vp-app">
                         <span className={`vp-app-icon ${appIconStyle("goodle")}`}><Search size="1.5rem" aria-hidden="true" /></span>
                         <span className="vp-app-label">Goodle</span>
                       </button>
                     ) : null}
-                    {Array.from({ length: deviceSettings.installedApps.includes("goodle") ? 1 : 2 }, (_, index) => <span key={index} aria-hidden="true" className="vp-app-slot" />)}
+                    {Array.from({ length: Math.max(0, 2 - ["goodle", "messages"].filter((appId) => deviceSettings.installedApps.includes(appId)).length) }, (_, index) => <span key={index} aria-hidden="true" className="vp-app-slot" />)}
                   </div>
                 </div>
               )}
               {activeApp === "settings" && selectedPhone ? <AppErrorBoundary appName="Settings"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Settings...</div>}><SettingsApp phone={{ ...selectedPhone, settings: deviceSettings }} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onBack={() => backFromApp("settings")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "app-store" && selectedPhone ? <AppErrorBoundary appName="App Store"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "goodle" && selectedPhone && deviceSettings.installedApps.includes("goodle") ? <AppErrorBoundary appName="Goodle"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Goodle...</div>}><GoodleApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "messages" && selectedPhone && deviceSettings.installedApps.includes("messages") ? <AppErrorBoundary appName="Messages"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Messages...</div>}><MessagesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("messages")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
             </main>
             <footer className="vp-footer">
               <button ref={closeButtonRef} type="button" onClick={close} className="vp-putdown-btn">

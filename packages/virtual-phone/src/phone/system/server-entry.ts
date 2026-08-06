@@ -6,6 +6,7 @@ import {
   type PhoneOwnerType,
 } from "../device/identity";
 import { normalizeDeviceSettings, type DeviceSettings } from "../device/settings";
+import { PhoneMessagingService, unreadCount, type ThreadDocument } from "./messaging";
 
 interface CapabilityContext {
   api: {
@@ -75,7 +76,34 @@ function readEnsureInput(value: unknown): EnsurePhoneInput {
 
 export async function activate({ api }: CapabilityContext) {
   const phones = new PhoneIdentityService(api.runtime.persistence.documents);
+  const messaging = new PhoneMessagingService(api.runtime.persistence.documents);
   await phones.migrateLegacyDocuments();
+
+  const findPhone = async (phoneId: string) => {
+    const phone = (await phones.list()).find(({ document }) => document.identity.phoneId === phoneId);
+    if (!phone) throw new Error("Phone not found");
+    return phone;
+  };
+  const contactsFor = async (phoneId: string) => {
+    const self = await findPhone(phoneId);
+    return (await phones.list())
+      .filter(({ document }) =>
+        document.identity.phoneId !== phoneId &&
+        document.provisioning.enabled &&
+        document.identity.chatScope.some((chatId) => self.document.identity.chatScope.includes(chatId)))
+      .map(({ document }) => ({ phoneId: document.identity.phoneId, ownerName: document.identity.ownerName }));
+  };
+  const threadPayload = (threadId: string, document: ThreadDocument, phoneId: string, names: Map<string, string>) => {
+    const otherPhoneId = document.participants.find((participant) => participant !== phoneId) ?? "";
+    return {
+      id: threadId,
+      otherPhoneId,
+      otherName: names.get(otherPhoneId) ?? "Unknown phone",
+      unread: unreadCount(document, phoneId),
+      messages: document.messages,
+    };
+  };
+
   const routes: FastifyPluginAsync = async (app) => {
     app.get("/phones", async () => ({ phones: (await phones.list()).map(phoneResponse) }));
     app.get<{ Params: { ownerType: string; ownerId: string } }>("/phones/:ownerType/:ownerId", async (request, reply) => {
@@ -170,6 +198,46 @@ export async function activate({ api }: CapabilityContext) {
         return { phone: phoneResponse(phone) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid device settings" });
+      }
+    });
+    app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/messaging", async (request, reply) => {
+      try {
+        const contacts = await contactsFor(request.params.phoneId);
+        const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
+        const threads = (await messaging.threadsFor(request.params.phoneId))
+          .map(({ record, document }) => threadPayload(record.id, document, request.params.phoneId, names));
+        return { contacts, threads };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/messaging/send", async (request, reply) => {
+      try {
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const toPhoneId = String(body.toPhoneId ?? "");
+        const contacts = await contactsFor(request.params.phoneId);
+        if (!contacts.some((contact) => contact.phoneId === toPhoneId)) {
+          return reply.status(400).send({ error: "That phone cannot be messaged from this chat" });
+        }
+        const thread = await messaging.send(request.params.phoneId, toPhoneId, String(body.text ?? ""));
+        const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
+        return { thread: threadPayload(thread.record.id, thread.document, request.params.phoneId, names) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/messaging/read", async (request, reply) => {
+      try {
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const thread = await messaging.markRead(String(body.threadId ?? ""), request.params.phoneId);
+        const names = new Map((await contactsFor(request.params.phoneId)).map((contact) => [contact.phoneId, contact.ownerName]));
+        return { thread: threadPayload(thread.record.id, thread.document, request.params.phoneId, names) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
       }
     });
     type StorageParams = { phoneId: string; appId: string; key: string };

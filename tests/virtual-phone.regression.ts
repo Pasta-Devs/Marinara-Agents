@@ -17,6 +17,8 @@ import { settingsManifest } from "../packages/virtual-phone/src/phone/apps/setti
 import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/phone/apps/app-store/manifest";
 import { fallbackSearchResults, goodleManifest } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
 import { defaultDeviceSettings } from "../packages/virtual-phone/src/phone/device/settings";
+import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
+import { PhoneMessagingService, unreadCount } from "../packages/virtual-phone/src/phone/system/messaging";
 import { conditionOpacity, patternBackground } from "../packages/virtual-phone/src/phone/device/effects";
 
 class MemoryDocuments implements PhoneDocumentStore {
@@ -287,6 +289,36 @@ async function main() {
   await assert.rejects(() => reloadedRuntime.setAppStorageKey("missing-phone", "goodle", "key", 1), /Phone not found/u);
   await reloadedRuntime.removeAppStorageKey(personaPhoneId, "goodle", "recents");
   assert.equal(await reloadedRuntime.getAppStorageKey(personaPhoneId, "goodle", "recents"), null);
+
+  validateAppManifest(messagesManifest);
+  assert.equal(messagesManifest.removable, true);
+  assert.deepEqual(messagesManifest.records, [{ type: "message-thread", ownership: "participant-shared" }]);
+  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages"]);
+  let tick = 0;
+  const messageIds = ["msg-1", "msg-2", "msg-3"];
+  const messaging = new PhoneMessagingService(
+    documents,
+    () => new Date(1_700_000_000_000 + ++tick * 1000).toISOString(),
+    () => messageIds.shift()!,
+  );
+  const sent = await messaging.send("phone-persona", "phone-character", "  Hey Mira!  ");
+  assert.deepEqual(sent.document.participants, ["phone-character", "phone-persona"]);
+  assert.equal(sent.document.messages[0]!.text, "Hey Mira!");
+  assert.equal(unreadCount(sent.document, "phone-persona"), 0);
+  assert.equal(unreadCount(sent.document, "phone-character"), 1);
+  const replied = await messaging.send("phone-character", "phone-persona", "Hey Alex");
+  assert.equal(replied.record.id, sent.record.id);
+  assert.equal(replied.document.messages.length, 2);
+  assert.equal(unreadCount(replied.document, "phone-persona"), 1);
+  assert.equal(unreadCount(replied.document, "phone-character"), 0);
+  const read = await messaging.markRead(replied.record.id, "phone-persona");
+  assert.equal(unreadCount(read.document, "phone-persona"), 0);
+  assert.equal((await messaging.threadsFor("phone-persona")).length, 1);
+  assert.deepEqual(await messaging.threadsFor("phone-unknown"), []);
+  await assert.rejects(() => messaging.send("phone-persona", "phone-persona", "self"), /two different phones/u);
+  await assert.rejects(() => messaging.send("phone-persona", "phone-character", "   "), /text is required/u);
+  await assert.rejects(() => messaging.send("phone-persona", "phone-character", "x".repeat(2001)), /limited to 2000/u);
+  await assert.rejects(() => messaging.markRead("thread:missing", "phone-persona"), /Thread not found/u);
 
   const configured = await reloadedRuntime.updateSettings(minted.document.identity.phoneId, {
     deviceName: "Alex's Phone",
