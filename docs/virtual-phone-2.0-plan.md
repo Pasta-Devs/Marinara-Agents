@@ -41,7 +41,7 @@ The foundation must support displaying a character's phone when the story needs 
 
 The implementation starts from new code. Existing Virtual Phone code must not dictate the new architecture. Existing behavior may be retained only when it is deliberately selected as a 2.0 product requirement.
 
-The old 1.x overhaul plan is deliberately not carried onto this branch, so it cannot anchor 2.0 work on the previous architecture. It remains available as historical context through `git show virtual-phone-test-catalog:docs/virtual-phone-overhaul-plan.md`. This document is the active product and architecture plan for 2.0.
+The 1.x implementation and its overhaul plan have been retired. Their branches were deleted after this plan was approved, so 2.0 has no local predecessor to anchor on. This document is the sole active product and architecture plan for the Virtual Phone.
 
 ### Phone provisioning
 
@@ -901,7 +901,8 @@ The model may propose `name`, `domain`, `identity`, and `tagline`; the Platform 
 - Mandatory for 2.0: the phone overlay, home screen, status bar, notifications, and Web Search. Redesigned: Settings, App Store, and every app. Every other current feature is retired until it earns its own milestone.
 - Only apps with a written brief are rebuilt as independent 2.0 apps. There is no bulk port.
 - No 1.x data migrates into 2.0.
-- 1.x and 2.0 coexist through a different package id, a different catalog, and a separate storage namespace. They share no state and there is no upgrade path.
+- There is no coexistence requirement. The 1.x branches, package, and catalog were retired before 2.0 implementation began, so 2.0 is the only Virtual Phone. Testers with an installed 1.x package keep whatever they already downloaded, but it receives no further builds and 2.0 neither reads nor upgrades its data.
+- 2.0 uses its own package id, catalog, and storage namespace regardless, so an old local install cannot collide with it.
 
 ## Decisions Before Basic Implementation
 
@@ -986,7 +987,7 @@ No implementation or generated package rebuild is part of this planning mileston
 
 ### Dedicated 2.0 development channel
 
-Virtual Phone 2.0 development must not reuse or replace the existing `virtual-phone-test-catalog` branch or its catalog URL. That channel belongs to the current phone development line and the historical overhaul plan.
+Virtual Phone 2.0 development uses its own dedicated branch and catalog URL. The former `virtual-phone-test-catalog` channel has been retired along with the 1.x line and must not be recreated.
 
 The 2.0 development channel is:
 
@@ -1027,4 +1028,4 @@ When implementation begins, it must follow the repository workflow:
 - Run focused Virtual Phone regression tests plus catalog lanes, catalog validation, and `git diff --check` at the release gate.
 - Record actual install, update, restart, offline, and uninstall verification separately from automated tests.
 
-The 1.x overhaul plan on the `virtual-phone-test-catalog` branch may be consulted for historical behavior and known constraints, but it is not a reason to preserve the current implementation structure. Its requirement to retain the existing `virtual-phone-test-catalog` URL applies to that older development line and is explicitly superseded for the separate 2.0 effort by this document's dedicated-channel decision.
+The 1.x development line and its catalog URL have been retired along with their branches. No part of the older channel constrains this effort, and the dedicated `hold-the-phone` channel described above is the only Virtual Phone development channel.
