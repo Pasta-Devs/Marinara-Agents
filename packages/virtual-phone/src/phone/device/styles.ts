@@ -45,7 +45,8 @@ export const phoneStylesheet = `
 .vp-unlock-btn { min-height: 2.875rem; padding: 0 1.75rem; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-accent) 90%, #ffffff), var(--vp-accent)); color: #fff; font-size: 0.8125rem; font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.15), 0 6px 16px color-mix(in srgb, var(--vp-accent) 40%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.25); transition: transform 120ms ease, box-shadow 120ms ease; }
 .vp-unlock-btn:active { transform: scale(0.97); }
 .vp-lock-list { display: grid; gap: 0.5rem; width: 100%; }
-.vp-lock-card--notification { display: grid; gap: 0.125rem; justify-items: start; min-height: 0; text-align: left; }
+.vp-lock-card--notification { display: grid; gap: 0.125rem; justify-items: start; min-height: 0; width: 100%; text-align: left; cursor: pointer; transition: transform 120ms ease; }
+.vp-lock-card--notification:active { transform: scale(0.98); }
 
 .vp-home { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 1.25rem; }
 .vp-home-top { display: flex; justify-content: flex-end; }

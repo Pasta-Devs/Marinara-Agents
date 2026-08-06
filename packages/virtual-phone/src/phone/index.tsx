@@ -275,11 +275,19 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                   {notifications.length === 0 ? <div className="vp-lock-card">No notifications</div> : (
                     <div className="vp-lock-list" aria-label="Notifications">
                       {notifications.slice(0, 3).map((notification) => (
-                        <div key={notification.id} className="vp-lock-card vp-lock-card--notification">
+                        <button
+                          key={notification.id}
+                          type="button"
+                          className="vp-lock-card vp-lock-card--notification"
+                          onClick={() => {
+                            setSession(unlockDevice);
+                            if (notification.appId === "messages" && deviceSettings.installedApps.includes("messages")) openAppRoute("messages", "/");
+                          }}
+                        >
                           <span className="vp-thread-name">{notification.title}</span>
                           <span className="vp-thread-preview">{notification.body}</span>
                           {notification.count > 1 ? <span className="vp-muted-note">{notification.count} new messages</span> : null}
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
