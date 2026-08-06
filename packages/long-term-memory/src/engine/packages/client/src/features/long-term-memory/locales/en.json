@@ -58,7 +58,7 @@
   "ui.longTermMemory.chatsettings.recallStyle": "Recall style",
   "ui.longTermMemory.chatsettings.recallStyleBalancedDescription": "Balanced matches memories with a general-purpose mix of signals.",
   "ui.longTermMemory.chatsettings.recallStyleBroadDescription": "Broad considers a wider range of related memories.",
-  "ui.longTermMemory.chatsettings.recallStyleCustomDescription": "Custom uses the retrieval weights you set below.",
+  "ui.longTermMemory.chatsettings.recallStyleCustomDescription": "Custom uses the retrieval weights in Long-Term Memory settings.",
   "ui.longTermMemory.chatsettings.recallStyleExactDescription": "Exact favors the closest matching memories.",
   "ui.longTermMemory.chatsettings.recallStyleStoryDescription": "Story favors continuity and narrative context.",
   "ui.longTermMemory.chatsettings.recallExplanation": "Saved memories are not added to every reply. When Long-Term Memory is active, the current conversation is matched against eligible memories and relevant results are added to the model context for that reply.",
