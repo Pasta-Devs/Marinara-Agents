@@ -2,6 +2,7 @@ import React from "react";
 import { RotateCcw } from "lucide-react";
 import type { Phone } from "../../system/PhonesSettings";
 import { phoneRequest } from "../../platform/api";
+import { defaultDeviceSettings } from "../../device/settings";
 import { PhoneAppHeader } from "../../platform/app-header";
 
 interface SettingsShellProps {
@@ -12,11 +13,7 @@ interface SettingsShellProps {
 }
 
 export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: SettingsShellProps) {
-  const settings = phone.settings ?? {
-    deviceName: "", wallpaper: "gradient", theme: phone.baselineTheme,
-    pattern: "none" as const, patternIntensity: 0 as const, reduceDeviceEffects: false,
-    installedApps: ["settings", "app-store", "goodle"],
-  };
+  const settings = phone.settings ?? defaultDeviceSettings(phone.baselineTheme);
   const update = async (patch: Record<string, unknown>) => {
     const response = await phoneRequest<{ phone: Phone }>(`/phones/${encodeURIComponent(phone.phoneId)}/settings`, {
       method: "PATCH", body: JSON.stringify(patch),

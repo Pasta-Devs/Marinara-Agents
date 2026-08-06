@@ -8,6 +8,7 @@ import { phoneStylesheet } from "./device/styles";
 import { defaultPhoneStatus } from "./device/status";
 import { initialDeviceSession, unlockDevice } from "./device/surfaces";
 import { phoneRequest } from "./platform/api";
+import { defaultDeviceSettings } from "./device/settings";
 import { patternBackground } from "./device/effects";
 import { InstalledAppRegistry } from "./platform/app-registry";
 import { AppRouteStackManager } from "./platform/app-lifecycle";
@@ -100,7 +101,6 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         dispatchPhoneEvent(PHONE_CLOSE_EVENT);
-        phoneOpener?.focus();
         return;
       }
       if (event.key !== "Tab" || !overlayRef.current) return;
@@ -126,6 +126,8 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       for (const { child, inert } of previousInert) child.inert = inert;
+      // Focus can only return to the opener after its subtree is no longer inert.
+      phoneOpener?.focus();
     };
   }, [open]);
 
@@ -134,11 +136,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     setActiveApp(selectedPhone ? activeApps.current.get(selectedPhone.phoneId) ?? null : null);
   }, [selectedPhone?.phoneId]);
   if (!open) return null;
-  const deviceSettings = selectedPhone?.settings ?? {
-    deviceName: "", wallpaper: "gradient", theme: selectedPhone?.baselineTheme ?? "system",
-    pattern: "none" as const, patternIntensity: 0 as const, reduceDeviceEffects: false,
-    installedApps: ["settings", "app-store", "goodle"],
-  };
+  const deviceSettings = selectedPhone?.settings ?? defaultDeviceSettings(selectedPhone?.baselineTheme ?? "system");
   const updateSettings = async (patch: Record<string, unknown>) => {
     if (!selectedPhone) return;
     const response = await phoneRequest<{ phone: Phone }>(`/phones/${encodeURIComponent(selectedPhone.phoneId)}/settings`, {
@@ -148,7 +146,6 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   };
   const close = () => {
     dispatchPhoneEvent(PHONE_CLOSE_EVENT);
-    phoneOpener?.focus();
   };
   const phoneRouteStacks = selectedPhone
     ? (routeStacks.current.get(selectedPhone.phoneId) ?? (() => {
