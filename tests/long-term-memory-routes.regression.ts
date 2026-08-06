@@ -134,7 +134,7 @@ async function main() {
         id: "chat-professor-mari",
         name: "Professor Mari",
         characterIds: ["__professor_mari__"],
-        groupId: null,
+        groupId: "professor-mari-only",
         metadata: {
           summaryEntries: [
             {
@@ -705,6 +705,22 @@ async function main() {
         ?.scope,
       { personaId: "persona-fixture" },
     );
+    await storageService.storage.createNote({
+      id: "world_professor_mari_group",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { groupId: "professor-mari-only" },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        facts: {
+          text: "Professor Mari's group must not be a scope target.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
     const scopeTargets = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/scope-targets?chatId=chat-a",
@@ -722,6 +738,12 @@ async function main() {
         .groups.find((group: any) => group.id === "observatory-branches")
         ?.chatIds.sort(),
       ["chat-a"],
+    );
+    assert.equal(
+      scopeTargets
+        .json()
+        .groups.some((group: any) => group.id === "professor-mari-only"),
+      false,
     );
     assert.equal(
       scopeTargets.json().chats.some((chat: any) => chat.id === "game-empty"),
@@ -787,6 +809,12 @@ async function main() {
         label: "Observatory",
         chatIds: ["chat-a", "game-a"],
       },
+    );
+    assert.equal(
+      allScopeTargets
+        .json()
+        .groups.some((group: any) => group.id === "professor-mari-only"),
+      false,
     );
     const professorMariCharacterPreview = await app.inject({
       method: "POST",

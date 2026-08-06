@@ -602,7 +602,11 @@ export function createLongTermMemoryRoutes(runtime: {
             (characterId) => characterIds.add(characterId),
           );
         }
-        if (note.scope.groupId) groupIds.add(note.scope.groupId);
+        if (
+          note.scope.groupId &&
+          eligibleChats.some((chat) => chat.groupId === note.scope.groupId)
+        )
+          groupIds.add(note.scope.groupId);
         note.scope.characterIds
           ?.filter((id) => id !== PROFESSOR_MARI_CHARACTER_ID)
           .forEach((id) => characterIds.add(id));
