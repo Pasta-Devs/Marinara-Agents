@@ -29,14 +29,27 @@ function dispatchPhoneEvent(type: string) {
   window.dispatchEvent(new CustomEvent(type));
 }
 
+type ActiveApp = "settings" | "app-store" | "goodle" | null;
+
+function appIconStyle(appId: string) {
+  if (appId === "settings") return "bg-amber-500/20 text-amber-700 dark:text-amber-300";
+  if (appId === "app-store") return "bg-sky-500/20 text-sky-700 dark:text-sky-300";
+  if (appId === "goodle") return "bg-rose-500/20 text-rose-700 dark:text-rose-300";
+  return "bg-[var(--vp-surface)] text-[var(--vp-text)]";
+}
+
+function wallpaperBackground(wallpaper: string) {
+  if (wallpaper === "midnight") return "linear-gradient(145deg, #111827 0%, #243447 55%, #0f172a 100%)";
+  if (wallpaper === "paper") return "linear-gradient(145deg, #fff8e7 0%, #e8dfcc 52%, #f7efe1 100%)";
+  return "linear-gradient(145deg, var(--vp-bg), var(--vp-surface))";
+}
+
 function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [open, setOpen] = React.useState(false);
   const [phones, setPhones] = React.useState<Phone[]>([]);
   const [session, setSession] = React.useState(() => initialDeviceSession());
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [appStoreOpen, setAppStoreOpen] = React.useState(false);
-  const [goodleOpen, setGoodleOpen] = React.useState(false);
+  const [activeApp, setActiveApp] = React.useState<ActiveApp>(null);
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
   const overlayRef = React.useRef<HTMLDivElement>(null);
   const status = defaultPhoneStatus();
@@ -122,19 +135,25 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     dispatchPhoneEvent(PHONE_CLOSE_EVENT);
     phoneOpener?.focus();
   };
+  const openApp = (app: Exclude<ActiveApp, null>) => setActiveApp(app);
+  const closeApp = () => setActiveApp(null);
+  const theme = deviceSettings.theme === "system" ? selectedPhone?.baselineTheme ?? "system" : deviceSettings.theme;
   return createPortal(
-    <div ref={overlayRef} className="fixed inset-0 z-[10020]" data-chat-floating-panel style={phoneThemeTokens(selectedPhone?.baselineTheme ?? "system") as React.CSSProperties}>
+    <div ref={overlayRef} className="fixed inset-0 z-[10020]" data-chat-floating-panel style={phoneThemeTokens(theme) as React.CSSProperties}>
       <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" aria-hidden="true" onClick={close} />
-      <section role="dialog" aria-modal="true" aria-labelledby="virtual-phone-title" className="absolute inset-y-0 right-0 flex w-full max-w-[calc(100vw-1rem)] items-center justify-center p-3 sm:p-6">
-        <div className="relative flex h-[min(88vh,860px)] aspect-[9/19.5] max-h-full min-h-[28rem] max-w-full flex-col rounded-[40px] border-[12px] border-[var(--vp-bezel,#11151d)] bg-[var(--vp-bg,#edf2f1)] p-1 shadow-2xl ring-1 ring-white/15">
-          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] bg-[var(--vp-bg,#edf2f1)] text-[var(--vp-text,#192321)]">
-            <header className="relative flex min-h-11 items-center justify-between px-4 text-[0.6875rem] font-semibold">
+      <section role="dialog" aria-modal="true" aria-labelledby="virtual-phone-title" className="absolute inset-y-0 right-0 flex w-full items-center justify-end p-3 sm:p-6">
+        <div className="relative flex w-[min(calc(100vw-1.5rem),calc((100dvh-1.5rem)*9/19.5),396px)] aspect-[9/19.5] flex-col rounded-[42px] border-[10px] border-[var(--vp-bezel,#11151d)] bg-[var(--vp-bezel,#11151d)] p-1 shadow-[0_24px_80px_rgb(0_0_0_/_0.4),0_2px_8px_rgb(0_0_0_/_0.35)] ring-1 ring-white/20 sm:w-[min(calc(100vw-3rem),calc(88dvh*9/19.5),396px)] sm:border-[12px] sm:rounded-[46px]">
+          <span className="pointer-events-none absolute left-1/2 top-0 z-30 h-6 w-28 -translate-x-1/2 rounded-b-2xl bg-[var(--vp-bezel,#11151d)] sm:h-7 sm:w-32" aria-hidden="true"><span className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-white/20 sm:top-2.5" /></span>
+          <span className="pointer-events-none absolute -left-3 top-24 h-12 w-1 rounded-l-full bg-[var(--vp-bezel,#11151d)] shadow-[0_72px_0_var(--vp-bezel),0_128px_0_var(--vp-bezel)] sm:-left-4" aria-hidden="true" />
+          <span className="pointer-events-none absolute -right-3 top-32 h-20 w-1 rounded-r-full bg-[var(--vp-bezel,#11151d)] sm:-right-4" aria-hidden="true" />
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[32px] bg-[var(--vp-bg,#edf2f1)] text-[var(--vp-text,#192321)] sm:rounded-[34px]">
+            <header className="relative grid min-h-12 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pt-1 text-[0.6875rem] font-semibold sm:min-h-14 sm:px-5 sm:pt-2">
               <span className="flex items-center gap-1" aria-label="Full cellular signal and Wi-Fi off">
                 <Signal size="0.75rem" aria-hidden="true" />
                 <WifiOff size="0.75rem" aria-hidden="true" />
               </span>
-              <span id="virtual-phone-title">{new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
-              <div className="flex items-center gap-1.5">
+              <span id="virtual-phone-title" className="min-w-0 truncate text-center">{new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+              <div className="flex min-w-0 items-center justify-end gap-1.5">
                 <span className="inline-flex items-center gap-1" aria-label={`${status.batteryLevel}% battery, not charging`}>
                   {status.batteryLevel}% <BatteryMedium size="0.875rem" aria-hidden="true" />
                 </span>
@@ -144,7 +163,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                 </button>
               </div>
               {switcherOpen ? (
-                <div role="listbox" aria-label="Available phones" className="absolute right-3 top-10 z-20 w-48 space-y-1 rounded-md border border-black/10 bg-[var(--vp-surface)] p-2 text-[var(--vp-text)] shadow-xl">
+                <div role="listbox" aria-label="Available phones" className="absolute right-3 top-12 z-20 max-w-[calc(100%-1.5rem)] w-48 space-y-1 rounded-xl border border-black/10 bg-[var(--vp-surface)] p-2 text-[var(--vp-text)] shadow-xl">
                   {phones.map((phone) => (
                     <button key={phone.phoneId} type="button" role="option" aria-selected={phone.phoneId === session.selectedPhoneId} onClick={() => { setSession((current) => ({ ...current, selectedPhoneId: phone.phoneId })); setSwitcherOpen(false); }} className="flex min-h-11 w-full items-center rounded-md px-3 text-left text-xs hover:bg-[var(--vp-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]">
                       <span className="truncate">{phone.ownerName}</span>
@@ -153,7 +172,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                 </div>
               ) : null}
             </header>
-            <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[linear-gradient(145deg,var(--vp-bg),var(--vp-surface))]" style={{ backgroundImage: `${patternBackground(deviceSettings.pattern, deviceSettings.patternIntensity)}, linear-gradient(145deg,var(--vp-bg),var(--vp-surface))`, backgroundSize: "16px 16px, cover" }}>
+            <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden" style={{ backgroundImage: `${patternBackground(deviceSettings.pattern, deviceSettings.patternIntensity)}, ${wallpaperBackground(deviceSettings.wallpaper)}`, backgroundSize: "16px 16px, cover" }}>
               {session.surface === "lock" ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
                   <div>
@@ -161,39 +180,39 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                     <p className="mt-1 text-xs text-[var(--vp-muted)]">{new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
                   </div>
                   <div className="min-h-20 w-full rounded-[var(--vp-radius)] bg-[var(--vp-surface)]/55 p-4 text-xs text-[var(--vp-muted)]">No notifications</div>
-                  <button type="button" onClick={() => setSession(unlockDevice)} className="min-h-11 rounded-lg bg-[var(--vp-surface)] px-5 text-xs font-semibold shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]">Unlock</button>
+                     <button type="button" onClick={() => setSession(unlockDevice)} className="min-h-11 rounded-xl bg-[var(--vp-surface)] px-5 text-xs font-semibold shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]">Unlock</button>
                 </div>
               ) : (
                 <div className="flex min-h-0 flex-1 flex-col p-5">
-                  <div className="flex justify-end">
-                    <button type="button" aria-label="Device settings" title="Device settings" onClick={() => setSettingsOpen(true)} className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--vp-surface)]/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><Settings size="1rem" aria-hidden="true" /></button>
+                   <div className="flex justify-end">
+                     <button type="button" aria-label="Device settings" title="Device settings" onClick={() => openApp("settings")} className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--vp-surface)]/75 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><Settings size="1rem" aria-hidden="true" /></button>
                   </div>
                   <label className="mt-2 block">
                     <span className="sr-only">Web Search</span>
                     <input type="search" disabled placeholder="Web Search" className="min-h-11 w-full rounded-[var(--vp-radius)] border-0 bg-[var(--vp-surface)]/80 px-4 text-sm text-[var(--vp-text)] shadow-sm placeholder:text-[var(--vp-muted)] disabled:opacity-100" />
                   </label>
-                  <div className="min-h-24 flex-1" aria-hidden="true" />
-                  <div aria-label="Installed apps" className="grid min-h-36 grid-cols-4 grid-rows-2 gap-3 rounded-[var(--vp-radius)] bg-[var(--vp-surface)]/35 p-3">
-                    <button type="button" aria-label="Open Settings" onClick={() => setSettingsOpen(true)} className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl bg-[var(--vp-surface)] text-[var(--vp-text)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]">
-                      <Settings size="1.25rem" aria-hidden="true" />
-                      <span className="text-[0.625rem]">Settings</span>
-                    </button>
-                    <button type="button" aria-label="Open App Store" onClick={() => setAppStoreOpen(true)} className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl bg-[var(--vp-surface)] text-[var(--vp-text)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><Store size="1.25rem" aria-hidden="true" /><span className="text-[0.625rem]">App Store</span></button>
-                    {deviceSettings.installedApps.includes("goodle") ? <button type="button" aria-label="Open Goodle" onClick={() => setGoodleOpen(true)} className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl bg-[var(--vp-surface)] text-[var(--vp-text)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><Search size="1.25rem" aria-hidden="true" /><span className="text-[0.625rem]">Goodle</span></button> : null}
-                    {Array.from({ length: deviceSettings.installedApps.includes("goodle") ? 5 : 6 }, (_, index) => <span key={index} aria-hidden="true" className="aspect-square rounded-xl border border-dashed border-[var(--vp-muted)]/20" />)}
-                  </div>
-                </div>
-              )}
-              {settingsOpen && selectedPhone ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading Settings...</div>}><SettingsApp phone={selectedPhone} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onClose={() => setSettingsOpen(false)} /></React.Suspense> : null}
-              {appStoreOpen && selectedPhone ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onClose={() => setAppStoreOpen(false)} /></React.Suspense> : null}
-              {goodleOpen && deviceSettings.installedApps.includes("goodle") ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading Goodle...</div>}><GoodleApp onClose={() => setGoodleOpen(false)} /></React.Suspense> : null}
-              <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20" style={{ opacity: conditionOpacity(0, deviceSettings.reduceDeviceEffects) }} data-virtual-phone-condition="cracks" />
-              <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20" style={{ opacity: conditionOpacity(0, deviceSettings.reduceDeviceEffects) }} data-virtual-phone-condition="smudge" />
-              <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20" style={{ opacity: conditionOpacity(0, deviceSettings.reduceDeviceEffects) }} data-virtual-phone-condition="blood" />
+                   <div className="min-h-24 flex-1" aria-hidden="true" />
+                   <div aria-label="Installed apps" className="grid grid-cols-4 gap-x-3 gap-y-5 px-1 pb-2">
+                     <button type="button" aria-label="Open Settings" onClick={() => openApp("settings")} className="group flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl text-[var(--vp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]">
+                       <span className={`flex aspect-square w-full max-w-[4.25rem] items-center justify-center rounded-[18px] shadow-[inset_0_1px_rgb(255_255_255_/_0.35),0_4px_10px_rgb(0_0_0_/_0.12)] transition-transform group-active:scale-[0.96] ${appIconStyle("settings")}`}><Settings size="1.5rem" aria-hidden="true" /></span>
+                       <span className="text-[0.625rem]">Settings</span>
+                     </button>
+                     <button type="button" aria-label="Open App Store" onClick={() => openApp("app-store")} className="group flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl text-[var(--vp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><span className={`flex aspect-square w-full max-w-[4.25rem] items-center justify-center rounded-[18px] shadow-[inset_0_1px_rgb(255_255_255_/_0.35),0_4px_10px_rgb(0_0_0_/_0.12)] transition-transform group-active:scale-[0.96] ${appIconStyle("app-store")}`}><Store size="1.5rem" aria-hidden="true" /></span><span className="text-[0.625rem]">App Store</span></button>
+                     {deviceSettings.installedApps.includes("goodle") ? <button type="button" aria-label="Open Goodle" onClick={() => openApp("goodle")} className="group flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl text-[var(--vp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><span className={`flex aspect-square w-full max-w-[4.25rem] items-center justify-center rounded-[18px] shadow-[inset_0_1px_rgb(255_255_255_/_0.35),0_4px_10px_rgb(0_0_0_/_0.12)] transition-transform group-active:scale-[0.96] ${appIconStyle("goodle")}`}><Search size="1.5rem" aria-hidden="true" /></span><span className="text-[0.625rem]">Goodle</span></button> : null}
+                     {Array.from({ length: deviceSettings.installedApps.includes("goodle") ? 1 : 2 }, (_, index) => <span key={index} aria-hidden="true" className="aspect-square w-full max-w-[4.25rem] rounded-[18px] border border-dashed border-[var(--vp-muted)]/20" />)}
+                   </div>
+                 </div>
+               )}
+               {activeApp === "settings" && selectedPhone ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading Settings...</div>}><SettingsApp phone={{ ...selectedPhone, settings: { ...deviceSettings, theme } }} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onClose={closeApp} /></React.Suspense> : null}
+               {activeApp === "app-store" && selectedPhone ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onClose={closeApp} /></React.Suspense> : null}
+               {activeApp === "goodle" && deviceSettings.installedApps.includes("goodle") ? <React.Suspense fallback={<div className="absolute inset-0 z-10 bg-[var(--vp-bg)] p-5 text-xs">Loading Goodle...</div>}><GoodleApp onClose={closeApp} /></React.Suspense> : null}
+               <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 mix-blend-multiply" style={{ opacity: conditionOpacity(1, deviceSettings.reduceDeviceEffects), backgroundImage: "linear-gradient(35deg, transparent 47%, rgb(20 20 20 / 0.22) 48%, transparent 49%), linear-gradient(125deg, transparent 62%, rgb(20 20 20 / 0.16) 63%, transparent 64%)", backgroundSize: "52% 38%, 68% 55%" }} data-virtual-phone-condition="cracks" />
+               <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 mix-blend-multiply" style={{ opacity: conditionOpacity(1, deviceSettings.reduceDeviceEffects), backgroundImage: "radial-gradient(ellipse at 20% 28%, rgb(20 20 20 / 0.12), transparent 24%), radial-gradient(ellipse at 78% 64%, rgb(20 20 20 / 0.09), transparent 20%)" }} data-virtual-phone-condition="smudge" />
+               <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 mix-blend-multiply" style={{ opacity: conditionOpacity(1, deviceSettings.reduceDeviceEffects), backgroundImage: "radial-gradient(ellipse at 88% 18%, rgb(100 15 15 / 0.13), transparent 24%), radial-gradient(ellipse at 8% 82%, rgb(100 15 15 / 0.08), transparent 18%)" }} data-virtual-phone-condition="blood" />
             </main>
-            <button ref={closeButtonRef} type="button" onClick={close} className="mx-4 mb-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--vp-accent,#2c8979)] px-4 text-xs font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent,#2c8979)] focus-visible:ring-offset-2">
-              <X size="0.875rem" aria-hidden="true" /> Put down
-            </button>
+            <footer className="shrink-0 border-t border-black/5 bg-[var(--vp-bg)] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3"><button ref={closeButtonRef} type="button" onClick={close} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--vp-accent,#2c8979)] px-4 text-xs font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent,#2c8979)] focus-visible:ring-offset-2">
+               <X size="0.875rem" aria-hidden="true" /> Put down
+             </button></footer>
           </div>
         </div>
       </section>

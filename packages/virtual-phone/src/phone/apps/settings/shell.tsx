@@ -1,7 +1,8 @@
 import React from "react";
-import { RotateCcw, X } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import type { Phone } from "../../system/PhonesSettings";
 import { phoneRequest } from "../../platform/api";
+import { PhoneAppHeader } from "../../platform/app-header";
 
 interface SettingsShellProps {
   phone: Phone;
@@ -27,10 +28,7 @@ export function SettingsShell({ phone, onPhoneChange, onClose }: SettingsShellPr
   };
   return (
     <section aria-labelledby="device-settings-title" className="absolute inset-0 z-10 overflow-y-auto bg-[var(--vp-bg)] p-5">
-      <header className="mb-5 flex min-h-11 items-center justify-between">
-        <h2 id="device-settings-title" className="text-sm font-semibold">Settings</h2>
-        <button type="button" aria-label="Close settings" onClick={onClose} className="inline-flex h-11 w-11 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]"><X size="1rem" aria-hidden="true" /></button>
-      </header>
+      <PhoneAppHeader title="Settings" titleId="device-settings-title" closeLabel="Close settings" onClose={onClose} />
       <div className="space-y-4 text-xs">
         <h3 className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-[var(--vp-muted)]">Device</h3>
         <label className="block space-y-1.5"><span className="font-medium">Device name</span><input key={`${phone.phoneId}:${settings.deviceName}`} defaultValue={settings.deviceName} onBlur={(event) => void update({ deviceName: event.target.value })} className="min-h-11 w-full rounded-lg border border-black/10 bg-[var(--vp-surface)] px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vp-accent)]" /></label>
