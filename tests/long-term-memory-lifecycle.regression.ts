@@ -171,10 +171,16 @@ async function main() {
       "Preserves the character card, then proposes durable identity",
       "Preserves selected lorebook entries, then proposes durable world",
       "Preserves the summary, then proposes events, relationships, threads",
-      "The source note was saved and",
       "Review what extraction found. Accept saves a proposal to Memory Vault",
       "Stable appearance can help the character remain visually consistent",
-      "This source note preserves the imported material for evidence. It is not recalled directly.",
+      "Built-in prompts are read-only. Copy one to create an editable custom template.",
+      "Balanced matches memories with a general-purpose mix of signals.",
+      "Story favors continuity and narrative context.",
+      "Custom uses the retrieval weights you set below.",
+      "accepted proposals become recallable.",
+      "This source note preserves imported material as audit evidence. It is not recalled directly; accepted derived memories appear below.",
+      "Imported source:",
+      "Character record:",
       "Saved memories are not added to every reply.",
     ])
       assert.match(artifactClient, new RegExp(copy, "u"));
@@ -419,6 +425,17 @@ async function main() {
             chunkFormatVersion: 1, embeddingsAvailable: false, embeddedChunkCount: 0,
           },
         });
+      if (request.method === "GET" && url.pathname.endsWith("/settings"))
+        return send(200, {});
+      if (
+        request.method === "GET" &&
+        url.pathname.endsWith("/extraction-settings")
+      )
+        return send(200, {});
+      if (request.method === "GET" && url.pathname.endsWith("/integrity"))
+        return send(200, { status: "healthy", issues: [] });
+      if (request.method === "GET" && url.pathname === "/api/connections")
+        return send(200, []);
       if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count")) return send(200, { count: 2 });
       if (request.method === "GET" && url.pathname.endsWith("/last-injection/chat-artifact")) {
         lastInjectionRequests += 1;
@@ -731,7 +748,6 @@ async function main() {
       ) <= 2,
       true,
     );
-    await page.screenshot({ path: "/tmp/opencode/ltm-activation-desktop-final.png", fullPage: true });
     await page.evaluate((version) => {
       const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & { capabilityProps?: unknown };
       element.setAttribute("view", "settings");
@@ -740,6 +756,13 @@ async function main() {
     }, packageManifest.version);
     const chatSettings = page.locator('[data-ltm-surface="chat-settings"]').last();
     await chatSettings.waitFor();
+    await chatSettings
+      .getByRole("button", { name: "About Recall style" })
+      .click();
+    assert.match(
+      await page.locator('[data-ltm-info-panel="Recall style"]').innerText(),
+      /Balanced matches memories with a general-purpose mix of signals\./u,
+    );
     const lastInjection = chatSettings.locator("[data-ltm-last-injection]");
     await lastInjection.getByText(/1 saved memory included in the latest model context/u).waitFor();
     await lastInjection.click();
@@ -807,6 +830,68 @@ async function main() {
       ),
       ["vault", "review", "sources", "settings"],
     );
+    await page.getByRole("button", { name: "Show setup guide" }).click();
+    for (let step = 0; step < 4; step += 1)
+      await page.getByRole("button", { name: "Next" }).click();
+    assert.equal(await page.getByRole("button", { name: "Skip" }).count(), 0);
+    assert.equal(
+      await page.getByRole("button", { name: "Explore Memory Vault" }).count(),
+      0,
+    );
+    await page.getByRole("button", { name: "Import a source" }).click();
+    await page
+      .locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]')
+      .click();
+    await page.locator("#settings-tab-recall").click();
+    const globalRecallStyle = page
+      .locator('[data-ltm-destination-content]')
+      .getByRole("combobox", { name: "Recall style" });
+    await globalRecallStyle.selectOption("story");
+    await page
+      .locator('[data-ltm-destination-content]')
+      .getByRole("button", { name: "About Recall style" })
+      .click();
+    assert.match(
+      await page.locator('[data-ltm-info-panel="Recall style"]').innerText(),
+      /Story favors continuity and narrative context\./u,
+    );
+    await page.keyboard.press("Escape");
+    await globalRecallStyle.selectOption("custom");
+    await page
+      .locator('[data-ltm-destination-content]')
+      .getByRole("button", { name: "About Recall style" })
+      .click();
+    assert.match(
+      await page.locator('[data-ltm-info-panel="Recall style"]').innerText(),
+      /Custom uses the retrieval weights you set below\./u,
+    );
+    await page.locator("#settings-tab-extraction").click();
+    await page.getByRole("button", { name: "About Prompt templates" }).click();
+    assert.match(
+      await page.locator('[data-ltm-info-panel="Prompt templates"]').innerText(),
+      /Built-in prompts are read-only\. Copy one to create an editable custom template\./u,
+    );
+    await page.keyboard.press("Escape");
+    const builtInPrompt = page.getByRole("textbox", { name: "Template prompt" });
+    assert.equal(await builtInPrompt.isEditable(), false);
+    await page.getByRole("button", { name: "Copy to edit" }).click();
+    await page.getByRole("textbox", { name: "Template prompt" }).waitFor();
+    await page.waitForFunction(
+      () =>
+        !(document.querySelector(
+          'textarea[aria-labelledby$="-template-prompt-label"]',
+        ) as HTMLTextAreaElement | null)?.readOnly,
+    );
+    await page.getByRole("button", { name: "Reset to default" }).first().click();
+    assert.equal(
+      await page
+        .locator('select[aria-labelledby$="-active-template-label"]')
+        .first()
+        .inputValue(),
+      "",
+    );
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Discard changes" }).click();
     await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
     await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
     assert.deepEqual(reviewQueries, ["?status=pending"]);
@@ -882,10 +967,9 @@ async function main() {
     await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
     await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
     await page.locator('[data-ltm-review-draft-title]').waitFor();
-    await page.screenshot({ path: "/tmp/opencode/ltm-review-mobile-final.png", fullPage: true });
     assert.equal(
       await page.locator('[data-ltm-review-draft-title]').innerText(),
-      "Mobile review source",
+      "Source note: Mobile review source",
     );
     const reviewText = await page
       .locator('[data-ltm-workspace-pane="workbench"]')
@@ -1243,7 +1327,6 @@ async function main() {
       };
     });
     console.log(`LTM mobile activation baseline: ${JSON.stringify(activationMetrics)}`);
-    await mobilePage.screenshot({ path: "/tmp/opencode/ltm-activation-mobile-final.png", fullPage: true });
     assert.ok(activationMetrics.box.width > 0 && activationMetrics.box.height > 0);
     assert.ok(activationMetrics.box.width >= 40 && activationMetrics.box.height >= 36);
     assert.equal(activationMetrics.withinViewport, true);

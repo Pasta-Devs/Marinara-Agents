@@ -656,11 +656,15 @@ export default function MemoryVault({
     const [kind, id] = value.split(/:(.+)/, 2);
     if (!id) return humanizeLabel(value);
     if (kind === "source_note")
-      return (
-        allNotes.find((note) => note.id === id)?.title?.trim() ||
-        localizeUi("ui.longTermMemory.memoryvault.sourceNote")
-      );
-    if (kind === "character") return scopeTargetLabel("character", id, targets);
+      return localizeUi("ui.longTermMemory.memoryvault.importedSource", {
+        title:
+          allNotes.find((note) => note.id === id)?.title?.trim() ||
+          localizeUi("ui.longTermMemory.memoryvault.sourceNote"),
+      });
+    if (kind === "character")
+      return localizeUi("ui.longTermMemory.memoryvault.characterRecord", {
+        name: scopeTargetLabel("character", id, targets),
+      });
     if (kind === "persona") return scopeTargetLabel("persona", id, targets);
     if (kind === "chat") return scopeTargetLabel("chat", id, targets);
     return humanizeLabel(kind);
@@ -673,10 +677,14 @@ export default function MemoryVault({
   const provenanceSourceLabel = () => {
     if (!draft?.provenance) return "";
     if (draft.provenance.kind === "character")
-      return scopeTargetLabel("character", draft.provenance.sourceId, targets);
+      return localizeUi("ui.longTermMemory.memoryvault.characterRecord", {
+        name: scopeTargetLabel("character", draft.provenance.sourceId, targets),
+      });
     if (draft.provenance.kind === "chat_summary")
-      return scopeTargetLabel("chat", draft.provenance.sourceId, targets);
-    return "Lorebook";
+      return localizeUi("ui.longTermMemory.memoryvault.chatSummary", {
+        title: scopeTargetLabel("chat", draft.provenance.sourceId, targets),
+      });
+    return localizeUi("ui.longTermMemory.memoryvault.lorebook");
   };
 
   const dirtyRef = useRef(dirty);
@@ -2781,8 +2789,9 @@ export default function MemoryVault({
                           />
                         </dt>
                         <dd className="break-words">
-                          {humanizeLabel(draft.provenance.kind)}:{" "}
-                          {provenanceSourceLabel()}
+                          {localizeUi("ui.longTermMemory.memoryvault.importedFrom", {
+                            source: provenanceSourceLabel(),
+                          })}
                         </dd>
                       </div>
                     ) : null}

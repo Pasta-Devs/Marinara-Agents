@@ -875,24 +875,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             )}
                           </Button>
                         )}
-                        <Button
-                          onClick={() => {
-                            if (
-                              onboardingStep < onboardingSteps.length - 1 ||
-                              destination === "vault"
-                            )
-                              completeOnboarding();
-                            else void selectDestination("vault");
-                          }}
-                        >
-                          {onboardingStep === onboardingSteps.length - 1
-                            ? localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.exploreMemoryVault",
-                              )
-                            : localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.skip",
-                              )}
-                        </Button>
+                        {onboardingStep < onboardingSteps.length - 1 ? (
+                          <Button onClick={completeOnboarding}>
+                            {localizeUi(
+                              "ui.longTermMemory.longtermmemorydetail.skip",
+                            )}
+                          </Button>
+                        ) : null}
                       </div>
                       <p className="text-xs text-[var(--muted-foreground)]">
                         {localizeUi(

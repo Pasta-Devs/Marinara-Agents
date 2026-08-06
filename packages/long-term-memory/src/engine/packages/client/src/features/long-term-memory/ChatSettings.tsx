@@ -15,6 +15,7 @@ import {
 import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation } from "./localization";
+import { recallStyleDescriptionKey } from "./recall-style";
 
 export function ChatSettings({ props }: { props: CapabilityProps }) {
   const { t: localizeUi } = useLtmTranslation();
@@ -89,7 +90,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             <InfoPopover
               label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
               content={localizeUi(
-                "ui.longTermMemory.chatsettings.controlsHowBroadlyThisChatMatchesSavedMemoriesThis",
+                recallStyleDescriptionKey(effectiveStyle),
               )}
             />
           </span>
