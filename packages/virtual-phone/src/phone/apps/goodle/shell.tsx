@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 import { fallbackSearchResults } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
+import { phoneRequest } from "../../platform/api";
 
 const MAX_RECENTS = 8;
 
@@ -20,13 +21,21 @@ export function GoodleShell({ phoneId, onBack, onClose }: { phoneId: string; onB
     return () => { active = false; };
   }, [store]);
 
+  const [searching, setSearching] = React.useState(false);
   const search = (term: string) => {
-    setResults(fallbackSearchResults(term));
     const trimmed = term.trim();
+    setResults(fallbackSearchResults(trimmed));
     if (!trimmed) return;
     const next = [trimmed, ...recents.filter((recent) => recent !== trimmed)].slice(0, MAX_RECENTS);
     setRecents(next);
     void store.set("recents", next).catch(() => undefined);
+    setSearching(true);
+    void phoneRequest<{ results: ReturnType<typeof fallbackSearchResults> }>(`/phones/${encodeURIComponent(phoneId)}/goodle/search`, {
+      method: "POST", body: JSON.stringify({ query: trimmed }),
+    })
+      .then((response) => setResults(response.results))
+      .catch(() => setResults(fallbackSearchResults(trimmed)))
+      .finally(() => setSearching(false));
   };
   const clearRecents = () => {
     setRecents([]);
@@ -55,9 +64,9 @@ export function GoodleShell({ phoneId, onBack, onClose }: { phoneId: string; onB
           ))}
         </div>
       ) : null}
-      <div>
+      <div aria-busy={searching}>
         <h3 className="vp-result-title">{results.title}</h3>
-        <p className="vp-result-summary">{results.summary}</p>
+        <p className="vp-result-summary">{searching ? "Searching…" : results.summary}</p>
         {results.items.length ? <ul className="vp-result-list">{results.items.map((item) => <li key={item}>{item}</li>)}</ul> : null}
       </div>
     </section>

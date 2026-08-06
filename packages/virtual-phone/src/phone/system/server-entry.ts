@@ -8,6 +8,7 @@ import {
 import { normalizeDeviceSettings, type DeviceSettings } from "../device/settings";
 import { PhoneMessagingService, unreadCount, unreadMessages, type ThreadDocument } from "./messaging";
 import { parseBoundedContent } from "../platform/content";
+import { fallbackSearchResults } from "../apps/goodle/manifest";
 
 interface CapabilityContext {
   api: {
@@ -249,6 +250,36 @@ export async function activate({ api }: CapabilityContext) {
         return { contacts, threads };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/goodle/search", async (request, reply) => {
+      const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+        ? request.body as Record<string, unknown>
+        : {};
+      const query = String(body.query ?? "").trim().slice(0, 120);
+      const fallback = fallbackSearchResults(query);
+      if (!query) return { results: fallback };
+      try {
+        await findPhone(request.params.phoneId);
+        const model = await api.runtime.languageModels?.resolve();
+        if (!model) return { results: fallback };
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"result one\",\"result two\",...]} with 3 to 6 items.",
+          },
+          { role: "user", content: `Search query: ${query}` },
+        ], { temperature: 0.9, maxTokens: 400 });
+        const results = parseBoundedContent(completion.content, {
+          fields: { title: "string", summary: "string", items: "string[]" },
+          defaults: fallback,
+        });
+        return { results };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Phone not found") {
+          return reply.status(400).send({ error: error.message });
+        }
+        return { results: fallback };
       }
     });
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/notifications", async (request, reply) => {
