@@ -1,7 +1,8 @@
-import { ArrowLeft, MoreHorizontal, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { normalizeTopBarActions, type TopBarAction } from "./top-bar";
 
 const actionIcons: Record<string, typeof ArrowLeft> = {
+  add: Plus,
   menu: MoreHorizontal,
   refresh: RotateCcw,
   search: Search,

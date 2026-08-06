@@ -18,6 +18,8 @@ import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/p
 import { fallbackSearchResults, goodleManifest } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
 import { defaultDeviceSettings } from "../packages/virtual-phone/src/phone/device/settings";
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
+import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
+import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/phone/apps/noodler/manifest";
 import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
 import { conditionOpacity, patternBackground } from "../packages/virtual-phone/src/phone/device/effects";
 
@@ -293,7 +295,13 @@ async function main() {
   validateAppManifest(messagesManifest);
   assert.equal(messagesManifest.removable, true);
   assert.deepEqual(messagesManifest.records, [{ type: "message-thread", ownership: "participant-shared" }]);
-  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages"]);
+  validateAppManifest(notesManifest);
+  assert.equal(notesManifest.modelUse, "none");
+  assert.deepEqual(notesManifest.records, [{ type: "note", ownership: "phone-local" }]);
+  validateAppManifest(noodlerManifest);
+  assert.equal(noodlerManifest.modelUse, "heavy");
+  assert.deepEqual(fallbackFeed(), { posts: [] });
+  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes"]);
   let tick = 0;
   const messageIds = ["msg-1", "msg-2", "msg-3"];
   const messaging = new PhoneMessagingService(

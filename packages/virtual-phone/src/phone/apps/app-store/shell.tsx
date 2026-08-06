@@ -1,12 +1,20 @@
 import React from "react";
-import { MessageCircle, Search, Settings, Store } from "lucide-react";
+import { AtSign, MessageCircle, Search, Settings, StickyNote, Store } from "lucide-react";
 import type { AppManifest } from "../../platform/app-manifest";
 import { modelUseLabel } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
 
+const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler"]);
+const appGlyphs: Record<string, typeof Store> = {
+  settings: Settings,
+  goodle: Search,
+  messages: MessageCircle,
+  notes: StickyNote,
+  noodler: AtSign,
+};
+
 function appIconClass(appId: string) {
-  if (appId === "settings" || appId === "app-store" || appId === "goodle" || appId === "messages") return `vp-app-icon--${appId}`;
-  return "vp-app-icon--default";
+  return styledAppIds.has(appId) ? `vp-app-icon--${appId}` : "vp-app-icon--default";
 }
 
 interface AppStoreShellProps {
@@ -23,7 +31,7 @@ export function AppStoreShell({ apps, onInstalledChange, onBack, onClose }: AppS
       <div className="vp-stack" style={{ gap: "0.5rem" }}>
         {apps.map(({ manifest, installed }) => (
           <article key={manifest.id} className="vp-card vp-card-row">
-            <span className={`vp-card-icon ${appIconClass(manifest.id)}`} aria-hidden="true">{manifest.id === "settings" ? <Settings size="1rem" /> : manifest.id === "goodle" ? <Search size="1rem" /> : manifest.id === "messages" ? <MessageCircle size="1rem" /> : <Store size="1rem" />}</span>
+            <span className={`vp-card-icon ${appIconClass(manifest.id)}`} aria-hidden="true">{React.createElement(appGlyphs[manifest.id] ?? Store, { size: "1rem" })}</span>
             <div className="vp-card-body">
               <h3>{manifest.name}</h3>
               <p>{modelUseLabel(manifest.modelUse)}</p>

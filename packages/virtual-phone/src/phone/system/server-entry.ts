@@ -9,6 +9,7 @@ import { normalizeDeviceSettings, type DeviceSettings } from "../device/settings
 import { PhoneMessagingService, unreadCount, unreadMessages, type ThreadDocument } from "./messaging";
 import { parseBoundedContent } from "../platform/content";
 import { fallbackSearchResults } from "../apps/goodle/manifest";
+import { fallbackFeed } from "../apps/noodler/manifest";
 
 interface CapabilityContext {
   api: {
@@ -307,6 +308,34 @@ export async function activate({ api }: CapabilityContext) {
           return reply.status(400).send({ error: error.message });
         }
         return { results: fallback };
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler/feed", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const model = await api.runtime.languageModels?.resolve();
+        if (!model) return { feed: fallbackFeed() };
+        const chatId = phone.document.identity.chatScope[0];
+        let storyContext = "";
+        if (chatId && api.runtime.persistence.listMessages) {
+          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
+            .map((message) => message.content.slice(0, 240))
+            .join("\n");
+        }
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You are Noodler, the social network inside a fictional roleplay world. Invent 4 to 6 short posts by fictional side characters (never the protagonists) reacting to life in this world. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
+          },
+          { role: "user", content: "Generate the current feed." },
+        ], { temperature: 1, maxTokens: 500 });
+        const feed = parseBoundedContent(completion.content, { fields: { posts: "string[]" }, defaults: fallbackFeed() });
+        return { feed };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Phone not found") {
+          return reply.status(400).send({ error: error.message });
+        }
+        return { feed: fallbackFeed() };
       }
     });
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/notifications", async (request, reply) => {

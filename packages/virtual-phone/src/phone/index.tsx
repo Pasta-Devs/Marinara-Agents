@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { BatteryMedium, ChevronDown, MessageCircle, Search, Settings, Signal, Smartphone, Store, WifiOff, X } from "lucide-react";
+import { AtSign, BatteryMedium, ChevronDown, MessageCircle, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
 import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/PhonesSettings";
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
@@ -16,16 +16,22 @@ import { settingsManifest } from "./apps/settings/manifest";
 import { appStoreManifest } from "./apps/app-store/manifest";
 import { goodleManifest } from "./apps/goodle/manifest";
 import { messagesManifest } from "./apps/messages/manifest";
+import { notesManifest } from "./apps/notes/manifest";
+import { noodlerManifest } from "./apps/noodler/manifest";
 
 const SettingsApp = React.lazy(() => import("./apps/settings/shell").then((module) => ({ default: module.SettingsShell })));
 const AppStoreApp = React.lazy(() => import("./apps/app-store/shell").then((module) => ({ default: module.AppStoreShell })));
 const GoodleApp = React.lazy(() => import("./apps/goodle/shell").then((module) => ({ default: module.GoodleShell })));
 const MessagesApp = React.lazy(() => import("./apps/messages/shell").then((module) => ({ default: module.MessagesShell })));
+const NotesApp = React.lazy(() => import("./apps/notes/shell").then((module) => ({ default: module.NotesShell })));
+const NoodlerApp = React.lazy(() => import("./apps/noodler/shell").then((module) => ({ default: module.NoodlerShell })));
 export const phoneAppRegistry = new InstalledAppRegistry();
 phoneAppRegistry.register({ manifest: settingsManifest, load: async () => import("./apps/settings/shell") });
 phoneAppRegistry.register({ manifest: appStoreManifest, load: async () => import("./apps/app-store/shell") });
 phoneAppRegistry.register({ manifest: goodleManifest, load: async () => import("./apps/goodle/shell") });
 phoneAppRegistry.register({ manifest: messagesManifest, load: async () => import("./apps/messages/shell") });
+phoneAppRegistry.register({ manifest: notesManifest, load: async () => import("./apps/notes/shell") });
+phoneAppRegistry.register({ manifest: noodlerManifest, load: async () => import("./apps/noodler/shell") });
 
 class AppErrorBoundary extends React.Component<{ appName: string; children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -55,7 +61,7 @@ function dispatchPhoneEvent(type: string) {
   window.dispatchEvent(new CustomEvent(type));
 }
 
-type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | null;
+type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | "notes" | "noodler" | null;
 
 interface PhoneNotification {
   id: string;
@@ -66,9 +72,10 @@ interface PhoneNotification {
   at: string;
 }
 
+const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler"]);
+
 function appIconStyle(appId: string) {
-  if (appId === "settings" || appId === "app-store" || appId === "goodle" || appId === "messages") return `vp-app-icon--${appId}`;
-  return "vp-app-icon--default";
+  return styledAppIds.has(appId) ? `vp-app-icon--${appId}` : "vp-app-icon--default";
 }
 
 function useClock() {
@@ -213,6 +220,13 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     }
   };
   const messagesUnread = notifications.filter((notification) => notification.appId === "messages").reduce((total, notification) => total + notification.count, 0);
+  const optionalApps: Array<{ id: Exclude<ActiveApp, null>; label: string; Icon: typeof Settings; badge?: number }> = [
+    { id: "messages", label: "Messages", Icon: MessageCircle, badge: messagesUnread },
+    { id: "goodle", label: "Goodle", Icon: Search },
+    { id: "notes", label: "Notes", Icon: StickyNote },
+    { id: "noodler", label: "Noodler", Icon: AtSign },
+  ];
+  const installedOptionalApps = optionalApps.filter((app) => deviceSettings.installedApps.includes(app.id));
   const theme = deviceSettings.theme === "system" ? selectedPhone?.baselineTheme ?? "system" : deviceSettings.theme;
   const clock = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return createPortal(
@@ -290,20 +304,14 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                       <span className={`vp-app-icon ${appIconStyle("app-store")}`}><Store size="1.5rem" aria-hidden="true" /></span>
                       <span className="vp-app-label">App Store</span>
                     </button>
-                    {deviceSettings.installedApps.includes("messages") ? (
-                      <button type="button" aria-label={`Open Messages${messagesUnread > 0 ? `, ${messagesUnread} unread` : ""}`} onClick={() => openAppRoute("messages", "/")} className="vp-app">
-                        <span className={`vp-app-icon ${appIconStyle("messages")}`}><MessageCircle size="1.5rem" aria-hidden="true" /></span>
-                        {messagesUnread > 0 ? <span className="vp-badge vp-app-badge" aria-hidden="true">{messagesUnread > 99 ? "99+" : messagesUnread}</span> : null}
-                        <span className="vp-app-label">Messages</span>
+                    {installedOptionalApps.map(({ id, label, Icon, badge }) => (
+                      <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => openAppRoute(id, "/")} className="vp-app">
+                        <span className={`vp-app-icon ${appIconStyle(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
+                        {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
+                        <span className="vp-app-label">{label}</span>
                       </button>
-                    ) : null}
-                    {deviceSettings.installedApps.includes("goodle") ? (
-                      <button type="button" aria-label="Open Goodle" onClick={() => openAppRoute("goodle", "/")} className="vp-app">
-                        <span className={`vp-app-icon ${appIconStyle("goodle")}`}><Search size="1.5rem" aria-hidden="true" /></span>
-                        <span className="vp-app-label">Goodle</span>
-                      </button>
-                    ) : null}
-                    {Array.from({ length: Math.max(0, 2 - ["goodle", "messages"].filter((appId) => deviceSettings.installedApps.includes(appId)).length) }, (_, index) => <span key={index} aria-hidden="true" className="vp-app-slot" />)}
+                    ))}
+                    {Array.from({ length: (4 - ((2 + installedOptionalApps.length) % 4)) % 4 }, (_, index) => <span key={index} aria-hidden="true" className="vp-app-slot" />)}
                   </div>
                 </div>
               )}
@@ -311,6 +319,8 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               {activeApp === "app-store" && selectedPhone ? <AppErrorBoundary appName="App Store"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "goodle" && selectedPhone && deviceSettings.installedApps.includes("goodle") ? <AppErrorBoundary appName="Goodle"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Goodle...</div>}><GoodleApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "messages" && selectedPhone && deviceSettings.installedApps.includes("messages") ? <AppErrorBoundary appName="Messages"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Messages...</div>}><MessagesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("messages")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "notes" && selectedPhone && deviceSettings.installedApps.includes("notes") ? <AppErrorBoundary appName="Notes"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Notes...</div>}><NotesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("notes")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "noodler" && selectedPhone && deviceSettings.installedApps.includes("noodler") ? <AppErrorBoundary appName="Noodler"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Noodler...</div>}><NoodlerApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("noodler")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
             </main>
             <footer className="vp-footer">
               <button ref={closeButtonRef} type="button" onClick={close} className="vp-putdown-btn">

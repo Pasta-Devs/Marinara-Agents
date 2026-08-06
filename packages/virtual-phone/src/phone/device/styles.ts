@@ -67,6 +67,8 @@ export const phoneStylesheet = `
 .vp-app-icon--app-store { background: linear-gradient(180deg, #34aefc 0%, #0b6ded 100%); }
 .vp-app-icon--goodle { background: linear-gradient(180deg, #ff7a59 0%, #e6343f 100%); }
 .vp-app-icon--messages { background: linear-gradient(180deg, #5ce872 0%, #1eb944 100%); }
+.vp-app-icon--notes { background: linear-gradient(180deg, #ffd75e 0%, #f5a623 100%); }
+.vp-app-icon--noodler { background: linear-gradient(180deg, #b48cff 0%, #7a3ff2 100%); }
 .vp-app-icon--default { background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 92%, #ffffff), var(--vp-surface)); color: var(--vp-text); }
 .vp-app-label { font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.01em; text-shadow: 0 1px 4px rgb(0 0 0 / 0.1); }
 .vp-app-slot { aspect-ratio: 1; width: 100%; max-width: 4.25rem; border-radius: 32%; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--vp-muted) 22%, transparent), inset 0 2px 6px rgb(0 0 0 / 0.05); }
@@ -131,5 +133,9 @@ export const phoneStylesheet = `
 .vp-bubble--other { align-self: flex-start; border-bottom-left-radius: 0.375rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 96%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.07), inset 0 0 0 1px var(--vp-border); }
 .vp-bubble-time { display: block; margin-top: 0.125rem; font-size: 0.5625rem; opacity: 0.7; }
 .vp-composer { display: flex; align-items: center; gap: 0.5rem; }
+.vp-textarea { width: 100%; min-height: 14rem; padding: 0.875rem; border: 0; border-radius: 1.125rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); color: var(--vp-text); font: inherit; font-size: 0.8125rem; line-height: 1.5; resize: vertical; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); }
+.vp-post { display: grid; gap: 0.25rem; }
+.vp-post-author { font-size: 0.75rem; font-weight: 650; color: var(--vp-accent); }
+.vp-post-text { margin: 0; font-size: 0.8125rem; line-height: 1.4; overflow-wrap: anywhere; }
 .vp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 `;
