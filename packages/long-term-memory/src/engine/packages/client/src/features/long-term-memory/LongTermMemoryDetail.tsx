@@ -232,10 +232,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestination("vault");
   };
   const openReview = async (sourceNoteId?: string) => {
-    if (!(await confirmDestinationChange(destinationLabel("review")))) return;
+    if (!(await confirmDestinationChange(destinationLabel("review"))))
+      return false;
     setDestinationDirty(false);
     setReviewSourceNoteId(sourceNoteId ?? null);
     setDestination("review");
+    return true;
   };
   const recoverCandidate: NonNullable<
     LongTermMemoryDestinationProps["onRecoverCandidate"]
@@ -1036,10 +1038,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               <Button
                                 primary
                                 onClick={async () => {
-                                  if (pendingDrafts.data?.count)
-                                    await openReview();
-                                  else await openSources();
-                                  completeOnboarding();
+                                  const opened = pendingDrafts.data?.count
+                                    ? await openReview()
+                                    : await openSources();
+                                  if (opened) completeOnboarding();
                                 }}
                               >
                                 {localizeUi(

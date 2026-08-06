@@ -422,6 +422,7 @@ async function main() {
       ];
       let healthState: "healthy" | "degraded" = "healthy";
       let noteTotal = 3;
+      let pendingDraftCount = 2;
       let lastInjectionRequests = 0;
       browserServer = createServer(async (request, response) => {
         const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -476,7 +477,7 @@ async function main() {
           request.method === "GET" &&
           url.pathname.endsWith("/drafts/pending-count")
         )
-          return send(200, { count: 2 });
+          return send(200, { count: pendingDraftCount });
         if (
           request.method === "GET" &&
           url.pathname.endsWith("/last-injection/chat-artifact")
@@ -823,6 +824,7 @@ async function main() {
           desktopActivationChanges.push(enabled);
         },
       );
+      await page.exposeFunction("declineDestinationChange", () => false);
       await page.addInitScript(() => {
         Object.defineProperty(Crypto.prototype, "randomUUID", {
           configurable: true,
@@ -911,6 +913,128 @@ async function main() {
       await page
         .locator('[data-ltm-destination-content][aria-label="Memory Vault"]')
         .waitFor();
+      await page
+        .locator(
+          '[data-ltm-navigation="desktop"] [data-ltm-destination="review"]',
+        )
+        .click();
+      await page
+        .locator('[data-ltm-review-source-select="source_mobile_review"]')
+        .click();
+      await page.locator('[data-ltm-review-mutation-toggle]').click();
+      await page.evaluate(() => {
+        const element = document.querySelector(
+          "marinara-capability-long-term-memory",
+        ) as HTMLElement & { capabilityProps?: Record<string, unknown> };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (window as Window & {
+            declineDestinationChange: () => boolean;
+          }).declineDestinationChange,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
+      });
+      await page
+        .locator('[data-ltm-review-mutation] textarea')
+        .first()
+        .fill("Dirty memory");
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page
+        .getByRole("button", { name: "Next: choose a source" })
+        .click();
+      await page.getByRole("button", { name: "Continue to review" }).click();
+      await page.getByRole("button", { name: "Open Review Queue" }).click();
+      assert.equal(await onboardingTitle.innerText(), "Review before saving");
+      assert.equal(
+        await page.locator('[data-ltm-surface="review-queue"]').count(),
+        1,
+      );
+      assert.equal(
+        await page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+        null,
+      );
+      await page.getByRole("button", { name: "Skip", exact: true }).click();
+      pendingDraftCount = 0;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement(
+          "marinara-capability-long-term-memory",
+        ) as HTMLElement & { capabilityProps?: unknown };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          chatId: "desktop-chat",
+          chatName: "desktop chat",
+          chatMode: "conversation",
+          enabledForChat: true,
+          confirmAction: (window as Window & {
+            declineDestinationChange: () => boolean;
+          }).declineDestinationChange,
+          package: { version },
+        };
+        document.body.append(element);
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page
+        .locator(
+          '[data-ltm-navigation="desktop"] [data-ltm-destination="review"]',
+        )
+        .click();
+      await page
+        .locator('[data-ltm-review-source-select="source_mobile_review"]')
+        .click();
+      await page.locator('[data-ltm-review-mutation-toggle]').click();
+      await page
+        .locator('[data-ltm-review-mutation] textarea')
+        .first()
+        .fill("Dirty memory");
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page
+        .getByRole("button", { name: "Next: choose a source" })
+        .click();
+      await page.getByRole("button", { name: "Continue to review" }).click();
+      await page.getByRole("button", { name: "Choose a source" }).click();
+      assert.equal(await onboardingTitle.innerText(), "Review before saving");
+      assert.equal(
+        await page.locator('[data-ltm-surface="review-queue"]').count(),
+        1,
+      );
+      assert.equal(
+        await page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+        null,
+      );
+      await page.getByRole("button", { name: "Skip", exact: true }).click();
+      pendingDraftCount = 2;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement(
+          "marinara-capability-long-term-memory",
+        ) as HTMLElement & { capabilityProps?: unknown };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          chatId: "desktop-chat",
+          chatName: "desktop chat",
+          chatMode: "conversation",
+          enabledForChat: true,
+          onEnabledForChatChange: (
+            window as Window & {
+              onDesktopActivationChange: (enabled: boolean) => void;
+            }
+          ).onDesktopActivationChange,
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: turn it on" }).click();
       await page.getByRole("button", { name: "Next: choose a source" }).click();
