@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronRight, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, X } from "lucide-react";
 import type {
   LtmDraftMutation,
   LtmDraftReviewDraft,
@@ -2146,6 +2146,13 @@ export default function ReviewQueue({
                       disabled={extractingSourceId !== null}
                       onClick={() => void reextractSource()}
                     >
+                      {extractingSourceId === effectiveSourceId ? (
+                        <Loader2
+                          aria-hidden="true"
+                          size="0.875rem"
+                          className="animate-spin motion-reduce:animate-none"
+                        />
+                      ) : null}
                       {localizeUi(
                         "ui.longTermMemory.reviewqueue.reExtractSource",
                       )}
