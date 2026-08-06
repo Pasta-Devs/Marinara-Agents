@@ -95,6 +95,7 @@ import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
 import {
   importPackageInterop,
+  PROFESSOR_MARI_CHARACTER_ID,
   previewPackageInterop,
   previewPackageLorebooks,
 } from "./interop.js";
@@ -572,13 +573,22 @@ export function createLongTermMemoryRoutes(runtime: {
         getPackagePersistence().listChats(),
         getPackageResources().listCharacters(),
       ]);
-      const chatById = new Map(chats.map((chat) => [chat.id, chat]));
+      const eligibleChats = chats.filter(
+        (chat) =>
+          !normalizeLtmChatCharacterIds(chat.characterIds).includes(
+            PROFESSOR_MARI_CHARACTER_ID,
+          ),
+      );
+      const eligibleResources = resources.filter(
+        (resource) => resource.id !== PROFESSOR_MARI_CHARACTER_ID,
+      );
+      const chatById = new Map(eligibleChats.map((chat) => [chat.id, chat]));
       const currentChat = chatId ? (chatById.get(chatId) ?? null) : null;
       const chatIds = new Set<string>();
       const groupIds = new Set<string>();
       const characterIds = new Set<string>();
       if (includeAllChats) {
-        for (const chat of chats) {
+        for (const chat of eligibleChats) {
           chatIds.add(chat.id);
           if (chat.groupId) groupIds.add(chat.groupId);
         }
@@ -593,7 +603,9 @@ export function createLongTermMemoryRoutes(runtime: {
           );
         }
         if (note.scope.groupId) groupIds.add(note.scope.groupId);
-        note.scope.characterIds?.forEach((id) => characterIds.add(id));
+        note.scope.characterIds
+          ?.filter((id) => id !== PROFESSOR_MARI_CHARACTER_ID)
+          .forEach((id) => characterIds.add(id));
       }
       const namedChats = numberDuplicateLabels(
         [...chatIds]
@@ -613,10 +625,10 @@ export function createLongTermMemoryRoutes(runtime: {
           ),
       );
       const resourceById = new Map(
-        resources.map((resource) => [resource.id, resource]),
+        eligibleResources.map((resource) => [resource.id, resource]),
       );
       const visibleCharacterIds = includeAllChats
-        ? new Set(resources.map((resource) => resource.id))
+        ? new Set(eligibleResources.map((resource) => resource.id))
         : characterIds;
       const namedCharacters = numberDuplicateLabels(
         [...visibleCharacterIds]
@@ -660,7 +672,7 @@ export function createLongTermMemoryRoutes(runtime: {
         groups: numberDuplicateLabels(
           [...groupIds]
             .map((id) => {
-              const members = chats.filter(
+              const members = eligibleChats.filter(
                 (chat) =>
                   chat.groupId === id &&
                   (includeAllChats || chatIds.has(chat.id)),

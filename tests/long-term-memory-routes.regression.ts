@@ -129,6 +129,22 @@ async function main() {
         name: "Persona B",
         personaId: "persona-b",
       },
+      {
+        ...chats[0],
+        id: "chat-professor-mari",
+        name: "Professor Mari",
+        characterIds: ["__professor_mari__"],
+        groupId: null,
+        metadata: {
+          summaryEntries: [
+            {
+              id: "summary-mari",
+              content: "Professor Mari must stay out of Long-Term Memory.",
+              enabled: true,
+            },
+          ],
+        },
+      },
     );
     chats[0].metadata = {
       summaryEntries: [
@@ -337,10 +353,18 @@ async function main() {
               return [
                 {
                   id: "character-mara",
-                  data: JSON.stringify({ name: "Mara" }),
+                  data: JSON.stringify({
+                    name: "Mara",
+                    description: "Mara keeps the observatory gate secure.",
+                  }),
                   comment: "",
                 },
                 { id: "character-nyra", data: { name: "Nyra" }, comment: "" },
+                {
+                  id: "__professor_mari__",
+                  data: { name: "Professor Mari" },
+                  comment: "",
+                },
               ];
             },
             async listPersonas() {
@@ -734,6 +758,20 @@ async function main() {
     assert.equal(
       allScopeTargets
         .json()
+        .chats.some((chat: any) => chat.id === "chat-professor-mari"),
+      false,
+    );
+    assert.equal(
+      allScopeTargets
+        .json()
+        .characters.some(
+          (character: any) => character.id === "__professor_mari__",
+        ),
+      false,
+    );
+    assert.equal(
+      allScopeTargets
+        .json()
         .characters.some(
           (character: any) =>
             character.id === "character-nyra" && character.label === "Nyra",
@@ -750,6 +788,83 @@ async function main() {
         chatIds: ["chat-a", "game-a"],
       },
     );
+    const professorMariCharacterPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "characters", limit: 10 },
+    });
+    assert.equal(professorMariCharacterPreview.statusCode, 200);
+    assert.equal(
+      professorMariCharacterPreview
+        .json()
+        .samples.some((sample: any) => sample.sourceId === "__professor_mari__"),
+      false,
+    );
+    assert.equal(
+      professorMariCharacterPreview
+        .json()
+        .samples.some((sample: any) => sample.sourceId === "character-mara"),
+      true,
+    );
+    const professorMariCharacterImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "characters",
+        sourceIds: ["__professor_mari__"],
+        extract: false,
+      },
+    });
+    assert.equal(professorMariCharacterImport.statusCode, 200);
+    assert.deepEqual(professorMariCharacterImport.json().missingSourceIds, [
+      "__professor_mari__",
+    ]);
+    assert.equal(professorMariCharacterImport.json().imported.length, 0);
+    assert.equal(
+      (await storageService.storage.listNotes({ type: "source" })).some(
+        (note: any) => note.provenance?.sourceId === "__professor_mari__",
+      ),
+      false,
+    );
+    const professorMariChatPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "chats", limit: 10 },
+    });
+    assert.equal(professorMariChatPreview.statusCode, 200);
+    assert.equal(
+      professorMariChatPreview
+        .json()
+        .samples.some(
+          (sample: any) =>
+            sample.sourceId === "chat-professor-mari:summary-mari",
+        ),
+      false,
+    );
+    assert.equal(
+      professorMariChatPreview
+        .json()
+        .samples.some((sample: any) => sample.sourceId === "chat-a:summary-a"),
+      true,
+    );
+    const professorMariChatImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-professor-mari:summary-mari"],
+        extract: false,
+      },
+    });
+    assert.equal(professorMariChatImport.statusCode, 200);
+    assert.deepEqual(professorMariChatImport.json().missingSourceIds, [
+      "chat-professor-mari:summary-mari",
+    ]);
+    assert.equal(professorMariChatImport.json().imported.length, 0);
     for (const note of [
       {
         id: "world_scope_character",

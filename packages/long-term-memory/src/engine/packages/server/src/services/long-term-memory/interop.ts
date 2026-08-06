@@ -16,7 +16,11 @@ import {
   getLtmScopeChatIds,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
+import {
+  ltmModeForChatMode,
+  normalizeLtmChatCharacterIds,
+  resolveChatLtmScope,
+} from "./chat-scope.js";
 import { nowIso } from "./ltm-utils.js";
 import {
   getPackageLanguageModels,
@@ -61,6 +65,8 @@ type Lorebook = {
   scope: LtmScope;
   candidates: Candidate[];
 };
+
+export const PROFESSOR_MARI_CHARACTER_ID = "__professor_mari__";
 function object(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value))
     return value as Record<string, unknown>;
@@ -480,6 +486,7 @@ async function candidates(
   const result: Candidate[] = [];
   if (request.source === "characters")
     for (const row of await getPackageResources().listCharacters()) {
+      if (row.id === PROFESSOR_MARI_CHARACTER_ID) continue;
       const data = object(row.data),
         name = text(data.name) || "Character",
         sourceText = compact(data, row.comment);
@@ -515,6 +522,12 @@ async function candidates(
     const scopeIds = new Set(getLtmScopeChatIds(request.scope));
     const broaderScope = Boolean(request.scope?.groupId) || scopeIds.size > 1;
     for (const chat of await getPackagePersistence().listChats()) {
+      if (
+        normalizeLtmChatCharacterIds(chat.characterIds).includes(
+          PROFESSOR_MARI_CHARACTER_ID,
+        )
+      )
+        continue;
       if (request.chatId && !broaderScope && chat.id !== request.chatId)
         continue;
       if (
