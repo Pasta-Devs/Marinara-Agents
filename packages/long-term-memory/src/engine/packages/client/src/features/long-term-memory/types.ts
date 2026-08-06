@@ -34,6 +34,8 @@ export type CapabilityProps = {
     patch: Record<string, unknown>,
   ) => void | Promise<void>;
   onOpenAgentSettings?: () => void;
+  onOpenChatSummarySettings?: () => void;
+  onOpenActivePromptPresetEditor?: () => void;
   onClose?: () => void;
   onManagePackage?: () => void;
   onDirtyChange?: (dirty: boolean) => void;

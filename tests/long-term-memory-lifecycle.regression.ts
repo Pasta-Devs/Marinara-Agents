@@ -829,12 +829,20 @@ async function main() {
       const browserContext = await browser.newContext({ hasTouch: true });
       const page = await browserContext.newPage();
       const desktopActivationChanges: boolean[] = [];
+      const chatSummarySettingsOpens: number[] = [];
+      const promptPresetEditorOpens: number[] = [];
       await page.exposeFunction(
         "onDesktopActivationChange",
         (enabled: boolean) => {
           desktopActivationChanges.push(enabled);
         },
       );
+      await page.exposeFunction("onOpenChatSummarySettings", () => {
+        chatSummarySettingsOpens.push(Date.now());
+      });
+      await page.exposeFunction("onOpenActivePromptPresetEditor", () => {
+        promptPresetEditorOpens.push(Date.now());
+      });
       await page.exposeFunction("declineDestinationChange", () => false);
       await page.addInitScript(() => {
         Object.defineProperty(Crypto.prototype, "randomUUID", {
@@ -1073,6 +1081,11 @@ async function main() {
           .count(),
         1,
       );
+      assert.equal(
+        await page.getByRole("button", { name: "Open Chat Summary settings" }).count(),
+        0,
+        "Chat Summary handoff must remain hidden without a compatible Roleplay host callback",
+      );
       await page
         .getByRole("button", { name: "Continue without changing it" })
         .click();
@@ -1096,6 +1109,13 @@ async function main() {
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
         /Prompt Preset Editor -> Sections -> Add Section -> Agent Sections -> Long-Term Memory/u,
       );
+      assert.equal(
+        await page
+          .getByRole("button", { name: "Open prompt preset Sections" })
+          .count(),
+        0,
+        "Prompt preset handoff must remain hidden without a host callback",
+      );
       await page.getByRole("button", { name: "Turn on for this chat" }).click();
       assert.deepEqual(desktopActivationChanges, [true]);
       await page
@@ -1105,6 +1125,62 @@ async function main() {
         .locator('[data-ltm-surface="onboarding"]')
         .getByRole("button", { name: "Back", exact: true })
         .click();
+      await page.evaluate(() => {
+        const element = document.querySelector(
+          "marinara-capability-long-term-memory",
+        ) as HTMLElement & { capabilityProps?: Record<string, unknown> };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          enabledForChat: true,
+          onOpenChatSummarySettings: (window as Window & {
+            onOpenChatSummarySettings: () => void;
+          }).onOpenChatSummarySettings,
+          onOpenActivePromptPresetEditor: (window as Window & {
+            onOpenActivePromptPresetEditor: () => void;
+          }).onOpenActivePromptPresetEditor,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
+      });
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page
+        .getByRole("button", { name: "Open prompt preset Sections" })
+        .click();
+      assert.deepEqual(promptPresetEditorOpens.length, 1);
+      assert.equal(
+        await page.locator('[data-ltm-surface="onboarding"]').count(),
+        0,
+      );
+      assert.equal(
+        await page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+        "complete",
+      );
+      await page.evaluate(() =>
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1"),
+      );
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page.getByRole("button", { name: "Next: choose a source" }).click();
+      await page
+        .getByRole("button", { name: "Chat summary", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Open Chat Summary settings" })
+        .click();
+      assert.deepEqual(chatSummarySettingsOpens.length, 1);
+      assert.equal(
+        await page.locator('[data-ltm-surface="onboarding"]').count(),
+        0,
+      );
+      assert.equal(
+        await page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+        "complete",
+      );
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
       await page
         .locator(
