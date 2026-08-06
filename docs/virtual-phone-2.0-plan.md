@@ -41,7 +41,7 @@ The foundation must support displaying a character's phone when the story needs 
 
 The implementation starts from new code. Existing Virtual Phone code must not dictate the new architecture. Existing behavior may be retained only when it is deliberately selected as a 2.0 product requirement.
 
-The old overhaul plan remains historical implementation context. This document is the active product and architecture plan for 2.0.
+The old 1.x overhaul plan is deliberately not carried onto this branch, so it cannot anchor 2.0 work on the previous architecture. It remains available as historical context through `git show virtual-phone-test-catalog:docs/virtual-phone-overhaul-plan.md`. This document is the active product and architecture plan for 2.0.
 
 ### Phone provisioning
 
@@ -1027,4 +1027,4 @@ When implementation begins, it must follow the repository workflow:
 - Run focused Virtual Phone regression tests plus catalog lanes, catalog validation, and `git diff --check` at the release gate.
 - Record actual install, update, restart, offline, and uninstall verification separately from automated tests.
 
-The existing `docs/virtual-phone-overhaul-plan.md` may inform historical behavior and known constraints, but it is not a reason to preserve the current implementation structure. Its requirement to retain the existing `virtual-phone-test-catalog` URL applies to that older development line and is explicitly superseded for the separate 2.0 effort by this document's dedicated-channel decision.
+The 1.x overhaul plan on the `virtual-phone-test-catalog` branch may be consulted for historical behavior and known constraints, but it is not a reason to preserve the current implementation structure. Its requirement to retain the existing `virtual-phone-test-catalog` URL applies to that older development line and is explicitly superseded for the separate 2.0 effort by this document's dedicated-channel decision.
