@@ -1071,31 +1071,23 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           )}
                           {onboardingStep === 4 && !status.data?.notes.total ? (
                             <Button
-                              onClick={() => void openSources("characters")}
+                              onClick={async () => {
+                                if (await openSources("characters"))
+                                  completeOnboarding();
+                              }}
                             >
                               {localizeUi(
                                 "ui.longTermMemory.longtermmemorydetail.chooseASource",
                               )}
                             </Button>
                           ) : null}
-                          <Button
-                            onClick={() => {
-                              if (
-                                onboardingStep < onboardingSteps.length - 1 ||
-                                destination === "vault"
-                              )
-                                completeOnboarding();
-                              else void selectDestination("vault");
-                            }}
-                          >
-                            {onboardingStep === onboardingSteps.length - 1
-                              ? localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.goToSavedMemories",
-                                )
-                              : localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.skip",
-                                )}
-                          </Button>
+                          {onboardingStep < onboardingSteps.length - 1 ? (
+                            <Button onClick={completeOnboarding}>
+                              {localizeUi(
+                                "ui.longTermMemory.longtermmemorydetail.skip",
+                              )}
+                            </Button>
+                          ) : null}
                         </div>
                         <p className="text-xs text-[var(--muted-foreground)]">
                           {localizeUi(

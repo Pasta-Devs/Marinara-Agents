@@ -20,6 +20,7 @@ import type { LongTermMemoryDestinationProps } from "./types";
 import ActivityView from "./ActivityView";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
 import { useLtmTranslation } from "./localization";
+import { recallStyleDescriptionKey } from "./recall-style";
 
 type GlobalForm = {
   version: 1;
@@ -1121,7 +1122,7 @@ export default function MemorySettings({
               <InfoPopover
                 label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
                 content={localizeUi(
-                  "ui.longTermMemory.memorysettings.choosesTheOverallMatchingStrategyUsedToFindRelevant",
+                  recallStyleDescriptionKey(globalForm.longTermMemoryRecallStyle),
                 )}
               />
             </span>

@@ -851,11 +851,11 @@ async function main() {
       characterAllChats.json().length,
     );
     await storageService.storage.createNote({
-      id: "character-mara",
+      id: "char_mara",
       type: "character",
       status: "active",
       modes: ["roleplay"],
-      scope: {},
+      scope: { characterIds: ["character-mara"] },
       tags: [],
       keywords: [],
       links: [],
@@ -872,7 +872,7 @@ async function main() {
       headers,
     });
     assert.equal(
-      characterMemory.json().some((note: any) => note.id === "character-mara"),
+      characterMemory.json().some((note: any) => note.id === "char_mara"),
       true,
     );
     const characterAllBranches = await app.inject({
@@ -883,6 +883,8 @@ async function main() {
     assert.deepEqual(
       characterAllBranches.json().map((note: any) => note.id).sort(),
       [
+        "char_mara",
+        "world_character_persona_scoped",
         "world_route_fixture",
         "world_scope_branch",
         "world_scope_character",
@@ -896,8 +898,14 @@ async function main() {
     });
     assert.deepEqual(
       selectedBranch.json().map((note: any) => note.id).sort(),
-      ["world_scope_branch", "world_scope_character", "world_scope_group"].sort(),
+      [
+        "char_mara",
+        "world_scope_branch",
+        "world_scope_character",
+        "world_scope_group",
+      ].sort(),
     );
+    await storageService.storage.deleteNotesPermanently(["char_mara"]);
     const searched = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/search",

@@ -1517,6 +1517,12 @@ export default function ReviewQueue({
       noteById.get(row.targetId)?.type ??
       row.targetType ??
       (mutation.kind === "create_note" ? mutation.note.type : undefined);
+    const displayTitle =
+      mutation.kind === "create_note" && targetType === "character"
+        ? localizeUi("ui.longTermMemory.reviewqueue.proposedCharacterMemory", {
+            title: targetTitle,
+          })
+        : targetTitle;
     const importance =
       mutation.kind === "create_note"
         ? importanceOptions.find((value) =>
@@ -1541,7 +1547,7 @@ export default function ReviewQueue({
             compact
             label={`${localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
               value1: mutationLabel,
-            })}: ${targetTitle}`}
+            })}: ${displayTitle}`}
             onChange={() => toggleSelection(row.mutation.id)}
           />
           <button
@@ -1565,7 +1571,7 @@ export default function ReviewQueue({
             data-ltm-risk={row.mutation.risk}
             data-ltm-disposition={row.disposition}
           >
-            <span className="block text-sm font-semibold">{targetTitle}</span>
+            <span className="block text-sm font-semibold">{displayTitle}</span>
             {targetBody ? (
               <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">
                 {targetBody}
@@ -2091,10 +2097,13 @@ export default function ReviewQueue({
                     data-ltm-review-draft-title
                     className="truncate text-base font-semibold tracking-tight"
                   >
-                    {noteById.get(effectiveSourceId ?? "")?.title ||
-                      localizeUi(
-                        "ui.longTermMemory.reviewqueue.untitledMemory",
-                      )}
+                    {localizeUi("ui.longTermMemory.reviewqueue.sourceNote", {
+                      title:
+                        noteById.get(effectiveSourceId ?? "")?.title ||
+                        localizeUi(
+                          "ui.longTermMemory.reviewqueue.untitledMemory",
+                        ),
+                    })}
                   </h2>
                   <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                     {selectedDraft
