@@ -172,6 +172,40 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid device settings" });
       }
     });
+    type StorageParams = { phoneId: string; appId: string; key: string };
+    app.get<{ Params: Omit<StorageParams, "key"> }>("/phones/:phoneId/apps/:appId/storage", async (request, reply) => {
+      try {
+        return { entries: await phones.listAppStorage(request.params.phoneId, request.params.appId) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid storage request" });
+      }
+    });
+    app.get<{ Params: StorageParams }>("/phones/:phoneId/apps/:appId/storage/:key", async (request, reply) => {
+      try {
+        return { value: await phones.getAppStorageKey(request.params.phoneId, request.params.appId, request.params.key) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid storage request" });
+      }
+    });
+    app.put<{ Params: StorageParams }>("/phones/:phoneId/apps/:appId/storage/:key", async (request, reply) => {
+      try {
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        await phones.setAppStorageKey(request.params.phoneId, request.params.appId, request.params.key, body.value);
+        return { value: body.value ?? null };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid storage request" });
+      }
+    });
+    app.delete<{ Params: StorageParams }>("/phones/:phoneId/apps/:appId/storage/:key", async (request, reply) => {
+      try {
+        await phones.removeAppStorageKey(request.params.phoneId, request.params.appId, request.params.key);
+        return { removed: true };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid storage request" });
+      }
+    });
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/settings/reset", async (request, reply) => {
       try {
         return { phone: phoneResponse(await phones.resetSettings(request.params.phoneId)) };

@@ -24,6 +24,26 @@ phoneAppRegistry.register({ manifest: settingsManifest, load: async () => import
 phoneAppRegistry.register({ manifest: appStoreManifest, load: async () => import("./apps/app-store/shell") });
 phoneAppRegistry.register({ manifest: goodleManifest, load: async () => import("./apps/goodle/shell") });
 
+class AppErrorBoundary extends React.Component<{ appName: string; children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div role="alert" className="vp-appview vp-app-error">
+          <p>{this.props.appName} ran into a problem.</p>
+          <button type="button" onClick={() => this.setState({ failed: false })} className="vp-surface-btn">Try again</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const PHONE_OPEN_EVENT = "marinara-virtual-phone-open";
 const PHONE_CLOSE_EVENT = "marinara-virtual-phone-close";
 let phoneOpener: HTMLElement | null = null;
@@ -245,9 +265,9 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                   </div>
                 </div>
               )}
-              {activeApp === "settings" && selectedPhone ? <React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Settings...</div>}><SettingsApp phone={{ ...selectedPhone, settings: deviceSettings }} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onBack={() => backFromApp("settings")} onClose={closeApp} /></React.Suspense> : null}
-              {activeApp === "app-store" && selectedPhone ? <React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense> : null}
-              {activeApp === "goodle" && deviceSettings.installedApps.includes("goodle") ? <React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Goodle...</div>}><GoodleApp onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense> : null}
+              {activeApp === "settings" && selectedPhone ? <AppErrorBoundary appName="Settings"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Settings...</div>}><SettingsApp phone={{ ...selectedPhone, settings: deviceSettings }} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onBack={() => backFromApp("settings")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "app-store" && selectedPhone ? <AppErrorBoundary appName="App Store"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "goodle" && selectedPhone && deviceSettings.installedApps.includes("goodle") ? <AppErrorBoundary appName="Goodle"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Goodle...</div>}><GoodleApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
             </main>
             <footer className="vp-footer">
               <button ref={closeButtonRef} type="button" onClick={close} className="vp-putdown-btn">

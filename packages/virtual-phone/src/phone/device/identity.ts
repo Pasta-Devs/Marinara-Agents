@@ -108,6 +108,19 @@ function isPhoneDocument(value: unknown): value is PhoneDocument {
   );
 }
 
+const APP_STORAGE_LIMIT = 256 * 1024;
+
+function validateAppStorageId(value: string, field: string) {
+  if (!value.trim() || value.includes("\0") || value.length > 200) throw new Error(`Invalid phone storage ${field}`);
+}
+
+function readAppStorage(document: PhoneDocument) {
+  const storage = document.namespaces.phone.appStorage;
+  return storage && typeof storage === "object" && !Array.isArray(storage)
+    ? storage as Record<string, Record<string, unknown>>
+    : {};
+}
+
 function parsePhoneRecord(record: PhoneDocumentRecord) {
   if (!isPhoneDocument(record.data)) throw new Error(`Phone record ${record.id} is invalid`);
   return { record, document: record.data };
@@ -285,6 +298,61 @@ export class PhoneIdentityService {
     });
     if (!updated) return this.updateSettings(phoneId, patch);
     return parsePhoneRecord(updated);
+  }
+
+  private async requirePhone(phoneId: string) {
+    const phone = (await this.list()).find(({ document }) => document.identity.phoneId === phoneId);
+    if (!phone) throw new Error("Phone not found");
+    return phone;
+  }
+
+  private async writeAppStorage(phoneId: string, appId: string, mutate: (app: Record<string, unknown>) => Record<string, unknown>) {
+    validateAppStorageId(appId, "appId");
+    const phone = await this.requirePhone(phoneId);
+    const all = readAppStorage(phone.document);
+    const app = mutate({ ...(all[appId] ?? {}) });
+    if (new TextEncoder().encode(JSON.stringify(app)).byteLength > APP_STORAGE_LIMIT) {
+      throw new Error("Phone app storage exceeds 256KB");
+    }
+    const document: PhoneDocument = {
+      ...phone.document,
+      namespaces: { phone: { ...phone.document.namespaces.phone, appStorage: { ...all, [appId]: app } } },
+    };
+    const updated = await this.documents.update({
+      id: phone.record.id,
+      packageId: PACKAGE_ID,
+      expectedRevision: phone.record.revision,
+      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      description: document.identity.ownerName,
+      data: document,
+      updatedAt: this.now(),
+    });
+    if (!updated) return this.writeAppStorage(phoneId, appId, mutate);
+    return parsePhoneRecord(updated);
+  }
+
+  async listAppStorage(phoneId: string, appId: string) {
+    validateAppStorageId(appId, "appId");
+    const phone = await this.requirePhone(phoneId);
+    return Object.entries(readAppStorage(phone.document)[appId] ?? {}).map(([key, value]) => ({ key, value }));
+  }
+
+  async getAppStorageKey(phoneId: string, appId: string, key: string) {
+    validateAppStorageId(appId, "appId");
+    validateAppStorageId(key, "key");
+    const phone = await this.requirePhone(phoneId);
+    return readAppStorage(phone.document)[appId]?.[key] ?? null;
+  }
+
+  async setAppStorageKey(phoneId: string, appId: string, key: string, value: unknown) {
+    validateAppStorageId(key, "key");
+    if (JSON.stringify(value) === undefined) throw new Error("Phone store values must be JSON");
+    return this.writeAppStorage(phoneId, appId, (app) => ({ ...app, [key]: value }));
+  }
+
+  async removeAppStorageKey(phoneId: string, appId: string, key: string) {
+    validateAppStorageId(key, "key");
+    return this.writeAppStorage(phoneId, appId, ({ [key]: _removed, ...rest }) => rest);
   }
 
   async resetSettings(phoneId: string) {

@@ -9,6 +9,7 @@ export const phoneStylesheet = `
 .vp-root *, .vp-root *::before, .vp-root *::after { box-sizing: border-box; }
 .vp-root button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .vp-root button:focus-visible, .vp-root input:focus-visible, .vp-root select:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
+.vp-root button:disabled { opacity: 0.35; cursor: default; }
 .vp-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / 0.4); }
 .vp-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding: 0.75rem; }
 @media (min-width: 640px) { .vp-stage { padding: 1.5rem; } }
@@ -106,5 +107,11 @@ export const phoneStylesheet = `
 .vp-result-list li { border-radius: 0.875rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); padding: 0.875rem; font-size: 0.8125rem; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); }
 .vp-result-title { margin: 1.25rem 0 0; font-size: 0.9375rem; font-weight: 650; letter-spacing: -0.01em; }
 .vp-result-summary { margin: 0.5rem 0 0; font-size: 0.8125rem; color: var(--vp-muted); }
+.vp-app-header-actions { display: flex; align-items: center; gap: 0.125rem; flex-shrink: 0; }
+.vp-app-error { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; text-align: center; font-size: 0.8125rem; font-weight: 500; }
+.vp-app-error .vp-surface-btn { width: auto; padding: 0 1.5rem; }
+.vp-chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.875rem; }
+.vp-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.125rem; padding: 0 0.875rem; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); font-size: 0.75rem; font-weight: 500; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-chip:active { transform: scale(0.96); }
 .vp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 `;

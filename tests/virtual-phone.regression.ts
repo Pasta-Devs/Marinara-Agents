@@ -277,6 +277,17 @@ async function main() {
   );
   assert.deepEqual(parseBoundedContent("not json", { fields: { title: "string" }, defaults: { title: "Fallback" } }), { title: "Fallback" });
 
+  const personaPhoneId = minted.document.identity.phoneId;
+  await reloadedRuntime.setAppStorageKey(personaPhoneId, "goodle", "recents", ["cafes", "parks"]);
+  assert.deepEqual(await reloadedRuntime.getAppStorageKey(personaPhoneId, "goodle", "recents"), ["cafes", "parks"]);
+  assert.deepEqual(await reloadedRuntime.listAppStorage(personaPhoneId, "goodle"), [{ key: "recents", value: ["cafes", "parks"] }]);
+  assert.deepEqual(await reloadedRuntime.listAppStorage(personaPhoneId, "settings"), []);
+  await assert.rejects(() => reloadedRuntime.setAppStorageKey(personaPhoneId, "goodle", "", 1), /Invalid phone storage key/u);
+  await assert.rejects(() => reloadedRuntime.setAppStorageKey(personaPhoneId, "goodle", "big", "x".repeat(257 * 1024)), /exceeds 256KB/u);
+  await assert.rejects(() => reloadedRuntime.setAppStorageKey("missing-phone", "goodle", "key", 1), /Phone not found/u);
+  await reloadedRuntime.removeAppStorageKey(personaPhoneId, "goodle", "recents");
+  assert.equal(await reloadedRuntime.getAppStorageKey(personaPhoneId, "goodle", "recents"), null);
+
   const configured = await reloadedRuntime.updateSettings(minted.document.identity.phoneId, {
     deviceName: "Alex's Phone",
     pattern: "waves",
