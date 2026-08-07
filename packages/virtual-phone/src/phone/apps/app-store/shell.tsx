@@ -34,7 +34,7 @@ export function AppStoreShell({ apps, onInstalledChange, onBack, onClose }: AppS
             <span className={`vp-card-icon ${appIconClass(manifest.id)}`} aria-hidden="true">{React.createElement(appGlyphs[manifest.id] ?? Store, { size: "1rem" })}</span>
             <div className="vp-card-body">
               <h3>{manifest.name}</h3>
-              <p>{modelUseLabel(manifest.modelUse)}</p>
+              <p>{manifest.category[0]?.toUpperCase()}{manifest.category.slice(1)} · {modelUseLabel(manifest.modelUse)}</p>
             </div>
             {manifest.removable ? <button type="button" onClick={() => onInstalledChange(manifest.id, !installed)} className="vp-accent-btn">{installed ? "Remove" : "Install"}</button> : <span className="vp-muted-note">Installed</span>}
           </article>

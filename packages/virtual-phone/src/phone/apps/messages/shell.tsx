@@ -89,7 +89,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
   const newContacts = data?.contacts.filter((contact) => !startedContactIds.has(contact.phoneId)) ?? [];
 
   return (
-    <section aria-labelledby="messages-title" className="vp-appview">
+    <section aria-labelledby="messages-title" className={`vp-appview${activeThread ? " vp-appview--fixed" : ""}`}>
       <PhoneAppHeader
         title={activeThread ? activeThread.otherName : "Messages"}
         titleId="messages-title"

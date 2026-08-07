@@ -49,7 +49,7 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
   };
 
   return (
-    <section aria-labelledby="notes-title" className="vp-appview">
+    <section aria-labelledby="notes-title" className={`vp-appview${activeNote ? " vp-appview--fixed" : ""}`}>
       <PhoneAppHeader
         title={activeNote ? noteTitle(activeNote) : "Notes"}
         titleId="notes-title"
@@ -82,7 +82,7 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
           onChange={(event) => updateActive(event.target.value)}
           placeholder="Write something…"
           autoFocus
-          className="vp-textarea"
+          className="vp-textarea vp-textarea--fill"
         />
       ) : notes.length === 0 ? (
         <p className="vp-muted-note">No notes yet. Everything written here stays on this phone.</p>
