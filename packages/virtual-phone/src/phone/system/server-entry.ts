@@ -877,10 +877,14 @@ export async function activate({ api }: CapabilityContext) {
         if (!model) return { photo: "" };
         const chatId = targetChat(phone, request.query.chatId);
         const storyContext = await worldContext(chatId, phone);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const subject = String(body.subject ?? "").trim().slice(0, 300);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `${phone.document.identity.ownerName} just took a photo with their phone inside a roleplay story. Describe what the photo shows in one or two vivid sentences, present tense, like a caption. Respond with only JSON: {"photo":"description"}.${storyContext}${await customInstructions(phone)}`,
+            content: `${phone.document.identity.ownerName} just took a photo with their phone inside a roleplay story. Describe what the photo shows in one or two vivid sentences, present tense, like a caption. Respond with only JSON: {"photo":"description"}.${subject ? `\n\nThey aimed the camera at: ${subject}` : ""}${storyContext}${await customInstructions(phone)}`,
           },
           { role: "user", content: "Describe the photo." },
         ], { temperature: 0.9, maxTokens: 300 });
@@ -1205,6 +1209,27 @@ export async function activate({ api }: CapabilityContext) {
         supported: true,
         lorebooks: books.map((book) => ({ id: book.id, name: readName(book.data, "Lorebook") })),
       };
+    });
+    // "About this phone" — the facts Settings shows about the device itself.
+    app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/about", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const settings = phoneGenSettings(phone);
+        const storage = await Promise.all(settings.installedApps.map(async (appId) => {
+          const entries = await phones.listAppStorage(request.params.phoneId, appId).catch(() => []);
+          return new TextEncoder().encode(JSON.stringify(entries)).byteLength;
+        }));
+        return {
+          ownerName: phone.document.identity.ownerName,
+          ownerType: phone.document.identity.ownerType,
+          deviceName: phone.document.identity.deviceName ?? "",
+          chats: phone.document.identity.chatScope.length,
+          installedApps: settings.installedApps.length,
+          storageBytes: storage.reduce((total, bytes) => total + bytes, 0),
+        };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Phone not found" });
+      }
     });
     type StorageParams = { phoneId: string; appId: string; key: string };
     app.get<{ Params: Omit<StorageParams, "key"> }>("/phones/:phoneId/apps/:appId/storage", async (request, reply) => {

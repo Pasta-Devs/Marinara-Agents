@@ -25,10 +25,40 @@ function connectionLabel(connection: EngineConnection) {
   return [connection.provider, connection.model].filter(Boolean).join(" · ") || connection.id;
 }
 
+interface PhoneAbout {
+  ownerName: string;
+  ownerType: string;
+  deviceName: string;
+  chats: number;
+  installedApps: number;
+  storageBytes: number;
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: SettingsShellProps) {
-  const settings = phone.settings ?? defaultDeviceSettings(phone.baselineTheme);
+  const saved = phone.settings ?? defaultDeviceSettings(phone.baselineTheme);
+  /**
+   * Appearance previews immediately. Every change is a PATCH, so without local state ahead of the
+   * round trip the swatch you just picked lags behind your finger.
+   */
+  const [pending, setPending] = React.useState<Record<string, unknown>>({});
+  const settings = { ...saved, ...pending } as typeof saved;
+  const [about, setAbout] = React.useState<PhoneAbout | null>(null);
   const [connections, setConnections] = React.useState<EngineConnection[] | null>(null);
   const [lorebooks, setLorebooks] = React.useState<Array<{ id: string; name: string }> | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    void phoneRequest<PhoneAbout>(`/phones/${encodeURIComponent(phone.phoneId)}/about`)
+      .then((payload) => { if (active) setAbout(payload); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [phone.phoneId, settings.installedApps.length]);
 
   React.useEffect(() => {
     let active = true;
@@ -62,10 +92,20 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
     </>
   );
   const update = async (patch: Record<string, unknown>) => {
-    const response = await phoneRequest<{ phone: Phone }>(`/phones/${encodeURIComponent(phone.phoneId)}/settings`, {
-      method: "PATCH", body: JSON.stringify(patch),
-    });
-    onPhoneChange(response.phone);
+    setPending((current) => ({ ...current, ...patch }));
+    try {
+      const response = await phoneRequest<{ phone: Phone }>(`/phones/${encodeURIComponent(phone.phoneId)}/settings`, {
+        method: "PATCH", body: JSON.stringify(patch),
+      });
+      onPhoneChange(response.phone);
+    } finally {
+      // The server's answer is authoritative once it lands; drop the optimistic copy either way.
+      setPending((current) => {
+        const next = { ...current };
+        for (const key of Object.keys(patch)) delete next[key];
+        return next;
+      });
+    }
   };
   const reset = async () => {
     const response = await phoneRequest<{ phone: Phone }>(`/phones/${encodeURIComponent(phone.phoneId)}/settings/reset`, { method: "POST" });
@@ -143,6 +183,14 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
           </label>
         </div>
         <p className="vp-muted-note" style={{ padding: "0 1rem" }}>Replies covers character texts in Messages. Feeds &amp; sites covers Goodle, Noodle, NoodleR, Mail, and Tindler.</p>
+        <h3 className="vp-section-label">About this phone</h3>
+        <div className="vp-group">
+          <div className="vp-row"><span>Owner</span><span className="vp-muted-note">{about ? `${about.ownerName} (${about.ownerType})` : "…"}</span></div>
+          <div className="vp-row"><span>Device name</span><span className="vp-muted-note">{about?.deviceName || "Not set"}</span></div>
+          <div className="vp-row"><span>Chats</span><span className="vp-muted-note">{about ? about.chats : "…"}</span></div>
+          <div className="vp-row"><span>Installed apps</span><span className="vp-muted-note">{about ? about.installedApps : "…"}</span></div>
+          <div className="vp-row"><span>Storage used</span><span className="vp-muted-note">{about ? formatBytes(about.storageBytes) : "…"}</span></div>
+        </div>
         <div className="vp-group">
           <button type="button" onClick={() => { if (window.confirm("Reset this phone's device settings?")) void reset(); }} className="vp-row vp-row--danger"><RotateCcw size="0.875rem" aria-hidden="true" /> Reset device settings</button>
         </div>

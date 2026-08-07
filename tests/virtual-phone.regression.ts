@@ -453,6 +453,30 @@ async function main() {
     patternIntensity: 2,
     reduceDeviceEffects: true,
   });
+  // Step 7.5 — phone config binds to the persona/character, not to a chat. Phones are keyed by
+  // owner, so a second chat appends to chatScope and leaves the configuration alone. Configuring a
+  // phone is real work; redoing it every roleplay is exactly the repeated-work problem LTM solved.
+  await reloadedRuntime.updateSettings("phone-persona", {
+    installedApps: ["settings", "app-store", "goodle"],
+    lorebookIds: ["book-1"],
+    generationInstructions: "Everything here is waterlogged.",
+  });
+  const thirdChat = await createService().ensure({
+    ownerId: "persona-1",
+    ownerType: "persona",
+    ownerName: "Alex Updated",
+    chatId: "chat-3",
+  });
+  const carried = thirdChat.document.namespaces.phone.settings as {
+    installedApps: string[];
+    lorebookIds: string[];
+    generationInstructions: string;
+  };
+  assert.deepEqual(carried.installedApps, ["settings", "app-store", "goodle"]);
+  assert.deepEqual(carried.lorebookIds, ["book-1"]);
+  assert.equal(carried.generationInstructions, "Everything here is waterlogged.");
+  assert.deepEqual(thirdChat.document.identity.chatScope, ["chat-1", "chat-2", "chat-3"]);
+
   assert.equal(conditionOpacity(3, false), 1);
   assert.equal(conditionOpacity(3, true), 0);
   assert.match(patternBackground("grid", 3), /linear-gradient/u);
