@@ -23,6 +23,9 @@ import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/pho
 import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/contacts/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "../packages/virtual-phone/src/phone/system/noodle";
 import { noodlerRManifest } from "../packages/virtual-phone/src/phone/apps/noodler-r/manifest";
+import { forumManifest } from "../packages/virtual-phone/src/phone/apps/forum/manifest";
+import { cameraManifest } from "../packages/virtual-phone/src/phone/apps/camera/manifest";
+import { ForumService, parseGeneratedReply, parseGeneratedThread } from "../packages/virtual-phone/src/phone/system/forum";
 import { mailManifest, parseEmail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
@@ -335,7 +338,7 @@ async function main() {
     { from: "Duloc Parks Dept", subject: "Overdue swamp permit", body: "Your permit expired on the 3rd." },
   );
   assert.deepEqual(parseEmail("weird"), { from: "weird", subject: "(no subject)", body: "(empty message)" });
-  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery"]);
+  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera"]);
   assert.equal(defaultDeviceSettings().lightConnectionId, "");
   assert.equal(defaultDeviceSettings().wallpaperTint, "");
   const tinted = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, { wallpaperTint: "#FFAA00" });
@@ -398,6 +401,29 @@ async function main() {
   assert.deepEqual(mergedFeed.map((post) => post.text), ["other chat", "hello swamp"]);
   assert.deepEqual(await noodleService.feedFor(["chat-none"]), []);
   validateAppManifest(noodlerRManifest);
+  validateAppManifest(forumManifest);
+  validateAppManifest(cameraManifest);
+  assert.deepEqual(
+    parseGeneratedThread("Ferry prices AGAIN | Dockworker Dan @dandocks | Third hike this year. Absurd."),
+    { title: "Ferry prices AGAIN", author: "Dockworker Dan @dandocks", body: "Third hike this year. Absurd." },
+  );
+  assert.deepEqual(parseGeneratedReply("Marge @marge | Same here."), { author: "Marge @marge", text: "Same here." });
+  let forumTick = 0;
+  const forumService = new ForumService(
+    documents,
+    () => new Date(1_900_000_000_000 + ++forumTick * 1000).toISOString(),
+    () => `f-${++forumTick}`,
+  );
+  await forumService.addThreads("chat-1", [{ title: "First thread", author: "Dan", body: "opening post" }]);
+  const board = await forumService.boardFor(["chat-1"]);
+  assert.equal(board.length, 1);
+  assert.equal(board[0]!.posts.length, 1);
+  await forumService.addReply(["chat-1"], board[0]!.id, "Alex", "a reply");
+  const afterReply = await forumService.boardFor(["chat-1"]);
+  assert.equal(afterReply[0]!.posts.length, 2);
+  assert.equal(afterReply[0]!.posts[1]!.author, "Alex");
+  await assert.rejects(() => forumService.addReply(["chat-1"], "missing-thread", "Alex", "x"), /Thread not found/u);
+  await assert.rejects(() => forumService.addReply(["chat-1"], board[0]!.id, "Alex", "   "), /text is required/u);
   assert.deepEqual(parsePagePost("Morning swamp yoga pics | locked"), { text: "Morning swamp yoga pics", locked: true });
   assert.deepEqual(parsePagePost("Hello everyone | free"), { text: "Hello everyone", locked: false });
   assert.deepEqual(parsePagePost("No marker at all"), { text: "No marker at all", locked: false });

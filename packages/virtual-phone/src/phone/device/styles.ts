@@ -88,6 +88,17 @@ export const phoneStylesheet = `
 .vp-app-icon--gallery { background: linear-gradient(180deg, #f78fb3 0%, #8e44ad 100%); }
 .vp-app-icon--tindler { background: linear-gradient(180deg, #ff655b 0%, #fd297b 100%); }
 .vp-app-icon--noodler-r { background: linear-gradient(180deg, #ff5fa2 0%, #1c0a14 100%); }
+.vp-app-icon--forum { background: linear-gradient(180deg, #ffb75e 0%, #d9530f 100%); }
+.vp-app-icon--camera { background: linear-gradient(180deg, #6b7280 0%, #1f2937 100%); }
+.vp-forum-op { box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 6px 16px rgb(0 0 0 / 0.07), inset 0 0 0 1.5px color-mix(in srgb, var(--vp-accent) 45%, var(--vp-border)); }
+.vp-viewfinder { display: flex; align-items: center; justify-content: center; min-height: 11rem; padding: 1rem; border-radius: 1rem; background: linear-gradient(160deg, #14161a, #05070b); color: #e8ecf2; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), inset 0 0 3rem rgb(0 0 0 / 0.6); }
+.vp-viewfinder-text { margin: 0; font-size: 0.8125rem; line-height: 1.5; text-align: center; font-style: italic; }
+.vp-shutter-row { display: flex; justify-content: center; margin-top: 0.875rem; }
+.vp-shutter { height: 3.5rem; width: 3.5rem; border-radius: 999px; background: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / 0.3), inset 0 0 0 3px rgb(0 0 0 / 0.15); transition: transform 120ms ease; }
+.vp-shutter:active:not(:disabled) { transform: scale(0.9); }
+.vp-polaroid { display: grid; gap: 0.375rem; }
+.vp-polaroid p { margin: 0; font-size: 0.75rem; line-height: 1.5; font-style: italic; }
+.vp-polaroid figcaption { font-size: 0.5625rem; font-weight: 500; color: var(--vp-muted); }
 .vp-noodlerr-subrow { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .vp-noodlerr-locked { display: flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 4rem; font-size: 0.75rem; font-weight: 600; color: var(--vp-muted); border-style: dashed; box-shadow: inset 0 0 0 1.5px var(--vp-border); }
 .vp-app-icon--default { background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 92%, #ffffff), var(--vp-surface)); color: var(--vp-text); }

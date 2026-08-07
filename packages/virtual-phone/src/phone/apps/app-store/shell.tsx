@@ -1,10 +1,10 @@
 import React from "react";
-import { AtSign, BookUser, Flame, Images, Lock, Mail, MessageCircle, Search, Settings, StickyNote, Store } from "lucide-react";
+import { AtSign, BookUser, Camera, Flame, Images, Lock, Mail, MessageCircle, MessagesSquare, Search, Settings, StickyNote, Store } from "lucide-react";
 import type { AppManifest } from "../../platform/app-manifest";
 import { modelUseLabel } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
 
-const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler", "contacts", "mail", "gallery", "tindler", "noodler-r"]);
+const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler", "contacts", "mail", "gallery", "tindler", "noodler-r", "forum", "camera"]);
 const appGlyphs: Record<string, typeof Store> = {
   settings: Settings,
   goodle: Search,
@@ -16,6 +16,8 @@ const appGlyphs: Record<string, typeof Store> = {
   gallery: Images,
   tindler: Flame,
   "noodler-r": Lock,
+  forum: MessagesSquare,
+  camera: Camera,
 };
 
 function appIconClass(appId: string) {

@@ -13,6 +13,7 @@ import { fallbackSearchResults } from "../apps/goodle/manifest";
 import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
+import { ForumService, parseGeneratedReply, parseGeneratedThread } from "./forum";
 
 interface CapabilityContext {
   api: {
@@ -108,6 +109,7 @@ export async function activate({ api }: CapabilityContext) {
   const messaging = new PhoneMessagingService(api.runtime.persistence.documents);
   const noodle = new NoodleFeedService(api.runtime.persistence.documents);
   const noodlerPages = new NoodlerPageService(api.runtime.persistence.documents);
+  const forum = new ForumService(api.runtime.persistence.documents);
   await phones.migrateLegacyDocuments();
 
   const findPhone = async (phoneId: string) => {
@@ -532,6 +534,111 @@ export async function activate({ api }: CapabilityContext) {
         return { images: images.reverse().slice(0, 60) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Gallery unavailable" });
+      }
+    });
+    app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/forum", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        return { threads: await forum.boardFor(phone.document.identity.chatScope) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Forum unavailable" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/forum/refresh", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const scope = phone.document.identity.chatScope;
+        const model = await resolvePhoneModel(phone, "heavy");
+        const chatId = scope[0];
+        if (!model || !chatId) return { threads: await forum.boardFor(scope) };
+        let storyContext = "";
+        if (api.runtime.persistence.listMessages) {
+          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
+            .map((message) => message.content.slice(0, 240))
+            .join("\n");
+        }
+        const existingTitles = (await forum.boardFor([chatId])).slice(0, 10).map((thread) => thread.title).join("\n");
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You write threads for the public web forum of a fictional roleplay world. Invent 3 to 5 new threads started by fictional side characters (never the protagonists). Respond with only JSON: {"threads":["Thread title | Author @handle | opening post text", ...]}. Every thread uses that exact three-part format.${existingTitles ? `\n\nThreads that already exist (do not repeat them):\n${existingTitles}` : ""}${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}${customInstructions(phone)}`,
+          },
+          { role: "user", content: "Generate the new threads." },
+        ], { temperature: 1, maxTokens: 700 });
+        const generated = parseBoundedContent(completion.content, { fields: { threads: "string[]" }, defaults: { threads: [] as string[] } }) as { threads: string[] };
+        if (generated.threads.length) await forum.addThreads(chatId, generated.threads.map(parseGeneratedThread));
+        return { threads: await forum.boardFor(scope) };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Phone not found") {
+          return reply.status(400).send({ error: error.message });
+        }
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Forum refresh failed" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/forum/reply", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const scope = phone.document.identity.chatScope;
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const threadId = String(body.threadId ?? "");
+        const ownerName = phone.document.identity.ownerName;
+        const chatId = await forum.addReply(scope, threadId, ownerName, String(body.text ?? ""));
+        try {
+          const model = await resolvePhoneModel(phone, "heavy");
+          if (model) {
+            const thread = (await forum.boardFor([chatId])).find((candidate) => candidate.id === threadId);
+            if (thread) {
+              const history = thread.posts.slice(-8).map((post) => `${post.author}: ${post.text.slice(0, 200)}`).join("\n");
+              const completion = await model.chatComplete([
+                {
+                  role: "system",
+                  content: `You continue a thread on the public web forum of a fictional roleplay world. Write 1 or 2 replies from fictional side characters reacting to the latest post. Respond with only JSON: {"replies":["Author @handle | reply text", ...]}.${customInstructions(phone)}`,
+                },
+                { role: "user", content: `Thread: ${thread.title}\n${history}` },
+              ], { temperature: 1, maxTokens: 400 });
+              const generated = parseBoundedContent(completion.content, { fields: { replies: "string[]" }, defaults: { replies: [] as string[] } }) as { replies: string[] };
+              for (const item of generated.replies.slice(0, 2)) {
+                const parsedReply = parseGeneratedReply(item);
+                if (parsedReply.text) await forum.addReply([chatId], threadId, parsedReply.author, parsedReply.text);
+              }
+            }
+          }
+        } catch {
+          // No generated replies; the user's post still landed.
+        }
+        return { threads: await forum.boardFor(scope) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Reply failed" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/camera/shot", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const model = await resolvePhoneModel(phone, "light");
+        if (!model) return { photo: "" };
+        const chatId = phone.document.identity.chatScope[0];
+        let storyContext = "";
+        if (chatId && api.runtime.persistence.listMessages) {
+          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-8)
+            .map((message) => message.content.slice(0, 240))
+            .join("\n");
+        }
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `${phone.document.identity.ownerName} just took a photo with their phone inside a roleplay story. Describe what the photo shows in one or two vivid sentences, present tense, like a caption. Respond with only JSON: {"photo":"description"}.${storyContext ? `\n\nThe current scene:\n${storyContext}` : ""}${customInstructions(phone)}`,
+          },
+          { role: "user", content: "Describe the photo." },
+        ], { temperature: 0.9, maxTokens: 150 });
+        const shot = parseBoundedContent(completion.content, { fields: { photo: "string" }, defaults: { photo: "" } }) as { photo: string };
+        return { photo: shot.photo };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Phone not found") {
+          return reply.status(400).send({ error: error.message });
+        }
+        return { photo: "" };
       }
     });
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler-r/page", async (request, reply) => {
