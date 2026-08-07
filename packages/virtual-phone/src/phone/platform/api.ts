@@ -11,12 +11,27 @@ function adminHeaders() {
   }
 }
 
+/**
+ * The chat the phone is open in. Generation routes need it to decide which chat a request is
+ * about — a phone's chatScope is an array, and picking an index is how content ended up attributed
+ * to whichever chat the phone happened to join first. Held here rather than threaded through every
+ * app's props because it is ambient to the whole device and never varies per app.
+ */
+let activeChatId: string | null = null;
+
+export function setActiveChatId(chatId: string | null) {
+  activeChatId = chatId;
+}
+
 export async function phoneRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   for (const [name, value] of Object.entries(adminHeaders())) headers.set(name, value);
   if (init.method && init.method !== "GET") headers.set(CSRF_HEADER, "1");
   if (init.body) headers.set("Content-Type", "application/json");
-  const response = await fetch(`${API_ROOT}${path}`, { ...init, headers, cache: "no-store" });
+  const url = activeChatId && !path.includes("chatId=")
+    ? `${path}${path.includes("?") ? "&" : "?"}chatId=${encodeURIComponent(activeChatId)}`
+    : path;
+  const response = await fetch(`${API_ROOT}${url}`, { ...init, headers, cache: "no-store" });
   const payload = await response.json().catch(() => null) as { error?: unknown } | null;
   if (!response.ok) {
     throw new Error(typeof payload?.error === "string" ? payload.error : response.statusText || "Phone request failed");

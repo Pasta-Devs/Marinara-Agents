@@ -135,6 +135,19 @@ export async function activate({ api }: CapabilityContext) {
     if (!phone.document.identity.chatScope.includes(chatId)) throw new Error("This phone is not part of this chat");
     return { phone, chatId };
   };
+  /**
+   * Which chat a request is about. A phone's chatScope is an array and every generation route used
+   * to take `scope[0]` arbitrarily, so a phone spanning several chats generated content for
+   * whichever chat it joined first. The client sends the chat it is open in; failing that we take
+   * the most recently joined chat, since chatScope appends. Both beat an unexplained index.
+   */
+  const targetChat = (phone: Awaited<ReturnType<typeof findPhone>>, requested?: unknown) => {
+    const scope = phone.document.identity.chatScope;
+    const asked = typeof requested === "string" ? requested : "";
+    if (asked && scope.includes(asked)) return asked;
+    return scope[scope.length - 1];
+  };
+
   const threadPayload = (threadId: string, document: ThreadDocument, phoneId: string, names: Map<string, string>) => {
     const otherPhoneId = document.participants.find((participant) => participant !== phoneId) ?? "";
     return {
@@ -441,6 +454,50 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid device settings" });
       }
     });
+  /**
+   * Engine chats surfaced as threads. Read-only history plus a send box: unread counts and markRead
+   * are sandbox-thread concepts and are deliberately not forced onto them. `listMessages` is
+   * optional on the runtime, so a host without it simply sees no chat threads.
+   */
+  const CHAT_THREAD_PREFIX = "chat:";
+  const engineThreadsFor = async (phone: Awaited<ReturnType<typeof findPhone>>) => {
+    if (!api.runtime.persistence.listMessages) return [];
+    const ownerId = phone.document.identity.ownerId;
+    const isPersona = phone.document.identity.ownerType === "persona";
+    const threads = [];
+    for (const chatId of phone.document.identity.chatScope) {
+      const chat = await api.runtime.persistence.getChat(chatId).catch(() => null);
+      if (!chat) continue;
+      const characters = await api.runtime.resources.listCharacters(chat.characterIds).catch(() => []);
+      const otherName = characters
+        .filter((character) => isPersona || character.id !== ownerId)
+        .map((character) => readName(character.data, "Character"))
+        .join(", ") || "The story";
+      const messages = (await api.runtime.persistence.listMessages(chatId).catch(() => []))
+        .slice(-STORY_MESSAGES)
+        .map((message, index) => ({
+          id: `${chatId}:${index}`,
+          // "Self" is the phone's owner speaking: the user's turns on a persona phone, that
+          // character's turns on a character phone.
+          from: (isPersona ? message.role === "user" : message.characterId === ownerId)
+            ? phone.document.identity.phoneId
+            : `${CHAT_THREAD_PREFIX}${chatId}`,
+          text: message.content,
+          at: "",
+        }));
+      threads.push({
+        id: `${CHAT_THREAD_PREFIX}${chatId}`,
+        otherPhoneId: `${CHAT_THREAD_PREFIX}${chatId}`,
+        otherName,
+        unread: 0,
+        messages,
+        reply: null,
+        kind: "chat" as const,
+      });
+    }
+    return threads;
+  };
+
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/messaging", async (request, reply) => {
       try {
         const contacts = await Promise.all((await contactsFor(request.params.phoneId)).map(async (contact) => {
@@ -455,8 +512,15 @@ export async function activate({ api }: CapabilityContext) {
           }
         }));
         const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
-        const threads = (await messaging.threadsFor(request.params.phoneId))
-          .map(({ record, document }) => threadPayload(record.id, document, request.params.phoneId, names));
+        const phone = await findPhone(request.params.phoneId);
+        const threads = [
+          ...await engineThreadsFor(phone),
+          ...(await messaging.threadsFor(request.params.phoneId))
+            .map(({ record, document }) => ({
+              ...threadPayload(record.id, document, request.params.phoneId, names),
+              kind: "phone" as const,
+            })),
+        ];
         return { contacts, threads };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
@@ -524,7 +588,7 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Contact could not be removed" });
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/goodle/search", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/goodle/search", async (request, reply) => {
       const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
         ? request.body as Record<string, unknown>
         : {};
@@ -535,7 +599,7 @@ export async function activate({ api }: CapabilityContext) {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { results: fallback };
-        const storyContext = await worldContext(phone.document.identity.chatScope[0]);
+        const storyContext = await worldContext(targetChat(phone, request.query.chatId));
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -556,7 +620,7 @@ export async function activate({ api }: CapabilityContext) {
         return { results: fallback };
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/goodle/page", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/goodle/page", async (request, reply) => {
       const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
         ? request.body as Record<string, unknown>
         : {};
@@ -576,7 +640,7 @@ export async function activate({ api }: CapabilityContext) {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { page: fallback };
-        const storyContext = await worldContext(phone.document.identity.chatScope[0]);
+        const storyContext = await worldContext(targetChat(phone, request.query.chatId));
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -605,7 +669,7 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Noodle unavailable" });
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodle/post", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/noodle/post", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
         const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
@@ -613,7 +677,7 @@ export async function activate({ api }: CapabilityContext) {
           : {};
         const text = String(body.text ?? "").trim();
         if (!text) return reply.status(400).send({ error: "Post text is required" });
-        const chatId = phone.document.identity.chatScope[0];
+        const chatId = targetChat(phone, request.query.chatId);
         if (!chatId) return reply.status(400).send({ error: "This phone has no chat to post in" });
         const ownerName = phone.document.identity.ownerName;
         await noodle.addPosts(chatId, [{ author: ownerName, handle: handleFor(ownerName), text }]);
@@ -622,14 +686,13 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Post failed" });
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler/feed", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/noodler/feed", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
         const scope = phone.document.identity.chatScope;
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { posts: await noodle.feedFor(scope) };
-        // ponytail: generation always lands in the phone's first chat; per-chat targeting when phones span many chats
-        const chatId = scope[0];
+        const chatId = targetChat(phone, request.query.chatId);
         if (!chatId) return { posts: [] };
         const storyContext = await worldContext(chatId);
         const timeline = (await noodle.feedFor([chatId])).slice(0, 10)
@@ -678,12 +741,12 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Gallery unavailable" });
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/camera/shot", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/camera/shot", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "light");
         if (!model) return { photo: "" };
-        const chatId = phone.document.identity.chatScope[0];
+        const chatId = targetChat(phone, request.query.chatId);
         const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
@@ -758,12 +821,12 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "NoodleR unavailable" });
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler/trending", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/noodler/trending", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { topics: [] };
-        const chatId = phone.document.identity.chatScope[0];
+        const chatId = targetChat(phone, request.query.chatId);
         const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
@@ -781,7 +844,7 @@ export async function activate({ api }: CapabilityContext) {
         return { topics: [] };
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/tindler/deck", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/tindler/deck", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
@@ -790,7 +853,7 @@ export async function activate({ api }: CapabilityContext) {
           ? request.body as Record<string, unknown>
           : {};
         const preferences = String(body.preferences ?? "").trim().slice(0, 200);
-        const chatId = phone.document.identity.chatScope[0];
+        const chatId = targetChat(phone, request.query.chatId);
         const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
@@ -808,12 +871,12 @@ export async function activate({ api }: CapabilityContext) {
         return { profiles: [] };
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/mail/inbox", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/mail/inbox", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { emails: [] };
-        const chatId = phone.document.identity.chatScope[0];
+        const chatId = targetChat(phone, request.query.chatId);
         const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
@@ -860,6 +923,32 @@ export async function activate({ api }: CapabilityContext) {
           ? request.body as Record<string, unknown>
           : {};
         const toPhoneId = String(body.toPhoneId ?? "");
+        if (toPhoneId.startsWith(CHAT_THREAD_PREFIX)) {
+          const phone = await findPhone(request.params.phoneId);
+          const chatId = toPhoneId.slice(CHAT_THREAD_PREFIX.length);
+          if (!phone.document.identity.chatScope.includes(chatId)) {
+            return reply.status(400).send({ error: "This phone is not part of this chat" });
+          }
+          if (!api.runtime.persistence.createMessageWithSwipe) {
+            return reply.status(400).send({ error: "This Engine version cannot write to the story" });
+          }
+          const text = String(body.text ?? "").trim();
+          if (!text) return reply.status(400).send({ error: "Message text is required" });
+          // Marked as a text so the character answers like they are texting — shorter, no body
+          // language. Always on; the phone is an input surface for the roleplay, not a side channel.
+          await api.runtime.persistence.createMessageWithSwipe({
+            id: randomUUID(),
+            swipeId: randomUUID(),
+            chatId,
+            role: "user",
+            characterId: null,
+            content: `*${phone.document.identity.ownerName} texts:* ${text}`,
+            extra: { virtualPhone: "text" },
+            createdAt: new Date().toISOString(),
+          });
+          const [thread] = (await engineThreadsFor(phone)).filter((candidate) => candidate.id === toPhoneId);
+          return { thread };
+        }
         const contacts = await contactsFor(request.params.phoneId);
         if (!contacts.some((contact) => contact.phoneId === toPhoneId)) {
           return reply.status(400).send({ error: "That phone cannot be messaged from this chat" });

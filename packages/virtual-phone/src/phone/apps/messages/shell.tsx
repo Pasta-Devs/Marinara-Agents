@@ -17,6 +17,8 @@ interface Thread {
   unread: number;
   messages: ThreadMessage[];
   reply: { status: "pending" | "failed"; at: string; error?: string } | null;
+  /** "chat" threads are Engine conversations: real story history, and sending posts into the chat. */
+  kind: "chat" | "phone";
 }
 interface MessagingPayload {
   contacts: Array<{ phoneId: string; ownerId?: string; ownerName: string }>;
@@ -71,7 +73,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
   } : current);
 
   React.useEffect(() => {
-    if (!activeThread || activeThread.unread === 0) return;
+    if (!activeThread || activeThread.kind === "chat" || activeThread.unread === 0) return;
     void phoneRequest<{ thread: Thread }>(`/phones/${encodeURIComponent(phoneId)}/messaging/read`, {
       method: "POST", body: JSON.stringify({ threadId: activeThread.id }),
     }).then((response) => updateThread(response.thread)).catch(() => undefined);
@@ -131,7 +133,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
             {activeThread.messages.map((message) => (
               <div key={message.id} className={`vp-bubble ${message.from === phoneId ? "vp-bubble--self" : "vp-bubble--other"}`}>
                 {message.text}
-                <span className="vp-bubble-time">{new Date(message.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+                {message.at ? <span className="vp-bubble-time">{new Date(message.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span> : null}
               </div>
             ))}
             {activeThread.reply?.status === "pending" ? (
@@ -145,7 +147,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
           </div>
           <form className="vp-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void send(activeThread.otherPhoneId, draft); }}>
             <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Message {activeThread.otherName}</span>
-              <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Message" maxLength={2000} disabled={sending} className="vp-input" />
+              <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={activeThread.kind === "chat" ? "Text into the story" : "Message"} maxLength={2000} disabled={sending} className="vp-input" />
             </label>
             <button type="submit" aria-label="Send message" disabled={sending || !draft.trim()} className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Send size="1rem" aria-hidden="true" /></button>
           </form>
@@ -161,7 +163,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
               <button key={thread.id} type="button" onClick={() => setActiveThreadId(thread.id)} className="vp-thread-row">
                 <PhoneAvatar name={thread.otherName} url={avatarFor(thread.otherPhoneId)} />
                 <span className="vp-thread-body">
-                  <span className="vp-thread-name">{thread.otherName}</span>
+                  <span className="vp-thread-name">{thread.otherName}{thread.kind === "chat" ? <span className="vp-muted-note"> · in the story</span> : null}</span>
                   <span className="vp-thread-preview">{last ? `${last.from === phoneId ? "You: " : ""}${last.text}` : "No messages yet"}</span>
                 </span>
                 {thread.unread > 0 ? <span className="vp-badge" aria-label={`${thread.unread} unread`}>{thread.unread}</span> : null}

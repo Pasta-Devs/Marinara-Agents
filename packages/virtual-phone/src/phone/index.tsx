@@ -6,7 +6,7 @@ import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
 import { initialDeviceSession, unlockDevice } from "./device/surfaces";
-import { phoneRequest } from "./platform/api";
+import { phoneRequest, setActiveChatId } from "./platform/api";
 import { defaultDeviceSettings } from "./device/settings";
 import { conditionOpacity, patternBackground } from "./device/effects";
 import { InstalledAppRegistry, type AppRenderContext, type InstalledApp } from "./platform/app-registry";
@@ -206,6 +206,8 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
       }));
     });
   }, [chatId, open]);
+
+  React.useEffect(() => { setActiveChatId(chatId); }, [chatId]);
 
   React.useEffect(() => {
     const handleOpen = () => setOpen(true);
