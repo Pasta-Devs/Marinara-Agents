@@ -109,6 +109,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [homeSearch, setHomeSearch] = React.useState("");
   const [pendingSearch, setPendingSearch] = React.useState("");
   const [showState, setShowState] = React.useState<"idle" | "pending" | "done">("idle");
+  const [refState, setRefState] = React.useState<"idle" | "pending" | "done">("idle");
   const routeStacks = React.useRef(new Map<string, AppRouteStackManager>());
   const activeApps = React.useRef(new Map<string, Exclude<ActiveApp, null>>());
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -378,8 +379,17 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
           }} className="vp-dock-btn">
             <Eye size="0.875rem" aria-hidden="true" /> {showState === "done" ? "Shown ✓" : "Show"}
           </button>
-          <button type="button" disabled title="Reference chat — coming soon" aria-label="Reference chat" className="vp-dock-btn">
-            <Quote size="0.875rem" aria-hidden="true" /> Reference
+          <button type="button" disabled={!chatId || !selectedPhone || refState === "pending"} title="Add this screen to the chat as quiet context" aria-label="Reference in chat" onClick={() => {
+            if (!chatId || !selectedPhone) return;
+            setRefState("pending");
+            void phoneRequest(`/chats/${encodeURIComponent(chatId)}/phones/${encodeURIComponent(selectedPhone.phoneId)}/show`, {
+              method: "POST", body: JSON.stringify({ app: activeApp, surface: session.surface, mode: "reference" }),
+            }).then(() => {
+              setRefState("done");
+              window.setTimeout(() => setRefState("idle"), 2000);
+            }).catch(() => setRefState("idle"));
+          }} className="vp-dock-btn">
+            <Quote size="0.875rem" aria-hidden="true" /> {refState === "done" ? "Added ✓" : "Reference"}
           </button>
         </div>
         </div>

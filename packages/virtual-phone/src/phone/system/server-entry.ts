@@ -236,7 +236,10 @@ export async function activate({ api }: CapabilityContext) {
         } else if (app_ === "settings" || app_ === "app-store" || app_ === "contacts") {
           summary = `the ${app_ === "app-store" ? "App Store" : app_[0]!.toUpperCase() + app_.slice(1)} app`;
         }
-        const content = `*${ownerName} shows their phone — ${summary}*`;
+        const mode = body.mode === "reference" ? "reference" : "show";
+        const content = mode === "reference"
+          ? `[${ownerName}'s phone right now — ${summary}]`
+          : `*${ownerName} shows their phone — ${summary}*`;
         await api.runtime.persistence.createMessageWithSwipe({
           id: randomUUID(),
           swipeId: randomUUID(),
@@ -244,7 +247,7 @@ export async function activate({ api }: CapabilityContext) {
           role: "user",
           characterId: null,
           content,
-          extra: { virtualPhone: "show" },
+          extra: { virtualPhone: mode },
           createdAt: new Date().toISOString(),
         });
         return { content };

@@ -8,7 +8,7 @@ The plan's `share.screen` contract: the shared payload is a bounded, platform-re
 - **Payload:** the server builds a one-line summary from the visible surface: lock/home screens by name; Messages includes the latest thread partner and the last two message texts (120 chars each); Goodle the latest search; Notes the latest note's first line; other apps just their name. The user chose to show the screen, so surfaced content is deliberate.
 - **Writeback:** one user-role story message via `createMessageWithSwipe`: `*<owner> shows their phone — <summary>*`, tagged `extra: { virtualPhone: "show" }`. No model call; fully deterministic.
 - **Feedback:** the button flashes "Shown ✓" and reverts. Failure shows nothing destructive — the phone stays usable.
-- **Reference chat** stays a disabled placeholder: its semantics (quoting chat into the phone, or phone into the chat draft?) are not defined by the plan; it waits for a decision.
+- **Reference chat:** same route and bounded summary, `mode: "reference"`. Instead of an in-story showing action it inserts quiet bracketed context — `[<owner>'s phone right now — <summary>]`, tagged `extra: { virtualPhone: "reference" }` — so the model knows what's on the phone without a narrated beat. Show = the character sees it in-story; Reference = the story just knows.
 
 ## Contacts
 
