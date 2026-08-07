@@ -130,7 +130,7 @@ export async function activate({ api }: CapabilityContext) {
         document.identity.phoneId !== phoneId &&
         document.provisioning.enabled &&
         document.identity.chatScope.some((chatId) => self.document.identity.chatScope.includes(chatId)))
-      .map(({ document }) => ({ phoneId: document.identity.phoneId, ownerName: document.identity.ownerName, deviceName: document.identity.deviceName }));
+      .map(({ document }) => ({ phoneId: document.identity.phoneId, ownerId: document.identity.ownerId, ownerType: document.identity.ownerType, ownerName: document.identity.ownerName, deviceName: document.identity.deviceName }));
   };
   const threadPayload = (threadId: string, document: ThreadDocument, phoneId: string, names: Map<string, string>) => {
     const otherPhoneId = document.participants.find((participant) => participant !== phoneId) ?? "";
@@ -433,7 +433,17 @@ export async function activate({ api }: CapabilityContext) {
     });
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/messaging", async (request, reply) => {
       try {
-        const contacts = await contactsFor(request.params.phoneId);
+        const contacts = await Promise.all((await contactsFor(request.params.phoneId)).map(async (contact) => {
+          try {
+            const records = contact.ownerType === "character"
+              ? await api.runtime.resources.listCharacters([contact.ownerId])
+              : await api.runtime.resources.listPersonas([contact.ownerId]);
+            const bio = readCardText(records[0]?.data).split("\n")[0]?.slice(0, 140) ?? "";
+            return { ...contact, bio };
+          } catch {
+            return { ...contact, bio: "" };
+          }
+        }));
         const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
         const threads = (await messaging.threadsFor(request.params.phoneId))
           .map(({ record, document }) => threadPayload(record.id, document, request.params.phoneId, names));
@@ -551,10 +561,14 @@ export async function activate({ api }: CapabilityContext) {
         const timeline = (await noodle.feedFor([chatId])).slice(0, 10)
           .map((post) => `${post.author} ${post.handle} — ${post.text.slice(0, 160)}`)
           .join("\n");
+        const cast = (await phones.list())
+          .filter(({ document }) => document.provisioning.enabled && document.identity.chatScope.includes(chatId))
+          .map(({ document }) => `${document.identity.ownerName} ${handleFor(document.identity.ownerName)}`)
+          .join(", ");
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts by fictional side characters (never the protagonists) reacting to life in this world. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext}${customInstructions(phone)}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts, mostly by fictional side characters reacting to life in this world. At most one post may come from the story cast${cast ? ` (${cast})` : ""}, staying true to their voice. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the next batch of posts." },
         ], { temperature: 1, maxTokens: 500 });

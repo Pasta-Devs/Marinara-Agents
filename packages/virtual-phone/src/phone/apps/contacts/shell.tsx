@@ -1,19 +1,17 @@
 import React from "react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
+import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
 
 interface ContactsPayload {
-  contacts: Array<{ phoneId: string; ownerName: string; deviceName?: string | null }>;
+  contacts: Array<{ phoneId: string; ownerId?: string; ownerName: string; deviceName?: string | null; bio?: string }>;
   threads: Array<{ otherPhoneId: string; unread: number }>;
-}
-
-function initials(name: string) {
-  return name.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
 }
 
 export function ContactsShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
   const [data, setData] = React.useState<ContactsPayload | null>(null);
   const [error, setError] = React.useState("");
+  const avatars = useAvatarMap();
 
   React.useEffect(() => {
     let active = true;
@@ -55,9 +53,10 @@ export function ContactsShell({ phoneId, onBack, onClose }: { phoneId: string; o
         <div className="vp-stack" style={{ gap: "0.5rem" }}>
           {data.contacts.map((contact) => (
             <div key={contact.phoneId} className="vp-thread-row">
-              <span className="vp-thread-avatar" aria-hidden="true">{initials(contact.ownerName)}</span>
+              <PhoneAvatar name={contact.ownerName} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
               <span className="vp-thread-body">
                 <span className="vp-thread-name">{contact.ownerName}</span>
+                {contact.bio?.trim() ? <span className="vp-thread-preview">{contact.bio}</span> : null}
                 <span className="vp-thread-preview">{contact.deviceName?.trim() ? `${contact.deviceName} · ` : ""}{threadStatus(contact.phoneId)}</span>
               </span>
             </div>

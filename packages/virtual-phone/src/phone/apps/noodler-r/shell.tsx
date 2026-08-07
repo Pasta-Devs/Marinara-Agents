@@ -3,6 +3,7 @@ import { Lock } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
+import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
 
 function hueFor(value: string) {
   let hue = 0;
@@ -29,14 +30,15 @@ interface CreatorPage {
 
 export function NoodlerRShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "noodler-r");
-  const [contacts, setContacts] = React.useState<Array<{ phoneId: string; ownerName: string }> | null>(null);
+  const [contacts, setContacts] = React.useState<Array<{ phoneId: string; ownerId?: string; ownerName: string }> | null>(null);
+  const avatars = useAvatarMap();
   const [page, setPage] = React.useState<CreatorPage | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [subs, setSubs] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     let active = true;
-    void phoneRequest<{ contacts: Array<{ phoneId: string; ownerName: string }> }>(`/phones/${encodeURIComponent(phoneId)}/messaging`)
+    void phoneRequest<{ contacts: Array<{ phoneId: string; ownerId?: string; ownerName: string }> }>(`/phones/${encodeURIComponent(phoneId)}/messaging`)
       .then((payload) => { if (active) setContacts(payload.contacts); })
       .catch(() => { if (active) setContacts([]); });
     void store.get("subs").then((value) => {
@@ -123,7 +125,7 @@ export function NoodlerRShell({ phoneId, onBack, onClose }: { phoneId: string; o
             <div className="vp-stack" style={{ gap: "0.5rem" }}>
               {contacts.map((contact) => (
                 <button key={contact.phoneId} type="button" onClick={() => openPage(contact.phoneId)} className="vp-thread-row">
-                  <span className="vp-thread-avatar" style={{ background: `linear-gradient(180deg, hsl(${hueFor(contact.ownerName)} 70% 55%), hsl(${hueFor(contact.ownerName)} 70% 38%))` }} aria-hidden="true">{initials(contact.ownerName)}</span>
+                  <PhoneAvatar name={contact.ownerName} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
                   <span className="vp-thread-body">
                     <span className="vp-thread-name">{contact.ownerName}</span>
                     <span className="vp-thread-preview">{subs.includes(contact.phoneId) ? "Subscribed" : "View page"}</span>

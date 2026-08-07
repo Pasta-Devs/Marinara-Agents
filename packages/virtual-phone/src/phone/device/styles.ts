@@ -180,6 +180,8 @@ export const phoneStylesheet = `
 .vp-thread-row { display: flex; align-items: center; gap: 0.625rem; width: 100%; min-height: 3.5rem; padding: 0.5rem 0.75rem; border-radius: 1rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); text-align: left; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 4px 12px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
 .vp-thread-row:active { transform: scale(0.98); }
 .vp-thread-avatar { display: inline-flex; align-items: center; justify-content: center; height: 2.5rem; width: 2.5rem; flex-shrink: 0; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-accent) 85%, #ffffff), var(--vp-accent)); color: #fff; font-size: 0.75rem; font-weight: 650; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), 0 2px 6px rgb(0 0 0 / 0.15); }
+.vp-thread-avatar { overflow: hidden; }
+.vp-thread-avatar img { height: 100%; width: 100%; object-fit: cover; }
 .vp-thread-body { display: grid; gap: 0.125rem; flex: 1; min-width: 0; }
 .vp-thread-name { font-size: 0.8125rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-thread-preview { font-size: 0.6875rem; color: var(--vp-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

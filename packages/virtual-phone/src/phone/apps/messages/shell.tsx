@@ -2,6 +2,7 @@ import React from "react";
 import { Send } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
+import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
 
 interface ThreadMessage {
   id: string;
@@ -17,12 +18,8 @@ interface Thread {
   messages: ThreadMessage[];
 }
 interface MessagingPayload {
-  contacts: Array<{ phoneId: string; ownerName: string }>;
+  contacts: Array<{ phoneId: string; ownerId?: string; ownerName: string }>;
   threads: Thread[];
-}
-
-function initials(name: string) {
-  return name.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
 }
 
 export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
@@ -32,6 +29,11 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
   const [draft, setDraft] = React.useState("");
   const [sending, setSending] = React.useState(false);
   const bubblesRef = React.useRef<HTMLDivElement>(null);
+  const avatars = useAvatarMap();
+  const avatarFor = (contactPhoneId: string) => {
+    const ownerId = data?.contacts.find((contact) => contact.phoneId === contactPhoneId)?.ownerId;
+    return ownerId ? avatars?.get(ownerId) : null;
+  };
 
   const load = React.useCallback(async () => {
     setError("");
@@ -140,7 +142,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
             const last = thread.messages.at(-1);
             return (
               <button key={thread.id} type="button" onClick={() => setActiveThreadId(thread.id)} className="vp-thread-row">
-                <span className="vp-thread-avatar" aria-hidden="true">{initials(thread.otherName)}</span>
+                <PhoneAvatar name={thread.otherName} url={avatarFor(thread.otherPhoneId)} />
                 <span className="vp-thread-body">
                   <span className="vp-thread-name">{thread.otherName}</span>
                   <span className="vp-thread-preview">{last ? `${last.from === phoneId ? "You: " : ""}${last.text}` : "No messages yet"}</span>
@@ -158,7 +160,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
                   const input = event.currentTarget.elements.namedItem("draft") as HTMLInputElement;
                   if (input.value.trim()) void send(contact.phoneId, input.value);
                 }}>
-                  <span className="vp-thread-avatar" aria-hidden="true">{initials(contact.ownerName)}</span>
+                  <PhoneAvatar name={contact.ownerName} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
                   <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Message {contact.ownerName}</span>
                     <input name="draft" placeholder={`Message ${contact.ownerName}`} maxLength={2000} className="vp-input" />
                   </label>
