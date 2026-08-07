@@ -10,10 +10,14 @@ export const phoneStylesheet = `
 .vp-root :where(button) { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .vp-root button:focus-visible, .vp-root input:focus-visible, .vp-root select:focus-visible, .vp-root textarea:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
 .vp-root button:disabled { opacity: 0.35; cursor: default; }
-.vp-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / 0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.vp-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / 0.45); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .vp-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding: 0.75rem; }
 @media (min-width: 640px) { .vp-stage { padding: 1.5rem; } }
 .vp-stage-col { display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem; }
+.vp-slide-up { animation: vp-slide-up 280ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+.vp-slide-down { animation: vp-slide-down 280ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes vp-slide-up { from { opacity: 0; transform: translateY(32px); } }
+@keyframes vp-slide-down { from { opacity: 0; transform: translateY(-32px); } }
 
 .vp-shell { position: relative; display: flex; flex-direction: column; width: min(calc(100vw - 1.5rem), calc((100dvh - 5rem) * 9 / 19.5), 396px); aspect-ratio: 9 / 19.5; padding: 5px; border-radius: 48px; background: linear-gradient(160deg, color-mix(in srgb, var(--vp-bezel) 82%, #7c8494) 0%, var(--vp-bezel) 22%, var(--vp-bezel) 78%, color-mix(in srgb, var(--vp-bezel) 88%, #7c8494) 100%); box-shadow: 0 32px 90px rgb(0 0 0 / 0.45), 0 8px 24px rgb(0 0 0 / 0.3), inset 0 0 0 1.5px rgb(255 255 255 / 0.16), inset 0 0 0 3px rgb(0 0 0 / 0.4); }
 @media (min-width: 640px) { .vp-shell { width: min(calc(100vw - 3rem), calc(82dvh * 9 / 19.5), 396px); } }
@@ -50,6 +54,7 @@ export const phoneStylesheet = `
 .vp-lock .vp-unlock-btn { margin-top: auto; }
 .vp-lock-clock { font-size: 3.25rem; font-weight: 250; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.05; margin: 0; text-shadow: 0 1px 12px rgb(0 0 0 / 0.08); }
 .vp-lock-date { margin: 0.375rem 0 0; font-size: 0.8125rem; font-weight: 500; color: var(--vp-muted); }
+.vp-lock-device { margin: 0.25rem 0 0; font-size: 0.625rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--vp-muted); }
 .vp-lock-card { width: 100%; min-height: 4.5rem; display: flex; align-items: center; justify-content: center; padding: 0.875rem; border-radius: 1.25rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); font-size: 0.75rem; font-weight: 500; color: var(--vp-muted); box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 8px 24px rgb(0 0 0 / 0.1), inset 0 0 0 1px var(--vp-border); }
 .vp-lock-list { display: grid; gap: 0.5rem; width: 100%; }
 .vp-lock-card--notification { display: grid; gap: 0.125rem; justify-items: start; min-height: 0; width: 100%; text-align: left; cursor: pointer; transition: transform 120ms ease; }
@@ -246,7 +251,7 @@ export const phoneStylesheet = `
 .vp-skeleton--avatar { height: 2.5rem; width: 2.5rem; border-radius: 999px; flex-shrink: 0; }
 .vp-skeleton--block { height: 4.25rem; border-radius: 1.125rem; }
 @keyframes vp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-@media (prefers-reduced-motion: reduce) { .vp-appview, .vp-switcher, .vp-skeleton { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .vp-appview, .vp-switcher, .vp-skeleton, .vp-slide-up, .vp-slide-down { animation: none; } }
 .vp-search-go { position: relative; flex: 1; min-width: 0; }
 .vp-go-btn { position: absolute; right: 0.3125rem; top: 50%; translate: 0 -50%; display: inline-flex; align-items: center; justify-content: center; height: 2.125rem; width: 2.125rem; border-radius: 999px; background: var(--vp-accent); color: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 0.2); transition: transform 120ms ease; }
 .vp-go-btn:active { transform: scale(0.94); }

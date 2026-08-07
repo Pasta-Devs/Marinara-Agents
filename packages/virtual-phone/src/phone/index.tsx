@@ -271,8 +271,8 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     <div ref={overlayRef} className="vp-root" data-chat-floating-panel style={{ ...phoneThemeTokens(theme), ...(deviceSettings.caseColor ? { "--vp-bezel": deviceSettings.caseColor } : {}) } as React.CSSProperties}>
       <style data-virtual-phone-styles>{phoneStylesheet}</style>
       <div className="vp-scrim" aria-hidden="true" onClick={close} />
-      <section role="dialog" aria-modal="true" aria-labelledby="virtual-phone-title" className="vp-stage">
-        <div className="vp-stage-col">
+      <section role="dialog" aria-modal="true" aria-labelledby="virtual-phone-title" className="vp-stage" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
+        <div key={selectedPhone?.phoneId ?? "none"} className={`vp-stage-col ${selectedPhone?.ownerType === "character" ? "vp-slide-down" : "vp-slide-up"}`}>
         <div className="vp-shell">
           <span className="vp-key vp-key--volume" aria-hidden="true" />
           <span className="vp-key vp-key--power" aria-hidden="true" />
@@ -308,6 +308,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                   <div>
                     <p className="vp-lock-clock">{clock}</p>
                     <p className="vp-lock-date">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
+                    {deviceSettings.deviceName.trim() ? <p className="vp-lock-device">{deviceSettings.deviceName}</p> : null}
                   </div>
                   {notifications.length === 0 ? <div className="vp-lock-card">No notifications</div> : (
                     <div className="vp-lock-list" aria-label="Notifications">

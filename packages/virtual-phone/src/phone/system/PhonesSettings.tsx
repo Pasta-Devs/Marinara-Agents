@@ -5,6 +5,7 @@ type BaselineTheme = "system" | "light" | "dark";
 export type Phone = {
   phoneId: string;
   ownerId: string;
+  ownerType?: "persona" | "character";
   ownerName: string;
   enabled: boolean;
   baselineTheme: BaselineTheme;
