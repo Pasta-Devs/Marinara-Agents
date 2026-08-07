@@ -1274,7 +1274,7 @@ async function main() {
         .click();
       await page.locator("#settings-tab-extraction").click();
       const desktopExtractionLayout = await page
-        .locator("#settings-panel-extraction > div.grid")
+        .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
         .evaluate((grid) => {
           const fields = [...grid.children].slice(0, 2) as HTMLElement[];
           const labels = fields.map(
@@ -2292,7 +2292,7 @@ async function main() {
         .click();
       await mobilePage.locator("#settings-tab-extraction").click();
       const mobileExtractionLayout = await mobilePage
-        .locator("#settings-panel-extraction > div.grid")
+        .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
         .evaluate((grid) => {
           const fields = [...grid.children].slice(0, 2) as HTMLElement[];
           const labels = fields.map(
