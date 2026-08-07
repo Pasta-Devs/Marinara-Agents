@@ -16,6 +16,7 @@ interface Thread {
   otherName: string;
   unread: number;
   messages: ThreadMessage[];
+  reply: { status: "pending" | "failed"; at: string; error?: string } | null;
 }
 interface MessagingPayload {
   contacts: Array<{ phoneId: string; ownerId?: string; ownerName: string }>;
@@ -53,6 +54,14 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
   }, [load]);
 
   const activeThread = data?.threads.find((thread) => thread.id === activeThreadId) ?? null;
+
+  // A reply being generated arrives within seconds, so the 30s idle poll is too slow to feel live.
+  const awaitingReply = data?.threads.some((thread) => thread.reply?.status === "pending") ?? false;
+  React.useEffect(() => {
+    if (!awaitingReply) return;
+    const timer = window.setInterval(() => void load(), 4_000);
+    return () => window.clearInterval(timer);
+  }, [awaitingReply, load]);
 
   const updateThread = (thread: Thread) => setData((current) => current ? {
     contacts: current.contacts,
@@ -125,6 +134,14 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
                 <span className="vp-bubble-time">{new Date(message.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
               </div>
             ))}
+            {activeThread.reply?.status === "pending" ? (
+              <div className="vp-bubble vp-bubble--other" role="status">
+                <span className="vp-muted-note">{activeThread.otherName} is typing…</span>
+              </div>
+            ) : null}
+            {activeThread.reply?.status === "failed" ? (
+              <p role="alert" className="vp-muted-note">{activeThread.reply.error ?? "The reply could not be generated."}</p>
+            ) : null}
           </div>
           <form className="vp-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void send(activeThread.otherPhoneId, draft); }}>
             <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Message {activeThread.otherName}</span>

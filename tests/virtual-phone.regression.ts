@@ -21,7 +21,7 @@ import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/conta
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "../packages/virtual-phone/src/phone/system/noodle";
 import { noodlerRManifest } from "../packages/virtual-phone/src/phone/apps/noodler-r/manifest";
 import { cameraManifest } from "../packages/virtual-phone/src/phone/apps/camera/manifest";
-import { mailManifest, parseEmail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
+import { mailManifest, mergeInbox, parseEmail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
 import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
@@ -298,6 +298,15 @@ async function main() {
   await assert.rejects(() => reloadedRuntime.setAppStorageKey("missing-phone", "goodle", "key", 1), /Phone not found/u);
   await reloadedRuntime.removeAppStorageKey(personaPhoneId, "goodle", "recents");
   assert.equal(await reloadedRuntime.getAppStorageKey(personaPhoneId, "goodle", "recents"), null);
+
+  // Refresh must append, not replace: read state and older mail survived the round trip.
+  const heldMail = [{ text: "Bank | Statement | ready", read: true }, { text: "Gym | Renewal | soon", read: false }];
+  assert.deepEqual(mergeInbox(heldMail, ["Aunt | Hello | how are you", "Bank | Statement | ready"]), [
+    { text: "Aunt | Hello | how are you", read: false },
+    { text: "Bank | Statement | ready", read: true },
+    { text: "Gym | Renewal | soon", read: false },
+  ]);
+  assert.deepEqual(mergeInbox([], ["Only | One | mail"]), [{ text: "Only | One | mail", read: false }]);
 
   validateAppManifest(messagesManifest);
   assert.equal(messagesManifest.removable, true);

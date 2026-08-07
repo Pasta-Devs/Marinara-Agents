@@ -13,11 +13,24 @@ export interface ThreadMessage {
   at: string;
 }
 
+/**
+ * A character's reply is generated in the background so sending never blocks on the model.
+ * `pending` is set when generation starts and cleared by the reply landing (or by the character
+ * deliberately leaving the message on read); `failed` keeps the error visible in the thread
+ * instead of letting it vanish.
+ */
+export interface ThreadReplyState {
+  status: "pending" | "failed";
+  at: string;
+  error?: string;
+}
+
 export interface ThreadDocument {
   schemaVersion: 1;
   participants: [string, string];
   messages: ThreadMessage[];
   lastRead: Record<string, string>;
+  reply?: ThreadReplyState;
 }
 
 function isThreadDocument(value: unknown): value is ThreadDocument {
@@ -98,6 +111,8 @@ export class PhoneMessagingService {
       ...existing.document,
       messages: [...existing.document.messages, message].slice(-MAX_MESSAGES),
       lastRead: { ...existing.document.lastRead, [fromPhoneId]: at },
+      // Any message landing settles the previous turn's reply state.
+      reply: undefined,
     };
     const updated = await this.documents.update({
       id: existing.record.id,
@@ -109,6 +124,23 @@ export class PhoneMessagingService {
       updatedAt: at,
     });
     if (!updated) return this.send(fromPhoneId, toPhoneId, rawText);
+    return parseThreadRecord(updated);
+  }
+
+  async setReplyState(threadId: string, reply: ThreadReplyState | null) {
+    const thread = (await this.listThreads()).find(({ record }) => record.id === threadId);
+    if (!thread) throw new Error("Thread not found");
+    const document: ThreadDocument = { ...thread.document, reply: reply ?? undefined };
+    const updated = await this.documents.update({
+      id: thread.record.id,
+      packageId: PACKAGE_ID,
+      expectedRevision: thread.record.revision,
+      name: thread.record.name,
+      description: thread.record.description,
+      data: document,
+      updatedAt: this.now(),
+    });
+    if (!updated) return this.setReplyState(threadId, reply);
     return parseThreadRecord(updated);
   }
 

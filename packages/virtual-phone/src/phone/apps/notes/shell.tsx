@@ -1,6 +1,6 @@
 import React from "react";
 import { PhoneAppHeader } from "../../platform/app-header";
-import { usePhoneStore } from "../../platform/use-phone-store";
+import { useDebouncedSave, usePhoneStore } from "../../platform/use-phone-store";
 
 interface Note {
   id: string;
@@ -16,6 +16,8 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
   const store = usePhoneStore(phoneId, "notes");
   const [notes, setNotes] = React.useState<Note[] | null>(null);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const { save } = useDebouncedSave(store, "notes", setError);
 
   React.useEffect(() => {
     let active = true;
@@ -26,9 +28,9 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
     return () => { active = false; };
   }, [store]);
 
-  const persist = (next: Note[]) => {
+  const persist = (next: Note[], immediate = false) => {
     setNotes(next);
-    void store.set("notes", next).catch(() => undefined);
+    save(next, immediate);
   };
   const activeNote = notes?.find((note) => note.id === activeId) ?? null;
   const updateActive = (text: string) => {
@@ -38,13 +40,13 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
   const addNote = () => {
     if (!notes) return;
     const note: Note = { id: crypto.randomUUID(), text: "", updatedAt: new Date().toISOString() };
-    persist([note, ...notes]);
+    persist([note, ...notes], true);
     setActiveId(note.id);
   };
   const deleteActive = () => {
     if (!notes || !activeNote) return;
     if (!window.confirm("Delete this note?")) return;
-    persist(notes.filter((note) => note.id !== activeNote.id));
+    persist(notes.filter((note) => note.id !== activeNote.id), true);
     setActiveId(null);
   };
 
@@ -64,6 +66,7 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
           if (actionId === "delete-note") deleteActive();
         }}
       />
+      {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
       {!notes ? (
         <div role="status" aria-label="Loading notes" className="vp-stack" style={{ gap: "0.5rem" }}>
           {[0, 1, 2].map((index) => (

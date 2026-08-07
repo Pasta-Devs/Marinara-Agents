@@ -3,7 +3,7 @@ import { Heart, X } from "lucide-react";
 import { parseProfile } from "./manifest";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
-import { usePhoneStore } from "../../platform/use-phone-store";
+import { useDebouncedSave, usePhoneStore } from "../../platform/use-phone-store";
 import { hueFor, initials } from "../../platform/avatars";
 
 export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
@@ -14,6 +14,8 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
   const [preferences, setPreferences] = React.useState("");
   const [view, setView] = React.useState<"deck" | "matches">("deck");
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const { save: savePreference } = useDebouncedSave(store, "preferences", setError);
 
   const fetchDeck = React.useCallback((prefs: string) => {
     setLoading(true);
@@ -62,7 +64,7 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
   };
   const savePreferences = (value: string) => {
     setPreferences(value);
-    void store.set("preferences", value).catch(() => undefined);
+    savePreference(value);
   };
 
   const profile = current ? parseProfile(current) : null;
@@ -84,6 +86,7 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
           if (actionId === "refresh-deck") fetchDeck(preferences);
         }}
       />
+      {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
       {view === "matches" ? (
         matches.length === 0 ? <p className="vp-muted-note">No matches yet. Go like someone.</p> : (
           <div className="vp-stack" style={{ gap: "0.5rem" }}>

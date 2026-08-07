@@ -5,19 +5,10 @@ export interface PhoneStoreBackend {
   remove(phoneId: string, appId: string, key: string): Promise<void>;
 }
 
-const MAX_BYTES = 256 * 1024;
-const encoder = new TextEncoder();
-
 function validateKey(key: string, allowEmpty = false) {
   if ((!allowEmpty && !key.trim()) || key.includes("\0") || key.length > 200) {
     throw new Error("Invalid phone store key");
   }
-}
-
-function jsonBytes(value: unknown) {
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined) throw new Error("Phone store values must be JSON");
-  return encoder.encode(serialized).byteLength;
 }
 
 export class PhoneStore {
@@ -32,16 +23,14 @@ export class PhoneStore {
     return this.backend.get(this.phoneId, this.appId, key);
   }
 
-  async set(key: string, value: unknown) {
+  /**
+   * One round trip. The 256KB quota is enforced server-side in `writeAppStorage`, which is the
+   * authoritative copy — doing the arithmetic here as well meant downloading all of this app's
+   * storage before every write, so Notes cost two requests per keystroke.
+   */
+  set(key: string, value: unknown) {
     validateKey(key);
-    const entries = await this.backend.list(this.phoneId, this.appId, "");
-    const bytes = entries
-      .filter((entry) => entry.key !== key)
-      .reduce((total, entry) => total + jsonBytes(entry.key) + jsonBytes(entry.value), 0);
-    if (bytes + jsonBytes(key) + jsonBytes(value) > MAX_BYTES) {
-      throw new Error("Phone app storage exceeds 256KB");
-    }
-    await this.backend.set(this.phoneId, this.appId, key, value);
+    return this.backend.set(this.phoneId, this.appId, key, value);
   }
 
   list(prefix = "") {

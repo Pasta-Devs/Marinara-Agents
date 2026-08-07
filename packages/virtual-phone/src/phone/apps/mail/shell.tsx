@@ -1,33 +1,43 @@
 import React from "react";
-import { parseEmail } from "./manifest";
+import { mergeInbox, parseEmail, type MailItem } from "./manifest";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
-
-interface MailItem {
-  text: string;
-  read: boolean;
-}
 
 export function MailShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "mail");
   const [inbox, setInbox] = React.useState<MailItem[] | null>(null);
   const [openIndex, setOpenIndex] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const persist = React.useCallback((items: MailItem[]) => {
     setInbox(items);
-    void store.set("inbox", items).catch(() => undefined);
+    void store.set("inbox", items).catch((cause: unknown) => {
+      setError(cause instanceof Error ? cause.message : "Could not save the inbox.");
+    });
   }, [store]);
 
   const refresh = React.useCallback(() => {
     setLoading(true);
     setOpenIndex(null);
+    setError(null);
     void phoneRequest<{ emails: string[] }>(`/phones/${encodeURIComponent(phoneId)}/mail/inbox`, { method: "POST", body: JSON.stringify({}) })
-      .then((response) => persist(response.emails.map((text) => ({ text, read: false }))))
-      .catch(() => setInbox((current) => current ?? []))
+      .then((response) => {
+        setInbox((current) => {
+          const merged = mergeInbox(current ?? [], response.emails);
+          void store.set("inbox", merged).catch((cause: unknown) => {
+            setError(cause instanceof Error ? cause.message : "Could not save the inbox.");
+          });
+          return merged;
+        });
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Could not reach the mail server.");
+        setInbox((current) => current ?? []);
+      })
       .finally(() => setLoading(false));
-  }, [phoneId, persist]);
+  }, [phoneId, store]);
 
   React.useEffect(() => {
     let active = true;
@@ -70,6 +80,7 @@ export function MailShell({ phoneId, onBack, onClose }: { phoneId: string; onBac
         </div>
       ) : (
         <>
+          {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
           {loading && !inbox?.length ? (
             <div role="status" aria-label="Loading mail" className="vp-stack" style={{ gap: "0.5rem" }}>
               {[0, 1, 2, 3].map((index) => (

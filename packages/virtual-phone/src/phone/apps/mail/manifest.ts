@@ -27,3 +27,18 @@ export function parseEmail(item: string) {
     body: parts.slice(2).join(" | ").trim() || "(empty message)",
   };
 }
+
+export interface MailItem {
+  text: string;
+  read: boolean;
+}
+
+/**
+ * Refresh used to replace the inbox outright, destroying read state and every older mail.
+ * New mail goes on top; anything already held keeps its position and its read flag. Identity is
+ * the generated line itself — the model reproducing an identical mail is the same mail.
+ */
+export function mergeInbox(held: MailItem[], incoming: string[]): MailItem[] {
+  const seen = new Set(held.map((item) => item.text));
+  return [...incoming.filter((text) => !seen.has(text)).map((text) => ({ text, read: false })), ...held];
+}

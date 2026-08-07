@@ -143,6 +143,7 @@ export async function activate({ api }: CapabilityContext) {
       otherName: names.get(otherPhoneId) ?? "Unknown phone",
       unread: unreadCount(document, phoneId),
       messages: document.messages,
+      reply: document.reply ?? null,
     };
   };
 
@@ -235,9 +236,8 @@ export async function activate({ api }: CapabilityContext) {
     return `${lore ? `\n\nWorld lore to stay true to:\n${lore}` : ""}${story ? `\n\nRecent story events:\n${story}` : ""}`;
   };
 
-  // ponytail: reply generated inline with send; queue it if model latency hurts
   const generateCharacterReply = async (senderPhoneId: string, recipientPhoneId: string) => {
-    try {
+    {
       const recipient = await findPhone(recipientPhoneId);
       if (recipient.document.identity.ownerType !== "character" || !recipient.document.provisioning.enabled) return null;
       const model = await resolvePhoneModel(recipient, "light");
@@ -264,8 +264,6 @@ export async function activate({ api }: CapabilityContext) {
       const { reply } = parseBoundedContent(completion.content, { fields: { reply: "string" }, defaults: { reply: "" }, limits: { maxString: 400 } }) as { reply: string };
       if (!reply.trim()) return null;
       return await messaging.send(recipientPhoneId, senderPhoneId, reply);
-    } catch {
-      return null;
     }
   };
 
@@ -867,9 +865,25 @@ export async function activate({ api }: CapabilityContext) {
           return reply.status(400).send({ error: "That phone cannot be messaged from this chat" });
         }
         const thread = await messaging.send(request.params.phoneId, toPhoneId, String(body.text ?? ""));
-        const withReply = (await generateCharacterReply(request.params.phoneId, toPhoneId)) ?? thread;
         const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
-        return { thread: threadPayload(withReply.record.id, withReply.document, request.params.phoneId, names) };
+        // The send returns as soon as the message is stored. Waiting on the model here made the
+        // send button hang for the length of a completion on a slow connection. The reply lands in
+        // the thread asynchronously and the client's poll picks it up.
+        const pending = await messaging.setReplyState(thread.record.id, { status: "pending", at: new Date().toISOString() })
+          .catch(() => thread);
+        void generateCharacterReply(request.params.phoneId, toPhoneId)
+          .then(async (replied) => {
+            // `send` clears the reply state, so only the left-on-read case needs clearing here.
+            if (!replied) await messaging.setReplyState(thread.record.id, null);
+          })
+          .catch(async (cause: unknown) => {
+            await messaging.setReplyState(thread.record.id, {
+              status: "failed",
+              at: new Date().toISOString(),
+              error: cause instanceof Error ? cause.message : "The reply could not be generated.",
+            }).catch(() => undefined);
+          });
+        return { thread: threadPayload(pending.record.id, pending.document, request.params.phoneId, names) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
       }
