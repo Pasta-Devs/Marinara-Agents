@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import {
   PhoneIdentityService,
@@ -26,6 +27,16 @@ interface CapabilityContext {
           characterId: string | null;
           content: string;
         }>>;
+        createMessageWithSwipe?(input: {
+          id: string;
+          swipeId: string;
+          chatId: string;
+          role: string;
+          characterId: string | null;
+          content: string;
+          extra: Record<string, unknown>;
+          createdAt: string;
+        }): Promise<unknown>;
       };
       resources: {
         listCharacters(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
@@ -107,7 +118,7 @@ export async function activate({ api }: CapabilityContext) {
         document.identity.phoneId !== phoneId &&
         document.provisioning.enabled &&
         document.identity.chatScope.some((chatId) => self.document.identity.chatScope.includes(chatId)))
-      .map(({ document }) => ({ phoneId: document.identity.phoneId, ownerName: document.identity.ownerName }));
+      .map(({ document }) => ({ phoneId: document.identity.phoneId, ownerName: document.identity.ownerName, deviceName: document.identity.deviceName }));
   };
   const threadPayload = (threadId: string, document: ThreadDocument, phoneId: string, names: Map<string, string>) => {
     const otherPhoneId = document.participants.find((participant) => participant !== phoneId) ?? "";
@@ -177,6 +188,68 @@ export async function activate({ api }: CapabilityContext) {
         return { phone: phoneResponse(phone) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid phone request" });
+      }
+    });
+    app.post<{ Params: { chatId: string; phoneId: string } }>("/chats/:chatId/phones/:phoneId/show", async (request, reply) => {
+      try {
+        if (!api.runtime.persistence.createMessageWithSwipe) {
+          return reply.status(400).send({ error: "This Engine version cannot write to the story" });
+        }
+        const chat = await api.runtime.persistence.getChat(request.params.chatId);
+        if (!chat) return reply.status(404).send({ error: "Chat not found" });
+        const phone = await findPhone(request.params.phoneId);
+        if (!phone.document.identity.chatScope.includes(chat.id)) {
+          return reply.status(400).send({ error: "This phone is not part of this chat" });
+        }
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const app_ = typeof body.app === "string" ? body.app : null;
+        const surface = body.surface === "lock" ? "lock" : "home";
+        const ownerName = phone.document.identity.ownerName;
+        const phoneId = phone.document.identity.phoneId;
+        let summary = surface === "lock" ? "the lock screen" : "the home screen";
+        if (app_ === "messages") {
+          const [thread] = await messaging.threadsFor(phoneId);
+          if (thread) {
+            const other = thread.document.participants.find((participant) => participant !== phoneId) ?? "";
+            const otherName = (await contactsFor(phoneId)).find((contact) => contact.phoneId === other)?.ownerName ?? "someone";
+            const lastTwo = thread.document.messages.slice(-2)
+              .map((message) => `"${message.text.slice(0, 120)}"`).join(" / ");
+            summary = `the Messages chat with ${otherName}: ${lastTwo}`;
+          } else {
+            summary = "the Messages app, no conversations yet";
+          }
+        } else if (app_ === "goodle") {
+          const recents = await phones.getAppStorageKey(phoneId, "goodle", "recents").catch(() => null);
+          summary = Array.isArray(recents) && typeof recents[0] === "string"
+            ? `Goodle, searching for "${recents[0].slice(0, 120)}"`
+            : "the Goodle search app";
+        } else if (app_ === "notes") {
+          const notes = await phones.getAppStorageKey(phoneId, "notes", "notes").catch(() => null);
+          const first = Array.isArray(notes) ? (notes[0] as { text?: unknown } | undefined) : undefined;
+          summary = typeof first?.text === "string" && first.text.trim()
+            ? `a note that starts: "${first.text.split("\n")[0]!.slice(0, 120)}"`
+            : "the Notes app";
+        } else if (app_ === "noodler") {
+          summary = "the Noodler feed";
+        } else if (app_ === "settings" || app_ === "app-store" || app_ === "contacts") {
+          summary = `the ${app_ === "app-store" ? "App Store" : app_[0]!.toUpperCase() + app_.slice(1)} app`;
+        }
+        const content = `*${ownerName} shows their phone — ${summary}*`;
+        await api.runtime.persistence.createMessageWithSwipe({
+          id: randomUUID(),
+          swipeId: randomUUID(),
+          chatId: chat.id,
+          role: "user",
+          characterId: null,
+          content,
+          extra: { virtualPhone: "show" },
+          createdAt: new Date().toISOString(),
+        });
+        return { content };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Unable to show the phone" });
       }
     });
     app.get<{ Params: { chatId: string } }>("/chats/:chatId/unread", async (request, reply) => {

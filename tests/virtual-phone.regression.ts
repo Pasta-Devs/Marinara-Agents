@@ -20,6 +20,7 @@ import { defaultDeviceSettings } from "../packages/virtual-phone/src/phone/devic
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
 import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/phone/apps/noodler/manifest";
+import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/contacts/manifest";
 import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
 import { conditionOpacity, patternBackground } from "../packages/virtual-phone/src/phone/device/effects";
 
@@ -309,7 +310,9 @@ async function main() {
   validateAppManifest(noodlerManifest);
   assert.equal(noodlerManifest.modelUse, "heavy");
   assert.deepEqual(fallbackFeed(), { posts: [] });
-  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes"]);
+  validateAppManifest(contactsManifest);
+  assert.equal(contactsManifest.modelUse, "none");
+  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts"]);
   let tick = 0;
   const messageIds = ["msg-1", "msg-2", "msg-3"];
   const messaging = new PhoneMessagingService(

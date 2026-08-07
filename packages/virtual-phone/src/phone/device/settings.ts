@@ -20,7 +20,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     pattern: "none",
     patternIntensity: 0,
     reduceDeviceEffects: false,
-    installedApps: ["settings", "app-store", "goodle", "messages", "notes"],
+    installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts"],
   };
 }
 

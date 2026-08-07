@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { AtSign, BatteryMedium, ChevronDown, Eye, MessageCircle, Quote, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
+import { AtSign, BatteryMedium, BookUser, ChevronDown, Eye, MessageCircle, Quote, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
 import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/PhonesSettings";
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
@@ -18,6 +18,7 @@ import { goodleManifest } from "./apps/goodle/manifest";
 import { messagesManifest } from "./apps/messages/manifest";
 import { notesManifest } from "./apps/notes/manifest";
 import { noodlerManifest } from "./apps/noodler/manifest";
+import { contactsManifest } from "./apps/contacts/manifest";
 
 const SettingsApp = React.lazy(() => import("./apps/settings/shell").then((module) => ({ default: module.SettingsShell })));
 const AppStoreApp = React.lazy(() => import("./apps/app-store/shell").then((module) => ({ default: module.AppStoreShell })));
@@ -25,6 +26,7 @@ const GoodleApp = React.lazy(() => import("./apps/goodle/shell").then((module) =
 const MessagesApp = React.lazy(() => import("./apps/messages/shell").then((module) => ({ default: module.MessagesShell })));
 const NotesApp = React.lazy(() => import("./apps/notes/shell").then((module) => ({ default: module.NotesShell })));
 const NoodlerApp = React.lazy(() => import("./apps/noodler/shell").then((module) => ({ default: module.NoodlerShell })));
+const ContactsApp = React.lazy(() => import("./apps/contacts/shell").then((module) => ({ default: module.ContactsShell })));
 export const phoneAppRegistry = new InstalledAppRegistry();
 phoneAppRegistry.register({ manifest: settingsManifest, load: async () => import("./apps/settings/shell") });
 phoneAppRegistry.register({ manifest: appStoreManifest, load: async () => import("./apps/app-store/shell") });
@@ -32,6 +34,7 @@ phoneAppRegistry.register({ manifest: goodleManifest, load: async () => import("
 phoneAppRegistry.register({ manifest: messagesManifest, load: async () => import("./apps/messages/shell") });
 phoneAppRegistry.register({ manifest: notesManifest, load: async () => import("./apps/notes/shell") });
 phoneAppRegistry.register({ manifest: noodlerManifest, load: async () => import("./apps/noodler/shell") });
+phoneAppRegistry.register({ manifest: contactsManifest, load: async () => import("./apps/contacts/shell") });
 
 class AppErrorBoundary extends React.Component<{ appName: string; children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -61,7 +64,7 @@ function dispatchPhoneEvent(type: string) {
   window.dispatchEvent(new CustomEvent(type));
 }
 
-type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | "notes" | "noodler" | null;
+type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | "notes" | "noodler" | "contacts" | null;
 
 interface PhoneNotification {
   id: string;
@@ -72,7 +75,7 @@ interface PhoneNotification {
   at: string;
 }
 
-const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler"]);
+const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler", "contacts"]);
 
 function appIconStyle(appId: string) {
   return styledAppIds.has(appId) ? `vp-app-icon--${appId}` : "vp-app-icon--default";
@@ -102,6 +105,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [notifications, setNotifications] = React.useState<PhoneNotification[]>([]);
   const [homeSearch, setHomeSearch] = React.useState("");
   const [pendingSearch, setPendingSearch] = React.useState("");
+  const [showState, setShowState] = React.useState<"idle" | "pending" | "done">("idle");
   const routeStacks = React.useRef(new Map<string, AppRouteStackManager>());
   const activeApps = React.useRef(new Map<string, Exclude<ActiveApp, null>>());
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -227,6 +231,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     { id: "goodle", label: "Goodle", Icon: Search },
     { id: "notes", label: "Notes", Icon: StickyNote },
     { id: "noodler", label: "Noodler", Icon: AtSign },
+    { id: "contacts", label: "Contacts", Icon: BookUser },
   ];
   const installedOptionalApps = optionalApps.filter((app) => deviceSettings.installedApps.includes(app.id));
   const launchableApps: typeof optionalApps = [...installedOptionalApps, { id: "app-store", label: "App Store", Icon: Store }];
@@ -347,6 +352,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               {activeApp === "messages" && selectedPhone && deviceSettings.installedApps.includes("messages") ? <AppErrorBoundary appName="Messages"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Messages...</div>}><MessagesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("messages")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "notes" && selectedPhone && deviceSettings.installedApps.includes("notes") ? <AppErrorBoundary appName="Notes"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Notes...</div>}><NotesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("notes")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "noodler" && selectedPhone && deviceSettings.installedApps.includes("noodler") ? <AppErrorBoundary appName="Noodler"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Noodler...</div>}><NoodlerApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("noodler")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "contacts" && selectedPhone && deviceSettings.installedApps.includes("contacts") ? <AppErrorBoundary appName="Contacts"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Contacts...</div>}><ContactsApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("contacts")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
             </main>
             <span className="vp-home-indicator" aria-hidden="true" />
           </div>
@@ -355,8 +361,17 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
           <button ref={closeButtonRef} type="button" onClick={close} className="vp-dock-btn vp-dock-btn--primary">
             <X size="0.875rem" aria-hidden="true" /> Put down
           </button>
-          <button type="button" disabled title="Show to character — coming soon" aria-label="Show to character" className="vp-dock-btn">
-            <Eye size="0.875rem" aria-hidden="true" /> Show
+          <button type="button" disabled={!chatId || !selectedPhone || showState === "pending"} title="Show this screen to the story" aria-label="Show to character" onClick={() => {
+            if (!chatId || !selectedPhone) return;
+            setShowState("pending");
+            void phoneRequest(`/chats/${encodeURIComponent(chatId)}/phones/${encodeURIComponent(selectedPhone.phoneId)}/show`, {
+              method: "POST", body: JSON.stringify({ app: activeApp, surface: session.surface }),
+            }).then(() => {
+              setShowState("done");
+              window.setTimeout(() => setShowState("idle"), 2000);
+            }).catch(() => setShowState("idle"));
+          }} className="vp-dock-btn">
+            <Eye size="0.875rem" aria-hidden="true" /> {showState === "done" ? "Shown ✓" : "Show"}
           </button>
           <button type="button" disabled title="Reference chat — coming soon" aria-label="Reference chat" className="vp-dock-btn">
             <Quote size="0.875rem" aria-hidden="true" /> Reference

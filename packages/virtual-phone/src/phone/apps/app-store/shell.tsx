@@ -1,16 +1,17 @@
 import React from "react";
-import { AtSign, MessageCircle, Search, Settings, StickyNote, Store } from "lucide-react";
+import { AtSign, BookUser, MessageCircle, Search, Settings, StickyNote, Store } from "lucide-react";
 import type { AppManifest } from "../../platform/app-manifest";
 import { modelUseLabel } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
 
-const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler"]);
+const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler", "contacts"]);
 const appGlyphs: Record<string, typeof Store> = {
   settings: Settings,
   goodle: Search,
   messages: MessageCircle,
   notes: StickyNote,
   noodler: AtSign,
+  contacts: BookUser,
 };
 
 function appIconClass(appId: string) {
