@@ -40,7 +40,7 @@ import {
   StatusSurface,
   inputClass,
 } from "./shared-controls";
-import { humanizeLabel } from "./display-labels";
+import { humanizeLabel, labelKeys, localizedLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps, SourceTab } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace } from "./LtmWorkspace";
@@ -406,7 +406,7 @@ function TransferWorkbench({
           data-ltm-transfer-action="preview"
         >
           {busy === "preview" ? (
-            <Loader2 size="0.75rem" className="animate-spin" />
+            <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
           ) : (
             <Send aria-hidden="true" size="0.75rem" />
           )}
@@ -434,7 +434,11 @@ function TransferWorkbench({
                 data-ltm-transfer-item={item.classification}
                 className="rounded bg-[var(--secondary)]/45 p-2"
               >
-                <strong>{item.title}</strong>: {item.classification}
+                <strong>{item.title}</strong>: {localizedLabel(
+                  item.classification,
+                  localizeUi,
+                  labelKeys.transferClassification,
+                )}
                 {item.reason
                   ? localizeUi("ui.longTermMemory.transferworkbench.value1", {
                       value1: item.reason,
@@ -451,7 +455,7 @@ function TransferWorkbench({
             data-ltm-transfer-ready-count={preview.buckets.ready.length}
           >
             {busy === "apply" ? (
-              <Loader2 size="0.75rem" className="animate-spin" />
+              <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
             ) : (
               <Check aria-hidden="true" size="0.75rem" />
             )}
@@ -1311,7 +1315,10 @@ export default function SourcesWorkspace({
           <>
             <IconButton
               icon={extractingId === noteId ? Loader2 : Sparkles}
-              label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
+               label={localizeUi(
+                 "ui.longTermMemory.sourcesworkspace.reExtractValue1",
+                 { value1: title },
+               )}
               disabled={extractingId !== null}
               onClick={(event) => {
                 stopRowAction(event);
@@ -1322,9 +1329,10 @@ export default function SourcesWorkspace({
             />
             <IconButton
               icon={BookOpen}
-              label={localizeUi(
-                "ui.longTermMemory.sourcesworkspace.reviewDrafts",
-              )}
+               label={localizeUi(
+                 "ui.longTermMemory.sourcesworkspace.reviewDraftsForValue1",
+                 { value1: title },
+               )}
               onClick={(event) => {
                 stopRowAction(event);
                 setOpenSourceActionId(null);
@@ -1640,7 +1648,7 @@ export default function SourcesWorkspace({
                 className="animate-spin"
               />
             ) : (
-              <RefreshCw size="0.75rem" />
+               <RefreshCw aria-hidden="true" size="0.75rem" />
             )}
             {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
           </Button>
@@ -1678,7 +1686,7 @@ export default function SourcesWorkspace({
               disabled={importing}
               data-ltm-source-action="retry-cancelled"
             >
-              <RefreshCw size="0.75rem" />
+               <RefreshCw aria-hidden="true" size="0.75rem" />
               {localizeUi(
                 "ui.longTermMemory.sourcesworkspace.retryOriginalSelection",
                 { count: cancelledImport.sourceIds.length },
@@ -1755,7 +1763,8 @@ export default function SourcesWorkspace({
                           }}
                           className={`flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--secondary)]/35 ${selectedLorebookId === book.id ? "bg-[var(--primary)]/10" : ""}`}
                         >
-                          <BookOpen
+                           <BookOpen
+                             aria-hidden="true"
                             size="1rem"
                             className="shrink-0 text-[var(--muted-foreground)]"
                           />
@@ -1774,7 +1783,8 @@ export default function SourcesWorkspace({
                               )}
                             </span>
                           </span>
-                          <ChevronRight
+                           <ChevronRight
+                             aria-hidden="true"
                             size="0.875rem"
                             className="shrink-0 text-[var(--muted-foreground)]"
                           />
@@ -1837,7 +1847,7 @@ export default function SourcesWorkspace({
                               }
                               data-ltm-lorebook-action="import-selected"
                             >
-                              <Check size="0.75rem" />{" "}
+                              <Check aria-hidden="true" size="0.75rem" />{" "}
                               {localizeUi(
                                 "ui.longTermMemory.sourcesworkspace.importSelectedCount",
                                 { count: selectedBookImportIds.length },
@@ -1857,7 +1867,7 @@ export default function SourcesWorkspace({
                               }
                               data-ltm-lorebook-action="refresh-selected"
                             >
-                              <RefreshCw size="0.75rem" />{" "}
+                              <RefreshCw aria-hidden="true" size="0.75rem" />{" "}
                               {localizeUi(
                                 "ui.longTermMemory.sourcesworkspace.syncSelectedCount",
                                 { count: selectedBookRefreshIds.length },
@@ -1875,7 +1885,7 @@ export default function SourcesWorkspace({
                                 }
                                 data-ltm-lorebook-action="transfer-selected"
                               >
-                                <Send size="0.75rem" />{" "}
+                                <Send aria-hidden="true" size="0.75rem" />{" "}
                                 {localizeUi(
                                   "ui.longTermMemory.sourcesworkspace.transferSelectedCount",
                                   {
@@ -2209,9 +2219,9 @@ export default function SourcesWorkspace({
                   data-ltm-source-selected-count={activeFlatSelectedIds.length}
                 >
                   {importing ? (
-                    <Loader2 size="0.75rem" className="animate-spin" />
+                    <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
                   ) : (
-                    <Check size="0.75rem" />
+                    <Check aria-hidden="true" size="0.75rem" />
                   )}
                   {localizeUi(
                     "ui.longTermMemory.sourcesworkspace.importSelected_7fb57e8",
@@ -2229,7 +2239,7 @@ export default function SourcesWorkspace({
                       activeFlatSelectedIds.length
                     }
                   >
-                    <RefreshCw size="0.75rem" />{" "}
+                      <RefreshCw aria-hidden="true" size="0.75rem" />{" "}
                     {localizeUi(
                       "ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb",
                     )}
@@ -2246,7 +2256,7 @@ export default function SourcesWorkspace({
                       }
                       data-ltm-source-action="transfer-selected"
                     >
-                      <Send size="0.75rem" />{" "}
+                      <Send aria-hidden="true" size="0.75rem" />{" "}
                       {localizeUi(
                         "ui.longTermMemory.sourcesworkspace.transferSelectedCount",
                         { count: transferNoteIds.size },
@@ -2526,9 +2536,9 @@ export default function SourcesWorkspace({
                   data-ltm-source-note-id={item.note.id}
                 >
                   {extractingId === item.note.id ? (
-                    <Loader2 size="0.75rem" className="animate-spin" />
+                      <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
                   ) : (
-                    <Sparkles size="0.75rem" />
+                      <Sparkles aria-hidden="true" size="0.75rem" />
                   )}
                   {localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
                 </Button>
@@ -2549,7 +2559,7 @@ export default function SourcesWorkspace({
               tone="danger"
               data-ltm-source-write-failure={failure.sourceId}
             >
-              <CircleAlert size="0.875rem" /> {failure.title}:{" "}
+              <CircleAlert aria-hidden="true" size="0.875rem" /> {failure.title}:{" "}
               {failure.error.message} (
               {importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
               {importStatusLabel(failure.extractionStatus, localizeUi)})
@@ -2557,7 +2567,7 @@ export default function SourcesWorkspace({
           ))}
           {importResult.missingSourceIds.map((id) => (
             <StatusSurface key={id} tone="danger" data-ltm-source-missing={id}>
-              <CircleAlert size="0.875rem" />{" "}
+              <CircleAlert aria-hidden="true" size="0.875rem" />{" "}
               {localizeUi(
                 "ui.longTermMemory.sourcesworkspace.missingSourceMemory",
               )}
