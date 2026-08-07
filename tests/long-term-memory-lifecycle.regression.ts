@@ -2319,6 +2319,12 @@ async function main() {
         mobileExtractionLayout.selectWidths,
         mobileExtractionLayout.fieldWidths,
       );
+      const mobileDiscardSettings = mobilePage.getByRole("button", {
+        name: "Discard changes",
+      });
+      mobilePage.once("dialog", (dialog) => void dialog.accept());
+      await mobileDiscardSettings.click();
+      await mobileDiscardSettings.waitFor({ state: "detached" });
       await mobilePage
         .getByRole("button", { name: "Show setup guide" })
         .click();
