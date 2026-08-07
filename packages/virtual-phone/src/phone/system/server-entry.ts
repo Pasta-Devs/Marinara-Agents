@@ -450,6 +450,34 @@ export async function activate({ api }: CapabilityContext) {
         return { feed: fallbackFeed() };
       }
     });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/mail/inbox", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const model = await api.runtime.languageModels?.resolve();
+        if (!model) return { emails: [] };
+        const chatId = phone.document.identity.chatScope[0];
+        let storyContext = "";
+        if (chatId && api.runtime.persistence.listMessages) {
+          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
+            .map((message) => message.content.slice(0, 240))
+            .join("\n");
+        }
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${storyContext ? `\n\nRecent story events for context:\n${storyContext}` : ""}`,
+          },
+          { role: "user", content: "Generate the current inbox." },
+        ], { temperature: 1, maxTokens: 600 });
+        const inbox = parseBoundedContent(completion.content, { fields: { emails: "string[]" }, defaults: { emails: [] as string[] } }) as { emails: string[] };
+        return { emails: inbox.emails };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Phone not found") {
+          return reply.status(400).send({ error: error.message });
+        }
+        return { emails: [] };
+      }
+    });
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/notifications", async (request, reply) => {
       try {
         const contacts = await contactsFor(request.params.phoneId);

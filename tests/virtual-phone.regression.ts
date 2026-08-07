@@ -21,6 +21,7 @@ import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messa
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
 import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/phone/apps/noodler/manifest";
 import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/contacts/manifest";
+import { mailManifest, parseEmail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
 import { conditionOpacity, patternBackground } from "../packages/virtual-phone/src/phone/device/effects";
 
@@ -312,6 +313,12 @@ async function main() {
   assert.deepEqual(fallbackFeed(), { posts: [] });
   validateAppManifest(contactsManifest);
   assert.equal(contactsManifest.modelUse, "none");
+  validateAppManifest(mailManifest);
+  assert.deepEqual(
+    parseEmail("Duloc Parks Dept | Overdue swamp permit | Your permit expired on the 3rd."),
+    { from: "Duloc Parks Dept", subject: "Overdue swamp permit", body: "Your permit expired on the 3rd." },
+  );
+  assert.deepEqual(parseEmail("weird"), { from: "weird", subject: "(no subject)", body: "(empty message)" });
   assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts"]);
   let tick = 0;
   const messageIds = ["msg-1", "msg-2", "msg-3"];

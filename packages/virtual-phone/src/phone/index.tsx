@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { AtSign, BatteryMedium, BookUser, ChevronDown, Eye, MessageCircle, Quote, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
+import { AtSign, BatteryMedium, BookUser, ChevronDown, Eye, Mail, MessageCircle, Quote, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
 import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/PhonesSettings";
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
@@ -19,6 +19,7 @@ import { messagesManifest } from "./apps/messages/manifest";
 import { notesManifest } from "./apps/notes/manifest";
 import { noodlerManifest } from "./apps/noodler/manifest";
 import { contactsManifest } from "./apps/contacts/manifest";
+import { mailManifest } from "./apps/mail/manifest";
 
 const SettingsApp = React.lazy(() => import("./apps/settings/shell").then((module) => ({ default: module.SettingsShell })));
 const AppStoreApp = React.lazy(() => import("./apps/app-store/shell").then((module) => ({ default: module.AppStoreShell })));
@@ -27,6 +28,7 @@ const MessagesApp = React.lazy(() => import("./apps/messages/shell").then((modul
 const NotesApp = React.lazy(() => import("./apps/notes/shell").then((module) => ({ default: module.NotesShell })));
 const NoodlerApp = React.lazy(() => import("./apps/noodler/shell").then((module) => ({ default: module.NoodlerShell })));
 const ContactsApp = React.lazy(() => import("./apps/contacts/shell").then((module) => ({ default: module.ContactsShell })));
+const MailApp = React.lazy(() => import("./apps/mail/shell").then((module) => ({ default: module.MailShell })));
 export const phoneAppRegistry = new InstalledAppRegistry();
 phoneAppRegistry.register({ manifest: settingsManifest, load: async () => import("./apps/settings/shell") });
 phoneAppRegistry.register({ manifest: appStoreManifest, load: async () => import("./apps/app-store/shell") });
@@ -35,6 +37,7 @@ phoneAppRegistry.register({ manifest: messagesManifest, load: async () => import
 phoneAppRegistry.register({ manifest: notesManifest, load: async () => import("./apps/notes/shell") });
 phoneAppRegistry.register({ manifest: noodlerManifest, load: async () => import("./apps/noodler/shell") });
 phoneAppRegistry.register({ manifest: contactsManifest, load: async () => import("./apps/contacts/shell") });
+phoneAppRegistry.register({ manifest: mailManifest, load: async () => import("./apps/mail/shell") });
 
 class AppErrorBoundary extends React.Component<{ appName: string; children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -64,7 +67,7 @@ function dispatchPhoneEvent(type: string) {
   window.dispatchEvent(new CustomEvent(type));
 }
 
-type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | "notes" | "noodler" | "contacts" | null;
+type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | "notes" | "noodler" | "contacts" | "mail" | null;
 
 interface PhoneNotification {
   id: string;
@@ -75,7 +78,7 @@ interface PhoneNotification {
   at: string;
 }
 
-const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler", "contacts"]);
+const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler", "contacts", "mail"]);
 
 function appIconStyle(appId: string) {
   return styledAppIds.has(appId) ? `vp-app-icon--${appId}` : "vp-app-icon--default";
@@ -232,6 +235,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     { id: "notes", label: "Notes", Icon: StickyNote },
     { id: "noodler", label: "Noodler", Icon: AtSign },
     { id: "contacts", label: "Contacts", Icon: BookUser },
+    { id: "mail", label: "Mail", Icon: Mail },
   ];
   const installedOptionalApps = optionalApps.filter((app) => deviceSettings.installedApps.includes(app.id));
   const launchableApps: typeof optionalApps = [...installedOptionalApps, { id: "app-store", label: "App Store", Icon: Store }];
@@ -353,6 +357,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               {activeApp === "notes" && selectedPhone && deviceSettings.installedApps.includes("notes") ? <AppErrorBoundary appName="Notes"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Notes...</div>}><NotesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("notes")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "noodler" && selectedPhone && deviceSettings.installedApps.includes("noodler") ? <AppErrorBoundary appName="Noodler"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Noodler...</div>}><NoodlerApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("noodler")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "contacts" && selectedPhone && deviceSettings.installedApps.includes("contacts") ? <AppErrorBoundary appName="Contacts"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Contacts...</div>}><ContactsApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("contacts")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "mail" && selectedPhone && deviceSettings.installedApps.includes("mail") ? <AppErrorBoundary appName="Mail"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Mail...</div>}><MailApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("mail")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
             </main>
             <span className="vp-home-indicator" aria-hidden="true" />
           </div>
