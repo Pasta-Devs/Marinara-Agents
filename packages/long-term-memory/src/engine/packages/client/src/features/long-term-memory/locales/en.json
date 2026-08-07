@@ -178,7 +178,7 @@
   "ui.longTermMemory.longtermmemorydetail.statusUnavailable": "Status unavailable",
   "ui.longTermMemory.longtermmemorydetail.stepProgress": "Step {{current}} of {{total}} · {{label}}",
   "ui.longTermMemory.longtermmemorydetail.thisChat": "this chat",
-  "ui.longTermMemory.longtermmemorydetail.promptBlockPlacement": "For Roleplay and Game it's slightly more hands-on. Open Prompt Preset Editor -> Sections -> Add Section -> Agent Sections -> Long-Term Memory, and leave the generated {{agent::long-term-memory}} block enabled wherever recalled continuity should show up. You can also just skip this and continue; Engine keeps a fallback placement running. You'd only touch this if you wanted memories to land somewhere specific.",
+  "ui.longTermMemory.longtermmemorydetail.promptBlockPlacement": "For Roleplay and Game it's slightly more hands-on. Open Prompt Preset Editor -> Sections -> Add Section -> Agent Sections -> Long-Term Memory, and leave the generated {{agent::long-term-memory}} block enabled wherever recalled continuity should show up. Marinara Engine has a default fallback for agents (depth 0), so you'd only touch this if you wanted memories to land somewhere specific.",
   "ui.longTermMemory.longtermmemorydetail.value1Value2": "{{value1}} {{value2}}",
   "ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton": "You can replay this guide with the help button above.",
   "ui.longTermMemory.longtermmemorynavigation.longTermMemorySections": "Long-Term Memory sections",
