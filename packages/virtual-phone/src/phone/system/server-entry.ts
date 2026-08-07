@@ -12,6 +12,7 @@ import { parseBoundedContent } from "../platform/content";
 import { fallbackSearchResults } from "../apps/goodle/manifest";
 import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
+import { handleFor, NoodleFeedService, parseGeneratedPost } from "./noodle";
 
 interface CapabilityContext {
   api: {
@@ -105,6 +106,7 @@ function readEnsureInput(value: unknown): EnsurePhoneInput {
 export async function activate({ api }: CapabilityContext) {
   const phones = new PhoneIdentityService(api.runtime.persistence.documents);
   const messaging = new PhoneMessagingService(api.runtime.persistence.documents);
+  const noodle = new NoodleFeedService(api.runtime.persistence.documents);
   await phones.migrateLegacyDocuments();
 
   const findPhone = async (phoneId: string) => {
@@ -426,32 +428,64 @@ export async function activate({ api }: CapabilityContext) {
         return { page: fallback };
       }
     });
+    app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/noodle/feed", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        return { posts: await noodle.feedFor(phone.document.identity.chatScope) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Noodle unavailable" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodle/post", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const text = String(body.text ?? "").trim();
+        if (!text) return reply.status(400).send({ error: "Post text is required" });
+        const chatId = phone.document.identity.chatScope[0];
+        if (!chatId) return reply.status(400).send({ error: "This phone has no chat to post in" });
+        const ownerName = phone.document.identity.ownerName;
+        await noodle.addPosts(chatId, [{ author: ownerName, handle: handleFor(ownerName), text }]);
+        return { posts: await noodle.feedFor(phone.document.identity.chatScope) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Post failed" });
+      }
+    });
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler/feed", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
+        const scope = phone.document.identity.chatScope;
         const model = await api.runtime.languageModels?.resolve();
-        if (!model) return { feed: fallbackFeed() };
-        const chatId = phone.document.identity.chatScope[0];
+        if (!model) return { posts: await noodle.feedFor(scope) };
+        // ponytail: generation always lands in the phone's first chat; per-chat targeting when phones span many chats
+        const chatId = scope[0];
+        if (!chatId) return { posts: [] };
         let storyContext = "";
-        if (chatId && api.runtime.persistence.listMessages) {
+        if (api.runtime.persistence.listMessages) {
           storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
             .map((message) => message.content.slice(0, 240))
             .join("\n");
         }
+        const timeline = (await noodle.feedFor([chatId])).slice(0, 10)
+          .map((post) => `${post.author} ${post.handle} — ${post.text.slice(0, 160)}`)
+          .join("\n");
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 short posts by fictional side characters (never the protagonists) reacting to life in this world. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts by fictional side characters (never the protagonists) reacting to life in this world. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
           },
-          { role: "user", content: "Generate the current feed." },
+          { role: "user", content: "Generate the next batch of posts." },
         ], { temperature: 1, maxTokens: 500 });
-        const feed = parseBoundedContent(completion.content, { fields: { posts: "string[]" }, defaults: fallbackFeed() });
-        return { feed };
+        const generated = parseBoundedContent(completion.content, { fields: { posts: "string[]" }, defaults: fallbackFeed() }) as { posts: string[] };
+        if (generated.posts.length) await noodle.addPosts(chatId, generated.posts.map(parseGeneratedPost));
+        return { posts: await noodle.feedFor(scope) };
       } catch (error) {
         if (error instanceof Error && error.message === "Phone not found") {
           return reply.status(400).send({ error: error.message });
         }
-        return { feed: fallbackFeed() };
+        return { posts: [] };
       }
     });
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/gallery", async (request, reply) => {

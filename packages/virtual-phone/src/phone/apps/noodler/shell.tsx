@@ -1,6 +1,5 @@
 import React from "react";
 import { AtSign, Flame, Heart, MessageCircle, Newspaper, Repeat2, Send } from "lucide-react";
-import { fallbackFeed } from "./manifest";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
@@ -11,14 +10,17 @@ function hashOf(value: string) {
   return hash;
 }
 
-function splitPost(post: string) {
-  const [authorPart, ...rest] = post.split(" — ");
-  const raw = rest.length ? authorPart!.trim() : "Noodler";
-  const text = rest.length ? rest.join(" — ") : post;
-  const handle = raw.match(/@[\w.-]+/u)?.[0] ?? `@${raw.toLowerCase().replace(/[^a-z0-9]+/gu, "") || "noodler"}`;
-  const name = raw.replace(handle, "").trim() || handle.slice(1);
-  const hash = hashOf(post);
-  return { name, handle, text, likes: 3 + (hash % 420), replies: hash % 37, boosts: hash % 52 };
+interface NoodlePost {
+  id: string;
+  author: string;
+  handle: string;
+  text: string;
+  at: string;
+}
+
+function postStats(post: NoodlePost) {
+  const hash = hashOf(post.id + post.text);
+  return { likes: 3 + (hash % 420), replies: hash % 37, boosts: hash % 52 };
 }
 
 function splitTopic(topic: string) {
@@ -29,7 +31,7 @@ function splitTopic(topic: string) {
 export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { phoneId: string; ownerName?: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "noodler");
   const [tab, setTab] = React.useState<"feed" | "trending">("feed");
-  const [feed, setFeed] = React.useState<{ posts: string[] } | null>(null);
+  const [feed, setFeed] = React.useState<NoodlePost[] | null>(null);
   const [trending, setTrending] = React.useState<string[] | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [draft, setDraft] = React.useState("");
@@ -37,23 +39,19 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
   const postDraft = () => {
     const text = draft.trim();
     if (!text) return;
-    const handle = `@${ownerName.toLowerCase().replace(/[^a-z0-9]+/gu, "") || "you"}`;
-    const next = { posts: [`${ownerName} ${handle} — ${text}`, ...(feed?.posts ?? [])] };
-    setFeed(next);
-    void store.set("feed", next).catch(() => undefined);
     setDraft("");
+    void phoneRequest<{ posts: NoodlePost[] }>(`/phones/${encodeURIComponent(phoneId)}/noodle/post`, {
+      method: "POST", body: JSON.stringify({ text }),
+    }).then((response) => setFeed(response.posts)).catch(() => setDraft(text));
   };
 
   const refreshFeed = React.useCallback(() => {
     setLoading(true);
-    void phoneRequest<{ feed: { posts: string[] } }>(`/phones/${encodeURIComponent(phoneId)}/noodler/feed`, { method: "POST", body: JSON.stringify({}) })
-      .then((response) => {
-        setFeed(response.feed);
-        void store.set("feed", response.feed).catch(() => undefined);
-      })
-      .catch(() => setFeed((current) => current ?? fallbackFeed()))
+    void phoneRequest<{ posts: NoodlePost[] }>(`/phones/${encodeURIComponent(phoneId)}/noodler/feed`, { method: "POST", body: JSON.stringify({}) })
+      .then((response) => setFeed(response.posts))
+      .catch(() => setFeed((current) => current ?? []))
       .finally(() => setLoading(false));
-  }, [phoneId, store]);
+  }, [phoneId]);
 
   const refreshTrending = React.useCallback(() => {
     setLoading(true);
@@ -68,18 +66,14 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
 
   React.useEffect(() => {
     let active = true;
-    void Promise.all([store.get("feed"), store.get("trending")]).then(([cachedFeed, cachedTrending]) => {
-      if (!active) return;
-      const feedValue = cachedFeed as { posts?: unknown } | undefined;
-      if (feedValue && Array.isArray(feedValue.posts) && feedValue.posts.every((post) => typeof post === "string")) {
-        setFeed({ posts: feedValue.posts as string[] });
-      } else {
-        refreshFeed();
-      }
-      if (Array.isArray(cachedTrending)) setTrending(cachedTrending.filter((topic): topic is string => typeof topic === "string"));
-    }).catch(() => { if (active) refreshFeed(); });
+    void phoneRequest<{ posts: NoodlePost[] }>(`/phones/${encodeURIComponent(phoneId)}/noodle/feed`)
+      .then((response) => { if (active) setFeed(response.posts); })
+      .catch(() => { if (active) setFeed([]); });
+    void store.get("trending").then((cachedTrending) => {
+      if (active && Array.isArray(cachedTrending)) setTrending(cachedTrending.filter((topic): topic is string => typeof topic === "string"));
+    }).catch(() => undefined);
     return () => { active = false; };
-  }, [store, refreshFeed]);
+  }, [phoneId, store]);
 
   React.useEffect(() => {
     if (tab === "trending" && trending === null && !loading) refreshTrending();
@@ -118,24 +112,25 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
               </label>
               <button type="submit" aria-label="Post" disabled={!draft.trim()} className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Send size="1rem" aria-hidden="true" /></button>
             </form>
-            {loading && !feed?.posts.length ? skeleton : null}
-            {feed && feed.posts.length === 0 && !loading ? (
+            {(loading || feed === null) && !feed?.length ? skeleton : null}
+            {feed && feed.length === 0 && !loading ? (
               <p className="vp-muted-note">The plate is empty. Refresh to see what's simmering.</p>
             ) : null}
-            {feed?.posts.length ? (
+            {feed?.length ? (
               <div className="vp-stack" style={{ gap: "0.5rem" }} aria-busy={loading}>
-                {feed.posts.map((post, index) => {
-                  const { name, handle, text, likes, replies, boosts } = splitPost(post);
+                {feed.map((post) => {
+                  const { likes, replies, boosts } = postStats(post);
                   return (
-                    <article key={index} className="vp-card vp-post">
+                    <article key={post.id} className="vp-card vp-post">
                       <div className="vp-post-header">
-                        <span className="vp-post-avatar" aria-hidden="true">{name[0]?.toUpperCase() ?? "N"}</span>
+                        <span className="vp-post-avatar" aria-hidden="true">{post.author[0]?.toUpperCase() ?? "N"}</span>
                         <span className="vp-post-names">
-                          <span className="vp-post-author">{name}</span>
-                          <span className="vp-post-handle">{handle}</span>
+                          <span className="vp-post-author">{post.author}</span>
+                          <span className="vp-post-handle">{post.handle}</span>
                         </span>
+                        <span className="vp-post-time">{new Date(post.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
                       </div>
-                      <p className="vp-post-text">{text}</p>
+                      <p className="vp-post-text">{post.text}</p>
                       <div className="vp-post-footer" aria-label={`${replies} replies, ${boosts} boosts, ${likes} likes`}>
                         <span><MessageCircle size="0.75rem" aria-hidden="true" /> {replies}</span>
                         <span><Repeat2 size="0.75rem" aria-hidden="true" /> {boosts}</span>

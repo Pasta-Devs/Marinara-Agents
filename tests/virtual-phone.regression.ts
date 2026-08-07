@@ -21,6 +21,7 @@ import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messa
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
 import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/phone/apps/noodler/manifest";
 import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/contacts/manifest";
+import { handleFor, NoodleFeedService, parseGeneratedPost } from "../packages/virtual-phone/src/phone/system/noodle";
 import { mailManifest, parseEmail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
@@ -360,6 +361,25 @@ async function main() {
   await assert.rejects(() => messaging.send("phone-persona", "phone-character", "   "), /text is required/u);
   await assert.rejects(() => messaging.send("phone-persona", "phone-character", "x".repeat(2001)), /limited to 2000/u);
   await assert.rejects(() => messaging.markRead("thread:missing", "phone-persona"), /Thread not found/u);
+
+  assert.equal(handleFor("Evil Stepsister #3"), "@evilstepsister3");
+  assert.deepEqual(
+    parseGeneratedPost("Marge Swampley @margeswamp — best onions in town — trust me"),
+    { author: "Marge Swampley", handle: "@margeswamp", text: "best onions in town — trust me" },
+  );
+  let noodleTick = 0;
+  const noodleIds = ["np-1", "np-2", "np-3"];
+  const noodleService = new NoodleFeedService(
+    documents,
+    () => new Date(1_800_000_000_000 + ++noodleTick * 1000).toISOString(),
+    () => noodleIds.shift() ?? `np-${Math.random()}`,
+  );
+  await noodleService.addPosts("chat-1", [{ author: "Mira", handle: "@mira", text: "hello swamp" }]);
+  await noodleService.addPosts("chat-2", [{ author: "Bob", handle: "@bob", text: "other chat" }, { author: "", handle: "", text: "  " }]);
+  assert.equal((await noodleService.feedFor(["chat-1"])).length, 1);
+  const mergedFeed = await noodleService.feedFor(["chat-1", "chat-2"]);
+  assert.deepEqual(mergedFeed.map((post) => post.text), ["other chat", "hello swamp"]);
+  assert.deepEqual(await noodleService.feedFor(["chat-none"]), []);
 
   const configured = await reloadedRuntime.updateSettings(minted.document.identity.phoneId, {
     deviceName: "Alex's Phone",
