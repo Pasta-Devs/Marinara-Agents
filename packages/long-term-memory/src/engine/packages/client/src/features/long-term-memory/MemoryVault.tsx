@@ -2393,7 +2393,11 @@ export default function MemoryVault({
                               {["critical", "major", "moderate", "minor"].map(
                                 (value) => (
                                   <option key={value} value={value}>
-                                    {humanizeLabel(value)}
+                                    {localizedLabel(
+                                      value,
+                                      localizeUi,
+                                      labelKeys.importance,
+                                    )}
                                   </option>
                                 ),
                               )}

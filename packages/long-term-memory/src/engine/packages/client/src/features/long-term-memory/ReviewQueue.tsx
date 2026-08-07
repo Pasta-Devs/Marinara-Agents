@@ -2127,7 +2127,11 @@ export default function ReviewQueue({
                   {selectedReviewSource ? (
                     <p className="text-xs text-[var(--muted-foreground)]">
                       {localizeUi("ui.longTermMemory.reviewqueue.modes")}{" "}
-                      {selectedReviewSource.modes.map(humanizeLabel).join(", ")}
+                      {selectedReviewSource.modes
+                        .map((mode) =>
+                          localizedLabel(mode, localizeUi, labelKeys.mode),
+                        )
+                        .join(", ")}
                     </p>
                   ) : null}
                 </div>
