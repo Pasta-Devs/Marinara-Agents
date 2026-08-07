@@ -1,5 +1,5 @@
 import React from "react";
-import { Flame, Heart, MessageCircle, Newspaper, Repeat2 } from "lucide-react";
+import { AtSign, Flame, Heart, MessageCircle, Newspaper, Repeat2, Send } from "lucide-react";
 import { fallbackFeed } from "./manifest";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
@@ -26,12 +26,23 @@ function splitTopic(topic: string) {
   return { tag: tag?.trim() || topic.trim(), reason: rest.join(" | ").trim() };
 }
 
-export function NoodlerShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
+export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { phoneId: string; ownerName?: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "noodler");
   const [tab, setTab] = React.useState<"feed" | "trending">("feed");
   const [feed, setFeed] = React.useState<{ posts: string[] } | null>(null);
   const [trending, setTrending] = React.useState<string[] | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [draft, setDraft] = React.useState("");
+
+  const postDraft = () => {
+    const text = draft.trim();
+    if (!text) return;
+    const handle = `@${ownerName.toLowerCase().replace(/[^a-z0-9]+/gu, "") || "you"}`;
+    const next = { posts: [`${ownerName} ${handle} — ${text}`, ...(feed?.posts ?? [])] };
+    setFeed(next);
+    void store.set("feed", next).catch(() => undefined);
+    setDraft("");
+  };
 
   const refreshFeed = React.useCallback(() => {
     setLoading(true);
@@ -89,9 +100,9 @@ export function NoodlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
   return (
     <section aria-labelledby="noodler-title" className="vp-appview vp-appview--fixed">
       <PhoneAppHeader
-        title="Noodler"
+        title="Noodle"
         titleId="noodler-title"
-        closeLabel="Close Noodler"
+        closeLabel="Close Noodle"
         onBack={onBack}
         onClose={onClose}
         actions={[{ id: "refresh", icon: "refresh", label: tab === "feed" ? "Refresh feed" : "Refresh trending", kind: "button", disabled: loading, reason: "Refreshing" }]}
@@ -100,9 +111,16 @@ export function NoodlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
       <div className="vp-tab-content">
         {tab === "feed" ? (
           <>
+            <div className="vp-page-url" aria-hidden="true"><AtSign size="0.75rem" /><span>https://noodle.local</span></div>
+            <form className="vp-composer" style={{ marginBottom: "0.875rem" }} onSubmit={(event) => { event.preventDefault(); postDraft(); }}>
+              <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Write a post</span>
+                <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="What's simmering?" maxLength={500} className="vp-input" />
+              </label>
+              <button type="submit" aria-label="Post" disabled={!draft.trim()} className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Send size="1rem" aria-hidden="true" /></button>
+            </form>
             {loading && !feed?.posts.length ? skeleton : null}
             {feed && feed.posts.length === 0 && !loading ? (
-              <p className="vp-muted-note">The feed is quiet right now. Refresh to see what the world is talking about.</p>
+              <p className="vp-muted-note">The plate is empty. Refresh to see what's simmering.</p>
             ) : null}
             {feed?.posts.length ? (
               <div className="vp-stack" style={{ gap: "0.5rem" }} aria-busy={loading}>
@@ -154,8 +172,8 @@ export function NoodlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
           </>
         )}
       </div>
-      <nav className="vp-tabbar" aria-label="Noodler sections">
-        <button type="button" aria-current={tab === "feed"} onClick={() => setTab("feed")} className="vp-tabbar-btn"><Newspaper size="1rem" aria-hidden="true" /><span>Feed</span></button>
+      <nav className="vp-tabbar" aria-label="Noodle sections">
+        <button type="button" aria-current={tab === "feed"} onClick={() => setTab("feed")} className="vp-tabbar-btn"><Newspaper size="1rem" aria-hidden="true" /><span>Main</span></button>
         <button type="button" aria-current={tab === "trending"} onClick={() => setTab("trending")} className="vp-tabbar-btn"><Flame size="1rem" aria-hidden="true" /><span>Trending</span></button>
       </nav>
     </section>

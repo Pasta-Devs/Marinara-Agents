@@ -2,7 +2,8 @@ import type { AppManifest } from "../../platform/app-manifest";
 
 export const noodlerManifest: AppManifest = {
   id: "noodler",
-  name: "Noodler",
+  // ponytail: id stays "noodler" for installed-app continuity; display name matches the Engine's Noodle
+  name: "Noodle",
   version: "1.0.0",
   icon: "noodler",
   category: "social",

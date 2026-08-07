@@ -233,7 +233,7 @@ export async function activate({ api }: CapabilityContext) {
             ? `a note that starts: "${first.text.split("\n")[0]!.slice(0, 120)}"`
             : "the Notes app";
         } else if (app_ === "noodler") {
-          summary = "the Noodler feed";
+          summary = "the Noodle feed";
         } else if (app_ === "settings" || app_ === "app-store" || app_ === "contacts") {
           summary = `the ${app_ === "app-store" ? "App Store" : app_[0]!.toUpperCase() + app_.slice(1)} app`;
         }
@@ -441,7 +441,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodler, the social network inside a fictional roleplay world. Invent 4 to 6 short posts by fictional side characters (never the protagonists) reacting to life in this world. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 short posts by fictional side characters (never the protagonists) reacting to life in this world. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
           },
           { role: "user", content: "Generate the current feed." },
         ], { temperature: 1, maxTokens: 500 });
@@ -490,7 +490,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodler, the social network inside a fictional roleplay world. List 5 trending topics in this world right now. Respond with only JSON: {"topics":["#HashtagName | one line on why it is trending", ...]}. Every topic uses that exact two-part format.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. List 5 trending topics in this world right now. Respond with only JSON: {"topics":["#HashtagName | one line on why it is trending", ...]}. Every topic uses that exact two-part format.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
           },
           { role: "user", content: "Generate the trending list." },
         ], { temperature: 1, maxTokens: 400 });
