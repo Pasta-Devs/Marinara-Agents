@@ -44,6 +44,104 @@ export function parseGeneratedPost(item: string) {
   return { author, handle, text };
 }
 
+const PAGE_KIND = "noodler-page";
+const MAX_PAGE_POSTS = 12;
+
+export interface NoodlerPagePost {
+  id: string;
+  text: string;
+  locked: boolean;
+}
+
+export interface NoodlerPageDocument {
+  schemaVersion: 1;
+  chatId: string;
+  creatorPhoneId: string;
+  creatorName: string;
+  tagline: string;
+  price: string;
+  posts: NoodlerPagePost[];
+}
+
+function isPageDocument(value: unknown): value is NoodlerPageDocument {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const document = value as Partial<NoodlerPageDocument>;
+  return document.schemaVersion === 1 && typeof document.chatId === "string" &&
+    typeof document.creatorPhoneId === "string" && typeof document.creatorName === "string" &&
+    Array.isArray(document.posts);
+}
+
+function parsePageRecord(record: PhoneDocumentRecord) {
+  if (!isPageDocument(record.data)) throw new Error(`NoodleR page record ${record.id} is invalid`);
+  return { record, document: record.data };
+}
+
+export function parsePagePost(item: string) {
+  const parts = item.split(" | ");
+  const marker = parts.at(-1)?.trim().toLowerCase();
+  const locked = marker === "locked";
+  const text = (marker === "locked" || marker === "free" ? parts.slice(0, -1).join(" | ") : item).trim().slice(0, MAX_TEXT);
+  return { text, locked };
+}
+
+export class NoodlerPageService {
+  constructor(
+    private readonly documents: PhoneDocumentStore,
+    private readonly now = () => new Date().toISOString(),
+    private readonly createId = () => randomUUID(),
+  ) {}
+
+  private async listPages() {
+    return (await this.documents.list(PACKAGE_ID, PAGE_KIND)).map(parsePageRecord);
+  }
+
+  async pageFor(chatId: string, creatorPhoneId: string) {
+    return (await this.listPages())
+      .find(({ document }) => document.chatId === chatId && document.creatorPhoneId === creatorPhoneId) ?? null;
+  }
+
+  async savePage(input: { chatId: string; creatorPhoneId: string; creatorName: string; tagline: string; price: string; posts: Array<{ text: string; locked: boolean }> }) {
+    const document: NoodlerPageDocument = {
+      schemaVersion: 1,
+      chatId: input.chatId,
+      creatorPhoneId: input.creatorPhoneId,
+      creatorName: input.creatorName.trim().slice(0, 80) || "Creator",
+      tagline: input.tagline.trim().slice(0, 200),
+      price: input.price.trim().slice(0, 40),
+      posts: input.posts
+        .map((post) => ({ id: this.createId(), text: post.text.trim().slice(0, MAX_TEXT), locked: post.locked }))
+        .filter((post) => post.text)
+        .slice(0, MAX_PAGE_POSTS),
+    };
+    const at = this.now();
+    const existing = await this.pageFor(input.chatId, input.creatorPhoneId);
+    if (!existing) {
+      const record = await this.documents.create({
+        id: `noodler-page:${input.chatId}:${input.creatorPhoneId}`,
+        packageId: PACKAGE_ID,
+        kind: PAGE_KIND,
+        name: `NoodleR ${input.creatorName}`,
+        description: "Shared in-story NoodleR page",
+        data: document,
+        createdAt: at,
+        updatedAt: at,
+      });
+      return parsePageRecord(record);
+    }
+    const updated = await this.documents.update({
+      id: existing.record.id,
+      packageId: PACKAGE_ID,
+      expectedRevision: existing.record.revision,
+      name: existing.record.name,
+      description: existing.record.description,
+      data: document,
+      updatedAt: at,
+    });
+    if (!updated) return this.savePage(input);
+    return parsePageRecord(updated);
+  }
+}
+
 export class NoodleFeedService {
   constructor(
     private readonly documents: PhoneDocumentStore,

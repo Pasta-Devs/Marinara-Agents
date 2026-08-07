@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { AtSign, BatteryMedium, BookUser, ChevronDown, Eye, Flame, Images, Mail, MessageCircle, Quote, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
+import { AtSign, BatteryMedium, BookUser, ChevronDown, Eye, Flame, Images, Lock, Mail, MessageCircle, Quote, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
 import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/PhonesSettings";
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
@@ -22,6 +22,7 @@ import { contactsManifest } from "./apps/contacts/manifest";
 import { mailManifest } from "./apps/mail/manifest";
 import { galleryManifest } from "./apps/gallery/manifest";
 import { tindlerManifest } from "./apps/tindler/manifest";
+import { noodlerRManifest } from "./apps/noodler-r/manifest";
 
 const SettingsApp = React.lazy(() => import("./apps/settings/shell").then((module) => ({ default: module.SettingsShell })));
 const AppStoreApp = React.lazy(() => import("./apps/app-store/shell").then((module) => ({ default: module.AppStoreShell })));
@@ -33,6 +34,7 @@ const ContactsApp = React.lazy(() => import("./apps/contacts/shell").then((modul
 const MailApp = React.lazy(() => import("./apps/mail/shell").then((module) => ({ default: module.MailShell })));
 const GalleryApp = React.lazy(() => import("./apps/gallery/shell").then((module) => ({ default: module.GalleryShell })));
 const TindlerApp = React.lazy(() => import("./apps/tindler/shell").then((module) => ({ default: module.TindlerShell })));
+const NoodlerRApp = React.lazy(() => import("./apps/noodler-r/shell").then((module) => ({ default: module.NoodlerRShell })));
 export const phoneAppRegistry = new InstalledAppRegistry();
 phoneAppRegistry.register({ manifest: settingsManifest, load: async () => import("./apps/settings/shell") });
 phoneAppRegistry.register({ manifest: appStoreManifest, load: async () => import("./apps/app-store/shell") });
@@ -44,6 +46,7 @@ phoneAppRegistry.register({ manifest: contactsManifest, load: async () => import
 phoneAppRegistry.register({ manifest: mailManifest, load: async () => import("./apps/mail/shell") });
 phoneAppRegistry.register({ manifest: galleryManifest, load: async () => import("./apps/gallery/shell") });
 phoneAppRegistry.register({ manifest: tindlerManifest, load: async () => import("./apps/tindler/shell") });
+phoneAppRegistry.register({ manifest: noodlerRManifest, load: async () => import("./apps/noodler-r/shell") });
 
 class AppErrorBoundary extends React.Component<{ appName: string; children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -73,7 +76,7 @@ function dispatchPhoneEvent(type: string) {
   window.dispatchEvent(new CustomEvent(type));
 }
 
-type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | "notes" | "noodler" | "contacts" | "mail" | "gallery" | "tindler" | null;
+type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | "notes" | "noodler" | "contacts" | "mail" | "gallery" | "tindler" | "noodler-r" | null;
 
 interface PhoneNotification {
   id: string;
@@ -84,7 +87,7 @@ interface PhoneNotification {
   at: string;
 }
 
-const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler", "contacts", "mail", "gallery", "tindler"]);
+const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler", "contacts", "mail", "gallery", "tindler", "noodler-r"]);
 
 function appIconStyle(appId: string) {
   return styledAppIds.has(appId) ? `vp-app-icon--${appId}` : "vp-app-icon--default";
@@ -245,6 +248,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     { id: "mail", label: "Mail", Icon: Mail },
     { id: "gallery", label: "Gallery", Icon: Images },
     { id: "tindler", label: "Tindler", Icon: Flame },
+    { id: "noodler-r", label: "NoodleR", Icon: Lock },
   ];
   const installedOptionalApps = optionalApps.filter((app) => deviceSettings.installedApps.includes(app.id));
   const launchableApps: typeof optionalApps = [...installedOptionalApps, { id: "app-store", label: "App Store", Icon: Store }];
@@ -369,6 +373,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               {activeApp === "mail" && selectedPhone && deviceSettings.installedApps.includes("mail") ? <AppErrorBoundary appName="Mail"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Mail...</div>}><MailApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("mail")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "gallery" && selectedPhone && deviceSettings.installedApps.includes("gallery") ? <AppErrorBoundary appName="Gallery"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Gallery...</div>}><GalleryApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("gallery")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "tindler" && selectedPhone && deviceSettings.installedApps.includes("tindler") ? <AppErrorBoundary appName="Tindler"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Tindler...</div>}><TindlerApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("tindler")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "noodler-r" && selectedPhone && deviceSettings.installedApps.includes("noodler-r") ? <AppErrorBoundary appName="NoodleR"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading NoodleR...</div>}><NoodlerRApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("noodler-r")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
             </main>
             <span className="vp-home-indicator" aria-hidden="true" />
           </div>

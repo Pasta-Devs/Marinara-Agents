@@ -12,7 +12,7 @@ import { parseBoundedContent } from "../platform/content";
 import { fallbackSearchResults } from "../apps/goodle/manifest";
 import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
-import { handleFor, NoodleFeedService, parseGeneratedPost } from "./noodle";
+import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
 
 interface CapabilityContext {
   api: {
@@ -107,6 +107,7 @@ export async function activate({ api }: CapabilityContext) {
   const phones = new PhoneIdentityService(api.runtime.persistence.documents);
   const messaging = new PhoneMessagingService(api.runtime.persistence.documents);
   const noodle = new NoodleFeedService(api.runtime.persistence.documents);
+  const noodlerPages = new NoodlerPageService(api.runtime.persistence.documents);
   await phones.migrateLegacyDocuments();
 
   const findPhone = async (phoneId: string) => {
@@ -507,6 +508,65 @@ export async function activate({ api }: CapabilityContext) {
         return { images: images.reverse().slice(0, 60) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Gallery unavailable" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler-r/page", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const creatorPhoneId = String(body.creatorPhoneId ?? "");
+        const refresh = body.refresh === true;
+        const contact = (await contactsFor(request.params.phoneId)).find((candidate) => candidate.phoneId === creatorPhoneId);
+        if (!contact) return reply.status(400).send({ error: "That creator is not in this chat" });
+        const creator = await findPhone(creatorPhoneId);
+        const chatId = phone.document.identity.chatScope
+          .find((candidate) => creator.document.identity.chatScope.includes(candidate));
+        if (!chatId) return reply.status(400).send({ error: "No shared chat with this creator" });
+        const pagePayload = (document: { creatorPhoneId: string; creatorName: string; tagline: string; price: string; posts: Array<{ id: string; text: string; locked: boolean }> }) => ({
+          creatorPhoneId: document.creatorPhoneId,
+          creatorName: document.creatorName,
+          tagline: document.tagline,
+          price: document.price,
+          posts: document.posts,
+        });
+        const existing = await noodlerPages.pageFor(chatId, creatorPhoneId);
+        if (existing && !refresh) return { page: pagePayload(existing.document) };
+        const model = await api.runtime.languageModels?.resolve();
+        if (!model) {
+          if (existing) return { page: pagePayload(existing.document) };
+          const empty = await noodlerPages.savePage({ chatId, creatorPhoneId, creatorName: contact.ownerName, tagline: "", price: "", posts: [] });
+          return { page: pagePayload(empty.document) };
+        }
+        let storyContext = "";
+        if (api.runtime.persistence.listMessages) {
+          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-8)
+            .map((message) => message.content.slice(0, 200))
+            .join("\n");
+        }
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You write ${contact.ownerName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${storyContext ? `\n\nThe character, from recent story events:\n${storyContext}` : ""}`,
+          },
+          { role: "user", content: `Generate ${contact.ownerName}'s NoodleR page.` },
+        ], { temperature: 1, maxTokens: 600 });
+        const generated = parseBoundedContent(completion.content, {
+          fields: { tagline: "string", price: "string", posts: "string[]" },
+          defaults: { tagline: "", price: "", posts: [] as string[] },
+        }) as { tagline: string; price: string; posts: string[] };
+        const saved = await noodlerPages.savePage({
+          chatId,
+          creatorPhoneId,
+          creatorName: contact.ownerName,
+          tagline: generated.tagline,
+          price: generated.price,
+          posts: generated.posts.map(parsePagePost),
+        });
+        return { page: pagePayload(saved.document) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "NoodleR unavailable" });
       }
     });
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler/trending", async (request, reply) => {

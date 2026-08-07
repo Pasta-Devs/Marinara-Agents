@@ -21,7 +21,8 @@ import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messa
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
 import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/phone/apps/noodler/manifest";
 import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/contacts/manifest";
-import { handleFor, NoodleFeedService, parseGeneratedPost } from "../packages/virtual-phone/src/phone/system/noodle";
+import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "../packages/virtual-phone/src/phone/system/noodle";
+import { noodlerRManifest } from "../packages/virtual-phone/src/phone/apps/noodler-r/manifest";
 import { mailManifest, parseEmail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
@@ -380,6 +381,18 @@ async function main() {
   const mergedFeed = await noodleService.feedFor(["chat-1", "chat-2"]);
   assert.deepEqual(mergedFeed.map((post) => post.text), ["other chat", "hello swamp"]);
   assert.deepEqual(await noodleService.feedFor(["chat-none"]), []);
+  validateAppManifest(noodlerRManifest);
+  assert.deepEqual(parsePagePost("Morning swamp yoga pics | locked"), { text: "Morning swamp yoga pics", locked: true });
+  assert.deepEqual(parsePagePost("Hello everyone | free"), { text: "Hello everyone", locked: false });
+  assert.deepEqual(parsePagePost("No marker at all"), { text: "No marker at all", locked: false });
+  const pages = new NoodlerPageService(documents, () => "2027-01-01T00:00:00.000Z", () => "pg-1");
+  const savedPage = await pages.savePage({ chatId: "chat-1", creatorPhoneId: "phone-character", creatorName: "Mira", tagline: "hi", price: "5 coins", posts: [{ text: "free one", locked: false }, { text: "teaser", locked: true }] });
+  assert.equal(savedPage.document.posts.length, 2);
+  const reloadedPage = await pages.pageFor("chat-1", "phone-character");
+  assert.equal(reloadedPage?.document.tagline, "hi");
+  const replacedPage = await pages.savePage({ chatId: "chat-1", creatorPhoneId: "phone-character", creatorName: "Mira", tagline: "new", price: "", posts: [] });
+  assert.equal(replacedPage.document.tagline, "new");
+  assert.equal(await pages.pageFor("chat-2", "phone-character"), null);
 
   const configured = await reloadedRuntime.updateSettings(minted.document.identity.phoneId, {
     deviceName: "Alex's Phone",
