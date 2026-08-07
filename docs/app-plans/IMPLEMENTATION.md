@@ -151,9 +151,18 @@ it is an Engine-side change requiring the maintainer's buy-in. **Do not start it
 
 # Stage U — Upstream track
 
-**Start these on day one and run them alongside everything below.** Neither is code you write; both are
-conversations that gate later stages, and both are slow because they need other people. Starting them
-in Stage 11, where the code lands, means waiting twice.
+**These are conversations, not code.** Send them early — they have long lead times and cost you no
+build effort — but **write no Engine-dependent code until Stage 11.**
+
+That is a standing rule for this whole plan:
+
+> **Anything requiring an Engine-side change happens last.** Every app in Stage 9 ships its unblocked
+> half first and its blocked half in Stage 11. No stage below Stage 11 may be gated on an Engine change
+> landing. If you find yourself waiting on the Engine, you are in the wrong stage — move on.
+
+The reason is scheduling, not principle: an Engine change needs the maintainer, review, and a release,
+and none of that is under your control. Twelve stages of work are. Do not let the one dependency you
+cannot schedule block the eleven you can.
 
 ## Step U.1 — Request the package API contract extension
 
@@ -781,9 +790,13 @@ Order within this stage is by value. Each has a full plan file; read it before s
 - **Bookmarks snapshot page content**, not just the URL. Generated pages aren't stable across
   regenerations, so a URL-only bookmark undermines the point. The site cache is currently **per chat**;
   a bookmark caches indefinitely and across chats.
-- **Images tab** — a grid of generated images for a query. *Blocked, Stage 11.*
-- **Per-site image generation button** — pages render with placeholders plus one button at the top. At
-  ~15s per image, auto-generating a page's worth of art means a minute-long page load. *Blocked, Stage 11.*
+
+**Deferred to Stage 11.3** (Engine change required — do not start here): the Images tab, and the
+per-site image generation button. Build the page-layout side so images can slot in later without a
+rewrite: reserve the slot, render the caption, leave the picture empty. That's Step 11.2(b) and it is
+unblocked — a Goodle page with empty image slots and intact captions is a *finished* page, not a
+placeholder.
+
 - **Open question, needs a decision before shipping:** what happens when a user pastes a **real URL**?
   The tester's first instinct on seeing a browser was a real Reddit link. Options: generate a fake page
   at that address; refuse with an in-character no-connection page; or let the model riff on the domain.
@@ -820,18 +833,31 @@ mail client first; 9.10 layers onto it.
   well as a UX one.
 - Delete / hide a photo.
 - Shows Camera roll shots alongside chat images.
-- **Source change:** read the Engine's `chat_images` table rather than regexing image URLs out of
-  message text. It carries the generation `prompt`, which *is* the caption. *Blocked, Stage 11.*
-- **Two-way:** phone-taken photos should reach the chat gallery, not only the reverse.
 - Not doing: albums / grouping.
+
+Captions work today without the Engine: the phone can generate or carry its own caption per image. Do
+that now rather than waiting.
+
+**Deferred to Stage 11.3** (Engine change required): reading the Engine's `chat_images` table instead of
+regexing image URLs out of message text, which also brings the generation `prompt` to use directly as
+the caption. Until then the regex source stays. **Also deferred:** phone-taken photos reaching the chat
+gallery — that's a write into Engine-owned storage.
+
+Design the caption as a field the Gallery owns, so swapping the source later replaces where it's
+populated from and nothing else.
 
 ## Step 9.5 — Camera (`01-camera.md`)
 
 Shutter flow: press → model describes what the camera sees in current story context → **description
 shown editable** so the user can refine the prompt → confirm → image generation → real image in the roll.
 
-Steps 1 and 2 are buildable now; step 3 is *blocked, Stage 11*. **Fallback when the host has no image
-connection: render the description as a text "photo" card** — today's behaviour — instead of failing.
+**Build the first two steps now and stop there.** Press-shutter and edit-the-description are the whole
+interaction; they need no Engine change. Committing produces a **text "photo" card** — today's
+behaviour — which stays as the permanent fallback for hosts with no image connection, so it is not
+throwaway work. The third step, real image generation, is **deferred to Stage 11.3**.
+
+This is the app where the split is most obviously fine: an editable prompt you can refine is the
+interesting half, and it's the unblocked half.
 
 Also: surface errors (currently `.catch(() => undefined)`), allow deleting a shot, make the silent
 24-shot cap visible or lift it.
@@ -917,27 +943,6 @@ fine and often good; an unknown number arriving *and the model not knowing it's 
 **Interacts with Stage 10's asymmetric awareness** — a character knowing your number is a different fact
 from a character seeing your phone. Don't conflate them.
 
-## Step 9.11 — Marketplace / classifieds
-
-**Decision:** `20-tester-feedback.md` §6. The tester's framing: *"eBay or FB Marketplace type deal would
-be funny. See what weird crap my characters are tryna sell."*
-
-**It is scheduled here because it is nearly free by this point.** Goodle already has a **`shop` page
-kind**, so the generation side largely exists — this is mostly a front-end over content the phone can
-already produce, plus the App Store entry. Adding it after Step 2.1 costs one registry entry.
-
-**Build:** a listings feed scoped to the world, generated from the same context everything else uses.
-Sellers are cast members and strangers. Tapping a listing opens a detail view.
-
-**Wants images more than most apps** — a marketplace of text is a classifieds column. Ship it behind
-Step 11.2's image policy: caption-and-source always render, image slot collapses with matching grey
-glyphs when there's no connection. It degrades acceptably, but it is the app most improved by Stage 11
-landing first, so **sequence it after 11.2** if you can.
-
-**Caveat:** n=1 and never confirmed as wanted by the maintainer, unlike Banking (Appendix A.6). Cheap is
-not the same as warranted — sanity-check with other testers before building, and if the answer is
-lukewarm, leave it. A fifteenth app is real bundle weight (Appendix A.1).
-
 ---
 
 # Stage 10 — Cross-character phone access as an RP event
@@ -977,10 +982,29 @@ see the bundle-size constraint in `20-tester-feedback.md` §10.
 
 ---
 
-# Stage 11 — Blocked on the package API contract
+# Stage 11 — Everything that needs an Engine change
+
+**This is the last stage of real work, deliberately.** Nothing above depends on it. Every app in
+Stage 9 has already shipped its unblocked half; this stage adds the halves that need the Engine.
 
 **Do not start any of this until the contract lands.** It is an Engine-side change with a wider blast
 radius than anything else here and it needs the maintainer's buy-in.
+
+Everything deferred here, and where it came from:
+
+| Deferred item | From | Needs |
+|---|---|---|
+| Camera: prompt → real generated image | Step 9.5 | `runtime.images.generate` |
+| Gallery: read `chat_images`, prompts as captions | Step 9.4 | `chat_images` read access |
+| Gallery: phone photos written to the chat gallery | Step 9.4 | write access |
+| Goodle: Images tab + per-site image button | Step 9.1 | `runtime.images.generate` |
+| Tindler: generated profile photos | `07-tindler.md` | `runtime.images.generate` |
+| Calls: the entire app | Step 11.4 | call session access |
+| Marketplace: the entire app | Step 11.5 | image policy in place first |
+
+**The unblocked halves of the image policy — Step 11.2 (b) and (c) — do not belong to this stage.**
+Build them during Stage 9, with the apps. They're what ships when the contract isn't there *or* when
+the user has no image connection, which is a permanent state for many users, not a waiting room.
 
 ## Step 11.1 — Extend the contract (task zero for all image work)
 
@@ -1039,6 +1063,25 @@ seven-site cost again), Step 5.1 (the incoming-call screen needs the phone reach
 **Step 9.10** (or the first thing this app does is have a stranger call you having never been given
 your number).
 
+## Step 11.5 — Marketplace / classifieds
+
+**Decision:** `20-tester-feedback.md` §6. The tester's framing: *"eBay or FB Marketplace type deal would
+be funny. See what weird crap my characters are tryna sell."*
+
+**Here rather than in Stage 9 because it is the app most dependent on images.** A marketplace of pure
+text is a classifieds column — technically working, missing the point. Build it after Step 11.2 so
+listings have pictures from day one.
+
+**Build:** a listings feed scoped to the world, generated from the same context everything else uses.
+Sellers are cast members and strangers. Tapping a listing opens a detail view. Goodle already has a
+**`shop` page kind**, so the generation side largely exists — this is mostly a front-end over content
+the phone can already produce, plus one registry entry (after Step 2.1) and an App Store entry.
+
+**Two caveats, both real:**
+- **n=1 and never confirmed as wanted by the maintainer**, unlike Banking (Appendix A.6). Cheap is not
+  the same as warranted. Sanity-check with other testers first; if the answer is lukewarm, leave it.
+- A fifteenth app is real bundle weight (Appendix A.1).
+
 ---
 
 # Stage 12 — Closed decisions
@@ -1049,7 +1092,7 @@ the work that makes it cheap:
 | Item | Where it went | Why there |
 |---|---|---|
 | Banking | **Step 7.6** | Same feature as 7.5 cross-chat persistence; free once that exists |
-| Marketplace | **Step 9.11** | Goodle's `shop` page kind already generates it; one registry entry after 2.1 |
+| Marketplace | **Step 11.5** | Goodle's `shop` page kind generates it, but it's the app most dependent on images |
 | Who knows whom | **Step 9.10** | Must precede Calls (11.4) or strangers ring you for no reason |
 | World object | **Step U.2** | Needs the maintainer; start day one, gates nothing |
 | Contract extension | **Step U.1** | Same — the ask is slow, the code (Stage 11) is not |
@@ -1070,6 +1113,9 @@ was considered and declined, not overlooked.
 
 # Appendix A — Standing constraints
 
+0. **Engine changes come last.** Nothing before Stage 11 may be gated on an Engine-side change landing.
+   Each app ships its unblocked half in Stage 9 and its blocked half in Stage 11. If you are waiting on
+   the Engine, you are in the wrong stage.
 1. **Bundle size.** This ships as a downloadable agent package; every app, template and asset is weight
    a user downloads. Cutting Forum helps. Weigh new apps against it.
 2. **The plan is almost entirely additive.** Stage 1 is the only subtraction across twenty design files.
@@ -1082,7 +1128,7 @@ was considered and declined, not overlooked.
 6. **The evidence base is n=1.** One power user building a unified world across every ME surface, who
    flagged his own bias four times. The reversals in Stage 1 and Stage 5.2 are solid — the maintainer
    argued them independently and three of four *remove* work. **The additive asks are unvalidated.**
-   Get more testers before building Step 7.6 (Banking) and Step 9.11 (Marketplace) in particular —
+   Get more testers before building Step 7.6 (Banking) and Step 11.5 (Marketplace) in particular —
    both are scheduled on the strength of being *cheap*, which is not the same as being *wanted*.
 
 # Appendix B — Suggested PR breakdown
@@ -1102,7 +1148,8 @@ Stage U is not a PR — it's two conversations, opened on day one and running th
 | 7 | Steps 7.1–7.5 (lorebooks + owner phones + persistence) |
 | 8 | Step 7.6 (Banking) — separate, because it's the one piece of Stage 7 that's an n=1 ask |
 | 9 | Stage 8 (notifications + unprompted texts) |
-| 10+ | One PR per app in Stage 9, including 9.10 (who knows whom) and 9.11 (Marketplace) |
+| 10+ | One PR per app in Stage 9, including 9.10 (who knows whom) |
+| last | Stage 11, once the contract lands — Calls and Marketplace are new apps, one each |
 
 Each targets `staging`, links an issue, opens as draft, and carries the rebuild + both validator
 outputs in the description.
