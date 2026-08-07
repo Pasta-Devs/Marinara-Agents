@@ -2287,44 +2287,6 @@ async function main() {
       assert.equal(mobileNavigationLayout.fits, true);
       assert.equal(mobileNavigationLayout.touchTargets, true);
       assert.equal(mobileNavigationLayout.oneRow, true);
-      await mobileNavigation
-        .locator('[data-ltm-destination="settings"]')
-        .click();
-      await mobilePage.locator("#settings-tab-extraction").click();
-      const mobileExtractionLayout = await mobilePage
-        .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
-        .evaluate((grid) => {
-          const fields = [...grid.children].slice(0, 2) as HTMLElement[];
-          const labels = fields.map(
-            (field) => field.firstElementChild as HTMLElement,
-          );
-          const selects = fields.map((field) => field.querySelector("select")!);
-          return {
-            columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/u)
-              .length,
-            labelHeights: labels.map(
-              (label) => label.getBoundingClientRect().height,
-            ),
-            selectWidths: selects.map(
-              (select) => select.getBoundingClientRect().width,
-            ),
-            fieldWidths: fields.map(
-              (field) => field.getBoundingClientRect().width,
-            ),
-          };
-        });
-      assert.equal(mobileExtractionLayout.columns, 1);
-      assert.deepEqual(mobileExtractionLayout.labelHeights, [44, 44]);
-      assert.deepEqual(
-        mobileExtractionLayout.selectWidths,
-        mobileExtractionLayout.fieldWidths,
-      );
-      const mobileDiscardSettings = mobilePage.getByRole("button", {
-        name: "Discard changes",
-      });
-      mobilePage.once("dialog", (dialog) => void dialog.accept());
-      await mobileDiscardSettings.click();
-      await mobileDiscardSettings.waitFor({ state: "detached" });
       await mobilePage
         .getByRole("button", { name: "Show setup guide" })
         .click();
@@ -2382,6 +2344,38 @@ async function main() {
             document.documentElement.clientWidth,
         ),
         true,
+      );
+      await mobileNavigation
+        .locator('[data-ltm-destination="settings"]')
+        .click();
+      await mobilePage.locator("#settings-tab-extraction").click();
+      const mobileExtractionLayout = await mobilePage
+        .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
+        .evaluate((grid) => {
+          const fields = [...grid.children].slice(0, 2) as HTMLElement[];
+          const labels = fields.map(
+            (field) => field.firstElementChild as HTMLElement,
+          );
+          const selects = fields.map((field) => field.querySelector("select")!);
+          return {
+            columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/u)
+              .length,
+            labelHeights: labels.map(
+              (label) => label.getBoundingClientRect().height,
+            ),
+            selectWidths: selects.map(
+              (select) => select.getBoundingClientRect().width,
+            ),
+            fieldWidths: fields.map(
+              (field) => field.getBoundingClientRect().width,
+            ),
+          };
+        });
+      assert.equal(mobileExtractionLayout.columns, 1);
+      assert.deepEqual(mobileExtractionLayout.labelHeights, [44, 44]);
+      assert.deepEqual(
+        mobileExtractionLayout.selectWidths,
+        mobileExtractionLayout.fieldWidths,
       );
       await mobilePage.setViewportSize({ width: 320, height: 720 });
       await mobilePage
