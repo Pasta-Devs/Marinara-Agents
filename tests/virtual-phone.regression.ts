@@ -81,7 +81,7 @@ async function main() {
   assert.deepEqual(minted.document.identity.chatScope, ["chat-1"]);
   assert.deepEqual(minted.document.namespaces, { phone: { settings: defaultDeviceSettings() } });
   assert.equal(minted.document.provisioning.enabled, true);
-  assert.equal(minted.document.provisioning.baselineTheme, "system");
+  assert.equal(minted.document.provisioning.baselineTheme, "dark");
 
   const reloadedRuntime = createService();
   const fromSecondChat = await reloadedRuntime.ensure({

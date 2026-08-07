@@ -201,9 +201,9 @@ export class PhoneIdentityService {
         },
         provisioning: {
           enabled: input.ownerType === "persona" ? true : input.enabled !== false,
-          baselineTheme: input.baselineTheme ?? "system",
+          baselineTheme: input.baselineTheme ?? "dark",
         },
-        namespaces: { phone: { settings: defaultDeviceSettings(input.baselineTheme ?? "system") } },
+        namespaces: { phone: { settings: defaultDeviceSettings(input.baselineTheme ?? "dark") } },
       };
       const record = await this.documents.create({
         id: `phone:${phoneId}`,

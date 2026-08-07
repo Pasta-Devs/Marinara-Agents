@@ -352,7 +352,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
           </div>
         </div>
         <div className="vp-dock" aria-label="Phone actions">
-          <button ref={closeButtonRef} type="button" onClick={close} className="vp-dock-btn">
+          <button ref={closeButtonRef} type="button" onClick={close} className="vp-dock-btn vp-dock-btn--primary">
             <X size="0.875rem" aria-hidden="true" /> Put down
           </button>
           <button type="button" disabled title="Coming soon" className="vp-dock-btn">

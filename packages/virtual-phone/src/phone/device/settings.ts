@@ -12,7 +12,7 @@ export interface DeviceSettings {
   installedApps: string[];
 }
 
-export function defaultDeviceSettings(theme: PhoneBaselineTheme = "system"): DeviceSettings {
+export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): DeviceSettings {
   return {
     deviceName: "",
     wallpaper: "gradient",
@@ -24,7 +24,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "system"): Dev
   };
 }
 
-export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineTheme = "system"): DeviceSettings {
+export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineTheme = "dark"): DeviceSettings {
   const defaults = defaultDeviceSettings(theme);
   if (!value || typeof value !== "object" || Array.isArray(value)) return defaults;
   const input = value as Record<string, unknown>;

@@ -10,10 +10,10 @@ export const phoneStylesheet = `
 .vp-root button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .vp-root button:focus-visible, .vp-root input:focus-visible, .vp-root select:focus-visible, .vp-root textarea:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
 .vp-root button:disabled { opacity: 0.35; cursor: default; }
-.vp-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / 0.4); }
+.vp-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / 0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .vp-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding: 0.75rem; }
 @media (min-width: 640px) { .vp-stage { padding: 1.5rem; } }
-.vp-stage-col { display: flex; flex-direction: column; align-items: stretch; gap: 0.625rem; }
+.vp-stage-col { display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem; }
 
 .vp-shell { position: relative; display: flex; flex-direction: column; width: min(calc(100vw - 1.5rem), calc((100dvh - 5rem) * 9 / 19.5), 396px); aspect-ratio: 9 / 19.5; padding: 5px; border-radius: 48px; background: linear-gradient(160deg, color-mix(in srgb, var(--vp-bezel) 82%, #7c8494) 0%, var(--vp-bezel) 22%, var(--vp-bezel) 78%, color-mix(in srgb, var(--vp-bezel) 88%, #7c8494) 100%); box-shadow: 0 32px 90px rgb(0 0 0 / 0.45), 0 8px 24px rgb(0 0 0 / 0.3), inset 0 0 0 1.5px rgb(255 255 255 / 0.16), inset 0 0 0 3px rgb(0 0 0 / 0.4); }
 @media (min-width: 640px) { .vp-shell { width: min(calc(100vw - 3rem), calc(82dvh * 9 / 19.5), 396px); } }
@@ -21,9 +21,10 @@ export const phoneStylesheet = `
 .vp-key--volume { left: -4px; top: 6rem; height: 3rem; border-radius: 4px 0 0 4px; box-shadow: 0 4.5rem 0 var(--vp-bezel); }
 .vp-key--power { right: -4px; top: 8rem; height: 5rem; border-radius: 0 4px 4px 0; background: linear-gradient(270deg, color-mix(in srgb, var(--vp-bezel) 70%, #8a93a5), var(--vp-bezel)); }
 
-.vp-dock { display: flex; gap: 0.5rem; }
-.vp-dock-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; flex: 1; min-width: 0; min-height: 2.5rem; padding: 0 0.625rem; border-radius: 999px; background: linear-gradient(180deg, #262a31, #16181d); color: #fff; font-size: 0.6875rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 20px rgb(0 0 0 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.07); transition: filter 140ms ease, transform 120ms ease; }
-.vp-dock-btn:hover:not(:disabled) { filter: brightness(1.2); }
+.vp-dock { display: flex; gap: 0.5rem; padding: 0.375rem; border-radius: 999px; background: #101318; box-shadow: 0 12px 32px rgb(0 0 0 / 0.5), inset 0 0 0 1px rgb(255 255 255 / 0.1); }
+.vp-dock-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; flex: 1; min-width: 0; min-height: 2.375rem; padding: 0 0.625rem; border-radius: 999px; background: #23272e; color: #fff; font-size: 0.6875rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1); transition: filter 140ms ease, transform 120ms ease; }
+.vp-dock-btn--primary { background: var(--vp-accent); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 2px 8px rgb(0 0 0 / 0.3); }
+.vp-dock-btn:hover:not(:disabled) { filter: brightness(1.15); }
 .vp-dock-btn:active:not(:disabled) { transform: scale(0.97); }
 
 .vp-screen { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; border-radius: 43px; background: var(--vp-bg); color: var(--vp-text); }
@@ -53,7 +54,7 @@ export const phoneStylesheet = `
 .vp-lock-list { display: grid; gap: 0.5rem; width: 100%; }
 .vp-lock-card--notification { display: grid; gap: 0.125rem; justify-items: start; min-height: 0; width: 100%; text-align: left; cursor: pointer; transition: transform 120ms ease; }
 .vp-lock-card--notification:active { transform: scale(0.98); }
-.vp-unlock-btn { min-height: 2.875rem; padding: 0 1.75rem; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-accent) 90%, #ffffff), var(--vp-accent)); color: #fff; font-size: 0.8125rem; font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.15), 0 6px 16px color-mix(in srgb, var(--vp-accent) 40%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.25); transition: transform 120ms ease, box-shadow 120ms ease; }
+.vp-unlock-btn { min-height: 2.875rem; padding: 0 2.5rem; border-radius: 999px; background: var(--vp-surface); color: var(--vp-text); font-size: 0.8125rem; font-weight: 600; box-shadow: 0 2px 10px rgb(0 0 0 / 0.3), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
 .vp-unlock-btn:active { transform: scale(0.97); }
 
 .vp-home { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 1.25rem 1.25rem 1.5rem; }
