@@ -1268,6 +1268,60 @@ async function main() {
         ) <= 2,
         true,
       );
+      await page
+        .locator(
+          '[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]',
+        )
+        .click();
+      await page.locator("#settings-tab-extraction").click();
+      const desktopExtractionLayout = await page
+        .locator("#settings-panel-extraction > div.grid")
+        .evaluate((grid) => {
+          const fields = [...grid.children].slice(0, 2) as HTMLElement[];
+          const labels = fields.map(
+            (field) => field.firstElementChild as HTMLElement,
+          );
+          const selects = fields.map((field) => field.querySelector("select")!);
+          const info = fields[1].querySelector("[data-ltm-info] svg")!;
+          return {
+            columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/u)
+              .length,
+            labelTops: labels.map((label) => label.getBoundingClientRect().top),
+            labelHeights: labels.map(
+              (label) => label.getBoundingClientRect().height,
+            ),
+            selectTops: selects.map(
+              (select) => select.getBoundingClientRect().top,
+            ),
+            selectHeights: selects.map(
+              (select) => select.getBoundingClientRect().height,
+            ),
+            infoSize: info.getBoundingClientRect().width,
+          };
+        });
+      assert.equal(desktopExtractionLayout.columns, 2);
+      assert.deepEqual(desktopExtractionLayout.labelHeights, [44, 44]);
+      assert.equal(
+        Math.abs(
+          desktopExtractionLayout.labelTops[0]! -
+            desktopExtractionLayout.labelTops[1]!,
+        ) <= 1,
+        true,
+      );
+      assert.equal(
+        Math.abs(
+          desktopExtractionLayout.selectTops[0]! -
+            desktopExtractionLayout.selectTops[1]!,
+        ) <= 1,
+        true,
+      );
+      assert.deepEqual(desktopExtractionLayout.selectHeights, [44, 44]);
+      assert.equal(desktopExtractionLayout.infoSize, 14);
+      await page
+        .locator(
+          '[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]',
+        )
+        .click();
       await page.evaluate((version) => {
         const element = document.createElement(
           "marinara-capability-long-term-memory",
@@ -2006,7 +2060,7 @@ async function main() {
       const activationGeometry = await activation.evaluate((element) => {
         const button = element.getBoundingClientRect();
         const track = element.firstElementChild!.getBoundingClientRect();
-        const knob = element.lastElementChild!.getBoundingClientRect();
+        const knob = element.firstElementChild!.firstElementChild!.getBoundingClientRect();
         const style = getComputedStyle(element.firstElementChild!);
         return {
           button: { width: button.width, height: button.height },
@@ -2023,22 +2077,21 @@ async function main() {
             height: knob.height,
           },
           backgroundColor: style.backgroundColor,
+          borderWidth: style.borderWidth,
         };
       });
       assert.deepEqual(activationGeometry.button, { width: 48, height: 44 });
       assert.deepEqual(activationGeometry.track, {
-        x: 4,
-        y: 12,
-        width: 40,
+        x: 2,
+        y: 10,
+        width: 44,
         height: 24,
       });
-      assert.deepEqual(activationGeometry.knob, {
-        x: 20,
-        y: 4,
-        width: 16,
-        height: 16,
-      });
+      assert.equal(activationGeometry.knob.width, 20);
+      assert.equal(activationGeometry.knob.height, 20);
+      assert.ok(activationGeometry.knob.x > activationGeometry.track.width / 2);
       assert.notEqual(activationGeometry.backgroundColor, "rgba(0, 0, 0, 0)");
+      assert.equal(activationGeometry.borderWidth, "1px");
       const activationTrack = await activationParts
         .first()
         .evaluate((element) => {
@@ -2052,7 +2105,7 @@ async function main() {
         });
       assert.deepEqual(
         { width: activationTrack.width, height: activationTrack.height },
-        { width: 40, height: 24 },
+        { width: 44, height: 24 },
       );
       assert.equal(
         activationTrack.backgroundColor,
@@ -2102,28 +2155,8 @@ async function main() {
         ) <= 1,
         true,
       );
-      const activationLabel = activation.locator(
-        "xpath=preceding-sibling::span[1]",
-      );
-      assert.match(await activationLabel.innerText(), /active in kirei/i);
-      assert.notEqual(
-        await activationLabel.evaluate(
-          (element) => getComputedStyle(element).display,
-        ),
-        "none",
-      );
-      assert.notEqual(
-        await activationLabel.evaluate(
-          (element) => getComputedStyle(element).visibility,
-        ),
-        "hidden",
-      );
-      assert.notEqual(
-        await activationLabel.evaluate(
-          (element) => getComputedStyle(element).opacity,
-        ),
-        "0",
-      );
+      assert.equal(await activation.getAttribute("title"), "Active in kirei");
+      assert.equal((await activation.innerText()).trim(), "");
       assert.equal(
         await mobilePage.evaluate(
           () =>
@@ -2151,19 +2184,19 @@ async function main() {
             ?.getAttribute("aria-checked") === "false",
       );
       assert.equal(await activation.getAttribute("aria-checked"), "false");
-      assert.match(await activationLabel.innerText(), /inactive in kirei/i);
+      assert.equal(await activation.getAttribute("title"), "Inactive in kirei");
+      const inactiveTrack = await activationParts.first().evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          backgroundColor: style.backgroundColor,
+          borderWidth: style.borderWidth,
+        };
+      });
       assert.notEqual(
-        await activationLabel.evaluate(
-          (element) => getComputedStyle(element).display,
-        ),
-        "none",
+        inactiveTrack.backgroundColor,
+        "rgba(0, 0, 0, 0)",
       );
-      assert.notEqual(
-        await activationLabel.evaluate(
-          (element) => getComputedStyle(element).visibility,
-        ),
-        "hidden",
-      );
+      assert.equal(inactiveTrack.borderWidth, "1px");
       const longChatName = "A".repeat(200);
       await mobilePage.evaluate((chatName) => {
         const element = document.querySelector(
@@ -2255,6 +2288,38 @@ async function main() {
       assert.equal(mobileNavigationLayout.fits, true);
       assert.equal(mobileNavigationLayout.touchTargets, true);
       assert.equal(mobileNavigationLayout.oneRow, true);
+      await mobileNavigation
+        .locator('[data-ltm-destination="settings"]')
+        .click();
+      await mobilePage.locator("#settings-tab-extraction").click();
+      const mobileExtractionLayout = await mobilePage
+        .locator("#settings-panel-extraction > div.grid")
+        .evaluate((grid) => {
+          const fields = [...grid.children].slice(0, 2) as HTMLElement[];
+          const labels = fields.map(
+            (field) => field.firstElementChild as HTMLElement,
+          );
+          const selects = fields.map((field) => field.querySelector("select")!);
+          return {
+            columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/u)
+              .length,
+            labelHeights: labels.map(
+              (label) => label.getBoundingClientRect().height,
+            ),
+            selectWidths: selects.map(
+              (select) => select.getBoundingClientRect().width,
+            ),
+            fieldWidths: fields.map(
+              (field) => field.getBoundingClientRect().width,
+            ),
+          };
+        });
+      assert.equal(mobileExtractionLayout.columns, 1);
+      assert.deepEqual(mobileExtractionLayout.labelHeights, [44, 44]);
+      assert.deepEqual(
+        mobileExtractionLayout.selectWidths,
+        mobileExtractionLayout.fieldWidths,
+      );
       await mobilePage
         .getByRole("button", { name: "Show setup guide" })
         .click();

@@ -105,11 +105,6 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     useState<LongTermMemoryDestination>("vault");
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
-  const [compactHeader, setCompactHeader] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 767px)").matches,
-  );
   const [addOpen, setAddOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
@@ -133,13 +128,6 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [onboardingSource, setOnboardingSource] =
     useState<SourceTab>("characters");
   const Destination = destinations[destination];
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 767px)");
-    const update = () => setCompactHeader(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
   const destinationLabel = (value: LongTermMemoryDestination) =>
     localizeUi(destinationLabelKeys[value]);
 
@@ -462,101 +450,56 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         </div>
         <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
           {props.chatId || props.onEnabledForChatChange ? (
-            <div className="mr-1 inline-flex h-9 items-center gap-2 whitespace-nowrap text-xs leading-5 text-[var(--marinara-editor-muted)] max-md:h-11">
-              <span
-                className="inline-flex h-9 items-center max-md:h-11"
-                style={{ paddingInline: "0.75rem" }}
-              >
-                {localizeUi(
-                  props.enabledForChat === true
-                    ? "ui.longTermMemory.longtermmemorydetail.activeIn"
-                    : "ui.longTermMemory.longtermmemorydetail.inactiveIn",
-                )}{" "}
-                <strong
-                  className="text-[var(--marinara-editor-text)]"
-                  style={{
-                    display: "inline-block",
-                    maxWidth: "10rem",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    verticalAlign: "bottom",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {props.chatName ??
+            <button
+              type="button"
+              role="switch"
+              aria-checked={props.enabledForChat === true}
+              aria-label={localizeUi(
+                props.enabledForChat === true
+                  ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
+                  : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
+                {
+                  value1:
+                    props.chatName ??
                     localizeUi(
                       "ui.longTermMemory.longtermmemorydetail.thisChat",
-                    )}
-                </strong>
-              </span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={props.enabledForChat === true}
-                aria-label={localizeUi(
+                    ),
+                },
+              )}
+              title={localizeUi(
+                props.enabledForChat === true
+                  ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
+                  : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
+                {
+                  value1:
+                    props.chatName ??
+                    localizeUi(
+                      "ui.longTermMemory.longtermmemorydetail.thisChat",
+                    ),
+                },
+              )}
+              data-ltm-control="activation"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 max-md:w-12"
+              disabled={activationPending || !props.onEnabledForChatChange}
+              onClick={() => void toggleActivation()}
+            >
+              <span
+                aria-hidden="true"
+                className={`flex h-6 w-11 items-center rounded-full border p-0.5 transition-colors ${
                   props.enabledForChat === true
-                    ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
-                    : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
-                  {
-                    value1:
-                      props.chatName ??
-                      localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.thisChat",
-                      ),
-                  },
-                )}
-                data-ltm-control="activation"
-                className="h-9 w-12 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
-                style={{
-                  position: "relative",
-                  display: "inline-flex",
-                  width: "3rem",
-                  height: compactHeader ? "2.75rem" : "2.25rem",
-                  flexShrink: 0,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: 0,
-                  border: 0,
-                  appearance: "none",
-                  background: "transparent",
-                  cursor: props.onEnabledForChatChange
-                    ? "pointer"
-                    : "not-allowed",
-                }}
-                disabled={activationPending || !props.onEnabledForChatChange}
-                onClick={() => void toggleActivation()}
+                    ? "border-[var(--marinara-editor-accent)] bg-[var(--marinara-editor-accent)]"
+                    : "border-[var(--marinara-editor-border-strong)] bg-[var(--marinara-editor-control-bg)]"
+                }`}
               >
                 <span
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    left: "0.25rem",
-                    top: compactHeader ? "0.75rem" : "0.5rem",
-                    width: "2.5rem",
-                    height: "1.5rem",
-                    borderRadius: "9999px",
-                    backgroundColor:
-                      props.enabledForChat === true
-                        ? "var(--marinara-editor-accent)"
-                        : "var(--marinara-editor-control-bg)",
-                    transition: "background-color 150ms ease",
-                  }}
+                  className={`block h-5 w-5 rounded-full bg-[var(--marinara-editor-text)] shadow-sm transition-transform ${
+                    props.enabledForChat === true
+                      ? "translate-x-5"
+                      : "translate-x-0"
+                  }`}
                 />
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    left: props.enabledForChat === true ? "1.5rem" : "0.5rem",
-                    top: compactHeader ? "1rem" : "0.75rem",
-                    width: "1rem",
-                    height: "1rem",
-                    borderRadius: "9999px",
-                    backgroundColor: "var(--marinara-editor-text)",
-                    transition: "left 150ms ease",
-                  }}
-                />
-              </button>
-            </div>
+              </span>
+            </button>
           ) : null}
           {destination === "vault" ? (
             <div ref={addMenuRef} className="relative">
