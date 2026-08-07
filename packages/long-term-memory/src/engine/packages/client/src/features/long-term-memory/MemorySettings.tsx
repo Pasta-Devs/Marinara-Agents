@@ -1017,6 +1017,17 @@ export default function MemorySettings({
           display: grid;
           gap: 0.5rem;
         }
+        [data-ltm-extraction-grid] > div > :first-child {
+          display: flex;
+          min-height: 2.75rem;
+          align-items: center;
+        }
+        [data-ltm-extraction-grid] .mari-editor-field {
+          min-height: 2.75rem;
+          width: 100%;
+          padding-inline: 0.75rem;
+          font-size: 0.875rem;
+        }
         @container ltm-memory-settings (min-width: 40rem) {
           [data-ltm-extraction-grid] {
             grid-template-columns: repeat(2, minmax(0, 1fr));

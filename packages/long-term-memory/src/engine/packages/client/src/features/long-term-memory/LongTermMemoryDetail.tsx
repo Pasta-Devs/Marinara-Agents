@@ -415,6 +415,60 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           top: 0.375rem;
           margin-left: 0;
         }
+        [data-ltm-control="activation"] {
+          display: inline-flex;
+          width: 2.75rem;
+          height: 2.75rem;
+          flex-shrink: 0;
+          align-items: center;
+          justify-content: center;
+          border: 0;
+          border-radius: 0.375rem;
+          background: transparent;
+          padding: 0;
+        }
+        [data-ltm-control="activation"] > span {
+          display: flex;
+          box-sizing: border-box;
+          width: 2.75rem;
+          height: 1.5rem;
+          align-items: center;
+          border: 1px solid var(--marinara-editor-border-strong);
+          border-radius: 9999px;
+          background: var(--marinara-editor-control-bg);
+          padding: 0.125rem;
+          transition: background-color 150ms ease, border-color 150ms ease;
+        }
+        [data-ltm-control="activation"][aria-checked="true"] > span {
+          border-color: var(--marinara-editor-accent);
+          background: var(--marinara-editor-accent);
+        }
+        [data-ltm-control="activation"] > span > span {
+          display: block;
+          width: 1.25rem;
+          height: 1.25rem;
+          border-radius: 9999px;
+          background: var(--marinara-editor-text);
+          box-shadow: 0 1px 2px color-mix(in srgb, #000 25%, transparent);
+          transform: translateX(0);
+          transition: transform 150ms ease;
+        }
+        [data-ltm-control="activation"][aria-checked="true"] > span > span {
+          transform: translateX(1.25rem);
+        }
+        [data-ltm-control="activation"]:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 0.125rem var(--marinara-editor-focus-ring);
+        }
+        [data-ltm-control="activation"]:disabled {
+          cursor: not-allowed;
+          opacity: 0.5;
+        }
+        @container ltm-detail (max-width: 47.99rem) {
+          [data-ltm-control="activation"] {
+            width: 3rem;
+          }
+        }
       `}</style>
       <header className="mari-editor-header relative z-20">
         <div className="mari-editor-header-main max-md:min-w-full">
