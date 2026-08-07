@@ -1350,7 +1350,10 @@ export default function MemorySettings({
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            <span id={extractionConnectionLabelId}>
+            <span
+              id={extractionConnectionLabelId}
+              className="flex min-h-11 items-center"
+            >
               {localizeUi(
                 "ui.longTermMemory.memorysettings.extractionConnection",
               )}

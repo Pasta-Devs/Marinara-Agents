@@ -224,7 +224,7 @@ export function InfoPopover({
         }}
         onMouseDown={(event) => event.preventDefault()}
       >
-        <Info aria-hidden="true" size="0.75rem" />
+        <Info aria-hidden="true" size="0.875rem" />
       </button>
       {open
         ? createPortal(
