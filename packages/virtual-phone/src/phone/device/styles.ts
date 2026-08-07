@@ -43,7 +43,10 @@ export const phoneStylesheet = `
 
 .vp-surface-area { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .vp-home-indicator { position: absolute; bottom: 0.375rem; left: 50%; translate: -50% 0; z-index: 30; height: 4px; width: 6.5rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 30%, var(--vp-bg)); pointer-events: none; }
-.vp-lock { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; gap: 1.5rem; padding: 1.5rem; text-align: center; }
+.vp-lock { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; gap: 1.25rem; padding: 2.5rem 1.25rem 1.75rem; text-align: center; }
+.vp-lock > div:first-child { margin-bottom: 0.75rem; }
+.vp-lock .vp-lock-card, .vp-lock .vp-lock-list { margin-top: 0.5rem; }
+.vp-lock .vp-unlock-btn { margin-top: auto; }
 .vp-lock-clock { font-size: 3.5rem; font-weight: 250; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.05; margin: 0; text-shadow: 0 1px 12px rgb(0 0 0 / 0.08); }
 .vp-lock-date { margin: 0.375rem 0 0; font-size: 0.8125rem; font-weight: 500; color: var(--vp-muted); }
 .vp-lock-card { width: 100%; min-height: 5rem; display: flex; align-items: center; justify-content: center; padding: 1rem; border-radius: 1.375rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); font-size: 0.75rem; font-weight: 500; color: var(--vp-muted); box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 8px 24px rgb(0 0 0 / 0.1), inset 0 0 0 1px var(--vp-border); }
@@ -87,8 +90,10 @@ export const phoneStylesheet = `
 .vp-appview--loading { font-size: 0.75rem; }
 .vp-appview--fixed { display: flex; flex-direction: column; overflow: hidden; }
 .vp-appview--fixed .vp-app-header { position: static; flex-shrink: 0; }
-.vp-app-header { position: sticky; top: -1.125rem; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 3rem; margin: -1.125rem -1.125rem 1rem; padding: 0.25rem 0.625rem; border-bottom: 1px solid var(--vp-border); background: var(--vp-bg); }
-.vp-app-header h2 { flex: 1; min-width: 0; margin: 0; text-align: center; font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-app-header { position: sticky; top: -1.125rem; z-index: 5; display: grid; grid-template-columns: minmax(2.75rem, 1fr) minmax(0, auto) minmax(2.75rem, 1fr); align-items: center; gap: 0.5rem; min-height: 3rem; margin: -1.125rem -1.125rem 1rem; padding: 0.25rem 0.625rem; border-bottom: 1px solid var(--vp-border); background: var(--vp-bg); }
+.vp-app-header > .vp-icon-btn:first-child { justify-self: start; }
+.vp-app-header h2 { min-width: 0; margin: 0; text-align: center; font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-app-header-actions { justify-self: end; }
 .vp-app-header-actions { display: flex; align-items: center; gap: 0.125rem; flex-shrink: 0; }
 .vp-app-error { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; text-align: center; font-size: 0.8125rem; font-weight: 500; }
 .vp-app-error .vp-surface-btn { width: auto; padding: 0 1.5rem; }
