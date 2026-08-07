@@ -87,6 +87,12 @@ const destinationLabelKeys: Record<LongTermMemoryDestination, string> = {
 
 export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const { t: localizeUi } = useLtmTranslation();
+  const backToAgentsLabel = localizeUi(
+    "ui.longTermMemory.longtermmemorydetail.backToAgents",
+  );
+  const addMemoriesLabel = localizeUi(
+    "ui.longTermMemory.longtermmemorydetail.addMemories",
+  );
   const status = useQuery({
     queryKey: queryKeys.status,
     queryFn: () => request<LtmStatusResponse>("/status"),
@@ -426,9 +432,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         <div className="mari-editor-header-main max-md:min-w-full">
           <button
             type="button"
-            aria-label={localizeUi(
-              "ui.longTermMemory.longtermmemorydetail.backToAgents",
-            )}
+            aria-label={backToAgentsLabel}
+            title={backToAgentsLabel}
             data-ltm-control="back"
             onClick={() => void close()}
             className="mari-editor-action inline-flex"
@@ -562,15 +567,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 onClick={() => setAddOpen((value) => !value)}
                 aria-expanded={addOpen}
                 aria-controls={addOpen ? "ltm-add-menu" : undefined}
-                aria-label={localizeUi(
-                  "ui.longTermMemory.longtermmemorydetail.addMemories",
-                )}
+                aria-label={addMemoriesLabel}
+                title={addMemoriesLabel}
               >
                 <Plus aria-hidden="true" size="0.75rem" />
                 <span className="hidden sm:inline">
-                  {localizeUi(
-                    "ui.longTermMemory.longtermmemorydetail.addMemories",
-                  )}
+                  {addMemoriesLabel}
                 </span>
               </Button>
               {addOpen ? (

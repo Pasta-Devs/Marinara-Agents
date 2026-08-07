@@ -199,11 +199,37 @@ async function main() {
         "Prompt Preset Editor -> Sections -> Add Section -> Agent Sections -> Long-Term Memory",
         "{{agent::long-term-memory}}",
         "Last Injection Summary to verify which saved memories actually reached model context",
-      ])
+        ])
         assert.ok(
           artifactClient.includes(copy),
           `Generated client is missing: ${copy}`,
         );
+      for (const copy of [
+        "Branch group",
+        "Persona",
+        "Occurred in",
+        "Already applicable",
+        "Rebuilt",
+        "Back to Agents",
+        "Add memories",
+        "Clear memory search",
+        "Remove {{value1}} section",
+        "{{mutation}}: {{title}}",
+      ])
+        assert.ok(
+          artifactClient.includes(copy),
+          `Generated client is missing localization alignment copy: ${copy}`,
+        );
+      assert.match(
+        artifactClient,
+        /backToAgents|Back to Agents/u,
+        "The generated client must retain the localized Back control label",
+      );
+      assert.match(
+        artifactClient,
+        /reExtractValue1|Re-extract \{\{value1\}\}/u,
+        "The generated client must retain source-specific mobile re-extract labels",
+      );
       assert.match(
         artifactClient,
         /extract:\w+!=="refresh"/u,

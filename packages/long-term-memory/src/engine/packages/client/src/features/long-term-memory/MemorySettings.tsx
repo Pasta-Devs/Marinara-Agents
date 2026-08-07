@@ -20,6 +20,7 @@ import type { LongTermMemoryDestinationProps } from "./types";
 import ActivityView from "./ActivityView";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
 import { useLtmTranslation } from "./localization";
+import { labelKeys, localizedLabel } from "./display-labels";
 import { recallStyleDescriptionKey } from "./recall-style";
 
 type GlobalForm = {
@@ -442,14 +443,17 @@ export default function MemorySettings({
       const result = await request<{
         actions: Array<{ action: string; result: string; count?: number }>;
       }>("/repair", "POST", { actions: selectedActions });
-      setMessage(
-        result.actions
-          .map(
-            (item) =>
-              `${item.action}: ${item.result}${item.count != null ? ` (${item.count})` : ""}`,
-          )
-          .join(". "),
-      );
+       setMessage(
+         result.actions
+           .map((item) =>
+             localizeUi("ui.longTermMemory.memorysettings.maintenanceResult", {
+               action: localizedLabel(item.action, localizeUi, labelKeys.maintenanceAction),
+               result: localizedLabel(item.result, localizeUi, labelKeys.maintenanceResult),
+               count: item.count ?? 0,
+             }),
+           )
+           .join(" "),
+       );
       setSelectedActions([]);
       await invalidateLtmQueries(queryClient, [
         queryKeys.integrity,
@@ -1633,7 +1637,11 @@ export default function MemorySettings({
           </h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
             {localizeUi("ui.longTermMemory.memorysettings.integrityState")}{" "}
-            {integrity.data?.health ?? "loading"}.
+             {localizedLabel(
+               integrity.data?.health ?? "loading",
+               localizeUi,
+               labelKeys.integrity,
+             )}.
           </p>
         </div>
         <div className="border-t border-[var(--border)] pt-3">
