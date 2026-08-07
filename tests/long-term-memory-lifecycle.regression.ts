@@ -213,12 +213,13 @@ async function main() {
         "Review what extraction found. Accept saves a proposal to Memory Vault",
         "Stable appearance can help the character remain visually consistent",
         "This source note preserves imported material as audit evidence. It is not recalled directly; accepted derived memories appear below.",
-        "Saved memories are not added to every reply.",
+        "Saving something does not mean it shows up in every reply.",
         "Import a character",
-        "Summary Prompt -> Chat Summary -> Long-Term Memory",
-        "Prompt Preset Editor -> Sections -> Add Section -> Agent Sections -> Long-Term Memory",
+        "Open Summary Prompt, then Chat Summary.",
+        "Open Prompt Preset Editor.",
+        "Add Agent Sections -> Long-Term Memory.",
         "{{agent::long-term-memory}}",
-        "Last Injection Summary to verify which saved memories actually reached model context",
+        "Inspect Last Injection Summary to see what actually reached the model",
         ])
         assert.ok(
           artifactClient.includes(copy),
@@ -933,28 +934,83 @@ async function main() {
       const setupGuide = page.getByRole("button", { name: "Show setup guide" });
       await setupGuide.click();
       const onboardingTitle = page.locator("#ltm-onboarding-title");
-      await page
-        .locator('[data-ltm-surface="onboarding"]')
-        .getByText(
-          /source note.*proposed memory.*saved memory.*recalled memory.*model context/iu,
-        )
-        .waitFor();
+      assert.equal(
+        await page
+          .locator('[data-ltm-surface="onboarding"]')
+          .getByText("Step 1 of 6 · Save")
+          .count(),
+        1,
+      );
+      assert.equal(await onboardingTitle.innerText(), "From source to saved memory");
+      assert.equal(
+        await page.locator("#ltm-onboarding-description dt").count(),
+        3,
+      );
+      const guideType = await page.locator("#ltm-onboarding-description").evaluate(
+        (description) => {
+          const title = document.querySelector("#ltm-onboarding-title")!;
+          const paragraph = description.querySelector("p")!;
+          const titleStyle = getComputedStyle(title);
+          const paragraphStyle = getComputedStyle(paragraph);
+          return {
+            titleSize: titleStyle.fontSize,
+            titleWeight: titleStyle.fontWeight,
+            titleLineHeight: titleStyle.lineHeight,
+            paragraphSize: paragraphStyle.fontSize,
+            paragraphLineHeight: paragraphStyle.lineHeight,
+          };
+        },
+      );
+      assert.deepEqual(guideType, {
+        titleSize: "20px",
+        titleWeight: "700",
+        titleLineHeight: "26px",
+        paragraphSize: "16px",
+        paragraphLineHeight: "28px",
+      });
+      const guideWidth = await page
+        .locator("#ltm-onboarding-description")
+        .evaluate((description) => description.getBoundingClientRect().width);
+      await page.getByRole("button", { name: "Next: how recall works" }).click();
+      assert.equal(await onboardingTitle.innerText(), "How recall works");
       const onboardingNext = page.getByRole("button", {
-        name: "Next: turn it on",
+        name: "Next: Turn it on",
       });
       await onboardingNext.click();
       assert.match(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
-        /Engine places recalled memory automatically/u,
+        /In Conversation, the Engine places recalled memory automatically/u,
       );
       assert.doesNotMatch(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
         /Agent Sections/u,
       );
+      assert.equal(
+        await page
+          .locator('[data-ltm-surface="onboarding"]')
+          .getByText("Step 3 of 6 · Activate")
+          .count(),
+        1,
+      );
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      assert.equal(await onboardingTitle.innerText(), "How recall works");
+      await page.getByRole("button", { name: "Next: Turn it on" }).click();
       await page.getByRole("button", { name: "Next: choose a source" }).click();
       assert.equal(
         await onboardingTitle.innerText(),
         "Choose what to remember",
+      );
+      assert.equal(
+        await page.locator("#ltm-onboarding-description ul li").count(),
+        3,
+      );
+      assert.ok(
+        Math.abs(
+          guideWidth -
+            (await page
+              .locator("#ltm-onboarding-description")
+              .evaluate((description) => description.getBoundingClientRect().width)),
+        ) < 0.01,
       );
       assert.equal(
         await page.getByRole("button", { name: "Import a character" }).count(),
@@ -962,6 +1018,10 @@ async function main() {
       );
       await page.getByRole("button", { name: "Continue to review" }).click();
       assert.equal(await onboardingTitle.innerText(), "Review before saving");
+      assert.equal(
+        await page.locator("#ltm-onboarding-description ul li").count(),
+        3,
+      );
       await page.getByRole("button", { name: "Continue to check" }).click();
       assert.equal(
         await onboardingTitle.innerText(),
@@ -969,7 +1029,18 @@ async function main() {
       );
       assert.match(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
-        /send a message relevant to a saved fact.*zero results/iu,
+        /send a message relevant to a saved fact[\s\S]*zero results/iu,
+      );
+      assert.equal(
+        await page
+          .locator('[data-ltm-surface="onboarding"]')
+          .getByText("Step 6 of 6 · Check")
+          .count(),
+        1,
+      );
+      assert.equal(
+        await page.locator("#ltm-onboarding-description ol li").count(),
+        3,
       );
       assert.equal(await page.getByRole("button", { name: "Skip" }).count(), 0);
       await page
@@ -1006,7 +1077,8 @@ async function main() {
         .first()
         .fill("Dirty memory");
       await setupGuide.click();
-      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page.getByRole("button", { name: "Next: how recall works" }).click();
+      await page.getByRole("button", { name: "Next: Turn it on" }).click();
       await page
         .getByRole("button", { name: "Next: choose a source" })
         .click();
@@ -1060,7 +1132,8 @@ async function main() {
         .first()
         .fill("Dirty memory");
       await setupGuide.click();
-      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page.getByRole("button", { name: "Next: how recall works" }).click();
+      await page.getByRole("button", { name: "Next: Turn it on" }).click();
       await page
         .getByRole("button", { name: "Next: choose a source" })
         .click();
@@ -1102,20 +1175,22 @@ async function main() {
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
       await setupGuide.click();
-      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page.getByRole("button", { name: "Next: how recall works" }).click();
+      await page.getByRole("button", { name: "Next: Turn it on" }).click();
       await page.getByRole("button", { name: "Next: choose a source" }).click();
       await page.getByRole("button", { name: "Import a character" }).click();
       await page
         .locator('[data-ltm-source-tab="characters"][aria-selected="true"]')
         .waitFor();
       await setupGuide.click();
-      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page.getByRole("button", { name: "Next: how recall works" }).click();
+      await page.getByRole("button", { name: "Next: Turn it on" }).click();
       await page.getByRole("button", { name: "Next: choose a source" }).click();
       await page.getByRole("button", { name: "Chat summary" }).click();
       const chatSummaryGuide = page.locator('[data-ltm-surface="onboarding"]');
       assert.match(
         await chatSummaryGuide.innerText(),
-        /Summary Prompt -> Chat Summary -> Long-Term Memory/u,
+        /Open Summary Prompt, then Chat Summary.*Open Long-Term Memory/isu,
       );
       assert.equal(
         await page.getByRole("button", { name: "I selected it" }).count(),
@@ -1150,10 +1225,11 @@ async function main() {
         element.dispatchEvent(new CustomEvent("marinara-capability-props"));
       });
       await setupGuide.click();
-      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page.getByRole("button", { name: "Next: how recall works" }).click();
+      await page.getByRole("button", { name: "Next: Turn it on" }).click();
       assert.match(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
-        /Prompt Preset Editor -> Sections -> Add Section -> Agent Sections -> Long-Term Memory/u,
+        /Open Prompt Preset Editor.*Open Sections.*Add Agent Sections -> Long-Term Memory/isu,
       );
       assert.equal(
         await page
@@ -1182,7 +1258,8 @@ async function main() {
         localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
       });
       await setupGuide.click();
-      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page.getByRole("button", { name: "Next: how recall works" }).click();
+      await page.getByRole("button", { name: "Next: Turn it on" }).click();
       await page
         .getByRole("button", { name: "Open prompt preset Sections" })
         .click();
@@ -1201,7 +1278,8 @@ async function main() {
         localStorage.removeItem("marinara-long-term-memory-onboarding-v1"),
       );
       await setupGuide.click();
-      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page.getByRole("button", { name: "Next: how recall works" }).click();
+      await page.getByRole("button", { name: "Next: Turn it on" }).click();
       await page.getByRole("button", { name: "Next: choose a source" }).click();
       await page
         .getByRole("button", { name: "Chat summary", exact: true })
@@ -2416,6 +2494,27 @@ async function main() {
       await mobilePage.evaluate(() => {
         document.documentElement.style.fontSize = "20px";
       });
+      assert.deepEqual(
+        await mobilePage
+          .locator('[data-ltm-surface="onboarding"]')
+          .evaluate((onboarding) => {
+            const title = onboarding.querySelector<HTMLElement>(
+              "#ltm-onboarding-title",
+            )!;
+            const description = onboarding.querySelector<HTMLElement>(
+              "#ltm-onboarding-description",
+            )!;
+            return {
+              titleFits: title.scrollWidth <= title.clientWidth,
+              descriptionFits: description.scrollWidth <= description.clientWidth,
+              pageFits:
+                onboarding.scrollWidth <= onboarding.clientWidth &&
+                document.documentElement.scrollWidth <=
+                  document.documentElement.clientWidth,
+            };
+          }),
+        { titleFits: true, descriptionFits: true, pageFits: true },
+      );
       assert.equal(
         await mobilePage.evaluate(
           () =>
@@ -2453,7 +2552,10 @@ async function main() {
       );
       await firstRunGuide.waitFor();
       await firstRunGuide
-        .getByRole("button", { name: "Next: turn it on" })
+        .getByRole("button", { name: "Next: how recall works" })
+        .click();
+      await firstRunGuide
+        .getByRole("button", { name: "Next: Turn it on" })
         .click();
       assert.match(await firstRunGuide.innerText(), /Continue without a chat/u);
       await firstRunGuide.getByRole("button", { name: "Skip" }).click();
