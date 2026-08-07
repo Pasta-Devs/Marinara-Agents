@@ -946,28 +946,6 @@ async function main() {
         await page.locator("#ltm-onboarding-description dt").count(),
         3,
       );
-      const guideType = await page.locator("#ltm-onboarding-description").evaluate(
-        (description) => {
-          const title = document.querySelector("#ltm-onboarding-title")!;
-          const paragraph = description.querySelector("p")!;
-          const titleStyle = getComputedStyle(title);
-          const paragraphStyle = getComputedStyle(paragraph);
-          return {
-            titleSize: titleStyle.fontSize,
-            titleWeight: titleStyle.fontWeight,
-            titleLineHeight: titleStyle.lineHeight,
-            paragraphSize: paragraphStyle.fontSize,
-            paragraphLineHeight: paragraphStyle.lineHeight,
-          };
-        },
-      );
-      assert.deepEqual(guideType, {
-        titleSize: "20px",
-        titleWeight: "700",
-        titleLineHeight: "26px",
-        paragraphSize: "16px",
-        paragraphLineHeight: "28px",
-      });
       const guideWidth = await page
         .locator("#ltm-onboarding-description")
         .evaluate((description) => description.getBoundingClientRect().width);

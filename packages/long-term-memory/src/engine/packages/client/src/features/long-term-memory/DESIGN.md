@@ -35,16 +35,6 @@ typography:
     fontWeight: 600
     lineHeight: 1.25
     letterSpacing: "normal"
-  guideHeadline:
-    fontFamily: "inherit"
-    fontSize: "1.25rem"
-    fontWeight: 700
-    lineHeight: 1.3
-  guideProse:
-    fontFamily: "inherit"
-    fontSize: "1rem"
-    fontWeight: 400
-    lineHeight: 1.75
 rounded:
   sm: "0.375rem"
   md: "0.5rem"
@@ -138,11 +128,7 @@ The palette is inherited from Marinara editor variables and neutral Engine surfa
 - **Body** (400, `0.875rem`, `1.5`): Editable memory content, descriptions, and explanatory copy.
 - **Label** (600, `0.75rem`, `1.25`): Form labels, tabs, actions, statuses, and operational metadata.
 - **Micro-label** (400-600, `0.625rem` to `0.6875rem`): Badges, inherited-setting markers, timestamps, confidence, and compact status counts.
-- **Guide Headline** (700, `1.25rem`, `1.3`): Onboarding step titles and similar first-run instructional headings; it does not replace ordinary workbench headings.
-- **Guide Prose** (400, `1rem`, `1.75`, maximum `65ch`): Multi-sentence onboarding instruction; it does not replace compact forms, records, metadata, or settings descriptions.
-- **Term / Action Lead** (600, `1rem`, `1.75`): The leading term in onboarding definitions, bullets, and procedures.
-
-Onboarding uses definition lists for vocabulary, unordered lists for parallel options or consequences, ordered lists for required procedures, and separate paragraphs for caveats or recommendations. This formatting reflows inside the existing `65ch` measure without changing the text box, grid, or panel width. The dense workspace **Body** role remains authoritative for all non-onboarding content.
+Onboarding uses definition lists for vocabulary, unordered lists for parallel options or consequences, ordered lists for required procedures, and separate paragraphs for caveats or recommendations. This formatting reflows inside the existing `65ch` measure without changing the text box, grid, panel width, or the dense workspace type roles.
 
 **The Truncation Rule.** Long titles and summaries may truncate in navigation rows, but the surrounding control must expose the full subject through its accessible name or the workbench detail view.
 

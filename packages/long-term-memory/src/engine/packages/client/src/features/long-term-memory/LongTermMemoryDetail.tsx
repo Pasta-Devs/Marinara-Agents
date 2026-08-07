@@ -896,8 +896,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                         >
                           <h2
                             id="ltm-onboarding-title"
-                            className="text-lg font-bold"
-                            style={{ fontSize: "1.25rem", lineHeight: 1.3 }}
+                            className="text-lg font-semibold"
                           >
                             {localizeUi(
                               onboardingSteps[onboardingStep].titleKey,
@@ -905,8 +904,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           </h2>
                           <div
                             id="ltm-onboarding-description"
-                            className="max-w-[65ch] space-y-4 text-base leading-7 text-[var(--muted-foreground)]"
-                            style={{ fontSize: "1rem", lineHeight: "1.75rem" }}
+                            className="max-w-[65ch] space-y-4 text-sm leading-6 text-[var(--muted-foreground)]"
                           >
                             {onboardingStep === 0 ? (
                               <>
@@ -1272,7 +1270,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                 ))}
                               </div>
                               {onboardingSource === "chats" ? (
-                                <div className="max-w-[65ch] space-y-4 text-base leading-7 text-[var(--muted-foreground)]">
+                                <div className="max-w-[65ch] space-y-4 text-sm leading-6 text-[var(--muted-foreground)]">
                                   <p>
                                     {localizeUi(
                                       "ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntro",
