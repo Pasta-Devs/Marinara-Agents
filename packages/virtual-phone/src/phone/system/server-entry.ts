@@ -420,6 +420,45 @@ export async function activate({ api }: CapabilityContext) {
       }
     });
   /**
+   * Step 9.10 — who this phone holds details for, and how it got them. Nothing modelled whether a
+   * character actually has another's address or number, so everyone could contact everyone. That is
+   * invisible while you initiate every conversation and a visible continuity break the moment
+   * characters initiate, which Step 8.3 and the mail work now both do.
+   *
+   * Deliberately permissive: sharing a scene is enough to know someone, and an unknown number
+   * arriving is fine and often good. The bug is an unknown number arriving and the model not
+   * knowing it is unknown, so this exists to tell the model which it is.
+   *
+   * Must be consulted before Step 11.4 (Calls) ships, or the first thing that app does is have a
+   * stranger ring you having never been given your number.
+   */
+  const directoryFor = async (phone: Awaited<ReturnType<typeof findPhone>>) => {
+    const phoneId = phone.document.identity.phoneId;
+    const known = new Map<string, string>();
+    for (const contact of await contactsFor(phoneId)) {
+      known.set(contact.ownerName, "you share a scene with them");
+    }
+    for (const thread of await messaging.threadsFor(phoneId)) {
+      const otherPhoneId = thread.document.participants.find((participant) => participant !== phoneId);
+      if (!otherPhoneId) continue;
+      const other = await findPhone(otherPhoneId).catch(() => null);
+      if (other) known.set(other.document.identity.ownerName, "you have texted before");
+    }
+    for (const chatId of phone.document.identity.chatScope) {
+      for (const { document } of await phones.listContacts(chatId)) {
+        known.set(document.name, document.phoneLabel ? `you saved their details as ${document.phoneLabel}` : "you saved them in Contacts");
+      }
+    }
+    return known;
+  };
+  const directoryContext = async (phone: Awaited<ReturnType<typeof findPhone>>) => {
+    const known = await directoryFor(phone);
+    if (known.size === 0) return "\n\nThis phone holds nobody's details. Anyone contacting it is a stranger who had to find the address some other way — say so in how they write.";
+    const lines = [...known.entries()].slice(0, 30).map(([name, why]) => `${name} — ${why}`).join("\n");
+    return `\n\nWhose details this phone holds:\n${lines}\nAnyone not on that list is a stranger to the owner. That is allowed, but it must read like a stranger: they explain how they got the address, or they clearly should not have it.`;
+  };
+
+  /**
    * Step 8.3 — a character texts because a thread has gone quiet, or because you left them on read.
    * Needs only the timestamp on the last message, which is what keeps it consistent with the
    * stateless decision in Step 3.2.
@@ -474,7 +513,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are ${phone.document.identity.ownerName}, texting ${other.document.identity.ownerName} on your phone inside an ongoing roleplay. ${reason} Send one short in-character text picking the thread back up, in your own voice. Respond with only JSON: {"reply":"your message"}. If you would not text them right now, respond with {"reply":""}.${await ownerCard(phone, "Who you are — about")}${await worldContext(chatId, phone)}${await customInstructions(phone)}`,
+            content: `You are ${phone.document.identity.ownerName}, texting ${other.document.identity.ownerName} on your phone inside an ongoing roleplay. ${reason} Send one short in-character text picking the thread back up, in your own voice. Respond with only JSON: {"reply":"your message"}. If you would not text them right now, respond with {"reply":""}.${await ownerCard(phone, "Who you are — about")}${await directoryContext(phone)}${await worldContext(chatId, phone)}${await customInstructions(phone)}`,
           },
           { role: "user", content: history || "No messages yet." },
         ], { temperature: 0.95, maxTokens: 250 });
@@ -1015,7 +1054,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${await ownerCard(phone, "About the inbox owner")}${storyContext}${await customInstructions(phone)}`,
+            content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${await ownerCard(phone, "About the inbox owner")}${await directoryContext(phone)}${storyContext}${await customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the current inbox." },
         ], { temperature: 1, maxTokens: 1400 });
