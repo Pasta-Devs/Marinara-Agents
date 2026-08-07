@@ -50,7 +50,17 @@ export function NoodlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
         actions={[{ id: "refresh-feed", icon: "refresh", label: "Refresh feed", kind: "button", disabled: loading, reason: "Refreshing" }]}
         onAction={(actionId) => { if (actionId === "refresh-feed") refresh(); }}
       />
-      {loading && !feed?.posts.length ? <p role="status" className="vp-muted-note">Loading the feed…</p> : null}
+      {loading && !feed?.posts.length ? (
+        <div role="status" aria-label="Loading the feed" className="vp-stack" style={{ gap: "0.5rem" }}>
+          {[0, 1, 2, 3].map((index) => (
+            <div key={index} className="vp-card vp-post" aria-hidden="true">
+              <span className="vp-skeleton vp-skeleton--line" style={{ width: "35%" }} />
+              <span className="vp-skeleton vp-skeleton--line" style={{ width: "100%" }} />
+              <span className="vp-skeleton vp-skeleton--line" style={{ width: "80%" }} />
+            </div>
+          ))}
+        </div>
+      ) : null}
       {feed && feed.posts.length === 0 && !loading ? (
         <p className="vp-muted-note">The feed is quiet right now. Refresh to see what the world is talking about.</p>
       ) : null}

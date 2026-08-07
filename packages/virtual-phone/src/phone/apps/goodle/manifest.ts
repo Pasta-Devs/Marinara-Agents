@@ -22,6 +22,15 @@ export const goodleManifest: AppManifest = {
   notifications: null,
 };
 
+export function parseResultItem(item: string) {
+  const parts = item.split(" | ");
+  const title = parts[0]?.trim() || item.trim() || "Untitled page";
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 40) || "page";
+  const url = parts[1]?.trim() || `goodle.web/${slug}`;
+  const snippet = parts.slice(2).join(" | ").trim();
+  return { title, url, snippet };
+}
+
 export function fallbackSearchResults(query: string) {
   const normalized = query.trim().slice(0, 120);
   return normalized

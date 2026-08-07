@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { AtSign, BatteryMedium, ChevronDown, MessageCircle, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
+import { AtSign, BatteryMedium, ChevronDown, Eye, MessageCircle, Quote, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
 import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/PhonesSettings";
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
@@ -100,6 +100,8 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [activeApp, setActiveApp] = React.useState<ActiveApp>(null);
   const [notifications, setNotifications] = React.useState<PhoneNotification[]>([]);
+  const [homeSearch, setHomeSearch] = React.useState("");
+  const [pendingSearch, setPendingSearch] = React.useState("");
   const routeStacks = React.useRef(new Map<string, AppRouteStackManager>());
   const activeApps = React.useRef(new Map<string, Exclude<ActiveApp, null>>());
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -227,6 +229,8 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     { id: "noodler", label: "Noodler", Icon: AtSign },
   ];
   const installedOptionalApps = optionalApps.filter((app) => deviceSettings.installedApps.includes(app.id));
+  const dockApps = installedOptionalApps.slice(0, 4);
+  const overflowApps = installedOptionalApps.slice(4);
   const theme = deviceSettings.theme === "system" ? selectedPhone?.baselineTheme ?? "system" : deviceSettings.theme;
   const clock = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return createPortal(
@@ -234,14 +238,17 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
       <style data-virtual-phone-styles>{phoneStylesheet}</style>
       <div className="vp-scrim" aria-hidden="true" onClick={close} />
       <section role="dialog" aria-modal="true" aria-labelledby="virtual-phone-title" className="vp-stage">
+        <div className="vp-stage-col">
         <div className="vp-shell">
-          <span className="vp-notch" aria-hidden="true" />
           <span className="vp-key vp-key--volume" aria-hidden="true" />
           <span className="vp-key vp-key--power" aria-hidden="true" />
           <div className="vp-screen">
             <header className="vp-statusbar">
               <span id="virtual-phone-title" className="vp-statusbar-clock">{clock}</span>
-              <span aria-hidden="true" />
+              <button type="button" aria-haspopup="listbox" aria-expanded={switcherOpen} aria-label="Switch phone" onClick={() => setSwitcherOpen((current) => !current)} className="vp-switch-btn">
+                <span>{selectedPhone?.ownerName ?? "Phone"}</span>
+                <ChevronDown size="0.75rem" aria-hidden="true" />
+              </button>
               <div className="vp-statusbar-end">
                 <span className="vp-statusbar-cluster" aria-label="Full cellular signal and Wi-Fi off">
                   <Signal size="0.75rem" aria-hidden="true" />
@@ -250,10 +257,6 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                 <span className="vp-statusbar-cluster" aria-label={`${status.batteryLevel}% battery, not charging`}>
                   {status.batteryLevel}% <BatteryMedium size="0.875rem" aria-hidden="true" />
                 </span>
-                <button type="button" aria-haspopup="listbox" aria-expanded={switcherOpen} aria-label="Switch phone" onClick={() => setSwitcherOpen((current) => !current)} className="vp-switch-btn">
-                  <span>{selectedPhone?.ownerName ?? "Phone"}</span>
-                  <ChevronDown size="0.75rem" aria-hidden="true" />
-                </button>
               </div>
               {switcherOpen ? (
                 <div role="listbox" aria-label="Available phones" className="vp-switcher">
@@ -296,47 +299,68 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               ) : (
                 <div className="vp-home">
                   <div className="vp-home-top">
+                    <form style={{ flex: 1, minWidth: 0 }} onSubmit={(event) => {
+                      event.preventDefault();
+                      if (!deviceSettings.installedApps.includes("goodle") || !homeSearch.trim()) return;
+                      setPendingSearch(homeSearch.trim());
+                      setHomeSearch("");
+                      openAppRoute("goodle", "/");
+                    }}>
+                      <label className="vp-field">
+                        <span className="vp-sr-only">Web Search</span>
+                        <input type="search" value={homeSearch} onChange={(event) => setHomeSearch(event.target.value)} disabled={!deviceSettings.installedApps.includes("goodle")} placeholder={deviceSettings.installedApps.includes("goodle") ? "Search Goodle" : "Install Goodle to search"} className="vp-search-bar" />
+                      </label>
+                    </form>
                     <button type="button" aria-label="Device settings" title="Device settings" onClick={() => openAppRoute("settings", "/")} className="vp-icon-btn vp-icon-btn--surface"><Settings size="1rem" aria-hidden="true" /></button>
                   </div>
-                  <label className="vp-field" style={{ marginTop: "0.5rem" }}>
-                    <span className="vp-sr-only">Web Search</span>
-                    <input type="search" disabled placeholder="Web Search" className="vp-search-bar" />
-                  </label>
                   <div className="vp-home-spacer" aria-hidden="true" />
                   <div aria-label="Installed apps" className="vp-app-grid">
-                    <button type="button" aria-label="Open Settings" onClick={() => openAppRoute("settings", "/")} className="vp-app">
-                      <span className={`vp-app-icon ${appIconStyle("settings")}`}><Settings size="1.5rem" aria-hidden="true" /></span>
-                      <span className="vp-app-label">Settings</span>
-                    </button>
                     <button type="button" aria-label="Open App Store" onClick={() => openAppRoute("app-store", "/")} className="vp-app">
                       <span className={`vp-app-icon ${appIconStyle("app-store")}`}><Store size="1.5rem" aria-hidden="true" /></span>
                       <span className="vp-app-label">App Store</span>
                     </button>
-                    {installedOptionalApps.map(({ id, label, Icon, badge }) => (
-                      <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => openAppRoute(id, "/")} className="vp-app">
+                    {overflowApps.map(({ id, label, Icon, badge }) => (
+                      <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => { if (id === "goodle") setPendingSearch(""); openAppRoute(id, "/"); }} className="vp-app">
                         <span className={`vp-app-icon ${appIconStyle(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
                         {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
                         <span className="vp-app-label">{label}</span>
                       </button>
                     ))}
-                    {Array.from({ length: (4 - ((2 + installedOptionalApps.length) % 4)) % 4 }, (_, index) => <span key={index} aria-hidden="true" className="vp-app-slot" />)}
+                    {Array.from({ length: (4 - ((1 + overflowApps.length) % 4)) % 4 }, (_, index) => <span key={index} aria-hidden="true" className="vp-app-slot" />)}
                   </div>
+                  {dockApps.length ? (
+                    <div className="vp-dockrow" aria-label="Favorite apps">
+                      {dockApps.map(({ id, label, Icon, badge }) => (
+                        <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} title={label} onClick={() => { if (id === "goodle") setPendingSearch(""); openAppRoute(id, "/"); }} className="vp-app">
+                          <span className={`vp-app-icon ${appIconStyle(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
+                          {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               )}
               {activeApp === "settings" && selectedPhone ? <AppErrorBoundary appName="Settings"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Settings...</div>}><SettingsApp phone={{ ...selectedPhone, settings: deviceSettings }} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onBack={() => backFromApp("settings")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "app-store" && selectedPhone ? <AppErrorBoundary appName="App Store"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "goodle" && selectedPhone && deviceSettings.installedApps.includes("goodle") ? <AppErrorBoundary appName="Goodle"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Goodle...</div>}><GoodleApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "goodle" && selectedPhone && deviceSettings.installedApps.includes("goodle") ? <AppErrorBoundary appName="Goodle"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Goodle...</div>}><GoodleApp phoneId={selectedPhone.phoneId} initialQuery={pendingSearch} onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "messages" && selectedPhone && deviceSettings.installedApps.includes("messages") ? <AppErrorBoundary appName="Messages"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Messages...</div>}><MessagesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("messages")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "notes" && selectedPhone && deviceSettings.installedApps.includes("notes") ? <AppErrorBoundary appName="Notes"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Notes...</div>}><NotesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("notes")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "noodler" && selectedPhone && deviceSettings.installedApps.includes("noodler") ? <AppErrorBoundary appName="Noodler"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Noodler...</div>}><NoodlerApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("noodler")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
             </main>
-            <footer className="vp-footer">
-              <button ref={closeButtonRef} type="button" onClick={close} className="vp-putdown-btn">
-                <X size="0.875rem" aria-hidden="true" /> Put down
-              </button>
-              <span className="vp-home-indicator" aria-hidden="true" />
-            </footer>
+            <span className="vp-home-indicator" aria-hidden="true" />
           </div>
+        </div>
+        <div className="vp-dock" aria-label="Phone actions">
+          <button ref={closeButtonRef} type="button" onClick={close} className="vp-dock-btn">
+            <X size="0.875rem" aria-hidden="true" /> Put down
+          </button>
+          <button type="button" disabled title="Coming soon" className="vp-dock-btn">
+            <Eye size="0.875rem" aria-hidden="true" /> Show to character
+          </button>
+          <button type="button" disabled title="Coming soon" className="vp-dock-btn">
+            <Quote size="0.875rem" aria-hidden="true" /> Reference chat
+          </button>
+        </div>
         </div>
       </section>
     </div>,

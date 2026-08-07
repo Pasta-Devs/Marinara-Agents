@@ -294,7 +294,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"result one\",\"result two\",...]} with 3 to 6 items.",
+            content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"Page Title | site.web/path | one-line snippet\", ...]} with 3 to 6 items. Every item uses that exact three-part format with invented in-world domains.",
           },
           { role: "user", content: `Search query: ${query}` },
         ], { temperature: 0.9, maxTokens: 400 });
@@ -308,6 +308,34 @@ export async function activate({ api }: CapabilityContext) {
           return reply.status(400).send({ error: error.message });
         }
         return { results: fallback };
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/goodle/page", async (request, reply) => {
+      const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+        ? request.body as Record<string, unknown>
+        : {};
+      const title = String(body.title ?? "").trim().slice(0, 200);
+      const url = String(body.url ?? "").trim().slice(0, 200);
+      const query = String(body.query ?? "").trim().slice(0, 120);
+      const fallback = { title: title || "Page unavailable", body: ["Goodle can't reach this page right now."] };
+      try {
+        await findPhone(request.params.phoneId);
+        const model = await api.runtime.languageModels?.resolve();
+        if (!model) return { page: fallback };
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: "You render fictional web pages on the in-story internet of a roleplay world. Write the content of the requested page so it feels like a real site from that world. Respond with only JSON: {\"title\":\"...\",\"body\":[\"paragraph one\",\"paragraph two\",...]} with 2 to 5 short paragraphs.",
+          },
+          { role: "user", content: `URL: ${url}\nPage title: ${title}\nFound via search: ${query}` },
+        ], { temperature: 0.9, maxTokens: 600 });
+        const page = parseBoundedContent(completion.content, { fields: { title: "string", body: "string[]" }, defaults: fallback });
+        return { page };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Phone not found") {
+          return reply.status(400).send({ error: error.message });
+        }
+        return { page: fallback };
       }
     });
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler/feed", async (request, reply) => {

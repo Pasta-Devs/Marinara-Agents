@@ -15,7 +15,7 @@ import { NotificationStore } from "../packages/virtual-phone/src/phone/platform/
 import { parseBoundedContent } from "../packages/virtual-phone/src/phone/platform/content";
 import { settingsManifest } from "../packages/virtual-phone/src/phone/apps/settings/manifest";
 import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/phone/apps/app-store/manifest";
-import { fallbackSearchResults, goodleManifest } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
+import { fallbackSearchResults, goodleManifest, parseResultItem } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
 import { defaultDeviceSettings } from "../packages/virtual-phone/src/phone/device/settings";
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
@@ -143,6 +143,11 @@ async function main() {
   assert.equal(goodleManifest.removable, true);
   assert.equal(goodleManifest.modelUse, "heavy");
   assert.deepEqual(fallbackSearchResults(" cafes "), { title: "Results for cafes", summary: "No generated results are available right now.", items: [] });
+  assert.deepEqual(
+    parseResultItem("Harbor Gazette | gazette.web/harbor | Nightly ferry schedule changes"),
+    { title: "Harbor Gazette", url: "gazette.web/harbor", snippet: "Nightly ferry schedule changes" },
+  );
+  assert.deepEqual(parseResultItem("Just A Title"), { title: "Just A Title", url: "goodle.web/just-a-title", snippet: "" });
   const customized = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, {
     deviceName: "Mira's phone",
     wallpaper: "midnight",

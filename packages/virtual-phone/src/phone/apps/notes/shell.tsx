@@ -64,7 +64,18 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
           if (actionId === "delete-note") deleteActive();
         }}
       />
-      {!notes ? <p role="status" className="vp-muted-note">Loading notes…</p> : activeNote ? (
+      {!notes ? (
+        <div role="status" aria-label="Loading notes" className="vp-stack" style={{ gap: "0.5rem" }}>
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="vp-thread-row" aria-hidden="true">
+              <span className="vp-thread-body">
+                <span className="vp-skeleton vp-skeleton--line" style={{ width: "50%" }} />
+                <span className="vp-skeleton vp-skeleton--line" style={{ width: "85%" }} />
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : activeNote ? (
         <textarea
           aria-label="Note text"
           value={activeNote.text}

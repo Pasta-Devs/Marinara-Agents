@@ -100,7 +100,19 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
         onAction={(actionId) => { if (actionId === "refresh") void load(); }}
       />
       {error ? <p role="alert" className="vp-muted-note" style={{ marginBottom: "0.75rem" }}>{error}</p> : null}
-      {!data ? <p role="status" className="vp-muted-note">Loading messages…</p> : activeThread ? (
+      {!data ? (
+        <div role="status" aria-label="Loading messages" className="vp-stack" style={{ gap: "0.5rem" }}>
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="vp-thread-row" aria-hidden="true">
+              <span className="vp-skeleton vp-skeleton--avatar" />
+              <span className="vp-thread-body">
+                <span className="vp-skeleton vp-skeleton--line" style={{ width: "40%" }} />
+                <span className="vp-skeleton vp-skeleton--line" style={{ width: "75%" }} />
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : activeThread ? (
         <div className="vp-thread-view">
           <div ref={bubblesRef} className="vp-bubbles" aria-label={`Conversation with ${activeThread.otherName}`}>
             {activeThread.messages.map((message) => (
