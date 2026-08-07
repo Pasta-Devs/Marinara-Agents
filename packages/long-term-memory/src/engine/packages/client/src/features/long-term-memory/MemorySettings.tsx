@@ -1010,7 +1010,19 @@ export default function MemorySettings({
       aria-labelledby={memorySettingsTitleId}
       data-ltm-surface="memory-settings"
       className="space-y-5"
+      style={{ containerName: "ltm-memory-settings", containerType: "inline-size" }}
     >
+      <style>{`
+        [data-ltm-extraction-grid] {
+          display: grid;
+          gap: 0.5rem;
+        }
+        @container ltm-memory-settings (min-width: 40rem) {
+          [data-ltm-extraction-grid] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+      `}</style>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 id={memorySettingsTitleId} className="text-sm font-semibold">
@@ -1348,7 +1360,7 @@ export default function MemorySettings({
             {localizeUi("ui.longTermMemory.memorysettings.extraction")}
           </h3>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div data-ltm-extraction-grid>
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
             <span
               id={extractionConnectionLabelId}
