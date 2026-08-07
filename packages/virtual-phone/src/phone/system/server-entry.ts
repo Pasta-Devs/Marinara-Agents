@@ -317,7 +317,15 @@ export async function activate({ api }: CapabilityContext) {
       const title = String(body.title ?? "").trim().slice(0, 200);
       const url = String(body.url ?? "").trim().slice(0, 200);
       const query = String(body.query ?? "").trim().slice(0, 120);
-      const fallback = { title: title || "Page unavailable", body: ["Goodle can't reach this page right now."] };
+      const site = String(body.site ?? "").trim().slice(0, 80);
+      const fallback = {
+        site: site || url.split("/")[0] || "goodle.web",
+        title: title || "Page unavailable",
+        tagline: "",
+        kind: "official",
+        links: [] as string[],
+        sections: ["Offline :: Goodle can't reach this page right now."],
+      };
       try {
         await findPhone(request.params.phoneId);
         const model = await api.runtime.languageModels?.resolve();
@@ -325,11 +333,14 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: "You render fictional web pages on the in-story internet of a roleplay world. Write the content of the requested page so it feels like a real site from that world. Respond with only JSON: {\"title\":\"...\",\"body\":[\"paragraph one\",\"paragraph two\",...]} with 2 to 5 short paragraphs.",
+            content: "You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page as a template. Respond with only JSON: {\"site\":\"Site Name\",\"title\":\"page headline\",\"tagline\":\"short site tagline\",\"kind\":\"news, shop, blog, forum, or official\",\"links\":[\"nav label\", ...],\"sections\":[\"Section Heading :: section body text\", ...]} with 3 to 5 nav labels and 3 to 5 sections. Every section uses the exact format 'Heading :: body'. For a shop, each section is one product and its body states the price. For a forum, each section is one post and its heading is the poster's name.",
           },
-          { role: "user", content: `URL: ${url}\nPage title: ${title}\nFound via search: ${query}` },
-        ], { temperature: 0.9, maxTokens: 600 });
-        const page = parseBoundedContent(completion.content, { fields: { title: "string", body: "string[]" }, defaults: fallback });
+          { role: "user", content: `URL: ${url}\nPage title: ${title}\nFound via search: ${query}${site ? `\nThis page belongs to the site "${site}" — keep its name, tagline, and nav consistent.` : ""}` },
+        ], { temperature: 0.9, maxTokens: 700 });
+        const page = parseBoundedContent(completion.content, {
+          fields: { site: "string", title: "string", tagline: "string", kind: "string", links: "string[]", sections: "string[]" },
+          defaults: fallback,
+        });
         return { page };
       } catch (error) {
         if (error instanceof Error && error.message === "Phone not found") {

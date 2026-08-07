@@ -15,7 +15,7 @@ import { NotificationStore } from "../packages/virtual-phone/src/phone/platform/
 import { parseBoundedContent } from "../packages/virtual-phone/src/phone/platform/content";
 import { settingsManifest } from "../packages/virtual-phone/src/phone/apps/settings/manifest";
 import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/phone/apps/app-store/manifest";
-import { fallbackSearchResults, goodleManifest, parseResultItem } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
+import { fallbackSearchResults, goodleManifest, parsePageSection, parseResultItem, slugify } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
 import { defaultDeviceSettings } from "../packages/virtual-phone/src/phone/device/settings";
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
@@ -148,6 +148,9 @@ async function main() {
     { title: "Harbor Gazette", url: "gazette.web/harbor", snippet: "Nightly ferry schedule changes" },
   );
   assert.deepEqual(parseResultItem("Just A Title"), { title: "Just A Title", url: "goodle.web/just-a-title", snippet: "" });
+  assert.equal(slugify("Ferry Times & Fares!"), "ferry-times-fares");
+  assert.deepEqual(parsePageSection("Deals :: Two-for-one noodles :: today only"), { heading: "Deals", body: "Two-for-one noodles :: today only" });
+  assert.deepEqual(parsePageSection("Just a paragraph"), { heading: "", body: "Just a paragraph" });
   const customized = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, {
     deviceName: "Mira's phone",
     wallpaper: "midnight",

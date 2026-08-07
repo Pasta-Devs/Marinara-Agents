@@ -1,12 +1,24 @@
 import React from "react";
+import { Heart, MessageCircle, Repeat2 } from "lucide-react";
 import { fallbackFeed } from "./manifest";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 
+function hashOf(value: string) {
+  let hash = 0;
+  for (const char of value) hash = (hash * 31 + char.charCodeAt(0)) % 100_000;
+  return hash;
+}
+
 function splitPost(post: string) {
-  const [author, ...rest] = post.split(" — ");
-  return rest.length ? { author: author!, text: rest.join(" — ") } : { author: "Noodler", text: post };
+  const [authorPart, ...rest] = post.split(" — ");
+  const raw = rest.length ? authorPart!.trim() : "Noodler";
+  const text = rest.length ? rest.join(" — ") : post;
+  const handle = raw.match(/@[\w.-]+/u)?.[0] ?? `@${raw.toLowerCase().replace(/[^a-z0-9]+/gu, "") || "noodler"}`;
+  const name = raw.replace(handle, "").trim() || handle.slice(1);
+  const hash = hashOf(post);
+  return { name, handle, text, likes: 3 + (hash % 420), replies: hash % 37, boosts: hash % 52 };
 }
 
 export function NoodlerShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
@@ -67,11 +79,22 @@ export function NoodlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
       {feed?.posts.length ? (
         <div className="vp-stack" style={{ gap: "0.5rem" }} aria-busy={loading}>
           {feed.posts.map((post, index) => {
-            const { author, text } = splitPost(post);
+            const { name, handle, text, likes, replies, boosts } = splitPost(post);
             return (
               <article key={index} className="vp-card vp-post">
-                <span className="vp-post-author">{author}</span>
+                <div className="vp-post-header">
+                  <span className="vp-post-avatar" aria-hidden="true">{name[0]?.toUpperCase() ?? "N"}</span>
+                  <span className="vp-post-names">
+                    <span className="vp-post-author">{name}</span>
+                    <span className="vp-post-handle">{handle}</span>
+                  </span>
+                </div>
                 <p className="vp-post-text">{text}</p>
+                <div className="vp-post-footer" aria-label={`${replies} replies, ${boosts} boosts, ${likes} likes`}>
+                  <span><MessageCircle size="0.75rem" aria-hidden="true" /> {replies}</span>
+                  <span><Repeat2 size="0.75rem" aria-hidden="true" /> {boosts}</span>
+                  <span><Heart size="0.75rem" aria-hidden="true" /> {likes}</span>
+                </div>
               </article>
             );
           })}

@@ -22,13 +22,23 @@ export const goodleManifest: AppManifest = {
   notifications: null,
 };
 
+export function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 40) || "page";
+}
+
 export function parseResultItem(item: string) {
   const parts = item.split(" | ");
   const title = parts[0]?.trim() || item.trim() || "Untitled page";
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 40) || "page";
-  const url = parts[1]?.trim() || `goodle.web/${slug}`;
+  const url = parts[1]?.trim() || `goodle.web/${slugify(title)}`;
   const snippet = parts.slice(2).join(" | ").trim();
   return { title, url, snippet };
+}
+
+export function parsePageSection(section: string) {
+  const [heading, ...rest] = section.split(" :: ");
+  return rest.length
+    ? { heading: heading!.trim(), body: rest.join(" :: ").trim() }
+    : { heading: "", body: section.trim() };
 }
 
 export function fallbackSearchResults(query: string) {

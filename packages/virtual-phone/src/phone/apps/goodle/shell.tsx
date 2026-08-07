@@ -1,16 +1,30 @@
 import React from "react";
 import { Globe, Search } from "lucide-react";
-import { fallbackSearchResults, parseResultItem } from "./manifest";
+import { fallbackSearchResults, parsePageSection, parseResultItem, slugify } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { phoneRequest } from "../../platform/api";
 
 const MAX_RECENTS = 8;
+const LOGO_COLORS = ["#4285f4", "#ea4335", "#fbbc05", "#4285f4", "#34a853", "#ea4335"];
 
-interface PageState {
+function hueFor(value: string) {
+  let hue = 0;
+  for (const char of value) hue = (hue * 31 + char.charCodeAt(0)) % 360;
+  return hue;
+}
+
+interface SitePagePayload {
+  site: string;
   title: string;
+  tagline: string;
+  kind: string;
+  links: string[];
+  sections: string[];
+}
+
+interface PageState extends SitePagePayload {
   url: string;
-  body: string[];
   loading: boolean;
 }
 
@@ -56,24 +70,30 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
     // Home-screen searches hand off once, on mount.
   }, []);
 
-  const openPage = (item: string) => {
-    const { title, url } = parseResultItem(item);
-    setPage({ title, url, body: [], loading: true });
-    void phoneRequest<{ page: { title: string; body: string[] } }>(`/phones/${encodeURIComponent(phoneId)}/goodle/page`, {
-      method: "POST", body: JSON.stringify({ title, url, query: query.trim() }),
+  const openPage = (title: string, url: string, site?: string) => {
+    setPage({ site: site ?? url.split("/")[0] ?? "goodle.web", title, tagline: "", kind: "official", links: [], sections: [], url, loading: true });
+    void phoneRequest<{ page: SitePagePayload }>(`/phones/${encodeURIComponent(phoneId)}/goodle/page`, {
+      method: "POST", body: JSON.stringify({ title, url, query: query.trim(), ...(site ? { site } : {}) }),
     })
-      .then((response) => setPage({ title: response.page.title || title, url, body: response.page.body, loading: false }))
-      .catch(() => setPage({ title, url, body: ["Goodle can't reach this page right now."], loading: false }));
+      .then((response) => setPage({ ...response.page, title: response.page.title || title, url, loading: false }))
+      .catch(() => setPage({
+        site: site ?? url.split("/")[0] ?? "goodle.web", title, tagline: "", kind: "official", links: [],
+        sections: ["Offline :: Goodle can't reach this page right now."], url, loading: false,
+      }));
   };
   const clearRecents = () => {
     setRecents([]);
     void store.remove("recents").catch(() => undefined);
   };
 
+  const domain = page?.url.split("/")[0] ?? "goodle.web";
+  const hue = hueFor(page?.site ?? "");
+  const sections = page?.sections.map(parsePageSection) ?? [];
+
   return (
     <section aria-labelledby="goodle-title" className="vp-appview">
       <PhoneAppHeader
-        title={page ? page.title : "Goodle"}
+        title={page ? page.site : "Goodle"}
         titleId="goodle-title"
         closeLabel="Close Goodle"
         onBack={() => page ? setPage(null) : onBack()}
@@ -82,25 +102,58 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
         onAction={(actionId) => { if (actionId === "clear-recents") clearRecents(); }}
       />
       {page ? (
-        <div>
+        <div className="vp-site" aria-busy={page.loading}>
           <div className="vp-page-url"><Globe size="0.75rem" aria-hidden="true" /><span>{page.url}</span></div>
           {page.loading ? (
             <div role="status" aria-label="Loading page">
+              <span className="vp-skeleton" style={{ height: "5rem", borderRadius: "1.125rem 1.125rem 0 0" }} />
+              <span className="vp-skeleton" style={{ height: "2.5rem", borderRadius: "0 0 1.125rem 1.125rem", marginBottom: "1rem" }} />
               <span className="vp-skeleton vp-skeleton--line" style={{ width: "60%", height: "0.875rem" }} />
               <span className="vp-skeleton vp-skeleton--line" style={{ width: "100%" }} />
               <span className="vp-skeleton vp-skeleton--line" style={{ width: "95%" }} />
               <span className="vp-skeleton vp-skeleton--line" style={{ width: "88%" }} />
-              <span className="vp-skeleton vp-skeleton--line" style={{ width: "70%" }} />
             </div>
           ) : (
-            <div className="vp-page-body">
+            <>
+              <header className="vp-site-masthead" style={{ background: `linear-gradient(135deg, hsl(${hue} 62% 42%), hsl(${(hue + 40) % 360} 62% 30%))` }}>
+                <span className="vp-site-name">{page.site}</span>
+                {page.tagline ? <span className="vp-site-tagline">{page.tagline}</span> : null}
+              </header>
+              {page.links.length ? (
+                <nav className="vp-site-nav" aria-label={`${page.site} sections`}>
+                  {page.links.map((link) => (
+                    <button key={link} type="button" onClick={() => openPage(link, `${domain}/${slugify(link)}`, page.site)} className="vp-site-nav-btn">{link}</button>
+                  ))}
+                </nav>
+              ) : null}
               <h3 className="vp-page-heading">{page.title}</h3>
-              {page.body.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-            </div>
+              {page.kind === "shop" ? (
+                <div className="vp-site-grid">
+                  {sections.map((section, index) => (
+                    <article key={index} className="vp-site-card">
+                      <h4>{section.heading || "Item"}</h4>
+                      <p>{section.body}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                sections.map((section, index) => (
+                  <article key={index} className={`vp-site-section${page.kind === "forum" ? " vp-site-section--post" : ""}`}>
+                    {section.heading ? <h4>{section.heading}</h4> : null}
+                    <p>{section.body}</p>
+                  </article>
+                ))
+              )}
+            </>
           )}
         </div>
       ) : (
         <>
+          {!results.items.length && !searching ? (
+            <div className="vp-goodle-logo" aria-hidden="true">
+              {"Goodle".split("").map((letter, index) => <span key={index} style={{ color: LOGO_COLORS[index % LOGO_COLORS.length] }}>{letter}</span>)}
+            </div>
+          ) : null}
           <form onSubmit={(event) => { event.preventDefault(); search(query); }} className="vp-search-row">
             <label><span className="vp-sr-only">Search Goodle</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="vp-input" /></label>
             <button type="submit" aria-label="Search" className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Search size="1rem" aria-hidden="true" /></button>
@@ -124,7 +177,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
                 {results.items.map((item) => {
                   const { title, url, snippet } = parseResultItem(item);
                   return (
-                    <button key={item} type="button" onClick={() => openPage(item)} className="vp-result-card">
+                    <button key={item} type="button" onClick={() => openPage(title, url)} className="vp-result-card">
                       <span className="vp-result-link">{title}</span>
                       <span className="vp-result-url">{url}</span>
                       {snippet ? <span className="vp-result-snippet">{snippet}</span> : null}

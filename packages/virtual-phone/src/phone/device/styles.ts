@@ -144,9 +144,32 @@ export const phoneStylesheet = `
 .vp-bubble--other { align-self: flex-start; border-bottom-left-radius: 0.375rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 96%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.07), inset 0 0 0 1px var(--vp-border); }
 .vp-bubble-time { display: block; margin-top: 0.125rem; font-size: 0.5625rem; opacity: 0.7; }
 .vp-composer { display: flex; align-items: center; gap: 0.5rem; }
-.vp-post { display: grid; gap: 0.25rem; }
-.vp-post-author { font-size: 0.75rem; font-weight: 650; color: var(--vp-accent); }
+.vp-post { display: grid; gap: 0.375rem; }
+.vp-post-header { display: flex; align-items: center; gap: 0.5rem; }
+.vp-post-avatar { display: inline-flex; align-items: center; justify-content: center; height: 2rem; width: 2rem; flex-shrink: 0; border-radius: 999px; background: linear-gradient(180deg, #b48cff, #7a3ff2); color: #fff; font-size: 0.6875rem; font-weight: 700; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3); }
+.vp-post-names { display: flex; align-items: baseline; gap: 0.375rem; min-width: 0; overflow: hidden; }
+.vp-post-author { font-size: 0.75rem; font-weight: 650; white-space: nowrap; }
+.vp-post-handle { font-size: 0.6875rem; font-weight: 500; color: var(--vp-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-post-text { margin: 0; font-size: 0.8125rem; line-height: 1.4; overflow-wrap: anywhere; }
+.vp-post-footer { display: flex; gap: 1.25rem; align-items: center; font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); }
+.vp-post-footer span { display: inline-flex; align-items: center; gap: 0.25rem; }
+
+.vp-goodle-logo { display: flex; justify-content: center; gap: 1px; margin: 1.75rem 0 1.25rem; font-size: 2.375rem; font-weight: 700; letter-spacing: -0.02em; text-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.vp-site-masthead { display: grid; gap: 0.25rem; padding: 1.25rem 1rem; border-radius: 1.125rem 1.125rem 0 0; color: #fff; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.15); }
+.vp-site-name { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.01em; }
+.vp-site-tagline { font-size: 0.6875rem; font-weight: 500; opacity: 0.85; }
+.vp-site-nav { display: flex; gap: 0.375rem; overflow-x: auto; padding: 0.5rem; margin-bottom: 1rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); border-radius: 0 0 1.125rem 1.125rem; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); }
+.vp-site-nav-btn { flex-shrink: 0; min-height: 1.875rem; padding: 0 0.75rem; border-radius: 999px; font-size: 0.6875rem; font-weight: 600; background: color-mix(in srgb, var(--vp-text) 6%, transparent); transition: background 120ms ease; }
+.vp-site-nav-btn:hover { background: color-mix(in srgb, var(--vp-text) 11%, transparent); }
+.vp-site-section { margin-bottom: 0.875rem; }
+.vp-site-section h4 { margin: 0 0 0.25rem; font-size: 0.8125rem; font-weight: 650; }
+.vp-site-section p { margin: 0; font-size: 0.75rem; line-height: 1.5; overflow-wrap: anywhere; }
+.vp-site-section--post { padding: 0.75rem 0.875rem; border-radius: 0.875rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); }
+.vp-site-section--post h4 { color: var(--vp-accent); }
+.vp-site-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.vp-site-card { display: grid; gap: 0.25rem; padding: 0.75rem; border-radius: 0.875rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); }
+.vp-site-card h4 { margin: 0; font-size: 0.75rem; font-weight: 650; }
+.vp-site-card p { margin: 0; font-size: 0.6875rem; line-height: 1.4; color: var(--vp-muted); overflow-wrap: anywhere; }
 
 .vp-skeleton { display: block; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 10%, transparent); animation: vp-pulse 1.2s ease-in-out infinite; }
 .vp-skeleton--line { height: 0.625rem; margin: 0.1875rem 0; }
