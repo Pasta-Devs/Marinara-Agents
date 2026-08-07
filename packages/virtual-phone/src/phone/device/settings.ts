@@ -1,11 +1,15 @@
 import type { PhoneBaselineTheme } from "./identity";
 
 export type PhonePattern = "none" | "dots" | "grid" | "noise" | "waves";
+export type ScreenEffect = "none" | "cracks" | "smudge" | "blood" | "scanlines";
 
 export interface DeviceSettings {
   deviceName: string;
   wallpaper: string;
   wallpaperTint: string;
+  caseColor: string;
+  screenEffect: ScreenEffect;
+  screenEffectIntensity: 0 | 1 | 2 | 3;
   theme: PhoneBaselineTheme;
   pattern: PhonePattern;
   patternIntensity: 0 | 1 | 2 | 3;
@@ -21,6 +25,9 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     deviceName: "",
     wallpaper: "gradient",
     wallpaperTint: "",
+    caseColor: "",
+    screenEffect: "none",
+    screenEffectIntensity: 2,
     theme,
     pattern: "none",
     patternIntensity: 0,
@@ -44,6 +51,9 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
     deviceName: typeof input.deviceName === "string" ? input.deviceName.slice(0, 80) : defaults.deviceName,
     wallpaper: typeof input.wallpaper === "string" && input.wallpaper.trim() ? input.wallpaper.slice(0, 200) : defaults.wallpaper,
     wallpaperTint: typeof input.wallpaperTint === "string" && /^#[0-9a-fA-F]{6}$/u.test(input.wallpaperTint) ? input.wallpaperTint.toLowerCase() : defaults.wallpaperTint,
+    caseColor: typeof input.caseColor === "string" && /^#[0-9a-fA-F]{6}$/u.test(input.caseColor) ? input.caseColor.toLowerCase() : defaults.caseColor,
+    screenEffect: ["none", "cracks", "smudge", "blood", "scanlines"].includes(String(input.screenEffect)) ? input.screenEffect as ScreenEffect : defaults.screenEffect,
+    screenEffectIntensity: [0, 1, 2, 3].includes(Number(input.screenEffectIntensity)) ? Number(input.screenEffectIntensity) as 0 | 1 | 2 | 3 : defaults.screenEffectIntensity,
     theme: input.theme === "light" || input.theme === "dark" || input.theme === "system" ? input.theme : defaults.theme,
     pattern,
     patternIntensity: intensity === 1 || intensity === 2 || intensity === 3 ? intensity : 0,

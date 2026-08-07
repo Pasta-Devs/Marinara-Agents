@@ -12,6 +12,9 @@ export type Phone = {
     deviceName: string;
     wallpaper: string;
     wallpaperTint: string;
+    caseColor: string;
+    screenEffect: "none" | "cracks" | "smudge" | "blood" | "scanlines";
+    screenEffectIntensity: 0 | 1 | 2 | 3;
     theme: BaselineTheme;
     pattern: "none" | "dots" | "grid" | "noise" | "waves";
     patternIntensity: 0 | 1 | 2 | 3;

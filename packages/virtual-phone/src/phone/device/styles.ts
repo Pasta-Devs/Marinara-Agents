@@ -256,5 +256,19 @@ export const phoneStylesheet = `
 .vp-color-input::-webkit-color-swatch { border: 1px solid var(--vp-border); border-radius: 0.375rem; }
 .vp-urlbar { display: inline-flex; align-items: center; gap: 0.375rem; max-width: 100%; min-height: 1.875rem; padding: 0 0.75rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 6%, var(--vp-bg)); font-size: 0.6875rem; font-weight: 500; color: var(--vp-muted); }
 .vp-urlbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-grid-pager { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -0.75rem; padding: 0 0.75rem; scrollbar-width: none; }
+.vp-grid-pager::-webkit-scrollbar { display: none; }
+.vp-grid-page { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
+.vp-page-dots { display: flex; justify-content: center; gap: 0.3125rem; margin-top: 0.375rem; }
+.vp-page-dot { height: 0.3125rem; width: 0.3125rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 25%, var(--vp-bg)); transition: background 160ms ease; }
+.vp-page-dot--active { background: var(--vp-text); }
+.vp-store-actions { display: grid; gap: 0.25rem; justify-items: end; flex-shrink: 0; }
+.vp-store-remove { font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); padding: 0.125rem 0.375rem; border-radius: 0.375rem; }
+.vp-store-remove:hover { color: #ff3b30; }
+.vp-fx { position: absolute; inset: 0; z-index: 40; pointer-events: none; border-radius: 43px; }
+.vp-fx--cracks { background: repeating-linear-gradient(17deg, transparent 0 42px, rgb(255 255 255 / 0.22) 42px 43px, transparent 43px 96px), repeating-linear-gradient(-63deg, transparent 0 57px, rgb(255 255 255 / 0.16) 57px 58px, transparent 58px 128px), radial-gradient(circle at 68% 18%, rgb(255 255 255 / 0.18) 0 2px, transparent 3%); }
+.vp-fx--smudge { background: radial-gradient(ellipse 40% 25% at 70% 22%, rgb(255 255 255 / 0.1), transparent), radial-gradient(ellipse 35% 20% at 28% 62%, rgb(255 255 255 / 0.08), transparent), radial-gradient(ellipse 30% 15% at 55% 85%, rgb(255 255 255 / 0.07), transparent); }
+.vp-fx--blood { background: radial-gradient(circle at 80% 10%, rgb(150 10 20 / 0.55) 0 6%, transparent 16%), radial-gradient(circle at 73% 20%, rgb(130 5 15 / 0.45) 0 3%, transparent 9%), radial-gradient(circle at 16% 76%, rgb(140 8 18 / 0.4) 0 8%, transparent 20%), radial-gradient(circle at 24% 88%, rgb(120 5 12 / 0.35) 0 4%, transparent 10%); }
+.vp-fx--scanlines { background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.16) 0 1px, transparent 1px 3px); }
 .vp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 `;

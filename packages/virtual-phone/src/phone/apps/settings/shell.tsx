@@ -75,11 +75,17 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
             <input type="color" aria-label="Wallpaper tint color" value={settings.wallpaperTint || "#3a6ea5"} onChange={(event) => void update({ wallpaperTint: event.target.value })} className="vp-color-input" />
             {settings.wallpaperTint ? <button type="button" onClick={() => void update({ wallpaperTint: "" })} className="vp-accent-btn" style={{ minHeight: "1.875rem" }}>Clear</button> : <span className="vp-muted-note">None</span>}
           </span></div>
+          <div className="vp-row"><span>Case color</span><span className="vp-color-row">
+            <input type="color" aria-label="Case color" value={settings.caseColor || "#101216"} onChange={(event) => void update({ caseColor: event.target.value })} className="vp-color-input" />
+            {settings.caseColor ? <button type="button" onClick={() => void update({ caseColor: "" })} className="vp-accent-btn" style={{ minHeight: "1.875rem" }}>Clear</button> : <span className="vp-muted-note">Default</span>}
+          </span></div>
         </div>
         <h3 className="vp-section-label">Effects</h3>
         <div className="vp-group">
           <label className="vp-row"><span>Pattern</span><select value={settings.pattern} onChange={(event) => void update({ pattern: event.target.value })} className="vp-row-control"><option value="none">None</option><option value="dots">Dots</option><option value="grid">Grid</option><option value="noise">Noise</option><option value="waves">Waves</option></select></label>
           <label className="vp-row vp-row--stacked"><span>Pattern intensity</span><input type="range" min="0" max="3" step="1" value={settings.patternIntensity} onChange={(event) => void update({ patternIntensity: Number(event.target.value) })} className="vp-range" /></label>
+          <label className="vp-row"><span>Screen overlay</span><select value={settings.screenEffect} onChange={(event) => void update({ screenEffect: event.target.value })} className="vp-row-control"><option value="none">None</option><option value="cracks">Cracked glass</option><option value="smudge">Smudges</option><option value="blood">Blood</option><option value="scanlines">Scanlines</option></select></label>
+          <label className="vp-row vp-row--stacked"><span>Overlay intensity</span><input type="range" min="0" max="3" step="1" value={settings.screenEffectIntensity} onChange={(event) => void update({ screenEffectIntensity: Number(event.target.value) })} className="vp-range" /></label>
           <label className="vp-row"><span>Reduce device effects</span><input type="checkbox" checked={settings.reduceDeviceEffects} onChange={(event) => void update({ reduceDeviceEffects: event.target.checked })} className="vp-switch" /></label>
         </div>
         <h3 className="vp-section-label">Generation</h3>

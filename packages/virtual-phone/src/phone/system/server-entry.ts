@@ -44,6 +44,12 @@ interface CapabilityContext {
       resources: {
         listCharacters(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
         listPersonas(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
+        listLorebooks?(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
+        listEligibleLorebookEntries?(selection: { lorebookIds: string[] }): Promise<Array<{
+          name: string;
+          content: string;
+          description: string;
+        }>>;
       };
       languageModels?: {
         resolve(connectionId?: string | null): Promise<{
@@ -161,6 +167,62 @@ export async function activate({ api }: CapabilityContext) {
     return text ? `\n\nAdditional instructions from the user (follow them):\n${text}` : "";
   };
 
+  const readCardText = (value: unknown): string => {
+    const found: string[] = [];
+    const visit = (candidate: unknown) => {
+      if (typeof candidate === "string") {
+        try { visit(JSON.parse(candidate)); } catch { /* plain string, not a card */ }
+        return;
+      }
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return;
+      const record = candidate as Record<string, unknown>;
+      for (const key of ["description", "personality", "scenario"]) {
+        if (typeof record[key] === "string" && (record[key] as string).trim()) found.push((record[key] as string).trim());
+      }
+      if (record.data) visit(record.data);
+    };
+    visit(value);
+    return [...new Set(found)].join("\n").slice(0, 700);
+  };
+  const ownerCard = async (phone: Awaited<ReturnType<typeof findPhone>>, label: string) => {
+    try {
+      const identity = phone.document.identity;
+      const records = identity.ownerType === "character"
+        ? await api.runtime.resources.listCharacters([identity.ownerId])
+        : await api.runtime.resources.listPersonas([identity.ownerId]);
+      const card = readCardText(records[0]?.data);
+      return card ? `\n\n${label} ${identity.ownerName}:\n${card}` : "";
+    } catch {
+      return "";
+    }
+  };
+  // ponytail: every lorebook feeds the phone, capped; switch to per-chat lorebook linkage when the Engine exposes it
+  const loreContext = async () => {
+    try {
+      if (!api.runtime.resources.listLorebooks || !api.runtime.resources.listEligibleLorebookEntries) return "";
+      const books = await api.runtime.resources.listLorebooks();
+      if (!books.length) return "";
+      const entries = await api.runtime.resources.listEligibleLorebookEntries({ lorebookIds: books.map((book) => book.id) });
+      return entries.slice(0, 8)
+        .map((entry) => `${entry.name}: ${(entry.content || entry.description || "").slice(0, 200)}`)
+        .filter((line) => !line.endsWith(": "))
+        .join("\n")
+        .slice(0, 1600);
+    } catch {
+      return "";
+    }
+  };
+  const worldContext = async (chatId: string | undefined) => {
+    const lore = await loreContext();
+    let story = "";
+    if (chatId && api.runtime.persistence.listMessages) {
+      story = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
+        .map((message) => message.content.slice(0, 240))
+        .join("\n");
+    }
+    return `${lore ? `\n\nWorld lore to stay true to:\n${lore}` : ""}${story ? `\n\nRecent story events:\n${story}` : ""}`;
+  };
+
   // ponytail: reply generated inline with send; queue it if model latency hurts
   const generateCharacterReply = async (senderPhoneId: string, recipientPhoneId: string) => {
     try {
@@ -179,17 +241,11 @@ export async function activate({ api }: CapabilityContext) {
         .join("\n");
       const sharedChatId = recipient.document.identity.chatScope
         .find((chatId) => sender.document.identity.chatScope.includes(chatId));
-      let storyContext = "";
-      if (sharedChatId && api.runtime.persistence.listMessages) {
-        const recent = (await api.runtime.persistence.listMessages(sharedChatId)).slice(-10);
-        storyContext = recent
-          .map((message) => `${message.role === "user" ? senderName : recipientName}: ${message.content.slice(0, 240)}`)
-          .join("\n");
-      }
+      const storyContext = await worldContext(sharedChatId);
       const completion = await model.chatComplete([
         {
           role: "system",
-          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${storyContext ? `\n\nRecent story events for context:\n${storyContext}` : ""}${customInstructions(recipient)}`,
+          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${await ownerCard(recipient, "Who is texting — about")}${storyContext}${customInstructions(recipient)}`,
         },
         { role: "user", content: history },
       ], { temperature: 0.9, maxTokens: 200 });
@@ -397,10 +453,11 @@ export async function activate({ api }: CapabilityContext) {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { results: fallback };
+        const storyContext = await worldContext(phone.document.identity.chatScope[0]);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"Page Title | site.web/path | one-line snippet\", ...]} with 3 to 6 items. Every item uses that exact three-part format with invented in-world domains." + customInstructions(phone),
+            content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"Page Title | site.web/path | one-line snippet\", ...]} with 3 to 6 items. Every item uses that exact three-part format with invented in-world domains." + storyContext + customInstructions(phone),
           },
           { role: "user", content: `Search query: ${query}` },
         ], { temperature: 0.9, maxTokens: 400 });
@@ -436,10 +493,11 @@ export async function activate({ api }: CapabilityContext) {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { page: fallback };
+        const storyContext = await worldContext(phone.document.identity.chatScope[0]);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: "You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page as a template. Respond with only JSON: {\"site\":\"Site Name\",\"title\":\"page headline\",\"tagline\":\"short site tagline\",\"kind\":\"news, shop, blog, forum, or official\",\"links\":[\"nav label\", ...],\"sections\":[\"Section Heading :: section body text\", ...]} with 3 to 5 nav labels and 3 to 5 sections. Every section uses the exact format 'Heading :: body'. For a shop, each section is one product and its body states the price. For a forum, each section is one post and its heading is the poster's name." + customInstructions(phone),
+            content: "You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page as a template. Respond with only JSON: {\"site\":\"Site Name\",\"title\":\"page headline\",\"tagline\":\"short site tagline\",\"kind\":\"news, shop, blog, forum, or official\",\"links\":[\"nav label\", ...],\"sections\":[\"Section Heading :: section body text\", ...]} with 3 to 5 nav labels and 3 to 5 sections. Every section uses the exact format 'Heading :: body'. For a shop, each section is one product and its body states the price. For a forum, each section is one post and its heading is the poster's name." + storyContext + customInstructions(phone),
           },
           { role: "user", content: `URL: ${url}\nPage title: ${title}\nFound via search: ${query}${site ? `\nThis page belongs to the site "${site}" — keep its name, tagline, and nav consistent.` : ""}` },
         ], { temperature: 0.9, maxTokens: 700 });
@@ -489,19 +547,14 @@ export async function activate({ api }: CapabilityContext) {
         // ponytail: generation always lands in the phone's first chat; per-chat targeting when phones span many chats
         const chatId = scope[0];
         if (!chatId) return { posts: [] };
-        let storyContext = "";
-        if (api.runtime.persistence.listMessages) {
-          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
-            .map((message) => message.content.slice(0, 240))
-            .join("\n");
-        }
+        const storyContext = await worldContext(chatId);
         const timeline = (await noodle.feedFor([chatId])).slice(0, 10)
           .map((post) => `${post.author} ${post.handle} — ${post.text.slice(0, 160)}`)
           .join("\n");
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts by fictional side characters (never the protagonists) reacting to life in this world. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}${customInstructions(phone)}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts by fictional side characters (never the protagonists) reacting to life in this world. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the next batch of posts." },
         ], { temperature: 1, maxTokens: 500 });
@@ -551,17 +604,12 @@ export async function activate({ api }: CapabilityContext) {
         const model = await resolvePhoneModel(phone, "heavy");
         const chatId = scope[0];
         if (!model || !chatId) return { threads: await forum.boardFor(scope) };
-        let storyContext = "";
-        if (api.runtime.persistence.listMessages) {
-          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
-            .map((message) => message.content.slice(0, 240))
-            .join("\n");
-        }
+        const storyContext = await worldContext(chatId);
         const existingTitles = (await forum.boardFor([chatId])).slice(0, 10).map((thread) => thread.title).join("\n");
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write threads for the public web forum of a fictional roleplay world. Invent 3 to 5 new threads started by fictional side characters (never the protagonists). Respond with only JSON: {"threads":["Thread title | Author @handle | opening post text", ...]}. Every thread uses that exact three-part format.${existingTitles ? `\n\nThreads that already exist (do not repeat them):\n${existingTitles}` : ""}${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}${customInstructions(phone)}`,
+            content: `You write threads for the public web forum of a fictional roleplay world. Invent 3 to 5 new threads started by fictional side characters (never the protagonists). Respond with only JSON: {"threads":["Thread title | Author @handle | opening post text", ...]}. Every thread uses that exact three-part format.${existingTitles ? `\n\nThreads that already exist (do not repeat them):\n${existingTitles}` : ""}${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the new threads." },
         ], { temperature: 1, maxTokens: 700 });
@@ -619,16 +667,11 @@ export async function activate({ api }: CapabilityContext) {
         const model = await resolvePhoneModel(phone, "light");
         if (!model) return { photo: "" };
         const chatId = phone.document.identity.chatScope[0];
-        let storyContext = "";
-        if (chatId && api.runtime.persistence.listMessages) {
-          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-8)
-            .map((message) => message.content.slice(0, 240))
-            .join("\n");
-        }
+        const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `${phone.document.identity.ownerName} just took a photo with their phone inside a roleplay story. Describe what the photo shows in one or two vivid sentences, present tense, like a caption. Respond with only JSON: {"photo":"description"}.${storyContext ? `\n\nThe current scene:\n${storyContext}` : ""}${customInstructions(phone)}`,
+            content: `${phone.document.identity.ownerName} just took a photo with their phone inside a roleplay story. Describe what the photo shows in one or two vivid sentences, present tense, like a caption. Respond with only JSON: {"photo":"description"}.${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Describe the photo." },
         ], { temperature: 0.9, maxTokens: 150 });
@@ -670,16 +713,11 @@ export async function activate({ api }: CapabilityContext) {
           const empty = await noodlerPages.savePage({ chatId, creatorPhoneId, creatorName: contact.ownerName, tagline: "", price: "", posts: [] });
           return { page: pagePayload(empty.document) };
         }
-        let storyContext = "";
-        if (api.runtime.persistence.listMessages) {
-          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-8)
-            .map((message) => message.content.slice(0, 200))
-            .join("\n");
-        }
+        const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write ${contact.ownerName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${storyContext ? `\n\nThe character, from recent story events:\n${storyContext}` : ""}${customInstructions(phone)}`,
+            content: `You write ${contact.ownerName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${await ownerCard(creator, "About the creator")}${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: `Generate ${contact.ownerName}'s NoodleR page.` },
         ], { temperature: 1, maxTokens: 600 });
@@ -706,16 +744,11 @@ export async function activate({ api }: CapabilityContext) {
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { topics: [] };
         const chatId = phone.document.identity.chatScope[0];
-        let storyContext = "";
-        if (chatId && api.runtime.persistence.listMessages) {
-          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
-            .map((message) => message.content.slice(0, 240))
-            .join("\n");
-        }
+        const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodle, the social network inside a fictional roleplay world. List 5 trending topics in this world right now. Respond with only JSON: {"topics":["#HashtagName | one line on why it is trending", ...]}. Every topic uses that exact two-part format.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}${customInstructions(phone)}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. List 5 trending topics in this world right now. Respond with only JSON: {"topics":["#HashtagName | one line on why it is trending", ...]}. Every topic uses that exact two-part format.${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the trending list." },
         ], { temperature: 1, maxTokens: 400 });
@@ -738,16 +771,11 @@ export async function activate({ api }: CapabilityContext) {
           : {};
         const preferences = String(body.preferences ?? "").trim().slice(0, 200);
         const chatId = phone.document.identity.chatScope[0];
-        let storyContext = "";
-        if (chatId && api.runtime.persistence.listMessages) {
-          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-8)
-            .map((message) => message.content.slice(0, 200))
-            .join("\n");
-        }
+        const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write dating profiles for Tindler, the dating app inside a fictional roleplay world. Invent 5 single side characters who plausibly live in this world (never the story's protagonists). Respond with only JSON: {"profiles":["Name, Age | short tagline | two-sentence bio", ...]}. Every profile uses that exact three-part format.${preferences ? `\nThe user's stated preference: "${preferences}" — match it.` : ""}${storyContext ? `\n\nThe world, from recent story events:\n${storyContext}` : ""}${customInstructions(phone)}`,
+            content: `You write dating profiles for Tindler, the dating app inside a fictional roleplay world. Invent 5 single side characters who plausibly live in this world (never the story's protagonists). Respond with only JSON: {"profiles":["Name, Age | short tagline | two-sentence bio", ...]}. Every profile uses that exact three-part format.${preferences ? `\nThe user's stated preference: "${preferences}" — match it.` : ""}${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the next deck of profiles." },
         ], { temperature: 1, maxTokens: 500 });
@@ -766,16 +794,11 @@ export async function activate({ api }: CapabilityContext) {
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { emails: [] };
         const chatId = phone.document.identity.chatScope[0];
-        let storyContext = "";
-        if (chatId && api.runtime.persistence.listMessages) {
-          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
-            .map((message) => message.content.slice(0, 240))
-            .join("\n");
-        }
+        const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${storyContext ? `\n\nRecent story events for context:\n${storyContext}` : ""}${customInstructions(phone)}`,
+            content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${await ownerCard(phone, "About the inbox owner")}${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the current inbox." },
         ], { temperature: 1, maxTokens: 600 });

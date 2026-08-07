@@ -341,6 +341,18 @@ async function main() {
   assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera"]);
   assert.equal(defaultDeviceSettings().lightConnectionId, "");
   assert.equal(defaultDeviceSettings().wallpaperTint, "");
+  assert.equal(defaultDeviceSettings().caseColor, "");
+  assert.equal(defaultDeviceSettings().screenEffect, "none");
+  assert.equal(defaultDeviceSettings().screenEffectIntensity, 2);
+  const cased = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, { caseColor: "#FF00AA", screenEffect: "cracks", screenEffectIntensity: 3 });
+  const casedStored = cased.document.namespaces.phone.settings as { caseColor: string; screenEffect: string; screenEffectIntensity: number };
+  assert.equal(casedStored.caseColor, "#ff00aa");
+  assert.equal(casedStored.screenEffect, "cracks");
+  assert.equal(casedStored.screenEffectIntensity, 3);
+  const badCase = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, { caseColor: "red", screenEffect: "explode" });
+  const badStored = badCase.document.namespaces.phone.settings as { caseColor: string; screenEffect: string };
+  assert.equal(badStored.caseColor, "");
+  assert.equal(badStored.screenEffect, "none");
   const tinted = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, { wallpaperTint: "#FFAA00" });
   assert.equal((tinted.document.namespaces.phone.settings as { wallpaperTint: string }).wallpaperTint, "#ffaa00");
   const badTint = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, { wallpaperTint: "url(javascript:x)" });

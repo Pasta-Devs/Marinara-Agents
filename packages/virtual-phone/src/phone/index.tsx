@@ -9,7 +9,7 @@ import { defaultPhoneStatus } from "./device/status";
 import { initialDeviceSession, unlockDevice } from "./device/surfaces";
 import { phoneRequest } from "./platform/api";
 import { defaultDeviceSettings } from "./device/settings";
-import { patternBackground } from "./device/effects";
+import { conditionOpacity, patternBackground } from "./device/effects";
 import { InstalledAppRegistry } from "./platform/app-registry";
 import { AppRouteStackManager } from "./platform/app-lifecycle";
 import { settingsManifest } from "./apps/settings/manifest";
@@ -125,6 +125,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [pendingSearch, setPendingSearch] = React.useState("");
   const [showState, setShowState] = React.useState<"idle" | "pending" | "done">("idle");
   const [refState, setRefState] = React.useState<"idle" | "pending" | "done">("idle");
+  const [gridPage, setGridPage] = React.useState(0);
   const routeStacks = React.useRef(new Map<string, AppRouteStackManager>());
   const activeApps = React.useRef(new Map<string, Exclude<ActiveApp, null>>());
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -263,10 +264,11 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const dockIds = ["messages", "goodle", "notes", "app-store"];
   const dockApps = dockIds.flatMap((id) => launchableApps.filter((app) => app.id === id)).slice(0, 4);
   const gridApps = launchableApps.filter((app) => !dockIds.includes(app.id));
+  const gridPages = Array.from({ length: Math.ceil(gridApps.length / 8) }, (_, page) => gridApps.slice(page * 8, page * 8 + 8));
   const theme = deviceSettings.theme === "system" ? selectedPhone?.baselineTheme ?? "system" : deviceSettings.theme;
   const clock = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return createPortal(
-    <div ref={overlayRef} className="vp-root" data-chat-floating-panel style={phoneThemeTokens(theme) as React.CSSProperties}>
+    <div ref={overlayRef} className="vp-root" data-chat-floating-panel style={{ ...phoneThemeTokens(theme), ...(deviceSettings.caseColor ? { "--vp-bezel": deviceSettings.caseColor } : {}) } as React.CSSProperties}>
       <style data-virtual-phone-styles>{phoneStylesheet}</style>
       <div className="vp-scrim" aria-hidden="true" onClick={close} />
       <section role="dialog" aria-modal="true" aria-labelledby="virtual-phone-title" className="vp-stage">
@@ -349,16 +351,30 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                   <p className="vp-home-clock">{clock}</p>
                   <p className="vp-home-date">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
                   <div className="vp-home-spacer" aria-hidden="true" />
-                  {gridApps.length ? (
-                    <div aria-label="Installed apps" className="vp-app-grid">
-                      {gridApps.map(({ id, label, Icon, badge }) => (
-                        <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => { if (id === "goodle") setPendingSearch(""); openAppRoute(id, "/"); }} className="vp-app">
-                          <span className={`vp-app-icon ${appIconStyle(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
-                          {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
-                          <span className="vp-app-label">{label}</span>
-                        </button>
-                      ))}
-                    </div>
+                  {gridPages.length ? (
+                    <>
+                      <div aria-label="Installed apps" className="vp-grid-pager" onScroll={(event) => {
+                        const target = event.currentTarget;
+                        setGridPage(Math.round(target.scrollLeft / Math.max(1, target.clientWidth)));
+                      }}>
+                        {gridPages.map((page, pageIndex) => (
+                          <div key={pageIndex} className="vp-app-grid vp-grid-page">
+                            {page.map(({ id, label, Icon, badge }) => (
+                              <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => { if (id === "goodle") setPendingSearch(""); openAppRoute(id, "/"); }} className="vp-app">
+                                <span className={`vp-app-icon ${appIconStyle(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
+                                {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
+                                <span className="vp-app-label">{label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                      {gridPages.length > 1 ? (
+                        <div className="vp-page-dots" aria-hidden="true">
+                          {gridPages.map((_, dotIndex) => <span key={dotIndex} className={`vp-page-dot${dotIndex === gridPage ? " vp-page-dot--active" : ""}`} />)}
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
                   {dockApps.length ? (
                     <div className="vp-dockrow" aria-label="Favorite apps">
@@ -373,7 +389,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                 </div>
               )}
               {activeApp === "settings" && selectedPhone ? <AppErrorBoundary appName="Settings"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Settings...</div>}><SettingsApp phone={{ ...selectedPhone, settings: deviceSettings }} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onBack={() => backFromApp("settings")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "app-store" && selectedPhone ? <AppErrorBoundary appName="App Store"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeApp === "app-store" && selectedPhone ? <AppErrorBoundary appName="App Store"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onOpenApp={(appId) => { if (appId === "goodle") setPendingSearch(""); openAppRoute(appId as Exclude<ActiveApp, null>, "/"); }} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "goodle" && selectedPhone && deviceSettings.installedApps.includes("goodle") ? <AppErrorBoundary appName="Goodle"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Goodle...</div>}><GoodleApp phoneId={selectedPhone.phoneId} initialQuery={pendingSearch} onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "messages" && selectedPhone && deviceSettings.installedApps.includes("messages") ? <AppErrorBoundary appName="Messages"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Messages...</div>}><MessagesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("messages")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "notes" && selectedPhone && deviceSettings.installedApps.includes("notes") ? <AppErrorBoundary appName="Notes"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Notes...</div>}><NotesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("notes")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
@@ -386,6 +402,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               {activeApp === "forum" && selectedPhone && deviceSettings.installedApps.includes("forum") ? <AppErrorBoundary appName="Forum"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Forum...</div>}><ForumApp phoneId={selectedPhone.phoneId} ownerName={selectedPhone.ownerName} onBack={() => backFromApp("forum")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
               {activeApp === "camera" && selectedPhone && deviceSettings.installedApps.includes("camera") ? <AppErrorBoundary appName="Camera"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Camera...</div>}><CameraApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("camera")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
             </main>
+            {deviceSettings.screenEffect !== "none" ? <span className={`vp-fx vp-fx--${deviceSettings.screenEffect}`} style={{ opacity: conditionOpacity(deviceSettings.screenEffectIntensity, deviceSettings.reduceDeviceEffects) }} aria-hidden="true" /> : null}
             <span className="vp-home-indicator" aria-hidden="true" />
           </div>
         </div>
