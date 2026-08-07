@@ -14,6 +14,14 @@ export interface DeviceSettings {
   pattern: PhonePattern;
   patternIntensity: 0 | 1 | 2 | 3;
   reduceDeviceEffects: boolean;
+  /**
+   * Status-bar state belongs to the story, not to the host machine: it is a character's phone, and
+   * a desktop's real battery means nothing. Set here by the user today; the same two fields are
+   * what a model-driven command will write once the agent runtime is enabled (Step 8.4).
+   * Deliberately not drifting over session time — a phone dying should be a beat someone chose.
+   */
+  batteryLevel: number;
+  cellularSignal: 0 | 1 | 2 | 3 | 4;
   installedApps: string[];
   lightConnectionId: string;
   heavyConnectionId: string;
@@ -32,6 +40,8 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     pattern: "none",
     patternIntensity: 0,
     reduceDeviceEffects: false,
+    batteryLevel: 80,
+    cellularSignal: 4,
     installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera"],
     lightConnectionId: "",
     heavyConnectionId: "",
@@ -58,6 +68,12 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
     pattern,
     patternIntensity: intensity === 1 || intensity === 2 || intensity === 3 ? intensity : 0,
     reduceDeviceEffects: input.reduceDeviceEffects === true,
+    batteryLevel: Number.isFinite(Number(input.batteryLevel))
+      ? Math.min(100, Math.max(0, Math.round(Number(input.batteryLevel))))
+      : defaults.batteryLevel,
+    cellularSignal: [0, 1, 2, 3, 4].includes(Number(input.cellularSignal))
+      ? Number(input.cellularSignal) as 0 | 1 | 2 | 3 | 4
+      : defaults.cellularSignal,
     installedApps: Array.isArray(input.installedApps)
       ? [...new Set(["settings", "app-store", ...input.installedApps.filter((appId): appId is string => typeof appId === "string" && appId.trim().length > 0)])]
       : defaults.installedApps,

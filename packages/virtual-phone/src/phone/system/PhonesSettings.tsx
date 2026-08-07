@@ -20,6 +20,8 @@ export type Phone = {
     pattern: "none" | "dots" | "grid" | "noise" | "waves";
     patternIntensity: 0 | 1 | 2 | 3;
     reduceDeviceEffects: boolean;
+    batteryLevel: number;
+    cellularSignal: 0 | 1 | 2 | 3 | 4;
     installedApps: string[];
     lightConnectionId: string;
     heavyConnectionId: string;

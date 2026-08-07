@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { PhoneIdentityService, type PhoneDocumentRecord, type PhoneDocumentStore } from "../packages/virtual-phone/src/phone/device/identity";
 import { phoneThemeTokens } from "../packages/virtual-phone/src/phone/device/theme";
-import { defaultPhoneStatus } from "../packages/virtual-phone/src/phone/device/status";
 import { initialDeviceSession, unlockDevice } from "../packages/virtual-phone/src/phone/device/surfaces";
 import { InstalledAppRegistry } from "../packages/virtual-phone/src/phone/platform/app-registry";
 import { validateAppManifest, type AppManifest } from "../packages/virtual-phone/src/phone/platform/app-manifest";
@@ -13,7 +12,7 @@ import { parseBoundedContent } from "../packages/virtual-phone/src/phone/platfor
 import { settingsManifest } from "../packages/virtual-phone/src/phone/apps/settings/manifest";
 import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/phone/apps/app-store/manifest";
 import { fallbackSearchResults, goodleManifest, parsePageSection, parseResultItem, slugify } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
-import { defaultDeviceSettings } from "../packages/virtual-phone/src/phone/device/settings";
+import { defaultDeviceSettings, normalizeDeviceSettings } from "../packages/virtual-phone/src/phone/device/settings";
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
 import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/phone/apps/noodler/manifest";
@@ -183,14 +182,13 @@ async function main() {
   );
   assert.notEqual(phoneThemeTokens("light")["--vp-bg"], phoneThemeTokens("dark")["--vp-bg"]);
   assert.equal(phoneThemeTokens("dark")["--vp-radius"], "28px");
-  assert.deepEqual(defaultPhoneStatus(), {
-    cellularSignal: 4,
-    wifi: false,
-    airplaneMode: false,
-    batteryLevel: 80,
-    charging: false,
-    online: true,
-  });
+  // Status-bar state now lives in device settings so the story can drive it.
+  assert.equal(defaultDeviceSettings("dark").batteryLevel, 80);
+  assert.equal(defaultDeviceSettings("dark").cellularSignal, 4);
+  assert.equal(normalizeDeviceSettings({ batteryLevel: 250, cellularSignal: 9 }).batteryLevel, 100);
+  assert.equal(normalizeDeviceSettings({ batteryLevel: -5, cellularSignal: 9 }).batteryLevel, 0);
+  assert.equal(normalizeDeviceSettings({ cellularSignal: 9 }).cellularSignal, 4);
+  assert.equal(normalizeDeviceSettings({ cellularSignal: 1 }).cellularSignal, 1);
   const locked = initialDeviceSession("phone-persona");
   assert.equal(locked.surface, "lock");
   assert.deepEqual(unlockDevice(locked), { surface: "home", selectedPhoneId: "phone-persona" });

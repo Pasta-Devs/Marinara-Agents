@@ -88,6 +88,12 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
           <label className="vp-row vp-row--stacked"><span>Overlay intensity</span><input type="range" min="0" max="3" step="1" value={settings.screenEffectIntensity} onChange={(event) => void update({ screenEffectIntensity: Number(event.target.value) })} className="vp-range" /></label>
           <label className="vp-row"><span>Reduce device effects</span><input type="checkbox" checked={settings.reduceDeviceEffects} onChange={(event) => void update({ reduceDeviceEffects: event.target.checked })} className="vp-switch" /></label>
         </div>
+        <h3 className="vp-section-label">Status bar</h3>
+        <div className="vp-group">
+          <p className="vp-muted-note">This is the character's phone, not yours — set these to fit the story.</p>
+          <label className="vp-row vp-row--stacked"><span>Battery ({settings.batteryLevel}%)</span><input type="range" min="0" max="100" step="1" value={settings.batteryLevel} onChange={(event) => void update({ batteryLevel: Number(event.target.value) })} className="vp-range" /></label>
+          <label className="vp-row"><span>Signal</span><select value={settings.cellularSignal} onChange={(event) => void update({ cellularSignal: Number(event.target.value) })} className="vp-row-control"><option value="4">Full</option><option value="3">Good</option><option value="2">Fair</option><option value="1">Weak</option><option value="0">No signal</option></select></label>
+        </div>
         <h3 className="vp-section-label">Generation</h3>
         <div className="vp-group">
           <label className="vp-row"><span>Replies</span><select value={settings.lightConnectionId} disabled={!connections} onChange={(event) => void update({ lightConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.lightConnectionId)}</select></label>

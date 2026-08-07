@@ -36,6 +36,7 @@ export const phoneStylesheet = `
 .vp-statusbar-cluster { display: inline-flex; align-items: center; gap: 0.3125rem; min-width: 0; }
 .vp-statusbar-clock { justify-self: start; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-statusbar-end { display: flex; align-items: center; justify-content: flex-end; gap: 0.375rem; min-width: 0; }
+.vp-statusbar-notice { display: inline-flex; align-items: center; padding: 0; border: 0; background: none; cursor: pointer; }
 .vp-switch-btn { justify-self: center; display: inline-flex; align-items: center; gap: 0.1875rem; min-height: 1.5rem; max-width: 6rem; padding: 0 0.5rem; border-radius: 999px; font-size: 0.625rem; background: color-mix(in srgb, var(--vp-text) 8%, var(--vp-bg)); transition: background 140ms ease; }
 .vp-switch-btn:hover { background: color-mix(in srgb, var(--vp-text) 13%, var(--vp-bg)); }
 .vp-switch-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

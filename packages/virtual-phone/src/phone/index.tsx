@@ -1,11 +1,10 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { BatteryMedium, ChevronDown, Eye, Quote, Search, Settings, Signal, Smartphone, WifiOff, X } from "lucide-react";
+import { BatteryFull, BatteryLow, BatteryMedium, BatteryWarning, ChevronDown, Eye, Quote, Search, Settings, SignalHigh, SignalLow, SignalMedium, SignalZero, Smartphone, WifiOff, X } from "lucide-react";
 import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/PhonesSettings";
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
-import { defaultPhoneStatus } from "./device/status";
 import { initialDeviceSession, unlockDevice } from "./device/surfaces";
 import { phoneRequest } from "./platform/api";
 import { defaultDeviceSettings } from "./device/settings";
@@ -143,8 +142,16 @@ interface PhoneNotification {
 function useClock() {
   const [now, setNow] = React.useState(() => new Date());
   React.useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 30_000);
-    return () => window.clearInterval(timer);
+    // Tick on the minute boundary. A plain 30s interval left the displayed time up to 30 seconds
+    // stale on one of the two most-looked-at rows of pixels on the device.
+    let timer = 0;
+    const tick = () => {
+      const current = new Date();
+      setNow(current);
+      timer = window.setTimeout(tick, 60_000 - (current.getSeconds() * 1000 + current.getMilliseconds()));
+    };
+    tick();
+    return () => window.clearTimeout(timer);
   }, []);
   return now;
 }
@@ -153,6 +160,16 @@ function wallpaperBackground(wallpaper: string) {
   if (wallpaper === "midnight") return "linear-gradient(145deg, #111827 0%, #243447 55%, #0f172a 100%)";
   if (wallpaper === "paper") return "linear-gradient(145deg, #fff8e7 0%, #e8dfcc 52%, #f7efe1 100%)";
   return "linear-gradient(145deg, var(--vp-bg), var(--vp-surface))";
+}
+
+const signalIcons = [SignalZero, SignalLow, SignalMedium, SignalHigh, SignalHigh] as const;
+const signalLabels = ["No", "Weak", "Fair", "Good", "Full"] as const;
+
+function batteryIcon(level: number) {
+  if (level <= 10) return BatteryWarning;
+  if (level <= 35) return BatteryLow;
+  if (level <= 80) return BatteryMedium;
+  return BatteryFull;
 }
 
 function PhoneOverlay({ chatId }: { chatId: string | null }) {
@@ -171,7 +188,6 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const activeApps = React.useRef(new Map<string, Exclude<ActiveApp, null>>());
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
   const overlayRef = React.useRef<HTMLDivElement>(null);
-  const status = defaultPhoneStatus();
   const now = useClock();
 
   React.useEffect(() => {
@@ -242,17 +258,25 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   React.useEffect(() => {
     setActiveApp(selectedPhone ? activeApps.current.get(selectedPhone.phoneId) ?? null : null);
   }, [selectedPhone?.phoneId]);
+  // Notifications used to be fetched once, only while open AND on the home screen, so a character
+  // texting mid-scene could not reach you from inside an app. Poll on the same 30s cadence the
+  // toolbar badge uses, for as long as the phone is open, whatever is on screen.
   React.useEffect(() => {
-    if (!open || !selectedPhone || activeApp !== null) {
+    if (!open || !selectedPhone) {
       if (!selectedPhone) setNotifications([]);
       return;
     }
     let active = true;
-    void phoneRequest<{ notifications: PhoneNotification[] }>(`/phones/${encodeURIComponent(selectedPhone.phoneId)}/notifications`)
-      .then((response) => { if (active) setNotifications(response.notifications); })
-      .catch(() => undefined);
-    return () => { active = false; };
-  }, [open, selectedPhone?.phoneId, activeApp]);
+    const phoneId = selectedPhone.phoneId;
+    const refresh = () => {
+      void phoneRequest<{ notifications: PhoneNotification[] }>(`/phones/${encodeURIComponent(phoneId)}/notifications`)
+        .then((response) => { if (active) setNotifications(response.notifications); })
+        .catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [open, selectedPhone?.phoneId]);
   if (!open) return null;
   const deviceSettings = selectedPhone?.settings ?? defaultDeviceSettings(selectedPhone?.baselineTheme ?? "system");
   const updateSettings = async (patch: Record<string, unknown>) => {
@@ -287,6 +311,10 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     }
   };
   const messagesUnread = notifications.filter((notification) => notification.appId === "messages").reduce((total, notification) => total + notification.count, 0);
+  const notificationCount = notifications.reduce((total, notification) => total + notification.count, 0);
+  const SignalIcon = signalIcons[deviceSettings.cellularSignal] ?? SignalHigh;
+  const signalLabel = signalLabels[deviceSettings.cellularSignal] ?? "Full";
+  const BatteryIcon = batteryIcon(deviceSettings.batteryLevel);
   const openApp = (appId: string) => {
     if (appId === "goodle") setPendingSearch("");
     openAppRoute(appId, "/");
@@ -343,12 +371,18 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                 <ChevronDown size="0.75rem" aria-hidden="true" />
               </button>
               <div className="vp-statusbar-end">
-                <span className="vp-statusbar-cluster" aria-label="Full cellular signal and Wi-Fi off">
-                  <Signal size="0.75rem" aria-hidden="true" />
+                {/* Reachable from inside an app, which is where a mid-scene text used to be invisible. */}
+                {activeApp && notificationCount > 0 ? (
+                  <button type="button" className="vp-statusbar-notice" onClick={closeApp} aria-label={`${notificationCount} new ${notificationCount === 1 ? "notification" : "notifications"}, go to the home screen`}>
+                    <span className="vp-badge" aria-hidden="true">{notificationCount > 99 ? "99+" : notificationCount}</span>
+                  </button>
+                ) : null}
+                <span className="vp-statusbar-cluster" aria-label={`${signalLabel} cellular signal and Wi-Fi off`}>
+                  <SignalIcon size="0.75rem" aria-hidden="true" />
                   <WifiOff size="0.75rem" aria-hidden="true" />
                 </span>
-                <span className="vp-statusbar-cluster" aria-label={`${status.batteryLevel}% battery, not charging`}>
-                  {status.batteryLevel}% <BatteryMedium size="0.875rem" aria-hidden="true" />
+                <span className="vp-statusbar-cluster" aria-label={`${deviceSettings.batteryLevel}% battery, not charging`}>
+                  {deviceSettings.batteryLevel}% <BatteryIcon size="0.875rem" aria-hidden="true" />
                 </span>
               </div>
               {switcherOpen ? (
@@ -511,7 +545,8 @@ function VirtualPhoneToolbar({ className, chatId }: { className?: string; chatId
         .catch(() => undefined);
     };
     refresh();
-    const timer = window.setInterval(refresh, 60_000);
+    // Matches the in-device notification cadence, so the closed-phone badge is never a minute behind.
+    const timer = window.setInterval(refresh, 30_000);
     window.addEventListener(PHONE_CLOSE_EVENT, refresh);
     return () => {
       active = false;
