@@ -10,8 +10,8 @@ export const contactsManifest: AppManifest = {
   modelUse: "none",
   removable: true,
   routes: [{ id: "list", path: "/", title: "Contacts" }],
-  records: [],
-  actions: [],
+  records: [{ type: "contact", ownership: "permissioned-private" }],
+  actions: [{ id: "add-contact", tier: "local", immediate: true }],
   content: { list: {} },
   notifications: null,
 };

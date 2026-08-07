@@ -39,6 +39,18 @@ export interface PhoneDocumentRecord {
   updatedAt: string;
 }
 
+export interface ContactDocument {
+  schemaVersion: 1;
+  contactId: string;
+  chatId: string;
+  name: string;
+  handle: string;
+  bio: string;
+  phoneLabel: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PhoneDocumentStore {
   list(packageId: string, kind: string): Promise<PhoneDocumentRecord[]>;
   create(input: {
@@ -76,6 +88,7 @@ export interface EnsurePhoneInput {
 const PACKAGE_ID = "virtual-phone";
 const LEGACY_PACKAGE_ID = "virtual-phone-2";
 const PHONE_KIND = "phone";
+const CONTACT_KIND = "contact";
 
 function ownerKey(ownerType: PhoneOwnerType, ownerId: string) {
   return `${ownerType}:${ownerId}`;
@@ -137,6 +150,50 @@ export class PhoneIdentityService {
 
   async list() {
     return (await this.documents.list(PACKAGE_ID, PHONE_KIND)).map(parsePhoneRecord);
+  }
+
+  async listContacts(chatId: string) {
+    const normalizedChatId = normalizeRequiredString(chatId, "chatId");
+    return (await this.documents.list(PACKAGE_ID, CONTACT_KIND))
+      .filter((record) => {
+        const data = record.data as Partial<ContactDocument>;
+        return data.schemaVersion === 1 && data.chatId === normalizedChatId && typeof data.contactId === "string";
+      })
+      .map((record) => ({ record, document: record.data as ContactDocument }));
+  }
+
+  async createContact(input: { chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string }) {
+    const chatId = normalizeRequiredString(input.chatId, "chatId");
+    const name = normalizeRequiredString(input.name, "name").slice(0, 120);
+    const timestamp = this.now();
+    const document: ContactDocument = {
+      schemaVersion: 1,
+      contactId: this.createId(),
+      chatId,
+      name,
+      handle: String(input.handle ?? "").trim().slice(0, 80),
+      bio: String(input.bio ?? "").trim().slice(0, 500),
+      phoneLabel: String(input.phoneLabel ?? "").trim().slice(0, 80),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    const record = await this.documents.create({
+      id: `contact:${document.contactId}`,
+      packageId: PACKAGE_ID,
+      kind: CONTACT_KIND,
+      name: document.name,
+      description: "Virtual Phone contact",
+      data: document,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    return { record, document };
+  }
+
+  async removeContact(contactId: string, chatId: string) {
+    const contact = (await this.listContacts(chatId)).find(({ document }) => document.contactId === contactId);
+    if (!contact) throw new Error("Contact not found");
+    if (!await this.documents.remove(PACKAGE_ID, contact.record.id, contact.record.revision)) throw new Error("Contact changed; try again");
   }
 
   async migrateLegacyDocuments() {

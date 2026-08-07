@@ -132,6 +132,11 @@ export async function activate({ api }: CapabilityContext) {
         document.identity.chatScope.some((chatId) => self.document.identity.chatScope.includes(chatId)))
       .map(({ document }) => ({ phoneId: document.identity.phoneId, ownerId: document.identity.ownerId, ownerType: document.identity.ownerType, ownerName: document.identity.ownerName, deviceName: document.identity.deviceName }));
   };
+  const chatForPhone = async (phoneId: string, chatId: string) => {
+    const phone = await findPhone(phoneId);
+    if (!phone.document.identity.chatScope.includes(chatId)) throw new Error("This phone is not part of this chat");
+    return { phone, chatId };
+  };
   const threadPayload = (threadId: string, document: ThreadDocument, phoneId: string, names: Map<string, string>) => {
     const otherPhoneId = document.participants.find((participant) => participant !== phoneId) ?? "";
     return {
@@ -452,6 +457,68 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
       }
     });
+    app.get<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/contacts", async (request, reply) => {
+      try {
+        const { phone, chatId } = await chatForPhone(request.params.phoneId, String(request.query.chatId ?? ""));
+        const phoneContacts = await Promise.all((await contactsFor(phone.document.identity.phoneId)).map(async (contact) => {
+          const records = contact.ownerType === "character"
+            ? await api.runtime.resources.listCharacters([contact.ownerId])
+            : await api.runtime.resources.listPersonas([contact.ownerId]);
+          return {
+            id: contact.phoneId,
+            kind: "phone" as const,
+            name: contact.ownerName,
+            handle: "",
+            bio: readCardText(records[0]?.data).split("\n")[0]?.slice(0, 140) ?? "",
+            phoneLabel: contact.deviceName ?? "",
+            phoneId: contact.phoneId,
+            ownerId: contact.ownerId,
+          };
+        }));
+        const manualContacts = (await phones.listContacts(chatId)).map(({ document }) => ({
+          id: document.contactId,
+          kind: "contact" as const,
+          name: document.name,
+          handle: document.handle,
+          bio: document.bio,
+          phoneLabel: document.phoneLabel,
+          phoneId: null,
+        }));
+        const names = new Map(phoneContacts.map((contact) => [contact.phoneId, contact.name]));
+        const threads = (await messaging.threadsFor(phone.document.identity.phoneId))
+          .map(({ record, document }) => threadPayload(record.id, document, phone.document.identity.phoneId, names));
+        return { contacts: [...phoneContacts, ...manualContacts], threads };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Contacts unavailable" });
+      }
+    });
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/contacts", async (request, reply) => {
+      try {
+        const { chatId } = await chatForPhone(request.params.phoneId, String(request.query.chatId ?? ""));
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const contact = await phones.createContact({
+          chatId,
+          name: String(body.name ?? ""),
+          handle: String(body.handle ?? ""),
+          bio: String(body.bio ?? ""),
+          phoneLabel: String(body.phoneLabel ?? ""),
+        });
+        return { contact: { id: contact.document.contactId, kind: "contact", ...contact.document, phoneId: null } };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Contact could not be added" });
+      }
+    });
+    app.delete<{ Params: { phoneId: string; contactId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/contacts/:contactId", async (request, reply) => {
+      try {
+        const { chatId } = await chatForPhone(request.params.phoneId, String(request.query.chatId ?? ""));
+        await phones.removeContact(request.params.contactId, chatId);
+        return { removed: true };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Contact could not be removed" });
+      }
+    });
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/goodle/search", async (request, reply) => {
       const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
         ? request.body as Record<string, unknown>
@@ -564,6 +631,7 @@ export async function activate({ api }: CapabilityContext) {
         const cast = (await phones.list())
           .filter(({ document }) => document.provisioning.enabled && document.identity.chatScope.includes(chatId))
           .map(({ document }) => `${document.identity.ownerName} ${handleFor(document.identity.ownerName)}`)
+          .concat((await phones.listContacts(chatId)).map(({ document }) => `${document.name} ${handleFor(document.name)}`))
           .join(", ");
         const completion = await model.chatComplete([
           {
@@ -705,13 +773,15 @@ export async function activate({ api }: CapabilityContext) {
           ? request.body as Record<string, unknown>
           : {};
         const creatorPhoneId = String(body.creatorPhoneId ?? "");
+        const requestedChatId = String(body.chatId ?? "");
         const refresh = body.refresh === true;
-        const contact = (await contactsFor(request.params.phoneId)).find((candidate) => candidate.phoneId === creatorPhoneId);
-        if (!contact) return reply.status(400).send({ error: "That creator is not in this chat" });
-        const creator = await findPhone(creatorPhoneId);
-        const chatId = phone.document.identity.chatScope
-          .find((candidate) => creator.document.identity.chatScope.includes(candidate));
-        if (!chatId) return reply.status(400).send({ error: "No shared chat with this creator" });
+        if (!phone.document.identity.chatScope.includes(requestedChatId)) return reply.status(400).send({ error: "This phone is not part of this chat" });
+        const phoneContact = (await contactsFor(request.params.phoneId)).find((candidate) => candidate.phoneId === creatorPhoneId);
+        const manualContact = (await phones.listContacts(requestedChatId)).find(({ document }) => document.contactId === creatorPhoneId)?.document;
+        if (!phoneContact && !manualContact) return reply.status(400).send({ error: "That creator is not in this chat" });
+        const creator = phoneContact ? await findPhone(creatorPhoneId) : null;
+        const chatId = requestedChatId;
+        const creatorName = phoneContact?.ownerName ?? manualContact!.name;
         const pagePayload = (document: { creatorPhoneId: string; creatorName: string; tagline: string; price: string; posts: Array<{ id: string; text: string; locked: boolean }> }) => ({
           creatorPhoneId: document.creatorPhoneId,
           creatorName: document.creatorName,
@@ -724,16 +794,16 @@ export async function activate({ api }: CapabilityContext) {
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) {
           if (existing) return { page: pagePayload(existing.document) };
-          const empty = await noodlerPages.savePage({ chatId, creatorPhoneId, creatorName: contact.ownerName, tagline: "", price: "", posts: [] });
+           const empty = await noodlerPages.savePage({ chatId, creatorPhoneId, creatorName, tagline: "", price: "", posts: [] });
           return { page: pagePayload(empty.document) };
         }
         const storyContext = await worldContext(chatId);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write ${contact.ownerName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${await ownerCard(creator, "About the creator")}${storyContext}${customInstructions(phone)}`,
+             content: `You write ${creatorName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${creator ? await ownerCard(creator, "About the creator") : manualContact?.bio ? `\n\nAbout the creator:\n${manualContact.bio}` : ""}${storyContext}${customInstructions(phone)}`,
           },
-          { role: "user", content: `Generate ${contact.ownerName}'s NoodleR page.` },
+           { role: "user", content: `Generate ${creatorName}'s NoodleR page.` },
         ], { temperature: 1, maxTokens: 600 });
         const generated = parseBoundedContent(completion.content, {
           fields: { tagline: "string", price: "string", posts: "string[]" },
@@ -742,7 +812,7 @@ export async function activate({ api }: CapabilityContext) {
         const saved = await noodlerPages.savePage({
           chatId,
           creatorPhoneId,
-          creatorName: contact.ownerName,
+           creatorName,
           tagline: generated.tagline,
           price: generated.price,
           posts: generated.posts.map(parsePagePost),

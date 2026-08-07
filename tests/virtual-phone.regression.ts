@@ -75,7 +75,7 @@ class MemoryDocuments implements PhoneDocumentStore {
 
 async function main() {
   const documents = new MemoryDocuments();
-  const ids = ["phone-persona", "phone-character"];
+  const ids = ["phone-persona", "phone-character", "contact-manual"];
   const clock = ["2026-08-06T10:00:00.000Z", "2026-08-06T10:01:00.000Z", "2026-08-06T10:02:00.000Z"];
   const createService = () => new PhoneIdentityService(documents, () => clock.shift()!, () => ids.shift()!);
 
@@ -143,6 +143,17 @@ async function main() {
   assert.equal(reenabled.document.identity.phoneId, disabled.document.identity.phoneId);
   assert.equal(reenabled.document.provisioning.enabled, true);
   assert.equal(reenabled.document.provisioning.baselineTheme, "dark");
+  const manualContact = await concurrentRuntime.createContact({
+    chatId: "chat-1",
+    name: "Lady Farquaad",
+    bio: "A person outside the active cast.",
+  });
+  assert.equal(manualContact.document.name, "Lady Farquaad");
+  assert.equal(manualContact.document.phoneLabel, "");
+  assert.deepEqual((await concurrentRuntime.listContacts("chat-1")).map(({ document }) => document.name), ["Lady Farquaad"]);
+  assert.deepEqual(await concurrentRuntime.listContacts("chat-2"), []);
+  await concurrentRuntime.removeContact(manualContact.document.contactId, "chat-1");
+  assert.deepEqual(await concurrentRuntime.listContacts("chat-1"), []);
   assert.equal(settingsManifest.removable, false);
   assert.equal(settingsManifest.modelUse, "none");
   assert.equal(appStoreManifest.removable, false);

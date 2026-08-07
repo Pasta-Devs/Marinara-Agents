@@ -28,7 +28,7 @@ interface CreatorPage {
   posts: PagePost[];
 }
 
-export function NoodlerRShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
+export function NoodlerRShell({ phoneId, chatId, onBack, onClose }: { phoneId: string; chatId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "noodler-r");
   const [contacts, setContacts] = React.useState<Array<{ phoneId: string; ownerId?: string; ownerName: string }> | null>(null);
   const avatars = useAvatarMap();
@@ -38,20 +38,20 @@ export function NoodlerRShell({ phoneId, onBack, onClose }: { phoneId: string; o
 
   React.useEffect(() => {
     let active = true;
-    void phoneRequest<{ contacts: Array<{ phoneId: string; ownerId?: string; ownerName: string }> }>(`/phones/${encodeURIComponent(phoneId)}/messaging`)
-      .then((payload) => { if (active) setContacts(payload.contacts); })
+    void phoneRequest<{ contacts: Array<{ id: string; ownerId?: string; name: string }> }>(`/phones/${encodeURIComponent(phoneId)}/contacts?chatId=${encodeURIComponent(chatId)}`)
+      .then((payload) => { if (active) setContacts(payload.contacts.map((contact) => ({ phoneId: contact.id, ownerId: contact.ownerId, ownerName: contact.name }))); })
       .catch(() => { if (active) setContacts([]); });
     void store.get("subs").then((value) => {
       if (active && Array.isArray(value)) setSubs(value.filter((item): item is string => typeof item === "string"));
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [phoneId, store]);
+  }, [phoneId, chatId, store]);
 
   const openPage = (creatorPhoneId: string, refresh = false) => {
     setLoading(true);
     if (!refresh) setPage(null);
     void phoneRequest<{ page: CreatorPage }>(`/phones/${encodeURIComponent(phoneId)}/noodler-r/page`, {
-      method: "POST", body: JSON.stringify({ creatorPhoneId, refresh }),
+      method: "POST", body: JSON.stringify({ creatorPhoneId, chatId, refresh }),
     })
       .then((response) => setPage(response.page))
       .catch(() => setPage((current) => current ?? null))

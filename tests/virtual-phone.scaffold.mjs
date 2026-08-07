@@ -11,7 +11,7 @@ const developmentCatalog = JSON.parse(await readFile(join(repoRoot, "test-catalo
 const developmentEntry = developmentCatalog.packages.find((entry) => entry.manifest.id === "virtual-phone");
 
 assert.equal(manifest.id, "virtual-phone");
-assert.equal(manifest.version, "2.0.3");
+assert.equal(manifest.version, "2.0.41");
 assert.equal(manifest.entrypoints.server, "server.mjs");
 assert.equal(manifest.restartRequired, true);
 assert.deepEqual(manifest.permissions, ["routes", "storage", "ui"]);
