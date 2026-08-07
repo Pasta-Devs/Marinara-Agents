@@ -101,11 +101,11 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
         onClose={onClose}
         actions={[{ id: "refresh", icon: "refresh", label: tab === "feed" ? "Refresh feed" : "Refresh trending", kind: "button", disabled: loading, reason: "Refreshing" }]}
         onAction={(actionId) => { if (actionId === "refresh") (tab === "feed" ? refreshFeed() : refreshTrending()); }}
+        center={<span className="vp-urlbar"><AtSign size="0.75rem" aria-hidden="true" /><span>noodle.local</span></span>}
       />
       <div className="vp-tab-content">
         {tab === "feed" ? (
           <>
-            <div className="vp-page-url" aria-hidden="true"><AtSign size="0.75rem" /><span>https://noodle.local</span></div>
             <form className="vp-composer" style={{ marginBottom: "0.875rem" }} onSubmit={(event) => { event.preventDefault(); postDraft(); }}>
               <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Write a post</span>
                 <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="What's simmering?" maxLength={500} className="vp-input" />

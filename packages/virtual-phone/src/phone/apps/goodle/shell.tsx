@@ -103,10 +103,10 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
         onClose={onClose}
         actions={page ? [] : [{ id: "clear-recents", icon: "trash", label: "Clear recent searches", kind: "button", disabled: recents.length === 0, reason: "No recent searches" }]}
         onAction={(actionId) => { if (actionId === "clear-recents") clearRecents(); }}
+        center={page ? <span className="vp-urlbar"><Globe size="0.75rem" aria-hidden="true" /><span>{page.url}</span></span> : undefined}
       />
       {page ? (
         <div className="vp-site" aria-busy={page.loading}>
-          <div className="vp-page-url"><Globe size="0.75rem" aria-hidden="true" /><span>{page.url}</span></div>
           {page.loading ? (
             <div role="status" aria-label="Loading page">
               <span className="vp-skeleton" style={{ height: "5rem", borderRadius: "1.125rem 1.125rem 0 0" }} />

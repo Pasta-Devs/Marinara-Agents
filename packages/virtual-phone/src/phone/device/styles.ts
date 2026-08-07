@@ -28,7 +28,7 @@ export const phoneStylesheet = `
 .vp-dock-btn:active:not(:disabled) { transform: scale(0.97); }
 
 .vp-screen { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; border-radius: 43px; background: var(--vp-bg); color: var(--vp-text); }
-.vp-statusbar { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0.5rem; min-height: 2.25rem; flex-shrink: 0; padding: 0.375rem 1.125rem 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+.vp-statusbar { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0.5rem; min-height: 2.25rem; flex-shrink: 0; padding: 0.375rem 1rem 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
 .vp-statusbar-cluster { display: inline-flex; align-items: center; gap: 0.3125rem; min-width: 0; }
 .vp-statusbar-clock { justify-self: start; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-statusbar-end { display: flex; align-items: center; justify-content: flex-end; gap: 0.375rem; min-width: 0; }
@@ -44,7 +44,7 @@ export const phoneStylesheet = `
 
 .vp-surface-area { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .vp-home-indicator { position: absolute; bottom: 0.375rem; left: 50%; translate: -50% 0; z-index: 30; height: 4px; width: 6.5rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 30%, var(--vp-bg)); pointer-events: none; }
-.vp-lock { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; gap: 1.125rem; padding: 2rem 1.125rem 1.5rem; text-align: center; }
+.vp-lock { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; gap: 1.125rem; padding: 2rem 0.875rem 1.5rem; text-align: center; }
 .vp-lock > div:first-child { margin-bottom: 0.75rem; }
 .vp-lock .vp-lock-card, .vp-lock .vp-lock-list { margin-top: 0.5rem; }
 .vp-lock .vp-unlock-btn { margin-top: auto; }
@@ -57,7 +57,7 @@ export const phoneStylesheet = `
 .vp-unlock-btn { min-height: 2.875rem; padding: 0 2.5rem; border-radius: 999px; background: var(--vp-surface); color: var(--vp-text); font-size: 0.8125rem; font-weight: 600; box-shadow: 0 2px 10px rgb(0 0 0 / 0.3), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
 .vp-unlock-btn:active { transform: scale(0.97); }
 
-.vp-home { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 1rem 1rem 1.375rem; }
+.vp-home { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 1rem 0.75rem 1.375rem; }
 .vp-home-top { display: flex; align-items: center; gap: 0.5rem; }
 .vp-home-top .vp-search-bar { margin-top: 0; }
 .vp-dockrow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.625rem; margin-top: 0.875rem; padding: 0.5rem 0.625rem; border-radius: 1.625rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: inset 0 0 0 1px var(--vp-border), 0 6px 18px rgb(0 0 0 / 0.1); }
@@ -93,13 +93,14 @@ export const phoneStylesheet = `
 .vp-app-icon--default { background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 92%, #ffffff), var(--vp-surface)); color: var(--vp-text); }
 .vp-app-label { font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.01em; text-shadow: 0 1px 4px rgb(0 0 0 / 0.1); }
 
-.vp-appview { position: absolute; inset: 0; z-index: 10; overflow-y: auto; background: var(--vp-bg); padding: 1rem 1rem 1.625rem; animation: vp-app-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+.vp-appview { position: absolute; inset: 0; z-index: 10; overflow-y: auto; background: var(--vp-bg); padding: 1rem 0.75rem 1.625rem; animation: vp-app-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1); }
 @keyframes vp-app-in { from { opacity: 0; transform: scale(0.96) translateY(8px); } }
 .vp-appview--loading { font-size: 0.75rem; }
 .vp-appview--fixed { display: flex; flex-direction: column; overflow: hidden; }
 .vp-appview--fixed .vp-app-header { position: static; flex-shrink: 0; }
-.vp-app-header { position: sticky; top: -1rem; z-index: 5; display: grid; grid-template-columns: minmax(2.5rem, 1fr) minmax(0, auto) minmax(2.5rem, 1fr); align-items: center; gap: 0.5rem; min-height: 2.75rem; margin: -1rem -1rem 0.875rem; padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--vp-border); background: var(--vp-bg); }
+.vp-app-header { position: sticky; top: -1rem; z-index: 5; display: grid; grid-template-columns: minmax(2.5rem, 1fr) minmax(0, auto) minmax(2.5rem, 1fr); align-items: center; gap: 0.5rem; min-height: 2.75rem; margin: -1rem -0.75rem 0.875rem; padding: 0.25rem 0.375rem; border-bottom: 1px solid var(--vp-border); background: var(--vp-bg); }
 .vp-app-header > .vp-icon-btn:first-child { justify-self: start; }
+.vp-app-header-mid { display: flex; align-items: center; justify-content: center; min-width: 0; }
 .vp-app-header h2 { min-width: 0; margin: 0; text-align: center; font-size: 1rem; font-weight: 650; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-app-header-actions { justify-self: end; }
 .vp-app-header-actions { display: flex; align-items: center; gap: 0.125rem; flex-shrink: 0; }
@@ -242,5 +243,7 @@ export const phoneStylesheet = `
 .vp-color-input { height: 1.875rem; width: 2.75rem; padding: 0; border: 0; border-radius: 0.5rem; background: none; cursor: pointer; }
 .vp-color-input::-webkit-color-swatch-wrapper { padding: 2px; }
 .vp-color-input::-webkit-color-swatch { border: 1px solid var(--vp-border); border-radius: 0.375rem; }
+.vp-urlbar { display: inline-flex; align-items: center; gap: 0.375rem; max-width: 100%; min-height: 1.875rem; padding: 0 0.75rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 6%, var(--vp-bg)); font-size: 0.6875rem; font-weight: 500; color: var(--vp-muted); }
+.vp-urlbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 `;
