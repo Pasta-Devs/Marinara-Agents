@@ -2334,9 +2334,13 @@ async function main() {
           ),
       );
       await mobilePage.getByRole("button", { name: "Skip" }).click();
+      await mobilePage
+        .locator('[data-ltm-surface="onboarding"]')
+        .waitFor({ state: "detached" });
       await mobileNavigation
         .locator('[data-ltm-destination="sources"]')
         .click();
+      await mobilePage.locator('[data-ltm-surface="sources"]').waitFor();
       await mobilePage.locator('[data-ltm-source-tab="lorebooks"]').click();
       await mobilePage
         .locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]')
