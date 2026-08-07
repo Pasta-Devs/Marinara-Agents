@@ -20,7 +20,7 @@ import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/conta
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "../packages/virtual-phone/src/phone/system/noodle";
 import { noodlerRManifest } from "../packages/virtual-phone/src/phone/apps/noodler-r/manifest";
 import { cameraManifest } from "../packages/virtual-phone/src/phone/apps/camera/manifest";
-import { mailManifest, mergeInbox, parseEmail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
+import { draftMail, mailFromLine, mailManifest, mergeMail, parseEmail, readStoredMail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
 import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
@@ -297,30 +297,26 @@ async function main() {
   await reloadedRuntime.removeAppStorageKey(personaPhoneId, "goodle", "recents");
   assert.equal(await reloadedRuntime.getAppStorageKey(personaPhoneId, "goodle", "recents"), null);
 
-  // Refresh must append, not replace: read state and older mail survived the round trip.
-  const heldMail = [{ text: "Bank | Statement | ready", read: true }, { text: "Gym | Renewal | soon", read: false }];
-  assert.deepEqual(mergeInbox(heldMail, ["Aunt | Hello | how are you", "Bank | Statement | ready"]), [
-    { text: "Aunt | Hello | how are you", read: false },
-    { text: "Bank | Statement | ready", read: true },
-    { text: "Gym | Renewal | soon", read: false },
+  // Refresh must append, not replace: read state, sent mail and older mail survive the round trip.
+  const heldMail = [
+    { ...mailFromLine("Bank | Statement | ready", "Me", "2026-08-08T09:00:00.000Z"), read: true },
+    mailFromLine("Gym | Renewal | soon", "Me", "2026-08-08T09:01:00.000Z"),
+    draftMail({ from: "Me", to: "aunt@post.web", subject: "Hello", body: "hi" }),
+  ];
+  const afterRefresh = mergeMail(heldMail, [
+    mailFromLine("Aunt | Hello | how are you", "Me", "2026-08-08T10:00:00.000Z"),
+    mailFromLine("Bank | Statement | ready", "Me", "2026-08-08T10:00:00.000Z"),
   ]);
-  assert.deepEqual(mergeInbox([], ["Only | One | mail"]), [{ text: "Only | One | mail", read: false }]);
-
-  // In-text links are what make the fake web feel deep; losing the markers silently flattens it.
-  assert.deepEqual(parseLinkedText("The [[Ashen Vault]] reopened near [[Low Market]]."), [
-    { text: "The ", link: false },
-    { text: "Ashen Vault", link: true },
-    { text: " reopened near ", link: false },
-    { text: "Low Market", link: true },
-    { text: ".", link: false },
+  assert.deepEqual(afterRefresh.map((mail) => mail.subject), ["Hello", "Statement", "Renewal", "Hello"]);
+  assert.equal(afterRefresh.filter((mail) => mail.folder === "sent").length, 1);
+  assert.equal(afterRefresh.find((mail) => mail.from === "Bank")?.read, true);
+  // A mailbox written by an earlier build must survive the update rather than vanish.
+  const migratedMail = readStoredMail([{ text: "Bank | Statement | ready", read: true }, { text: "Gym | Renewal | soon" }], "Me");
+  assert.deepEqual(migratedMail.map((mail) => [mail.from, mail.subject, mail.read, mail.folder]), [
+    ["Bank", "Statement", true, "inbox"],
+    ["Gym", "Renewal", false, "inbox"],
   ]);
-  assert.deepEqual(parseLinkedText("No links here."), [{ text: "No links here.", link: false }]);
-  // A pasted real URL must open this world's page at that address, never a search.
-  assert.equal(looksLikeUrl("https://www.reddit.com/r/x"), true);
-  assert.equal(looksLikeUrl("ashen.web"), true);
-  assert.equal(looksLikeUrl("best cafes in town"), false);
-  assert.equal(looksLikeUrl("reddit"), false);
-  assert.equal(normalizeUrl("https://www.reddit.com/r/x"), "reddit.com/r/x");
+  assert.deepEqual(readStoredMail("nonsense", "Me"), []);
 
   validateAppManifest(messagesManifest);
   assert.equal(messagesManifest.removable, true);

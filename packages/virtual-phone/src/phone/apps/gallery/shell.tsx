@@ -3,8 +3,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
+import { ShareSheet } from "../../platform/share-sheet";
 
-export function GalleryShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
+export function GalleryShell({ phoneId, onSettingsPatch, onBack, onClose }: { phoneId: string; onSettingsPatch: (patch: Record<string, unknown>) => Promise<void>; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "gallery");
   const [images, setImages] = React.useState<string[] | null>(null);
   const [openIndex, setOpenIndex] = React.useState<number | null>(null);
@@ -18,6 +19,7 @@ export function GalleryShell({ phoneId, onBack, onClose }: { phoneId: string; on
   const [captions, setCaptions] = React.useState<Record<string, string>>({});
   /** Hidden images stay out of the grid without the phone being able to delete chat history. */
   const [hidden, setHidden] = React.useState<string[]>([]);
+  const [sharing, setSharing] = React.useState(false);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -94,14 +96,37 @@ export function GalleryShell({ phoneId, onBack, onClose }: { phoneId: string; on
         onBack={() => openUrl ? setOpenIndex(null) : onBack()}
         onClose={onClose}
         actions={openUrl
-          ? [{ id: "hide-photo", icon: "trash", label: "Hide photo", kind: "button" }]
+          ? [
+            { id: "share-photo", icon: "menu", label: "Share photo", kind: "button" },
+            { id: "hide-photo", icon: "trash", label: "Hide photo", kind: "button" },
+          ]
           : [{ id: "refresh-gallery", icon: "refresh", label: "Refresh gallery", kind: "button", disabled: loading, reason: "Refreshing" }]}
         onAction={(actionId) => {
           if (actionId === "refresh-gallery") load();
+          if (actionId === "share-photo") setSharing(true);
           if (actionId === "hide-photo" && openUrl) hide(openUrl);
         }}
       />
       {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
+      {sharing && openUrl ? (
+        <ShareSheet
+          title="Share photo"
+          onClose={() => setSharing(false)}
+          actions={[
+            { id: "wallpaper", label: "Set as wallpaper", run: () => onSettingsPatch({ wallpaper: openUrl }) },
+            {
+              id: "noodle",
+              label: "Post to Noodle",
+              run: async () => {
+                await phoneRequest(`/phones/${encodeURIComponent(phoneId)}/noodle/post`, {
+                  method: "POST",
+                  body: JSON.stringify({ text: captions[openUrl]?.trim() || "Took this.", image: openUrl }),
+                });
+              },
+            },
+          ]}
+        />
+      ) : null}
       {openUrl ? (
         <figure className="vp-photo-view">
           <img src={openUrl} alt={captions[openUrl]?.trim() || "Photo from this story, undescribed"} />

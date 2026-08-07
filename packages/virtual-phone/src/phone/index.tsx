@@ -75,12 +75,12 @@ phoneAppRegistry.register({
 phoneAppRegistry.register({
   manifest: mailManifest,
   component: lazyShell(() => import("./apps/mail/shell"), "MailShell"),
-  props: phoneId,
+  props: (context) => ({ phoneId: context.phone.phoneId, ownerName: context.phone.ownerName }),
 });
 phoneAppRegistry.register({
   manifest: galleryManifest,
   component: lazyShell(() => import("./apps/gallery/shell"), "GalleryShell"),
-  props: phoneId,
+  props: (context) => ({ phoneId: context.phone.phoneId, onSettingsPatch: context.onSettingsPatch }),
 });
 phoneAppRegistry.register({
   manifest: tindlerManifest,
@@ -157,6 +157,8 @@ function useClock() {
 }
 
 function wallpaperBackground(wallpaper: string) {
+  // A photo shared out of the Gallery becomes the wallpaper by storing its URL here.
+  if (/^(https?:|data:|\/)/u.test(wallpaper)) return `url("${wallpaper.replace(/"/gu, "%22")}")`;
   if (wallpaper === "midnight") return "linear-gradient(145deg, #111827 0%, #243447 55%, #0f172a 100%)";
   if (wallpaper === "paper") return "linear-gradient(145deg, #fff8e7 0%, #e8dfcc 52%, #f7efe1 100%)";
   return "linear-gradient(145deg, var(--vp-bg), var(--vp-surface))";
@@ -333,6 +335,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     onPhoneChange: (phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item)),
     openApp,
     installedApps: phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) })),
+    onSettingsPatch: updateSettings,
     onInstalledChange: (appId, installed) => void updateSettings({
       installedApps: installed
         ? [...new Set([...deviceSettings.installedApps, appId])]

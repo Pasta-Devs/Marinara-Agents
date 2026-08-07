@@ -12,6 +12,8 @@ export interface NoodlePost {
   handle: string;
   text: string;
   at: string;
+  /** Set when the post came from the Gallery share sheet. Generated posts have none. */
+  image?: string;
 }
 
 export interface NoodleFeedDocument {
@@ -162,12 +164,13 @@ export class NoodleFeedService {
       .slice(0, 100);
   }
 
-  async addPosts(chatId: string, posts: Array<{ author: string; handle: string; text: string }>) {
+  async addPosts(chatId: string, posts: Array<{ author: string; handle: string; text: string; image?: string }>) {
     const cleaned = posts
       .map((post) => ({
         author: post.author.trim().slice(0, 80) || "Someone",
         handle: post.handle.trim().slice(0, 40) || "@someone",
         text: post.text.trim().slice(0, MAX_TEXT),
+        ...(post.image ? { image: post.image.slice(0, 1000) } : {}),
       }))
       .filter((post) => post.text);
     if (!chatId || cleaned.length === 0) return this.feedFor([chatId]);

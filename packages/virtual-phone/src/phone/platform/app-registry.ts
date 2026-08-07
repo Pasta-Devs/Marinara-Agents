@@ -17,6 +17,8 @@ export interface AppRenderContext {
   openApp: (appId: string) => void;
   installedApps: Array<{ manifest: AppManifest; installed: boolean }>;
   onInstalledChange: (appId: string, installed: boolean) => void;
+  /** Lets an app act on the device itself — Gallery setting a photo as the wallpaper, say. */
+  onSettingsPatch: (patch: Record<string, unknown>) => Promise<void>;
 }
 
 export interface InstalledApp {

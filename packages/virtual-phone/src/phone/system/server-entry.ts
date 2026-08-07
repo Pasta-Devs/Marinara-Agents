@@ -809,7 +809,8 @@ export async function activate({ api }: CapabilityContext) {
         const chatId = targetChat(phone, request.query.chatId);
         if (!chatId) return reply.status(400).send({ error: "This phone has no chat to post in" });
         const ownerName = phone.document.identity.ownerName;
-        await noodle.addPosts(chatId, [{ author: ownerName, handle: handleFor(ownerName), text }]);
+        const image = String(body.image ?? "").trim().slice(0, 1000);
+        await noodle.addPosts(chatId, [{ author: ownerName, handle: handleFor(ownerName), text, ...(image ? { image } : {}) }]);
         return { posts: await noodle.feedFor(phone.document.identity.chatScope) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Post failed" });
@@ -1209,6 +1210,60 @@ export async function activate({ api }: CapabilityContext) {
         supported: true,
         lorebooks: books.map((book) => ({ id: book.id, name: readName(book.data, "Lorebook") })),
       };
+    });
+    /**
+     * Sending mail. The recipient may be a character in this chat, a contact the user invented, or
+     * a bare address typed into the To field — free text is deliberate, since inventing an address
+     * for a company or a stranger and letting the model decide who that is is most of the fun.
+     * Characters answer mail sent to them; nobody is guaranteed to answer.
+     */
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/mail/send", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const to = String(body.to ?? "").trim().slice(0, 200);
+        const subject = String(body.subject ?? "").trim().slice(0, 200);
+        const text = String(body.body ?? "").trim().slice(0, 4000);
+        if (!to) return reply.status(400).send({ error: "A recipient is required" });
+        if (!text) return reply.status(400).send({ error: "The message is empty" });
+
+        const chatId = targetChat(phone, request.query.chatId);
+        const model = await resolvePhoneModel(phone, "heavy");
+        if (!model) return { reply: null };
+
+        // A recipient who has a phone in this chat answers in their own voice; anyone else is
+        // whoever the model decides lives behind that address.
+        const contact = (await contactsFor(request.params.phoneId))
+          .find((candidate) => candidate.ownerName.toLowerCase() === to.toLowerCase()
+            || to.toLowerCase().startsWith(`${candidate.ownerName.toLowerCase().replace(/\s+/gu, ".")}@`));
+        const recipientPhone = contact ? await findPhone(contact.phoneId) : null;
+        const storyContext = await worldContext(chatId, phone);
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You are ${recipientPhone ? recipientPhone.document.identity.ownerName : `whoever reads mail sent to "${to}" in this fictional world — a person, a company's support desk, or an automated system, whichever fits`}, replying to an email from ${phone.document.identity.ownerName} inside a roleplay story. Write the reply they would actually send: it may be warm, curt, boilerplate, an auto-responder, or a refusal. Respond with only JSON: {"from":"sender name","subject":"reply subject","body":"the reply"}. If nobody would reply to this, respond with {"from":"","subject":"","body":""}.${recipientPhone ? await ownerCard(recipientPhone, "About the recipient") : ""}${storyContext}${await customInstructions(phone)}`,
+          },
+          { role: "user", content: `To: ${to}\nSubject: ${subject}\n\n${text}` },
+        ], { temperature: 0.9, maxTokens: 1200 });
+        const answer = parseBoundedContent(completion.content, {
+          fields: { from: "string", subject: "string", body: "string" },
+          defaults: { from: "", subject: "", body: "" },
+          limits: { maxString: 1600, perField: { from: 120, subject: 200 } },
+        }) as { from: string; subject: string; body: string };
+        if (!answer.body.trim()) return { reply: null };
+        return {
+          reply: {
+            from: answer.from.trim() || to,
+            to: phone.document.identity.ownerName,
+            subject: answer.subject.trim() || `Re: ${subject}`,
+            body: answer.body.trim(),
+          },
+        };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "The mail could not be sent" });
+      }
     });
     // "About this phone" — the facts Settings shows about the device itself.
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/about", async (request, reply) => {

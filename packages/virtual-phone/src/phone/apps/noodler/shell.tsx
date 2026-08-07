@@ -16,6 +16,7 @@ interface NoodlePost {
   handle: string;
   text: string;
   at: string;
+  image?: string;
 }
 
 function postStats(post: NoodlePost) {
@@ -136,6 +137,7 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
                         <span className="vp-post-time">{new Date(post.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
                       </div>
                       <p className="vp-post-text">{post.text}</p>
+                      {post.image ? <img src={post.image} alt={post.text} className="vp-post-image" loading="lazy" /> : null}
                       <div className="vp-post-footer" aria-label={`${replies} replies, ${boosts} boosts, ${likes} likes`}>
                         <span><MessageCircle size="0.75rem" aria-hidden="true" /> {replies}</span>
                         <span><Repeat2 size="0.75rem" aria-hidden="true" /> {boosts}</span>
