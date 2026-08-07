@@ -67,7 +67,6 @@ const engineStyles = readFileSync(
   "utf8",
 );
 const activationFixtureStyles = `
-  [data-ltm-control="activation"] { width: 2.5rem; height: 2.25rem; }
   [data-ltm-surface="detail"] .hidden { display: none; }
   @media (min-width: 768px) {
     [data-ltm-surface="detail"] .md\\:flex { display: flex; }
