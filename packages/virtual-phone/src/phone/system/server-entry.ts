@@ -179,9 +179,52 @@ export async function activate({ api }: CapabilityContext) {
       return null;
     }
   };
-  const customInstructions = (phone: Awaited<ReturnType<typeof findPhone>>) => {
+  /**
+   * The user's own instructions plus the inferred owner profile, appended to everything this phone
+   * generates. The profile is generated once on first use and stored on the phone — regenerating it
+   * per request would put a model round trip in front of every search.
+   */
+  const customInstructions = async (phone: Awaited<ReturnType<typeof findPhone>>) => {
     const text = phoneGenSettings(phone).generationInstructions.trim();
-    return text ? `\n\nAdditional instructions from the user (follow them):\n${text}` : "";
+    const instructions = text ? `\n\nAdditional instructions from the user (follow them):\n${text}` : "";
+    return `${await ownerProfile(phone)}${instructions}`;
+  };
+
+  /**
+   * Step 7.3 — infer how the owner relates to technology from their card, and let that shape what
+   * their phone produces: result quality, scam and ad density, how the interface talks to them.
+   * The fallback for the majority who will not author a lorebook entry. A lorebook entry attached
+   * in Settings (Step 7.1) is the real mechanism and takes precedence by being far more specific.
+   */
+  const ownerProfile = async (phone: Awaited<ReturnType<typeof findPhone>>) => {
+    const stored = phone.document.namespaces.phone.ownerProfile;
+    if (typeof stored === "string") return stored ? `\n\nWhose phone this is:\n${stored}` : "";
+    const card = await ownerCard(phone, "About");
+    if (!card) {
+      await phones.setOwnerProfile(phone.document.identity.phoneId, "").catch(() => undefined);
+      return "";
+    }
+    const model = await resolvePhoneModel(phone, "light");
+    if (!model) return "";
+    try {
+      const completion = await model.chatComplete([
+        {
+          role: "system",
+          content: `Read this character and describe, in two or three sentences, how they relate to technology and what their phone is therefore like to use: how competent they are with it, how cluttered or locked-down or broken it is, how much spam and how many scams get through, and how the interface talks to them. Write it as instructions to whoever generates this phone's content. Respond with only JSON: {"profile":"..."}.${card}`,
+        },
+        { role: "user", content: "Describe the owner." },
+      ], { temperature: 0.7, maxTokens: 300 });
+      const { profile } = parseBoundedContent(completion.content, {
+        fields: { profile: "string" },
+        defaults: { profile: "" },
+        limits: { maxString: 1200 },
+      }) as { profile: string };
+      await phones.setOwnerProfile(phone.document.identity.phoneId, profile.trim());
+      return profile.trim() ? `\n\nWhose phone this is:\n${profile.trim()}` : "";
+    } catch {
+      // Leave it unstored so the next request retries rather than caching a failure forever.
+      return "";
+    }
   };
 
   const readCardText = (value: unknown): string => {
@@ -282,7 +325,7 @@ export async function activate({ api }: CapabilityContext) {
       const completion = await model.chatComplete([
         {
           role: "system",
-          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${await ownerCard(recipient, "Who is texting — about")}${storyContext}${customInstructions(recipient)}`,
+          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${await ownerCard(recipient, "Who is texting — about")}${storyContext}${await customInstructions(recipient)}`,
         },
         { role: "user", content: history },
       ], { temperature: 0.9, maxTokens: 250 });
@@ -376,9 +419,83 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Unable to show the phone" });
       }
     });
+  /**
+   * Step 8.3 — a character texts because a thread has gone quiet, or because you left them on read.
+   * Needs only the timestamp on the last message, which is what keeps it consistent with the
+   * stateless decision in Step 3.2.
+   *
+   * Know what this is: with stateless generation and a time trigger, characters text *on a timer
+   * with recent context* rather than reacting to a remembered event. That gap is acknowledged in
+   * 19-background-and-learning.md — do not quietly expand scope to close it.
+   *
+   * Budgeted deliberately, because this runs off a poll: opt-in per phone, one candidate thread per
+   * call, a probability gate, and a cooldown per phone on top of a cooldown per thread. Worst case
+   * is roughly two generations an hour for a phone whose owner switched it on.
+   */
+  const QUIET_THREAD_MS = 30 * 60 * 1000;
+  const UNPROMPTED_COOLDOWN_MS = 30 * 60 * 1000;
+  const UNPROMPTED_CHANCE = 0.1;
+  const maybeTextFirst = async (chatId: string) => {
+    const inChat = (await phones.list()).filter(({ document }) =>
+      document.provisioning.enabled
+      && document.identity.ownerType === "character"
+      && document.identity.chatScope.includes(chatId));
+    const now = Date.now();
+    for (const phone of inChat) {
+      if (!phoneGenSettings(phone).unpromptedTexts) continue;
+      if (Math.random() > UNPROMPTED_CHANCE) continue;
+      const phoneId = phone.document.identity.phoneId;
+      const lastAttempt = await phones.getAppStorageKey(phoneId, "messages", "lastUnpromptedAt").catch(() => null);
+      if (typeof lastAttempt === "string" && now - Date.parse(lastAttempt) < UNPROMPTED_COOLDOWN_MS) continue;
+      const candidates = (await messaging.threadsFor(phoneId)).filter(({ document }) => {
+        const last = document.messages.at(-1);
+        if (!last) return false;
+        return now - Date.parse(last.at) > QUIET_THREAD_MS;
+      });
+      const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+      if (!chosen) continue;
+      const otherPhoneId = chosen.document.participants.find((participant) => participant !== phoneId);
+      if (!otherPhoneId) continue;
+      // Marked before generating, so a failure still spends the cooldown rather than retrying hard.
+      await phones.setAppStorageKey(phoneId, "messages", "lastUnpromptedAt", new Date().toISOString())
+        .catch(() => undefined);
+      const last = chosen.document.messages.at(-1)!;
+      const leftOnRead = last.from === otherPhoneId;
+      try {
+        const model = await resolvePhoneModel(phone, "light");
+        if (!model) continue;
+        const other = await findPhone(otherPhoneId);
+        const history = chosen.document.messages.slice(-20)
+          .map((message) => `${message.from === phoneId ? phone.document.identity.ownerName : other.document.identity.ownerName}: ${message.text}`)
+          .join("\n");
+        const reason = leftOnRead
+          ? `${other.document.identity.ownerName} never replied to your last exchange.`
+          : "The conversation has gone quiet for a while.";
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You are ${phone.document.identity.ownerName}, texting ${other.document.identity.ownerName} on your phone inside an ongoing roleplay. ${reason} Send one short in-character text picking the thread back up, in your own voice. Respond with only JSON: {"reply":"your message"}. If you would not text them right now, respond with {"reply":""}.${await ownerCard(phone, "Who you are — about")}${await worldContext(chatId, phone)}${await customInstructions(phone)}`,
+          },
+          { role: "user", content: history || "No messages yet." },
+        ], { temperature: 0.95, maxTokens: 250 });
+        const { reply } = parseBoundedContent(completion.content, {
+          fields: { reply: "string" },
+          defaults: { reply: "" },
+          limits: { maxString: 400 },
+        }) as { reply: string };
+        if (reply.trim()) await messaging.send(phoneId, otherPhoneId, reply);
+      } catch {
+        // A character failing to think of something to say is not an error worth surfacing.
+      }
+    }
+  };
+
     app.get<{ Params: { chatId: string } }>("/chats/:chatId/unread", async (request, reply) => {
       const chat = await api.runtime.persistence.getChat(request.params.chatId);
       if (!chat) return reply.status(404).send({ error: "Chat not found" });
+      // This poll runs whether or not the phone is open, which is exactly when an unprompted text
+      // should be able to arrive. It is fire-and-forget: the badge must never wait on a model.
+      void maybeTextFirst(chat.id).catch(() => undefined);
       const inChat = (await phones.list()).filter(({ document }) =>
         document.provisioning.enabled && document.identity.chatScope.includes(chat.id));
       let unread = 0;
@@ -615,7 +732,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"Page Title | site.web/path | one-line snippet\", ...]} with 3 to 6 items. Every item uses that exact three-part format with invented in-world domains." + storyContext + customInstructions(phone),
+            content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"Page Title | site.web/path | one-line snippet\", ...]} with 3 to 6 items. Every item uses that exact three-part format with invented in-world domains." + storyContext + await customInstructions(phone),
           },
           { role: "user", content: `Search query: ${query}` },
         ], { temperature: 0.9, maxTokens: 800 });
@@ -656,7 +773,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: "You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page as a template. Respond with only JSON: {\"site\":\"Site Name\",\"title\":\"page headline\",\"tagline\":\"short site tagline\",\"kind\":\"news, shop, blog, forum, or official\",\"links\":[\"nav label\", ...],\"sections\":[\"Section Heading :: section body text\", ...]} with 3 to 5 nav labels and 3 to 5 sections. Every section uses the exact format 'Heading :: body'. For a shop, each section is one product and its body states the price. For a forum, each section is one post and its heading is the poster's name." + storyContext + customInstructions(phone),
+            content: "You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page as a template. Respond with only JSON: {\"site\":\"Site Name\",\"title\":\"page headline\",\"tagline\":\"short site tagline\",\"kind\":\"news, shop, blog, forum, or official\",\"links\":[\"nav label\", ...],\"sections\":[\"Section Heading :: section body text\", ...]} with 3 to 5 nav labels and 3 to 5 sections. Every section uses the exact format 'Heading :: body'. For a shop, each section is one product and its body states the price. For a forum, each section is one post and its heading is the poster's name." + storyContext + await customInstructions(phone),
           },
           { role: "user", content: `URL: ${url}\nPage title: ${title}\nFound via search: ${query}${site ? `\nThis page belongs to the site "${site}" — keep its name, tagline, and nav consistent.` : ""}` },
         ], { temperature: 0.9, maxTokens: 1800 });
@@ -718,7 +835,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts, mostly by fictional side characters reacting to life in this world. At most one post may come from the story cast${cast ? ` (${cast})` : ""}, staying true to their voice. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext}${customInstructions(phone)}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts, mostly by fictional side characters reacting to life in this world. At most one post may come from the story cast${cast ? ` (${cast})` : ""}, staying true to their voice. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext}${await customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the next batch of posts." },
         ], { temperature: 1, maxTokens: 800 });
@@ -763,7 +880,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `${phone.document.identity.ownerName} just took a photo with their phone inside a roleplay story. Describe what the photo shows in one or two vivid sentences, present tense, like a caption. Respond with only JSON: {"photo":"description"}.${storyContext}${customInstructions(phone)}`,
+            content: `${phone.document.identity.ownerName} just took a photo with their phone inside a roleplay story. Describe what the photo shows in one or two vivid sentences, present tense, like a caption. Respond with only JSON: {"photo":"description"}.${storyContext}${await customInstructions(phone)}`,
           },
           { role: "user", content: "Describe the photo." },
         ], { temperature: 0.9, maxTokens: 300 });
@@ -811,7 +928,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-             content: `You write ${creatorName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${creator ? await ownerCard(creator, "About the creator") : manualContact?.bio ? `\n\nAbout the creator:\n${manualContact.bio}` : ""}${storyContext}${customInstructions(phone)}`,
+             content: `You write ${creatorName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${creator ? await ownerCard(creator, "About the creator") : manualContact?.bio ? `\n\nAbout the creator:\n${manualContact.bio}` : ""}${storyContext}${await customInstructions(phone)}`,
           },
            { role: "user", content: `Generate ${creatorName}'s NoodleR page.` },
         ], { temperature: 1, maxTokens: 1200 });
@@ -843,7 +960,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodle, the social network inside a fictional roleplay world. List 5 trending topics in this world right now. Respond with only JSON: {"topics":["#HashtagName | one line on why it is trending", ...]}. Every topic uses that exact two-part format.${storyContext}${customInstructions(phone)}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. List 5 trending topics in this world right now. Respond with only JSON: {"topics":["#HashtagName | one line on why it is trending", ...]}. Every topic uses that exact two-part format.${storyContext}${await customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the trending list." },
         ], { temperature: 1, maxTokens: 400 });
@@ -870,7 +987,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write dating profiles for Tindler, the dating app inside a fictional roleplay world. Invent 5 single side characters who plausibly live in this world (never the story's protagonists). Respond with only JSON: {"profiles":["Name, Age | short tagline | two-sentence bio", ...]}. Every profile uses that exact three-part format.${preferences ? `\nThe user's stated preference: "${preferences}" — match it.` : ""}${storyContext}${customInstructions(phone)}`,
+            content: `You write dating profiles for Tindler, the dating app inside a fictional roleplay world. Invent 5 single side characters who plausibly live in this world (never the story's protagonists). Respond with only JSON: {"profiles":["Name, Age | short tagline | two-sentence bio", ...]}. Every profile uses that exact three-part format.${preferences ? `\nThe user's stated preference: "${preferences}" — match it.` : ""}${storyContext}${await customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the next deck of profiles." },
         ], { temperature: 1, maxTokens: 900 });
@@ -893,7 +1010,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${await ownerCard(phone, "About the inbox owner")}${storyContext}${customInstructions(phone)}`,
+            content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${await ownerCard(phone, "About the inbox owner")}${storyContext}${await customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the current inbox." },
         ], { temperature: 1, maxTokens: 1400 });
@@ -906,15 +1023,93 @@ export async function activate({ api }: CapabilityContext) {
         return { emails: [] };
       }
     });
-    app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/notifications", async (request, reply) => {
+    /**
+     * Stage 8 — notifications collected per app rather than derived only from message threads. Five
+     * apps declared `notify` and never fired one; a phone that only buzzes for texts is a quiet
+     * phone.
+     *
+     * "New since you last looked" needs a marker, and each app writes its own into its phone
+     * storage under `lastSeenAt` when it opens. No marker yet means nothing is reported as new,
+     * so installing this build does not greet anyone with a wall of backdated notifications.
+     *
+     * NoodleR is NOT wired: "a creator you subscribe to posted" needs a subscription model that
+     * does not exist yet — there is no record of which creators a phone follows. It belongs with
+     * the NoodleR work, not here.
+     */
+    const lastSeen = async (phoneId: string, appId: string) => {
+      const value = await phones.getAppStorageKey(phoneId, appId, "lastSeenAt").catch(() => null);
+      return typeof value === "string" ? value : "";
+    };
+    app.get<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/notifications", async (request, reply) => {
       try {
-        const contacts = await contactsFor(request.params.phoneId);
+        const phoneId = request.params.phoneId;
+        const contacts = await contactsFor(phoneId);
         const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
-        const notifications = (await messaging.threadsFor(request.params.phoneId)).flatMap(({ record, document }) => {
-          const unread = unreadMessages(document, request.params.phoneId);
+        const extra: Array<{ id: string; appId: string; title: string; body: string; count: number; at: string }> = [];
+
+        const phone = await findPhone(phoneId);
+        const installed = phoneGenSettings(phone).installedApps;
+
+        if (installed.includes("mail")) {
+          const stored = await phones.getAppStorageKey(phoneId, "mail", "inbox").catch(() => null);
+          const unreadMail = Array.isArray(stored)
+            ? stored.filter((item): item is { text: string; read: boolean } =>
+              !!item && typeof (item as { text?: unknown }).text === "string" && (item as { read?: unknown }).read !== true)
+            : [];
+          const newest = unreadMail[0];
+          if (newest) {
+            const [from, subject] = newest.text.split(" | ");
+            extra.push({
+              id: `mail:${unreadMail.length}`,
+              appId: "mail",
+              title: from?.trim() || "New mail",
+              body: subject?.trim() || "",
+              count: unreadMail.length,
+              at: "",
+            });
+          }
+        }
+
+        if (installed.includes("noodler")) {
+          const since = await lastSeen(phoneId, "noodler");
+          const fresh = since
+            ? (await noodle.feedFor(phone.document.identity.chatScope)).filter((post) => post.at > since)
+            : [];
+          const newest = fresh[0];
+          if (newest) {
+            extra.push({
+              id: `noodler:${newest.id}`,
+              appId: "noodler",
+              title: "Noodle",
+              body: `${newest.author}: ${newest.text.slice(0, 120)}`,
+              count: fresh.length,
+              at: newest.at,
+            });
+          }
+        }
+
+        if (installed.includes("tindler")) {
+          const stored = await phones.getAppStorageKey(phoneId, "tindler", "matches").catch(() => null);
+          const seen = await phones.getAppStorageKey(phoneId, "tindler", "lastSeenMatches").catch(() => null);
+          const matches = Array.isArray(stored) ? stored.length : 0;
+          const unseen = matches - (typeof seen === "number" ? seen : matches);
+          if (unseen > 0) {
+            extra.push({
+              id: `tindler:${matches}`,
+              appId: "tindler",
+              title: "Tindler",
+              body: unseen === 1 ? "You have a new match" : `You have ${unseen} new matches`,
+              count: unseen,
+              at: "",
+            });
+          }
+        }
+
+        const notifications = (await messaging.threadsFor(phoneId)).flatMap(({ record, document }) => {
+          const unread = unreadMessages(document, phoneId);
           const last = unread.at(-1);
           if (!last) return [];
-          const otherPhoneId = document.participants.find((participant) => participant !== request.params.phoneId) ?? "";
+          const otherPhoneId = document.participants.find((participant) => participant !== phoneId) ?? "";
           return [{
             id: record.id,
             appId: "messages",
@@ -924,7 +1119,7 @@ export async function activate({ api }: CapabilityContext) {
             at: last.at,
           }];
         });
-        return { notifications };
+        return { notifications: [...notifications, ...extra] };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid notifications request" });
       }

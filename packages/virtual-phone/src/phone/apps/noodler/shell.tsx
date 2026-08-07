@@ -36,6 +36,11 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
   const [loading, setLoading] = React.useState(false);
   const [draft, setDraft] = React.useState("");
 
+  // Marks the feed seen, so the notifications route can tell what arrived since (Stage 8.2).
+  React.useEffect(() => {
+    void store.set("lastSeenAt", new Date().toISOString()).catch(() => undefined);
+  }, [store]);
+
   const postDraft = () => {
     const text = draft.trim();
     if (!text) return;

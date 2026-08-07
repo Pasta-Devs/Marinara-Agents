@@ -357,6 +357,32 @@ export class PhoneIdentityService {
     return parsePhoneRecord(updated);
   }
 
+  /**
+   * A one-line-ish read on the owner's relationship with technology, inferred from their card at
+   * activation and reused on every generation afterwards. Generated once, not per request — this is
+   * the fallback for the majority who will not write a lorebook entry, not a system in its own
+   * right (see docs/app-plans/IMPLEMENTATION.md Step 7.3).
+   */
+  async setOwnerProfile(phoneId: string, profile: string) {
+    const phone = await this.requirePhone(phoneId);
+    const updatedAt = this.now();
+    const document: PhoneDocument = {
+      ...phone.document,
+      namespaces: { phone: { ...phone.document.namespaces.phone, ownerProfile: profile.slice(0, 1200) } },
+    };
+    const updated = await this.documents.update({
+      id: phone.record.id,
+      packageId: PACKAGE_ID,
+      expectedRevision: phone.record.revision,
+      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      description: document.identity.ownerName,
+      data: document,
+      updatedAt,
+    });
+    if (!updated) return this.setOwnerProfile(phoneId, profile);
+    return parsePhoneRecord(updated);
+  }
+
   private async requirePhone(phoneId: string) {
     const phone = (await this.list()).find(({ document }) => document.identity.phoneId === phoneId);
     if (!phone) throw new Error("Phone not found");

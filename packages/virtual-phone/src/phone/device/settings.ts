@@ -30,6 +30,12 @@ export interface DeviceSettings {
    * different set — running two stories used to bleed one world's lore into the other's phone.
    */
   lorebookIds: string[];
+  /**
+   * Characters may text you unprompted when a thread has gone quiet or you left them on read.
+   * Off by default and deliberately so: it is the one feature here that spends tokens without
+   * the user asking for anything.
+   */
+  unpromptedTexts: boolean;
   lightConnectionId: string;
   heavyConnectionId: string;
   generationInstructions: string;
@@ -51,6 +57,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     cellularSignal: 4,
     installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera"],
     lorebookIds: [],
+    unpromptedTexts: false,
     lightConnectionId: "",
     heavyConnectionId: "",
     generationInstructions: "",
@@ -88,6 +95,7 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
     lorebookIds: Array.isArray(input.lorebookIds)
       ? [...new Set(input.lorebookIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0))].slice(0, 50)
       : defaults.lorebookIds,
+    unpromptedTexts: input.unpromptedTexts === true,
     lightConnectionId: typeof input.lightConnectionId === "string" ? input.lightConnectionId.slice(0, 100) : defaults.lightConnectionId,
     heavyConnectionId: typeof input.heavyConnectionId === "string" ? input.heavyConnectionId.slice(0, 100) : defaults.heavyConnectionId,
     generationInstructions: typeof input.generationInstructions === "string" ? input.generationInstructions.slice(0, 2000) : defaults.generationInstructions,

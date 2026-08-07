@@ -82,7 +82,11 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
           { id: "refresh-deck", icon: "refresh", label: "New people", kind: "button", disabled: loading, reason: "Finding people" },
         ]}
         onAction={(actionId) => {
-          if (actionId === "matches") setView("matches");
+          if (actionId === "matches") {
+            setView("matches");
+            // Matches are only "new" until you have looked at them (Stage 8.2).
+            void store.set("lastSeenMatches", matches.length).catch(() => undefined);
+          }
           if (actionId === "refresh-deck") fetchDeck(preferences);
         }}
       />
