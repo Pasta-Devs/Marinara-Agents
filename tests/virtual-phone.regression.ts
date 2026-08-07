@@ -336,6 +336,17 @@ async function main() {
   );
   assert.deepEqual(parseEmail("weird"), { from: "weird", subject: "(no subject)", body: "(empty message)" });
   assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery"]);
+  assert.equal(defaultDeviceSettings().lightConnectionId, "");
+  assert.equal(defaultDeviceSettings().generationInstructions, "");
+  const genSettings = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, {
+    lightConnectionId: "conn-small",
+    heavyConnectionId: "conn-big",
+    generationInstructions: "Keep it noir.",
+  });
+  const genStored = genSettings.document.namespaces.phone.settings as { lightConnectionId: string; heavyConnectionId: string; generationInstructions: string };
+  assert.equal(genStored.lightConnectionId, "conn-small");
+  assert.equal(genStored.heavyConnectionId, "conn-big");
+  assert.equal(genStored.generationInstructions, "Keep it noir.");
   let tick = 0;
   const messageIds = ["msg-1", "msg-2", "msg-3"];
   const messaging = new PhoneMessagingService(

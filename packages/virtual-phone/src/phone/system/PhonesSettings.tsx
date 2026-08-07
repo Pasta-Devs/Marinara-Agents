@@ -16,6 +16,9 @@ export type Phone = {
     patternIntensity: 0 | 1 | 2 | 3;
     reduceDeviceEffects: boolean;
     installedApps: string[];
+    lightConnectionId: string;
+    heavyConnectionId: string;
+    generationInstructions: string;
   };
 };
 export type ProvisioningResponse = {

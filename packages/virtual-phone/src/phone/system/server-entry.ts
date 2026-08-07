@@ -135,12 +135,36 @@ export async function activate({ api }: CapabilityContext) {
     };
   };
 
+  const phoneGenSettings = (phone: Awaited<ReturnType<typeof findPhone>>) =>
+    normalizeDeviceSettings(phone.document.namespaces.phone.settings, phone.document.provisioning.baselineTheme);
+  const resolvePhoneModel = async (phone: Awaited<ReturnType<typeof findPhone>>, tier: "light" | "heavy") => {
+    if (!api.runtime.languageModels) return null;
+    const settings = phoneGenSettings(phone);
+    const chosen = tier === "light" ? settings.lightConnectionId : settings.heavyConnectionId;
+    if (chosen) {
+      try {
+        return await api.runtime.languageModels.resolve(chosen);
+      } catch {
+        // Chosen connection is gone; fall back to the agent default.
+      }
+    }
+    try {
+      return await api.runtime.languageModels.resolve();
+    } catch {
+      return null;
+    }
+  };
+  const customInstructions = (phone: Awaited<ReturnType<typeof findPhone>>) => {
+    const text = phoneGenSettings(phone).generationInstructions.trim();
+    return text ? `\n\nAdditional instructions from the user (follow them):\n${text}` : "";
+  };
+
   // ponytail: reply generated inline with send; queue it if model latency hurts
   const generateCharacterReply = async (senderPhoneId: string, recipientPhoneId: string) => {
     try {
       const recipient = await findPhone(recipientPhoneId);
       if (recipient.document.identity.ownerType !== "character" || !recipient.document.provisioning.enabled) return null;
-      const model = await api.runtime.languageModels?.resolve();
+      const model = await resolvePhoneModel(recipient, "light");
       if (!model) return null;
       const sender = await findPhone(senderPhoneId);
       const thread = (await messaging.threadsFor(recipientPhoneId))
@@ -163,7 +187,7 @@ export async function activate({ api }: CapabilityContext) {
       const completion = await model.chatComplete([
         {
           role: "system",
-          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${storyContext ? `\n\nRecent story events for context:\n${storyContext}` : ""}`,
+          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${storyContext ? `\n\nRecent story events for context:\n${storyContext}` : ""}${customInstructions(recipient)}`,
         },
         { role: "user", content: history },
       ], { temperature: 0.9, maxTokens: 200 });
@@ -368,13 +392,13 @@ export async function activate({ api }: CapabilityContext) {
       const fallback = fallbackSearchResults(query);
       if (!query) return { results: fallback };
       try {
-        await findPhone(request.params.phoneId);
-        const model = await api.runtime.languageModels?.resolve();
+        const phone = await findPhone(request.params.phoneId);
+        const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { results: fallback };
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"Page Title | site.web/path | one-line snippet\", ...]} with 3 to 6 items. Every item uses that exact three-part format with invented in-world domains.",
+            content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"Page Title | site.web/path | one-line snippet\", ...]} with 3 to 6 items. Every item uses that exact three-part format with invented in-world domains." + customInstructions(phone),
           },
           { role: "user", content: `Search query: ${query}` },
         ], { temperature: 0.9, maxTokens: 400 });
@@ -407,13 +431,13 @@ export async function activate({ api }: CapabilityContext) {
         sections: ["Offline :: Goodle can't reach this page right now."],
       };
       try {
-        await findPhone(request.params.phoneId);
-        const model = await api.runtime.languageModels?.resolve();
+        const phone = await findPhone(request.params.phoneId);
+        const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { page: fallback };
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: "You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page as a template. Respond with only JSON: {\"site\":\"Site Name\",\"title\":\"page headline\",\"tagline\":\"short site tagline\",\"kind\":\"news, shop, blog, forum, or official\",\"links\":[\"nav label\", ...],\"sections\":[\"Section Heading :: section body text\", ...]} with 3 to 5 nav labels and 3 to 5 sections. Every section uses the exact format 'Heading :: body'. For a shop, each section is one product and its body states the price. For a forum, each section is one post and its heading is the poster's name.",
+            content: "You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page as a template. Respond with only JSON: {\"site\":\"Site Name\",\"title\":\"page headline\",\"tagline\":\"short site tagline\",\"kind\":\"news, shop, blog, forum, or official\",\"links\":[\"nav label\", ...],\"sections\":[\"Section Heading :: section body text\", ...]} with 3 to 5 nav labels and 3 to 5 sections. Every section uses the exact format 'Heading :: body'. For a shop, each section is one product and its body states the price. For a forum, each section is one post and its heading is the poster's name." + customInstructions(phone),
           },
           { role: "user", content: `URL: ${url}\nPage title: ${title}\nFound via search: ${query}${site ? `\nThis page belongs to the site "${site}" — keep its name, tagline, and nav consistent.` : ""}` },
         ], { temperature: 0.9, maxTokens: 700 });
@@ -458,7 +482,7 @@ export async function activate({ api }: CapabilityContext) {
       try {
         const phone = await findPhone(request.params.phoneId);
         const scope = phone.document.identity.chatScope;
-        const model = await api.runtime.languageModels?.resolve();
+        const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { posts: await noodle.feedFor(scope) };
         // ponytail: generation always lands in the phone's first chat; per-chat targeting when phones span many chats
         const chatId = scope[0];
@@ -475,7 +499,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts by fictional side characters (never the protagonists) reacting to life in this world. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts by fictional side characters (never the protagonists) reacting to life in this world. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the next batch of posts." },
         ], { temperature: 1, maxTokens: 500 });
@@ -533,7 +557,7 @@ export async function activate({ api }: CapabilityContext) {
         });
         const existing = await noodlerPages.pageFor(chatId, creatorPhoneId);
         if (existing && !refresh) return { page: pagePayload(existing.document) };
-        const model = await api.runtime.languageModels?.resolve();
+        const model = await resolvePhoneModel(phone, "heavy");
         if (!model) {
           if (existing) return { page: pagePayload(existing.document) };
           const empty = await noodlerPages.savePage({ chatId, creatorPhoneId, creatorName: contact.ownerName, tagline: "", price: "", posts: [] });
@@ -548,7 +572,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write ${contact.ownerName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${storyContext ? `\n\nThe character, from recent story events:\n${storyContext}` : ""}`,
+            content: `You write ${contact.ownerName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${storyContext ? `\n\nThe character, from recent story events:\n${storyContext}` : ""}${customInstructions(phone)}`,
           },
           { role: "user", content: `Generate ${contact.ownerName}'s NoodleR page.` },
         ], { temperature: 1, maxTokens: 600 });
@@ -572,7 +596,7 @@ export async function activate({ api }: CapabilityContext) {
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler/trending", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
-        const model = await api.runtime.languageModels?.resolve();
+        const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { topics: [] };
         const chatId = phone.document.identity.chatScope[0];
         let storyContext = "";
@@ -584,7 +608,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are Noodle, the social network inside a fictional roleplay world. List 5 trending topics in this world right now. Respond with only JSON: {"topics":["#HashtagName | one line on why it is trending", ...]}. Every topic uses that exact two-part format.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
+            content: `You are Noodle, the social network inside a fictional roleplay world. List 5 trending topics in this world right now. Respond with only JSON: {"topics":["#HashtagName | one line on why it is trending", ...]}. Every topic uses that exact two-part format.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the trending list." },
         ], { temperature: 1, maxTokens: 400 });
@@ -600,7 +624,7 @@ export async function activate({ api }: CapabilityContext) {
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/tindler/deck", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
-        const model = await api.runtime.languageModels?.resolve();
+        const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { profiles: [] };
         const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
           ? request.body as Record<string, unknown>
@@ -616,7 +640,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write dating profiles for Tindler, the dating app inside a fictional roleplay world. Invent 5 single side characters who plausibly live in this world (never the story's protagonists). Respond with only JSON: {"profiles":["Name, Age | short tagline | two-sentence bio", ...]}. Every profile uses that exact three-part format.${preferences ? `\nThe user's stated preference: "${preferences}" — match it.` : ""}${storyContext ? `\n\nThe world, from recent story events:\n${storyContext}` : ""}`,
+            content: `You write dating profiles for Tindler, the dating app inside a fictional roleplay world. Invent 5 single side characters who plausibly live in this world (never the story's protagonists). Respond with only JSON: {"profiles":["Name, Age | short tagline | two-sentence bio", ...]}. Every profile uses that exact three-part format.${preferences ? `\nThe user's stated preference: "${preferences}" — match it.` : ""}${storyContext ? `\n\nThe world, from recent story events:\n${storyContext}` : ""}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the next deck of profiles." },
         ], { temperature: 1, maxTokens: 500 });
@@ -632,7 +656,7 @@ export async function activate({ api }: CapabilityContext) {
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/mail/inbox", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
-        const model = await api.runtime.languageModels?.resolve();
+        const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { emails: [] };
         const chatId = phone.document.identity.chatScope[0];
         let storyContext = "";
@@ -644,7 +668,7 @@ export async function activate({ api }: CapabilityContext) {
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${storyContext ? `\n\nRecent story events for context:\n${storyContext}` : ""}`,
+            content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${storyContext ? `\n\nRecent story events for context:\n${storyContext}` : ""}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the current inbox." },
         ], { temperature: 1, maxTokens: 600 });

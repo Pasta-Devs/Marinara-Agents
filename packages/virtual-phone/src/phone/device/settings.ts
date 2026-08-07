@@ -10,6 +10,9 @@ export interface DeviceSettings {
   patternIntensity: 0 | 1 | 2 | 3;
   reduceDeviceEffects: boolean;
   installedApps: string[];
+  lightConnectionId: string;
+  heavyConnectionId: string;
+  generationInstructions: string;
 }
 
 export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): DeviceSettings {
@@ -21,6 +24,9 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     patternIntensity: 0,
     reduceDeviceEffects: false,
     installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery"],
+    lightConnectionId: "",
+    heavyConnectionId: "",
+    generationInstructions: "",
   };
 }
 
@@ -42,5 +48,8 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
     installedApps: Array.isArray(input.installedApps)
       ? [...new Set(["settings", "app-store", ...input.installedApps.filter((appId): appId is string => typeof appId === "string" && appId.trim().length > 0)])]
       : defaults.installedApps,
+    lightConnectionId: typeof input.lightConnectionId === "string" ? input.lightConnectionId.slice(0, 100) : defaults.lightConnectionId,
+    heavyConnectionId: typeof input.heavyConnectionId === "string" ? input.heavyConnectionId.slice(0, 100) : defaults.heavyConnectionId,
+    generationInstructions: typeof input.generationInstructions === "string" ? input.generationInstructions.slice(0, 2000) : defaults.generationInstructions,
   };
 }

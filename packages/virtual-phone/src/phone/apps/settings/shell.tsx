@@ -12,8 +12,46 @@ interface SettingsShellProps {
   onClose: () => void;
 }
 
+interface EngineConnection {
+  id: string;
+  name?: string | null;
+  provider?: string | null;
+  model?: string | null;
+}
+
+function connectionLabel(connection: EngineConnection) {
+  const name = connection.name?.trim();
+  if (name) return name;
+  return [connection.provider, connection.model].filter(Boolean).join(" · ") || connection.id;
+}
+
 export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: SettingsShellProps) {
   const settings = phone.settings ?? defaultDeviceSettings(phone.baselineTheme);
+  const [connections, setConnections] = React.useState<EngineConnection[] | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    void fetch("/api/connections", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() as Promise<unknown> : [])
+      .then((list) => {
+        if (!active) return;
+        setConnections(Array.isArray(list)
+          ? list.filter((item): item is EngineConnection => !!item && typeof (item as EngineConnection).id === "string")
+          : []);
+      })
+      .catch(() => { if (active) setConnections([]); });
+    return () => { active = false; };
+  }, []);
+
+  const connectionOptions = (selected: string) => (
+    <>
+      <option value="">Agent default</option>
+      {connections?.map((connection) => <option key={connection.id} value={connection.id}>{connectionLabel(connection)}</option>)}
+      {selected && !connections?.some((connection) => connection.id === selected)
+        ? <option value={selected}>Saved connection (unavailable)</option>
+        : null}
+    </>
+  );
   const update = async (patch: Record<string, unknown>) => {
     const response = await phoneRequest<{ phone: Phone }>(`/phones/${encodeURIComponent(phone.phoneId)}/settings`, {
       method: "PATCH", body: JSON.stringify(patch),
@@ -40,6 +78,23 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
           <label className="vp-row vp-row--stacked"><span>Pattern intensity</span><input type="range" min="0" max="3" step="1" value={settings.patternIntensity} onChange={(event) => void update({ patternIntensity: Number(event.target.value) })} className="vp-range" /></label>
           <label className="vp-row"><span>Reduce device effects</span><input type="checkbox" checked={settings.reduceDeviceEffects} onChange={(event) => void update({ reduceDeviceEffects: event.target.checked })} className="vp-switch" /></label>
         </div>
+        <h3 className="vp-section-label">Generation</h3>
+        <div className="vp-group">
+          <label className="vp-row"><span>Replies</span><select value={settings.lightConnectionId} disabled={!connections} onChange={(event) => void update({ lightConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.lightConnectionId)}</select></label>
+          <label className="vp-row"><span>Feeds &amp; sites</span><select value={settings.heavyConnectionId} disabled={!connections} onChange={(event) => void update({ heavyConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.heavyConnectionId)}</select></label>
+          <label className="vp-row vp-row--stacked"><span>Custom instructions</span>
+            <textarea
+              key={`${phone.phoneId}:instructions`}
+              defaultValue={settings.generationInstructions}
+              onBlur={(event) => void update({ generationInstructions: event.target.value })}
+              placeholder="Extra style or tone instructions added to everything this phone generates"
+              maxLength={2000}
+              className="vp-textarea"
+              style={{ minHeight: "5.5rem", width: "100%" }}
+            />
+          </label>
+        </div>
+        <p className="vp-muted-note" style={{ padding: "0 1rem" }}>Replies covers character texts in Messages. Feeds &amp; sites covers Goodle, Noodle, NoodleR, Mail, and Tindler.</p>
         <div className="vp-group">
           <button type="button" onClick={() => { if (window.confirm("Reset this phone's device settings?")) void reset(); }} className="vp-row vp-row--danger"><RotateCcw size="0.875rem" aria-hidden="true" /> Reset device settings</button>
         </div>
