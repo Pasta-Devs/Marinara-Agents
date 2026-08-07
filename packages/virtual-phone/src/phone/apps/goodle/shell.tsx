@@ -34,7 +34,8 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   const [recents, setRecents] = React.useState<string[]>([]);
   const [results, setResults] = React.useState(() => fallbackSearchResults(""));
   const [searching, setSearching] = React.useState(false);
-  const [page, setPage] = React.useState<PageState | null>(null);
+  const [pages, setPages] = React.useState<PageState[]>([]);
+  const page = pages.at(-1) ?? null;
   const recentsRef = React.useRef(recents);
   recentsRef.current = recents;
 
@@ -71,12 +72,14 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   }, []);
 
   const openPage = (title: string, url: string, site?: string) => {
-    setPage({ site: site ?? url.split("/")[0] ?? "goodle.web", title, tagline: "", kind: "official", links: [], sections: [], url, loading: true });
+    setPages((current) => [...current, { site: site ?? url.split("/")[0] ?? "goodle.web", title, tagline: "", kind: "official", links: [], sections: [], url, loading: true }]);
+    const settle = (loaded: PageState) => setPages((current) =>
+      current.map((entry) => entry.url === url && entry.loading ? loaded : entry));
     void phoneRequest<{ page: SitePagePayload }>(`/phones/${encodeURIComponent(phoneId)}/goodle/page`, {
       method: "POST", body: JSON.stringify({ title, url, query: query.trim(), ...(site ? { site } : {}) }),
     })
-      .then((response) => setPage({ ...response.page, title: response.page.title || title, url, loading: false }))
-      .catch(() => setPage({
+      .then((response) => settle({ ...response.page, title: response.page.title || title, url, loading: false }))
+      .catch(() => settle({
         site: site ?? url.split("/")[0] ?? "goodle.web", title, tagline: "", kind: "official", links: [],
         sections: ["Offline :: Goodle can't reach this page right now."], url, loading: false,
       }));
@@ -96,7 +99,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
         title={page ? page.site : "Goodle"}
         titleId="goodle-title"
         closeLabel="Close Goodle"
-        onBack={() => page ? setPage(null) : onBack()}
+        onBack={() => page ? setPages((current) => current.slice(0, -1)) : onBack()}
         onClose={onClose}
         actions={page ? [] : [{ id: "clear-recents", icon: "trash", label: "Clear recent searches", kind: "button", disabled: recents.length === 0, reason: "No recent searches" }]}
         onAction={(actionId) => { if (actionId === "clear-recents") clearRecents(); }}
