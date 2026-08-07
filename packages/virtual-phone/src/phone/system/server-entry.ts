@@ -215,13 +215,22 @@ export async function activate({ api }: CapabilityContext) {
       return "";
     }
   };
+  // The phone's entire awareness of the story. It is stateless by decision (see
+  // docs/app-plans/19-background-and-learning.md) — this window is re-read per request and never
+  // accumulated, so it is the only thing standing between generation and generic content.
+  // The per-message cap is the harsher of the two: it clips long story posts mid-sentence.
+  const STORY_MESSAGES = 30;
+  const STORY_MESSAGE_CHARS = 900;
+  /** Total ceiling, keeping the most recent end. ~3k tokens, so a small-context model still fits. */
+  const STORY_BUDGET_CHARS = 12_000;
   const worldContext = async (chatId: string | undefined) => {
     const lore = await loreContext();
     let story = "";
     if (chatId && api.runtime.persistence.listMessages) {
-      story = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
-        .map((message) => message.content.slice(0, 240))
-        .join("\n");
+      story = (await api.runtime.persistence.listMessages(chatId)).slice(-STORY_MESSAGES)
+        .map((message) => message.content.slice(0, STORY_MESSAGE_CHARS))
+        .join("\n")
+        .slice(-STORY_BUDGET_CHARS);
     }
     return `${lore ? `\n\nWorld lore to stay true to:\n${lore}` : ""}${story ? `\n\nRecent story events:\n${story}` : ""}`;
   };
@@ -251,8 +260,8 @@ export async function activate({ api }: CapabilityContext) {
           content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${await ownerCard(recipient, "Who is texting — about")}${storyContext}${customInstructions(recipient)}`,
         },
         { role: "user", content: history },
-      ], { temperature: 0.9, maxTokens: 200 });
-      const { reply } = parseBoundedContent(completion.content, { fields: { reply: "string" }, defaults: { reply: "" } }) as { reply: string };
+      ], { temperature: 0.9, maxTokens: 250 });
+      const { reply } = parseBoundedContent(completion.content, { fields: { reply: "string" }, defaults: { reply: "" }, limits: { maxString: 400 } }) as { reply: string };
       if (!reply.trim()) return null;
       return await messaging.send(recipientPhoneId, senderPhoneId, reply);
     } catch {
@@ -535,10 +544,11 @@ export async function activate({ api }: CapabilityContext) {
             content: "You are Goodle, the in-story web search engine inside a roleplay world. Invent plausible, entertaining search results that fit a lived-in fictional world. Respond with only JSON: {\"title\":\"...\",\"summary\":\"...\",\"items\":[\"Page Title | site.web/path | one-line snippet\", ...]} with 3 to 6 items. Every item uses that exact three-part format with invented in-world domains." + storyContext + customInstructions(phone),
           },
           { role: "user", content: `Search query: ${query}` },
-        ], { temperature: 0.9, maxTokens: 400 });
+        ], { temperature: 0.9, maxTokens: 800 });
         const results = parseBoundedContent(completion.content, {
           fields: { title: "string", summary: "string", items: "string[]" },
           defaults: fallback,
+          limits: { maxString: 500, maxItems: 12 },
         });
         return { results };
       } catch (error) {
@@ -575,10 +585,11 @@ export async function activate({ api }: CapabilityContext) {
             content: "You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page as a template. Respond with only JSON: {\"site\":\"Site Name\",\"title\":\"page headline\",\"tagline\":\"short site tagline\",\"kind\":\"news, shop, blog, forum, or official\",\"links\":[\"nav label\", ...],\"sections\":[\"Section Heading :: section body text\", ...]} with 3 to 5 nav labels and 3 to 5 sections. Every section uses the exact format 'Heading :: body'. For a shop, each section is one product and its body states the price. For a forum, each section is one post and its heading is the poster's name." + storyContext + customInstructions(phone),
           },
           { role: "user", content: `URL: ${url}\nPage title: ${title}\nFound via search: ${query}${site ? `\nThis page belongs to the site "${site}" — keep its name, tagline, and nav consistent.` : ""}` },
-        ], { temperature: 0.9, maxTokens: 700 });
+        ], { temperature: 0.9, maxTokens: 1800 });
         const page = parseBoundedContent(completion.content, {
           fields: { site: "string", title: "string", tagline: "string", kind: "string", links: "string[]", sections: "string[]" },
           defaults: fallback,
+          limits: { maxString: 1200, maxItems: 12, perField: { site: 80, tagline: 200, kind: 40 } },
         });
         return { page };
       } catch (error) {
@@ -637,8 +648,8 @@ export async function activate({ api }: CapabilityContext) {
             content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 new short posts, mostly by fictional side characters reacting to life in this world. At most one post may come from the story cast${cast ? ` (${cast})` : ""}, staying true to their voice. They may reply to or riff on the existing timeline. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${timeline ? `\n\nThe timeline so far:\n${timeline}` : ""}${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the next batch of posts." },
-        ], { temperature: 1, maxTokens: 500 });
-        const generated = parseBoundedContent(completion.content, { fields: { posts: "string[]" }, defaults: fallbackFeed() }) as { posts: string[] };
+        ], { temperature: 1, maxTokens: 800 });
+        const generated = parseBoundedContent(completion.content, { fields: { posts: "string[]" }, defaults: fallbackFeed(), limits: { maxString: 600, maxItems: 20 } }) as { posts: string[] };
         if (generated.posts.length) await noodle.addPosts(chatId, generated.posts.map(parseGeneratedPost));
         return { posts: await noodle.feedFor(scope) };
       } catch (error) {
@@ -682,8 +693,8 @@ export async function activate({ api }: CapabilityContext) {
             content: `${phone.document.identity.ownerName} just took a photo with their phone inside a roleplay story. Describe what the photo shows in one or two vivid sentences, present tense, like a caption. Respond with only JSON: {"photo":"description"}.${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Describe the photo." },
-        ], { temperature: 0.9, maxTokens: 150 });
-        const shot = parseBoundedContent(completion.content, { fields: { photo: "string" }, defaults: { photo: "" } }) as { photo: string };
+        ], { temperature: 0.9, maxTokens: 300 });
+        const shot = parseBoundedContent(completion.content, { fields: { photo: "string" }, defaults: { photo: "" }, limits: { maxString: 800 } }) as { photo: string };
         return { photo: shot.photo };
       } catch (error) {
         if (error instanceof Error && error.message === "Phone not found") {
@@ -730,10 +741,11 @@ export async function activate({ api }: CapabilityContext) {
              content: `You write ${creatorName}'s page on NoodleR, the creator platform inside a fictional roleplay world (all accounts are adults). Stay true to their character. Respond with only JSON: {"tagline":"short profile bio","price":"e.g. 5 coins/month","posts":["post text | free","teaser post text | locked", ...]} with 4 to 6 posts, mixing free posts and locked subscriber teasers.${creator ? await ownerCard(creator, "About the creator") : manualContact?.bio ? `\n\nAbout the creator:\n${manualContact.bio}` : ""}${storyContext}${customInstructions(phone)}`,
           },
            { role: "user", content: `Generate ${creatorName}'s NoodleR page.` },
-        ], { temperature: 1, maxTokens: 600 });
+        ], { temperature: 1, maxTokens: 1200 });
         const generated = parseBoundedContent(completion.content, {
           fields: { tagline: "string", price: "string", posts: "string[]" },
           defaults: { tagline: "", price: "", posts: [] as string[] },
+          limits: { maxString: 1200, maxItems: 12, perField: { price: 60 } },
         }) as { tagline: string; price: string; posts: string[] };
         const saved = await noodlerPages.savePage({
           chatId,
@@ -788,8 +800,8 @@ export async function activate({ api }: CapabilityContext) {
             content: `You write dating profiles for Tindler, the dating app inside a fictional roleplay world. Invent 5 single side characters who plausibly live in this world (never the story's protagonists). Respond with only JSON: {"profiles":["Name, Age | short tagline | two-sentence bio", ...]}. Every profile uses that exact three-part format.${preferences ? `\nThe user's stated preference: "${preferences}" — match it.` : ""}${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the next deck of profiles." },
-        ], { temperature: 1, maxTokens: 500 });
-        const deck = parseBoundedContent(completion.content, { fields: { profiles: "string[]" }, defaults: { profiles: [] as string[] } }) as { profiles: string[] };
+        ], { temperature: 1, maxTokens: 900 });
+        const deck = parseBoundedContent(completion.content, { fields: { profiles: "string[]" }, defaults: { profiles: [] as string[] }, limits: { maxString: 600, maxItems: 15 } }) as { profiles: string[] };
         return { profiles: deck.profiles };
       } catch (error) {
         if (error instanceof Error && error.message === "Phone not found") {
@@ -811,8 +823,8 @@ export async function activate({ api }: CapabilityContext) {
             content: `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${await ownerCard(phone, "About the inbox owner")}${storyContext}${customInstructions(phone)}`,
           },
           { role: "user", content: "Generate the current inbox." },
-        ], { temperature: 1, maxTokens: 600 });
-        const inbox = parseBoundedContent(completion.content, { fields: { emails: "string[]" }, defaults: { emails: [] as string[] } }) as { emails: string[] };
+        ], { temperature: 1, maxTokens: 1400 });
+        const inbox = parseBoundedContent(completion.content, { fields: { emails: "string[]" }, defaults: { emails: [] as string[] }, limits: { maxString: 1200, maxItems: 25 } }) as { emails: string[] };
         return { emails: inbox.emails };
       } catch (error) {
         if (error instanceof Error && error.message === "Phone not found") {

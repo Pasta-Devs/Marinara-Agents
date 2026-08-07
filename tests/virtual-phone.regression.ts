@@ -274,6 +274,20 @@ async function main() {
   );
   assert.deepEqual(parseBoundedContent("not json", { fields: { title: "string" }, defaults: { title: "Fallback" } }), { title: "Fallback" });
 
+  // Per-schema limits: an unmigrated schema keeps the old 300-char cap, a declared one overrides it,
+  // and perField overrides both. Losing this silently makes every generated page a paragraph again.
+  const long = "x".repeat(3000);
+  assert.equal((parseBoundedContent(`{"body":"${long}"}`, { fields: { body: "string" }, defaults: { body: "" } }) as { body: string }).body.length, 300);
+  assert.equal((parseBoundedContent(`{"body":"${long}"}`, { fields: { body: "string" }, defaults: { body: "" }, limits: { maxString: 1200 } }) as { body: string }).body.length, 1200);
+  assert.deepEqual(
+    parseBoundedContent(`{"site":"${long}","sections":["${long}","${long}","${long}"]}`, {
+      fields: { site: "string", sections: "string[]" },
+      defaults: { site: "", sections: [] },
+      limits: { maxString: 1200, maxItems: 2, perField: { site: 80 } },
+    }),
+    { site: "x".repeat(80), sections: ["x".repeat(1200), "x".repeat(1200)] },
+  );
+
   const personaPhoneId = minted.document.identity.phoneId;
   await reloadedRuntime.setAppStorageKey(personaPhoneId, "goodle", "recents", ["cafes", "parks"]);
   assert.deepEqual(await reloadedRuntime.getAppStorageKey(personaPhoneId, "goodle", "recents"), ["cafes", "parks"]);
