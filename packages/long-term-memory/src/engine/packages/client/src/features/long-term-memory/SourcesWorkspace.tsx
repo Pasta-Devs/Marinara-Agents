@@ -81,11 +81,7 @@ const sourceTabs: Array<{ id: Source; labelKey: string }> = [
     labelKey: "ui.longTermMemory.sourcesworkspace.lorebooks",
   },
 ];
-const sourceDescriptionKeys: Record<Source, string> = {
-  characters: "ui.longTermMemory.sourcesworkspace.characterDescription",
-  lorebooks: "ui.longTermMemory.sourcesworkspace.lorebookDescription",
-  chats: "ui.longTermMemory.sourcesworkspace.chatSummaryDescription",
-};
+
 
 const flatPanelTabs: Array<{ id: FlatPanel; labelKey: string }> = [
   {
@@ -1440,9 +1436,6 @@ export default function SourcesWorkspace({
                 "ui.longTermMemory.sourcesworkspace.lorebookGuidedImport",
               )}
       </StatusSurface>
-      <p className="text-xs text-[var(--muted-foreground)]">
-        {localizeUi(sourceDescriptionKeys[source])}
-      </p>
 
       <div className="mari-editor-panel mari-editor-panel--soft flex flex-wrap items-center gap-3 p-3">
         <div

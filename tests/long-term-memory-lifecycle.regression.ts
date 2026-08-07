@@ -206,9 +206,9 @@ async function main() {
         "Workflow guidance must remain contextual rather than repeated on each destination",
       );
       for (const copy of [
-        "Preserves the character card, then proposes durable identity",
-        "Preserves selected lorebook entries, then proposes durable world",
-        "Preserves the summary, then proposes events, relationships, threads",
+        "Keeps the character card as a source note, then proposes smaller identity",
+        "Keeps selected lorebook entries as source notes, then proposes durable world",
+        "extraction proposes events, relationships, threads, and continuity that may matter later",
         "accepted proposals become recallable.",
         "Review what extraction found. Accept saves a proposal to Memory Vault",
         "Stable appearance can help the character remain visually consistent",
