@@ -158,7 +158,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
             <label><span className="vp-sr-only">Search Goodle</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="vp-input" /></label>
             <button type="submit" aria-label="Search" className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Search size="1rem" aria-hidden="true" /></button>
           </form>
-          {recents.length ? (
+          {recents.length && !searching && !results.items.length ? (
             <div className="vp-chip-row" aria-label="Recent searches">
               {recents.map((recent) => (
                 <button key={recent} type="button" onClick={() => { setQuery(recent); search(recent); }} className="vp-chip">{recent}</button>

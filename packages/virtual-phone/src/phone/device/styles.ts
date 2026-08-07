@@ -7,7 +7,7 @@
 export const phoneStylesheet = `
 .vp-root { position: fixed; inset: 0; z-index: 10020; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
 .vp-root *, .vp-root *::before, .vp-root *::after { box-sizing: border-box; }
-.vp-root button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.vp-root :where(button) { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .vp-root button:focus-visible, .vp-root input:focus-visible, .vp-root select:focus-visible, .vp-root textarea:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
 .vp-root button:disabled { opacity: 0.35; cursor: default; }
 .vp-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / 0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }

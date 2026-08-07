@@ -355,11 +355,11 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
           <button ref={closeButtonRef} type="button" onClick={close} className="vp-dock-btn vp-dock-btn--primary">
             <X size="0.875rem" aria-hidden="true" /> Put down
           </button>
-          <button type="button" disabled title="Coming soon" className="vp-dock-btn">
-            <Eye size="0.875rem" aria-hidden="true" /> Show to character
+          <button type="button" disabled title="Show to character — coming soon" aria-label="Show to character" className="vp-dock-btn">
+            <Eye size="0.875rem" aria-hidden="true" /> Show
           </button>
-          <button type="button" disabled title="Coming soon" className="vp-dock-btn">
-            <Quote size="0.875rem" aria-hidden="true" /> Reference chat
+          <button type="button" disabled title="Reference chat — coming soon" aria-label="Reference chat" className="vp-dock-btn">
+            <Quote size="0.875rem" aria-hidden="true" /> Reference
           </button>
         </div>
         </div>
