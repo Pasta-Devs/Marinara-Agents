@@ -23,6 +23,13 @@ export interface DeviceSettings {
   batteryLevel: number;
   cellularSignal: 0 | 1 | 2 | 3 | 4;
   installedApps: string[];
+  /**
+   * Lorebooks read on every generation for this phone, whether or not they are active in chat
+   * context. Empty means all of them, which is the old behaviour and the sane "Any" default.
+   * Scoped per phone so one character's phone can run on one world's rules and another's on a
+   * different set — running two stories used to bleed one world's lore into the other's phone.
+   */
+  lorebookIds: string[];
   lightConnectionId: string;
   heavyConnectionId: string;
   generationInstructions: string;
@@ -43,6 +50,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     batteryLevel: 80,
     cellularSignal: 4,
     installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera"],
+    lorebookIds: [],
     lightConnectionId: "",
     heavyConnectionId: "",
     generationInstructions: "",
@@ -77,6 +85,9 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
     installedApps: Array.isArray(input.installedApps)
       ? [...new Set(["settings", "app-store", ...input.installedApps.filter((appId): appId is string => typeof appId === "string" && appId.trim().length > 0)])]
       : defaults.installedApps,
+    lorebookIds: Array.isArray(input.lorebookIds)
+      ? [...new Set(input.lorebookIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0))].slice(0, 50)
+      : defaults.lorebookIds,
     lightConnectionId: typeof input.lightConnectionId === "string" ? input.lightConnectionId.slice(0, 100) : defaults.lightConnectionId,
     heavyConnectionId: typeof input.heavyConnectionId === "string" ? input.heavyConnectionId.slice(0, 100) : defaults.heavyConnectionId,
     generationInstructions: typeof input.generationInstructions === "string" ? input.generationInstructions.slice(0, 2000) : defaults.generationInstructions,

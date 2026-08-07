@@ -23,6 +23,7 @@ export type Phone = {
     batteryLevel: number;
     cellularSignal: 0 | 1 | 2 | 3 | 4;
     installedApps: string[];
+    lorebookIds: string[];
     lightConnectionId: string;
     heavyConnectionId: string;
     generationInstructions: string;

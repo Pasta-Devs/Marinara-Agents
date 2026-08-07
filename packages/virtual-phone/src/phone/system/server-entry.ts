@@ -213,11 +213,23 @@ export async function activate({ api }: CapabilityContext) {
       return "";
     }
   };
-  // ponytail: every lorebook feeds the phone, capped; switch to per-chat lorebook linkage when the Engine exposes it
-  const loreContext = async () => {
+  /**
+   * Lore for one phone. It used to feed every lorebook in the installation to every phone, so two
+   * unrelated stories bled into each other — wrong content, not merely too much. The phone's own
+   * settings now choose; empty still means all, which keeps existing phones working unchanged.
+   *
+   * Note for whoever picks up Step 7.2: honouring an entry's own Characters filter is NOT possible
+   * on this API. `listEligibleLorebookEntries` returns id, lorebookId, lorebookName, name, content
+   * and description only, and `listEligibleEntriesByIds` behind it deliberately resolves attached
+   * entries *without* character/persona scope. The filter fields never reach us. That is an Engine
+   * change and belongs with the Stage 11 contract ask.
+   */
+  const loreContext = async (phone?: Awaited<ReturnType<typeof findPhone>>) => {
     try {
       if (!api.runtime.resources.listLorebooks || !api.runtime.resources.listEligibleLorebookEntries) return "";
-      const books = await api.runtime.resources.listLorebooks();
+      const attached = phone ? phoneGenSettings(phone).lorebookIds : [];
+      const books = (await api.runtime.resources.listLorebooks())
+        .filter((book) => attached.length === 0 || attached.includes(book.id));
       if (!books.length) return "";
       const entries = await api.runtime.resources.listEligibleLorebookEntries({ lorebookIds: books.map((book) => book.id) });
       return entries.slice(0, 8)
@@ -237,8 +249,8 @@ export async function activate({ api }: CapabilityContext) {
   const STORY_MESSAGE_CHARS = 900;
   /** Total ceiling, keeping the most recent end. ~3k tokens, so a small-context model still fits. */
   const STORY_BUDGET_CHARS = 12_000;
-  const worldContext = async (chatId: string | undefined) => {
-    const lore = await loreContext();
+  const worldContext = async (chatId: string | undefined, phone?: Awaited<ReturnType<typeof findPhone>>) => {
+    const lore = await loreContext(phone);
     let story = "";
     if (chatId && api.runtime.persistence.listMessages) {
       story = (await api.runtime.persistence.listMessages(chatId)).slice(-STORY_MESSAGES)
@@ -266,7 +278,7 @@ export async function activate({ api }: CapabilityContext) {
         .join("\n");
       const sharedChatId = recipient.document.identity.chatScope
         .find((chatId) => sender.document.identity.chatScope.includes(chatId));
-      const storyContext = await worldContext(sharedChatId);
+      const storyContext = await worldContext(sharedChatId, recipient);
       const completion = await model.chatComplete([
         {
           role: "system",
@@ -599,7 +611,7 @@ export async function activate({ api }: CapabilityContext) {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { results: fallback };
-        const storyContext = await worldContext(targetChat(phone, request.query.chatId));
+        const storyContext = await worldContext(targetChat(phone, request.query.chatId), phone);
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -640,7 +652,7 @@ export async function activate({ api }: CapabilityContext) {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { page: fallback };
-        const storyContext = await worldContext(targetChat(phone, request.query.chatId));
+        const storyContext = await worldContext(targetChat(phone, request.query.chatId), phone);
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -694,7 +706,7 @@ export async function activate({ api }: CapabilityContext) {
         if (!model) return { posts: await noodle.feedFor(scope) };
         const chatId = targetChat(phone, request.query.chatId);
         if (!chatId) return { posts: [] };
-        const storyContext = await worldContext(chatId);
+        const storyContext = await worldContext(chatId, phone);
         const timeline = (await noodle.feedFor([chatId])).slice(0, 10)
           .map((post) => `${post.author} ${post.handle} — ${post.text.slice(0, 160)}`)
           .join("\n");
@@ -747,7 +759,7 @@ export async function activate({ api }: CapabilityContext) {
         const model = await resolvePhoneModel(phone, "light");
         if (!model) return { photo: "" };
         const chatId = targetChat(phone, request.query.chatId);
-        const storyContext = await worldContext(chatId);
+        const storyContext = await worldContext(chatId, phone);
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -795,7 +807,7 @@ export async function activate({ api }: CapabilityContext) {
            const empty = await noodlerPages.savePage({ chatId, creatorPhoneId, creatorName, tagline: "", price: "", posts: [] });
           return { page: pagePayload(empty.document) };
         }
-        const storyContext = await worldContext(chatId);
+        const storyContext = await worldContext(chatId, phone);
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -827,7 +839,7 @@ export async function activate({ api }: CapabilityContext) {
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { topics: [] };
         const chatId = targetChat(phone, request.query.chatId);
-        const storyContext = await worldContext(chatId);
+        const storyContext = await worldContext(chatId, phone);
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -854,7 +866,7 @@ export async function activate({ api }: CapabilityContext) {
           : {};
         const preferences = String(body.preferences ?? "").trim().slice(0, 200);
         const chatId = targetChat(phone, request.query.chatId);
-        const storyContext = await worldContext(chatId);
+        const storyContext = await worldContext(chatId, phone);
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -877,7 +889,7 @@ export async function activate({ api }: CapabilityContext) {
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { emails: [] };
         const chatId = targetChat(phone, request.query.chatId);
-        const storyContext = await worldContext(chatId);
+        const storyContext = await worldContext(chatId, phone);
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -988,6 +1000,16 @@ export async function activate({ api }: CapabilityContext) {
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
       }
+    });
+    // Feeds the Lorebooks picker in phone Settings. Optional on the runtime, so an older Engine
+    // simply reports none available and the picker says so.
+    app.get("/lorebooks", async () => {
+      if (!api.runtime.resources.listLorebooks) return { lorebooks: [], supported: false };
+      const books = await api.runtime.resources.listLorebooks();
+      return {
+        supported: true,
+        lorebooks: books.map((book) => ({ id: book.id, name: readName(book.data, "Lorebook") })),
+      };
     });
     type StorageParams = { phoneId: string; appId: string; key: string };
     app.get<{ Params: Omit<StorageParams, "key"> }>("/phones/:phoneId/apps/:appId/storage", async (request, reply) => {

@@ -28,6 +28,15 @@ function connectionLabel(connection: EngineConnection) {
 export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: SettingsShellProps) {
   const settings = phone.settings ?? defaultDeviceSettings(phone.baselineTheme);
   const [connections, setConnections] = React.useState<EngineConnection[] | null>(null);
+  const [lorebooks, setLorebooks] = React.useState<Array<{ id: string; name: string }> | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    void phoneRequest<{ lorebooks: Array<{ id: string; name: string }> }>("/lorebooks")
+      .then((response) => { if (active) setLorebooks(response.lorebooks); })
+      .catch(() => { if (active) setLorebooks([]); });
+    return () => { active = false; };
+  }, []);
 
   React.useEffect(() => {
     let active = true;
@@ -98,6 +107,27 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
         <div className="vp-group">
           <label className="vp-row"><span>Replies</span><select value={settings.lightConnectionId} disabled={!connections} onChange={(event) => void update({ lightConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.lightConnectionId)}</select></label>
           <label className="vp-row"><span>Feeds &amp; sites</span><select value={settings.heavyConnectionId} disabled={!connections} onChange={(event) => void update({ heavyConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.heavyConnectionId)}</select></label>
+          <div className="vp-row vp-row--stacked">
+            <span>Lorebooks</span>
+            <p className="vp-muted-note">Read on every generation from this phone, whether or not they are active in the chat. None selected means all of them.</p>
+            {lorebooks === null ? <p className="vp-muted-note">Loading lorebooks…</p> : null}
+            {lorebooks?.length === 0 ? <p className="vp-muted-note">No lorebooks available.</p> : null}
+            {lorebooks?.map((lorebook) => (
+              <label key={lorebook.id} className="vp-row">
+                <span>{lorebook.name}</span>
+                <input
+                  type="checkbox"
+                  checked={settings.lorebookIds.includes(lorebook.id)}
+                  onChange={(event) => void update({
+                    lorebookIds: event.target.checked
+                      ? [...settings.lorebookIds, lorebook.id]
+                      : settings.lorebookIds.filter((id) => id !== lorebook.id),
+                  })}
+                  className="vp-switch"
+                />
+              </label>
+            ))}
+          </div>
           <label className="vp-row vp-row--stacked"><span>Custom instructions</span>
             <textarea
               key={`${phone.phoneId}:instructions`}
