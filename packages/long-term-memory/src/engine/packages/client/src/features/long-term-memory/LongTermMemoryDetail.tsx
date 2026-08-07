@@ -417,17 +417,24 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         }
         [data-ltm-control="activation"] {
           display: inline-flex;
-          width: 2.75rem;
+          width: auto;
           height: 2.75rem;
           flex-shrink: 0;
           align-items: center;
           justify-content: center;
+          gap: 0.5rem;
           border: 0;
           border-radius: 0.375rem;
           background: transparent;
-          padding: 0;
+          padding: 0 0.25rem;
         }
-        [data-ltm-control="activation"] > span {
+        [data-ltm-activation-label] {
+          color: var(--marinara-editor-text);
+          font-size: 0.8125rem;
+          font-weight: 600;
+          line-height: 1.25;
+        }
+        [data-ltm-activation-track] {
           display: flex;
           box-sizing: border-box;
           width: 2.75rem;
@@ -439,11 +446,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           padding: 0.125rem;
           transition: background-color 150ms ease, border-color 150ms ease;
         }
-        [data-ltm-control="activation"][aria-checked="true"] > span {
+        [data-ltm-control="activation"][aria-checked="true"] [data-ltm-activation-track] {
           border-color: var(--marinara-editor-accent);
           background: var(--marinara-editor-accent);
         }
-        [data-ltm-control="activation"] > span > span {
+        [data-ltm-activation-knob] {
           display: block;
           width: 1.25rem;
           height: 1.25rem;
@@ -453,8 +460,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           transform: translateX(0);
           transition: transform 150ms ease;
         }
-        [data-ltm-control="activation"][aria-checked="true"] > span > span {
-          transform: translateX(1.25rem);
+        [data-ltm-control="activation"][aria-checked="true"] [data-ltm-activation-knob] {
+          transform: translateX(1.125rem);
         }
         [data-ltm-control="activation"]:focus-visible {
           outline: none;
@@ -466,12 +473,45 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         }
         @container ltm-detail (max-width: 47.99rem) {
           [data-ltm-control="activation"] {
-            width: 3rem;
+            min-width: 3rem;
+          }
+        }
+        @container ltm-detail (max-width: 47.99rem) {
+          [data-ltm-surface="detail"] > .mari-editor-header {
+            flex-wrap: nowrap;
+            gap: 0.375rem;
+            padding-inline: 0.625rem;
+          }
+          [data-ltm-surface="detail"] > .mari-editor-header > .mari-editor-header-main {
+            flex-basis: auto;
+            gap: 0.5rem;
+          }
+          [data-ltm-surface="detail"] > .mari-editor-header > .mari-editor-actions {
+            width: auto;
+            gap: 0.25rem;
+            border-top: 0;
+            padding-top: 0;
+          }
+          [data-ltm-control="activation"] {
+            gap: 0.375rem;
+            padding-inline: 0.125rem;
+          }
+        }
+        @container ltm-detail (max-width: 22.49rem) {
+          [data-ltm-surface="detail"] > .mari-editor-header {
+            gap: 0.25rem;
+            padding-inline: 0.5rem;
+          }
+          [data-ltm-surface="detail"] > .mari-editor-header > .mari-editor-header-main {
+            gap: 0.375rem;
+          }
+          [data-ltm-surface="detail"] > .mari-editor-header .mari-editor-icon-tile {
+            display: none;
           }
         }
       `}</style>
       <header className="mari-editor-header relative z-20">
-        <div className="mari-editor-header-main max-md:min-w-full">
+        <div className="mari-editor-header-main">
           <button
             type="button"
             aria-label={backToAgentsLabel}
@@ -502,7 +542,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             </p>
           </div>
         </div>
-        <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
+        <div className="mari-editor-actions flex">
           {props.chatId || props.onEnabledForChatChange ? (
             <button
               type="button"
@@ -533,25 +573,22 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 },
               )}
               data-ltm-control="activation"
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 max-md:w-12"
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={activationPending || !props.onEnabledForChatChange}
               onClick={() => void toggleActivation()}
             >
+              <span data-ltm-activation-label>
+                {localizeUi(
+                  props.enabledForChat === true
+                    ? "ui.longTermMemory.longtermmemorydetail.active"
+                    : "ui.longTermMemory.longtermmemorydetail.inactive",
+                )}
+              </span>
               <span
                 aria-hidden="true"
-                className={`flex h-6 w-11 items-center rounded-full border p-0.5 transition-colors ${
-                  props.enabledForChat === true
-                    ? "border-[var(--marinara-editor-accent)] bg-[var(--marinara-editor-accent)]"
-                    : "border-[var(--marinara-editor-border-strong)] bg-[var(--marinara-editor-control-bg)]"
-                }`}
+                data-ltm-activation-track
               >
-                <span
-                  className={`block h-5 w-5 rounded-full bg-[var(--marinara-editor-text)] shadow-sm transition-transform ${
-                    props.enabledForChat === true
-                      ? "translate-x-5"
-                      : "translate-x-0"
-                  }`}
-                />
+                <span data-ltm-activation-knob />
               </span>
             </button>
           ) : null}

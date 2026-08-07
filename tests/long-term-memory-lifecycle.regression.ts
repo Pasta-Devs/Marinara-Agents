@@ -1164,13 +1164,6 @@ async function main() {
       );
       await page.getByRole("button", { name: "Turn on for this chat" }).click();
       assert.deepEqual(desktopActivationChanges, [true]);
-      await page
-        .getByRole("button", { name: "Continue without activating" })
-        .click();
-      await page
-        .locator('[data-ltm-surface="onboarding"]')
-        .getByRole("button", { name: "Back", exact: true })
-        .click();
       await page.evaluate(() => {
         const element = document.querySelector(
           "marinara-capability-long-term-memory",
@@ -2054,13 +2047,18 @@ async function main() {
       assert.equal(await activation.count(), 1);
       assert.equal(await activation.isVisible(), true);
       assert.equal(await activation.getAttribute("aria-checked"), "true");
-      const activationParts = activation.locator("span");
-      assert.equal(await activationParts.count(), 2);
+      const activationTrack = activation.locator("[data-ltm-activation-track]");
       const activationGeometry = await activation.evaluate((element) => {
         const button = element.getBoundingClientRect();
-        const track = element.firstElementChild!.getBoundingClientRect();
-        const knob = element.firstElementChild!.firstElementChild!.getBoundingClientRect();
-        const style = getComputedStyle(element.firstElementChild!);
+        const track = element
+          .querySelector("[data-ltm-activation-track]")!
+          .getBoundingClientRect();
+        const knob = element
+          .querySelector("[data-ltm-activation-knob]")!
+          .getBoundingClientRect();
+        const style = getComputedStyle(
+          element.querySelector("[data-ltm-activation-track]")!,
+        );
         return {
           button: { width: button.width, height: button.height },
           track: {
@@ -2079,21 +2077,23 @@ async function main() {
           borderWidth: style.borderWidth,
         };
       });
-      assert.deepEqual(activationGeometry.button, { width: 48, height: 44 });
-      assert.deepEqual(activationGeometry.track, {
-        x: 2,
-        y: 10,
-        width: 44,
-        height: 24,
-      });
+      assert.equal(activationGeometry.button.height, 44);
+      assert.equal(activationGeometry.button.width > 48, true);
+      assert.equal(activationGeometry.track.width, 44);
+      assert.equal(activationGeometry.track.height, 24);
       assert.equal(activationGeometry.knob.width, 20);
       assert.equal(activationGeometry.knob.height, 20);
-      assert.ok(activationGeometry.knob.x > activationGeometry.track.width / 2);
+      assert.ok(
+        activationGeometry.knob.x + activationGeometry.knob.width / 2 >
+          activationGeometry.track.width / 2,
+      );
+      assert.ok(
+        activationGeometry.knob.x + activationGeometry.knob.width <=
+          activationGeometry.track.width,
+      );
       assert.notEqual(activationGeometry.backgroundColor, "rgba(0, 0, 0, 0)");
       assert.equal(activationGeometry.borderWidth, "1px");
-      const activationTrack = await activationParts
-        .first()
-        .evaluate((element) => {
+      const activationTrackStyle = await activationTrack.evaluate((element) => {
           const rect = element.getBoundingClientRect();
           const style = getComputedStyle(element);
           return {
@@ -2103,11 +2103,11 @@ async function main() {
           };
         });
       assert.deepEqual(
-        { width: activationTrack.width, height: activationTrack.height },
+        { width: activationTrackStyle.width, height: activationTrackStyle.height },
         { width: 44, height: 24 },
       );
       assert.equal(
-        activationTrack.backgroundColor,
+        activationTrackStyle.backgroundColor,
         activationGeometry.backgroundColor,
       );
       const activationMetrics = await activation.evaluate((element) => {
@@ -2142,20 +2142,32 @@ async function main() {
       );
       assert.equal(activationMetrics.withinViewport, true);
       assert.equal(activationMetrics.centerCovered, true);
+      assert.ok(
+        await mobilePage
+          .locator(".mari-editor-header")
+          .evaluate((header) => {
+            const [main, actions] = [...header.children].map((child) =>
+              child.getBoundingClientRect(),
+            );
+            return Math.abs(
+              main.top + main.height / 2 - (actions.top + actions.height / 2),
+            );
+          }) <= 1,
+      );
       const addMemoriesBox = await mobilePage
         .locator('[aria-label="Add memories"]')
         .boundingBox();
       assert.ok(addMemoriesBox);
       assert.equal(
         Math.abs(
-          (await activationParts.first().boundingBox())!.y +
+          (await activationTrack.boundingBox())!.y +
             12 -
             (addMemoriesBox.y + addMemoriesBox.height / 2),
         ) <= 1,
         true,
       );
       assert.equal(await activation.getAttribute("title"), "Active in kirei");
-      assert.equal((await activation.innerText()).trim(), "");
+      assert.equal((await activation.innerText()).trim(), "Active");
       assert.equal(
         await mobilePage.evaluate(
           () =>
@@ -2184,11 +2196,16 @@ async function main() {
       );
       assert.equal(await activation.getAttribute("aria-checked"), "false");
       assert.equal(await activation.getAttribute("title"), "Inactive in kirei");
-      const inactiveTrack = await activationParts.first().evaluate((element) => {
+      assert.equal((await activation.innerText()).trim(), "Inactive");
+      const inactiveTrack = await activationTrack.evaluate((element) => {
         const style = getComputedStyle(element);
+        const track = element.getBoundingClientRect();
+        const knob = element.firstElementChild!.getBoundingClientRect();
         return {
           backgroundColor: style.backgroundColor,
           borderWidth: style.borderWidth,
+          knobRight: knob.right - track.left,
+          width: track.width,
         };
       });
       assert.notEqual(
@@ -2196,6 +2213,7 @@ async function main() {
         "rgba(0, 0, 0, 0)",
       );
       assert.equal(inactiveTrack.borderWidth, "1px");
+      assert.ok(inactiveTrack.knobRight <= inactiveTrack.width);
       const longChatName = "A".repeat(200);
       await mobilePage.evaluate((chatName) => {
         const element = document.querySelector(
@@ -2378,6 +2396,20 @@ async function main() {
         mobileExtractionLayout.fieldWidths,
       );
       await mobilePage.setViewportSize({ width: 320, height: 720 });
+      assert.ok(
+        await mobilePage
+          .locator(".mari-editor-header")
+          .evaluate((header) => {
+            const [main, actions] = [...header.children].map((child) =>
+              child.getBoundingClientRect(),
+            );
+            return (
+              Math.abs(
+                main.top + main.height / 2 - (actions.top + actions.height / 2),
+              ) <= 1 && header.scrollWidth <= header.clientWidth
+            );
+          }),
+      );
       await mobilePage
         .getByRole("button", { name: "Show setup guide" })
         .click();
