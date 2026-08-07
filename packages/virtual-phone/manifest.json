@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "virtual-phone",
   "name": "Virtual Phone",
-  "version": "2.0.42",
+  "version": "2.0.43",
   "description": "Adds persistent in-story phones for personas and configured characters, with per-phone baseline themes and a docked device shell. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar.",
   "engine": {
     "min": "2.4.1",
@@ -41,8 +41,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "e2a0b4cbcbfa6d3e2143505ca3d350ddcfb97fdd3fe6bac247d68b381594d1a7",
-      "bytes": 331814
+      "sha256": "abe1c7a4e11b3c28afbbc200b70d9f1649a90e9eb2564051832d422446d85e9c",
+      "bytes": 327577
     }
   ],
   "permissions": [

@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { AtSign, BatteryMedium, BookUser, Camera, ChevronDown, Eye, Flame, Images, Lock, Mail, MessageCircle, Quote, Search, Settings, Signal, Smartphone, StickyNote, Store, WifiOff, X } from "lucide-react";
+import { BatteryMedium, ChevronDown, Eye, Quote, Search, Settings, Signal, Smartphone, WifiOff, X } from "lucide-react";
 import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/PhonesSettings";
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
@@ -10,9 +10,9 @@ import { initialDeviceSession, unlockDevice } from "./device/surfaces";
 import { phoneRequest } from "./platform/api";
 import { defaultDeviceSettings } from "./device/settings";
 import { conditionOpacity, patternBackground } from "./device/effects";
-import { InstalledAppRegistry } from "./platform/app-registry";
+import { InstalledAppRegistry, type AppRenderContext, type InstalledApp } from "./platform/app-registry";
 import { AppRouteStackManager } from "./platform/app-lifecycle";
-import { appIconClass } from "./platform/app-icons";
+import { appGlyph, appIconClass } from "./platform/app-icons";
 import { settingsManifest } from "./apps/settings/manifest";
 import { appStoreManifest } from "./apps/app-store/manifest";
 import { goodleManifest } from "./apps/goodle/manifest";
@@ -26,31 +26,79 @@ import { tindlerManifest } from "./apps/tindler/manifest";
 import { noodlerRManifest } from "./apps/noodler-r/manifest";
 import { cameraManifest } from "./apps/camera/manifest";
 
-const SettingsApp = React.lazy(() => import("./apps/settings/shell").then((module) => ({ default: module.SettingsShell })));
-const AppStoreApp = React.lazy(() => import("./apps/app-store/shell").then((module) => ({ default: module.AppStoreShell })));
-const GoodleApp = React.lazy(() => import("./apps/goodle/shell").then((module) => ({ default: module.GoodleShell })));
-const MessagesApp = React.lazy(() => import("./apps/messages/shell").then((module) => ({ default: module.MessagesShell })));
-const NotesApp = React.lazy(() => import("./apps/notes/shell").then((module) => ({ default: module.NotesShell })));
-const NoodlerApp = React.lazy(() => import("./apps/noodler/shell").then((module) => ({ default: module.NoodlerShell })));
-const ContactsApp = React.lazy(() => import("./apps/contacts/shell").then((module) => ({ default: module.ContactsShell })));
-const MailApp = React.lazy(() => import("./apps/mail/shell").then((module) => ({ default: module.MailShell })));
-const GalleryApp = React.lazy(() => import("./apps/gallery/shell").then((module) => ({ default: module.GalleryShell })));
-const TindlerApp = React.lazy(() => import("./apps/tindler/shell").then((module) => ({ default: module.TindlerShell })));
-const NoodlerRApp = React.lazy(() => import("./apps/noodler-r/shell").then((module) => ({ default: module.NoodlerRShell })));
-const CameraApp = React.lazy(() => import("./apps/camera/shell").then((module) => ({ default: module.CameraShell })));
+const lazyShell = <Module, Key extends keyof Module>(load: () => Promise<Module>, exportName: Key) =>
+  React.lazy(() => load().then((module) => ({ default: module[exportName] as React.ComponentType<any> })));
+
+const phoneId = (context: AppRenderContext) => ({ phoneId: context.phone.phoneId });
+
+/**
+ * The single registration site. Order here is the home-screen order.
+ * `settings` and `app-store` are not removable, so they ignore the install check.
+ */
 export const phoneAppRegistry = new InstalledAppRegistry();
-phoneAppRegistry.register({ manifest: settingsManifest, load: async () => import("./apps/settings/shell") });
-phoneAppRegistry.register({ manifest: appStoreManifest, load: async () => import("./apps/app-store/shell") });
-phoneAppRegistry.register({ manifest: goodleManifest, load: async () => import("./apps/goodle/shell") });
-phoneAppRegistry.register({ manifest: messagesManifest, load: async () => import("./apps/messages/shell") });
-phoneAppRegistry.register({ manifest: notesManifest, load: async () => import("./apps/notes/shell") });
-phoneAppRegistry.register({ manifest: noodlerManifest, load: async () => import("./apps/noodler/shell") });
-phoneAppRegistry.register({ manifest: contactsManifest, load: async () => import("./apps/contacts/shell") });
-phoneAppRegistry.register({ manifest: mailManifest, load: async () => import("./apps/mail/shell") });
-phoneAppRegistry.register({ manifest: galleryManifest, load: async () => import("./apps/gallery/shell") });
-phoneAppRegistry.register({ manifest: tindlerManifest, load: async () => import("./apps/tindler/shell") });
-phoneAppRegistry.register({ manifest: noodlerRManifest, load: async () => import("./apps/noodler-r/shell") });
-phoneAppRegistry.register({ manifest: cameraManifest, load: async () => import("./apps/camera/shell") });
+phoneAppRegistry.register({
+  manifest: settingsManifest,
+  component: lazyShell(() => import("./apps/settings/shell"), "SettingsShell"),
+  launcher: false,
+  props: (context) => ({ phone: { ...context.phone, settings: context.settings }, onPhoneChange: context.onPhoneChange }),
+});
+phoneAppRegistry.register({
+  manifest: appStoreManifest,
+  component: lazyShell(() => import("./apps/app-store/shell"), "AppStoreShell"),
+  props: (context) => ({ apps: context.installedApps, onInstalledChange: context.onInstalledChange, onOpenApp: context.openApp }),
+});
+phoneAppRegistry.register({
+  manifest: messagesManifest,
+  component: lazyShell(() => import("./apps/messages/shell"), "MessagesShell"),
+  props: phoneId,
+});
+phoneAppRegistry.register({
+  manifest: goodleManifest,
+  component: lazyShell(() => import("./apps/goodle/shell"), "GoodleShell"),
+  props: (context) => ({ phoneId: context.phone.phoneId, initialQuery: context.pendingSearch }),
+});
+phoneAppRegistry.register({
+  manifest: notesManifest,
+  component: lazyShell(() => import("./apps/notes/shell"), "NotesShell"),
+  props: phoneId,
+});
+phoneAppRegistry.register({
+  manifest: noodlerManifest,
+  component: lazyShell(() => import("./apps/noodler/shell"), "NoodlerShell"),
+  props: (context) => ({ phoneId: context.phone.phoneId, ownerName: context.phone.ownerName }),
+});
+phoneAppRegistry.register({
+  manifest: contactsManifest,
+  component: lazyShell(() => import("./apps/contacts/shell"), "ContactsShell"),
+  requiresChat: true,
+  props: (context) => ({ phoneId: context.phone.phoneId, chatId: context.chatId }),
+});
+phoneAppRegistry.register({
+  manifest: mailManifest,
+  component: lazyShell(() => import("./apps/mail/shell"), "MailShell"),
+  props: phoneId,
+});
+phoneAppRegistry.register({
+  manifest: galleryManifest,
+  component: lazyShell(() => import("./apps/gallery/shell"), "GalleryShell"),
+  props: phoneId,
+});
+phoneAppRegistry.register({
+  manifest: tindlerManifest,
+  component: lazyShell(() => import("./apps/tindler/shell"), "TindlerShell"),
+  props: phoneId,
+});
+phoneAppRegistry.register({
+  manifest: noodlerRManifest,
+  component: lazyShell(() => import("./apps/noodler-r/shell"), "NoodlerRShell"),
+  requiresChat: true,
+  props: (context) => ({ phoneId: context.phone.phoneId, chatId: context.chatId }),
+});
+phoneAppRegistry.register({
+  manifest: cameraManifest,
+  component: lazyShell(() => import("./apps/camera/shell"), "CameraShell"),
+  props: phoneId,
+});
 
 class AppErrorBoundary extends React.Component<{ appName: string; children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -80,7 +128,8 @@ function dispatchPhoneEvent(type: string) {
   window.dispatchEvent(new CustomEvent(type));
 }
 
-type ActiveApp = "settings" | "app-store" | "goodle" | "messages" | "notes" | "noodler" | "contacts" | "mail" | "gallery" | "tindler" | "noodler-r" | "camera" | null;
+/** An app id from `phoneAppRegistry`, or null for the home screen. */
+type ActiveApp = string | null;
 
 interface PhoneNotification {
   id: string;
@@ -238,20 +287,39 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     }
   };
   const messagesUnread = notifications.filter((notification) => notification.appId === "messages").reduce((total, notification) => total + notification.count, 0);
-  const optionalApps: Array<{ id: Exclude<ActiveApp, null>; label: string; Icon: typeof Settings; badge?: number }> = [
-    { id: "messages", label: "Messages", Icon: MessageCircle, badge: messagesUnread },
-    { id: "goodle", label: "Goodle", Icon: Search },
-    { id: "notes", label: "Notes", Icon: StickyNote },
-    { id: "noodler", label: "Noodle", Icon: AtSign },
-    { id: "contacts", label: "Contacts", Icon: BookUser },
-    { id: "mail", label: "Mail", Icon: Mail },
-    { id: "gallery", label: "Gallery", Icon: Images },
-    { id: "tindler", label: "Tindler", Icon: Flame },
-    { id: "noodler-r", label: "NoodleR", Icon: Lock },
-    { id: "camera", label: "Camera", Icon: Camera },
-  ];
-  const installedOptionalApps = optionalApps.filter((app) => deviceSettings.installedApps.includes(app.id));
-  const launchableApps: typeof optionalApps = [...installedOptionalApps, { id: "app-store", label: "App Store", Icon: Store }];
+  const openApp = (appId: string) => {
+    if (appId === "goodle") setPendingSearch("");
+    openAppRoute(appId, "/");
+  };
+  /** An app is available when it is installed (or not removable) and has the chat it needs. */
+  const isAvailable = (app: InstalledApp) =>
+    (!app.manifest.removable || deviceSettings.installedApps.includes(app.manifest.id))
+    && (!app.requiresChat || Boolean(chatId));
+  const appContext: Omit<AppRenderContext, "phone"> = {
+    chatId,
+    settings: deviceSettings,
+    pendingSearch,
+    setPendingSearch,
+    onPhoneChange: (phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item)),
+    openApp,
+    installedApps: phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) })),
+    onInstalledChange: (appId, installed) => void updateSettings({
+      installedApps: installed
+        ? [...new Set([...deviceSettings.installedApps, appId])]
+        : deviceSettings.installedApps.filter((installedId) => installedId !== appId),
+    }),
+  };
+  const registeredApp = activeApp ? phoneAppRegistry.get(activeApp) : undefined;
+  // An unknown id (an app removed from a build, e.g. Forum) or an uninstalled one renders nothing.
+  const activeAppEntry = registeredApp && isAvailable(registeredApp) ? registeredApp : undefined;
+  const launchableApps = phoneAppRegistry.list()
+    .filter((app) => app.launcher !== false && isAvailable(app))
+    .map(({ manifest }) => ({
+      id: manifest.id,
+      label: manifest.name,
+      Icon: appGlyph(manifest.id),
+      badge: manifest.id === "messages" ? messagesUnread : undefined,
+    }));
   const dockIds = ["messages", "goodle", "notes", "app-store"];
   const dockApps = dockIds.flatMap((id) => launchableApps.filter((app) => app.id === id)).slice(0, 4);
   const gridApps = launchableApps.filter((app) => !dockIds.includes(app.id));
@@ -352,7 +420,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                         {gridPages.map((page, pageIndex) => (
                           <div key={pageIndex} className="vp-app-grid vp-grid-page">
                             {page.map(({ id, label, Icon, badge }) => (
-                              <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => { if (id === "goodle") setPendingSearch(""); openAppRoute(id, "/"); }} className="vp-app">
+                              <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => openApp(id)} className="vp-app">
                                 <span className={`vp-app-icon ${appIconClass(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
                                 {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
                                 <span className="vp-app-label">{label}</span>
@@ -371,7 +439,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                   {dockApps.length ? (
                     <div className="vp-dockrow" aria-label="Favorite apps">
                       {dockApps.map(({ id, label, Icon, badge }) => (
-                        <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} title={label} onClick={() => { if (id === "goodle") setPendingSearch(""); openAppRoute(id, "/"); }} className="vp-app">
+                        <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} title={label} onClick={() => openApp(id)} className="vp-app">
                           <span className={`vp-app-icon ${appIconClass(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
                           {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
                         </button>
@@ -380,18 +448,17 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                   ) : null}
                 </div>
               )}
-              {activeApp === "settings" && selectedPhone ? <AppErrorBoundary appName="Settings"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Settings...</div>}><SettingsApp phone={{ ...selectedPhone, settings: deviceSettings }} onPhoneChange={(phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item))} onBack={() => backFromApp("settings")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "app-store" && selectedPhone ? <AppErrorBoundary appName="App Store"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading App Store...</div>}><AppStoreApp apps={phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) }))} onInstalledChange={(appId, installed) => void updateSettings({ installedApps: installed ? [...new Set([...deviceSettings.installedApps, appId])] : deviceSettings.installedApps.filter((installedId) => installedId !== appId) })} onOpenApp={(appId) => { if (appId === "goodle") setPendingSearch(""); openAppRoute(appId as Exclude<ActiveApp, null>, "/"); }} onBack={() => backFromApp("app-store")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "goodle" && selectedPhone && deviceSettings.installedApps.includes("goodle") ? <AppErrorBoundary appName="Goodle"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Goodle...</div>}><GoodleApp phoneId={selectedPhone.phoneId} initialQuery={pendingSearch} onBack={() => backFromApp("goodle")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "messages" && selectedPhone && deviceSettings.installedApps.includes("messages") ? <AppErrorBoundary appName="Messages"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Messages...</div>}><MessagesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("messages")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "notes" && selectedPhone && deviceSettings.installedApps.includes("notes") ? <AppErrorBoundary appName="Notes"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Notes...</div>}><NotesApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("notes")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "noodler" && selectedPhone && deviceSettings.installedApps.includes("noodler") ? <AppErrorBoundary appName="Noodle"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Noodle...</div>}><NoodlerApp phoneId={selectedPhone.phoneId} ownerName={selectedPhone.ownerName} onBack={() => backFromApp("noodler")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-               {activeApp === "contacts" && selectedPhone && chatId && deviceSettings.installedApps.includes("contacts") ? <AppErrorBoundary appName="Contacts"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Contacts...</div>}><ContactsApp phoneId={selectedPhone.phoneId} chatId={chatId} onBack={() => backFromApp("contacts")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "mail" && selectedPhone && deviceSettings.installedApps.includes("mail") ? <AppErrorBoundary appName="Mail"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Mail...</div>}><MailApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("mail")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "gallery" && selectedPhone && deviceSettings.installedApps.includes("gallery") ? <AppErrorBoundary appName="Gallery"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Gallery...</div>}><GalleryApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("gallery")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "tindler" && selectedPhone && deviceSettings.installedApps.includes("tindler") ? <AppErrorBoundary appName="Tindler"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Tindler...</div>}><TindlerApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("tindler")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-               {activeApp === "noodler-r" && selectedPhone && chatId && deviceSettings.installedApps.includes("noodler-r") ? <AppErrorBoundary appName="NoodleR"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading NoodleR...</div>}><NoodlerRApp phoneId={selectedPhone.phoneId} chatId={chatId} onBack={() => backFromApp("noodler-r")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
-              {activeApp === "camera" && selectedPhone && deviceSettings.installedApps.includes("camera") ? <AppErrorBoundary appName="Camera"><React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading Camera...</div>}><CameraApp phoneId={selectedPhone.phoneId} onBack={() => backFromApp("camera")} onClose={closeApp} /></React.Suspense></AppErrorBoundary> : null}
+              {activeAppEntry && selectedPhone ? (
+                <AppErrorBoundary key={activeAppEntry.manifest.id} appName={activeAppEntry.manifest.name}>
+                  <React.Suspense fallback={<div className="vp-appview vp-appview--loading">Loading {activeAppEntry.manifest.name}...</div>}>
+                    <activeAppEntry.component
+                      {...activeAppEntry.props({ ...appContext, phone: selectedPhone })}
+                      onBack={() => backFromApp(activeAppEntry.manifest.id)}
+                      onClose={closeApp}
+                    />
+                  </React.Suspense>
+                </AppErrorBoundary>
+              ) : null}
             </main>
             {deviceSettings.screenEffect !== "none" ? <span className={`vp-fx vp-fx--${deviceSettings.screenEffect}`} style={{ opacity: conditionOpacity(deviceSettings.screenEffectIntensity, deviceSettings.reduceDeviceEffects) }} aria-hidden="true" /> : null}
             <span className="vp-home-indicator" aria-hidden="true" />

@@ -3,7 +3,7 @@ import { PhoneIdentityService, type PhoneDocumentRecord, type PhoneDocumentStore
 import { phoneThemeTokens } from "../packages/virtual-phone/src/phone/device/theme";
 import { defaultPhoneStatus } from "../packages/virtual-phone/src/phone/device/status";
 import { initialDeviceSession, unlockDevice } from "../packages/virtual-phone/src/phone/device/surfaces";
-import { InstalledAppRegistry, type AppLaunchState } from "../packages/virtual-phone/src/phone/platform/app-registry";
+import { InstalledAppRegistry } from "../packages/virtual-phone/src/phone/platform/app-registry";
 import { validateAppManifest, type AppManifest } from "../packages/virtual-phone/src/phone/platform/app-manifest";
 import { AppRouteStackManager } from "../packages/virtual-phone/src/phone/platform/app-lifecycle";
 import { normalizeTopBarActions } from "../packages/virtual-phone/src/phone/platform/top-bar";
@@ -196,7 +196,6 @@ async function main() {
   assert.deepEqual(unlockDevice(locked), { surface: "home", selectedPhoneId: "phone-persona" });
 
   const registry = new InstalledAppRegistry();
-  const launchStates: AppLaunchState[] = [];
   const fixtureManifest: AppManifest = {
     id: "fixture",
     name: "Fixture",
@@ -213,12 +212,19 @@ async function main() {
     notifications: null,
   };
   validateAppManifest(fixtureManifest);
-  registry.register({ manifest: fixtureManifest, load: async () => ({ ready: true }) });
-  registry.register({ manifest: { ...fixtureManifest, id: "failing-fixture", name: "Failing fixture" }, load: async () => { throw new Error("Fixture failed"); } });
-  assert.equal((await registry.launch("fixture", (state) => launchStates.push(state))).status, "active");
-  const failed = await registry.launch("failing-fixture", (state) => launchStates.push(state));
-  assert.deepEqual(failed, { status: "failed", appId: "failing-fixture", error: "Fixture failed" });
-  assert.deepEqual(launchStates.map((state) => state.status), ["loading", "active", "loading", "failed"]);
+  const fixtureEntry = {
+    manifest: fixtureManifest,
+    component: null as never,
+    props: (context: { phone: { phoneId: string } }) => ({ phoneId: context.phone.phoneId }),
+  };
+  registry.register(fixtureEntry);
+  registry.register({ ...fixtureEntry, manifest: { ...fixtureManifest, id: "second-fixture", name: "Second fixture" } });
+  assert.throws(() => registry.register(fixtureEntry), /already registered/);
+  assert.deepEqual(registry.list().map((app) => app.manifest.id), ["fixture", "second-fixture"]);
+  assert.equal(registry.get("fixture")?.manifest.name, "Fixture");
+  assert.equal(registry.get("missing"), undefined);
+  // The shell renders `props(context)`; an app that stopped receiving its phoneId would render empty.
+  assert.deepEqual(registry.get("fixture")?.props({ phone: { phoneId: "phone-1" } } as never), { phoneId: "phone-1" });
 
   const routes = new AppRouteStackManager();
   routes.open("fixture", "/");

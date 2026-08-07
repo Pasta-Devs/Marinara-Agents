@@ -53,8 +53,6 @@ export interface AppManifest {
   notifications: AppNotificationDeclaration | null;
 }
 
-export type AppModuleLoader = () => Promise<unknown>;
-
 const idPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const versionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 const capabilities = new Set<AppCapability>([
