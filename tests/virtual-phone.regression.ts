@@ -11,7 +11,7 @@ import { ContextProjection } from "../packages/virtual-phone/src/phone/platform/
 import { parseBoundedContent } from "../packages/virtual-phone/src/phone/platform/content";
 import { settingsManifest } from "../packages/virtual-phone/src/phone/apps/settings/manifest";
 import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/phone/apps/app-store/manifest";
-import { fallbackSearchResults, goodleManifest, parsePageSection, parseResultItem, slugify } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
+import { fallbackSearchResults, goodleManifest, looksLikeUrl, normalizeUrl, parseLinkedText, parsePageSection, parseResultItem, slugify } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
 import { defaultDeviceSettings, normalizeDeviceSettings } from "../packages/virtual-phone/src/phone/device/settings";
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
@@ -305,6 +305,22 @@ async function main() {
     { text: "Gym | Renewal | soon", read: false },
   ]);
   assert.deepEqual(mergeInbox([], ["Only | One | mail"]), [{ text: "Only | One | mail", read: false }]);
+
+  // In-text links are what make the fake web feel deep; losing the markers silently flattens it.
+  assert.deepEqual(parseLinkedText("The [[Ashen Vault]] reopened near [[Low Market]]."), [
+    { text: "The ", link: false },
+    { text: "Ashen Vault", link: true },
+    { text: " reopened near ", link: false },
+    { text: "Low Market", link: true },
+    { text: ".", link: false },
+  ]);
+  assert.deepEqual(parseLinkedText("No links here."), [{ text: "No links here.", link: false }]);
+  // A pasted real URL must open this world's page at that address, never a search.
+  assert.equal(looksLikeUrl("https://www.reddit.com/r/x"), true);
+  assert.equal(looksLikeUrl("ashen.web"), true);
+  assert.equal(looksLikeUrl("best cafes in town"), false);
+  assert.equal(looksLikeUrl("reddit"), false);
+  assert.equal(normalizeUrl("https://www.reddit.com/r/x"), "reddit.com/r/x");
 
   validateAppManifest(messagesManifest);
   assert.equal(messagesManifest.removable, true);

@@ -37,6 +37,9 @@ export const phoneStylesheet = `
 .vp-statusbar-clock { justify-self: start; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-statusbar-end { display: flex; align-items: center; justify-content: flex-end; gap: 0.375rem; min-width: 0; }
 .vp-statusbar-notice { display: inline-flex; align-items: center; padding: 0; border: 0; background: none; cursor: pointer; }
+.vp-inline-link { display: inline; padding: 0; border: 0; background: none; font: inherit; color: var(--vp-accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.vp-urlbar-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0; border: 0; border-radius: 0.375rem; background: none; color: inherit; cursor: pointer; }
+.vp-urlbar-btn:disabled { opacity: 0.35; cursor: default; }
 .vp-switch-btn { justify-self: center; display: inline-flex; align-items: center; gap: 0.1875rem; min-height: 1.5rem; max-width: 6rem; padding: 0 0.5rem; border-radius: 999px; font-size: 0.625rem; background: color-mix(in srgb, var(--vp-text) 8%, var(--vp-bg)); transition: background 140ms ease; }
 .vp-switch-btn:hover { background: color-mix(in srgb, var(--vp-text) 13%, var(--vp-bg)); }
 .vp-switch-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

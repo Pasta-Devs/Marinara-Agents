@@ -47,3 +47,32 @@ export function fallbackSearchResults(query: string) {
     ? { title: `Results for ${normalized}`, summary: "No generated results are available right now.", items: [] as string[] }
     : { title: "Goodle Search", summary: "Enter a search query.", items: [] as string[] };
 }
+
+/**
+ * Splits a section body into plain text and `[[linked]]` entities. The generator wraps two to four
+ * names, places or products per section; those become links to further generated pages, which is
+ * what makes the fake web feel deep rather than like a single page per search.
+ */
+export function parseLinkedText(body: string): Array<{ text: string; link: boolean }> {
+  return body
+    .split(/(\[\[[^\]]+\]\])/gu)
+    .filter((part) => part.length > 0)
+    .map((part) => part.startsWith("[[") && part.endsWith("]]")
+      ? { text: part.slice(2, -2).trim(), link: true }
+      : { text: part, link: false })
+    .filter((part) => part.text.length > 0);
+}
+
+/**
+ * Recognises something the user typed as an address rather than a search. A real URL must not
+ * yield the real site — it opens this world's page at that address instead (see 13-goodle.md).
+ */
+export function looksLikeUrl(value: string) {
+  const trimmed = value.trim();
+  if (/\s/u.test(trimmed)) return false;
+  return /^(https?:\/\/)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/iu.test(trimmed);
+}
+
+export function normalizeUrl(value: string) {
+  return value.trim().replace(/^https?:\/\//iu, "").replace(/^www\./iu, "");
+}

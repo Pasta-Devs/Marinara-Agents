@@ -1,6 +1,6 @@
 import React from "react";
-import { Globe, Search } from "lucide-react";
-import { fallbackSearchResults, parsePageSection, parseResultItem, slugify } from "./manifest";
+import { Globe, Search, Star } from "lucide-react";
+import { fallbackSearchResults, looksLikeUrl, normalizeUrl, parseLinkedText, parsePageSection, parseResultItem, slugify } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { phoneRequest } from "../../platform/api";
@@ -30,6 +30,9 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   const [results, setResults] = React.useState(() => fallbackSearchResults(""));
   const [searching, setSearching] = React.useState(false);
   const [pages, setPages] = React.useState<PageState[]>([]);
+  // Pages popped by Back, kept so Forward can re-enter them without regenerating.
+  const [forward, setForward] = React.useState<PageState[]>([]);
+  const [bookmarks, setBookmarks] = React.useState<PageState[]>([]);
   const page = pages.at(-1) ?? null;
   const recentsRef = React.useRef(recents);
   recentsRef.current = recents;
@@ -38,6 +41,11 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
     let active = true;
     void store.get("recents").then((value) => {
       if (active && Array.isArray(value)) setRecents(value.filter((item): item is string => typeof item === "string"));
+    }).catch(() => undefined);
+    void store.get("bookmarks").then((value) => {
+      if (active && Array.isArray(value)) {
+        setBookmarks(value.filter((item): item is PageState => !!item && typeof (item as PageState).url === "string"));
+      }
     }).catch(() => undefined);
     return () => { active = false; };
   }, [store]);
@@ -67,6 +75,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   }, []);
 
   const openPage = (title: string, url: string, site?: string) => {
+    setForward([]);
     setPages((current) => [...current, { site: site ?? url.split("/")[0] ?? "goodle.web", title, tagline: "", kind: "official", links: [], sections: [], url, loading: true }]);
     const settle = (loaded: PageState) => setPages((current) =>
       current.map((entry) => entry.url === url && entry.loading ? loaded : entry));
@@ -79,12 +88,59 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
         sections: ["Offline :: Goodle can't reach this page right now."], url, loading: false,
       }));
   };
+  const back = () => {
+    setPages((current) => {
+      const leaving = current.at(-1);
+      if (leaving) setForward((stack) => [...stack, leaving]);
+      return current.slice(0, -1);
+    });
+  };
+  const goForward = () => {
+    setForward((stack) => {
+      const next = stack.at(-1);
+      if (next) setPages((current) => [...current, next]);
+      return stack.slice(0, -1);
+    });
+  };
+  const bookmarked = page ? bookmarks.some((entry) => entry.url === page.url) : false;
+  const toggleBookmark = () => {
+    if (!page || page.loading) return;
+    // Snapshots the page, not just the address. Generated pages are not stable across
+    // regenerations, so a URL-only bookmark would quietly return something else.
+    const next = bookmarked
+      ? bookmarks.filter((entry) => entry.url !== page.url)
+      : [{ ...page }, ...bookmarks].slice(0, 30);
+    setBookmarks(next);
+    void store.set("bookmarks", next).catch(() => undefined);
+  };
+  const openBookmark = (entry: PageState) => {
+    setForward([]);
+    setPages((current) => [...current, entry]);
+  };
+  const submitQuery = () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    // A typed address opens that address in this world; it never reaches the real internet.
+    if (looksLikeUrl(trimmed)) {
+      const url = normalizeUrl(trimmed);
+      openPage(url.split("/").slice(1).join("/") || url, url);
+      return;
+    }
+    search(trimmed);
+  };
   const clearRecents = () => {
     setRecents([]);
     void store.remove("recents").catch(() => undefined);
   };
 
   const domain = page?.url.split("/")[0] ?? "goodle.web";
+  const renderBody = (body: string) => parseLinkedText(body).map((part, index) => part.link
+    ? (
+      <button key={index} type="button" className="vp-inline-link" onClick={() => openPage(part.text, `${domain}/${slugify(part.text)}`, page?.site)}>
+        {part.text}
+      </button>
+    )
+    : <React.Fragment key={index}>{part.text}</React.Fragment>);
   const hue = hueFor(page?.site ?? "");
   const sections = page?.sections.map(parsePageSection) ?? [];
 
@@ -94,11 +150,20 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
         title={page ? page.site : "Goodle"}
         titleId="goodle-title"
         closeLabel="Close Goodle"
-        onBack={() => page ? setPages((current) => current.slice(0, -1)) : onBack()}
+        onBack={() => page ? back() : onBack()}
         onClose={onClose}
         actions={page ? [] : [{ id: "clear-recents", icon: "trash", label: "Clear recent searches", kind: "button", disabled: recents.length === 0, reason: "No recent searches" }]}
         onAction={(actionId) => { if (actionId === "clear-recents") clearRecents(); }}
-        center={page ? <span className="vp-urlbar"><Globe size="0.75rem" aria-hidden="true" /><span>{page.url}</span></span> : undefined}
+        center={page ? (
+          <span className="vp-urlbar">
+            <Globe size="0.75rem" aria-hidden="true" />
+            <span>{page.url}</span>
+            <button type="button" onClick={goForward} disabled={forward.length === 0} aria-label="Forward" className="vp-urlbar-btn">›</button>
+            <button type="button" onClick={toggleBookmark} disabled={page.loading} aria-label={bookmarked ? "Remove bookmark" : "Bookmark this page"} aria-pressed={bookmarked} className="vp-urlbar-btn">
+              <Star size="0.75rem" aria-hidden="true" fill={bookmarked ? "currentColor" : "none"} />
+            </button>
+          </span>
+        ) : undefined}
       />
       {page ? (
         <div className="vp-site" aria-busy={page.loading}>
@@ -130,7 +195,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
                   {sections.map((section, index) => (
                     <article key={index} className="vp-site-card">
                       <h4>{section.heading || "Item"}</h4>
-                      <p>{section.body}</p>
+                      <p>{renderBody(section.body)}</p>
                     </article>
                   ))}
                 </div>
@@ -138,7 +203,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
                 sections.map((section, index) => (
                   <article key={index} className={`vp-site-section${page.kind === "forum" ? " vp-site-section--post" : ""}`}>
                     {section.heading ? <h4>{section.heading}</h4> : null}
-                    <p>{section.body}</p>
+                    <p>{renderBody(section.body)}</p>
                   </article>
                 ))
               )}
@@ -152,14 +217,23 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
               {"Goodle".split("").map((letter, index) => <span key={index} style={{ color: LOGO_COLORS[index % LOGO_COLORS.length] }}>{letter}</span>)}
             </div>
           ) : null}
-          <form onSubmit={(event) => { event.preventDefault(); search(query); }} className="vp-search-go">
-            <label><span className="vp-sr-only">Search Goodle</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="vp-input" style={{ paddingRight: "2.75rem" }} /></label>
+          <form onSubmit={(event) => { event.preventDefault(); submitQuery(); }} className="vp-search-go">
+            <label><span className="vp-sr-only">Search Goodle</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search or type an address" className="vp-input" style={{ paddingRight: "2.75rem" }} /></label>
             {query.trim() ? <button type="submit" aria-label="Search" className="vp-go-btn"><Search size="0.875rem" aria-hidden="true" /></button> : null}
           </form>
           {recents.length && !searching && !results.items.length ? (
             <div className="vp-chip-row" aria-label="Recent searches">
               {recents.map((recent) => (
                 <button key={recent} type="button" onClick={() => { setQuery(recent); search(recent); }} className="vp-chip">{recent}</button>
+              ))}
+            </div>
+          ) : null}
+          {bookmarks.length && !searching && !results.items.length ? (
+            <div className="vp-chip-row" aria-label="Bookmarks">
+              {bookmarks.map((entry) => (
+                <button key={entry.url} type="button" onClick={() => openBookmark(entry)} className="vp-chip">
+                  <Star size="0.625rem" aria-hidden="true" fill="currentColor" /> {entry.site || entry.url}
+                </button>
               ))}
             </div>
           ) : null}
