@@ -22,6 +22,8 @@ import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/ma
 import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/phone/apps/noodler/manifest";
 import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/contacts/manifest";
 import { mailManifest, parseEmail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
+import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
+import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
 import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
 import { conditionOpacity, patternBackground } from "../packages/virtual-phone/src/phone/device/effects";
 
@@ -314,12 +316,24 @@ async function main() {
   validateAppManifest(contactsManifest);
   assert.equal(contactsManifest.modelUse, "none");
   validateAppManifest(mailManifest);
+  validateAppManifest(galleryManifest);
+  validateAppManifest(tindlerManifest);
+  assert.deepEqual(
+    extractImageUrls("Look! ![a swamp](/api/files/swamp.png) and https://cdn.duloc.gov/castle.jpg plus /api/files/swamp.png again"),
+    ["/api/files/swamp.png", "https://cdn.duloc.gov/castle.jpg"],
+  );
+  assert.deepEqual(extractImageUrls("no images here"), []);
+  assert.deepEqual(
+    parseProfile("Fiona D, 28 | Nights are better | Ogre-positive. Loves sunsets and swordplay."),
+    { name: "Fiona D", age: "28", tagline: "Nights are better", bio: "Ogre-positive. Loves sunsets and swordplay." },
+  );
+  assert.deepEqual(parseProfile("Mystery"), { name: "Mystery", age: "", tagline: "", bio: "" });
   assert.deepEqual(
     parseEmail("Duloc Parks Dept | Overdue swamp permit | Your permit expired on the 3rd."),
     { from: "Duloc Parks Dept", subject: "Overdue swamp permit", body: "Your permit expired on the 3rd." },
   );
   assert.deepEqual(parseEmail("weird"), { from: "weird", subject: "(no subject)", body: "(empty message)" });
-  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts"]);
+  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery"]);
   let tick = 0;
   const messageIds = ["msg-1", "msg-2", "msg-3"];
   const messaging = new PhoneMessagingService(

@@ -85,6 +85,8 @@ export const phoneStylesheet = `
 .vp-app-icon--noodler { background: linear-gradient(180deg, #b48cff 0%, #7a3ff2 100%); }
 .vp-app-icon--contacts { background: linear-gradient(180deg, #4dd6c6 0%, #0f9b8e 100%); }
 .vp-app-icon--mail { background: linear-gradient(180deg, #6fb6ff 0%, #1d6fd6 100%); }
+.vp-app-icon--gallery { background: linear-gradient(180deg, #f78fb3 0%, #8e44ad 100%); }
+.vp-app-icon--tindler { background: linear-gradient(180deg, #ff655b 0%, #fd297b 100%); }
 .vp-app-icon--default { background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 92%, #ffffff), var(--vp-surface)); color: var(--vp-text); }
 .vp-app-label { font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.01em; text-shadow: 0 1px 4px rgb(0 0 0 / 0.1); }
 
@@ -170,6 +172,30 @@ export const phoneStylesheet = `
 .vp-bubble--other { align-self: flex-start; border-bottom-left-radius: 0.375rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 96%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.07), inset 0 0 0 1px var(--vp-border); }
 .vp-bubble-time { display: block; margin-top: 0.125rem; font-size: 0.5625rem; opacity: 0.7; }
 .vp-composer { display: flex; align-items: center; gap: 0.5rem; }
+.vp-gallery-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.25rem; }
+.vp-gallery-cell { aspect-ratio: 1; overflow: hidden; border-radius: 0.5rem; background: var(--vp-surface); box-shadow: inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
+.vp-gallery-cell:active { transform: scale(0.96); }
+.vp-gallery-cell img { display: block; height: 100%; width: 100%; object-fit: cover; }
+.vp-gallery-skeleton { aspect-ratio: 1; border-radius: 0.5rem; }
+.vp-photo-view { margin: 0; }
+.vp-photo-view img { display: block; width: 100%; border-radius: 1.125rem; box-shadow: 0 4px 16px rgb(0 0 0 / 0.25); }
+.vp-tab-content { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 0.875rem; }
+.vp-tabbar { display: flex; flex-shrink: 0; gap: 0.25rem; padding: 0.375rem; border-radius: 1.125rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--vp-border); }
+.vp-tabbar-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.125rem; flex: 1; min-height: 2.75rem; border-radius: 0.875rem; font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); transition: background 120ms ease, color 120ms ease; }
+.vp-tabbar-btn[aria-current="true"] { color: var(--vp-accent); background: color-mix(in srgb, var(--vp-accent) 12%, var(--vp-surface)); }
+.vp-trend-rank { display: inline-flex; align-items: center; justify-content: center; height: 2rem; width: 2rem; flex-shrink: 0; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 7%, var(--vp-surface)); font-size: 0.75rem; font-weight: 700; color: var(--vp-muted); }
+.vp-tinder-card { border-radius: 1.5rem; overflow: hidden; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 2px 6px rgb(0 0 0 / 0.08), 0 12px 32px rgb(0 0 0 / 0.14), inset 0 0 0 1px var(--vp-border); }
+.vp-tinder-photo { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 5; max-height: 46dvh; width: 100%; color: #fff; font-size: 3.5rem; font-weight: 700; letter-spacing: 0.02em; text-shadow: 0 2px 12px rgb(0 0 0 / 0.25); }
+.vp-tinder-photo-skeleton { display: block; aspect-ratio: 4 / 5; max-height: 46dvh; width: 100%; border-radius: 0; }
+.vp-tinder-info { display: grid; gap: 0.25rem; padding: 0.875rem 1rem 1rem; }
+.vp-tinder-info h3 { margin: 0; font-size: 1rem; font-weight: 650; letter-spacing: -0.01em; }
+.vp-tinder-tagline { margin: 0; font-size: 0.75rem; font-weight: 600; color: var(--vp-accent); }
+.vp-tinder-bio { margin: 0; font-size: 0.75rem; line-height: 1.45; color: var(--vp-muted); }
+.vp-tinder-actions { display: flex; justify-content: center; gap: 1.75rem; margin-top: 1rem; }
+.vp-tinder-btn { display: inline-flex; align-items: center; justify-content: center; height: 3.25rem; width: 3.25rem; border-radius: 999px; background: var(--vp-surface); box-shadow: 0 2px 8px rgb(0 0 0 / 0.15), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
+.vp-tinder-btn:active { transform: scale(0.92); }
+.vp-tinder-btn--pass { color: var(--vp-muted); }
+.vp-tinder-btn--like { color: #fd297b; }
 .vp-mail-dot { display: inline-block; height: 0.5rem; width: 0.5rem; margin-right: 0.375rem; border-radius: 999px; background: var(--vp-accent); }
 .vp-mail-meta { margin: -0.375rem 0 0.75rem; font-size: 0.6875rem; font-weight: 500; color: var(--vp-muted); }
 .vp-post { display: grid; gap: 0.375rem; }

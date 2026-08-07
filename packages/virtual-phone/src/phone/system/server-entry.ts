@@ -11,6 +11,7 @@ import { PhoneMessagingService, unreadCount, unreadMessages, type ThreadDocument
 import { parseBoundedContent } from "../platform/content";
 import { fallbackSearchResults } from "../apps/goodle/manifest";
 import { fallbackFeed } from "../apps/noodler/manifest";
+import { extractImageUrls } from "../apps/gallery/manifest";
 
 interface CapabilityContext {
   api: {
@@ -451,6 +452,87 @@ export async function activate({ api }: CapabilityContext) {
           return reply.status(400).send({ error: error.message });
         }
         return { feed: fallbackFeed() };
+      }
+    });
+    app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/gallery", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        if (!api.runtime.persistence.listMessages) return { images: [] };
+        const images: string[] = [];
+        const seen = new Set<string>();
+        for (const chatId of phone.document.identity.chatScope) {
+          for (const message of await api.runtime.persistence.listMessages(chatId)) {
+            for (const url of extractImageUrls(message.content)) {
+              if (!seen.has(url)) {
+                seen.add(url);
+                images.push(url);
+              }
+            }
+          }
+        }
+        return { images: images.reverse().slice(0, 60) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Gallery unavailable" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/noodler/trending", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const model = await api.runtime.languageModels?.resolve();
+        if (!model) return { topics: [] };
+        const chatId = phone.document.identity.chatScope[0];
+        let storyContext = "";
+        if (chatId && api.runtime.persistence.listMessages) {
+          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-10)
+            .map((message) => message.content.slice(0, 240))
+            .join("\n");
+        }
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You are Noodler, the social network inside a fictional roleplay world. List 5 trending topics in this world right now. Respond with only JSON: {"topics":["#HashtagName | one line on why it is trending", ...]}. Every topic uses that exact two-part format.${storyContext ? `\n\nRecent story events to riff on:\n${storyContext}` : ""}`,
+          },
+          { role: "user", content: "Generate the trending list." },
+        ], { temperature: 1, maxTokens: 400 });
+        const trending = parseBoundedContent(completion.content, { fields: { topics: "string[]" }, defaults: { topics: [] as string[] } }) as { topics: string[] };
+        return { topics: trending.topics };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Phone not found") {
+          return reply.status(400).send({ error: error.message });
+        }
+        return { topics: [] };
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/tindler/deck", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const model = await api.runtime.languageModels?.resolve();
+        if (!model) return { profiles: [] };
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const preferences = String(body.preferences ?? "").trim().slice(0, 200);
+        const chatId = phone.document.identity.chatScope[0];
+        let storyContext = "";
+        if (chatId && api.runtime.persistence.listMessages) {
+          storyContext = (await api.runtime.persistence.listMessages(chatId)).slice(-8)
+            .map((message) => message.content.slice(0, 200))
+            .join("\n");
+        }
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You write dating profiles for Tindler, the dating app inside a fictional roleplay world. Invent 5 single side characters who plausibly live in this world (never the story's protagonists). Respond with only JSON: {"profiles":["Name, Age | short tagline | two-sentence bio", ...]}. Every profile uses that exact three-part format.${preferences ? `\nThe user's stated preference: "${preferences}" — match it.` : ""}${storyContext ? `\n\nThe world, from recent story events:\n${storyContext}` : ""}`,
+          },
+          { role: "user", content: "Generate the next deck of profiles." },
+        ], { temperature: 1, maxTokens: 500 });
+        const deck = parseBoundedContent(completion.content, { fields: { profiles: "string[]" }, defaults: { profiles: [] as string[] } }) as { profiles: string[] };
+        return { profiles: deck.profiles };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Phone not found") {
+          return reply.status(400).send({ error: error.message });
+        }
+        return { profiles: [] };
       }
     });
     app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/mail/inbox", async (request, reply) => {
