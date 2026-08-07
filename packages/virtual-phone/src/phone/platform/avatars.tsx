@@ -35,13 +35,14 @@ export function useAvatarMap() {
   return map;
 }
 
-function hueFor(value: string) {
+/** Stable hue from a name, so the same person always gets the same placeholder colour. */
+export function hueFor(value: string) {
   let hue = 0;
   for (const char of value) hue = (hue * 31 + char.charCodeAt(0)) % 360;
   return hue;
 }
 
-function initials(name: string) {
+export function initials(name: string) {
   return name.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
 }
 

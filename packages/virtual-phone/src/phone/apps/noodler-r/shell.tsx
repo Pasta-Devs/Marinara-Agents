@@ -3,17 +3,7 @@ import { Lock } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
-import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
-
-function hueFor(value: string) {
-  let hue = 0;
-  for (const char of value) hue = (hue * 31 + char.charCodeAt(0)) % 360;
-  return hue;
-}
-
-function initials(name: string) {
-  return name.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
-}
+import { PhoneAvatar, hueFor, useAvatarMap } from "../../platform/avatars";
 
 interface PagePost {
   id: string;

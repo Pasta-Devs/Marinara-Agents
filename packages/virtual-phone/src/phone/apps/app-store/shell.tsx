@@ -1,28 +1,8 @@
 import React from "react";
-import { AtSign, BookUser, Camera, Flame, Images, Lock, Mail, MessageCircle, MessagesSquare, Search, Settings, StickyNote, Store } from "lucide-react";
 import type { AppManifest } from "../../platform/app-manifest";
 import { modelUseLabel } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
-
-const styledAppIds = new Set(["settings", "app-store", "goodle", "messages", "notes", "noodler", "contacts", "mail", "gallery", "tindler", "noodler-r", "forum", "camera"]);
-const appGlyphs: Record<string, typeof Store> = {
-  settings: Settings,
-  goodle: Search,
-  messages: MessageCircle,
-  notes: StickyNote,
-  noodler: AtSign,
-  contacts: BookUser,
-  mail: Mail,
-  gallery: Images,
-  tindler: Flame,
-  "noodler-r": Lock,
-  forum: MessagesSquare,
-  camera: Camera,
-};
-
-function appIconClass(appId: string) {
-  return styledAppIds.has(appId) ? `vp-app-icon--${appId}` : "vp-app-icon--default";
-}
+import { appGlyph, appIconClass } from "../../platform/app-icons";
 
 function titleCase(value: string) {
   return value ? value[0]!.toUpperCase() + value.slice(1) : value;
@@ -47,7 +27,7 @@ export function AppStoreShell({ apps, onInstalledChange, onOpenApp, onBack, onCl
 
   const row = ({ manifest, installed }: { manifest: AppManifest; installed: boolean }) => (
     <article key={manifest.id} className="vp-card vp-card-row">
-      <span className={`vp-card-icon ${appIconClass(manifest.id)}`} aria-hidden="true">{React.createElement(appGlyphs[manifest.id] ?? Store, { size: "1rem" })}</span>
+      <span className={`vp-card-icon ${appIconClass(manifest.id)}`} aria-hidden="true">{React.createElement(appGlyph(manifest.id), { size: "1rem" })}</span>
       <div className="vp-card-body">
         <h3>{manifest.name}</h3>
         <p>{titleCase(manifest.category)} · {modelUseLabel(manifest.modelUse)}</p>

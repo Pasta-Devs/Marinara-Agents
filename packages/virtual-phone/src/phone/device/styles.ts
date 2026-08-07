@@ -93,9 +93,7 @@ export const phoneStylesheet = `
 .vp-app-icon--gallery { background: linear-gradient(180deg, #f78fb3 0%, #8e44ad 100%); }
 .vp-app-icon--tindler { background: linear-gradient(180deg, #ff655b 0%, #fd297b 100%); }
 .vp-app-icon--noodler-r { background: linear-gradient(180deg, #ff5fa2 0%, #1c0a14 100%); }
-.vp-app-icon--forum { background: linear-gradient(180deg, #ffb75e 0%, #d9530f 100%); }
 .vp-app-icon--camera { background: linear-gradient(180deg, #6b7280 0%, #1f2937 100%); }
-.vp-forum-op { box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 6px 16px rgb(0 0 0 / 0.07), inset 0 0 0 1.5px color-mix(in srgb, var(--vp-accent) 45%, var(--vp-border)); }
 .vp-viewfinder { display: flex; align-items: center; justify-content: center; min-height: 11rem; padding: 1rem; border-radius: 1rem; background: linear-gradient(160deg, #14161a, #05070b); color: #e8ecf2; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), inset 0 0 3rem rgb(0 0 0 / 0.6); }
 .vp-viewfinder-text { margin: 0; font-size: 0.8125rem; line-height: 1.5; text-align: center; font-style: italic; }
 .vp-shutter-row { display: flex; justify-content: center; margin-top: 0.875rem; }

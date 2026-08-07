@@ -4,15 +4,10 @@ import { fallbackSearchResults, parsePageSection, parseResultItem, slugify } fro
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { phoneRequest } from "../../platform/api";
+import { hueFor } from "../../platform/avatars";
 
 const MAX_RECENTS = 8;
 const LOGO_COLORS = ["#4285f4", "#ea4335", "#fbbc05", "#4285f4", "#34a853", "#ea4335"];
-
-function hueFor(value: string) {
-  let hue = 0;
-  for (const char of value) hue = (hue * 31 + char.charCodeAt(0)) % 360;
-  return hue;
-}
 
 interface SitePagePayload {
   site: string;

@@ -5,13 +5,10 @@ import { defaultPhoneStatus } from "../packages/virtual-phone/src/phone/device/s
 import { initialDeviceSession, unlockDevice } from "../packages/virtual-phone/src/phone/device/surfaces";
 import { InstalledAppRegistry, type AppLaunchState } from "../packages/virtual-phone/src/phone/platform/app-registry";
 import { validateAppManifest, type AppManifest } from "../packages/virtual-phone/src/phone/platform/app-manifest";
-import { AppLifecycleManager, AppRouteStackManager } from "../packages/virtual-phone/src/phone/platform/app-lifecycle";
+import { AppRouteStackManager } from "../packages/virtual-phone/src/phone/platform/app-lifecycle";
 import { normalizeTopBarActions } from "../packages/virtual-phone/src/phone/platform/top-bar";
 import { PhoneStore, type PhoneStoreBackend } from "../packages/virtual-phone/src/phone/platform/phone-store";
-import { BottomNavigationState } from "../packages/virtual-phone/src/phone/platform/bottom-navigation";
-import { AppCapabilityGrants } from "../packages/virtual-phone/src/phone/platform/capabilities";
 import { ContextProjection } from "../packages/virtual-phone/src/phone/platform/context";
-import { NotificationStore } from "../packages/virtual-phone/src/phone/platform/notifications";
 import { parseBoundedContent } from "../packages/virtual-phone/src/phone/platform/content";
 import { settingsManifest } from "../packages/virtual-phone/src/phone/apps/settings/manifest";
 import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/phone/apps/app-store/manifest";
@@ -23,9 +20,7 @@ import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/pho
 import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/contacts/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "../packages/virtual-phone/src/phone/system/noodle";
 import { noodlerRManifest } from "../packages/virtual-phone/src/phone/apps/noodler-r/manifest";
-import { forumManifest } from "../packages/virtual-phone/src/phone/apps/forum/manifest";
 import { cameraManifest } from "../packages/virtual-phone/src/phone/apps/camera/manifest";
-import { ForumService, parseGeneratedReply, parseGeneratedThread } from "../packages/virtual-phone/src/phone/system/forum";
 import { mailManifest, parseEmail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
@@ -225,16 +220,6 @@ async function main() {
   assert.deepEqual(failed, { status: "failed", appId: "failing-fixture", error: "Fixture failed" });
   assert.deepEqual(launchStates.map((state) => state.status), ["loading", "active", "loading", "failed"]);
 
-  const lifecycle = new AppLifecycleManager();
-  lifecycle.registerAvailable(fixtureManifest, async () => undefined);
-  assert.equal(lifecycle.install("fixture").state, "installed");
-  assert.equal((await lifecycle.activate("fixture")).state, "active");
-  await lifecycle.update("fixture", { ...fixtureManifest, version: "1.1.0" }, async (from, to) => {
-    assert.deepEqual([from, to], ["1.0.0", "1.1.0"]);
-  });
-  lifecycle.disable("fixture");
-  await assert.rejects(() => lifecycle.activate("fixture"), /disabled/u);
-
   const routes = new AppRouteStackManager();
   routes.open("fixture", "/");
   routes.push("fixture", "/detail");
@@ -268,37 +253,11 @@ async function main() {
   await store.remove("draft");
   assert.equal(await store.get("draft"), undefined);
 
-  const tabs = new BottomNavigationState([
-    { id: "home", route: "/", label: "Home", icon: "home" },
-    { id: "saved", route: "/saved", label: "Saved", icon: "bookmark" },
-  ]);
-  tabs.push("/detail");
-  tabs.setScroll(120);
-  tabs.select("saved");
-  tabs.setScroll(40);
-  assert.deepEqual(tabs.snapshot(), { activeTabId: "saved", route: "/saved", scrollTop: 40 });
-  tabs.select("home");
-  assert.deepEqual(tabs.snapshot(), { activeTabId: "home", route: "/detail", scrollTop: 120 });
-  assert.equal(tabs.select("home"), "/");
-
-  const grants = new AppCapabilityGrants();
-  grants.install("phone-persona", "fixture", ["storage.local", "notify"]);
-  grants.require("phone-persona", "fixture", "notify");
-  grants.revoke("phone-persona", "fixture", "notify");
-  assert.throws(() => grants.require("phone-persona", "fixture", "notify"), /cannot use notify/u);
-
   const context = new ContextProjection();
   context.set("location", { value: "Home", source: "device", updatedAt: 1 });
   context.set("location", { value: "Cafe", source: "conversation", updatedAt: 2 });
   assert.deepEqual(context.get("location"), { value: "Cafe", source: "conversation", updatedAt: 2 });
   assert.equal(context.provenance("location").length, 2);
-
-  const notifications = new NotificationStore();
-  notifications.add({ id: "one", appId: "fixture", title: "Ready", body: "Fixture ready", createdAt: 1 });
-  notifications.add({ id: "one", appId: "fixture", title: "Duplicate", body: "Ignored", createdAt: 2 });
-  assert.equal(notifications.unreadCount, 1);
-  notifications.acknowledge("one");
-  assert.equal(notifications.unreadCount, 0);
 
   assert.deepEqual(
     parseBoundedContent('Result: {"title":42,"count":"3","visible":"true","items":[1,2],"unknown":"drop"}', {
@@ -424,29 +383,7 @@ async function main() {
   assert.deepEqual(mergedFeed.map((post) => post.text), ["other chat", "hello swamp"]);
   assert.deepEqual(await noodleService.feedFor(["chat-none"]), []);
   validateAppManifest(noodlerRManifest);
-  validateAppManifest(forumManifest);
   validateAppManifest(cameraManifest);
-  assert.deepEqual(
-    parseGeneratedThread("Ferry prices AGAIN | Dockworker Dan @dandocks | Third hike this year. Absurd."),
-    { title: "Ferry prices AGAIN", author: "Dockworker Dan @dandocks", body: "Third hike this year. Absurd." },
-  );
-  assert.deepEqual(parseGeneratedReply("Marge @marge | Same here."), { author: "Marge @marge", text: "Same here." });
-  let forumTick = 0;
-  const forumService = new ForumService(
-    documents,
-    () => new Date(1_900_000_000_000 + ++forumTick * 1000).toISOString(),
-    () => `f-${++forumTick}`,
-  );
-  await forumService.addThreads("chat-1", [{ title: "First thread", author: "Dan", body: "opening post" }]);
-  const board = await forumService.boardFor(["chat-1"]);
-  assert.equal(board.length, 1);
-  assert.equal(board[0]!.posts.length, 1);
-  await forumService.addReply(["chat-1"], board[0]!.id, "Alex", "a reply");
-  const afterReply = await forumService.boardFor(["chat-1"]);
-  assert.equal(afterReply[0]!.posts.length, 2);
-  assert.equal(afterReply[0]!.posts[1]!.author, "Alex");
-  await assert.rejects(() => forumService.addReply(["chat-1"], "missing-thread", "Alex", "x"), /Thread not found/u);
-  await assert.rejects(() => forumService.addReply(["chat-1"], board[0]!.id, "Alex", "   "), /text is required/u);
   assert.deepEqual(parsePagePost("Morning swamp yoga pics | locked"), { text: "Morning swamp yoga pics", locked: true });
   assert.deepEqual(parsePagePost("Hello everyone | free"), { text: "Hello everyone", locked: false });
   assert.deepEqual(parsePagePost("No marker at all"), { text: "No marker at all", locked: false });

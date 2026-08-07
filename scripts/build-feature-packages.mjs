@@ -154,7 +154,7 @@ const features = [
   },
   {
     id: "virtual-phone",
-    version: "2.0.41",
+    version: "2.0.42",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Virtual Phone",
@@ -1395,11 +1395,20 @@ for (const feature of selectedFeatures) {
     const artifactName = `${feature.id}-${version}.zip`;
     const artifactPath = join(artifactsDir, artifactName);
     await rm(artifactPath, { force: true });
-    const zipped = spawnSync("zip", ["-X", "-q", artifactPath, ...artifactFiles], {
+    // ponytail: `zip` preferred; python3's zipfile is the fallback where it is absent. Both are
+    // deterministic given the fixed mtimes above, but they do not produce byte-identical archives,
+    // so a rebuild that switches packers changes the artifact hash. artifactFiles must stay flat —
+    // `python3 -m zipfile -c` strips directories from entry names.
+    const packer = spawnSync("zip", ["-X", "-q", artifactPath, ...artifactFiles], {
       cwd: temporary,
       env: { ...process.env, TZ: "UTC" },
-    });
-    if (zipped.status !== 0) throw new Error(`zip failed for ${feature.id}`);
+    }).status === 0
+      ? { status: 0 }
+      : spawnSync("python3", ["-m", "zipfile", "-c", artifactPath, ...artifactFiles], {
+          cwd: temporary,
+          env: { ...process.env, TZ: "UTC" },
+        });
+    if (packer.status !== 0) throw new Error(`zip failed for ${feature.id} (no zip or python3)`);
     const artifact = await readFile(artifactPath);
     catalog.packages.push({
       manifest,

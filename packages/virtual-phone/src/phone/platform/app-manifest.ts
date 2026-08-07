@@ -38,6 +38,11 @@ export interface AppManifest {
   version: string;
   icon: string;
   category: string;
+  /**
+   * Documentation only — nothing enforces these at runtime. The grant/enforcement system was
+   * deleted because it had no production consumer (only tests constructed it). Declaring a
+   * capability here describes what an app does; it does not gate anything.
+   */
   capabilities: AppCapability[];
   modelUse: AppModelUse;
   removable: boolean;
