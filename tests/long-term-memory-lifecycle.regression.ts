@@ -131,6 +131,27 @@ async function importEngine<T>(relativePath: string): Promise<T> {
   ) as Promise<T>;
 }
 async function main() {
+  const { labelKeys, localizedLabel } = await import(
+    pathToFileURL(
+      join(
+        repoRoot,
+        "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/display-labels.ts",
+      ),
+    ).href
+  );
+  const testLocalize = (key: string) => `translated:${key}`;
+  assert.equal(
+    localizedLabel("critical", testLocalize, labelKeys.importance),
+    "translated:ui.longTermMemory.memoryvault.critical",
+  );
+  assert.equal(
+    localizedLabel("roleplay", testLocalize, labelKeys.mode),
+    "translated:ui.longTermMemory.sourcesworkspace.roleplay",
+  );
+  assert.equal(
+    localizedLabel("future_value", testLocalize, labelKeys.mode),
+    "Future value",
+  );
   const dataDir = mkdtempSync(join(tmpdir(), "marinara-ltm-lifecycle-"));
   process.env.DATA_DIR = dataDir;
   process.env.MARINARA_ENV_FILE = join(dataDir, ".env");
