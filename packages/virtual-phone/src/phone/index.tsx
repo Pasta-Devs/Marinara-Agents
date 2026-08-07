@@ -229,8 +229,10 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     { id: "noodler", label: "Noodler", Icon: AtSign },
   ];
   const installedOptionalApps = optionalApps.filter((app) => deviceSettings.installedApps.includes(app.id));
-  const dockApps = installedOptionalApps.slice(0, 4);
-  const overflowApps = installedOptionalApps.slice(4);
+  const launchableApps: typeof optionalApps = [...installedOptionalApps, { id: "app-store", label: "App Store", Icon: Store }];
+  const dockIds = ["messages", "goodle", "notes", "app-store"];
+  const dockApps = dockIds.flatMap((id) => launchableApps.filter((app) => app.id === id)).slice(0, 4);
+  const gridApps = launchableApps.filter((app) => !dockIds.includes(app.id));
   const theme = deviceSettings.theme === "system" ? selectedPhone?.baselineTheme ?? "system" : deviceSettings.theme;
   const clock = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return createPortal(
@@ -313,21 +315,20 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                     </form>
                     <button type="button" aria-label="Device settings" title="Device settings" onClick={() => openAppRoute("settings", "/")} className="vp-icon-btn vp-icon-btn--surface"><Settings size="1rem" aria-hidden="true" /></button>
                   </div>
+                  <p className="vp-home-clock">{clock}</p>
+                  <p className="vp-home-date">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
                   <div className="vp-home-spacer" aria-hidden="true" />
-                  <div aria-label="Installed apps" className="vp-app-grid">
-                    <button type="button" aria-label="Open App Store" onClick={() => openAppRoute("app-store", "/")} className="vp-app">
-                      <span className={`vp-app-icon ${appIconStyle("app-store")}`}><Store size="1.5rem" aria-hidden="true" /></span>
-                      <span className="vp-app-label">App Store</span>
-                    </button>
-                    {overflowApps.map(({ id, label, Icon, badge }) => (
-                      <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => { if (id === "goodle") setPendingSearch(""); openAppRoute(id, "/"); }} className="vp-app">
-                        <span className={`vp-app-icon ${appIconStyle(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
-                        {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
-                        <span className="vp-app-label">{label}</span>
-                      </button>
-                    ))}
-                    {Array.from({ length: (4 - ((1 + overflowApps.length) % 4)) % 4 }, (_, index) => <span key={index} aria-hidden="true" className="vp-app-slot" />)}
-                  </div>
+                  {gridApps.length ? (
+                    <div aria-label="Installed apps" className="vp-app-grid">
+                      {gridApps.map(({ id, label, Icon, badge }) => (
+                        <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => { if (id === "goodle") setPendingSearch(""); openAppRoute(id, "/"); }} className="vp-app">
+                          <span className={`vp-app-icon ${appIconStyle(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
+                          {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
+                          <span className="vp-app-label">{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   {dockApps.length ? (
                     <div className="vp-dockrow" aria-label="Favorite apps">
                       {dockApps.map(({ id, label, Icon, badge }) => (
