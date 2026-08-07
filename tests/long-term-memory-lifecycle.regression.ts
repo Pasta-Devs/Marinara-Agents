@@ -952,7 +952,7 @@ async function main() {
       await page.getByRole("button", { name: "Next: how recall works" }).click();
       assert.equal(await onboardingTitle.innerText(), "How recall works");
       const onboardingNext = page.getByRole("button", {
-        name: "Next: Turn it on",
+        name: "Next: turn it on",
       });
       await onboardingNext.click();
       assert.match(
@@ -972,7 +972,7 @@ async function main() {
       );
       await page.getByRole("button", { name: "Back", exact: true }).click();
       assert.equal(await onboardingTitle.innerText(), "How recall works");
-      await page.getByRole("button", { name: "Next: Turn it on" }).click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
       await page.getByRole("button", { name: "Next: choose a source" }).click();
       assert.equal(
         await onboardingTitle.innerText(),
@@ -1056,7 +1056,7 @@ async function main() {
         .fill("Dirty memory");
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: how recall works" }).click();
-      await page.getByRole("button", { name: "Next: Turn it on" }).click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
       await page
         .getByRole("button", { name: "Next: choose a source" })
         .click();
@@ -1111,7 +1111,7 @@ async function main() {
         .fill("Dirty memory");
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: how recall works" }).click();
-      await page.getByRole("button", { name: "Next: Turn it on" }).click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
       await page
         .getByRole("button", { name: "Next: choose a source" })
         .click();
@@ -1154,7 +1154,7 @@ async function main() {
       await page.locator('[data-ltm-surface="detail"]').waitFor();
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: how recall works" }).click();
-      await page.getByRole("button", { name: "Next: Turn it on" }).click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
       await page.getByRole("button", { name: "Next: choose a source" }).click();
       await page.getByRole("button", { name: "Import a character" }).click();
       await page
@@ -1162,7 +1162,7 @@ async function main() {
         .waitFor();
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: how recall works" }).click();
-      await page.getByRole("button", { name: "Next: Turn it on" }).click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
       await page.getByRole("button", { name: "Next: choose a source" }).click();
       await page.getByRole("button", { name: "Chat summary" }).click();
       const chatSummaryGuide = page.locator('[data-ltm-surface="onboarding"]');
@@ -1170,13 +1170,9 @@ async function main() {
         await chatSummaryGuide.innerText(),
         /Open Summary Prompt, then Chat Summary.*Open Long-Term Memory/isu,
       );
-      assert.equal(
-        await page.getByRole("button", { name: "I selected it" }).count(),
-        1,
-      );
-      assert.equal(
-        await page
-          .getByRole("button", { name: "Continue without changing it" })
+       assert.equal(
+         await page
+           .getByRole("button", { name: "Open chat sources" })
           .count(),
         1,
       );
@@ -1186,7 +1182,7 @@ async function main() {
         "Chat Summary handoff must remain hidden without a compatible Roleplay host callback",
       );
       await page
-        .getByRole("button", { name: "Continue without changing it" })
+        .getByRole("button", { name: "Open chat sources" })
         .click();
       await page
         .locator('[data-ltm-source-tab="chats"][aria-selected="true"]')
@@ -1204,14 +1200,14 @@ async function main() {
       });
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: how recall works" }).click();
-      await page.getByRole("button", { name: "Next: Turn it on" }).click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
       assert.match(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
         /Open Prompt Preset Editor.*Open Sections.*Add Agent Sections -> Long-Term Memory/isu,
       );
       assert.equal(
         await page
-          .getByRole("button", { name: "Open prompt preset Sections" })
+          .getByRole("button", { name: "Open Prompt Preset Sections" })
           .count(),
         0,
         "Prompt preset handoff must remain hidden without a host callback",
@@ -1237,9 +1233,9 @@ async function main() {
       });
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: how recall works" }).click();
-      await page.getByRole("button", { name: "Next: Turn it on" }).click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
       await page
-        .getByRole("button", { name: "Open prompt preset Sections" })
+          .getByRole("button", { name: "Open Prompt Preset Sections" })
         .click();
       assert.deepEqual(promptPresetEditorOpens.length, 1);
       assert.equal(
@@ -1257,7 +1253,7 @@ async function main() {
       );
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: how recall works" }).click();
-      await page.getByRole("button", { name: "Next: Turn it on" }).click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
       await page.getByRole("button", { name: "Next: choose a source" }).click();
       await page
         .getByRole("button", { name: "Chat summary", exact: true })
@@ -2364,17 +2360,33 @@ async function main() {
       await mobilePage
         .getByRole("button", { name: "Show setup guide" })
         .click();
-      assert.ok(
-        await mobilePage
-          .locator(
-            '[data-ltm-surface="onboarding"] [data-ltm-control="button"]',
-          )
+       assert.ok(
+         await mobilePage
+           .locator(
+             '[data-ltm-surface="onboarding"] [data-ltm-control="button"]',
+           )
           .evaluateAll((buttons) =>
             buttons.every(
               (button) => button.getBoundingClientRect().height >= 44,
-            ),
-          ),
-      );
+             ),
+           ),
+       );
+       assert.deepEqual(
+         await mobilePage
+           .locator('[data-ltm-onboarding-actions]')
+           .evaluate((actions) => {
+             const buttons = [...actions.querySelectorAll(":scope > button")];
+             return buttons.map((button) => {
+               const actionRect = actions.getBoundingClientRect();
+               const buttonRect = button.getBoundingClientRect();
+               return {
+                 left: Math.round(buttonRect.left - actionRect.left),
+                 right: Math.round(actionRect.right - buttonRect.right),
+               };
+             });
+           }),
+         [{ left: 0, right: 0 }, { left: 0, right: 0 }],
+       );
       await mobilePage.getByRole("button", { name: "Skip" }).click();
       await mobilePage
         .locator('[data-ltm-surface="onboarding"]')
@@ -2533,10 +2545,32 @@ async function main() {
         .getByRole("button", { name: "Next: how recall works" })
         .click();
       await firstRunGuide
-        .getByRole("button", { name: "Next: Turn it on" })
+        .getByRole("button", { name: "Next: turn it on" })
         .click();
       assert.match(await firstRunGuide.innerText(), /Continue without a chat/u);
-      await firstRunGuide.getByRole("button", { name: "Skip" }).click();
+      await firstRunGuide
+        .getByRole("button", { name: "Continue without a chat" })
+        .click();
+      await firstRunGuide
+        .getByRole("button", { name: "Continue to review" })
+        .click();
+      await firstRunGuide
+        .getByRole("button", { name: "Continue to check" })
+        .click();
+      assert.equal(
+        await firstRunGuide
+          .getByRole("button", { name: "Choose a source" })
+          .count(),
+        1,
+      );
+      await firstRunGuide.getByRole("button", { name: "Choose a source" }).click();
+      await firstRunPage
+        .locator('[data-ltm-source-tab="characters"][aria-selected="true"]')
+        .waitFor();
+      assert.equal(
+        await firstRunPage.locator('[data-ltm-surface="onboarding"]').count(),
+        0,
+      );
       await firstRunPage.reload();
       await firstRunPage.evaluate((version) => {
         const element = document.createElement(

@@ -845,6 +845,14 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
                   transform: scaleX(-1);
                 }
+                [data-ltm-onboarding-actions] {
+                  display: flex;
+                  flex-direction: column;
+                  gap: 0.5rem;
+                }
+                [data-ltm-onboarding-actions] > button {
+                  width: 100%;
+                }
                 @media (min-width: 768px) {
                   [data-ltm-onboarding-body] {
                     grid-template-columns: minmax(0, 1fr) 12rem;
@@ -859,6 +867,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   }
                   [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
                     transform: none;
+                  }
+                  [data-ltm-onboarding-actions] {
+                    flex-direction: row;
+                    flex-wrap: wrap;
+                  }
+                  [data-ltm-onboarding-actions] > button {
+                    width: auto;
                   }
                 }
               `}</style>
@@ -1304,7 +1319,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           ) : null}
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div data-ltm-onboarding-actions>
                           {onboardingStep > 0 ? (
                             <Button
                               onClick={() =>
@@ -1402,17 +1417,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     }}
                                   >
                                     {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.selectedIt",
-                                    )}
-                                  </Button>
-                                  <Button
-                                    onClick={async () => {
-                                      if (await openSources("chats"))
-                                        completeOnboarding();
-                                    }}
-                                  >
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.continueWithoutChangingIt",
+                                      "ui.longTermMemory.longtermmemorydetail.openChatSources",
                                     )}
                                   </Button>
                                 </>
@@ -1444,7 +1449,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                 onClick={async () => {
                                   const opened = pendingDrafts.data?.count
                                     ? await openReview()
-                                    : await openSources();
+                                    : await openSources("characters");
                                   if (opened) completeOnboarding();
                                 }}
                               >
@@ -1464,27 +1469,19 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             <Button
                               primary
                               onClick={async () => {
-                                if (await selectDestination("vault"))
-                                  completeOnboarding();
+                                const opened = status.data?.notes.total
+                                  ? await selectDestination("vault")
+                                  : await openSources("characters");
+                                if (opened) completeOnboarding();
                               }}
                             >
                               {localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.goToSavedMemories",
+                                status.data?.notes.total
+                                  ? "ui.longTermMemory.longtermmemorydetail.goToSavedMemories"
+                                  : "ui.longTermMemory.longtermmemorydetail.chooseASource",
                               )}
                             </Button>
                           )}
-                          {onboardingStep === 4 && !status.data?.notes.total ? (
-                            <Button
-                              onClick={async () => {
-                                if (await openSources("characters"))
-                                  completeOnboarding();
-                              }}
-                            >
-                              {localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.chooseASource",
-                              )}
-                            </Button>
-                          ) : null}
                           {onboardingStep < onboardingSteps.length - 1 ? (
                             <Button onClick={completeOnboarding}>
                               {localizeUi(
