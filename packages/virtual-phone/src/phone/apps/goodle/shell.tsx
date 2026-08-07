@@ -157,9 +157,9 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
               {"Goodle".split("").map((letter, index) => <span key={index} style={{ color: LOGO_COLORS[index % LOGO_COLORS.length] }}>{letter}</span>)}
             </div>
           ) : null}
-          <form onSubmit={(event) => { event.preventDefault(); search(query); }} className="vp-search-row">
-            <label><span className="vp-sr-only">Search Goodle</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="vp-input" /></label>
-            <button type="submit" aria-label="Search" className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Search size="1rem" aria-hidden="true" /></button>
+          <form onSubmit={(event) => { event.preventDefault(); search(query); }} className="vp-search-go">
+            <label><span className="vp-sr-only">Search Goodle</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="vp-input" style={{ paddingRight: "2.75rem" }} /></label>
+            {query.trim() ? <button type="submit" aria-label="Search" className="vp-go-btn"><Search size="0.875rem" aria-hidden="true" /></button> : null}
           </form>
           {recents.length && !searching && !results.items.length ? (
             <div className="vp-chip-row" aria-label="Recent searches">

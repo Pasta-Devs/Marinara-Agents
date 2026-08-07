@@ -5,6 +5,7 @@ export type PhonePattern = "none" | "dots" | "grid" | "noise" | "waves";
 export interface DeviceSettings {
   deviceName: string;
   wallpaper: string;
+  wallpaperTint: string;
   theme: PhoneBaselineTheme;
   pattern: PhonePattern;
   patternIntensity: 0 | 1 | 2 | 3;
@@ -19,6 +20,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
   return {
     deviceName: "",
     wallpaper: "gradient",
+    wallpaperTint: "",
     theme,
     pattern: "none",
     patternIntensity: 0,
@@ -41,6 +43,7 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
   return {
     deviceName: typeof input.deviceName === "string" ? input.deviceName.slice(0, 80) : defaults.deviceName,
     wallpaper: typeof input.wallpaper === "string" && input.wallpaper.trim() ? input.wallpaper.slice(0, 200) : defaults.wallpaper,
+    wallpaperTint: typeof input.wallpaperTint === "string" && /^#[0-9a-fA-F]{6}$/u.test(input.wallpaperTint) ? input.wallpaperTint.toLowerCase() : defaults.wallpaperTint,
     theme: input.theme === "light" || input.theme === "dark" || input.theme === "system" ? input.theme : defaults.theme,
     pattern,
     patternIntensity: intensity === 1 || intensity === 2 || intensity === 3 ? intensity : 0,

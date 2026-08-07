@@ -337,6 +337,11 @@ async function main() {
   assert.deepEqual(parseEmail("weird"), { from: "weird", subject: "(no subject)", body: "(empty message)" });
   assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery"]);
   assert.equal(defaultDeviceSettings().lightConnectionId, "");
+  assert.equal(defaultDeviceSettings().wallpaperTint, "");
+  const tinted = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, { wallpaperTint: "#FFAA00" });
+  assert.equal((tinted.document.namespaces.phone.settings as { wallpaperTint: string }).wallpaperTint, "#ffaa00");
+  const badTint = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, { wallpaperTint: "url(javascript:x)" });
+  assert.equal((badTint.document.namespaces.phone.settings as { wallpaperTint: string }).wallpaperTint, "");
   assert.equal(defaultDeviceSettings().generationInstructions, "");
   const genSettings = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, {
     lightConnectionId: "conn-small",

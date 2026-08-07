@@ -11,6 +11,7 @@ export type Phone = {
   settings?: {
     deviceName: string;
     wallpaper: string;
+    wallpaperTint: string;
     theme: BaselineTheme;
     pattern: "none" | "dots" | "grid" | "noise" | "waves";
     patternIntensity: 0 | 1 | 2 | 3;

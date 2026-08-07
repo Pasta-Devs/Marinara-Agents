@@ -292,7 +292,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                 </div>
               ) : null}
             </header>
-            <main className="vp-surface-area" style={{ backgroundImage: `${patternBackground(deviceSettings.pattern, deviceSettings.patternIntensity)}, ${wallpaperBackground(deviceSettings.wallpaper)}`, backgroundSize: "16px 16px, cover" }}>
+            <main className="vp-surface-area" style={{ backgroundImage: `${patternBackground(deviceSettings.pattern, deviceSettings.patternIntensity)}, ${deviceSettings.wallpaperTint ? `linear-gradient(${deviceSettings.wallpaperTint}59, ${deviceSettings.wallpaperTint}59)` : "linear-gradient(rgb(0 0 0 / 0), rgb(0 0 0 / 0))"}, ${wallpaperBackground(deviceSettings.wallpaper)}`, backgroundSize: "16px 16px, cover, cover" }}>
               {session.surface === "lock" ? (
                 <div className="vp-lock">
                   <div>
@@ -323,7 +323,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               ) : (
                 <div className="vp-home">
                   <div className="vp-home-top">
-                    <form style={{ flex: 1, minWidth: 0 }} onSubmit={(event) => {
+                    <form className="vp-search-go" onSubmit={(event) => {
                       event.preventDefault();
                       if (!deviceSettings.installedApps.includes("goodle") || !homeSearch.trim()) return;
                       setPendingSearch(homeSearch.trim());
@@ -334,6 +334,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                         <span className="vp-sr-only">Web Search</span>
                         <input type="search" value={homeSearch} onChange={(event) => setHomeSearch(event.target.value)} disabled={!deviceSettings.installedApps.includes("goodle")} placeholder={deviceSettings.installedApps.includes("goodle") ? "Search Goodle" : "Install Goodle to search"} className="vp-search-bar" />
                       </label>
+                      {homeSearch.trim() ? <button type="submit" aria-label="Search" className="vp-go-btn"><Search size="0.875rem" aria-hidden="true" /></button> : null}
                     </form>
                     <button type="button" aria-label="Device settings" title="Device settings" onClick={() => openAppRoute("settings", "/")} className="vp-icon-btn vp-icon-btn--surface"><Settings size="1rem" aria-hidden="true" /></button>
                   </div>
