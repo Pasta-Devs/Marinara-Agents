@@ -1,6 +1,6 @@
 import React from "react";
 import { AtSign, Flame, Heart, MessageCircle, Newspaper, Repeat2, Send } from "lucide-react";
-import { phoneRequest } from "../../platform/api";
+import { phoneRequest, recordActivity } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 
@@ -53,6 +53,7 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
     const text = draft.trim();
     if (!text) return;
     setDraft("");
+    recordActivity(phoneId, parentPostId ? `replied on Noodle: "${text.slice(0, 100)}"` : `posted on Noodle: "${text.slice(0, 100)}"`);
     void phoneRequest<{ posts: NoodlePost[] }>(`/phones/${encodeURIComponent(phoneId)}/noodle/post`, {
       method: "POST", body: JSON.stringify({ text, ...(parentPostId ? { parentPostId } : {}) }),
     }).then((response) => setFeed(response.posts)).catch(() => setDraft(text));

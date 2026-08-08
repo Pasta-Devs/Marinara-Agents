@@ -38,3 +38,18 @@ export async function phoneRequest<T>(path: string, init: RequestInit = {}): Pro
   }
   return payload as T;
 }
+
+/**
+ * Records something the owner did that the story should be able to react to. Fire and forget —
+ * nothing in the UI should ever wait on it, and a failure to record is not worth interrupting
+ * anyone over. Flushed as one line when the phone is put down (see the `/session` route).
+ *
+ * Only call this for things with consequence. "Opened Mail" is not consequence; "sent mail to the
+ * harbour master" is.
+ */
+export function recordActivity(phoneId: string, text: string) {
+  void phoneRequest(`/phones/${encodeURIComponent(phoneId)}/activity`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  }).catch(() => undefined);
+}

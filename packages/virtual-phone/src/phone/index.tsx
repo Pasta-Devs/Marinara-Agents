@@ -306,6 +306,13 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     setPhones((current) => current.map((phone) => phone.phoneId === response.phone.phoneId ? response.phone : phone));
   };
   const close = () => {
+    // Putting the phone down is what tells the scene what happened on it — one line, once per
+    // session. Fire and forget: closing the phone must never wait on a request.
+    if (chatId && selectedPhone) {
+      void phoneRequest(`/chats/${encodeURIComponent(chatId)}/phones/${encodeURIComponent(selectedPhone.phoneId)}/session`, {
+        method: "POST", body: JSON.stringify({}),
+      }).catch(() => undefined);
+    }
     dispatchPhoneEvent(PHONE_CLOSE_EVENT);
   };
   const phoneRouteStacks = selectedPhone

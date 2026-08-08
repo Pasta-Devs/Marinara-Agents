@@ -3,7 +3,7 @@ import { Globe, Search, Star } from "lucide-react";
 import { fallbackSearchResults, looksLikeUrl, normalizeUrl, parseLinkedText, parsePageSection, parseResultItem, slugify } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
-import { phoneRequest } from "../../platform/api";
+import { phoneRequest, recordActivity } from "../../platform/api";
 import { hueFor } from "../../platform/avatars";
 
 const MAX_RECENTS = 8;
@@ -58,6 +58,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
     setRecents(next);
     void store.set("recents", next).catch(() => undefined);
     setSearching(true);
+    recordActivity(phoneId, `looked up "${trimmed}"`);
     void phoneRequest<{ results: ReturnType<typeof fallbackSearchResults> }>(`/phones/${encodeURIComponent(phoneId)}/goodle/search`, {
       method: "POST", body: JSON.stringify({ query: trimmed }),
     })

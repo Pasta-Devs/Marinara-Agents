@@ -1,7 +1,7 @@
 import React from "react";
 import { Heart, X } from "lucide-react";
 import { parseProfile } from "./manifest";
-import { phoneRequest } from "../../platform/api";
+import { phoneRequest, recordActivity } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { useDebouncedSave, usePhoneStore } from "../../platform/use-phone-store";
 import { hueFor, initials } from "../../platform/avatars";
@@ -75,6 +75,7 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
   const commit = React.useCallback((decision: "like" | "pass") => {
     if (!current || flying) return;
     if (decision === "like") {
+      recordActivity(phoneId, `matched with ${parseProfile(current).name} on Tindler`);
       setMatches((currentMatches) => {
         const next = [current, ...currentMatches];
         void store.set("matches", next).catch(() => undefined);

@@ -1,6 +1,6 @@
 import React from "react";
 import { PhoneAppHeader } from "../../platform/app-header";
-import { phoneRequest } from "../../platform/api";
+import { phoneRequest, recordActivity } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { applyTransaction, emptyAccount, formatMoney, parseProposal, readAccount, type BankAccount } from "./manifest";
 
@@ -80,6 +80,7 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
     const proposal = account.pending.find((entry) => entry.id === id);
     if (!proposal) return;
     const withoutProposal = { ...account, pending: account.pending.filter((entry) => entry.id !== id) };
+    recordActivity(phoneId, `${proposal.amount > 0 ? "received" : "paid"} ${Math.abs(proposal.amount)} — ${proposal.description}`);
     persist(applyTransaction(withoutProposal, {
       id: proposal.id,
       at: new Date().toISOString(),

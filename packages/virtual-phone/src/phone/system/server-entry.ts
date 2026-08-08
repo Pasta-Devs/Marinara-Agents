@@ -577,6 +577,58 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "That phone is out of reach" });
       }
     });
+    /**
+     * The phone half of the loop: what the owner did, recorded as it happens.
+     * Cheap and silent — no model call, no chat write.
+     */
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/activity", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const text = String(body.text ?? "").trim();
+        const chatId = targetChat(phone, request.query.chatId);
+        if (!text || !chatId) return { recorded: false };
+        await phones.appendActivity(request.params.phoneId, chatId, text);
+        return { recorded: true };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Activity not recorded" });
+      }
+    });
+
+    /**
+     * The story half: putting the phone down tells the scene what happened on it, as ONE line.
+     *
+     * This is what makes the phone part of the roleplay rather than a side panel — until now the
+     * only path from phone to story was the manual Show button, so everything you did in here was
+     * invisible and consequence-free. Batched per session on purpose: a message per action would
+     * flood the chat, and the Engine renders these as ordinary messages.
+     */
+    app.post<{ Params: { chatId: string; phoneId: string } }>("/chats/:chatId/phones/:phoneId/session", async (request, reply) => {
+      try {
+        const { phone, chatId } = await chatForPhone(request.params.phoneId, request.params.chatId);
+        if (!phoneGenSettings(phone).storyNotices) return { wrote: false };
+        if (!api.runtime.persistence.createMessageWithSwipe) return { wrote: false };
+        const entries = await phones.takeActivity(request.params.phoneId, chatId);
+        if (entries.length === 0) return { wrote: false };
+        const ownerName = phone.document.identity.ownerName;
+        const summary = entries.map((entry) => entry.text).join("; ");
+        await api.runtime.persistence.createMessageWithSwipe({
+          id: randomUUID(),
+          swipeId: randomUUID(),
+          chatId,
+          role: "user",
+          characterId: null,
+          content: `[${ownerName} was on their phone: ${summary}]`,
+          extra: { virtualPhone: "session" },
+          createdAt: new Date().toISOString(),
+        });
+        return { wrote: true, summary };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Session not recorded" });
+      }
+    });
     app.get<{ Params: { chatId: string } }>("/chats/:chatId/unread", async (request, reply) => {
       const chat = await api.runtime.persistence.getChat(request.params.chatId);
       if (!chat) return reply.status(404).send({ error: "Chat not found" });

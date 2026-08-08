@@ -1,6 +1,6 @@
 import React from "react";
 import { draftMail, mailFromLine, mergeMail, parseEmail, readStoredMail, type MailFolder, type MailMessage } from "./manifest";
-import { phoneRequest } from "../../platform/api";
+import { phoneRequest, recordActivity } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 
@@ -104,6 +104,7 @@ export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phon
     const sent = draftMail({ from: ownerName, to: composing.to, subject: composing.subject, body: composing.body, ...(composing.replyTo ? { replyTo: composing.replyTo } : {}) });
     const afterSend = [sent, ...(mail ?? [])];
     persist(afterSend);
+    recordActivity(phoneId, `emailed ${composing.to}${composing.subject.trim() ? ` about "${composing.subject.trim()}"` : ""}`);
     setComposing(null);
     setFolder("sent");
     try {

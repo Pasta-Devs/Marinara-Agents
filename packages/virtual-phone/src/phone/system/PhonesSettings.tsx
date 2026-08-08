@@ -25,6 +25,7 @@ export type Phone = {
     installedApps: string[];
     lorebookIds: string[];
     unpromptedTexts: boolean;
+    storyNotices: boolean;
     lightConnectionId: string;
     heavyConnectionId: string;
     generationInstructions: string;

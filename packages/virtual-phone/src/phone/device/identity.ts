@@ -383,6 +383,65 @@ export class PhoneIdentityService {
     return parsePhoneRecord(updated);
   }
 
+  /**
+   * What the owner did on the phone that the story has not been told about yet.
+   *
+   * The phone is part of the roleplay, not a side panel: if you photograph something, look
+   * something up or send a letter, the scene should be able to react. Entries accumulate here and
+   * are flushed as ONE quiet line when the phone is put down — a message per action would flood
+   * the chat, and nothing in the Engine renders `extra.virtualPhone` specially, so every write is
+   * visible to the reader.
+   */
+  async appendActivity(phoneId: string, chatId: string, text: string) {
+    const phone = await this.requirePhone(phoneId);
+    const existing = Array.isArray(phone.document.namespaces.phone.activity)
+      ? phone.document.namespaces.phone.activity as Array<{ at: string; chatId: string; text: string }>
+      : [];
+    const entry = { at: this.now(), chatId, text: text.slice(0, 240) };
+    const document: PhoneDocument = {
+      ...phone.document,
+      namespaces: { phone: { ...phone.document.namespaces.phone, activity: [...existing, entry].slice(-40) } },
+    };
+    const updated = await this.documents.update({
+      id: phone.record.id,
+      packageId: PACKAGE_ID,
+      expectedRevision: phone.record.revision,
+      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      description: document.identity.ownerName,
+      data: document,
+      updatedAt: entry.at,
+    });
+    if (!updated) return this.appendActivity(phoneId, chatId, text);
+    return parsePhoneRecord(updated);
+  }
+
+  /** Reads and clears the pending activity for one chat. Clearing is what makes the flush once-only. */
+  async takeActivity(phoneId: string, chatId: string) {
+    const phone = await this.requirePhone(phoneId);
+    const existing = Array.isArray(phone.document.namespaces.phone.activity)
+      ? phone.document.namespaces.phone.activity as Array<{ at: string; chatId: string; text: string }>
+      : [];
+    const mine = existing.filter((entry) => entry.chatId === chatId);
+    if (mine.length === 0) return [];
+    const document: PhoneDocument = {
+      ...phone.document,
+      namespaces: {
+        phone: { ...phone.document.namespaces.phone, activity: existing.filter((entry) => entry.chatId !== chatId) },
+      },
+    };
+    const updated = await this.documents.update({
+      id: phone.record.id,
+      packageId: PACKAGE_ID,
+      expectedRevision: phone.record.revision,
+      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      description: document.identity.ownerName,
+      data: document,
+      updatedAt: this.now(),
+    });
+    if (!updated) return this.takeActivity(phoneId, chatId);
+    return mine;
+  }
+
   private async requirePhone(phoneId: string) {
     const phone = (await this.list()).find(({ document }) => document.identity.phoneId === phoneId);
     if (!phone) throw new Error("Phone not found");

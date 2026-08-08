@@ -36,6 +36,12 @@ export interface DeviceSettings {
    * the user asking for anything.
    */
   unpromptedTexts: boolean;
+  /**
+   * When the phone is put down, one quiet line tells the scene what was done on it. This is what
+   * makes the phone part of the roleplay instead of a side panel, so it is on by default — but it
+   * writes a visible message into the chat, so it must be switchable off.
+   */
+  storyNotices: boolean;
   lightConnectionId: string;
   heavyConnectionId: string;
   generationInstructions: string;
@@ -58,6 +64,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera"],
     lorebookIds: [],
     unpromptedTexts: false,
+    storyNotices: true,
     lightConnectionId: "",
     heavyConnectionId: "",
     generationInstructions: "",
@@ -96,6 +103,7 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
       ? [...new Set(input.lorebookIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0))].slice(0, 50)
       : defaults.lorebookIds,
     unpromptedTexts: input.unpromptedTexts === true,
+    storyNotices: input.storyNotices !== false,
     lightConnectionId: typeof input.lightConnectionId === "string" ? input.lightConnectionId.slice(0, 100) : defaults.lightConnectionId,
     heavyConnectionId: typeof input.heavyConnectionId === "string" ? input.heavyConnectionId.slice(0, 100) : defaults.heavyConnectionId,
     generationInstructions: typeof input.generationInstructions === "string" ? input.generationInstructions.slice(0, 2000) : defaults.generationInstructions,

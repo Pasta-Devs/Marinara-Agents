@@ -147,6 +147,8 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
         <div className="vp-group">
           <label className="vp-row"><span>Replies</span><select value={settings.lightConnectionId} disabled={!connections} onChange={(event) => void update({ lightConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.lightConnectionId)}</select></label>
           <label className="vp-row"><span>Feeds &amp; sites</span><select value={settings.heavyConnectionId} disabled={!connections} onChange={(event) => void update({ heavyConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.heavyConnectionId)}</select></label>
+          <label className="vp-row"><span>The story notices</span><input type="checkbox" checked={settings.storyNotices} onChange={(event) => void update({ storyNotices: event.target.checked })} className="vp-switch" /></label>
+          <p className="vp-muted-note">When you put the phone down, one line tells the scene what you did on it — so what happens here can be reacted to. Off makes the phone invisible to the story again.</p>
           <label className="vp-row"><span>Let characters text first</span><input type="checkbox" checked={settings.unpromptedTexts} onChange={(event) => void update({ unpromptedTexts: event.target.checked })} className="vp-switch" /></label>
           <p className="vp-muted-note">Off by default. When on, a character may text when a thread has gone quiet or you left them on read — this spends tokens in the background.</p>
           <div className="vp-row vp-row--stacked">

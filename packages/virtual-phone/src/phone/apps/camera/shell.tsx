@@ -1,6 +1,6 @@
 import React from "react";
 import { PhoneAppHeader } from "../../platform/app-header";
-import { phoneRequest } from "../../platform/api";
+import { phoneRequest, recordActivity } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
 
 interface Shot {
@@ -67,6 +67,7 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
     if (!draft?.trim()) return;
     const shot: Shot = { id: crypto.randomUUID(), text: draft.trim(), at: new Date().toISOString() };
     persist([shot, ...(shots ?? [])].slice(0, MAX_SHOTS));
+    recordActivity(phoneId, `took a photo — ${shot.text.slice(0, 120)}`);
     setDraft(null);
     setSubject("");
   };
