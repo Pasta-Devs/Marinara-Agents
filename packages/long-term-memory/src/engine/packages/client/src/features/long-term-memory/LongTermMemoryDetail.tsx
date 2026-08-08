@@ -886,8 +886,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
                   transform: scaleX(-1);
                 }
-                [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-shift="left-40"] {
-                  transform: translateX(-40px);
+                [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-shift="left-80"] {
+                  transform: translateX(-80px);
                 }
                 [data-ltm-onboarding-actions] {
                   display: flex;
@@ -1711,7 +1711,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               undefined
                             }
                             data-ltm-onboarding-mobile-shift={
-                              onboardingStep === 4 ? "left-40" : undefined
+                              onboardingStep === 4 ? "left-80" : undefined
                             }
                           />
                         </picture>
