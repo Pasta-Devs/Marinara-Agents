@@ -377,6 +377,7 @@ export function SpatialMapAiBuilder({
         const requestInput = {
           operation: standalone ? "create" : request.operation,
           size: request.size,
+          ...(request.operation === "expand" ? { targetLocationCount: request.targetLocationCount } : {}),
           ...(startOver ? { breakHistoryContinuity: true as const } : {}),
           ...(!standalone && request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
           instructions: request.instructions.trim() || undefined,

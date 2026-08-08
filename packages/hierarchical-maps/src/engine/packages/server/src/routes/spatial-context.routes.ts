@@ -1107,6 +1107,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         "hierarchyMode",
         "hierarchyProfile",
         "generationPreferencesOverride",
+        "targetLocationCount",
         "breakHistoryContinuity",
       ]),
     );
@@ -1327,6 +1328,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         "hierarchyMode",
         "hierarchyProfile",
         "generationPreferencesOverride",
+        "targetLocationCount",
         "breakHistoryContinuity",
       ]),
     );
