@@ -116,41 +116,45 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
         <div className="vp-stack" style={{ gap: "0.5rem" }}>
           {account.transactions.length === 0 ? <p className="vp-muted-note">No transactions yet.</p> : null}
           {account.transactions.map((entry) => (
-            <div key={entry.id} className="vp-thread-row">
-              <span className="vp-thread-body">
-                <span className="vp-thread-name">{entry.description}</span>
-                <span className="vp-thread-preview">
+            <div key={entry.id} className="vp-ledger-row">
+              <span className="vp-ledger-what">
+                <span className="vp-ledger-desc">{entry.description}</span>
+                <span className="vp-ledger-meta">
                   {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                   {entry.source === "story" ? " · from the story" : " · you"}
                 </span>
               </span>
-              <span className="vp-thread-name" style={{ color: entry.amount < 0 ? "inherit" : "var(--vp-accent)" }}>
-                {entry.amount > 0 ? "+" : ""}{formatMoney(entry.amount, account.currency)}
+              <span className={`vp-ledger-amount vp-ledger-amount--${entry.amount > 0 ? "in" : "out"}`}>
+                {entry.amount > 0 ? "+" : "−"}{formatMoney(Math.abs(entry.amount), account.currency)}
               </span>
             </div>
           ))}
         </div>
       ) : (
         <div className="vp-stack" style={{ gap: "0.75rem" }}>
-          <div className="vp-card vp-stack" style={{ gap: "0.25rem", alignItems: "center" }}>
-            <span className="vp-muted-note">Balance</span>
-            <span className="vp-lock-clock" style={{ fontSize: "2rem" }}>{formatMoney(account.balance, account.currency)}</span>
-            <button type="button" className="vp-surface-btn" onClick={() => setView("history")}>
+          <div className="vp-bank-card">
+            <span className="vp-bank-label">Available balance</span>
+            <span className="vp-bank-balance">{formatMoney(account.balance, account.currency)}</span>
+            <span className="vp-bank-owner">
               {account.transactions.length} transaction{account.transactions.length === 1 ? "" : "s"}
-            </button>
+            </span>
           </div>
+          <button type="button" className="vp-surface-btn" onClick={() => setView("history")}>View transactions</button>
 
           {account.pending.length ? (
             <>
               <h3 className="vp-section-label">Waiting for approval</h3>
               <div className="vp-stack" style={{ gap: "0.5rem" }}>
                 {account.pending.map((proposal) => (
-                  <div key={proposal.id} className="vp-card vp-stack" style={{ gap: "0.5rem" }}>
-                    <span className="vp-thread-name">
-                      {proposal.amount > 0 ? "+" : ""}{formatMoney(proposal.amount, account.currency)}
+                  <div key={proposal.id} className="vp-review-card">
+                    <span className="vp-review-head">
+                      <span className={`vp-ledger-amount vp-ledger-amount--${proposal.amount > 0 ? "in" : "out"}`} style={{ fontSize: "1.125rem" }}>
+                        {proposal.amount > 0 ? "+" : "−"}{formatMoney(Math.abs(proposal.amount), account.currency)}
+                      </span>
+                      <span className="vp-ledger-meta">proposed by the story</span>
                     </span>
-                    <span className="vp-thread-preview">{proposal.description}</span>
-                    <div className="vp-store-actions">
+                    <span className="vp-ledger-desc" style={{ whiteSpace: "normal" }}>{proposal.description}</span>
+                    <div className="vp-review-actions">
                       <button type="button" className="vp-accent-btn" onClick={() => accept(proposal.id)}>Approve</button>
                       <button type="button" className="vp-store-remove" onClick={() => reject(proposal.id)}>Reject</button>
                     </div>

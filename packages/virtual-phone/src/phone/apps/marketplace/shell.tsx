@@ -47,8 +47,8 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
    * caption and source carry the listing on their own, which is a finished page rather than a
    * placeholder.
    */
-  const photo = (listing: Listing, large = false) => (
-    <span className="vp-market-photo" style={large ? { fontSize: "3rem", minHeight: "8rem" } : undefined} aria-hidden="true">
+  const photo = (listing: Listing, hero = false) => (
+    <span className={`vp-market-photo${hero ? " vp-market-photo--hero" : ""}`} aria-hidden="true">
       {glyphFor(listing)}
     </span>
   );
@@ -74,19 +74,20 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
           <div className="vp-page-body"><p style={{ whiteSpace: "pre-wrap" }}>{open.description}</p></div>
         </div>
       ) : !listings ? (
-        <div role="status" aria-label="Loading listings" className="vp-stack" style={{ gap: "0.5rem" }}>
-          {[0, 1, 2].map((index) => <span key={index} className="vp-skeleton vp-skeleton--block" />)}
+        <div role="status" aria-label="Loading listings" className="vp-market-grid">
+          {[0, 1, 2, 3].map((index) => <span key={index} className="vp-skeleton" style={{ aspectRatio: "1 / 1", borderRadius: "1rem" }} />)}
         </div>
       ) : listings.length === 0 ? (
         <p className="vp-muted-note">Nothing for sale right now. Refresh to see what turns up.</p>
       ) : (
-        <div className="vp-stack" style={{ gap: "0.5rem" }} aria-busy={loading}>
+        <div className="vp-market-grid" aria-busy={loading}>
           {listings.map((listing, index) => (
-            <button key={`${listing.title}-${index}`} type="button" onClick={() => setOpenIndex(index)} className="vp-card vp-card-row">
+            <button key={`${listing.title}-${index}`} type="button" onClick={() => setOpenIndex(index)} className="vp-market-tile">
               {photo(listing)}
-              <span className="vp-card-body">
-                <h3>{listing.title}</h3>
-                <p>{listing.price} · {listing.seller}</p>
+              <span className="vp-market-body">
+                <span className="vp-market-price">{listing.price}</span>
+                <span className="vp-market-title">{listing.title}</span>
+                <span className="vp-market-seller">{listing.seller}</span>
               </span>
             </button>
           ))}

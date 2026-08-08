@@ -100,7 +100,34 @@ export const phoneStylesheet = `
 .vp-app-icon--camera { background: linear-gradient(180deg, #6b7280 0%, #1f2937 100%); }
 .vp-app-icon--banking { background: linear-gradient(180deg, #10b981 0%, #065f46 100%); }
 .vp-app-icon--marketplace { background: linear-gradient(180deg, #f59e0b 0%, #b45309 100%); }
-.vp-market-photo { display: flex; align-items: center; justify-content: center; min-width: 3rem; min-height: 3rem; border-radius: 0.75rem; background: color-mix(in srgb, var(--vp-text) 8%, var(--vp-surface)); color: var(--vp-muted); font-size: 1.25rem; }
+/* Marketplace is a tile grid. The image slot is sized as if the photo were there, because one day
+   it will be (Step 11.3) — an empty slot that reserves its space reads as designed, not broken. */
+.vp-market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.vp-market-tile { display: flex; flex-direction: column; overflow: hidden; border-radius: 1rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 8px 20px rgb(0 0 0 / 0.1), inset 0 0 0 1px var(--vp-border); text-align: left; transition: transform 120ms ease; }
+.vp-market-tile:active { transform: scale(0.97); }
+.vp-market-photo { display: flex; align-items: center; justify-content: center; aspect-ratio: 1 / 1; width: 100%; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--vp-text) 5%, var(--vp-surface)) 0 10px, color-mix(in srgb, var(--vp-text) 8%, var(--vp-surface)) 10px 20px); color: color-mix(in srgb, var(--vp-text) 28%, transparent); font-size: 1.75rem; }
+.vp-market-photo--hero { aspect-ratio: 4 / 3; border-radius: 1rem; font-size: 3.5rem; }
+.vp-market-body { display: grid; gap: 0.125rem; padding: 0.5rem 0.625rem 0.75rem; }
+.vp-market-title { font-size: 0.75rem; font-weight: 650; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.vp-market-price { font-size: 0.8125rem; font-weight: 700; color: var(--vp-accent); }
+.vp-market-seller { font-size: 0.625rem; color: var(--vp-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Banking leads with the balance on a card face, and the log reads as a ledger. */
+.vp-bank-card { position: relative; overflow: hidden; display: grid; gap: 0.25rem; padding: 1.125rem 1.25rem 1.25rem; border-radius: 1.25rem; color: #fff; background: linear-gradient(140deg, #065f46 0%, #047857 45%, #0f766e 100%); box-shadow: 0 2px 6px rgb(0 0 0 / 0.12), 0 16px 40px rgb(0 0 0 / 0.22); }
+.vp-bank-card::after { content: ""; position: absolute; inset: -40% -20% auto auto; width: 14rem; height: 14rem; border-radius: 999px; background: rgb(255 255 255 / 0.08); pointer-events: none; }
+.vp-bank-label { font-size: 0.625rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.75; }
+.vp-bank-balance { font-size: 2.125rem; font-weight: 300; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.vp-bank-owner { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; opacity: 0.85; }
+.vp-ledger-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.5rem; padding: 0.625rem 0.75rem; border-radius: 0.75rem; background: var(--vp-surface); box-shadow: inset 0 0 0 1px var(--vp-border); }
+.vp-ledger-what { display: grid; gap: 0.125rem; min-width: 0; }
+.vp-ledger-desc { font-size: 0.75rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-ledger-meta { font-size: 0.625rem; color: var(--vp-muted); }
+.vp-ledger-amount { font-size: 0.8125rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.vp-ledger-amount--in { color: #10b981; }
+.vp-ledger-amount--out { color: var(--vp-text); }
+.vp-review-card { display: grid; gap: 0.5rem; padding: 0.75rem 0.875rem; border-radius: 1rem; background: var(--vp-surface); box-shadow: inset 0 0 0 1px var(--vp-accent); }
+.vp-review-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.vp-review-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .vp-viewfinder { display: flex; align-items: center; justify-content: center; min-height: 11rem; padding: 1rem; border-radius: 1rem; background: linear-gradient(160deg, #14161a, #05070b); color: #e8ecf2; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), inset 0 0 3rem rgb(0 0 0 / 0.6); }
 .vp-viewfinder-text { margin: 0; font-size: 0.8125rem; line-height: 1.5; text-align: center; font-style: italic; }
 .vp-shutter-row { display: flex; justify-content: center; margin-top: 0.875rem; }
@@ -220,7 +247,17 @@ export const phoneStylesheet = `
 .vp-tinder-info h3 { margin: 0; font-size: 1rem; font-weight: 650; letter-spacing: -0.01em; }
 .vp-tinder-tagline { margin: 0; font-size: 0.75rem; font-weight: 600; color: var(--vp-accent); }
 .vp-tinder-bio { margin: 0; font-size: 0.75rem; line-height: 1.45; color: var(--vp-muted); }
-.vp-tinder-actions { display: flex; justify-content: center; gap: 1.5rem; margin-top: 0.875rem; }
+/* Tindler is a deck, not a list: the stack fills the app and the buttons sit under it. */
+.vp-deck { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; margin: 0.25rem 0; }
+.vp-deck-card { position: absolute; inset: 0; display: flex; flex-direction: column; will-change: transform; }
+.vp-deck-card--top { z-index: 2; cursor: grab; user-select: none; }
+.vp-deck-card--top:active { cursor: grabbing; }
+.vp-deck-card .vp-tinder-photo { flex: 1; min-height: 0; aspect-ratio: auto; max-height: none; }
+.vp-deck-stamp { position: absolute; top: 1.25rem; left: 1.25rem; padding: 0.25rem 0.625rem; border-radius: 0.5rem; font-size: 0.9375rem; font-weight: 800; letter-spacing: 0.08em; transform: rotate(-12deg); }
+.vp-deck-stamp--like { color: #22c55e; box-shadow: inset 0 0 0 3px #22c55e; }
+.vp-deck-stamp--pass { left: auto; right: 1.25rem; color: #ef4444; box-shadow: inset 0 0 0 3px #ef4444; transform: rotate(12deg); }
+.vp-deck-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; text-align: center; color: var(--vp-muted); font-size: 0.8125rem; }
+.vp-tinder-actions { display: flex; justify-content: center; gap: 1.5rem; padding: 0.875rem 0 0.25rem; flex-shrink: 0; }
 .vp-tinder-btn { display: inline-flex; align-items: center; justify-content: center; height: 3rem; width: 3rem; border-radius: 999px; background: var(--vp-surface); box-shadow: 0 2px 8px rgb(0 0 0 / 0.15), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
 .vp-tinder-btn:active { transform: scale(0.92); }
 .vp-tinder-btn--pass { color: var(--vp-muted); }
