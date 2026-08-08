@@ -1990,11 +1990,6 @@ export default function ReviewQueue({
                     blocked: review.data?.counts.blockedDrafts ?? 0,
                   })}
                 </p>
-                {review.data?.sources.length ? (
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    {localizeUi("ui.longTermMemory.reviewqueue.curationGuidance")}
-                  </p>
-                ) : null}
               </header>
               <div className="mari-editor-panel overflow-hidden">
                 {sourceIds.map((id) => {
