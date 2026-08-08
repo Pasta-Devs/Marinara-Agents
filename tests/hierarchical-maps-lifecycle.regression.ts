@@ -205,7 +205,7 @@ assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds,
 const currentFixture = fixtures.get("1.3.4");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
-  engineVersion: "2.4.1",
+  engineVersion: "2.4.2",
   engineCommit: "00986ff5bfdcd5705d70c7fca8d8ade86665b217",
 });
 
