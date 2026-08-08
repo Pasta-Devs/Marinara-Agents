@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import { writeEnglishPackageLocale } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsDir = join(repoRoot, "artifacts");
@@ -75,6 +76,7 @@ for (const id of selectedPackageDirectories) {
     files: [{ path: manifest.entrypoints.agents, sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength }],
   };
   await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeEnglishPackageLocale(sourceDir, manifest, agentDefinitions);
 
   const temporary = await mkdtemp(join(tmpdir(), `marinara-agent-${id}-`));
   try {
