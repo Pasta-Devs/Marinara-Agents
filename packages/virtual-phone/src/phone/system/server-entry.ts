@@ -849,7 +849,14 @@ export async function activate({ api }: CapabilityContext) {
         if (!chatId) return reply.status(400).send({ error: "This phone has no chat to post in" });
         const ownerName = phone.document.identity.ownerName;
         const image = String(body.image ?? "").trim().slice(0, 1000);
-        await noodle.addPosts(chatId, [{ author: ownerName, handle: handleFor(ownerName), text, ...(image ? { image } : {}) }]);
+        const parentPostId = String(body.parentPostId ?? "").trim().slice(0, 200);
+        await noodle.addPosts(chatId, [{
+          author: ownerName,
+          handle: handleFor(ownerName),
+          text,
+          ...(image ? { image } : {}),
+          ...(parentPostId ? { parentPostId } : {}),
+        }]);
         return { posts: await noodle.feedFor(phone.document.identity.chatScope) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Post failed" });
@@ -1256,6 +1263,24 @@ export async function activate({ api }: CapabilityContext) {
      * for a company or a stranger and letting the model decide who that is is most of the fun.
      * Characters answer mail sent to them; nobody is guaranteed to answer.
      */
+    // Real, deduplicated interactions. A like is held against the phone that gave it, so pressing
+    // twice takes it back rather than counting twice.
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/noodle/interact", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const postId = String(body.postId ?? "").trim();
+        const kind = body.kind === "boost" ? "boost" : "like";
+        const chatId = targetChat(phone, request.query.chatId);
+        if (!chatId || !postId) return reply.status(400).send({ error: "That post cannot be reached from this phone" });
+        await noodle.interact(chatId, postId, request.params.phoneId, kind);
+        return { posts: await noodle.feedFor(phone.document.identity.chatScope) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "That interaction failed" });
+      }
+    });
     app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/mail/send", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);

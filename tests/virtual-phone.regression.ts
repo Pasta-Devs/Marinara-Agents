@@ -421,6 +421,20 @@ async function main() {
   const mergedFeed = await noodleService.feedFor(["chat-1", "chat-2"]);
   assert.deepEqual(mergedFeed.map((post) => post.text), ["other chat", "hello swamp"]);
   assert.deepEqual(await noodleService.feedFor(["chat-none"]), []);
+  // Interactions are real and deduplicated: pressing like twice takes it back rather than counting
+  // twice, and the seeded baseline keeps a fresh feed from reading as dead the way Forum did.
+  const likeFeed = await noodleService.addPosts("chat-likes", [{ author: "Nim", handle: "@nim", text: "first" }]);
+  const likedPostId = likeFeed[0]!.id;
+  assert.equal(likeFeed[0]!.likedBy?.length, 0);
+  assert.ok((likeFeed[0]!.seed?.likes ?? 0) > 0);
+  await noodleService.interact("chat-likes", likedPostId, "phone-persona", "like");
+  await noodleService.interact("chat-likes", likedPostId, "phone-character", "like");
+  await noodleService.interact("chat-likes", likedPostId, "phone-persona", "like");
+  const afterLikes = (await noodleService.feedFor(["chat-likes"])).find((post) => post.id === likedPostId);
+  assert.deepEqual(afterLikes?.likedBy, ["phone-character"]);
+  await noodleService.addPosts("chat-likes", [{ author: "You", handle: "@you", text: "replying", parentPostId: likedPostId }]);
+  assert.equal((await noodleService.feedFor(["chat-likes"])).filter((post) => post.parentPostId === likedPostId).length, 1);
+
   validateAppManifest(noodlerRManifest);
   validateAppManifest(cameraManifest);
   assert.deepEqual(parsePagePost("Morning swamp yoga pics | locked"), { text: "Morning swamp yoga pics", locked: true });

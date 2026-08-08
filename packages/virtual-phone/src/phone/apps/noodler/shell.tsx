@@ -4,12 +4,6 @@ import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 
-function hashOf(value: string) {
-  let hash = 0;
-  for (const char of value) hash = (hash * 31 + char.charCodeAt(0)) % 100_000;
-  return hash;
-}
-
 interface NoodlePost {
   id: string;
   author: string;
@@ -17,11 +11,23 @@ interface NoodlePost {
   text: string;
   at: string;
   image?: string;
+  parentPostId?: string;
+  likedBy?: string[];
+  boostedBy?: string[];
+  seed?: { likes: number; boosts: number; replies: number };
 }
 
-function postStats(post: NoodlePost) {
-  const hash = hashOf(post.id + post.text);
-  return { likes: 3 + (hash % 420), replies: hash % 37, boosts: hash % 52 };
+/**
+ * Displayed counts are the post's fictional baseline plus the interactions that actually happened.
+ * Counts used to be derived from a hash of the text, so nothing you did ever moved them.
+ */
+function postStats(post: NoodlePost, replies: number) {
+  const seed = post.seed ?? { likes: 0, boosts: 0, replies: 0 };
+  return {
+    likes: seed.likes + (post.likedBy?.length ?? 0),
+    boosts: seed.boosts + (post.boostedBy?.length ?? 0),
+    replies: seed.replies + replies,
+  };
 }
 
 function splitTopic(topic: string) {
@@ -30,6 +36,7 @@ function splitTopic(topic: string) {
 }
 
 export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { phoneId: string; ownerName?: string; onBack: () => void; onClose: () => void }) {
+  const [openPostId, setOpenPostId] = React.useState<string | null>(null);
   const store = usePhoneStore(phoneId, "noodler");
   const [tab, setTab] = React.useState<"feed" | "trending">("feed");
   const [feed, setFeed] = React.useState<NoodlePost[] | null>(null);
@@ -42,13 +49,19 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
     void store.set("lastSeenAt", new Date().toISOString()).catch(() => undefined);
   }, [store]);
 
-  const postDraft = () => {
+  const postDraft = (parentPostId?: string) => {
     const text = draft.trim();
     if (!text) return;
     setDraft("");
     void phoneRequest<{ posts: NoodlePost[] }>(`/phones/${encodeURIComponent(phoneId)}/noodle/post`, {
-      method: "POST", body: JSON.stringify({ text }),
+      method: "POST", body: JSON.stringify({ text, ...(parentPostId ? { parentPostId } : {}) }),
     }).then((response) => setFeed(response.posts)).catch(() => setDraft(text));
+  };
+
+  const interact = (postId: string, kind: "like" | "boost") => {
+    void phoneRequest<{ posts: NoodlePost[] }>(`/phones/${encodeURIComponent(phoneId)}/noodle/interact`, {
+      method: "POST", body: JSON.stringify({ postId, kind }),
+    }).then((response) => setFeed(response.posts)).catch(() => undefined);
   };
 
   const refreshFeed = React.useCallback(() => {
@@ -85,6 +98,40 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
     if (tab === "trending" && trending === null && !loading) refreshTrending();
   }, [tab, trending, loading, refreshTrending]);
 
+  const repliesTo = (postId: string) => (feed ?? []).filter((post) => post.parentPostId === postId);
+  const openPost = openPostId ? (feed ?? []).find((post) => post.id === openPostId) ?? null : null;
+
+  const renderPost = (post: NoodlePost) => {
+    const { likes, replies, boosts } = postStats(post, repliesTo(post.id).length);
+    const liked = post.likedBy?.includes(phoneId) ?? false;
+    const boosted = post.boostedBy?.includes(phoneId) ?? false;
+    return (
+      <article key={post.id} className="vp-card vp-post" style={post.parentPostId ? { marginLeft: "1rem" } : undefined}>
+        <div className="vp-post-header">
+          <span className="vp-post-avatar" aria-hidden="true">{post.author[0]?.toUpperCase() ?? "N"}</span>
+          <span className="vp-post-names">
+            <span className="vp-post-author">{post.author}</span>
+            <span className="vp-post-handle">{post.handle}</span>
+          </span>
+          <span className="vp-post-time">{new Date(post.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+        </div>
+        <p className="vp-post-text">{post.text}</p>
+        {post.image ? <img src={post.image} alt={post.text} className="vp-post-image" loading="lazy" /> : null}
+        <div className="vp-post-footer">
+          <button type="button" onClick={() => setOpenPostId(post.id)} aria-label={`${replies} replies`}>
+            <MessageCircle size="0.75rem" aria-hidden="true" /> {replies}
+          </button>
+          <button type="button" onClick={() => interact(post.id, "boost")} aria-pressed={boosted} aria-label={`${boosts} boosts`} style={boosted ? { color: "var(--vp-accent)" } : undefined}>
+            <Repeat2 size="0.75rem" aria-hidden="true" /> {boosts}
+          </button>
+          <button type="button" onClick={() => interact(post.id, "like")} aria-pressed={liked} aria-label={`${likes} likes`} style={liked ? { color: "var(--vp-accent)" } : undefined}>
+            <Heart size="0.75rem" aria-hidden="true" fill={liked ? "currentColor" : "none"} /> {likes}
+          </button>
+        </div>
+      </article>
+    );
+  };
+
   const skeleton = (
     <div role="status" aria-label="Loading" className="vp-stack" style={{ gap: "0.5rem" }}>
       {[0, 1, 2, 3].map((index) => (
@@ -100,10 +147,10 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
   return (
     <section aria-labelledby="noodler-title" className="vp-appview vp-appview--fixed">
       <PhoneAppHeader
-        title="Noodle"
+        title={openPost ? "Thread" : "Noodle"}
         titleId="noodler-title"
         closeLabel="Close Noodle"
-        onBack={onBack}
+        onBack={() => openPost ? setOpenPostId(null) : onBack()}
         onClose={onClose}
         actions={[{ id: "refresh", icon: "refresh", label: tab === "feed" ? "Refresh feed" : "Refresh trending", kind: "button", disabled: loading, reason: "Refreshing" }]}
         onAction={(actionId) => { if (actionId === "refresh") (tab === "feed" ? refreshFeed() : refreshTrending()); }}
@@ -112,9 +159,9 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
       <div className="vp-tab-content">
         {tab === "feed" ? (
           <>
-            <form className="vp-composer" style={{ marginBottom: "0.875rem" }} onSubmit={(event) => { event.preventDefault(); postDraft(); }}>
-              <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Write a post</span>
-                <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="What's simmering?" maxLength={500} className="vp-input" />
+            <form className="vp-composer" style={{ marginBottom: "0.875rem" }} onSubmit={(event) => { event.preventDefault(); postDraft(openPostId ?? undefined); }}>
+              <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">{openPost ? `Reply to ${openPost.author}` : "Write a post"}</span>
+                <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={openPost ? `Reply to ${openPost.author}` : "What's simmering?"} maxLength={500} className="vp-input" />
               </label>
               <button type="submit" aria-label="Post" disabled={!draft.trim()} className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Send size="1rem" aria-hidden="true" /></button>
             </form>
@@ -124,28 +171,7 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
             ) : null}
             {feed?.length ? (
               <div className="vp-stack" style={{ gap: "0.5rem" }} aria-busy={loading}>
-                {feed.map((post) => {
-                  const { likes, replies, boosts } = postStats(post);
-                  return (
-                    <article key={post.id} className="vp-card vp-post">
-                      <div className="vp-post-header">
-                        <span className="vp-post-avatar" aria-hidden="true">{post.author[0]?.toUpperCase() ?? "N"}</span>
-                        <span className="vp-post-names">
-                          <span className="vp-post-author">{post.author}</span>
-                          <span className="vp-post-handle">{post.handle}</span>
-                        </span>
-                        <span className="vp-post-time">{new Date(post.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
-                      </div>
-                      <p className="vp-post-text">{post.text}</p>
-                      {post.image ? <img src={post.image} alt={post.text} className="vp-post-image" loading="lazy" /> : null}
-                      <div className="vp-post-footer" aria-label={`${replies} replies, ${boosts} boosts, ${likes} likes`}>
-                        <span><MessageCircle size="0.75rem" aria-hidden="true" /> {replies}</span>
-                        <span><Repeat2 size="0.75rem" aria-hidden="true" /> {boosts}</span>
-                        <span><Heart size="0.75rem" aria-hidden="true" /> {likes}</span>
-                      </div>
-                    </article>
-                  );
-                })}
+                {(openPost ? [openPost, ...repliesTo(openPost.id)] : feed.filter((post) => !post.parentPostId)).map((post) => renderPost(post))}
               </div>
             ) : null}
           </>
