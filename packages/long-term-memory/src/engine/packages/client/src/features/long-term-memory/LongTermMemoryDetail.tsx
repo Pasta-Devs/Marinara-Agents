@@ -1325,7 +1325,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                   <div className="mt-3 space-y-3 text-sm leading-6 text-[var(--muted-foreground)]">
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
-                                        Source notes.
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodSourceNotesLabel",
+                                        )}
                                       </strong>{" "}
                                       {localizeUi(
                                         "ui.longTermMemory.longtermmemorydetail.underTheHoodSourceNotes",
@@ -1333,7 +1335,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
-                                        Fingerprints.
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodFingerprintsLabel",
+                                        )}
                                       </strong>{" "}
                                       {localizeUi(
                                         "ui.longTermMemory.longtermmemorydetail.underTheHoodFingerprints",
@@ -1341,7 +1345,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
-                                        Candidate memories.
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodCandidatesLabel",
+                                        )}
                                       </strong>{" "}
                                       {localizeUi(
                                         "ui.longTermMemory.longtermmemorydetail.underTheHoodCandidates",
@@ -1349,7 +1355,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
-                                        Evidence.
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodEvidenceLabel",
+                                        )}
                                       </strong>{" "}
                                       {localizeUi(
                                         "ui.longTermMemory.longtermmemorydetail.underTheHoodEvidence",
@@ -1357,7 +1365,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
-                                        Duplicate checks.
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodDuplicatesLabel",
+                                        )}
                                       </strong>{" "}
                                       {localizeUi(
                                         "ui.longTermMemory.longtermmemorydetail.underTheHoodDuplicates",
@@ -1365,7 +1375,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
-                                        Review.
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodReviewLabel",
+                                        )}
                                       </strong>{" "}
                                       {localizeUi(
                                         "ui.longTermMemory.longtermmemorydetail.underTheHoodReview",
@@ -1383,7 +1395,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     <ul className="list-disc list-outside space-y-2 ps-6">
                                       <li>
                                         <strong className="font-semibold text-[var(--foreground)]">
-                                          Direct matches.
+                                          {localizeUi(
+                                            "ui.longTermMemory.longtermmemorydetail.underTheHoodDirectMatchesLabel",
+                                          )}
                                         </strong>{" "}
                                         {localizeUi(
                                           "ui.longTermMemory.longtermmemorydetail.underTheHoodDirectMatches",
@@ -1391,7 +1405,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       </li>
                                       <li>
                                         <strong className="font-semibold text-[var(--foreground)]">
-                                          Word matching.
+                                          {localizeUi(
+                                            "ui.longTermMemory.longtermmemorydetail.underTheHoodWordMatchingLabel",
+                                          )}
                                         </strong>{" "}
                                         {localizeUi(
                                           "ui.longTermMemory.longtermmemorydetail.underTheHoodWordMatching",
@@ -1399,7 +1415,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       </li>
                                       <li>
                                         <strong className="font-semibold text-[var(--foreground)]">
-                                          Keywords.
+                                          {localizeUi(
+                                            "ui.longTermMemory.longtermmemorydetail.underTheHoodKeywordsLabel",
+                                          )}
                                         </strong>{" "}
                                         {localizeUi(
                                           "ui.longTermMemory.longtermmemorydetail.underTheHoodKeywords",
@@ -1407,7 +1425,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       </li>
                                       <li>
                                         <strong className="font-semibold text-[var(--foreground)]">
-                                          Related memories.
+                                          {localizeUi(
+                                            "ui.longTermMemory.longtermmemorydetail.underTheHoodRelatedMemoriesLabel",
+                                          )}
                                         </strong>{" "}
                                         {localizeUi(
                                           "ui.longTermMemory.longtermmemorydetail.underTheHoodRelatedMemories",
@@ -1415,7 +1435,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       </li>
                                       <li>
                                         <strong className="font-semibold text-[var(--foreground)]">
-                                          Meaning.
+                                          {localizeUi(
+                                            "ui.longTermMemory.longtermmemorydetail.underTheHoodMeaningLabel",
+                                          )}
                                         </strong>{" "}
                                         {localizeUi(
                                           "ui.longTermMemory.longtermmemorydetail.underTheHoodMeaning",
