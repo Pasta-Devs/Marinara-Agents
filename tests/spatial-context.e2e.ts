@@ -5401,6 +5401,12 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await routeMap.getByRole("button", { name: "Plan route to Upper Level" }).click();
     await expect(recoveredStoryLocation).toContainText("Route to Upper Level");
     await expect(recoveredStoryLocation).toContainText("Next step 1 of 2 · Blackglass Lighthouse");
+    if (mobileRuntime) {
+      const queuedStoryMap = recoveredStoryLocation.getByRole("button", { name: "Open story map" });
+      await expectMinimumInteractiveSize(queuedStoryMap, "Queued mobile story-map control");
+      await queuedStoryMap.click();
+      await expect(recoveredStoryLocation.getByRole("region", { name: "Hierarchical world map" })).toBeVisible();
+    }
 
     await page.evaluate(() => {
       const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as

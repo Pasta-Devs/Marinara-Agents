@@ -64,6 +64,16 @@ const builtClient = readFileSync(new URL("../packages/hierarchical-maps/client.j
 assert.match(runtimeBarSource, /travelMode/u, "Runtime location controls must persist the selected travel mode.");
 assert.match(runtimeBarSource, /Step by step/u, "Runtime location controls must expose step-by-step travel.");
 assert.match(runtimeBarSource, /Travel now/u, "Runtime location controls must expose immediate travel.");
+assert.match(
+  runtimeBarSource,
+  /\{enabled && mapAvailable && \(\s*<div data-marinara-maps-runtime-mobile\b[^>]*>/u,
+  "The mobile story-map trigger must remain available while a step-by-step move is pending.",
+);
+assert.doesNotMatch(
+  runtimeBarSource,
+  /\{!pending && enabled && mapAvailable && \(\s*<div data-marinara-maps-runtime-mobile\b[^>]*>/u,
+  "A queued move must not suppress the mobile story-map trigger.",
+);
 assert.doesNotMatch(runtimeBarSource, /Set destination/u, "Runtime location controls must replace the legacy destination-only action.");
 assert.match(builtClient, /Step by step/u, "The built client must include the travel-mode control.");
 assert.match(builtClient, /Travel now/u, "The built client must include the immediate-travel control.");
