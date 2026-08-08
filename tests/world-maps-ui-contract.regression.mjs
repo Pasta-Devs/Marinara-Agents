@@ -59,7 +59,22 @@ const runtimeBarSource = readFileSync(
   ),
   "utf8",
 );
+const aiBuilderSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/SpatialMapAiBuilder.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const aiDraftSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/server/src/services/spatial-context/ai-draft.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const builtClient = readFileSync(new URL("../packages/hierarchical-maps/client.js", import.meta.url), "utf8");
+const builtServer = readFileSync(new URL("../packages/hierarchical-maps/server.mjs", import.meta.url), "utf8");
 
 assert.match(runtimeBarSource, /travelMode/u, "Runtime location controls must persist the selected travel mode.");
 assert.match(runtimeBarSource, /Step by step/u, "Runtime location controls must expose step-by-step travel.");
@@ -77,6 +92,12 @@ assert.doesNotMatch(
 assert.doesNotMatch(runtimeBarSource, /Set destination/u, "Runtime location controls must replace the legacy destination-only action.");
 assert.match(builtClient, /Step by step/u, "The built client must include the travel-mode control.");
 assert.match(builtClient, /Travel now/u, "The built client must include the immediate-travel control.");
+assert.match(aiBuilderSource, /Custom place target/u, "AI expansion must expose an editable custom place target.");
+assert.match(aiBuilderSource, /targetLocationCount/u, "The custom place target must be carried in the AI builder request.");
+assert.match(aiDraftSource, /resolveSpatialDraftSizeSpec/u, "The server must resolve custom targets through the existing size tiers.");
+assert.match(aiDraftSource, /SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT/u, "Custom targets must retain a bounded one-call generation ceiling.");
+assert.match(builtClient, /Custom place target/u, "The built client must include the editable expansion target.");
+assert.match(builtServer, /targetLocationCount/u, "The built server must accept and apply the expansion target.");
 
 assert.match(
   workspaceSource,

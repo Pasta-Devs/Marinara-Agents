@@ -45,6 +45,7 @@ import {
   moveSpatialHierarchyType,
   normalizeHierarchyProfile,
   profileFromTemplate,
+  SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT,
   type SpatialGenerationPreferences,
   type SpatialHierarchyProfile,
 } from "../../../../../maps-shared/src/maps-model";
@@ -77,6 +78,7 @@ type SpatialMapAiBuilderRequest = {
   operation: SpatialMapDraftOperation;
   targetLocationId: string;
   size: SpatialMapDraftSize;
+  targetLocationCount?: number;
   instructions: string;
   groundingMode: SpatialMapGroundingMode;
   sourceLorebookIds: string[];
@@ -90,13 +92,20 @@ export type SpatialMapAiBuilderSession = SpatialMapAiBuilderRequest & {
 
 const SIZE_OPTIONS: Array<{
   value: SpatialMapDraftSize;
+  targetLocationCount: number;
   label: string;
   description: string;
 }> = [
-  { value: "small", label: "Small", description: "About 8 places" },
-  { value: "medium", label: "Medium", description: "About 16 places" },
-  { value: "large", label: "Large", description: "About 28 places" },
+  { value: "small", targetLocationCount: 8, label: "Small", description: "About 8 places" },
+  { value: "medium", targetLocationCount: 16, label: "Medium", description: "About 16 places" },
+  { value: "large", targetLocationCount: 28, label: "Large", description: "About 28 places" },
 ];
+
+function sizeForTargetLocationCount(targetLocationCount: number): SpatialMapDraftSize {
+  if (targetLocationCount <= 8) return "small";
+  if (targetLocationCount <= 16) return "medium";
+  return "large";
+}
 
 function sourceCopy(ownerMode: SpatialOwnerMode, standalone: boolean): string {
   if (standalone) return "Uses only your instructions and any lorebooks you explicitly select. No chat or Game plot is used.";
@@ -209,6 +218,11 @@ export function SpatialMapAiBuilder({
   const [operation, setOperation] = useState<SpatialMapDraftOperation>(initialOperation);
   const [targetLocationId, setTargetLocationId] = useState(defaultTargetLocationId);
   const [size, setSize] = useState<SpatialMapDraftSize>(initialSession?.size ?? initialResult?.size ?? "medium");
+  const [targetLocationCount, setTargetLocationCount] = useState(
+    initialSession?.targetLocationCount ??
+      SIZE_OPTIONS.find((option) => option.value === (initialSession?.size ?? initialResult?.size ?? "medium"))!
+        .targetLocationCount,
+  );
   const [instructions, setInstructions] = useState(initialSession?.instructions ?? "");
   const [result, setResult] = useState<MapsGenerateSpatialMapDraftResponse | null>(() =>
     withHierarchyProfile(initialSession?.result ?? initialResult, hierarchyProfile),
@@ -320,6 +334,11 @@ export function SpatialMapAiBuilder({
     setOperation(nextOperation);
     setTargetLocationId(initialSession?.targetLocationId ?? initialResult?.targetLocationId ?? defaultTargetLocationId);
     setSize(initialSession?.size ?? initialResult?.size ?? "medium");
+    setTargetLocationCount(
+      initialSession?.targetLocationCount ??
+        SIZE_OPTIONS.find((option) => option.value === (initialSession?.size ?? initialResult?.size ?? "medium"))!
+          .targetLocationCount,
+    );
     setInstructions(initialSession?.instructions ?? "");
     setResult(withHierarchyProfile(initialSession?.result ?? initialResult, hierarchyProfile));
     setError(null);
@@ -342,6 +361,7 @@ export function SpatialMapAiBuilder({
         const requestInput = {
           operation: standalone ? "create" : request.operation,
           size: request.size,
+          ...(request.operation === "expand" ? { targetLocationCount: request.targetLocationCount } : {}),
           ...(!standalone && request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
           instructions: request.instructions.trim() || undefined,
           groundingMode: request.groundingMode,
@@ -378,6 +398,7 @@ export function SpatialMapAiBuilder({
       operation: initialSession.operation,
       targetLocationId: initialSession.targetLocationId,
       size: initialSession.size,
+      targetLocationCount: initialSession.targetLocationCount,
       instructions: initialSession.instructions,
       groundingMode: initialSession.groundingMode,
       sourceLorebookIds: initialSession.sourceLorebookIds,
@@ -418,6 +439,7 @@ export function SpatialMapAiBuilder({
     operation,
     targetLocationId,
     size,
+    ...(operation === "expand" ? { targetLocationCount } : {}),
     instructions,
     groundingMode,
     sourceLorebookIds,
@@ -961,15 +983,16 @@ export function SpatialMapAiBuilder({
                 <button
                   key={option.value}
                   type="button"
-                  aria-pressed={size === option.value}
+                  aria-pressed={operation === "expand" ? targetLocationCount === option.targetLocationCount : size === option.value}
                   disabled={generationPending}
                   onClick={() => {
                     setSize(option.value);
+                    if (operation === "expand") setTargetLocationCount(option.targetLocationCount);
                     resetResult();
                   }}
                   className={cn(
                     "min-h-14 rounded-lg border px-2 py-2 text-left transition-colors duration-200 disabled:cursor-wait disabled:opacity-60",
-                    size === option.value
+                    (operation === "expand" ? targetLocationCount === option.targetLocationCount : size === option.value)
                       ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)]"
                       : "border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-editor-muted)]",
                   )}
@@ -979,6 +1002,31 @@ export function SpatialMapAiBuilder({
                 </button>
               ))}
             </div>
+            {operation === "expand" && (
+              <label className="mt-3 block text-xs font-medium text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-target-count">
+                Custom place target
+                <input
+                  id="spatial-ai-target-count"
+                  type="number"
+                  min={1}
+                  max={SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT}
+                  step={1}
+                  value={targetLocationCount}
+                  disabled={generationPending}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    if (!Number.isInteger(next)) return;
+                    setTargetLocationCount(Math.max(1, Math.min(SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT, next)));
+                    setSize(sizeForTargetLocationCount(next));
+                    resetResult();
+                  }}
+                  className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)] disabled:opacity-60"
+                />
+                <span className="mt-1 block text-[0.625rem] text-[var(--marinara-editor-muted)]">
+                  Choose any whole number from 1 to {SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT} places.
+                </span>
+              </label>
+            )}
           </fieldset>
 
           <p className="mt-4 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
@@ -1247,6 +1295,7 @@ export function SpatialMapAiBuilder({
                       operation,
                       targetLocationId,
                       size,
+                      targetLocationCount,
                       instructions,
                       groundingMode,
                       sourceLorebookIds,

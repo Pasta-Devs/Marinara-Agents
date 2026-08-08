@@ -23,7 +23,8 @@ import {
   normalizeSpatialMapPlan,
   readSpatialHierarchyProfile,
   readSpatialMapPlanProvenance,
-  SPATIAL_DRAFT_SIZE_SPECS,
+  resolveSpatialDraftSizeSpec,
+  SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT,
 } from "../services/spatial-context/ai-draft.js";
 import {
   createSpatialContextService,
@@ -147,6 +148,7 @@ const spatialAgentConfigurationUpdateSchema = z.object({
 
 const SPATIAL_MAP_TEMPLATE_PACKAGE_ID = "hierarchical-maps";
 const SPATIAL_MAP_TEMPLATE_KIND = "map-template";
+const spatialCustomTargetLocationSchema = z.number().int().min(1).max(SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT);
 
 const spatialMapTemplateInputSchema = z
   .object({
@@ -1096,8 +1098,12 @@ export async function spatialContextRoutes(app: FastifyInstance) {
 
   app.post("/spatial-context/templates/generate", async (request, reply) => {
     const body = isRecord(request.body) ? request.body : {};
+    const targetLocationCountResult =
+      body.targetLocationCount === undefined
+        ? null
+        : spatialCustomTargetLocationSchema.safeParse(body.targetLocationCount);
     const parsed = generateSpatialMapDraftRequestSchema.safeParse(
-      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "generationPreferencesOverride"]),
+      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "generationPreferencesOverride", "targetLocationCount"]),
     );
     const hierarchyMode = z.enum(["auto", "template", "custom"]).safeParse(body.hierarchyMode ?? "auto");
     const requestedProfile =
@@ -1106,8 +1112,15 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       body.generationPreferencesOverride === undefined
         ? null
         : spatialGenerationPreferencesSchema.safeParse(body.generationPreferencesOverride);
+    if (targetLocationCountResult?.success) {
+      return reply.status(400).send({
+        error: "A custom location target is used only when expanding an existing map.",
+        code: "spatial_map_template_generation_invalid",
+      });
+    }
     if (
       !parsed.success ||
+      (targetLocationCountResult && !targetLocationCountResult.success) ||
       parsed.data.operation !== "create" ||
       !hierarchyMode.success ||
       (requestedProfile && !requestedProfile.success) ||
@@ -1291,8 +1304,21 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         "Per-request prompt replacement is not supported. Use a validated map generation prompt option instead.",
       );
     }
+    const targetLocationCountResult =
+      body.targetLocationCount === undefined
+        ? null
+        : spatialCustomTargetLocationSchema.safeParse(body.targetLocationCount);
+    if (targetLocationCountResult && !targetLocationCountResult.success) {
+      throw new SpatialMapPromptRequestError(
+        400,
+        "spatial_ai_request_invalid",
+        targetLocationCountResult.error.issues[0]?.message ?? "The custom location target is invalid.",
+        targetLocationCountResult.error.issues,
+      );
+    }
+    const targetLocationCount = targetLocationCountResult?.success ? targetLocationCountResult.data : undefined;
     const parsed = generateSpatialMapDraftRequestSchema.safeParse(
-      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "generationPreferencesOverride"]),
+      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "generationPreferencesOverride", "targetLocationCount"]),
     );
     if (!parsed.success) {
       throw new SpatialMapPromptRequestError(
@@ -1300,6 +1326,13 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         "spatial_ai_request_invalid",
         parsed.error.issues[0]?.message ?? "Invalid map generation request.",
         parsed.error.issues,
+      );
+    }
+    if (parsed.data.operation !== "expand" && targetLocationCount !== undefined) {
+      throw new SpatialMapPromptRequestError(
+        400,
+        "spatial_ai_request_invalid",
+        "A custom location target is used only when expanding an existing map.",
       );
     }
     const generationPreferencesOverride =
@@ -1390,7 +1423,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         ? buildGameMapDraftReference(parseSpatialMetadata(chat.metadata))
         : null;
     const requiredLocationNames = gameMapReference?.requiredLocationNames ?? [];
-    const draftSize = SPATIAL_DRAFT_SIZE_SPECS[parsed.data.size];
+    const draftSize = resolveSpatialDraftSizeSpec(parsed.data.size, targetLocationCount);
     if (gameMapReference?.truncated) {
       throw new SpatialMapPromptRequestError(
         409,
@@ -1434,6 +1467,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
               definition: existingDefinition!,
               targetLocationId: parsed.data.targetLocationId!,
               size: parsed.data.size,
+              targetLocations: targetLocationCount,
               groundingMode,
               loreCatalog: loreCatalog.prompt,
               sourceContext,
@@ -1446,6 +1480,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
           : buildSpatialMapDraftPrompt({
               ownerMode,
               size: parsed.data.size,
+              targetLocations: targetLocationCount,
               groundingMode,
               loreCatalog: loreCatalog.prompt,
               sourceContext,
@@ -1467,6 +1502,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
 
     return {
       request: parsed.data,
+      ...(targetLocationCount === undefined ? {} : { targetLocationCount }),
       spatial,
       chat,
       ownerMode,
@@ -1695,6 +1731,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
     const {
       request: parsed,
+      targetLocationCount,
       spatial,
       chat,
       ownerMode,
@@ -1792,12 +1829,14 @@ export async function spatialContextRoutes(app: FastifyInstance) {
                 sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
                 requireLoreSource: groundingMode === "lore_strict",
                 size: parsed.size,
+                targetLocations: targetLocationCount,
               })
             : normalizeSpatialMapPlan(parsedPlan, {
                 ownerMode,
                 revision: existingDefinition?.revision ?? 0,
                 enabled: existingDefinition?.enabled ?? false,
                 size: parsed.size,
+                targetLocations: targetLocationCount,
                 sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
                 requireLoreSource: groundingMode === "lore_strict",
                 requiredLocationNames,

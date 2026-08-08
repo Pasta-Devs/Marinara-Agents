@@ -90,7 +90,8 @@ function artifactFixture(version: string): ArtifactFixture {
     version === "1.2.9" ||
     version === "1.3.0" ||
     version === "1.3.1" ||
-    version === "1.3.2"
+    version === "1.3.2" ||
+    version === "1.3.3"
   ) {
     const clientSource = execFileSync("unzip", ["-p", path, "client.js"], { encoding: "utf8" });
     assert.ok(clientSource.includes(artifactWorldMapsGuideUrl));
@@ -102,27 +103,28 @@ function artifactFixture(version: string): ArtifactFixture {
       version === "1.2.9" ||
       version === "1.3.0" ||
       version === "1.3.1" ||
-      version === "1.3.2"
+      version === "1.3.2" ||
+      version === "1.3.3"
     ) {
       assert.match(
         clientSource,
         /\[data-marinara-maps-world-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
       );
     }
-    if (version === "1.2.9" || version === "1.3.0" || version === "1.3.1" || version === "1.3.2") {
+    if (version === "1.2.9" || version === "1.3.0" || version === "1.3.1" || version === "1.3.2" || version === "1.3.3") {
       assert.match(
         clientSource,
         /\[data-marinara-maps-workspace-overlay\]\s+\[data-marinara-maps-editor-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
       );
     }
-    if (version === "1.3.1" || version === "1.3.2") {
+    if (version === "1.3.1" || version === "1.3.2" || version === "1.3.3") {
       assert.match(clientSource, /spatial_transition_rejected/u);
       assert.match(clientSource, /spatial_transition_committed/u);
       assert.match(clientSource, /marinara-capability-server-event/u);
       assert.match(clientSource, /The current location changed\. Review the available destinations\./u);
       assert.match(clientSource, /new Map\(\[\["spatial_transition_stale_definition"/u);
     }
-    if (version === "1.3.2") {
+    if (version === "1.3.2" || version === "1.3.3") {
       assert.match(clientSource, /Incoming one-way/u);
       assert.match(clientSource, /data-marinara-direct-link-direction/u);
     }
@@ -158,6 +160,7 @@ const fixtures = new Map(
     artifactFixture("1.3.0"),
     artifactFixture("1.3.1"),
     artifactFixture("1.3.2"),
+    artifactFixture("1.3.3"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -182,11 +185,11 @@ assert.deepEqual(candidateFixture.manifest.builtAgainst, {
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
-const currentFixture = fixtures.get("1.3.2");
+const currentFixture = fixtures.get("1.3.3");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
   engineVersion: "2.4.1",
-  engineCommit: "bb40d3feba0cb96062526f19e11fbe3a97ced9c9",
+  engineCommit: "00986ff5bfdcd5705d70c7fca8d8ade86665b217",
 });
 
 function seedInstalledProfile(version: string) {
@@ -250,7 +253,8 @@ function catalogFixture(version: string) {
           version === "1.2.9" ||
           version === "1.3.0" ||
           version === "1.3.1" ||
-          version === "1.3.2"
+          version === "1.3.2" ||
+          version === "1.3.3"
             ? catalogWorldMapsGuideUrl
             : "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
       },
@@ -2784,11 +2788,11 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.3.2";
+    catalogVersion = "1.3.3";
     catalogOnline = true;
-    const upgraded132 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded132.version, "1.3.2");
-    assert.equal(upgraded132.previousVersion, "1.1.7");
+    const upgraded133 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded133.version, "1.3.3");
+    assert.equal(upgraded133.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
@@ -2834,6 +2838,32 @@ async function main() {
       },
     })) as { currentLocationId: string; definition: { revision: number } };
     assert.equal(impersonateSpatial.currentLocationId, "lifecycle_world");
+
+    mapExpansionExistingTargetId = "lifecycle_harbor";
+    const customExpansionRequestIndex = generationProviderRequests.length;
+    const customExpansion = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${impersonateChat.id}/spatial-context/generate`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "expand",
+        targetLocationId: "lifecycle_world",
+        size: "small",
+        targetLocationCount: 10,
+        instructions: "Add a canal ward connected to the existing harbor.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: impersonateConnection.id,
+        debugMode: false,
+      },
+    })) as { operation: string; definition: { locations: Array<{ id: string }> } };
+    mapExpansionExistingTargetId = null;
+    assert.equal(customExpansion.operation, "expand");
+    assert.match(
+      capturedProviderPrompt(generationProviderRequests[customExpansionRequestIndex]),
+      /Create about 10 new locations/u,
+      "Custom expansion targets must reach the provider prompt.",
+    );
 
     const guidedGeneration = await app.inject({
       method: "POST",
@@ -3732,7 +3762,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.3.2");
+    assert.equal(reinstalled.version, "1.3.3");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -3820,7 +3850,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.3.2", status: "active", readiness: "ready" }],
+      [{ version: "1.3.3", status: "active", readiness: "ready" }],
     );
 
     console.info(
