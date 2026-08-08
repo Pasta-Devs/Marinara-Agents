@@ -11,6 +11,7 @@ type Contact = {
   name: string;
   phoneLabel?: string;
   bio?: string;
+  source?: string;
 };
 
 interface ContactsPayload {
@@ -54,7 +55,12 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
         method: "POST",
         body: JSON.stringify(draft),
       });
-      setData((current) => current ? { ...current, contacts: [...current.contacts, response.contact] } : current);
+      setData((current) => current ? {
+        ...current,
+        contacts: current.contacts.some((contact) => contact.id === response.contact.id)
+          ? current.contacts.map((contact) => contact.id === response.contact.id ? response.contact : contact)
+          : [...current.contacts, response.contact],
+      } : current);
       setDraft({ name: "", bio: "", phoneLabel: "" });
       setView("list");
     } catch (requestError) {
@@ -114,6 +120,7 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
             <span className="vp-thread-name">{openContact.name}</span>
             {openContact.phoneLabel?.trim() ? <span className="vp-thread-preview">{openContact.phoneLabel}</span> : null}
             {openContact.bio?.trim() ? <p className="vp-thread-preview">{openContact.bio}</p> : null}
+            {openContact.source?.trim() ? <span className="vp-muted-note">{openContact.source}</span> : null}
             <span className="vp-muted-note">
               {openContact.phoneId ? threadStatus(openContact.phoneId) : "No phone in this chat"}
             </span>
@@ -152,6 +159,7 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
                   <span className="vp-thread-body">
                     <span className="vp-thread-name">{contact.name}</span>
                     {contact.bio?.trim() ? <span className="vp-thread-preview">{contact.bio}</span> : null}
+                    {contact.source?.trim() ? <span className="vp-thread-preview">{contact.source}</span> : null}
                     <span className="vp-thread-preview">{contact.phoneLabel?.trim() ? `${contact.phoneLabel} · ` : ""}{contact.phoneId ? threadStatus(contact.phoneId) : "No phone in this chat"}</span>
                   </span>
                 </button>

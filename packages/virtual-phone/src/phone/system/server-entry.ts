@@ -13,6 +13,7 @@ import { fallbackSearchResults } from "../apps/goodle/manifest";
 import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
+import { applyTransaction, readAccount } from "../apps/banking/manifest";
 
 interface CapabilityContext {
   api: {
@@ -146,6 +147,12 @@ export async function activate({ api }: CapabilityContext) {
     const asked = typeof requested === "string" ? requested : "";
     if (asked && scope.includes(asked)) return asked;
     return scope[scope.length - 1];
+  };
+  const CONTACT_PHONE_PREFIX = "contact:";
+  const contactPhoneId = (chatId: string, contactId: string) => `${CONTACT_PHONE_PREFIX}${encodeURIComponent(chatId)}:${contactId}`;
+  const contactIdFromPhone = (phoneId: string, chatId: string) => {
+    const prefix = `${CONTACT_PHONE_PREFIX}${encodeURIComponent(chatId)}:`;
+    return phoneId.startsWith(prefix) ? phoneId.slice(prefix.length) : null;
   };
 
   const threadPayload = (threadId: string, document: ThreadDocument, phoneId: string, names: Map<string, string>) => {
@@ -335,6 +342,33 @@ export async function activate({ api }: CapabilityContext) {
     }
   };
 
+  const generateContactReply = async (senderPhoneId: string, contactId: string, chatId: string) => {
+    const sender = await findPhone(senderPhoneId);
+    const contact = (await phones.listContacts(chatId)).find(({ document }) => document.contactId === contactId)?.document;
+    if (!contact) throw new Error("Contact not found");
+    const model = await resolvePhoneModel(sender, "light");
+    if (!model) return null;
+    const syntheticPhoneId = contactPhoneId(chatId, contact.contactId);
+    const thread = (await messaging.threadsFor(senderPhoneId))
+      .find(({ document }) => document.participants.includes(syntheticPhoneId));
+    if (!thread) return null;
+    const history = thread.document.messages.slice(-20)
+      .map((message) => `${message.from === senderPhoneId ? sender.document.identity.ownerName : contact.name}: ${message.text}`)
+      .join("\n");
+    const completion = await model.chatComplete([
+      {
+        role: "system",
+        content: `You are ${contact.name}, texting ${sender.document.identity.ownerName} inside an ongoing roleplay. Write one short reply in your own voice. Respond with only JSON: {"reply":"your message"}. If you would leave this on read, respond with {"reply":""}.${contact.bio ? `\n\nAbout you:\n${contact.bio}` : ""}\n\nHow you know them: ${contact.source || "saved in Contacts"}${await worldContext(chatId, sender)}${await customInstructions(sender)}`,
+      },
+      { role: "user", content: history },
+    ], { temperature: 0.9, maxTokens: 250 });
+    const { reply } = parseBoundedContent(completion.content, {
+      fields: { reply: "string" }, defaults: { reply: "" }, limits: { maxString: 400 },
+    }) as { reply: string };
+    if (!reply.trim()) return null;
+    return messaging.send(syntheticPhoneId, senderPhoneId, reply);
+  };
+
   const routes: FastifyPluginAsync = async (app) => {
     app.get("/phones", async () => ({ phones: (await phones.list()).map(phoneResponse) }));
     app.get<{ Params: { ownerType: string; ownerId: string } }>("/phones/:ownerType/:ownerId", async (request, reply) => {
@@ -446,7 +480,7 @@ export async function activate({ api }: CapabilityContext) {
     }
     for (const chatId of phone.document.identity.chatScope) {
       for (const { document } of await phones.listContacts(chatId)) {
-        known.set(document.name, document.phoneLabel ? `you saved their details as ${document.phoneLabel}` : "you saved them in Contacts");
+        known.set(document.name, document.source || (document.phoneLabel ? `you saved their details as ${document.phoneLabel}` : "you saved them in Contacts"));
       }
     }
     return known;
@@ -766,9 +800,10 @@ export async function activate({ api }: CapabilityContext) {
     return threads;
   };
 
-    app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/messaging", async (request, reply) => {
+    app.get<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/messaging", async (request, reply) => {
       try {
-        const contacts = await Promise.all((await contactsFor(request.params.phoneId)).map(async (contact) => {
+        const phone = await findPhone(request.params.phoneId);
+        const phoneContacts = await Promise.all((await contactsFor(request.params.phoneId)).map(async (contact) => {
           try {
             const records = contact.ownerType === "character"
               ? await api.runtime.resources.listCharacters([contact.ownerId])
@@ -779,11 +814,21 @@ export async function activate({ api }: CapabilityContext) {
             return { ...contact, bio: "" };
           }
         }));
+        const chatId = targetChat(phone, request.query.chatId);
+        const manualContacts = chatId ? (await phones.listContacts(chatId)).map(({ document }) => ({
+          phoneId: contactPhoneId(chatId!, document.contactId),
+          ownerName: document.name,
+          bio: document.bio,
+        })) : [];
+        const contacts = [...phoneContacts, ...manualContacts];
         const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
-        const phone = await findPhone(request.params.phoneId);
         const threads = [
           ...await engineThreadsFor(phone),
           ...(await messaging.threadsFor(request.params.phoneId))
+            .filter(({ document }) => {
+              const other = document.participants.find((participant) => participant !== request.params.phoneId) ?? "";
+              return !other.startsWith(CONTACT_PHONE_PREFIX) || names.has(other);
+            })
             .map(({ record, document }) => ({
               ...threadPayload(record.id, document, request.params.phoneId, names),
               kind: "phone" as const,
@@ -818,11 +863,19 @@ export async function activate({ api }: CapabilityContext) {
           name: document.name,
           handle: document.handle,
           bio: document.bio,
-          phoneLabel: document.phoneLabel,
-          phoneId: null,
+            phoneLabel: document.phoneLabel,
+            source: document.source || "Added in Contacts",
+            phoneId: contactPhoneId(chatId, document.contactId),
         }));
-        const names = new Map(phoneContacts.map((contact) => [contact.phoneId, contact.name]));
+        const names = new Map([
+          ...phoneContacts.map((contact) => [contact.phoneId, contact.name] as const),
+          ...manualContacts.map((contact) => [contact.phoneId, contact.name] as const),
+        ]);
         const threads = (await messaging.threadsFor(phone.document.identity.phoneId))
+          .filter(({ document }) => {
+            const other = document.participants.find((participant) => participant !== phone.document.identity.phoneId) ?? "";
+            return !other.startsWith(CONTACT_PHONE_PREFIX) || names.has(other);
+          })
           .map(({ record, document }) => threadPayload(record.id, document, phone.document.identity.phoneId, names));
         return { contacts: [...phoneContacts, ...manualContacts], threads };
       } catch (error) {
@@ -841,8 +894,25 @@ export async function activate({ api }: CapabilityContext) {
           handle: String(body.handle ?? ""),
           bio: String(body.bio ?? ""),
           phoneLabel: String(body.phoneLabel ?? ""),
+          source: String(body.source ?? "Added in Contacts"),
         });
-        return { contact: { id: contact.document.contactId, kind: "contact", ...contact.document, phoneId: null } };
+        const firstMessage = String(body.firstMessage ?? "").trim().slice(0, 400);
+        if (firstMessage) {
+          const syntheticPhoneId = contactPhoneId(chatId, contact.document.contactId);
+          const existing = (await messaging.threadsFor(request.params.phoneId))
+            .some(({ document }) => document.participants.includes(syntheticPhoneId));
+          if (!existing) {
+            try {
+              await messaging.send(syntheticPhoneId, request.params.phoneId, firstMessage);
+            } catch (cause) {
+              return {
+                contact: { id: contact.document.contactId, kind: "contact", ...contact.document, phoneId: syntheticPhoneId },
+                warning: cause instanceof Error ? cause.message : "The first message could not be delivered",
+              };
+            }
+          }
+        }
+        return { contact: { id: contact.document.contactId, kind: "contact", ...contact.document, phoneId: contactPhoneId(chatId, contact.document.contactId) } };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Contact could not be added" });
       }
@@ -1195,10 +1265,15 @@ export async function activate({ api }: CapabilityContext) {
       try {
         const phoneId = request.params.phoneId;
         const contacts = await contactsFor(phoneId);
-        const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
+        const phone = await findPhone(phoneId);
+        const chatId = targetChat(phone, request.query.chatId);
+        const manualContacts = chatId ? await phones.listContacts(chatId) : [];
+        const names = new Map([
+          ...contacts.map((contact) => [contact.phoneId, contact.ownerName] as const),
+          ...manualContacts.map(({ document }) => [contactPhoneId(chatId!, document.contactId), document.name] as const),
+        ]);
         const extra: Array<{ id: string; appId: string; title: string; body: string; count: number; at: string }> = [];
 
-        const phone = await findPhone(phoneId);
         const installed = phoneGenSettings(phone).installedApps;
 
         if (installed.includes("mail")) {
@@ -1257,10 +1332,11 @@ export async function activate({ api }: CapabilityContext) {
         }
 
         const notifications = (await messaging.threadsFor(phoneId)).flatMap(({ record, document }) => {
+          const otherPhoneId = document.participants.find((participant) => participant !== phoneId) ?? "";
+          if (otherPhoneId.startsWith(CONTACT_PHONE_PREFIX) && !names.has(otherPhoneId)) return [];
           const unread = unreadMessages(document, phoneId);
           const last = unread.at(-1);
           if (!last) return [];
-          const otherPhoneId = document.participants.find((participant) => participant !== phoneId) ?? "";
           return [{
             id: record.id,
             appId: "messages",
@@ -1275,7 +1351,7 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid notifications request" });
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/messaging/send", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/messaging/send", async (request, reply) => {
       try {
         const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
           ? request.body as Record<string, unknown>
@@ -1307,18 +1383,31 @@ export async function activate({ api }: CapabilityContext) {
           const [thread] = (await engineThreadsFor(phone)).filter((candidate) => candidate.id === toPhoneId);
           return { thread };
         }
-        const contacts = await contactsFor(request.params.phoneId);
-        if (!contacts.some((contact) => contact.phoneId === toPhoneId)) {
+        const phone = await findPhone(request.params.phoneId);
+        const chatId = targetChat(phone, request.query.chatId);
+        const phoneContacts = await contactsFor(request.params.phoneId);
+        const manualContacts = chatId ? await phones.listContacts(chatId) : [];
+        const manualContactId = chatId ? contactIdFromPhone(toPhoneId, chatId) : null;
+        const manualContact = manualContactId
+          ? manualContacts.find(({ document }) => document.contactId === manualContactId)
+          : null;
+        if (!phoneContacts.some((contact) => contact.phoneId === toPhoneId) && !manualContact) {
           return reply.status(400).send({ error: "That phone cannot be messaged from this chat" });
         }
         const thread = await messaging.send(request.params.phoneId, toPhoneId, String(body.text ?? ""));
-        const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
+        const names = new Map([
+          ...phoneContacts.map((contact) => [contact.phoneId, contact.ownerName] as const),
+          ...manualContacts.map(({ document }) => [contactPhoneId(chatId!, document.contactId), document.name] as const),
+        ]);
         // The send returns as soon as the message is stored. Waiting on the model here made the
         // send button hang for the length of a completion on a slow connection. The reply lands in
         // the thread asynchronously and the client's poll picks it up.
         const pending = await messaging.setReplyState(thread.record.id, { status: "pending", at: new Date().toISOString() })
           .catch(() => thread);
-        void generateCharacterReply(request.params.phoneId, toPhoneId)
+        const generateReply = manualContact
+          ? generateContactReply(request.params.phoneId, manualContact.document.contactId, chatId!)
+          : generateCharacterReply(request.params.phoneId, toPhoneId);
+        void generateReply
           .then(async (replied) => {
             // `send` clears the reply state, so only the left-on-read case needs clearing here.
             if (!replied) await messaging.setReplyState(thread.record.id, null);
@@ -1335,13 +1424,25 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
       }
     });
-    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/messaging/read", async (request, reply) => {
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/messaging/read", async (request, reply) => {
       try {
         const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
           ? request.body as Record<string, unknown>
           : {};
-        const thread = await messaging.markRead(String(body.threadId ?? ""), request.params.phoneId);
-        const names = new Map((await contactsFor(request.params.phoneId)).map((contact) => [contact.phoneId, contact.ownerName]));
+        const phone = await findPhone(request.params.phoneId);
+        const chatId = targetChat(phone, request.query.chatId);
+        if (!chatId) return reply.status(400).send({ error: "This phone is not part of a chat" });
+        const threadId = String(body.threadId ?? "");
+        const candidate = (await messaging.threadsFor(request.params.phoneId)).find(({ record }) => record.id === threadId);
+        const other = candidate?.document.participants.find((participant) => participant !== request.params.phoneId) ?? "";
+        if (other.startsWith(CONTACT_PHONE_PREFIX) && contactIdFromPhone(other, chatId) === null) {
+          return reply.status(400).send({ error: "That contact belongs to another chat" });
+        }
+        const thread = await messaging.markRead(threadId, request.params.phoneId);
+        const names = new Map([
+          ...(await contactsFor(request.params.phoneId)).map((contact) => [contact.phoneId, contact.ownerName] as const),
+          ...(await phones.listContacts(chatId)).map(({ document }) => [contactPhoneId(chatId, document.contactId), document.name] as const),
+        ]);
         return { thread: threadPayload(thread.record.id, thread.document, request.params.phoneId, names) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
@@ -1461,6 +1562,41 @@ export async function activate({ api }: CapabilityContext) {
         return { changes: proposed.changes };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "The bank could not be reached" });
+      }
+    });
+    app.post<{ Params: { phoneId: string } }>("/phones/:phoneId/wallet/move", async (request, reply) => {
+      try {
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const amount = Math.trunc(Number(body.amount));
+        const description = String(body.description ?? "").trim().slice(0, 200);
+        const transactionId = String(body.transactionId ?? "").trim().slice(0, 200);
+        if (!Number.isFinite(amount) || amount === 0) return reply.status(400).send({ error: "A non-zero wallet amount is required" });
+        if (!transactionId) return reply.status(400).send({ error: "A wallet transaction ID is required" });
+        const priorResult = (value: unknown) => {
+          const account = readAccount(value);
+          return account.transactions.some((entry) => entry.id === transactionId)
+            ? { account, insufficient: false }
+            : null;
+        };
+        const result = await phones.mutateAppStorageKey(request.params.phoneId, "banking", "account", (value) => {
+          const account = readAccount(value);
+          if (account.transactions.length === 0 && account.balance === 0) {
+            return { value, result: { account: null, insufficient: false } };
+          }
+          if (amount < 0 && account.balance < Math.abs(amount)) {
+            return { value, result: { account, insufficient: true } };
+          }
+          const updated = applyTransaction(account, {
+            id: transactionId, at: new Date().toISOString(), amount,
+            description: description || "Phone purchase", source: "user",
+          });
+          return { value: updated, result: { account: updated, insufficient: false } };
+        }, priorResult);
+        return result;
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "The wallet could not be updated" });
       }
     });
     /**

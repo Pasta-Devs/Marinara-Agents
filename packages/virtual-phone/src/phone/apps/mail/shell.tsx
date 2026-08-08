@@ -3,6 +3,7 @@ import { draftMail, mailFromLine, mergeMail, parseEmail, readStoredMail, type Ma
 import { phoneRequest, recordActivity } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
+import { rememberPerson } from "../../platform/people";
 
 const FOLDERS: Array<{ id: MailFolder; label: string }> = [
   { id: "inbox", label: "Inbox" },
@@ -46,8 +47,16 @@ export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phon
         const arrived = response.emails.map((line) => mailFromLine(line, ownerName, at));
         setMail((current) => {
           const merged = mergeMail(current ?? [], arrived);
-          void store.set("inbox", merged).catch(() => undefined);
+          void store.set("inbox", merged).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The mailbox could not be saved."));
           return merged;
+        });
+        void Promise.all(arrived.map((item) => rememberPerson(phoneId, {
+          name: item.from,
+          bio: `Wrote about “${item.subject}”.`,
+          phoneLabel: "Mail",
+          source: "Wrote to you by mail",
+        }))).catch((cause: unknown) => {
+          setError(cause instanceof Error ? cause.message : "A mail correspondent could not be added to Contacts.");
         });
       })
       .catch((cause: unknown) => {
@@ -74,7 +83,9 @@ export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phon
     let active = true;
     void phoneRequest<{ contacts: Array<{ ownerName: string }> }>(`/phones/${encodeURIComponent(phoneId)}/messaging`)
       .then((payload) => { if (active) setContacts(payload.contacts.map((contact) => contact.ownerName)); })
-      .catch(() => undefined);
+      .catch((cause: unknown) => {
+        if (active) setError(cause instanceof Error ? cause.message : "Contacts could not be loaded.");
+      });
     return () => { active = false; };
   }, [phoneId]);
 
@@ -119,6 +130,16 @@ export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phon
           new Date().toISOString(),
         );
         persist([{ ...answer, replyTo: sent.id }, ...afterSend]);
+        try {
+          await rememberPerson(phoneId, {
+            name: response.reply.from,
+            bio: `Corresponded about “${response.reply.subject}”.`,
+            phoneLabel: "Mail",
+            source: "Corresponded by mail",
+          });
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : "The correspondent could not be added to Contacts.");
+        }
         setFolder("inbox");
       }
     } catch (cause) {

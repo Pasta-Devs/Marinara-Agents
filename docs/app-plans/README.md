@@ -98,7 +98,7 @@ accretes five more per-app workarounds. [`20-tester-feedback.md`](20-tester-feed
 [`21-engine-contract-ask.md`](21-engine-contract-ask.md), with the Engine file paths, current type
 shapes and a minimal proposed shape for each item.
 
-Framed as **two general mechanisms plus two data reads**, rather than the five point-solutions it
+Framed as **three general mechanisms plus two data reads**, rather than the five point-solutions it
 first looked like. Three of the blockers — images, calls, music transport — are really the same
 thing: the phone cannot talk to another agent. `15-rp-integration.md` §5 already says the phone
 should integrate *control* of other agents and never their functionality; the general ask is what
@@ -108,4 +108,6 @@ Each general ask carries a narrow fallback that unblocks the same features, so i
 one review. Two of the four items were assumed possible when these plans were written and turned out
 to be blocked once code was written against them.
 
-This is the entire remaining dependency — Stages 1 through 10 are shipped.
+The Engine contract is the remaining dependency for the blocked integrations. Package-side systemic
+work continues independently: apps now feed the shared Contacts registry and money flows through a
+shared wallet.

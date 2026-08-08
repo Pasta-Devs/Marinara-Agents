@@ -4,7 +4,8 @@ import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { PhoneAvatar, hueFor, useAvatarMap } from "../../platform/avatars";
-import { applyTransaction, formatMoney, readAccount, type BankAccount } from "../banking/manifest";
+import { charge, InsufficientFundsError } from "../../platform/wallet";
+import { formatMoney } from "../banking/manifest";
 
 interface PagePost {
   id: string;
@@ -21,7 +22,6 @@ interface CreatorPage {
 
 export function NoodlerRShell({ phoneId, chatId, onBack, onClose }: { phoneId: string; chatId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "noodler-r");
-  const bank = usePhoneStore(phoneId, "banking");
   const [chargeError, setChargeError] = React.useState<string | null>(null);
   const [contacts, setContacts] = React.useState<Array<{ phoneId: string; ownerId?: string; ownerName: string }> | null>(null);
   const avatars = useAvatarMap();
@@ -36,7 +36,9 @@ export function NoodlerRShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
       .catch(() => { if (active) setContacts([]); });
     void store.get("subs").then((value) => {
       if (active && Array.isArray(value)) setSubs(value.filter((item): item is string => typeof item === "string"));
-    }).catch(() => undefined);
+    }).catch((cause: unknown) => {
+      if (active) setChargeError(cause instanceof Error ? cause.message : "Subscriptions could not be loaded.");
+    });
     return () => { active = false; };
   }, [phoneId, chatId, store]);
 
@@ -65,26 +67,31 @@ export function NoodlerRShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
     setChargeError(null);
     const cost = priceOf(page.price);
     if (!subscribed && cost > 0) {
-      const account = readAccount(await bank.get("account").catch(() => null));
-      // No account at all means Banking is not installed on this phone; leave it free.
-      if (account.transactions.length || account.balance) {
-        if (account.balance < cost) {
-          setChargeError(`Not enough in the bank — ${page.price} needed, ${formatMoney(account.balance, account.currency)} available.`);
-          return;
+      try {
+        const next = [page.creatorPhoneId, ...subs];
+        await store.set("subs", next);
+        try {
+          await charge(phoneId, cost, `Subscribed to ${page.creatorName} on NoodleR`, `noodler-r:${page.creatorPhoneId}`);
+        } catch (cause) {
+          await store.set("subs", subs);
+          throw cause;
         }
-        const charged: BankAccount = applyTransaction(account, {
-          id: `sub-${page.creatorPhoneId}-${Date.now()}`,
-          at: new Date().toISOString(),
-          amount: -cost,
-          description: `Subscribed to ${page.creatorName} on NoodleR`,
-          source: "user",
-        });
-        await bank.set("account", charged).catch(() => undefined);
+      } catch (cause) {
+        if (cause instanceof InsufficientFundsError) {
+          setChargeError(`Not enough in the bank — ${page.price} needed, ${formatMoney(cause.account.balance, cause.account.currency)} available.`);
+        } else {
+          setChargeError(cause instanceof Error ? cause.message : "The bank could not complete the subscription.");
+        }
+        return;
       }
     }
     const next = subscribed ? subs.filter((id) => id !== page.creatorPhoneId) : [page.creatorPhoneId, ...subs];
     setSubs(next);
-    void store.set("subs", next).catch(() => undefined);
+    try {
+      if (subscribed || cost === 0) await store.set("subs", next);
+    } catch (cause) {
+      setChargeError(cause instanceof Error ? cause.message : "The subscription could not be saved.");
+    }
   };
 
   return (

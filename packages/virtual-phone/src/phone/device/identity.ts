@@ -47,6 +47,8 @@ export interface ContactDocument {
   handle: string;
   bio: string;
   phoneLabel: string;
+  /** Where this person entered the owner's life, shown in Contacts and generation context. */
+  source: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -141,6 +143,7 @@ function parsePhoneRecord(record: PhoneDocumentRecord) {
 
 export class PhoneIdentityService {
   private readonly ownerLocks = new Map<string, Promise<unknown>>();
+  private readonly contactLocks = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly documents: PhoneDocumentStore,
@@ -162,9 +165,46 @@ export class PhoneIdentityService {
       .map((record) => ({ record, document: record.data as ContactDocument }));
   }
 
-  async createContact(input: { chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string }) {
+  async createContact(input: { chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string }) {
     const chatId = normalizeRequiredString(input.chatId, "chatId");
     const name = normalizeRequiredString(input.name, "name").slice(0, 120);
+    const key = `${chatId}\0${name.toLocaleLowerCase()}`;
+    const previous = this.contactLocks.get(key) ?? Promise.resolve();
+    const pending = previous.then(() => this.createContactUnlocked({ ...input, chatId, name }));
+    this.contactLocks.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.contactLocks.get(key) === pending) this.contactLocks.delete(key);
+    }
+  }
+
+  private async createContactUnlocked(input: { chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string }) {
+    const { chatId, name } = input;
+    const existing = (await this.listContacts(chatId)).find(({ document }) =>
+      document.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+    if (existing) {
+      const updatedAt = this.now();
+      const document: ContactDocument = {
+        ...existing.document,
+        handle: String(input.handle ?? existing.document.handle).trim().slice(0, 80),
+        bio: String(input.bio ?? existing.document.bio).trim().slice(0, 500),
+        phoneLabel: String(input.phoneLabel ?? existing.document.phoneLabel).trim().slice(0, 80),
+        source: String(input.source ?? existing.document.source ?? "Added in Contacts").trim().slice(0, 120),
+        updatedAt,
+      };
+      const record = await this.documents.update({
+        id: existing.record.id,
+        packageId: PACKAGE_ID,
+        expectedRevision: existing.record.revision,
+        name: document.name,
+        description: existing.record.description,
+        data: document,
+        updatedAt,
+      });
+      if (!record) return this.createContactUnlocked(input);
+      return { record, document };
+    }
     const timestamp = this.now();
     const document: ContactDocument = {
       schemaVersion: 1,
@@ -174,6 +214,7 @@ export class PhoneIdentityService {
       handle: String(input.handle ?? "").trim().slice(0, 80),
       bio: String(input.bio ?? "").trim().slice(0, 500),
       phoneLabel: String(input.phoneLabel ?? "").trim().slice(0, 80),
+      source: String(input.source ?? "Added in Contacts").trim().slice(0, 120),
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -490,6 +531,23 @@ export class PhoneIdentityService {
     validateAppStorageId(key, "key");
     if (JSON.stringify(value) === undefined) throw new Error("Phone store values must be JSON");
     return this.writeAppStorage(phoneId, appId, (app) => ({ ...app, [key]: value }));
+  }
+
+  async mutateAppStorageKey<T>(phoneId: string, appId: string, key: string, mutate: (value: unknown) => { value: unknown; result: T }, resultForStored?: (value: unknown) => T | null) {
+    validateAppStorageId(key, "key");
+    let result!: T;
+    await this.writeAppStorage(phoneId, appId, (app) => {
+      const stored = resultForStored?.(app[key] ?? null);
+      if (stored !== null && stored !== undefined) {
+        result = stored;
+        return app;
+      }
+      const changed = mutate(app[key] ?? null);
+      if (JSON.stringify(changed.value) === undefined) throw new Error("Phone store values must be JSON");
+      result = changed.result;
+      return { ...app, [key]: changed.value };
+    });
+    return result;
   }
 
   async removeAppStorageKey(phoneId: string, appId: string, key: string) {

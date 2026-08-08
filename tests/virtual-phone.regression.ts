@@ -146,6 +146,16 @@ async function main() {
   });
   assert.equal(manualContact.document.name, "Lady Farquaad");
   assert.equal(manualContact.document.phoneLabel, "");
+  assert.equal(manualContact.document.source, "Added in Contacts");
+  const metAgain = await concurrentRuntime.createContact({
+    chatId: "chat-1",
+    name: "lady farquaad",
+    phoneLabel: "Marketplace",
+    source: "Bought from them on Marketplace",
+  });
+  assert.equal(metAgain.document.contactId, manualContact.document.contactId);
+  assert.equal(metAgain.document.source, "Bought from them on Marketplace");
+  assert.equal((await concurrentRuntime.listContacts("chat-1")).length, 1);
   assert.deepEqual((await concurrentRuntime.listContacts("chat-1")).map(({ document }) => document.name), ["Lady Farquaad"]);
   assert.deepEqual(await concurrentRuntime.listContacts("chat-2"), []);
   await concurrentRuntime.removeContact(manualContact.document.contactId, "chat-1");
@@ -457,6 +467,14 @@ async function main() {
   assert.equal(parseProposal("0 :: nothing"), null);
   assert.equal(readAccount(undefined).balance, 0);
   assert.equal(readAccount({ balance: "x", transactions: null }).currency, "credits");
+  await concurrentRuntime.setAppStorageKey("phone-persona", "banking", "account", account);
+  const moved = await concurrentRuntime.mutateAppStorageKey("phone-persona", "banking", "account", (value) => {
+    const current = readAccount(value);
+    const updated = applyTransaction(current, { id: "wallet", at: "2026-08-08T12:00:00.000Z", amount: -10, description: "Lunch", source: "user" });
+    return { value: updated, result: updated };
+  });
+  assert.equal(moved.balance, 200);
+  assert.equal(readAccount(await concurrentRuntime.getAppStorageKey("phone-persona", "banking", "account")).balance, 200);
   // A listing keeps title, price and seller with no image; only the picture is missing.
   assert.deepEqual(parseListing("Nel | 40 marks | Rusted bicycle | Rides fine downhill."), {
     seller: "Nel", price: "40 marks", title: "Rusted bicycle", description: "Rides fine downhill.",

@@ -3,14 +3,15 @@ import { Send } from "lucide-react";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { phoneRequest, recordActivity } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
-import { applyTransaction, formatMoney, readAccount } from "../banking/manifest";
+import { rememberPerson } from "../../platform/people";
+import { charge, credit, InsufficientFundsError } from "../../platform/wallet";
+import { formatMoney } from "../banking/manifest";
 import { glyphFor, listingKey, parseListing, priceValue, type HaggleTurn, type Listing, type OwnListing } from "./manifest";
 
 const newId = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `l-${Math.random().toString(36).slice(2)}`);
 
 export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "marketplace");
-  const bank = usePhoneStore(phoneId, "banking");
   const [listings, setListings] = React.useState<Listing[] | null>(null);
   const [owned, setOwned] = React.useState<Listing[]>([]);
   const [selling, setSelling] = React.useState<OwnListing[]>([]);
@@ -32,7 +33,7 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
       .then((response) => {
         const parsed = response.listings.map(parseListing);
         setListings(parsed);
-        void store.set("listings", parsed).catch(() => undefined);
+        void store.set("listings", parsed).catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "The listings could not be saved."));
       })
       .catch((cause: unknown) => {
         setNotice(cause instanceof Error ? cause.message : "The marketplace could not be reached.");
@@ -64,9 +65,9 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
   const askingPrice = open ? priceValue(open.price) : 0;
   const payable = agreed || askingPrice;
 
-  const persistOwned = (next: Listing[]) => { setOwned(next); void store.set("owned", next).catch(() => undefined); };
-  const persistSelling = (next: OwnListing[]) => { setSelling(next); void store.set("selling", next).catch(() => undefined); };
-  const persistThreads = (next: Record<string, HaggleTurn[]>) => { setThreads(next); void store.set("threads", next).catch(() => undefined); };
+  const persistOwned = (next: Listing[]) => { setOwned(next); void store.set("owned", next).catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "Your purchases could not be saved.")); };
+  const persistSelling = (next: OwnListing[]) => { setSelling(next); void store.set("selling", next).catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "Your listings could not be saved.")); };
+  const persistThreads = (next: Record<string, HaggleTurn[]>) => { setThreads(next); void store.set("threads", next).catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "The seller conversation could not be saved.")); };
 
   /** Money leaves the same account Banking shows, or the purchase does not happen. */
   const buy = async (listing: Listing) => {
@@ -74,26 +75,36 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
     setNotice(null);
     try {
       const cost = payable;
-      const account = readAccount(await bank.get("account").catch(() => null));
-      const hasBanking = account.transactions.length > 0 || account.balance !== 0;
-      if (cost > 0 && hasBanking) {
-        if (account.balance < cost) {
-          setNotice(`You are short. ${listing.price} wanted, ${formatMoney(account.balance, account.currency)} in the account.`);
-          return;
-        }
-        await bank.set("account", applyTransaction(account, {
-          id: newId(),
-          at: new Date().toISOString(),
-          amount: -cost,
-          description: `Bought ${listing.title} from ${listing.seller}`,
-          source: "user",
-        })).catch(() => undefined);
+      const nextOwned = [listing, ...owned];
+      await store.set("owned", nextOwned);
+      try {
+        if (cost > 0) await charge(phoneId, cost, `Bought ${listing.title} from ${listing.seller}`, `market-buy:${listingKey(listing)}`);
+      } catch (cause) {
+        await store.set("owned", owned);
+        throw cause;
       }
-      persistOwned([listing, ...owned]);
+      setOwned(nextOwned);
+      let contactWarning = "";
+      try {
+        await rememberPerson(phoneId, {
+          name: listing.seller,
+          bio: `Sold ${listing.title} to you through Marketplace.`,
+          phoneLabel: "Marketplace",
+          source: "Bought from them on Marketplace",
+        });
+      } catch (cause) {
+        contactWarning = cause instanceof Error ? cause.message : `${listing.seller} could not be added to Contacts.`;
+      }
       recordActivity(phoneId, `bought ${listing.title} from ${listing.seller}${cost ? ` for ${cost}` : ""}`);
-      setNotice(`Bought. ${listing.seller} is expecting you.`);
+      setNotice(contactWarning ? `Bought, but ${contactWarning}` : `Bought. ${listing.seller} is expecting you.`);
       setOpenKey(null);
       setTab("yours");
+    } catch (cause) {
+      if (cause instanceof InsufficientFundsError) {
+        setNotice(`You are short. ${listing.price} wanted, ${formatMoney(cause.account.balance, cause.account.currency)} in the account.`);
+      } else {
+        setNotice(cause instanceof Error ? cause.message : "The purchase could not be completed.");
+      }
     } finally {
       setBusy(false);
     }
@@ -121,6 +132,16 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
       // A moved price is recorded as a marker turn so it survives a reload without another field.
       if (response.offer > 0 && response.offer !== askingPrice) turns.push({ from: "seller", text: `§${response.offer}|` });
       persistThreads({ ...withMine, [key]: [...(withMine[key] ?? []), ...turns] });
+      try {
+        await rememberPerson(phoneId, {
+          name: listing.seller,
+          bio: `Selling ${listing.title} on Marketplace.`,
+          phoneLabel: "Marketplace",
+          source: "Messaged on Marketplace",
+        });
+      } catch (cause) {
+        setNotice(cause instanceof Error ? cause.message : `${listing.seller} could not be added to Contacts.`);
+      }
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : "No reply.");
     } finally {
@@ -153,6 +174,16 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
         persistSelling(next.map((item) => item.id === entry.id
           ? { ...item, offer: { from: response.buyer.trim(), amount: response.amount, message: response.message } }
           : item));
+        try {
+          await rememberPerson(phoneId, {
+            name: response.buyer,
+            bio: `Interested in buying ${entry.title}.`,
+            phoneLabel: "Marketplace",
+            source: "Answered your Marketplace listing",
+          });
+        } catch (cause) {
+          setNotice(cause instanceof Error ? cause.message : `${response.buyer} could not be added to Contacts.`);
+        }
       }
     } catch {
       // Nobody answering is a valid outcome for a classified ad.
@@ -163,17 +194,21 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
 
   const acceptOffer = async (entry: OwnListing) => {
     if (!entry.offer) return;
-    const account = readAccount(await bank.get("account").catch(() => null));
-    if (account.transactions.length > 0 || account.balance !== 0) {
-      await bank.set("account", applyTransaction(account, {
-        id: newId(),
-        at: new Date().toISOString(),
-        amount: entry.offer.amount,
-        description: `Sold ${entry.title} to ${entry.offer.from}`,
-        source: "user",
-      })).catch(() => undefined);
+    setNotice(null);
+    try {
+      const nextSelling = selling.map((item) => item.id === entry.id ? { ...item, sold: true } : item);
+      await store.set("selling", nextSelling);
+      try {
+        await credit(phoneId, entry.offer.amount, `Sold ${entry.title} to ${entry.offer.from}`, `market-sell:${entry.id}`);
+      } catch (cause) {
+        await store.set("selling", selling);
+        throw cause;
+      }
+      setSelling(nextSelling);
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "The payment could not be deposited.");
+      return;
     }
-    persistSelling(selling.map((item) => item.id === entry.id ? { ...item, sold: true } : item));
     recordActivity(phoneId, `sold ${entry.title} to ${entry.offer.from} for ${entry.offer.amount}`);
     setNotice(`Sold to ${entry.offer.from}.`);
   };

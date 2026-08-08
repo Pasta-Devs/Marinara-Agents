@@ -5,6 +5,7 @@ import { phoneRequest, recordActivity } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { useDebouncedSave, usePhoneStore } from "../../platform/use-phone-store";
 import { hueFor, initials } from "../../platform/avatars";
+import { rememberPerson } from "../../platform/people";
 
 /** Past this much horizontal travel, letting go commits the swipe instead of springing back. */
 const COMMIT_PX = 96;
@@ -33,8 +34,8 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
       .then((response) => {
         setDeck(response.profiles);
         setIndex(0);
-        void store.set("deck", response.profiles).catch(() => undefined);
-        void store.set("deckIndex", 0).catch(() => undefined);
+        void store.set("deck", response.profiles).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The deck could not be saved."));
+        void store.set("deckIndex", 0).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The deck position could not be saved."));
       })
       .catch(() => setDeck((current) => current ?? []))
       .finally(() => setLoading(false));
@@ -63,7 +64,7 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
   const advance = React.useCallback(() => {
     setIndex((currentIndex) => {
       const next = currentIndex + 1;
-      void store.set("deckIndex", next).catch(() => undefined);
+      void store.set("deckIndex", next).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The deck position could not be saved."));
       return next;
     });
     setDrag(0);
@@ -75,10 +76,20 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
   const commit = React.useCallback((decision: "like" | "pass") => {
     if (!current || flying) return;
     if (decision === "like") {
-      recordActivity(phoneId, `matched with ${parseProfile(current).name} on Tindler`);
+      const matched = parseProfile(current);
+      recordActivity(phoneId, `matched with ${matched.name} on Tindler`);
+      void rememberPerson(phoneId, {
+        name: matched.name,
+        bio: [matched.tagline, matched.bio].filter(Boolean).join(" — "),
+        phoneLabel: "Tindler",
+        source: "Matched on Tindler",
+        firstMessage: matched.tagline ? `${matched.tagline} — hey, it's a match.` : "Hey — it's a match.",
+      }).catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : `${matched.name} could not be added to Contacts.`);
+      });
       setMatches((currentMatches) => {
         const next = [current, ...currentMatches];
-        void store.set("matches", next).catch(() => undefined);
+        void store.set("matches", next).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The match could not be saved."));
         return next;
       });
     }
@@ -145,7 +156,7 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
           if (actionId === "preferences") setView("preferences");
           if (actionId === "matches") {
             setView("matches");
-            void store.set("lastSeenMatches", matches.length).catch(() => undefined);
+            void store.set("lastSeenMatches", matches.length).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Matches could not be marked as seen."));
           }
           if (actionId === "refresh-deck") fetchDeck(preferences);
         }}
