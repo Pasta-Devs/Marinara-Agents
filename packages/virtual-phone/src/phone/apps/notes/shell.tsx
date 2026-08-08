@@ -90,13 +90,12 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
       ) : notes.length === 0 ? (
         <p className="vp-muted-note">No notes yet. Everything written here stays on this phone.</p>
       ) : (
-        <div className="vp-stack" style={{ gap: "0.5rem" }}>
+        <div className="vp-notes-grid">
           {notes.map((note) => (
-            <button key={note.id} type="button" onClick={() => setActiveId(note.id)} className="vp-thread-row">
-              <span className="vp-thread-body">
-                <span className="vp-thread-name">{noteTitle(note)}</span>
-                <span className="vp-thread-preview">{new Date(note.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })} · {note.text.split("\n").slice(1).join(" ").trim() || "No additional text"}</span>
-              </span>
+            <button key={note.id} type="button" onClick={() => setActiveId(note.id)} className="vp-note-card">
+              <h3>{noteTitle(note)}</h3>
+              <p>{note.text.split("\n").slice(1).join(" ").trim() || "No additional text"}</p>
+              <time dateTime={note.updatedAt}>{new Date(note.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}</time>
             </button>
           ))}
         </div>
