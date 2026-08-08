@@ -1847,6 +1847,37 @@ export async function activate({ api }: CapabilityContext) {
         return { products: result.products };
       } catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : "Azmoron could not be reached" }); }
     });
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/maps/search", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body) ? request.body as Record<string, unknown> : {};
+        const query = String(body.query ?? "").trim().slice(0, 160);
+        const model = await resolvePhoneModel(phone, "heavy");
+        if (!model) return { places: [] };
+        const chatId = targetChat(phone, request.query.chatId);
+        const completion = await model.chatComplete([
+          { role: "system", content: `You are the Maps app in a fictional roleplay world. For the search "${query || "what's nearby"}", list 4 to 7 real-feeling places that fit this world. Respond only JSON: {"places":["Place name | category | one short line on what it is or who runs it", ...]}. Category is a single word like cafe, harbour, shop, park, home, bar. Reuse places and people already established in this world where they fit.${await worldContext(chatId, phone)}${await customInstructions(phone)}` },
+          { role: "user", content: query || "What is around here?" },
+        ], { temperature: 0.9, maxTokens: 900 });
+        const result = parseBoundedContent(completion.content, { fields: { places: "string[]" }, defaults: { places: [] as string[] }, limits: { maxString: 400, maxItems: 12 } }) as { places: string[] };
+        return { places: result.places };
+      } catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : "Maps could not be reached" }); }
+    });
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/find/locate", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const model = await resolvePhoneModel(phone, "heavy");
+        const names = [...(await directoryFor(phone)).keys()].slice(0, 12);
+        if (!model || names.length === 0) return { people: [] };
+        const chatId = targetChat(phone, request.query.chatId);
+        const completion = await model.chatComplete([
+          { role: "system", content: `You are Find, the friend-locator app in a fictional roleplay world. For each named person, say where they plausibly are right now and what they are doing, consistent with this story. Respond only JSON: {"people":["Name | place | short status", ...]}, one entry per given name, using those exact names.${await worldContext(chatId, phone)}${await customInstructions(phone)}` },
+          { role: "user", content: `People to locate: ${names.join(", ")}` },
+        ], { temperature: 0.9, maxTokens: 900 });
+        const result = parseBoundedContent(completion.content, { fields: { people: "string[]" }, defaults: { people: [] as string[] }, limits: { maxString: 300, maxItems: 14 } }) as { people: string[] };
+        return { people: result.people };
+      } catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : "Find could not be reached" }); }
+    });
     // "About this phone" — the facts Settings shows about the device itself.
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/about", async (request, reply) => {
       try {

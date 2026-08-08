@@ -1,4 +1,5 @@
 import type { AppManifest } from "../../platform/app-manifest";
+import { emojiFor } from "../../platform/emoji";
 
 export const marketplaceManifest: AppManifest = {
   id: "marketplace",
@@ -74,24 +75,9 @@ export function parseListing(line: string): Listing {
 
 /**
  * Step 11.2(b) — with no image connection, a listing keeps its title, price and seller and only the
- * picture is missing, exactly as a real marketplace page reads with the network cut. The model
- * picks a grey glyph to match what the photo would have shown, so the empty slot is deliberate
- * rather than broken. This is the permanent state for the many users who never configure images.
+ * picture is missing, exactly as a real marketplace page reads with the network cut. A greyed emoji
+ * stands in for what the photo would have shown, so the empty slot is deliberate rather than broken.
  */
-const GLYPHS: Array<[RegExp, string]> = [
-  [/\b(car|van|truck|bike|bicycle|scooter)\b/iu, "▤"],
-  [/\b(phone|laptop|computer|camera|radio)\b/iu, "▣"],
-  [/\b(chair|table|desk|sofa|couch|bed|lamp)\b/iu, "▥"],
-  [/\b(coat|jacket|dress|boots|shoes|shirt)\b/iu, "▧"],
-  [/\b(book|map|letter|record|vinyl)\b/iu, "▨"],
-  [/\b(sword|knife|gun|armour|armor|shield)\b/iu, "▩"],
-  [/\b(dog|cat|horse|bird|fish)\b/iu, "❖"],
-];
-
 export function glyphFor(listing: Listing) {
-  const haystack = `${listing.title} ${listing.description}`;
-  for (const [pattern, glyph] of GLYPHS) {
-    if (pattern.test(haystack)) return glyph;
-  }
-  return "▢";
+  return emojiFor(`${listing.title} ${listing.description}`, "🛍️");
 }

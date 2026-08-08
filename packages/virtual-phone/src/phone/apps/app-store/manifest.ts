@@ -49,6 +49,8 @@ export const appDescriptions: Record<string, string> = {
   banking: "A balance that follows this persona across chats, with a transaction history. The story proposes what moved; you approve, reject, or set the number yourself.",
   pastasafari: "A match-three pasta game. Scores, streaks, and the moments you played can become part of the phone owner's story.",
   azmoron: "A world-aware marketplace where useful, suspicious, and sentimental parcels can arrive at your door and in your story.",
+  maps: "Search the world around you. Places you look up become somewhere the owner knows and the story can use.",
+  find: "See where the people you know are right now. What Find shows, the owner learns.",
 };
 
 export function appDescription(appId: string) {

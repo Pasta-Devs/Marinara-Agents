@@ -28,6 +28,8 @@ import { bankingManifest } from "./apps/banking/manifest";
 import { marketplaceManifest } from "./apps/marketplace/manifest";
 import { pastasafariManifest } from "./apps/pastasafari/manifest";
 import { azmoronManifest } from "./apps/azmoron/manifest";
+import { mapsManifest } from "./apps/maps/manifest";
+import { findManifest } from "./apps/find/manifest";
 
 const lazyShell = <Module, Key extends keyof Module>(load: () => Promise<Module>, exportName: Key) =>
   React.lazy(() => load().then((module) => ({ default: module[exportName] as React.ComponentType<any> })));
@@ -121,6 +123,16 @@ phoneAppRegistry.register({
   manifest: azmoronManifest,
   component: lazyShell(() => import("./apps/azmoron/shell"), "AzmoronShell"),
   props: phoneId,
+});
+phoneAppRegistry.register({
+  manifest: mapsManifest,
+  component: lazyShell(() => import("./apps/maps/shell"), "MapsShell"),
+  props: (context) => ({ phoneId: context.phone.phoneId, chatId: context.chatId }),
+});
+phoneAppRegistry.register({
+  manifest: findManifest,
+  component: lazyShell(() => import("./apps/find/shell"), "FindShell"),
+  props: (context) => ({ phoneId: context.phone.phoneId, chatId: context.chatId }),
 });
 
 class AppErrorBoundary extends React.Component<{ appName: string; children: React.ReactNode }, { failed: boolean }> {

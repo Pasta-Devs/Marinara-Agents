@@ -100,6 +100,20 @@ export const phoneStylesheet = `
 .vp-app-icon--camera { background: linear-gradient(180deg, #6b7280 0%, #1f2937 100%); }
 .vp-app-icon--banking { background: linear-gradient(180deg, #10b981 0%, #065f46 100%); }
 .vp-app-icon--marketplace { background: linear-gradient(180deg, #f59e0b 0%, #b45309 100%); }
+.vp-app-icon--pastasafari { background: linear-gradient(180deg, #ef6461 0%, #b3272d 100%); }
+.vp-app-icon--azmoron { background: linear-gradient(180deg, #ffb84d 0%, #d97706 100%); }
+.vp-app-icon--maps { background: linear-gradient(180deg, #5dbb78 0%, #0f7a4a 100%); }
+.vp-app-icon--find { background: linear-gradient(180deg, #5c9ded 0%, #1d4ed8 100%); }
+.vp-emoji-thumb { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 0.6rem; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--vp-text) 5%, var(--vp-surface)) 0 10px, color-mix(in srgb, var(--vp-text) 8%, var(--vp-surface)) 10px 20px); filter: grayscale(1); opacity: 0.72; }
+.vp-emoji-thumb--sm { height: 2.5rem; width: 2.5rem; font-size: 1.25rem; border-radius: 999px; }
+.vp-emoji-thumb--md { aspect-ratio: 1; width: 100%; font-size: 2rem; }
+.vp-emoji-thumb--lg { aspect-ratio: 4 / 3; width: 100%; font-size: 3.5rem; border-radius: 1rem; }
+.vp-map-canvas { position: relative; display: flex; align-items: center; justify-content: center; min-height: 12rem; border-radius: 1.1rem; overflow: hidden; background: linear-gradient(160deg, #dcede0, #c7e0cf); background-image: linear-gradient(#ffffff88 1px, transparent 1px), linear-gradient(90deg, #ffffff88 1px, transparent 1px); background-size: 100% 100%, 2rem 2rem, 2rem 2rem; box-shadow: inset 0 0 0 1px var(--vp-border), inset 0 0 3rem rgb(15 122 74 / 0.08); }
+.vp-map-canvas--detail { min-height: 9rem; }
+.vp-map-pin { position: absolute; transform: translate(-50%, -50%); border: 0; background: none; font-size: 1.6rem; line-height: 1; cursor: pointer; filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.3)); transition: transform 120ms ease; }
+.vp-map-pin:hover { transform: translate(-50%, -55%) scale(1.15); }
+.vp-map-pin.is-open { position: static; transform: none; font-size: 2.75rem; }
+.vp-find-row { display: flex; align-items: center; gap: 0.625rem; padding: 0.6rem 0.7rem; }
 /* Marketplace is a tile grid. The image slot is sized as if the photo were there, because one day
    it will be (Step 11.3) — an empty slot that reserves its space reads as designed, not broken. */
 .vp-market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }

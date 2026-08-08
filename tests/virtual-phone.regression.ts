@@ -383,7 +383,7 @@ async function main() {
     { from: "Duloc Parks Dept", subject: "Overdue swamp permit", body: "Your permit expired on the 3rd." },
   );
   assert.deepEqual(parseEmail("weird"), { from: "weird", subject: "(no subject)", body: "(empty message)" });
-  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera", "pastasafari", "azmoron"]);
+  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera", "pastasafari", "azmoron", "maps", "find"]);
   assert.equal(defaultDeviceSettings().lightConnectionId, "");
   assert.equal(defaultDeviceSettings().wallpaperTint, "");
   assert.equal(defaultDeviceSettings().caseColor, "");
@@ -504,8 +504,8 @@ async function main() {
     seller: "Nel", price: "40 marks", title: "Rusted bicycle", description: "Rides fine downhill.",
   });
   assert.equal(parseListing("").title, "Unnamed item");
-  assert.equal(glyphFor(parseListing("Nel | 40 | Rusted bicycle | downhill")), "\u25a4");
-  assert.equal(glyphFor(parseListing("Nel | 40 | Odd trinket | unclear")), "\u25a2");
+  assert.equal(glyphFor(parseListing("Nel | 40 | Rusted bicycle | downhill")), "\ud83d\udeb2");
+  assert.equal(glyphFor(parseListing("Nel | 40 | Odd trinket | unclear")), "\ud83d\udecd\ufe0f");
   // Buying charges the real balance, so a price that will not parse must not silently cost 0.
   assert.equal(priceValue("40 marks"), 40);
   assert.equal(priceValue("1,200 crowns"), 1200);

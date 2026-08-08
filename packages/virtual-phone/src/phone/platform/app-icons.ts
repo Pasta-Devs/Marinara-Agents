@@ -1,4 +1,4 @@
-import { AtSign, BookUser, Camera, Flame, Gamepad2, Images, Landmark, Lock, Mail, MessageCircle, Package, Search, Settings, ShoppingBag, StickyNote, Store } from "lucide-react";
+import { AtSign, BookUser, Camera, Flame, Gamepad2, Images, Landmark, Lock, Mail, Map, MessageCircle, Package, Radar, Search, Settings, ShoppingBag, StickyNote, Store } from "lucide-react";
 
 /**
  * Single source for app glyphs and icon styling. Previously duplicated in three places
@@ -22,6 +22,8 @@ export const appGlyphs: Record<string, typeof Store> = {
   marketplace: ShoppingBag,
   pastasafari: Gamepad2,
   azmoron: Package,
+  maps: Map,
+  find: Radar,
 };
 
 export function appGlyph(appId: string) {

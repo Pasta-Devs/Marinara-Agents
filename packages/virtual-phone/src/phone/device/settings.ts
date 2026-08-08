@@ -62,7 +62,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     reduceDeviceEffects: false,
     batteryLevel: 80,
     cellularSignal: 4,
-    installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera", "pastasafari", "azmoron"],
+    installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera", "pastasafari", "azmoron", "maps", "find"],
     lorebookIds: [],
     lorebookMode: "all",
     unpromptedTexts: false,
