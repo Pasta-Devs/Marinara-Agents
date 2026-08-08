@@ -1,0 +1,30 @@
+# ⚠️ REVERT BEFORE MERGING TO main
+
+## catalog/catalog.json — artifact/icon URLs repointed to `hold-the-phone`
+
+To let ME on this branch install quest 1.0.4 (and others) before the artifacts
+land on `main`, all 64 URLs in `catalog/catalog.json` were changed:
+
+    /Pasta-Devs/Marinara-Agents/main/  ->  /Pasta-Devs/Marinara-Agents/hold-the-phone/
+
+### Before the PR / merge to main
+1. Revert the URLs back to `.../main/` (one find-replace, opposite direction).
+2. Confirm every advertised artifact (e.g. `artifacts/quest-1.0.4.zip`) actually
+   exists on `main` — that was the original bug: catalog advertised 1.0.4 but
+   `main` only had quest up to 1.0.3, so the download 404'd.
+
+## Audit: what changed vs `main` (verify each is intentional before PR)
+
+Checked all `packages/*/manifest.json` and `catalog/catalog.json` against
+`origin/main`. **No packages or catalog entries were deleted/dropped.** These
+are the only diffs — confirm each is intended and that the matching
+`artifacts/<pkg>-<version>.zip` exists on `main` after merge:
+
+- [ ] hierarchical-maps  1.3.1 → **1.3.3**
+- [ ] long-term-memory   1.1.6 → **1.2.3**
+- [ ] quest              1.0.3 → **1.0.4**
+- [ ] virtual-phone      (new) → **2.0.68**
+
+Everything else matches `main` exactly.
+
+Delete this file once done.
