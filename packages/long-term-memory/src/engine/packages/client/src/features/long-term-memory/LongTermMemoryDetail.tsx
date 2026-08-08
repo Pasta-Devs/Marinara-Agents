@@ -66,7 +66,7 @@ const onboardingSteps = [
     mobileSprite: "Mari_point_down_left.png",
     desktopSprite: "Mari_point_middle_left.png",
     alt: "",
-    mobileFlip: true,
+    mobileFlip: false,
   },
   {
     labelKey: "ui.longTermMemory.longtermmemorydetail.review",
@@ -886,6 +886,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
                   transform: scaleX(-1);
                 }
+                [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-shift="left-40"] {
+                  transform: translateX(-40px);
+                }
                 [data-ltm-onboarding-actions] {
                   display: flex;
                   flex-direction: column;
@@ -934,6 +937,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     max-width: 12rem;
                   }
                   [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
+                    transform: none;
+                  }
+                  [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-shift] {
                     transform: none;
                   }
                   [data-ltm-onboarding-actions] {
@@ -1703,6 +1709,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             data-ltm-onboarding-mobile-flip={
                               onboardingSteps[onboardingStep].mobileFlip ||
                               undefined
+                            }
+                            data-ltm-onboarding-mobile-shift={
+                              onboardingStep === 4 ? "left-40" : undefined
                             }
                           />
                         </picture>
