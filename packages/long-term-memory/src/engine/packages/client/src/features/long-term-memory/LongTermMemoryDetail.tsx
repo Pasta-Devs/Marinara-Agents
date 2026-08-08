@@ -1068,11 +1068,6 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                 ) : props.chatMode === "roleplay" ||
                                   props.chatMode === "game" ? (
                                   <>
-                                    <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.promptBlockPlacementIntro",
-                                      )}
-                                    </p>
                                     <ol className="list-decimal list-outside space-y-1 ps-6">
                                       <li>
                                         {localizeUi(
@@ -1222,16 +1217,6 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       { value1: chatLabel },
                                     )}
                                   </li>
-                                  <li>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.verifyOpenSettings",
-                                    )}
-                                  </li>
-                                  <li>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.verifyInspectSummary",
-                                    )}
-                                  </li>
                                 </ol>
                                 <p>
                                   {localizeUi(
@@ -1297,22 +1282,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                         "ui.longTermMemory.longtermmemorydetail.chatSummarySetupOpen",
                                       )}
                                     </li>
-                                    <li>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.chatSummarySetupOpenPrompt",
-                                      )}
-                                    </li>
-                                    <li>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.chatSummarySetupEnable",
-                                      )}
-                                    </li>
                                   </ol>
-                                  <p>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.chatSummarySetupCaveat",
-                                    )}
-                                  </p>
                                 </div>
                               ) : null}
                             </>
