@@ -22,6 +22,7 @@ import { noodlerRManifest } from "../packages/virtual-phone/src/phone/apps/noodl
 import { cameraManifest } from "../packages/virtual-phone/src/phone/apps/camera/manifest";
 import { applyTransaction, bankingManifest, emptyAccount, parseProposal, readAccount } from "../packages/virtual-phone/src/phone/apps/banking/manifest";
 import { glyphFor, listingKey, marketplaceManifest, parseListing, priceValue } from "../packages/virtual-phone/src/phone/apps/marketplace/manifest";
+import { adjacent, findMatches, freshBoard, resolve } from "../packages/virtual-phone/src/phone/apps/pastasafari/engine";
 import { draftMail, mailFromLine, mailManifest, mergeMail, parseEmail, readStoredMail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
@@ -512,6 +513,22 @@ async function main() {
   assert.equal(priceValue("Offers"), 0);
   assert.equal(priceValue(""), 0);
   assert.equal(listingKey(parseListing("Nel | 40 | Rusted bicycle | x")), "nel::rusted bicycle");
+
+  // Pastasafari match-three engine: matches detected on both axes, gravity + cascades resolve fully.
+  // An alternating 2-colour base has no runs; plant one and check only it is found.
+  const base = () => Array.from({ length: 36 }, (_, i) => ((Math.floor(i / 6) + (i % 6)) % 2 ? "blue" : "red") as "red" | "blue");
+  const rowBoard = base(); rowBoard[0] = "red"; rowBoard[1] = "red"; rowBoard[2] = "red";
+  assert.deepEqual([...findMatches(rowBoard)].sort((a, b) => a - b), [0, 1, 2]);
+  const colBoard = base(); colBoard[0] = "red"; colBoard[6] = "red"; colBoard[12] = "red";
+  assert.deepEqual([...findMatches(colBoard)].sort((a, b) => a - b), [0, 6, 12]);
+  const resolved = resolve(rowBoard);
+  assert.equal(resolved.cleared >= 3, true);
+  assert.equal(findMatches(resolved.board).size, 0); // fully settled, no matches left
+  assert.equal(freshBoard().length, 36);
+  assert.equal(findMatches(freshBoard()).size, 0); // a fresh board never starts on a match
+  assert.equal(adjacent(0, 1), true);
+  assert.equal(adjacent(0, 6), true);
+  assert.equal(adjacent(5, 6), false); // wrapping across a row edge is not adjacency
   assert.deepEqual(parsePagePost("Morning swamp yoga pics | locked"), { text: "Morning swamp yoga pics", locked: true });
   assert.deepEqual(parsePagePost("Hello everyone | free"), { text: "Hello everyone", locked: false });
   assert.deepEqual(parsePagePost("No marker at all"), { text: "No marker at all", locked: false });

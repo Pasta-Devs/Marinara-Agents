@@ -249,6 +249,11 @@ export const phoneStylesheet = `
 .vp-pasta-tile { aspect-ratio: 1; border: 0; border-radius: 0.55rem; cursor: pointer; box-shadow: inset 0 -0.18rem 0 rgba(0,0,0,0.18), 0 0.15rem 0.2rem rgba(0,0,0,0.18); transition: transform 120ms ease, box-shadow 120ms ease; }
 .vp-pasta-tile:hover, .vp-pasta-tile.is-selected { transform: scale(1.08); box-shadow: 0 0 0 0.18rem #fff, 0 0.2rem 0.35rem rgba(0,0,0,0.28); }
 .vp-pasta-tile--red { background: #ef6461; } .vp-pasta-tile--yellow { background: #f2c14e; } .vp-pasta-tile--green { background: #5dbb78; } .vp-pasta-tile--blue { background: #5c9ded; } .vp-pasta-tile--pink { background: #db78b7; }
+.vp-pasta-tile:disabled { cursor: default; }
+.vp-pasta-stage { position: relative; }
+.vp-pasta-over { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem; border-radius: 1rem; background: rgba(15, 22, 34, 0.82); color: #fff; backdrop-filter: blur(2px); }
+.vp-pasta-over strong { font-size: 1.1rem; } .vp-pasta-over span { color: #cdd6e4; font-variant-numeric: tabular-nums; }
+.vp-pasta-flash { min-height: 1.2rem; margin: 0.6rem 0; text-align: center; font-size: 0.8rem; font-weight: 600; color: var(--vp-accent); }
 .vp-az-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
 .vp-az-product { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.7rem; }
 .vp-az-product .vp-section-label { font-size: 0.6rem; }
