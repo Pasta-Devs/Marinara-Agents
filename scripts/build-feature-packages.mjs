@@ -10,6 +10,7 @@ import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import { writeEnglishPackageLocale } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
@@ -1338,6 +1339,7 @@ for (const feature of selectedFeatures) {
     restartRequired: true,
   };
   await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeEnglishPackageLocale(sourceDir, manifest, [agentDefinition]);
 
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-${feature.id}-`));
   try {

@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Narrative Director",
+    "description": "Creates one-shot story directions when you choose to push the next response forward. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode."
+  },
+  "agents": {
+    "director": {
+      "name": "Narrative Director",
+      "description": "Creates one-shot story directions when you choose to push the next response forward. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode."
+    }
+  }
+}

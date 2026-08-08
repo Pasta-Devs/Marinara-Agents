@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Custom Tracker",
+    "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+  },
+  "agents": {
+    "custom-tracker": {
+      "name": "Custom Tracker",
+      "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+    }
+  }
+}

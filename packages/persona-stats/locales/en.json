@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Persona Stats",
+    "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+  },
+  "agents": {
+    "persona-stats": {
+      "name": "Persona Stats",
+      "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+    }
+  }
+}

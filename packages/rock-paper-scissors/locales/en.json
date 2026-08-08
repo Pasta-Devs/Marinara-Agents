@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Rock-Paper-Scissors",
+    "description": "Play Rock-Paper-Scissors with a Conversation character. Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it."
+  },
+  "agents": {
+    "rock-paper-scissors": {
+      "name": "Rock-Paper-Scissors",
+      "description": "Play Rock-Paper-Scissors with a Conversation character. Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it."
+    }
+  }
+}
