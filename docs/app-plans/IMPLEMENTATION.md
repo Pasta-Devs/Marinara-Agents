@@ -537,11 +537,14 @@ working tree before starting; coordinate rather than duplicate.
 
 ## Step 6.1 — Engine chats appear as threads
 
-Read via `runtime.persistence.listMessages(chatId)` across the phone's `identity.chatScope`. Sandbox
-phone-to-phone threads stay alongside them.
+Read via `runtime.persistence.listMessages(chatId)` across the phone's `identity.chatScope`, but show
+only messages explicitly marked as phone texts and their following assistant replies. Copying every
+ordinary message into the phone duplicates Chat and is not a texting experience. Sandbox
+phone-to-phone threads stay alongside the Conversation texting threads.
 
-**Engine-backed threads are read-only history plus a send box.** Unread counts and `markRead` apply
-only to sandbox threads — do not force the sandbox thread model onto them.
+**Engine-backed threads are projected phone-text history plus a send box.** They remain available when
+empty so a text can be started. Unread counts and `markRead` apply only to sandbox threads — do not
+force the sandbox thread model onto them.
 
 ## Step 6.2 — Sending from the phone posts into the real chat
 

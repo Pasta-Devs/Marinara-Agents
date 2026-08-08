@@ -8,6 +8,16 @@ Status: **decided**.
 - No "About this phone", no per-app settings, no notification/ringtone prefs.
 - Connections list loads from `/api/connections` directly rather than via `phoneRequest`.
 
+## Shipped UI pass
+
+Settings is split into compact Device, Generation, and About views. Boolean options use labeled
+switches with concise descriptions. Lorebooks use explicit All / Selected / None scope, a search
+field, and a bounded scrolling list, so a large installation does not turn Settings into an endless
+wall of rows. Existing settings normalize to All for compatibility.
+
+The home launcher is a single vertically scrollable grid of installed apps. It no longer divides
+apps into hardcoded dock favorites and hidden horizontal pages.
+
 ## Decisions
 
 - **Live preview of appearance** — theme, wallpaper, tint, and case colour update visibly as you pick

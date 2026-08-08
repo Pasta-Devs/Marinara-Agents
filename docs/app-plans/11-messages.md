@@ -26,7 +26,10 @@ is to make the phone's texting and the Engine's conversation the same thing.
 
 ### Design — decided
 1. **The Engine chat appears as a thread inside Messages, alongside phone-to-phone threads.**
-   Read via `listMessages(chatId)` across the phone's `identity.chatScope`. The sandbox stays.
+   Read via `listMessages(chatId)` across the phone's `identity.chatScope`, but project only messages
+   explicitly marked `extra.virtualPhone = "text"` and their following assistant replies. Mirroring
+   the ordinary transcript makes Messages a worse copy of Chat rather than a texting surface. An
+   empty Conversation thread remains available so the owner can start texting. The sandbox stays.
 2. **Sending from the phone posts into the real chat**, via `createMessageWithSwipe` — the same path
    the existing `/chats/:chatId/phones/:phoneId/show` route already uses. **The character replies in
    the chat**, not back inside the phone. The phone becomes an input surface for the roleplay.

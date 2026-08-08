@@ -25,11 +25,12 @@ export interface DeviceSettings {
   installedApps: string[];
   /**
    * Lorebooks read on every generation for this phone, whether or not they are active in chat
-   * context. Empty means all of them, which is the old behaviour and the sane "Any" default.
+   * context. `lorebookMode` makes All / Selected / None explicit; existing phones default to All.
    * Scoped per phone so one character's phone can run on one world's rules and another's on a
    * different set — running two stories used to bleed one world's lore into the other's phone.
    */
   lorebookIds: string[];
+  lorebookMode: "all" | "selected" | "none";
   /**
    * Characters may text you unprompted when a thread has gone quiet or you left them on read.
    * Off by default and deliberately so: it is the one feature here that spends tokens without
@@ -63,6 +64,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     cellularSignal: 4,
     installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera"],
     lorebookIds: [],
+    lorebookMode: "all",
     unpromptedTexts: false,
     storyNotices: true,
     lightConnectionId: "",
@@ -102,6 +104,7 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
     lorebookIds: Array.isArray(input.lorebookIds)
       ? [...new Set(input.lorebookIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0))].slice(0, 50)
       : defaults.lorebookIds,
+    lorebookMode: input.lorebookMode === "selected" || input.lorebookMode === "none" ? input.lorebookMode : "all",
     unpromptedTexts: input.unpromptedTexts === true,
     storyNotices: input.storyNotices !== false,
     lightConnectionId: typeof input.lightConnectionId === "string" ? input.lightConnectionId.slice(0, 100) : defaults.lightConnectionId,

@@ -113,3 +113,7 @@ work continues independently: apps now feed the shared Contacts registry and mon
 shared wallet. Explicit Goodle discoveries, Noodle posts, and Marketplace events are also retained as
 small phone-owned facts with chat provenance, so the same persona or character carries what they did
 or learned into later chats without exposing private banking state.
+
+Settings now separates Device, Generation, and About into compact views. Lorebooks use explicit
+All/Selected/None scope with search inside a bounded list. The home launcher is one vertically
+scrollable grid; the hidden horizontal pages and hardcoded dock were removed.

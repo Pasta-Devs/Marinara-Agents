@@ -27,6 +27,7 @@ import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
 import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
 import { conditionOpacity, patternBackground } from "../packages/virtual-phone/src/phone/device/effects";
+import { projectConversationTexts } from "../packages/virtual-phone/src/phone/system/server-entry";
 
 class MemoryDocuments implements PhoneDocumentStore {
   records: PhoneDocumentRecord[] = [];
@@ -208,6 +209,18 @@ async function main() {
   // Status-bar state now lives in device settings so the story can drive it.
   assert.equal(defaultDeviceSettings("dark").batteryLevel, 80);
   assert.equal(defaultDeviceSettings("dark").cellularSignal, 4);
+  assert.equal(defaultDeviceSettings("dark").lorebookMode, "all");
+  assert.equal(normalizeDeviceSettings({ lorebookIds: ["book-1"] }).lorebookMode, "all");
+  assert.equal(normalizeDeviceSettings({ lorebookMode: "selected", lorebookIds: [] }).lorebookMode, "selected");
+  const conversationProjection = projectConversationTexts([
+    { id: "ordinary-user", role: "user", extra: "{}" },
+    { id: "ordinary-reply", role: "assistant", extra: "{}" },
+    { id: "phone-text", role: "user", extra: JSON.stringify({ virtualPhone: "text" }) },
+    { id: "phone-reply", role: "assistant", extra: "{}" },
+    { id: "next-turn", role: "user", extra: "{}" },
+    { id: "next-reply", role: "assistant", extra: "{}" },
+  ]);
+  assert.deepEqual(conversationProjection.map((message) => message.id), ["phone-text", "phone-reply"]);
   assert.equal(normalizeDeviceSettings({ batteryLevel: 250, cellularSignal: 9 }).batteryLevel, 100);
   assert.equal(normalizeDeviceSettings({ batteryLevel: -5, cellularSignal: 9 }).batteryLevel, 0);
   assert.equal(normalizeDeviceSettings({ cellularSignal: 9 }).cellularSignal, 4);

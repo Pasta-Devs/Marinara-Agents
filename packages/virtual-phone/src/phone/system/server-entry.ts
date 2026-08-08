@@ -26,9 +26,12 @@ interface CapabilityContext {
           characterIds: string[];
         } | null>;
         listMessages?(chatId: string): Promise<Array<{
+          id: string;
           role: string;
           characterId: string | null;
           content: string;
+          extra: string;
+          createdAt: string;
         }>>;
         createMessageWithSwipe?(input: {
           id: string;
@@ -285,9 +288,12 @@ export async function activate({ api }: CapabilityContext) {
   const loreContext = async (phone?: Awaited<ReturnType<typeof findPhone>>) => {
     try {
       if (!api.runtime.resources.listLorebooks || !api.runtime.resources.listEligibleLorebookEntries) return "";
-      const attached = phone ? phoneGenSettings(phone).lorebookIds : [];
-      const books = (await api.runtime.resources.listLorebooks())
-        .filter((book) => attached.length === 0 || attached.includes(book.id));
+       const settings = phone ? phoneGenSettings(phone) : null;
+       if (settings?.lorebookMode === "none") return "";
+       const selectedOnly = settings?.lorebookMode === "selected";
+       const attached = selectedOnly ? settings.lorebookIds : [];
+       const books = (await api.runtime.resources.listLorebooks())
+        .filter((book) => !selectedOnly || attached.includes(book.id));
       if (!books.length) return "";
       const entries = await api.runtime.resources.listEligibleLorebookEntries({ lorebookIds: books.map((book) => book.id) });
       return entries.slice(0, 8)
@@ -499,7 +505,7 @@ export async function activate({ api }: CapabilityContext) {
     const lines = [...known.entries()].slice(0, 30).map(([name, why]) => `${name} — ${why}`).join("\n");
     return `\n\nWhose details this phone holds:\n${lines}\nAnyone not on that list is a stranger to the owner. That is allowed, but it must read like a stranger: they explain how they got the address, or they clearly should not have it.`;
   };
-  const sharedPhoneContext = async (phone: Awaited<ReturnType<typeof findPhone>>, chatId: string) => {
+  async function sharedPhoneContext(phone: Awaited<ReturnType<typeof findPhone>>, chatId: string) {
     const inChat = (await phones.list()).filter(({ document }) =>
       document.identity.phoneId !== phone.document.identity.phoneId &&
       document.provisioning.enabled && document.identity.chatScope.includes(chatId));
@@ -512,7 +518,7 @@ export async function activate({ api }: CapabilityContext) {
     const people = [...known.entries()].slice(0, 20).map(([name, why]) => `${name} — ${why}`).join("\n");
     const remembered = facts.slice(0, 20).map((fact) => `${fact.text} (${fact.source})`).join("\n");
     return `${people ? `\n\nPeople this phone knows:\n${people}` : ""}${remembered ? `\n\nThings the owner deliberately kept or established on this phone:\n${remembered}` : ""}`;
-  };
+  }
 
   /**
    * Step 8.3 — a character texts because a thread has gone quiet, or because you left them on read.
@@ -798,6 +804,17 @@ export async function activate({ api }: CapabilityContext) {
    * optional on the runtime, so a host without it simply sees no chat threads.
    */
   const CHAT_THREAD_PREFIX = "chat:";
+  const messageExtra = (value: unknown) => {
+    if (typeof value !== "string") return value && typeof value === "object" ? value as Record<string, unknown> : {};
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+    } catch {
+      return {};
+    }
+  };
+  /** A Conversation thread shows phone-text exchanges, not a second copy of the ordinary chat. */
+  const conversationTexts = projectConversationTexts;
   const engineThreadsFor = async (phone: Awaited<ReturnType<typeof findPhone>>) => {
     if (!api.runtime.persistence.listMessages) return [];
     const ownerId = phone.document.identity.ownerId;
@@ -811,17 +828,17 @@ export async function activate({ api }: CapabilityContext) {
         .filter((character) => isPersona || character.id !== ownerId)
         .map((character) => readName(character.data, "Character"))
         .join(", ") || "The story";
-      const messages = (await api.runtime.persistence.listMessages(chatId).catch(() => []))
+      const messages = conversationTexts(await api.runtime.persistence.listMessages(chatId).catch(() => []))
         .slice(-STORY_MESSAGES)
-        .map((message, index) => ({
-          id: `${chatId}:${index}`,
+        .map((message) => ({
+          id: message.id,
           // "Self" is the phone's owner speaking: the user's turns on a persona phone, that
           // character's turns on a character phone.
           from: (isPersona ? message.role === "user" : message.characterId === ownerId)
             ? phone.document.identity.phoneId
             : `${CHAT_THREAD_PREFIX}${chatId}`,
-          text: message.content,
-          at: "",
+          text: String(messageExtra(message.extra).virtualPhoneText ?? message.content),
+          at: message.createdAt,
         }));
       threads.push({
         id: `${CHAT_THREAD_PREFIX}${chatId}`,
@@ -1451,7 +1468,7 @@ export async function activate({ api }: CapabilityContext) {
             role: "user",
             characterId: null,
             content: `*${phone.document.identity.ownerName} texts:* ${text}`,
-            extra: { virtualPhone: "text" },
+            extra: { virtualPhone: "text", virtualPhoneText: text, virtualPhoneId: phone.document.identity.phoneId },
             createdAt: new Date().toISOString(),
           });
           const [thread] = (await engineThreadsFor(phone)).filter((candidate) => candidate.id === toPhoneId);
@@ -1840,6 +1857,32 @@ export async function activate({ api }: CapabilityContext) {
     });
   };
   return api.registerPrivilegedRoutes(routes, { prefix: "/api/virtual-phone" });
+}
+
+export function projectConversationTexts<T extends { role: string; extra: unknown }>(messages: T[]) {
+  const projected: T[] = [];
+  let awaitingReply = false;
+  for (const message of messages) {
+    const extra = typeof message.extra === "string" ? (() => {
+      try {
+        const parsed = JSON.parse(message.extra) as unknown;
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+      } catch {
+        return {};
+      }
+    })() : message.extra && typeof message.extra === "object" ? message.extra as Record<string, unknown> : {};
+    if (extra.virtualPhone === "text") {
+      projected.push(message);
+      awaitingReply = true;
+      continue;
+    }
+    if (message.role === "user" || message.role === "system" || message.role === "narrator") {
+      awaitingReply = false;
+      continue;
+    }
+    if (awaitingReply && message.role === "assistant") projected.push(message);
+  }
+  return projected;
 }
 
 export async function selfCheck({ api }: CapabilityContext) {

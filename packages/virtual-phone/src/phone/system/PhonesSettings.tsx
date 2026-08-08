@@ -24,6 +24,7 @@ export type Phone = {
     cellularSignal: 0 | 1 | 2 | 3 | 4;
     installedApps: string[];
     lorebookIds: string[];
+    lorebookMode: "all" | "selected" | "none";
     unpromptedTexts: boolean;
     storyNotices: boolean;
     lightConnectionId: string;

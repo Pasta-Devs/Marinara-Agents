@@ -200,7 +200,6 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [pendingSearch, setPendingSearch] = React.useState("");
   const [showState, setShowState] = React.useState<"idle" | "pending" | "done">("idle");
   const [refState, setRefState] = React.useState<"idle" | "pending" | "done">("idle");
-  const [gridPage, setGridPage] = React.useState(0);
   const routeStacks = React.useRef(new Map<string, AppRouteStackManager>());
   const activeApps = React.useRef(new Map<string, Exclude<ActiveApp, null>>());
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -247,7 +246,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
       }
       if (event.key !== "Tab" || !overlayRef.current) return;
       const controls = [...overlayRef.current.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       )];
       if (controls.length === 0) return;
       const first = controls[0]!;
@@ -419,10 +418,6 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
       Icon: appGlyph(manifest.id),
       badge: manifest.id === "messages" ? messagesUnread : undefined,
     }));
-  const dockIds = ["messages", "goodle", "notes", "app-store"];
-  const dockApps = dockIds.flatMap((id) => launchableApps.filter((app) => app.id === id)).slice(0, 4);
-  const gridApps = launchableApps.filter((app) => !dockIds.includes(app.id));
-  const gridPages = Array.from({ length: Math.ceil(gridApps.length / 8) }, (_, page) => gridApps.slice(page * 8, page * 8 + 8));
   const theme = deviceSettings.theme === "system" ? selectedPhone?.baselineTheme ?? "system" : deviceSettings.theme;
   const clock = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return createPortal(
@@ -517,41 +512,17 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                   <p className="vp-home-clock">{clock}</p>
                   <p className="vp-home-date">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
                   <div className="vp-home-spacer" aria-hidden="true" />
-                  {gridPages.length ? (
-                    <>
-                      <div aria-label="Installed apps" className="vp-grid-pager" onScroll={(event) => {
-                        const target = event.currentTarget;
-                        setGridPage(Math.round(target.scrollLeft / Math.max(1, target.clientWidth)));
-                      }}>
-                        {gridPages.map((page, pageIndex) => (
-                          <div key={pageIndex} className="vp-app-grid vp-grid-page">
-                            {page.map(({ id, label, Icon, badge }) => (
-                              <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => openApp(id)} className="vp-app">
-                                <span className={`vp-app-icon ${appIconClass(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
-                                {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
-                                <span className="vp-app-label">{label}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                      {gridPages.length > 1 ? (
-                        <div className="vp-page-dots" aria-hidden="true">
-                          {gridPages.map((_, dotIndex) => <span key={dotIndex} className={`vp-page-dot${dotIndex === gridPage ? " vp-page-dot--active" : ""}`} />)}
-                        </div>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {dockApps.length ? (
-                    <div className="vp-dockrow" aria-label="Favorite apps">
-                      {dockApps.map(({ id, label, Icon, badge }) => (
-                        <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} title={label} onClick={() => openApp(id)} className="vp-app">
-                          <span className={`vp-app-icon ${appIconClass(id)}`}><Icon size="1.5rem" aria-hidden="true" /></span>
+                  <div aria-label="Installed apps" className="vp-home-apps">
+                    <div className="vp-app-grid">
+                      {launchableApps.map(({ id, label, Icon, badge }) => (
+                        <button key={id} type="button" aria-label={`Open ${label}${badge ? `, ${badge} unread` : ""}`} onClick={() => openApp(id)} className="vp-app">
+                          <span className={`vp-app-icon ${appIconClass(id)}`}><Icon size="1.375rem" aria-hidden="true" /></span>
                           {badge ? <span className="vp-badge vp-app-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span> : null}
+                          <span className="vp-app-label">{label}</span>
                         </button>
                       ))}
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               )}
               {activeAppEntry && selectedPhone ? (

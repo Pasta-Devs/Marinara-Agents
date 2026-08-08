@@ -45,10 +45,10 @@ export async function phoneRequest<T>(path: string, init: RequestInit = {}): Pro
   for (const [name, value] of Object.entries(adminHeaders())) headers.set(name, value);
   if (init.method && init.method !== "GET") headers.set(CSRF_HEADER, "1");
   if (init.body) headers.set("Content-Type", "application/json");
-  const url = activeChatId && !path.includes("chatId=")
+  const url = activeChatId && !path.includes("chatId=") && !path.startsWith("/api/")
     ? `${path}${path.includes("?") ? "&" : "?"}chatId=${encodeURIComponent(activeChatId)}`
     : path;
-  const response = await fetch(`${API_ROOT}${url}`, { ...init, headers, cache: "no-store" });
+  const response = await fetch(url.startsWith("/api/") ? url : `${API_ROOT}${url}`, { ...init, headers, cache: "no-store" });
   const payload = await response.json().catch(() => null) as { error?: unknown } | null;
   if (!response.ok) {
     throw new Error(typeof payload?.error === "string" ? payload.error : response.statusText || "Phone request failed");
