@@ -77,7 +77,8 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
     if (!current || flying) return;
     if (decision === "like") {
       const matched = parseProfile(current);
-      recordActivity(phoneId, `matched with ${matched.name} on Tindler`);
+      void recordActivity(phoneId, `matched with ${matched.name} on Tindler`)
+        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The match action could not be recorded."));
       void rememberPerson(phoneId, {
         name: matched.name,
         bio: [matched.tagline, matched.bio].filter(Boolean).join(" — "),

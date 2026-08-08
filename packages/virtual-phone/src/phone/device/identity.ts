@@ -27,6 +27,14 @@ export interface PhoneDocument {
   };
 }
 
+export interface PhoneWorldFact {
+  id: string;
+  chatId: string;
+  text: string;
+  source: string;
+  at: string;
+}
+
 export interface PhoneDocumentRecord {
   id: string;
   packageId: string;
@@ -454,6 +462,48 @@ export class PhoneIdentityService {
     });
     if (!updated) return this.appendActivity(phoneId, chatId, text);
     return parsePhoneRecord(updated);
+  }
+
+  async rememberWorldFact(phoneId: string, chatId: string, text: string, source: string) {
+    const normalizedText = normalizeRequiredString(text, "text").slice(0, 300);
+    const normalizedSource = normalizeRequiredString(source, "source").slice(0, 80);
+    const phone = await this.requirePhone(phoneId);
+    if (!phone.document.identity.chatScope.includes(chatId)) throw new Error("This phone is not part of this chat");
+    const existing = Array.isArray(phone.document.namespaces.phone.worldFacts)
+      ? phone.document.namespaces.phone.worldFacts as PhoneWorldFact[]
+      : [];
+    const deduped = existing.filter((fact) => !(fact.chatId === chatId && fact.text.toLocaleLowerCase() === normalizedText.toLocaleLowerCase()));
+    const fact: PhoneWorldFact = { id: this.createId(), chatId, text: normalizedText, source: normalizedSource, at: this.now() };
+    const byChat = new Map<string, PhoneWorldFact[]>();
+    for (const candidate of [fact, ...deduped]) {
+      const facts = byChat.get(candidate.chatId) ?? [];
+      facts.push(candidate);
+      byChat.set(candidate.chatId, facts.slice(0, 60));
+    }
+    const retained = [...byChat.values()].flat();
+    const document: PhoneDocument = {
+      ...phone.document,
+      namespaces: { phone: { ...phone.document.namespaces.phone, worldFacts: retained } },
+    };
+    const updated = await this.documents.update({
+      id: phone.record.id,
+      packageId: PACKAGE_ID,
+      expectedRevision: phone.record.revision,
+      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      description: document.identity.ownerName,
+      data: document,
+      updatedAt: fact.at,
+    });
+    if (!updated) return this.rememberWorldFact(phoneId, chatId, text, source);
+    return fact;
+  }
+
+  async worldFactsFor(phoneId: string, chatId: string) {
+    const phone = await this.requirePhone(phoneId);
+    const facts = Array.isArray(phone.document.namespaces.phone.worldFacts)
+      ? phone.document.namespaces.phone.worldFacts as PhoneWorldFact[]
+      : [];
+    return facts.filter((fact) => fact.chatId === chatId);
   }
 
   /** Reads and clears the pending activity for one chat. Clearing is what makes the flush once-only. */

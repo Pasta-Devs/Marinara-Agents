@@ -3,7 +3,7 @@ import { Globe, Search, Star } from "lucide-react";
 import { fallbackSearchResults, looksLikeUrl, normalizeUrl, parseLinkedText, parsePageSection, parseResultItem, slugify } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
-import { phoneRequest, recordActivity } from "../../platform/api";
+import { phoneRequest, recordActivity, rememberWorldFact } from "../../platform/api";
 import { hueFor } from "../../platform/avatars";
 
 const MAX_RECENTS = 8;
@@ -33,6 +33,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   // Pages popped by Back, kept so Forward can re-enter them without regenerating.
   const [forward, setForward] = React.useState<PageState[]>([]);
   const [bookmarks, setBookmarks] = React.useState<PageState[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
   const page = pages.at(-1) ?? null;
   const recentsRef = React.useRef(recents);
   recentsRef.current = recents;
@@ -56,14 +57,17 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
     if (!trimmed) return;
     const next = [trimmed, ...recentsRef.current.filter((recent) => recent !== trimmed)].slice(0, MAX_RECENTS);
     setRecents(next);
-    void store.set("recents", next).catch(() => undefined);
+    void store.set("recents", next).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Recent searches could not be saved."));
     setSearching(true);
-    recordActivity(phoneId, `looked up "${trimmed}"`);
+    void recordActivity(phoneId, `looked up "${trimmed}"`).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The search action could not be recorded."));
     void phoneRequest<{ results: ReturnType<typeof fallbackSearchResults> }>(`/phones/${encodeURIComponent(phoneId)}/goodle/search`, {
       method: "POST", body: JSON.stringify({ query: trimmed }),
     })
       .then((response) => setResults(response.results))
-      .catch(() => setResults(fallbackSearchResults(trimmed)))
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Goodle could not complete the search.");
+        setResults(fallbackSearchResults(trimmed));
+      })
       .finally(() => setSearching(false));
   }, [phoneId, store]);
 
@@ -104,15 +108,26 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
     });
   };
   const bookmarked = page ? bookmarks.some((entry) => entry.url === page.url) : false;
-  const toggleBookmark = () => {
+  const toggleBookmark = async () => {
     if (!page || page.loading) return;
     // Snapshots the page, not just the address. Generated pages are not stable across
     // regenerations, so a URL-only bookmark would quietly return something else.
     const next = bookmarked
       ? bookmarks.filter((entry) => entry.url !== page.url)
       : [{ ...page }, ...bookmarks].slice(0, 30);
-    setBookmarks(next);
-    void store.set("bookmarks", next).catch(() => undefined);
+    try {
+      await store.set("bookmarks", next);
+      setBookmarks(next);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Bookmarks could not be saved.");
+      return;
+    }
+    if (!bookmarked) {
+      const summary = page.sections.map(parsePageSection).map((section) => `${section.heading}: ${section.body}`).join(" ").slice(0, 180);
+      void rememberWorldFact(phoneId, `Learned from ${page.site}: ${page.title}${summary ? ` — ${summary}` : ""}`, "Goodle bookmark")
+        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The discovery could not be shared with the phone."));
+      void recordActivity(phoneId, `bookmarked "${page.title}" on Goodle`).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The bookmark action could not be recorded."));
+    }
   };
   const openBookmark = (entry: PageState) => {
     setForward([]);
@@ -131,7 +146,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   };
   const clearRecents = () => {
     setRecents([]);
-    void store.remove("recents").catch(() => undefined);
+    void store.remove("recents").catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Recent searches could not be cleared."));
   };
 
   const domain = page?.url.split("/")[0] ?? "goodle.web";
@@ -166,6 +181,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
           </span>
         ) : undefined}
       />
+      {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
       {page ? (
         <div className="vp-site" aria-busy={page.loading}>
           {page.loading ? (

@@ -80,7 +80,8 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
     const proposal = account.pending.find((entry) => entry.id === id);
     if (!proposal) return;
     const withoutProposal = { ...account, pending: account.pending.filter((entry) => entry.id !== id) };
-    recordActivity(phoneId, `${proposal.amount > 0 ? "received" : "paid"} ${Math.abs(proposal.amount)} — ${proposal.description}`);
+    void recordActivity(phoneId, `${proposal.amount > 0 ? "received" : "paid"} ${Math.abs(proposal.amount)} — ${proposal.description}`)
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The transaction action could not be recorded."));
     persist(applyTransaction(withoutProposal, {
       id: proposal.id,
       at: new Date().toISOString(),

@@ -67,7 +67,8 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
     if (!draft?.trim()) return;
     const shot: Shot = { id: crypto.randomUUID(), text: draft.trim(), at: new Date().toISOString() };
     persist([shot, ...(shots ?? [])].slice(0, MAX_SHOTS));
-    recordActivity(phoneId, `took a photo — ${shot.text.slice(0, 120)}`);
+    void recordActivity(phoneId, `took a photo — ${shot.text.slice(0, 120)}`)
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The photo action could not be recorded."));
     setDraft(null);
     setSubject("");
   };

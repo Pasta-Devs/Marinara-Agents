@@ -156,6 +156,17 @@ async function main() {
   assert.equal(metAgain.document.contactId, manualContact.document.contactId);
   assert.equal(metAgain.document.source, "Bought from them on Marketplace");
   assert.equal((await concurrentRuntime.listContacts("chat-1")).length, 1);
+  const fact = await concurrentRuntime.rememberWorldFact("phone-persona", "chat-1", "The harbour closes at dusk", "Goodle bookmark");
+  assert.equal(fact.text, "The harbour closes at dusk");
+  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona", "chat-1")).length, 1);
+  await concurrentRuntime.rememberWorldFact("phone-persona", "chat-1", "the harbour closes at dusk", "Noodle post");
+  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona", "chat-1")).length, 1);
+  assert.deepEqual(await concurrentRuntime.worldFactsFor("phone-persona", "chat-2"), []);
+  for (let index = 0; index < 61; index += 1) {
+    await concurrentRuntime.rememberWorldFact("phone-persona", "chat-2", `Other chat fact ${index}`, "test");
+  }
+  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona", "chat-1")).length, 1);
+  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona", "chat-2")).length, 60);
   assert.deepEqual((await concurrentRuntime.listContacts("chat-1")).map(({ document }) => document.name), ["Lady Farquaad"]);
   assert.deepEqual(await concurrentRuntime.listContacts("chat-2"), []);
   await concurrentRuntime.removeContact(manualContact.document.contactId, "chat-1");

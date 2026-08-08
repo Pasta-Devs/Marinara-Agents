@@ -41,14 +41,19 @@ The Engine can already answer "what's relevant to this, from anywhere in the his
 a fixed 10-message tail instead. **Semantic recall is the single biggest available upgrade to phone
 content quality** — every generated artefact would be able to reach the whole story, not a window.
 
-## 3. The Engine has persistent agent memory. The phone stores nothing.
+## 3. The Engine has persistent agent memory. The phone stores no ambient memory.
 
 `db/schema/agents.ts` → **`agentMemory`**: key-value, **per agent per chat**, persistent.
 
 The virtual-phone agent could keep exactly the state that "learning" requires — running facts about
 who texts whom, what a character posts about, ongoing threads, what the phone has already generated so
-it doesn't repeat itself. It stores none of it. There is also a `memory` character command in the
-conversation-calls system that the phone ignores.
+it doesn't repeat itself. It does not keep that ambient state. There is also a `memory` character
+command in the conversation-calls system that the phone ignores.
+
+The package now has a deliberately narrower exception: explicit user actions can record a small,
+per-chat world fact. Goodle bookmarks, Noodle posts, and Marketplace events use this for continuity
+across apps. It is not semantic memory, does not summarize the story, and does not include private
+banking state. Passive reads remain stateless.
 
 ## 4. Lore leaks across worlds — `bug`
 

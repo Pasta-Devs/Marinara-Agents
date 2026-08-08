@@ -110,4 +110,6 @@ to be blocked once code was written against them.
 
 The Engine contract is the remaining dependency for the blocked integrations. Package-side systemic
 work continues independently: apps now feed the shared Contacts registry and money flows through a
-shared wallet.
+shared wallet. Explicit Goodle discoveries, Noodle posts, and Marketplace events are also retained as
+small per-chat phone facts, so later phone generation can refer to what the owner actually did or
+learned without exposing private banking state.

@@ -1,8 +1,9 @@
 import React from "react";
 import { AtSign, Flame, Heart, MessageCircle, Newspaper, Repeat2, Send } from "lucide-react";
-import { phoneRequest, recordActivity } from "../../platform/api";
+import { phoneRequest, recordActivity, rememberWorldFact } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
+import { rememberPerson } from "../../platform/people";
 
 interface NoodlePost {
   id: string;
@@ -43,6 +44,8 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
   const [trending, setTrending] = React.useState<string[] | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [draft, setDraft] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const posting = React.useRef(false);
 
   // Marks the feed seen, so the notifications route can tell what arrived since (Stage 8.2).
   React.useEffect(() => {
@@ -51,18 +54,43 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
 
   const postDraft = (parentPostId?: string) => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || posting.current) return;
+    posting.current = true;
     setDraft("");
-    recordActivity(phoneId, parentPostId ? `replied on Noodle: "${text.slice(0, 100)}"` : `posted on Noodle: "${text.slice(0, 100)}"`);
+    const parent = parentPostId ? (feed ?? []).find((post) => post.id === parentPostId) : null;
+    if (parent && parent.author !== ownerName) {
+      void rememberPerson(phoneId, {
+        name: parent.author,
+        handle: parent.handle,
+        bio: `Posts as ${parent.handle} on Noodle.`,
+        phoneLabel: "Noodle",
+        source: "Talked on Noodle",
+      }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : `${parent.author} could not be added to Contacts.`));
+    }
     void phoneRequest<{ posts: NoodlePost[] }>(`/phones/${encodeURIComponent(phoneId)}/noodle/post`, {
       method: "POST", body: JSON.stringify({ text, ...(parentPostId ? { parentPostId } : {}) }),
-    }).then((response) => setFeed(response.posts)).catch(() => setDraft(text));
+    }).then((response) => {
+      setFeed(response.posts);
+      void Promise.all([
+        recordActivity(phoneId, parent ? `replied to ${parent.author} on Noodle: "${text.slice(0, 100)}"` : `posted on Noodle: "${text.slice(0, 100)}"`),
+        rememberWorldFact(phoneId, parent ? `Replied to ${parent.author} on Noodle: "${text.slice(0, 180)}".` : `Posted on Noodle: "${text.slice(0, 180)}".`, "Noodle post"),
+      ])
+        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The post could not be shared with the phone."));
+      window.setTimeout(() => {
+        void phoneRequest<{ posts: NoodlePost[] }>(`/phones/${encodeURIComponent(phoneId)}/noodle/feed`)
+          .then((latest) => setFeed(latest.posts))
+          .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Replies could not be loaded."));
+      }, 1_500);
+    }).catch((cause: unknown) => {
+      setError(cause instanceof Error ? cause.message : "The post could not be published.");
+      setDraft(text);
+    }).finally(() => { posting.current = false; });
   };
 
   const interact = (postId: string, kind: "like" | "boost") => {
     void phoneRequest<{ posts: NoodlePost[] }>(`/phones/${encodeURIComponent(phoneId)}/noodle/interact`, {
       method: "POST", body: JSON.stringify({ postId, kind }),
-    }).then((response) => setFeed(response.posts)).catch(() => undefined);
+    }).then((response) => setFeed(response.posts)).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The interaction failed."));
   };
 
   const refreshFeed = React.useCallback(() => {
@@ -157,6 +185,7 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
         onAction={(actionId) => { if (actionId === "refresh") (tab === "feed" ? refreshFeed() : refreshTrending()); }}
         center={<span className="vp-urlbar"><AtSign size="0.75rem" aria-hidden="true" /><span>noodle.local</span></span>}
       />
+      {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
       <div className="vp-tab-content">
         {tab === "feed" ? (
           <>

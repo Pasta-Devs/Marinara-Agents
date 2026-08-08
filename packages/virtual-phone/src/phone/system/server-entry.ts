@@ -59,6 +59,7 @@ interface CapabilityContext {
           ): Promise<{ content: string }>;
         }>;
       };
+      logger?: { error(error: unknown, message: string, ...args: unknown[]): void };
     };
     registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void>;
   };
@@ -308,7 +309,8 @@ export async function activate({ api }: CapabilityContext) {
         .join("\n")
         .slice(-STORY_BUDGET_CHARS);
     }
-    return `${lore ? `\n\nWorld lore to stay true to:\n${lore}` : ""}${story ? `\n\nRecent story events:\n${story}` : ""}`;
+    const shared = chatId && phone ? await sharedPhoneContext(phone, chatId) : "";
+    return `${lore ? `\n\nWorld lore to stay true to:\n${lore}` : ""}${story ? `\n\nRecent story events:\n${story}` : ""}${shared}`;
   };
 
   const generateCharacterReply = async (senderPhoneId: string, recipientPhoneId: string) => {
@@ -491,6 +493,20 @@ export async function activate({ api }: CapabilityContext) {
     const lines = [...known.entries()].slice(0, 30).map(([name, why]) => `${name} — ${why}`).join("\n");
     return `\n\nWhose details this phone holds:\n${lines}\nAnyone not on that list is a stranger to the owner. That is allowed, but it must read like a stranger: they explain how they got the address, or they clearly should not have it.`;
   };
+  const sharedPhoneContext = async (phone: Awaited<ReturnType<typeof findPhone>>, chatId: string) => {
+    const inChat = (await phones.list()).filter(({ document }) =>
+      document.identity.phoneId !== phone.document.identity.phoneId &&
+      document.provisioning.enabled && document.identity.chatScope.includes(chatId));
+    const known = new Map<string, string>();
+    for (const { document } of inChat) known.set(document.identity.ownerName, "you share this story with them");
+    for (const { document } of await phones.listContacts(chatId)) {
+      known.set(document.name, document.source || "you saved them in Contacts");
+    }
+    const facts = await phones.worldFactsFor(phone.document.identity.phoneId, chatId);
+    const people = [...known.entries()].slice(0, 20).map(([name, why]) => `${name} — ${why}`).join("\n");
+    const remembered = facts.slice(0, 20).map((fact) => `${fact.text} (${fact.source})`).join("\n");
+    return `${people ? `\n\nPeople this phone knows:\n${people}` : ""}${remembered ? `\n\nThings the owner deliberately kept or established on this phone:\n${remembered}` : ""}`;
+  };
 
   /**
    * Step 8.3 — a character texts because a thread has gone quiet, or because you left them on read.
@@ -628,6 +644,20 @@ export async function activate({ api }: CapabilityContext) {
         return { recorded: true };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Activity not recorded" });
+      }
+    });
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/world-facts", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const chatId = targetChat(phone, request.query.chatId);
+        if (!chatId) return reply.status(400).send({ error: "This phone has no story to remember this in" });
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const fact = await phones.rememberWorldFact(request.params.phoneId, chatId, String(body.text ?? ""), String(body.source ?? "Phone"));
+        return { fact };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "The phone could not remember that" });
       }
     });
 
@@ -1020,14 +1050,45 @@ export async function activate({ api }: CapabilityContext) {
         const ownerName = phone.document.identity.ownerName;
         const image = String(body.image ?? "").trim().slice(0, 1000);
         const parentPostId = String(body.parentPostId ?? "").trim().slice(0, 200);
-        await noodle.addPosts(chatId, [{
+         const posted = await noodle.addPosts(chatId, [{
           author: ownerName,
           handle: handleFor(ownerName),
           text,
           ...(image ? { image } : {}),
-          ...(parentPostId ? { parentPostId } : {}),
-        }]);
-        return { posts: await noodle.feedFor(phone.document.identity.chatScope) };
+           ...(parentPostId ? { parentPostId } : {}),
+         }]);
+         const post = posted.find((candidate) => candidate.author === ownerName && candidate.text === text);
+         const generateReplies = async () => {
+           // A post is a public action in this world. Give one or two known people a chance to answer
+           // it, so Noodle changes the shared social graph rather than only changing local counters.
+           if (!parentPostId && post) {
+             const model = await resolvePhoneModel(phone, "light");
+             if (model) {
+               const candidates = (await phones.listContacts(chatId)).map(({ document }) => document).slice(0, 4);
+               if (candidates.length && !(await noodle.feedFor([chatId])).some((candidate) => candidate.parentPostId === post.id)) {
+               const completion = await model.chatComplete([
+                 { role: "system", content: `You are the people who know ${ownerName} in a fictional roleplay world. Choose zero, one, or two of these people to reply to their public Noodle post, in their own voice: ${candidates.map((candidate) => `${candidate.name}: ${candidate.bio}`).join("\n")}. Respond only JSON: {"replies":["Name | short reply", ...]}. Do not force a reply.${await worldContext(chatId, phone)}` },
+                 { role: "user", content: `Post by ${ownerName}: ${text}` },
+               ], { temperature: 0.9, maxTokens: 400 });
+               const generated = parseBoundedContent(completion.content, {
+                 fields: { replies: "string[]" }, defaults: { replies: [] as string[] }, limits: { maxString: 400, maxItems: 2 },
+               }) as { replies: string[] };
+               const allowed = new Map(candidates.map((candidate) => [candidate.name.toLocaleLowerCase(), candidate.name]));
+               const replies = generated.replies.flatMap((line) => {
+                 const [name, ...rest] = line.split(" | ");
+                 const author = allowed.get((name ?? "").trim().toLocaleLowerCase());
+                 const replyText = rest.join(" | ").trim();
+                 return author && replyText ? [{ author, handle: handleFor(author), text: replyText, parentPostId: "pending" }] : [];
+               });
+               if (replies.length) await noodle.addPosts(chatId, replies.map((reply) => ({ ...reply, parentPostId: post.id })));
+             }
+           }
+           }
+         };
+          void generateReplies().catch((cause: unknown) => {
+            api.runtime.logger?.error(cause, "[virtual-phone] Noodle replies could not be generated");
+          });
+         return { posts: await noodle.feedFor(phone.document.identity.chatScope) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Post failed" });
       }

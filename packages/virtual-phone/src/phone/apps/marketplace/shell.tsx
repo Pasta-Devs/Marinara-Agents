@@ -1,7 +1,7 @@
 import React from "react";
 import { Send } from "lucide-react";
 import { PhoneAppHeader } from "../../platform/app-header";
-import { phoneRequest, recordActivity } from "../../platform/api";
+import { phoneRequest, recordActivity, rememberWorldFact } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { rememberPerson } from "../../platform/people";
 import { charge, credit, InsufficientFundsError } from "../../platform/wallet";
@@ -95,7 +95,10 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
       } catch (cause) {
         contactWarning = cause instanceof Error ? cause.message : `${listing.seller} could not be added to Contacts.`;
       }
-      recordActivity(phoneId, `bought ${listing.title} from ${listing.seller}${cost ? ` for ${cost}` : ""}`);
+      void recordActivity(phoneId, `bought ${listing.title} from ${listing.seller}${cost ? ` for ${cost}` : ""}`)
+        .catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "The purchase action could not be recorded."));
+      void rememberWorldFact(phoneId, `Bought ${listing.title} from ${listing.seller}${cost ? ` for ${cost}` : ""}.`, "Marketplace purchase")
+        .catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "The purchase could not be shared with the phone."));
       setNotice(contactWarning ? `Bought, but ${contactWarning}` : `Bought. ${listing.seller} is expecting you.`);
       setOpenKey(null);
       setTab("yours");
@@ -162,8 +165,18 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
       sold: false,
     };
     const next = [entry, ...selling];
-    persistSelling(next);
-    recordActivity(phoneId, `listed ${entry.title} for sale at ${entry.price}`);
+    try {
+      await store.set("selling", next);
+      setSelling(next);
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "Your listing could not be saved.");
+      setBusy(false);
+      return;
+    }
+    void recordActivity(phoneId, `listed ${entry.title} for sale at ${entry.price}`)
+      .catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "The listing action could not be recorded."));
+    void rememberWorldFact(phoneId, `Listed ${entry.title} for sale at ${entry.price}.`, "Marketplace listing")
+      .catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "The listing could not be shared with the phone."));
     setSellDraft(null);
     setTab("yours");
     try {
@@ -209,7 +222,10 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
       setNotice(cause instanceof Error ? cause.message : "The payment could not be deposited.");
       return;
     }
-    recordActivity(phoneId, `sold ${entry.title} to ${entry.offer.from} for ${entry.offer.amount}`);
+    void recordActivity(phoneId, `sold ${entry.title} to ${entry.offer.from} for ${entry.offer.amount}`)
+      .catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "The sale action could not be recorded."));
+    void rememberWorldFact(phoneId, `Sold ${entry.title} to ${entry.offer.from} for ${entry.offer.amount}.`, "Marketplace sale")
+      .catch((cause: unknown) => setNotice(cause instanceof Error ? cause.message : "The sale could not be shared with the phone."));
     setNotice(`Sold to ${entry.offer.from}.`);
   };
 

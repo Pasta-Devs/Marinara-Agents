@@ -115,7 +115,8 @@ export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phon
     const sent = draftMail({ from: ownerName, to: composing.to, subject: composing.subject, body: composing.body, ...(composing.replyTo ? { replyTo: composing.replyTo } : {}) });
     const afterSend = [sent, ...(mail ?? [])];
     persist(afterSend);
-    recordActivity(phoneId, `emailed ${composing.to}${composing.subject.trim() ? ` about "${composing.subject.trim()}"` : ""}`);
+    void recordActivity(phoneId, `emailed ${composing.to}${composing.subject.trim() ? ` about "${composing.subject.trim()}"` : ""}`)
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The email action could not be recorded."));
     setComposing(null);
     setFolder("sent");
     try {

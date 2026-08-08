@@ -18,6 +18,23 @@ function adminHeaders() {
  * app's props because it is ambient to the whole device and never varies per app.
  */
 let activeChatId: string | null = null;
+const pendingPhoneWrites = new Map<string, Set<Promise<unknown>>>();
+
+function trackPhoneWrite<T>(phoneId: string, write: Promise<T>) {
+  const pending = pendingPhoneWrites.get(phoneId) ?? new Set<Promise<unknown>>();
+  pending.add(write);
+  pendingPhoneWrites.set(phoneId, pending);
+  void write.finally(() => {
+    pending.delete(write);
+    if (pending.size === 0) pendingPhoneWrites.delete(phoneId);
+  }).catch(() => undefined);
+  return write;
+}
+
+export async function waitForPhoneWrites(phoneId: string) {
+  const pending = pendingPhoneWrites.get(phoneId);
+  if (pending?.size) await Promise.allSettled([...pending]);
+}
 
 export function setActiveChatId(chatId: string | null) {
   activeChatId = chatId;
@@ -48,8 +65,15 @@ export async function phoneRequest<T>(path: string, init: RequestInit = {}): Pro
  * harbour master" is.
  */
 export function recordActivity(phoneId: string, text: string) {
-  void phoneRequest(`/phones/${encodeURIComponent(phoneId)}/activity`, {
+  return trackPhoneWrite(phoneId, phoneRequest(`/phones/${encodeURIComponent(phoneId)}/activity`, {
     method: "POST",
     body: JSON.stringify({ text }),
-  }).catch(() => undefined);
+  }));
+}
+
+export async function rememberWorldFact(phoneId: string, text: string, source: string) {
+  return trackPhoneWrite(phoneId, phoneRequest(`/phones/${encodeURIComponent(phoneId)}/world-facts`, {
+    method: "POST",
+    body: JSON.stringify({ text, source }),
+  }));
 }

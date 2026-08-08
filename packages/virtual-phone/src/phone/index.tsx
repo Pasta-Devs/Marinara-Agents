@@ -6,7 +6,7 @@ import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
 import { initialDeviceSession, unlockDevice } from "./device/surfaces";
-import { phoneRequest, setActiveChatId } from "./platform/api";
+import { phoneRequest, setActiveChatId, waitForPhoneWrites } from "./platform/api";
 import { defaultDeviceSettings } from "./device/settings";
 import { conditionOpacity, patternBackground } from "./device/effects";
 import { InstalledAppRegistry, type AppRenderContext, type InstalledApp } from "./platform/app-registry";
@@ -305,13 +305,17 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     });
     setPhones((current) => current.map((phone) => phone.phoneId === response.phone.phoneId ? response.phone : phone));
   };
-  const close = () => {
-    // Putting the phone down is what tells the scene what happened on it — one line, once per
-    // session. Fire and forget: closing the phone must never wait on a request.
+  const close = async () => {
+    // Flush the session before closing so the last app action cannot race the ledger read.
     if (chatId && selectedPhone) {
-      void phoneRequest(`/chats/${encodeURIComponent(chatId)}/phones/${encodeURIComponent(selectedPhone.phoneId)}/session`, {
-        method: "POST", body: JSON.stringify({}),
-      }).catch(() => undefined);
+      try {
+        await waitForPhoneWrites(selectedPhone.phoneId);
+        await phoneRequest(`/chats/${encodeURIComponent(chatId)}/phones/${encodeURIComponent(selectedPhone.phoneId)}/session`, {
+          method: "POST", body: JSON.stringify({}),
+        });
+      } catch (cause) {
+        console.error(cause instanceof Error ? cause.message : "The phone session could not be recorded.");
+      }
     }
     dispatchPhoneEvent(PHONE_CLOSE_EVENT);
   };
