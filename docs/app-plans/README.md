@@ -98,9 +98,14 @@ accretes five more per-app workarounds. [`20-tester-feedback.md`](20-tester-feed
 [`21-engine-contract-ask.md`](21-engine-contract-ask.md), with the Engine file paths, current type
 shapes and a minimal proposed shape for each item.
 
-Five items, not the three originally scoped in [`16-engine-interop.md`](16-engine-interop.md): image
-generation, `chat_images` read access and conversation call sessions, **plus** lorebook entry filter
-fields (Step 7.2) and a `phone` conversation command key (Step 8.4). Those last two were assumed
-possible when these plans were written and turned out to be blocked once the code was written.
+Framed as **two general mechanisms plus two data reads**, rather than the five point-solutions it
+first looked like. Three of the blockers — images, calls, music transport — are really the same
+thing: the phone cannot talk to another agent. `15-rp-integration.md` §5 already says the phone
+should integrate *control* of other agents and never their functionality; the general ask is what
+makes that possible without a new Engine change per integration.
+
+Each general ask carries a narrow fallback that unblocks the same features, so it can be decided in
+one review. Two of the four items were assumed possible when these plans were written and turned out
+to be blocked once code was written against them.
 
 This is the entire remaining dependency — Stages 1 through 10 are shipped.
