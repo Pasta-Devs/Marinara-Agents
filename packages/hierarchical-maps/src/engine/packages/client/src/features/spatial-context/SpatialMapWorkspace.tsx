@@ -3486,6 +3486,7 @@ export function SpatialMapWorkspace({
                     type="button"
                     onClick={() => {
                       setReplaceMapOpen(false);
+                      setStartOverPending(true);
                       importInputRef.current?.click();
                     }}
                     disabled={isImporting}

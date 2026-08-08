@@ -119,6 +119,11 @@ assert.match(
   "Replace/start over must carry replacement intent into the map library.",
 );
 assert.match(
+  workspaceSource,
+  /setReplaceMapOpen\(false\);\s*setStartOverPending\(true\);\s*importInputRef\.current\?\.click\(\)/u,
+  "Replace/start over imports must carry replacement intent into the file-import flow.",
+);
+assert.match(
   librarySource,
   /startOverReplacement[\s\S]*?useStartOverSpatialContext/u,
   "The map library must retain replacement intent and use the history-breaking save contract.",
