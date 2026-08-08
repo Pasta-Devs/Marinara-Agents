@@ -2857,6 +2857,56 @@ async function main() {
     })) as { currentLocationId: string; definition: { revision: number } };
     assert.equal(impersonateSpatial.currentLocationId, "lifecycle_world");
 
+    const customCreateChat = (await expectJson(app, {
+      method: "POST",
+      url: "/api/chats",
+      headers: csrfHeaders,
+      payload: {
+        name: "Custom create target lifecycle fixture",
+        mode: "roleplay",
+        characterIds: [],
+        connectionId: impersonateConnection.id,
+      },
+    })) as { id: string };
+    await expectJson(app, {
+      method: "PATCH",
+      url: `/api/chats/${customCreateChat.id}/metadata`,
+      headers: csrfHeaders,
+      payload: { enableAgents: true, activeAgentIds: ["hierarchical-maps"] },
+    });
+    const customCreateRequestIndex = generationProviderRequests.length;
+    const customCreate = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${customCreateChat.id}/spatial-context/generate`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        targetLocationCount: 10,
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: impersonateConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+      },
+    })) as { operation: string };
+    assert.equal(customCreate.operation, "create");
+    assert.match(
+      capturedProviderPrompt(generationProviderRequests[customCreateRequestIndex]),
+      /Create about 10 locations/u,
+      "Custom create targets must reach the provider prompt.",
+    );
+    await expectJson(
+      app,
+      {
+        method: "DELETE",
+        url: `/api/chats/${customCreateChat.id}?force=true`,
+        headers: csrfHeaders,
+      },
+      204,
+    );
+
     mapExpansionExistingTargetId = "lifecycle_harbor";
     const customExpansionRequestIndex = generationProviderRequests.length;
     const customExpansion = (await expectJson(app, {

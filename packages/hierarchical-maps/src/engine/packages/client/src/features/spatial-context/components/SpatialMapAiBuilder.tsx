@@ -377,7 +377,7 @@ export function SpatialMapAiBuilder({
         const requestInput = {
           operation: standalone ? "create" : request.operation,
           size: request.size,
-          ...(request.operation === "expand" ? { targetLocationCount: request.targetLocationCount } : {}),
+          ...(request.targetLocationCount === undefined ? {} : { targetLocationCount: request.targetLocationCount }),
           ...(startOver ? { breakHistoryContinuity: true as const } : {}),
           ...(!standalone && request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
           instructions: request.instructions.trim() || undefined,
@@ -465,7 +465,7 @@ export function SpatialMapAiBuilder({
     operation,
     targetLocationId,
     size,
-    ...(operation === "expand" ? { targetLocationCount } : {}),
+    targetLocationCount,
     instructions,
     groundingMode,
     sourceLorebookIds,
@@ -1009,16 +1009,16 @@ export function SpatialMapAiBuilder({
                 <button
                   key={option.value}
                   type="button"
-                  aria-pressed={operation === "expand" ? targetLocationCount === option.targetLocationCount : size === option.value}
+                  aria-pressed={targetLocationCount === option.targetLocationCount}
                   disabled={generationPending}
                   onClick={() => {
                     setSize(option.value);
-                    if (operation === "expand") setTargetLocationCount(option.targetLocationCount);
+                    setTargetLocationCount(option.targetLocationCount);
                     resetResult();
                   }}
                   className={cn(
                     "min-h-14 rounded-lg border px-2 py-2 text-left transition-colors duration-200 disabled:cursor-wait disabled:opacity-60",
-                    (operation === "expand" ? targetLocationCount === option.targetLocationCount : size === option.value)
+                    targetLocationCount === option.targetLocationCount
                       ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)]"
                       : "border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-editor-muted)]",
                   )}
@@ -1028,31 +1028,30 @@ export function SpatialMapAiBuilder({
                 </button>
               ))}
             </div>
-            {operation === "expand" && (
-              <label className="mt-3 block text-xs font-medium text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-target-count">
-                Custom place target
-                <input
-                  id="spatial-ai-target-count"
-                  type="number"
-                  min={1}
-                  max={SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT}
-                  step={1}
-                  value={targetLocationCount}
-                  disabled={generationPending}
-                  onChange={(event) => {
-                    const next = Number(event.target.value);
-                    if (!Number.isInteger(next)) return;
-                    setTargetLocationCount(Math.max(1, Math.min(SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT, next)));
-                    setSize(sizeForTargetLocationCount(next));
-                    resetResult();
-                  }}
-                  className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)] disabled:opacity-60"
-                />
-                <span className="mt-1 block text-[0.625rem] text-[var(--marinara-editor-muted)]">
-                  Choose any whole number from 1 to {SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT} places.
-                </span>
-              </label>
-            )}
+            <label className="mt-3 block text-xs font-medium text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-target-count">
+              Custom place target
+              <input
+                id="spatial-ai-target-count"
+                type="number"
+                min={1}
+                max={SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT}
+                step={1}
+                value={targetLocationCount}
+                disabled={generationPending}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  if (!Number.isInteger(next)) return;
+                  const normalized = Math.max(1, Math.min(SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT, next));
+                  setTargetLocationCount(normalized);
+                  setSize(sizeForTargetLocationCount(normalized));
+                  resetResult();
+                }}
+                className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)] disabled:opacity-60"
+              />
+              <span className="mt-1 block text-[0.625rem] text-[var(--marinara-editor-muted)]">
+                Choose any whole number from 1 to {SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT} places.
+              </span>
+            </label>
           </fieldset>
 
           <p className="mt-4 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">

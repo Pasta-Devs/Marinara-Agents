@@ -92,8 +92,16 @@ assert.doesNotMatch(
 assert.doesNotMatch(runtimeBarSource, /Set destination/u, "Runtime location controls must replace the legacy destination-only action.");
 assert.match(builtClient, /Step by step/u, "The built client must include the travel-mode control.");
 assert.match(builtClient, /Travel now/u, "The built client must include the immediate-travel control.");
-assert.match(aiBuilderSource, /Custom place target/u, "AI expansion must expose an editable custom place target.");
-assert.match(aiBuilderSource, /targetLocationCount/u, "The custom place target must be carried in the AI builder request.");
+assert.match(
+  aiBuilderSource,
+  /aria-pressed=\{targetLocationCount === option\.targetLocationCount\}[\s\S]*?Custom place target/u,
+  "Every AI map-size screen must expose the editable custom place target alongside the presets.",
+);
+assert.match(
+  aiBuilderSource,
+  /targetLocationCount,\s*instructions/u,
+  "The custom place target must be carried in every AI builder request.",
+);
 assert.match(aiDraftSource, /resolveSpatialDraftSizeSpec/u, "The server must resolve custom targets through the existing size tiers.");
 assert.match(aiDraftSource, /SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT/u, "Custom targets must retain a bounded one-call generation ceiling.");
 assert.match(builtClient, /Custom place target/u, "The built client must include the editable expansion target.");

@@ -1118,12 +1118,6 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       body.generationPreferencesOverride === undefined
         ? null
         : spatialGenerationPreferencesSchema.safeParse(body.generationPreferencesOverride);
-    if (targetLocationCountResult?.success) {
-      return reply.status(400).send({
-        error: "A custom location target is used only when expanding an existing map.",
-        code: "spatial_map_template_generation_invalid",
-      });
-    }
     if (
       !parsed.success ||
       (targetLocationCountResult && !targetLocationCountResult.success) ||
@@ -1172,6 +1166,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       prompt = buildSpatialMapDraftPrompt({
         ownerMode: "roleplay",
         size: parsed.data.size,
+        targetLocations: targetLocationCountResult?.success ? targetLocationCountResult.data : undefined,
         groundingMode,
         loreCatalog: loreCatalog.prompt,
         sourceContext: "{}",
@@ -1255,6 +1250,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         revision: 0,
         enabled: false,
         size: parsed.data.size,
+        targetLocations: targetLocationCountResult?.success ? targetLocationCountResult.data : undefined,
         sourceEntryIdsByKey: loreCatalog.sourceEntryIdsByKey,
         requireLoreSource: groundingMode === "lore_strict",
         requiredLocationNames: [],
@@ -1338,13 +1334,6 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         "spatial_ai_request_invalid",
         parsed.error.issues[0]?.message ?? "Invalid map generation request.",
         parsed.error.issues,
-      );
-    }
-    if (parsed.data.operation !== "expand" && targetLocationCount !== undefined) {
-      throw new SpatialMapPromptRequestError(
-        400,
-        "spatial_ai_request_invalid",
-        "A custom location target is used only when expanding an existing map.",
       );
     }
     const generationPreferencesOverride =

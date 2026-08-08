@@ -706,12 +706,14 @@ async function openGameSetupMapDraftReview(
     const request = route.request().postDataJSON() as {
       operation: string;
       size: string;
+      targetLocationCount?: number;
       connectionId?: string;
       debugMode: boolean;
     };
     expect(request).toMatchObject({
       operation: "create",
       size: "small",
+      targetLocationCount: 8,
       connectionId: connection.id,
       debugMode: false,
     });
@@ -791,6 +793,7 @@ async function openGameSetupMapDraftReview(
   } else {
     await wizard.getByRole("button", { name: /Draft with AI/ }).click();
     await wizard.getByRole("button", { name: /Small About 8 places/ }).click();
+    await expect(wizard.getByLabel("Custom place target")).toHaveValue("8");
   }
   await wizard.getByRole("button", { name: "Next" }).click();
   await expect(wizard.getByRole("heading", { name: "GM", exact: true })).toBeVisible();
@@ -3479,6 +3482,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     const request = route.request().postDataJSON() as {
       operation: string;
       size: string;
+      targetLocationCount?: number;
       instructions?: string;
       debugMode: boolean;
       promptOverride?: { system: string; user: string };
@@ -3486,6 +3490,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     expect(request).toMatchObject({
       operation: "create",
       size: "small",
+      targetLocationCount: 8,
       instructions: "A foggy port with a lighthouse and secret sewers.",
       debugMode: false,
     });
@@ -3546,6 +3551,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expectAiBuilderLayout(page, mobile);
     await page.getByLabel("What should this world include?").fill("A foggy port with a lighthouse and secret sewers.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
+    await expect(page.getByLabel("Custom place target")).toHaveValue("8");
     await page.getByRole("button", { name: /^Custom Edit every type/u }).click();
     await page.getByRole("button", { name: "Move Region down" }).click();
     await expect(page.getByLabel("Location type 1 label")).toHaveValue("Settlement");
@@ -4311,6 +4317,7 @@ test("AI map expansion preserves a campaign map and its current location", async
       operation: string;
       targetLocationId?: string;
       size: string;
+      targetLocationCount?: number;
       instructions?: string;
       debugMode: boolean;
       breakHistoryContinuity?: boolean;
@@ -4319,6 +4326,7 @@ test("AI map expansion preserves a campaign map and its current location", async
       expect(request.targetLocationId).toBeUndefined();
       expect(request.breakHistoryContinuity).toBe(true);
       expect(request.size).toBe("small");
+      expect(request.targetLocationCount).toBe(10);
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -4349,6 +4357,7 @@ test("AI map expansion preserves a campaign map and its current location", async
       operation: "expand",
       targetLocationId: "ai_harbor",
       size: "small",
+      targetLocationCount: 8,
       instructions: "Add a riverside ward with an inn for ferrymen.",
       debugMode: false,
     });
@@ -4648,9 +4657,11 @@ test("AI map expansion preserves a campaign map and its current location", async
     await aiStartOverDialog.getByRole("button", { name: "Start new map", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Replace the map draft with AI" })).toBeVisible();
     await expect(page.getByLabel("Expand beneath")).toHaveCount(0);
+    await expect(page.getByLabel("Custom place target")).toHaveValue("16");
     await expect(page.getByText("AI action", { exact: true })).toHaveCount(0);
     await page.getByLabel("What should this world include?").fill("A fresh map after the old campaign.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
+    await page.getByLabel("Custom place target").fill("10");
     await page.getByRole("button", { name: "Generate draft" }).click();
     await expect(page.getByText("Validated", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Discard draft", exact: true }).click();
