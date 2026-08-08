@@ -51,9 +51,10 @@ it doesn't repeat itself. It does not keep that ambient state. There is also a `
 command in the conversation-calls system that the phone ignores.
 
 The package now has a deliberately narrower exception: explicit user actions can record a small,
-per-chat world fact. Goodle bookmarks, Noodle posts, and Marketplace events use this for continuity
-across apps. It is not semantic memory, does not summarize the story, and does not include private
-banking state. Passive reads remain stateless.
+phone-owned world fact with the originating chat retained as provenance. Goodle bookmarks, Noodle
+posts, and Marketplace events use this for continuity across apps and later chats on the same
+persona/character phone. It is not semantic memory, does not summarize the story, and does not
+include private banking state. Passive reads remain stateless.
 
 ## 4. Lore leaks across worlds — `bug`
 

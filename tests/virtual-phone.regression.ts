@@ -140,6 +140,7 @@ async function main() {
   assert.equal(reenabled.document.provisioning.enabled, true);
   assert.equal(reenabled.document.provisioning.baselineTheme, "dark");
   const manualContact = await concurrentRuntime.createContact({
+    phoneId: "phone-persona",
     chatId: "chat-1",
     name: "Lady Farquaad",
     bio: "A person outside the active cast.",
@@ -148,6 +149,7 @@ async function main() {
   assert.equal(manualContact.document.phoneLabel, "");
   assert.equal(manualContact.document.source, "Added in Contacts");
   const metAgain = await concurrentRuntime.createContact({
+    phoneId: "phone-persona",
     chatId: "chat-1",
     name: "lady farquaad",
     phoneLabel: "Marketplace",
@@ -155,22 +157,20 @@ async function main() {
   });
   assert.equal(metAgain.document.contactId, manualContact.document.contactId);
   assert.equal(metAgain.document.source, "Bought from them on Marketplace");
-  assert.equal((await concurrentRuntime.listContacts("chat-1")).length, 1);
+  assert.equal((await concurrentRuntime.listContacts("phone-persona")).length, 1);
+  assert.deepEqual(await concurrentRuntime.listContacts("phone-character"), []);
   const fact = await concurrentRuntime.rememberWorldFact("phone-persona", "chat-1", "The harbour closes at dusk", "Goodle bookmark");
   assert.equal(fact.text, "The harbour closes at dusk");
-  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona", "chat-1")).length, 1);
+  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona")).length, 1);
   await concurrentRuntime.rememberWorldFact("phone-persona", "chat-1", "the harbour closes at dusk", "Noodle post");
-  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona", "chat-1")).length, 1);
-  assert.deepEqual(await concurrentRuntime.worldFactsFor("phone-persona", "chat-2"), []);
+  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona")).length, 1);
   for (let index = 0; index < 61; index += 1) {
     await concurrentRuntime.rememberWorldFact("phone-persona", "chat-2", `Other chat fact ${index}`, "test");
   }
-  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona", "chat-1")).length, 1);
-  assert.equal((await concurrentRuntime.worldFactsFor("phone-persona", "chat-2")).length, 60);
-  assert.deepEqual((await concurrentRuntime.listContacts("chat-1")).map(({ document }) => document.name), ["Lady Farquaad"]);
-  assert.deepEqual(await concurrentRuntime.listContacts("chat-2"), []);
-  await concurrentRuntime.removeContact(manualContact.document.contactId, "chat-1");
-  assert.deepEqual(await concurrentRuntime.listContacts("chat-1"), []);
+  const carriedFacts = await concurrentRuntime.worldFactsFor("phone-persona");
+  assert.equal(carriedFacts.filter((entry) => entry.chatId === "chat-1").length, 1);
+  assert.equal(carriedFacts.filter((entry) => entry.chatId === "chat-2").length, 60);
+  assert.deepEqual((await concurrentRuntime.listContacts("phone-persona")).map(({ document }) => document.name), ["Lady Farquaad"]);
   assert.equal(settingsManifest.removable, false);
   assert.equal(settingsManifest.modelUse, "none");
   assert.equal(appStoreManifest.removable, false);
@@ -548,6 +548,10 @@ async function main() {
   assert.deepEqual(carried.lorebookIds, ["book-1"]);
   assert.equal(carried.generationInstructions, "Everything here is waterlogged.");
   assert.deepEqual(thirdChat.document.identity.chatScope, ["chat-1", "chat-2", "chat-3"]);
+  assert.deepEqual((await createService().listContacts("phone-persona")).map(({ document }) => document.name), ["Lady Farquaad"]);
+  assert.ok((await createService().worldFactsFor("phone-persona")).some((entry) => entry.text.toLowerCase() === "the harbour closes at dusk" && entry.chatId === "chat-1"));
+  await concurrentRuntime.removeContact(manualContact.document.contactId, "phone-persona");
+  assert.deepEqual(await concurrentRuntime.listContacts("phone-persona"), []);
 
   assert.equal(conditionOpacity(3, false), 1);
   assert.equal(conditionOpacity(3, true), 0);

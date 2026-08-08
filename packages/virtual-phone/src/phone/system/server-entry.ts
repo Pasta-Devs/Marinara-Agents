@@ -150,11 +150,18 @@ export async function activate({ api }: CapabilityContext) {
     return scope[scope.length - 1];
   };
   const CONTACT_PHONE_PREFIX = "contact:";
-  const contactPhoneId = (chatId: string, contactId: string) => `${CONTACT_PHONE_PREFIX}${encodeURIComponent(chatId)}:${contactId}`;
-  const contactIdFromPhone = (phoneId: string, chatId: string) => {
-    const prefix = `${CONTACT_PHONE_PREFIX}${encodeURIComponent(chatId)}:`;
-    return phoneId.startsWith(prefix) ? phoneId.slice(prefix.length) : null;
+  const contactPhoneId = (contactId: string) => `${CONTACT_PHONE_PREFIX}${contactId}`;
+  const contactIdFromPhone = (phoneId: string) => {
+    if (!phoneId.startsWith(CONTACT_PHONE_PREFIX)) return null;
+    const value = phoneId.slice(CONTACT_PHONE_PREFIX.length);
+    // 2.0.60-2.0.61 embedded encoded chat provenance before the contact id.
+    const legacySeparator = value.indexOf(":");
+    return legacySeparator >= 0 ? value.slice(legacySeparator + 1) : value;
   };
+  const contactThreadIds = (document: { contactId: string; chatId: string }) => [
+    contactPhoneId(document.contactId),
+    `${CONTACT_PHONE_PREFIX}${encodeURIComponent(document.chatId)}:${document.contactId}`,
+  ];
 
   const threadPayload = (threadId: string, document: ThreadDocument, phoneId: string, names: Map<string, string>) => {
     const otherPhoneId = document.participants.find((participant) => participant !== phoneId) ?? "";
@@ -346,13 +353,13 @@ export async function activate({ api }: CapabilityContext) {
 
   const generateContactReply = async (senderPhoneId: string, contactId: string, chatId: string) => {
     const sender = await findPhone(senderPhoneId);
-    const contact = (await phones.listContacts(chatId)).find(({ document }) => document.contactId === contactId)?.document;
+    const contact = (await phones.listContacts(senderPhoneId)).find(({ document }) => document.contactId === contactId)?.document;
     if (!contact) throw new Error("Contact not found");
     const model = await resolvePhoneModel(sender, "light");
     if (!model) return null;
-    const syntheticPhoneId = contactPhoneId(chatId, contact.contactId);
+    const possiblePhoneIds = contactThreadIds(contact);
     const thread = (await messaging.threadsFor(senderPhoneId))
-      .find(({ document }) => document.participants.includes(syntheticPhoneId));
+      .find(({ document }) => possiblePhoneIds.some((phoneId) => document.participants.includes(phoneId)));
     if (!thread) return null;
     const history = thread.document.messages.slice(-20)
       .map((message) => `${message.from === senderPhoneId ? sender.document.identity.ownerName : contact.name}: ${message.text}`)
@@ -368,7 +375,8 @@ export async function activate({ api }: CapabilityContext) {
       fields: { reply: "string" }, defaults: { reply: "" }, limits: { maxString: 400 },
     }) as { reply: string };
     if (!reply.trim()) return null;
-    return messaging.send(syntheticPhoneId, senderPhoneId, reply);
+    const recipientPhoneId = thread.document.participants.find((participant) => participant !== senderPhoneId) ?? contactPhoneId(contact.contactId);
+    return messaging.send(recipientPhoneId, senderPhoneId, reply);
   };
 
   const routes: FastifyPluginAsync = async (app) => {
@@ -480,10 +488,8 @@ export async function activate({ api }: CapabilityContext) {
       const other = await findPhone(otherPhoneId).catch(() => null);
       if (other) known.set(other.document.identity.ownerName, "you have texted before");
     }
-    for (const chatId of phone.document.identity.chatScope) {
-      for (const { document } of await phones.listContacts(chatId)) {
-        known.set(document.name, document.source || (document.phoneLabel ? `you saved their details as ${document.phoneLabel}` : "you saved them in Contacts"));
-      }
+    for (const { document } of await phones.listContacts(phoneId)) {
+      known.set(document.name, document.source || (document.phoneLabel ? `you saved their details as ${document.phoneLabel}` : "you saved them in Contacts"));
     }
     return known;
   };
@@ -499,10 +505,10 @@ export async function activate({ api }: CapabilityContext) {
       document.provisioning.enabled && document.identity.chatScope.includes(chatId));
     const known = new Map<string, string>();
     for (const { document } of inChat) known.set(document.identity.ownerName, "you share this story with them");
-    for (const { document } of await phones.listContacts(chatId)) {
+    for (const { document } of await phones.listContacts(phone.document.identity.phoneId)) {
       known.set(document.name, document.source || "you saved them in Contacts");
     }
-    const facts = await phones.worldFactsFor(phone.document.identity.phoneId, chatId);
+    const facts = await phones.worldFactsFor(phone.document.identity.phoneId);
     const people = [...known.entries()].slice(0, 20).map(([name, why]) => `${name} — ${why}`).join("\n");
     const remembered = facts.slice(0, 20).map((fact) => `${fact.text} (${fact.source})`).join("\n");
     return `${people ? `\n\nPeople this phone knows:\n${people}` : ""}${remembered ? `\n\nThings the owner deliberately kept or established on this phone:\n${remembered}` : ""}`;
@@ -845,16 +851,20 @@ export async function activate({ api }: CapabilityContext) {
           }
         }));
         const chatId = targetChat(phone, request.query.chatId);
-        const manualContacts = chatId ? (await phones.listContacts(chatId)).map(({ document }) => ({
-          phoneId: contactPhoneId(chatId!, document.contactId),
+        const storedThreads = await messaging.threadsFor(request.params.phoneId);
+        const manualContacts = (await phones.listContacts(request.params.phoneId)).map(({ document }) => ({
+          phoneId: contactThreadIds(document).find((id) => storedThreads.some(({ document: thread }) => thread.participants.includes(id))) ?? contactPhoneId(document.contactId),
           ownerName: document.name,
           bio: document.bio,
-        })) : [];
+          aliases: contactThreadIds(document),
+        }));
         const contacts = [...phoneContacts, ...manualContacts];
-        const names = new Map(contacts.map((contact) => [contact.phoneId, contact.ownerName]));
+        const names = new Map(contacts.flatMap((contact) => "aliases" in contact
+          ? contact.aliases.map((id) => [id, contact.ownerName] as const)
+          : [[contact.phoneId, contact.ownerName] as const]));
         const threads = [
           ...await engineThreadsFor(phone),
-          ...(await messaging.threadsFor(request.params.phoneId))
+          ...storedThreads
             .filter(({ document }) => {
               const other = document.participants.find((participant) => participant !== request.params.phoneId) ?? "";
               return !other.startsWith(CONTACT_PHONE_PREFIX) || names.has(other);
@@ -887,7 +897,8 @@ export async function activate({ api }: CapabilityContext) {
             ownerId: contact.ownerId,
           };
         }));
-        const manualContacts = (await phones.listContacts(chatId)).map(({ document }) => ({
+        const storedThreads = await messaging.threadsFor(phone.document.identity.phoneId);
+        const manualContacts = (await phones.listContacts(phone.document.identity.phoneId)).map(({ document }) => ({
           id: document.contactId,
           kind: "contact" as const,
           name: document.name,
@@ -895,13 +906,14 @@ export async function activate({ api }: CapabilityContext) {
           bio: document.bio,
             phoneLabel: document.phoneLabel,
             source: document.source || "Added in Contacts",
-            phoneId: contactPhoneId(chatId, document.contactId),
+            phoneId: contactThreadIds(document).find((id) => storedThreads.some(({ document: thread }) => thread.participants.includes(id))) ?? contactPhoneId(document.contactId),
+            aliases: contactThreadIds(document),
         }));
         const names = new Map([
           ...phoneContacts.map((contact) => [contact.phoneId, contact.name] as const),
-          ...manualContacts.map((contact) => [contact.phoneId, contact.name] as const),
+          ...manualContacts.flatMap((contact) => contact.aliases.map((id) => [id, contact.name] as const)),
         ]);
-        const threads = (await messaging.threadsFor(phone.document.identity.phoneId))
+        const threads = storedThreads
           .filter(({ document }) => {
             const other = document.participants.find((participant) => participant !== phone.document.identity.phoneId) ?? "";
             return !other.startsWith(CONTACT_PHONE_PREFIX) || names.has(other);
@@ -919,6 +931,7 @@ export async function activate({ api }: CapabilityContext) {
           ? request.body as Record<string, unknown>
           : {};
         const contact = await phones.createContact({
+          phoneId: request.params.phoneId,
           chatId,
           name: String(body.name ?? ""),
           handle: String(body.handle ?? ""),
@@ -928,9 +941,9 @@ export async function activate({ api }: CapabilityContext) {
         });
         const firstMessage = String(body.firstMessage ?? "").trim().slice(0, 400);
         if (firstMessage) {
-          const syntheticPhoneId = contactPhoneId(chatId, contact.document.contactId);
+          const syntheticPhoneId = contactPhoneId(contact.document.contactId);
           const existing = (await messaging.threadsFor(request.params.phoneId))
-            .some(({ document }) => document.participants.includes(syntheticPhoneId));
+            .some(({ document }) => contactThreadIds(contact.document).some((id) => document.participants.includes(id)));
           if (!existing) {
             try {
               await messaging.send(syntheticPhoneId, request.params.phoneId, firstMessage);
@@ -942,15 +955,15 @@ export async function activate({ api }: CapabilityContext) {
             }
           }
         }
-        return { contact: { id: contact.document.contactId, kind: "contact", ...contact.document, phoneId: contactPhoneId(chatId, contact.document.contactId) } };
+        return { contact: { id: contact.document.contactId, kind: "contact", ...contact.document, phoneId: contactPhoneId(contact.document.contactId) } };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Contact could not be added" });
       }
     });
     app.delete<{ Params: { phoneId: string; contactId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/contacts/:contactId", async (request, reply) => {
       try {
-        const { chatId } = await chatForPhone(request.params.phoneId, String(request.query.chatId ?? ""));
-        await phones.removeContact(request.params.contactId, chatId);
+        await chatForPhone(request.params.phoneId, String(request.query.chatId ?? ""));
+        await phones.removeContact(request.params.contactId, request.params.phoneId);
         return { removed: true };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Contact could not be removed" });
@@ -1064,7 +1077,7 @@ export async function activate({ api }: CapabilityContext) {
            if (!parentPostId && post) {
              const model = await resolvePhoneModel(phone, "light");
              if (model) {
-               const candidates = (await phones.listContacts(chatId)).map(({ document }) => document).slice(0, 4);
+               const candidates = (await phones.listContacts(request.params.phoneId)).map(({ document }) => document).slice(0, 4);
                if (candidates.length && !(await noodle.feedFor([chatId])).some((candidate) => candidate.parentPostId === post.id)) {
                const completion = await model.chatComplete([
                  { role: "system", content: `You are the people who know ${ownerName} in a fictional roleplay world. Choose zero, one, or two of these people to reply to their public Noodle post, in their own voice: ${candidates.map((candidate) => `${candidate.name}: ${candidate.bio}`).join("\n")}. Respond only JSON: {"replies":["Name | short reply", ...]}. Do not force a reply.${await worldContext(chatId, phone)}` },
@@ -1108,7 +1121,7 @@ export async function activate({ api }: CapabilityContext) {
         const cast = (await phones.list())
           .filter(({ document }) => document.provisioning.enabled && document.identity.chatScope.includes(chatId))
           .map(({ document }) => `${document.identity.ownerName} ${handleFor(document.identity.ownerName)}`)
-          .concat((await phones.listContacts(chatId)).map(({ document }) => `${document.name} ${handleFor(document.name)}`))
+          .concat((await phones.listContacts(request.params.phoneId)).map(({ document }) => `${document.name} ${handleFor(document.name)}`))
           .join(", ");
         const completion = await model.chatComplete([
           {
@@ -1186,7 +1199,7 @@ export async function activate({ api }: CapabilityContext) {
         const refresh = body.refresh === true;
         if (!phone.document.identity.chatScope.includes(requestedChatId)) return reply.status(400).send({ error: "This phone is not part of this chat" });
         const phoneContact = (await contactsFor(request.params.phoneId)).find((candidate) => candidate.phoneId === creatorPhoneId);
-        const manualContact = (await phones.listContacts(requestedChatId)).find(({ document }) => document.contactId === creatorPhoneId)?.document;
+        const manualContact = (await phones.listContacts(request.params.phoneId)).find(({ document }) => document.contactId === creatorPhoneId)?.document;
         if (!phoneContact && !manualContact) return reply.status(400).send({ error: "That creator is not in this chat" });
         const creator = phoneContact ? await findPhone(creatorPhoneId) : null;
         const chatId = requestedChatId;
@@ -1328,10 +1341,10 @@ export async function activate({ api }: CapabilityContext) {
         const contacts = await contactsFor(phoneId);
         const phone = await findPhone(phoneId);
         const chatId = targetChat(phone, request.query.chatId);
-        const manualContacts = chatId ? await phones.listContacts(chatId) : [];
+        const manualContacts = await phones.listContacts(phoneId);
         const names = new Map([
           ...contacts.map((contact) => [contact.phoneId, contact.ownerName] as const),
-          ...manualContacts.map(({ document }) => [contactPhoneId(chatId!, document.contactId), document.name] as const),
+          ...manualContacts.flatMap(({ document }) => contactThreadIds(document).map((id) => [id, document.name] as const)),
         ]);
         const extra: Array<{ id: string; appId: string; title: string; body: string; count: number; at: string }> = [];
 
@@ -1447,8 +1460,8 @@ export async function activate({ api }: CapabilityContext) {
         const phone = await findPhone(request.params.phoneId);
         const chatId = targetChat(phone, request.query.chatId);
         const phoneContacts = await contactsFor(request.params.phoneId);
-        const manualContacts = chatId ? await phones.listContacts(chatId) : [];
-        const manualContactId = chatId ? contactIdFromPhone(toPhoneId, chatId) : null;
+        const manualContacts = await phones.listContacts(request.params.phoneId);
+        const manualContactId = contactIdFromPhone(toPhoneId);
         const manualContact = manualContactId
           ? manualContacts.find(({ document }) => document.contactId === manualContactId)
           : null;
@@ -1458,7 +1471,7 @@ export async function activate({ api }: CapabilityContext) {
         const thread = await messaging.send(request.params.phoneId, toPhoneId, String(body.text ?? ""));
         const names = new Map([
           ...phoneContacts.map((contact) => [contact.phoneId, contact.ownerName] as const),
-          ...manualContacts.map(({ document }) => [contactPhoneId(chatId!, document.contactId), document.name] as const),
+          ...manualContacts.flatMap(({ document }) => contactThreadIds(document).map((id) => [id, document.name] as const)),
         ]);
         // The send returns as soon as the message is stored. Waiting on the model here made the
         // send button hang for the length of a completion on a slow connection. The reply lands in
@@ -1496,13 +1509,14 @@ export async function activate({ api }: CapabilityContext) {
         const threadId = String(body.threadId ?? "");
         const candidate = (await messaging.threadsFor(request.params.phoneId)).find(({ record }) => record.id === threadId);
         const other = candidate?.document.participants.find((participant) => participant !== request.params.phoneId) ?? "";
-        if (other.startsWith(CONTACT_PHONE_PREFIX) && contactIdFromPhone(other, chatId) === null) {
-          return reply.status(400).send({ error: "That contact belongs to another chat" });
+        const manualContactId = contactIdFromPhone(other);
+        if (manualContactId && !(await phones.listContacts(request.params.phoneId)).some(({ document }) => document.contactId === manualContactId)) {
+          return reply.status(400).send({ error: "That contact is not on this phone" });
         }
         const thread = await messaging.markRead(threadId, request.params.phoneId);
         const names = new Map([
           ...(await contactsFor(request.params.phoneId)).map((contact) => [contact.phoneId, contact.ownerName] as const),
-          ...(await phones.listContacts(chatId)).map(({ document }) => [contactPhoneId(chatId, document.contactId), document.name] as const),
+          ...(await phones.listContacts(request.params.phoneId)).flatMap(({ document }) => contactThreadIds(document).map((id) => [id, document.name] as const)),
         ]);
         return { thread: threadPayload(thread.record.id, thread.document, request.params.phoneId, names) };
       } catch (error) {

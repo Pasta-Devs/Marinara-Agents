@@ -188,11 +188,14 @@ front-end over generation the phone can already do. Wants images more than most 
 a marketplace of pure text is a classifieds column. Carries the strongest caveat of anything scheduled —
 it's the one idea here the maintainer never confirmed wanting, and cheap is not the same as warranted.
 
-## 7. Availability outside a chat — `no change`
+## 7. Availability outside a chat — `clarified`
 
 dsbwizzard wanted to open the phone while browsing Noodle, not only from inside a chat. Both agreed
 chat-scoped is defensible — "the chats *are* the world" — and gunterlie left it at "both could work".
-**No change to the current chat-scoped model.** Recorded because it will come up again.
+**No change to where the phone UI is available:** it still opens from a chat. This did not decide data
+ownership. The phone itself is keyed by persona or character and persists across chats, so its
+contacts, retained facts, settings, wallet, and app storage travel with that owner. `chatId` on a
+phone-owned record is provenance, not a visibility filter.
 
 ## 8. Contacts don't model who knows whom — `open`
 

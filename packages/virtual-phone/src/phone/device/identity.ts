@@ -50,6 +50,9 @@ export interface PhoneDocumentRecord {
 export interface ContactDocument {
   schemaVersion: 1;
   contactId: string;
+  /** Owning persistent phones. Missing on 2.0.60-2.0.61 records, which are resolved from chatId. */
+  phoneIds?: string[];
+  /** Provenance only: the story where this person first entered the phone. */
   chatId: string;
   name: string;
   handle: string;
@@ -163,22 +166,27 @@ export class PhoneIdentityService {
     return (await this.documents.list(PACKAGE_ID, PHONE_KIND)).map(parsePhoneRecord);
   }
 
-  async listContacts(chatId: string) {
-    const normalizedChatId = normalizeRequiredString(chatId, "chatId");
+  async listContacts(phoneId: string) {
+    const phone = await this.requirePhone(phoneId);
     return (await this.documents.list(PACKAGE_ID, CONTACT_KIND))
       .filter((record) => {
         const data = record.data as Partial<ContactDocument>;
-        return data.schemaVersion === 1 && data.chatId === normalizedChatId && typeof data.contactId === "string";
+        if (data.schemaVersion !== 1 || typeof data.contactId !== "string") return false;
+        if (Array.isArray(data.phoneIds)) return data.phoneIds.includes(phoneId);
+        // Existing contacts had only chat provenance. Every phone that could see one before keeps it.
+        return typeof data.chatId === "string" && phone.document.identity.chatScope.includes(data.chatId);
       })
       .map((record) => ({ record, document: record.data as ContactDocument }));
   }
 
-  async createContact(input: { chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string }) {
+  async createContact(input: { phoneId: string; chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string }) {
+    const phoneId = normalizeRequiredString(input.phoneId, "phoneId");
+    await this.requirePhone(phoneId);
     const chatId = normalizeRequiredString(input.chatId, "chatId");
     const name = normalizeRequiredString(input.name, "name").slice(0, 120);
-    const key = `${chatId}\0${name.toLocaleLowerCase()}`;
+    const key = `${phoneId}\0${name.toLocaleLowerCase()}`;
     const previous = this.contactLocks.get(key) ?? Promise.resolve();
-    const pending = previous.then(() => this.createContactUnlocked({ ...input, chatId, name }));
+    const pending = previous.then(() => this.createContactUnlocked({ ...input, phoneId, chatId, name }));
     this.contactLocks.set(key, pending);
     try {
       return await pending;
@@ -187,14 +195,18 @@ export class PhoneIdentityService {
     }
   }
 
-  private async createContactUnlocked(input: { chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string }) {
-    const { chatId, name } = input;
-    const existing = (await this.listContacts(chatId)).find(({ document }) =>
+  private async createContactUnlocked(input: { phoneId: string; chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string }) {
+    const { phoneId, chatId, name } = input;
+    const existing = (await this.listContacts(phoneId)).find(({ document }) =>
       document.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
     if (existing) {
       const updatedAt = this.now();
+      const legacyOwners = existing.document.phoneIds ?? (await this.list())
+        .filter(({ document }) => document.identity.chatScope.includes(existing.document.chatId))
+        .map(({ document }) => document.identity.phoneId);
       const document: ContactDocument = {
         ...existing.document,
+        phoneIds: [...new Set([...legacyOwners, phoneId])],
         handle: String(input.handle ?? existing.document.handle).trim().slice(0, 80),
         bio: String(input.bio ?? existing.document.bio).trim().slice(0, 500),
         phoneLabel: String(input.phoneLabel ?? existing.document.phoneLabel).trim().slice(0, 80),
@@ -217,6 +229,7 @@ export class PhoneIdentityService {
     const document: ContactDocument = {
       schemaVersion: 1,
       contactId: this.createId(),
+      phoneIds: [phoneId],
       chatId,
       name,
       handle: String(input.handle ?? "").trim().slice(0, 80),
@@ -239,9 +252,24 @@ export class PhoneIdentityService {
     return { record, document };
   }
 
-  async removeContact(contactId: string, chatId: string) {
-    const contact = (await this.listContacts(chatId)).find(({ document }) => document.contactId === contactId);
+  async removeContact(contactId: string, phoneId: string) {
+    const contact = (await this.listContacts(phoneId)).find(({ document }) => document.contactId === contactId);
     if (!contact) throw new Error("Contact not found");
+    const owners = contact.document.phoneIds;
+    if (owners && owners.length > 1) {
+      const document = { ...contact.document, phoneIds: owners.filter((id) => id !== phoneId), updatedAt: this.now() };
+      const updated = await this.documents.update({
+        id: contact.record.id,
+        packageId: PACKAGE_ID,
+        expectedRevision: contact.record.revision,
+        name: document.name,
+        description: contact.record.description,
+        data: document,
+        updatedAt: document.updatedAt,
+      });
+      if (!updated) return this.removeContact(contactId, phoneId);
+      return;
+    }
     if (!await this.documents.remove(PACKAGE_ID, contact.record.id, contact.record.revision)) throw new Error("Contact changed; try again");
   }
 
@@ -498,12 +526,12 @@ export class PhoneIdentityService {
     return fact;
   }
 
-  async worldFactsFor(phoneId: string, chatId: string) {
+  async worldFactsFor(phoneId: string) {
     const phone = await this.requirePhone(phoneId);
     const facts = Array.isArray(phone.document.namespaces.phone.worldFacts)
       ? phone.document.namespaces.phone.worldFacts as PhoneWorldFact[]
       : [];
-    return facts.filter((fact) => fact.chatId === chatId);
+    return facts;
   }
 
   /** Reads and clears the pending activity for one chat. Clearing is what makes the flush once-only. */
