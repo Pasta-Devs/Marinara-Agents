@@ -3293,6 +3293,7 @@ export function SpatialMapWorkspace({
               type="button"
               onClick={() => {
                 setMobileActionsOpen(false);
+                setStartOverPending(false);
                 importInputRef.current?.click();
               }}
               disabled={conflict || spatialUpdatePending || isImporting}
@@ -4159,7 +4160,10 @@ export function SpatialMapWorkspace({
                 {!templateMode && (
                   <button
                     type="button"
-                    onClick={() => importInputRef.current?.click()}
+                    onClick={() => {
+                      setStartOverPending(false);
+                      importInputRef.current?.click();
+                    }}
                     disabled={isImporting}
                     className="mari-chrome-control min-h-11 justify-center px-5 text-sm disabled:opacity-45"
                   >
