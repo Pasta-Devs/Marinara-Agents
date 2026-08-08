@@ -94,6 +94,13 @@ accretes five more per-app workarounds. [`20-tester-feedback.md`](20-tester-feed
 
 ## Task zero
 
-**Extend the package API contract** ([`16-engine-interop.md`](16-engine-interop.md)) to expose image
-generation, `chat_images` read access, and conversation call sessions. Engine-side change; every
-image-dependent decision and the Calls app are blocked behind it.
+**Extend the package API contract** — the concrete ask is written up in
+[`21-engine-contract-ask.md`](21-engine-contract-ask.md), with the Engine file paths, current type
+shapes and a minimal proposed shape for each item.
+
+Five items, not the three originally scoped in [`16-engine-interop.md`](16-engine-interop.md): image
+generation, `chat_images` read access and conversation call sessions, **plus** lorebook entry filter
+fields (Step 7.2) and a `phone` conversation command key (Step 8.4). Those last two were assumed
+possible when these plans were written and turned out to be blocked once the code was written.
+
+This is the entire remaining dependency — Stages 1 through 10 are shipped.
