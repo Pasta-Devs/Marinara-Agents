@@ -3,8 +3,8 @@
 **What this is:** the Engine-side change the Virtual Phone needs, written after building Stages 1–10
 and hitting each wall in turn.
 
-**The short version.** Three of the five things the phone is blocked on are not really *"give the
-phone a table"* — they are *"let the phone talk to another agent"*:
+**The short version.** Three of the phone's blocked features are not really *"give the phone a
+table"* — they are *"let the phone talk to another agent"*:
 
 | Blocked feature | What actually owns it |
 |---|---|
@@ -16,7 +16,7 @@ phone a table"* — they are *"let the phone talk to another agent"*:
 agents, never their functionality** — otherwise the phone becomes a container for every other agent,
 against the bundle-size constraint in `20-tester-feedback.md` §10.
 
-So the ask below is **two general mechanisms plus two small data reads**, rather than five
+So the ask below is **three general mechanisms plus two small data reads**, rather than a series of
 point-solutions. The general version means the phone stops needing a new Engine change per
 integration: a Cooking agent ships, and the phone can have a recipes app the same week with no
 Engine work at all.
@@ -234,19 +234,86 @@ attached it to that phone, not because it targets a generation type.
 
 ---
 
+# E. Static package context injection
+
+**Highest-priority general ask.** Lets a package make its existing state part of the main generation
+prompt without paying for a second model call on every turn.
+
+The Engine already has the final transport shape, `AgentInjection`:
+
+```ts
+interface AgentInjection {
+  agentType: string;
+  agentName: string;
+  text: string;
+}
+```
+
+What is missing is a route from package code to that shape. A `pre_generation` agent currently runs
+through `agent-pipeline.ts` -> `executePhase`, which performs a language-model completion to produce
+its text. The Virtual Phone agent uses `execution: "feature"`, so it is excluded from that pipeline
+entirely. Changing it to an ordinary pre-generation agent would spend tokens every turn merely to
+restate data the package already has.
+
+**Proposed shape:** let a capability package declare a static context provider, invoked during prompt
+assembly with the current chat identity and returning text directly:
+
+```ts
+interface CapabilityStaticContextProvider {
+  getContext(input: {
+    chatId: string;
+    messageId?: string;
+  }): Promise<string | AgentInjection | Array<AgentInjection> | null>;
+}
+```
+
+The exact registration surface can follow the Engine's existing capability-package conventions. The
+contract that matters is:
+
+- no language-model call is made to obtain this text;
+- the Engine wraps a returned string as an `AgentInjection` owned by the package, or accepts explicit
+  injections when the package needs more than one section;
+- `null`, an empty string, a missing provider, or a provider from a disabled package injects nothing;
+- provider failures are logged and surfaced through existing agent/package diagnostics without
+  aborting the user's generation;
+- the Engine applies the same prompt-boundary and size controls used for other agent injections.
+
+**What the phone would do with it:** inject a compact, owner-specific view of the phone state that the
+character should naturally know: recent texts, relevant contacts and relationships, current balance,
+and consequential recent activity. It would not dump every app document or another character's
+private phone. This is the ambient half of Stage 10's asymmetric-awareness rule: a character knows
+their own phone, while the user's phone remains private until explicitly shown.
+
+The activity ledger shipped in 2.0.58 is the current fallback. It writes one visible line when the
+phone closes, which gives actions consequences but is necessarily episodic and reader-visible. Static
+context is different: the phone simply inhabits the character's world throughout generation, with no
+extra model call and no synthetic chat message.
+
+### E-fallback: package-authored pre-generation result
+
+If a general provider registry is too large, allow a feature-execution package to return an
+`AgentInjection` directly from a declared pre-generation hook. It must bypass `executePhase`'s model
+call. This is narrower but preserves the essential property: package state becomes prompt context at
+zero additional inference cost.
+
+---
+
 # Summary
 
 | # | Ask | Narrow fallback | Unblocks |
 |---|---|---|---|
+| **E** | Static package context injection | Package-authored pre-generation result | Ambient phone awareness with no extra model call |
 | **A** | `runtime.agents` — discover + invoke | `runtime.images.generate` only | Images everywhere, Calls, Music DJ, future agents |
 | **B** | Package-declared commands | Add one `"phone"` key | Characters using their phone in-scene |
 | **C** | `listChatImages` | — | Gallery real sources and prompts-as-captions |
 | **D** | Lorebook filter fields | — | Automatic owner-shaped phones |
 
-**If only part can land:** C and D are tiny, self-contained and each unblocks a real feature — best
-value per line of Engine change. A is the one worth taking generally rather than narrowly, because
-it is the difference between the phone integrating three agents and the phone integrating every
-agent that ever ships.
+**If only part can land:** E is the priority because it changes the phone from something the story is
+told about after use into persistent world context without a per-turn inference cost. C and D are
+tiny, self-contained and each unblocks a real feature. A is the one worth taking generally rather
+than narrowly, because it is the difference between the phone integrating three agents and the phone
+integrating every agent that ever ships.
 
 **Everything else in the plan is already shipped** — Stages 1 through 10, plus Banking and
-Marketplace, as of package version 2.0.57. This document is the entire remaining dependency.
+Marketplace, as of package version 2.0.59. The systemic shared-world pass and visual refinement are
+continuing in the package; this document is the complete list of remaining Engine dependencies.
