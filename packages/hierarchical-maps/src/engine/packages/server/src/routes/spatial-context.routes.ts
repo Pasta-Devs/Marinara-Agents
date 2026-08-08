@@ -7,6 +7,7 @@ import {
   updateSpatialContextRequestSchema,
   type CapabilityChatRecord,
   type CapabilityDocumentRecord,
+  type CapabilityResolvedLanguageModel,
   type CapabilityResourceHost,
   type GenerateSpatialMapDraftResponse,
   type SpatialContextDefinition,
@@ -28,7 +29,16 @@ import {
   createSpatialContextService,
   SpatialContextServiceError,
 } from "../services/spatial-context/definition.service.js";
-import { commitSpatialOwnerTurn, SpatialOwnerTurnError } from "../services/spatial-context/owner-turn.js";
+import {
+  buildSpatialMapJsonRepairMessages,
+  parseSpatialMapJsonWithRepair,
+  spatialMapJsonErrorPayload,
+} from "../services/spatial-context/map-json-response.js";
+import {
+  commitSpatialOwnerTurn,
+  findAppliedSpatialOwnerTurn,
+  SpatialOwnerTurnError,
+} from "../services/spatial-context/owner-turn.js";
 import {
   buildGameMapDraftReference,
   type GameMapDraftReference,
@@ -91,6 +101,17 @@ interface ChatSpatialParams {
   chatId: string;
 }
 
+interface ChatSpatialCommandParams extends ChatSpatialParams {
+  commandId: string;
+}
+
+interface SpatialTurnRecoveryQuery {
+  destinationId?: string;
+  travelMode?: string;
+  expectedDefinitionRevision?: string;
+  expectedCurrentLocationId?: string;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -98,6 +119,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function withoutKeys(value: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
   const omitted = new Set(keys);
   return Object.fromEntries(Object.entries(value).filter(([key]) => !omitted.has(key)));
+}
+
+function spatialMapJsonRepairRequest(resolved: CapabilityResolvedLanguageModel, maxTokens: number, debugMode: boolean) {
+  return async (malformedRaw: string) => {
+    const repairPrompt = resolved.fitContext(buildSpatialMapJsonRepairMessages(malformedRaw), { maxTokens });
+    if (repairPrompt.trimmed) {
+      throw new Error("The malformed response could not fit in a complete formatting-repair request.");
+    }
+    return resolved.chatComplete(repairPrompt.messages, {
+      temperature: 0,
+      maxTokens,
+      debugMode,
+    });
+  };
 }
 
 const GAME_LOREBOOK_KEEPER_SOURCE_ID = "game-lorebook-keeper";
@@ -1169,7 +1204,33 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         raw.length,
         raw,
       );
-      const parsedPlan = json.parseJsonish(raw);
+      const parsedResponse = await parseSpatialMapJsonWithRepair({
+        raw,
+        finishReason: result.finishReason,
+        parse: json.parseJsonish,
+        repair: spatialMapJsonRepairRequest(resolved, prompt.maxTokens, debugOverrideEnabled),
+      });
+      if (!parsedResponse.ok) {
+        const payload = spatialMapJsonErrorPayload(parsedResponse);
+        logger.warn(
+          "[spatial/map-template] Model response was not valid JSON (finishReason=%s chars=%d parser=%s kind=%s repairAttempted=%s)",
+          parsedResponse.primaryFailure.finishReason,
+          parsedResponse.primaryFailure.responseLength,
+          parsedResponse.primaryFailure.parserDetail,
+          parsedResponse.failure.kind,
+          parsedResponse.repairAttempted,
+        );
+        return reply.status(502).send(payload);
+      }
+      const parsedPlan = parsedResponse.value;
+      if (parsedResponse.repaired) {
+        logger.warn(
+          "[spatial/map-template] Repaired malformed JSON (finishReason=%s chars=%d parser=%s)",
+          parsedResponse.primaryFailure?.finishReason ?? "unknown",
+          parsedResponse.primaryFailure?.responseLength ?? raw.length,
+          parsedResponse.primaryFailure?.parserDetail ?? "unknown",
+        );
+      }
       const definition = normalizeSpatialMapPlan(parsedPlan, {
         ownerMode: "roleplay",
         revision: 0,
@@ -1427,24 +1488,21 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
   });
 
-  app.put<{ Params: ChatSpatialParams }>(
-    "/:chatId/spatial-context/generation-preferences",
-    async (req, reply) => {
-      const parsed = spatialGenerationPreferencesSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.status(400).send({
-          error: parsed.error.issues[0]?.message ?? "Invalid generation prompt preference.",
-          code: "spatial_request_invalid",
-          issues: parsed.error.issues,
-        });
-      }
-      try {
-        return await service.updateGenerationPreferences(req.params.chatId, parsed.data);
-      } catch (error) {
-        return sendServiceError(reply, error);
-      }
-    },
-  );
+  app.put<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generation-preferences", async (req, reply) => {
+    const parsed = spatialGenerationPreferencesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message ?? "Invalid generation prompt preference.",
+        code: "spatial_request_invalid",
+        issues: parsed.error.issues,
+      });
+    }
+    try {
+      return await service.updateGenerationPreferences(req.params.chatId, parsed.data);
+    } catch (error) {
+      return sendServiceError(reply, error);
+    }
+  });
 
   app.get<{ Params: ChatSpatialParams }>(
     "/:chatId/spatial-context/game-map-bindings/reconciliation",
@@ -1503,6 +1561,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       return {
         message: committed.message,
         spatial: await service.get(req.params.chatId),
+        ...(committed.travel ? { travel: committed.travel } : {}),
       };
     } catch (error) {
       if (error instanceof SpatialOwnerTurnError) {
@@ -1515,6 +1574,68 @@ export async function spatialContextRoutes(app: FastifyInstance) {
       throw error;
     }
   });
+
+  app.get<{ Params: ChatSpatialCommandParams; Querystring: SpatialTurnRecoveryQuery }>(
+    "/:chatId/spatial-context/turn/:commandId",
+    async (req, reply) => {
+    const commandId = z.string().trim().min(1).max(200).safeParse(req.params.commandId);
+    if (!commandId.success) {
+      return reply.status(400).send({
+        error: "Choose a valid movement command.",
+        code: "spatial_request_invalid",
+      });
+    }
+    const snapshot = await persistence.spatialSnapshots.getByCommand(req.params.chatId, commandId.data);
+    if (!snapshot) {
+      return reply.status(404).send({
+        error: "This movement command has not been applied.",
+        code: "spatial_transition_not_applied",
+      });
+    }
+    let recoveredTravel;
+    const hasRecoveryQuery = Object.values(req.query).some((value) => value !== undefined);
+    if (hasRecoveryQuery) {
+      const expectedDefinitionRevision = Number(req.query.expectedDefinitionRevision);
+      const parsedTransition = pendingSpatialTransitionSchema.safeParse({
+        destinationId: req.query.destinationId,
+        ...(req.query.travelMode ? { travelMode: req.query.travelMode } : {}),
+        expectedDefinitionRevision,
+        expectedCurrentLocationId: req.query.expectedCurrentLocationId ?? null,
+        commandId: commandId.data,
+      });
+      if (!parsedTransition.success) {
+        return reply.status(400).send({
+          error: parsedTransition.error.issues[0]?.message ?? "Invalid movement recovery request.",
+          code: "spatial_request_invalid",
+          issues: parsedTransition.error.issues,
+        });
+      }
+      try {
+        const applied = await findAppliedSpatialOwnerTurn({
+          chatId: req.params.chatId,
+          transition: parsedTransition.data,
+        });
+        recoveredTravel = applied?.travel;
+      } catch (error) {
+        if (error instanceof SpatialOwnerTurnError) {
+          return reply.status(error.statusCode).send({
+            error: error.message,
+            code: error.code,
+            ...(error.details ?? {}),
+          });
+        }
+        throw error;
+      }
+    }
+    return {
+      applied: true,
+      messageId: snapshot.messageId,
+      currentLocationId: snapshot.currentLocationId,
+      definitionRevision: snapshot.definitionRevision,
+      ...(recoveredTravel ? { travel: recoveredTravel } : {}),
+    };
+    },
+  );
 
   app.put<{ Params: ChatSpatialParams }>("/:chatId/spatial-context", async (req, reply) => {
     const body = isRecord(req.body) ? req.body : {};
@@ -1546,27 +1667,24 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post<{ Params: ChatSpatialParams }>(
-    "/:chatId/spatial-context/generation-prompt/preview",
-    async (req, reply) => {
-      try {
-        const prepared = await prepareSpatialMapPrompt(req.params.chatId, req.body, {
-          allowDraftPreviewWithExistingMap: true,
-        });
-        return {
-          ownerMode: prepared.ownerMode,
-          operation: prepared.operation,
-          size: prepared.request.size,
-          maxTokens: prepared.prompt.maxTokens,
-          containsPrivateContext: true,
-          system: prepared.prompt.messages.find((message) => message.role === "system")?.content ?? "",
-          user: prepared.prompt.messages.find((message) => message.role === "user")?.content ?? "",
-        };
-      } catch (error) {
-        return sendPromptRequestError(reply, error);
-      }
-    },
-  );
+  app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generation-prompt/preview", async (req, reply) => {
+    try {
+      const prepared = await prepareSpatialMapPrompt(req.params.chatId, req.body, {
+        allowDraftPreviewWithExistingMap: true,
+      });
+      return {
+        ownerMode: prepared.ownerMode,
+        operation: prepared.operation,
+        size: prepared.request.size,
+        maxTokens: prepared.prompt.maxTokens,
+        containsPrivateContext: true,
+        system: prepared.prompt.messages.find((message) => message.role === "system")?.content ?? "",
+        user: prepared.prompt.messages.find((message) => message.role === "user")?.content ?? "",
+      };
+    } catch (error) {
+      return sendPromptRequestError(reply, error);
+    }
+  });
 
   app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generate", async (req, reply) => {
     let prepared;
@@ -1635,20 +1753,34 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         raw.length,
         raw,
       );
-      let parsedPlan: unknown;
-      try {
-        parsedPlan = json.parseJsonish(raw);
-      } catch {
+      const parsedResponse = await parseSpatialMapJsonWithRepair({
+        raw,
+        finishReason: result.finishReason,
+        parse: json.parseJsonish,
+        repair: spatialMapJsonRepairRequest(resolved, prompt.maxTokens, debugOverrideEnabled),
+      });
+      if (!parsedResponse.ok) {
+        const payload = spatialMapJsonErrorPayload(parsedResponse);
         logger.warn(
-          "[spatial/map-draft] Model response was not valid JSON for chat %s (%d chars, likely truncated)",
+          "[spatial/map-draft] Model response was not valid JSON for chat %s (finishReason=%s chars=%d parser=%s kind=%s repairAttempted=%s)",
           chat.id,
-          raw.length,
+          parsedResponse.primaryFailure.finishReason,
+          parsedResponse.primaryFailure.responseLength,
+          parsedResponse.primaryFailure.parserDetail,
+          parsedResponse.failure.kind,
+          parsedResponse.repairAttempted,
         );
-        return reply.status(502).send({
-          error:
-            "The model's map draft was not valid JSON, most likely because the response was cut off. Raise the connection's Max Output Tokens or choose a smaller map size, then try again.",
-          code: "spatial_ai_generation_failed",
-        });
+        return reply.status(502).send(payload);
+      }
+      const parsedPlan = parsedResponse.value;
+      if (parsedResponse.repaired) {
+        logger.warn(
+          "[spatial/map-draft] Repaired malformed JSON for chat %s (finishReason=%s chars=%d parser=%s)",
+          chat.id,
+          parsedResponse.primaryFailure?.finishReason ?? "unknown",
+          parsedResponse.primaryFailure?.responseLength ?? raw.length,
+          parsedResponse.primaryFailure?.parserDetail ?? "unknown",
+        );
       }
       let definition: SpatialContextDefinition;
       try {

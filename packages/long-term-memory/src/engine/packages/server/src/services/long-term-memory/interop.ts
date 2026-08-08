@@ -16,7 +16,11 @@ import {
   getLtmScopeChatIds,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { ltmModeForChatMode, resolveChatLtmScope } from "./chat-scope.js";
+import {
+  ltmModeForChatMode,
+  normalizeLtmChatCharacterIds,
+  resolveChatLtmScope,
+} from "./chat-scope.js";
 import { nowIso } from "./ltm-utils.js";
 import {
   getPackageLanguageModels,
@@ -61,6 +65,8 @@ type Lorebook = {
   scope: LtmScope;
   candidates: Candidate[];
 };
+
+export const PROFESSOR_MARI_CHARACTER_ID = "__professor_mari__";
 function object(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value))
     return value as Record<string, unknown>;
@@ -146,7 +152,60 @@ function chunks(value: string) {
   if (remaining) result.push(remaining);
   return result;
 }
-function summaries(metadata: Record<string, unknown>) {
+function conversationDate(value: string) {
+  const match = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/u);
+  if (!match) return null;
+  const [, day, month, year] = match,
+    date = new Date(Number(year), Number(month) - 1, Number(day));
+  return date.getFullYear() === Number(year) &&
+      date.getMonth() === Number(month) - 1 &&
+      date.getDate() === Number(day)
+    ? date
+    : null;
+}
+function conversationSummaryEntries(
+  raw: unknown,
+  kind: "day" | "week",
+) {
+  return Object.entries(object(raw))
+    .flatMap(([key, value]) => {
+      const entry = object(value),
+        summary = typeof value === "string" ? text(value) : text(entry.summary),
+        keyDetails = Array.isArray(entry.keyDetails)
+          ? entry.keyDetails.filter(
+              (detail): detail is string =>
+                typeof detail === "string" && Boolean(detail.trim()),
+            )
+          : [],
+        date = conversationDate(key),
+        content = [summary, ...keyDetails].filter(Boolean).join("\n\n");
+      return date && content
+        ? [
+            {
+              id: `${kind}:${key}`,
+              content,
+              range: key,
+              origin: "conversation_summary",
+              date,
+            },
+          ]
+        : [];
+    })
+    .sort((left, right) => left.date.getTime() - right.date.getTime())
+    .map(({ date: _date, ...entry }) => entry);
+}
+function conversationSummaries(metadata: Record<string, unknown>) {
+  return [
+    ...conversationSummaryEntries(metadata.daySummaries, "day"),
+    ...conversationSummaryEntries(metadata.weekSummaries, "week"),
+  ].sort(
+    (left, right) =>
+      conversationDate(left.range)!.getTime() -
+      conversationDate(right.range)!.getTime(),
+  );
+}
+function summaries(metadata: Record<string, unknown>, chatMode: LtmMode) {
+  if (chatMode === "conversation") return conversationSummaries(metadata);
   const raw = Array.isArray(metadata.summaryEntries)
       ? metadata.summaryEntries.map(object)
       : [],
@@ -427,6 +486,7 @@ async function candidates(
   const result: Candidate[] = [];
   if (request.source === "characters")
     for (const row of await getPackageResources().listCharacters()) {
+      if (row.id === PROFESSOR_MARI_CHARACTER_ID) continue;
       const data = object(row.data),
         name = text(data.name) || "Character",
         sourceText = compact(data, row.comment);
@@ -460,8 +520,16 @@ async function candidates(
       result.push(...book.candidates);
   if (request.source === "chats") {
     const scopeIds = new Set(getLtmScopeChatIds(request.scope));
+    const broaderScope = Boolean(request.scope?.groupId) || scopeIds.size > 1;
     for (const chat of await getPackagePersistence().listChats()) {
-      if (request.chatId && chat.id !== request.chatId) continue;
+      if (
+        normalizeLtmChatCharacterIds(chat.characterIds).includes(
+          PROFESSOR_MARI_CHARACTER_ID,
+        )
+      )
+        continue;
+      if (request.chatId && !broaderScope && chat.id !== request.chatId)
+        continue;
       if (
         request.scope?.groupId
           ? chat.groupId !== request.scope.groupId
@@ -470,7 +538,7 @@ async function candidates(
         continue;
       const metadata = object(chat.metadata),
         chatMode = ltmModeForChatMode(chat.mode);
-      for (const entry of summaries(metadata)) {
+      for (const entry of summaries(metadata, chatMode)) {
         const sourceId = `${chat.id}:${entry.id}`,
           provenance = {
             kind: "chat_summary" as const,

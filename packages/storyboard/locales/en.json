@@ -1,0 +1,71 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Storyboard",
+    "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes."
+  },
+  "agents": {
+    "storyboard": {
+      "name": "Storyboard",
+      "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
+      "promptTemplates": {
+        "still-keyframes": {
+          "name": "Still Keyframes",
+          "description": "Game Mode storyboard preset for normal viewing. Creates single-scene keyframes and avoids comic text and panels."
+        },
+        "novelai-keyframes": {
+          "name": "NovelAI Keyframes",
+          "description": "Game Mode storyboard preset with compact ASCII Danbooru tags tuned for NovelAI V4/V4.5 and native Add Character prompting."
+        },
+        "comic-page-keyframes": {
+          "name": "Comic Page",
+          "description": "Game Mode illustration preset with comic panels, dialogue, captions, and SFX."
+        },
+        "colored-manga-keyframes": {
+          "name": "Colored Manga",
+          "description": "Game Mode storyboard preset with colored manga styling, panel-like staging, speech bubbles, and SFX."
+        },
+        "bw-manga-keyframes": {
+          "name": "B&W Manga",
+          "description": "Game Mode storyboard preset with black-and-white manga inks, screentones, speech bubbles, and SFX."
+        },
+        "still-keyframes-animation": {
+          "name": "Still Keyframe Animation",
+          "description": "Plans one style-neutral first frame and one achievable continuous motion direction per clip."
+        },
+        "anime-episode-director": {
+          "name": "Anime Episode Director",
+          "description": "Plans broadcast-anime single shots with first-frame continuity, compact motion direction, and provider-safe staging."
+        },
+        "novelai-keyframes-animation": {
+          "name": "NovelAI Keyframe Animation",
+          "description": "Plans NovelAI V4/V4.5 tag-based first frames while keeping timing and motion in a separate animation direction."
+        },
+        "comic-page-animation": {
+          "name": "Comic Page Animation",
+          "description": "Plans duration-aware comic pages as ordered visual references for automatic animations."
+        },
+        "colored-manga-keyframes-animation": {
+          "name": "Colored Manga Animation",
+          "description": "Plans a text-free colored manga first frame with motion that preserves linework and cel shading."
+        },
+        "bw-manga-keyframes-animation": {
+          "name": "B&W Manga Animation",
+          "description": "Plans a text-free monochrome first frame with motion that preserves inks and screentones."
+        },
+        "ltx-director-storyboard": {
+          "name": "LTX Director Storyboard",
+          "description": "Plans one first-frame illustration and one duration-aware LTX 2.3 image-to-video prompt for each shot."
+        },
+        "ltx-simple-image-to-video": {
+          "name": "LTX Simple Image-to-Video",
+          "description": "Plans one first frame and one simple 4-8 sentence LTX 2.3 image-to-video prompt per shot."
+        }
+      }
+    }
+  }
+}

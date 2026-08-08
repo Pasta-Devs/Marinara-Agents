@@ -5,6 +5,7 @@ import type {
   Message,
   MessageAttachment,
   PendingSpatialTransition,
+  ResolvedSpatialTravel,
   SpatialContextDefinition,
   SpatialContextResponse,
   SpatialDefinitionIssue,
@@ -15,6 +16,7 @@ import type {
 import { PackageApiError, packageApi } from "../features/spatial-context/package-api";
 import {
   clearPendingSpatialTransition,
+  reconcileCommittedSpatialTravel,
   setPendingSpatialTransitionStatus,
 } from "../features/spatial-context/pending-spatial-transitions";
 import { spatialResourceKeys } from "../features/spatial-context/use-spatial-resources";
@@ -128,6 +130,7 @@ export interface CommitSpatialOwnerTurnInput {
 interface CommitSpatialOwnerTurnResponse {
   message: Message;
   spatial: SpatialContextResponse;
+  travel?: ResolvedSpatialTravel;
 }
 
 export interface SpatialContextProblem {
@@ -337,7 +340,11 @@ export function useCommitSpatialOwnerTurn() {
       packageApi.post<CommitSpatialOwnerTurnResponse>(`/chats/${chatId}/spatial-context/turn`, request),
     onSuccess: (response, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), response.spatial);
-      clearPendingSpatialTransition(variables.chatId, variables.transition.commandId);
+      if (response.travel?.mode === "step_by_step" && response.travel.complete === false) {
+        reconcileCommittedSpatialTravel(variables.chatId, response.spatial, response.travel);
+      } else {
+        clearPendingSpatialTransition(variables.chatId, variables.transition.commandId);
+      }
       void queryClient.invalidateQueries({
         queryKey: spatialResourceKeys.chat(variables.chatId),
       });
@@ -661,12 +668,29 @@ export function usePublishSpatialSharedWorldDraft() {
         spatial: MapsSpatialContextResponse;
       }>(`/chats/${chatId}/spatial-context/shared-world/publish`, body);
     },
-    onSuccess: ({ world, spatial }, variables) => {
+    onSuccess: async ({ world, spatial }, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), spatial);
       queryClient.setQueryData<SpatialSharedWorldRecord[]>(spatialContextKeys.sharedWorlds, (current = []) =>
         current.map((candidate) => (candidate.id === world.id ? world : candidate)),
       );
-      void queryClient.invalidateQueries({ queryKey: spatialContextKeys.all });
+      try {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: spatialContextKeys.sharedWorlds,
+          }),
+          queryClient.invalidateQueries({
+            predicate: (query) => {
+              const [scope, chatId] = query.queryKey;
+              if (scope !== spatialContextKeys.all[0] || typeof chatId !== "string") return false;
+              const cached = query.state.data as MapsSpatialContextResponse | undefined;
+              return chatId === variables.chatId || cached?.sharedWorld?.worldId === world.id;
+            },
+          }),
+        ]);
+      } catch {
+        // The publish already succeeded and the canonical records above are current.
+        // A rejected cache refresh must not turn that durable success into an error.
+      }
     },
   });
 }

@@ -173,6 +173,159 @@ export function updateSpatialLocation(
   return next;
 }
 
+export type SpatialDirectLinkDirection = "outgoing" | "both" | "incoming";
+
+type SpatialDirectLink = SpatialLocation["links"][number];
+type SpatialDirectLinkPatch = Partial<Omit<SpatialDirectLink, "targetId" | "bidirectional">>;
+
+interface SpatialDirectLinkRecord {
+  sourceId: string;
+  linkIndex: number;
+  link: SpatialDirectLink;
+}
+
+function spatialDirectLinkPairKey(firstId: string, secondId: string): string {
+  return firstId < secondId ? `${firstId}\u0000${secondId}` : `${secondId}\u0000${firstId}`;
+}
+
+function spatialDirectLinkRecords(
+  definition: SpatialContextDefinition,
+): Map<string, SpatialDirectLinkRecord[]> {
+  const recordsByPair = new Map<string, SpatialDirectLinkRecord[]>();
+  for (const location of definition.locations) {
+    location.links.forEach((link, linkIndex) => {
+      const key = spatialDirectLinkPairKey(location.id, link.targetId);
+      const records = recordsByPair.get(key) ?? [];
+      records.push({ sourceId: location.id, linkIndex, link });
+      recordsByPair.set(key, records);
+    });
+  }
+  return recordsByPair;
+}
+
+export function canonicalizeSpatialDirectLinks(
+  definition: SpatialContextDefinition,
+): SpatialContextDefinition {
+  const recordsByPair = spatialDirectLinkRecords(definition);
+  const canonicalByPair = new Map<
+    string,
+    { record: SpatialDirectLinkRecord; bidirectional: boolean }
+  >();
+
+  for (const [key, records] of recordsByPair) {
+    const oneWayRecords = records.filter((record) => !record.link.bidirectional);
+    if (oneWayRecords.length === 0) {
+      canonicalByPair.set(key, { record: records[0]!, bidirectional: true });
+      continue;
+    }
+
+    const oneWaySources = new Set(oneWayRecords.map((record) => record.sourceId));
+    canonicalByPair.set(key, {
+      record: oneWayRecords[0]!,
+      // Opposing one-way records already allow travel in both directions.
+      // A one-way record paired with a stale two-way record is authoritative.
+      bidirectional: oneWaySources.size > 1,
+    });
+  }
+
+  let changed = false;
+  const locations = definition.locations.map((location) => {
+    const links = location.links.flatMap((link, linkIndex) => {
+      const key = spatialDirectLinkPairKey(location.id, link.targetId);
+      const canonical = canonicalByPair.get(key)!;
+      if (canonical.record.sourceId !== location.id || canonical.record.linkIndex !== linkIndex) {
+        changed = true;
+        return [];
+      }
+      if (link.bidirectional === canonical.bidirectional) return [link];
+      changed = true;
+      return [{ ...link, bidirectional: canonical.bidirectional }];
+    });
+    return links.length === location.links.length && links.every((link, index) => link === location.links[index])
+      ? location
+      : { ...location, links };
+  });
+
+  return changed ? { ...definition, locations } : definition;
+}
+
+export function setSpatialDirectLinkDirection(
+  definition: SpatialContextDefinition,
+  currentLocationId: string,
+  relatedLocationId: string,
+  direction: SpatialDirectLinkDirection,
+): SpatialContextDefinition {
+  if (currentLocationId === relatedLocationId) return definition;
+  const canonical = canonicalizeSpatialDirectLinks(definition);
+  const pairKey = spatialDirectLinkPairKey(currentLocationId, relatedLocationId);
+  const existing = spatialDirectLinkRecords(canonical).get(pairKey)?.[0];
+  const sourceId =
+    direction === "incoming"
+      ? relatedLocationId
+      : direction === "outgoing"
+        ? currentLocationId
+        : (existing?.sourceId ?? currentLocationId);
+  const targetId = sourceId === currentLocationId ? relatedLocationId : currentLocationId;
+  const nextLink: SpatialDirectLink = existing
+    ? { ...existing.link, targetId, bidirectional: direction === "both" }
+    : { targetId, bidirectional: direction === "both", state: "available" };
+
+  return {
+    ...canonical,
+    locations: canonical.locations.map((location) => {
+      const links = location.links.filter(
+        (link) => spatialDirectLinkPairKey(location.id, link.targetId) !== pairKey,
+      );
+      if (location.id !== sourceId) {
+        return links.length === location.links.length ? location : { ...location, links };
+      }
+      const insertionIndex = existing?.sourceId === sourceId ? Math.min(existing.linkIndex, links.length) : links.length;
+      links.splice(insertionIndex, 0, nextLink);
+      return { ...location, links };
+    }),
+  };
+}
+
+export function updateSpatialDirectLink(
+  definition: SpatialContextDefinition,
+  firstLocationId: string,
+  secondLocationId: string,
+  patch: SpatialDirectLinkPatch,
+): SpatialContextDefinition {
+  const canonical = canonicalizeSpatialDirectLinks(definition);
+  const pairKey = spatialDirectLinkPairKey(firstLocationId, secondLocationId);
+  if (!spatialDirectLinkRecords(canonical).has(pairKey)) return canonical;
+  return {
+    ...canonical,
+    locations: canonical.locations.map((location) => {
+      const links = location.links.map((link) =>
+        spatialDirectLinkPairKey(location.id, link.targetId) === pairKey
+          ? { ...link, ...patch, targetId: link.targetId, bidirectional: link.bidirectional }
+          : link,
+      );
+      return links.some((link, index) => link !== location.links[index]) ? { ...location, links } : location;
+    }),
+  };
+}
+
+export function removeSpatialDirectLink(
+  definition: SpatialContextDefinition,
+  firstLocationId: string,
+  secondLocationId: string,
+): SpatialContextDefinition {
+  const pairKey = spatialDirectLinkPairKey(firstLocationId, secondLocationId);
+  let changed = false;
+  const locations = definition.locations.map((location) => {
+    const links = location.links.filter(
+      (link) => spatialDirectLinkPairKey(location.id, link.targetId) !== pairKey,
+    );
+    if (links.length === location.links.length) return location;
+    changed = true;
+    return { ...location, links };
+  });
+  return changed ? { ...definition, locations } : definition;
+}
+
 export function reparentSpatialLocation(
   definition: SpatialContextDefinition,
   locationId: string,

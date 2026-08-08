@@ -68,6 +68,8 @@ async function main() {
   const completionMessages: any[] = [];
   const debugOverrides: any[] = [];
   let failGameRefine = false;
+  let failGrammarOnce = false;
+  let grammarErrorMessage = "";
   let fitContextMode: "normal" | "reduced" | "trimmed" = "normal";
   let abortInFlight = false;
   let abortReachedChatComplete = false;
@@ -126,6 +128,22 @@ async function main() {
         id: "chat-persona-b",
         name: "Persona B",
         personaId: "persona-b",
+      },
+      {
+        ...chats[0],
+        id: "chat-professor-mari",
+        name: "Professor Mari",
+        characterIds: ["__professor_mari__"],
+        groupId: "professor-mari-only",
+        metadata: {
+          summaryEntries: [
+            {
+              id: "summary-mari",
+              content: "Professor Mari must stay out of Long-Term Memory.",
+              enabled: true,
+            },
+          ],
+        },
       },
     );
     chats[0].metadata = {
@@ -232,6 +250,10 @@ async function main() {
                   modelCalls += 1;
                   completionMessages.push(_messages);
                   completionOptions.push(options);
+                  if (failGrammarOnce && options.responseFormat) {
+                    failGrammarOnce = false;
+                    throw new Error(`Custom OpenAIcompatible endpoint error 400: ${grammarErrorMessage}`);
+                  }
                   if (abortInFlight) {
                     abortReachedChatComplete = true;
                     notifyAbortChatComplete?.();
@@ -331,10 +353,18 @@ async function main() {
               return [
                 {
                   id: "character-mara",
-                  data: JSON.stringify({ name: "Mara" }),
+                  data: JSON.stringify({
+                    name: "Mara",
+                    description: "Mara keeps the observatory gate secure.",
+                  }),
                   comment: "",
                 },
                 { id: "character-nyra", data: { name: "Nyra" }, comment: "" },
+                {
+                  id: "__professor_mari__",
+                  data: { name: "Professor Mari" },
+                  comment: "",
+                },
               ];
             },
             async listPersonas() {
@@ -675,6 +705,22 @@ async function main() {
         ?.scope,
       { personaId: "persona-fixture" },
     );
+    await storageService.storage.createNote({
+      id: "world_professor_mari_group",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { groupId: "professor-mari-only" },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        facts: {
+          text: "Professor Mari's group must not be a scope target.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
     const scopeTargets = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/scope-targets?chatId=chat-a",
@@ -692,6 +738,12 @@ async function main() {
         .groups.find((group: any) => group.id === "observatory-branches")
         ?.chatIds.sort(),
       ["chat-a"],
+    );
+    assert.equal(
+      scopeTargets
+        .json()
+        .groups.some((group: any) => group.id === "professor-mari-only"),
+      false,
     );
     assert.equal(
       scopeTargets.json().chats.some((chat: any) => chat.id === "game-empty"),
@@ -728,6 +780,20 @@ async function main() {
     assert.equal(
       allScopeTargets
         .json()
+        .chats.some((chat: any) => chat.id === "chat-professor-mari"),
+      false,
+    );
+    assert.equal(
+      allScopeTargets
+        .json()
+        .characters.some(
+          (character: any) => character.id === "__professor_mari__",
+        ),
+      false,
+    );
+    assert.equal(
+      allScopeTargets
+        .json()
         .characters.some(
           (character: any) =>
             character.id === "character-nyra" && character.label === "Nyra",
@@ -744,6 +810,245 @@ async function main() {
         chatIds: ["chat-a", "game-a"],
       },
     );
+    assert.equal(
+      allScopeTargets
+        .json()
+        .groups.some((group: any) => group.id === "professor-mari-only"),
+      false,
+    );
+    const professorMariCharacterPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "characters", limit: 10 },
+    });
+    assert.equal(professorMariCharacterPreview.statusCode, 200);
+    assert.equal(
+      professorMariCharacterPreview
+        .json()
+        .samples.some((sample: any) => sample.sourceId === "__professor_mari__"),
+      false,
+    );
+    assert.equal(
+      professorMariCharacterPreview
+        .json()
+        .samples.some((sample: any) => sample.sourceId === "character-mara"),
+      true,
+    );
+    const professorMariCharacterImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "characters",
+        sourceIds: ["__professor_mari__"],
+        extract: false,
+      },
+    });
+    assert.equal(professorMariCharacterImport.statusCode, 200);
+    assert.deepEqual(professorMariCharacterImport.json().missingSourceIds, [
+      "__professor_mari__",
+    ]);
+    assert.equal(professorMariCharacterImport.json().imported.length, 0);
+    assert.equal(
+      (await storageService.storage.listNotes({ type: "source" })).some(
+        (note: any) => note.provenance?.sourceId === "__professor_mari__",
+      ),
+      false,
+    );
+    const professorMariChatPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "chats", limit: 10 },
+    });
+    assert.equal(professorMariChatPreview.statusCode, 200);
+    assert.equal(
+      professorMariChatPreview
+        .json()
+        .samples.some(
+          (sample: any) =>
+            sample.sourceId === "chat-professor-mari:summary-mari",
+        ),
+      false,
+    );
+    assert.equal(
+      professorMariChatPreview
+        .json()
+        .samples.some((sample: any) => sample.sourceId === "chat-a:summary-a"),
+      true,
+    );
+    const professorMariChatImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-professor-mari:summary-mari"],
+        extract: false,
+      },
+    });
+    assert.equal(professorMariChatImport.statusCode, 200);
+    assert.deepEqual(professorMariChatImport.json().missingSourceIds, [
+      "chat-professor-mari:summary-mari",
+    ]);
+    assert.equal(professorMariChatImport.json().imported.length, 0);
+    for (const note of [
+      {
+        id: "world_scope_character",
+        scope: { characterIds: ["character-mara"] },
+      },
+      {
+        id: "world_scope_chat",
+        scope: {
+          chatId: "chat-b",
+          chatIds: ["chat-b"],
+        },
+      },
+      {
+        id: "world_scope_group",
+        scope: {
+          groupId: "observatory-branches",
+          chatId: "chat-a",
+          chatIds: ["chat-a", "game-a"],
+          characterIds: ["character-mara"],
+        },
+      },
+      {
+        id: "world_scope_branch",
+        scope: {
+          chatId: "game-a",
+          chatIds: ["game-a"],
+          characterIds: ["character-mara"],
+        },
+      },
+      {
+        id: "world_scope_other_character",
+        scope: {
+          chatId: "chat-a",
+          chatIds: ["chat-a"],
+          characterIds: ["character-nyra"],
+        },
+      },
+    ]) {
+      await storageService.storage.createNote({
+        ...note,
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: { facts: { text: note.id, updatedAt: "2026-07-17T00:00:00.000Z" } },
+      });
+    }
+    const characterAllChats = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=chat-a,game-a,chat-b&scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.deepEqual(
+      characterAllChats.json().map((note: any) => note.id).sort(),
+      [
+        "world_route_fixture",
+        "world_scope_branch",
+        "world_scope_character",
+        "world_scope_chat",
+        "world_scope_group",
+      ].sort(),
+    );
+    await storageService.storage.createNote({
+      id: "world_character_persona_scoped",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: {
+        chatId: "chat-a",
+        chatIds: ["chat-a"],
+        characterIds: ["character-mara"],
+        personaId: "persona-fixture",
+      },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        facts: {
+          text: "Character filtering does not require a selected persona.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const characterWithoutPersona = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=chat-a&scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.equal(
+      characterWithoutPersona
+        .json()
+        .some((note: any) => note.id === "world_character_persona_scoped"),
+      true,
+    );
+    assert.equal(
+      new Set(characterAllChats.json().map((note: any) => note.id)).size,
+      characterAllChats.json().length,
+    );
+    await storageService.storage.createNote({
+      id: "char_mara",
+      type: "character",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { characterIds: ["character-mara"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: {
+        persona: {
+          text: "Mara's unscoped character memory is selected by character ID.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const characterMemory = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.equal(
+      characterMemory.json().some((note: any) => note.id === "char_mara"),
+      true,
+    );
+    const characterAllBranches = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=chat-a,game-a&scopeGroupId=observatory-branches&scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.deepEqual(
+      characterAllBranches.json().map((note: any) => note.id).sort(),
+      [
+        "char_mara",
+        "world_character_persona_scoped",
+        "world_route_fixture",
+        "world_scope_branch",
+        "world_scope_character",
+        "world_scope_group",
+      ].sort(),
+    );
+    const selectedBranch = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?scopeChatIds=game-a&scopeGroupId=observatory-branches&scopeCharacterIds=character-mara&includeGlobal=false",
+      headers,
+    });
+    assert.deepEqual(
+      selectedBranch.json().map((note: any) => note.id).sort(),
+      [
+        "char_mara",
+        "world_scope_branch",
+        "world_scope_character",
+        "world_scope_group",
+      ].sort(),
+    );
+    await storageService.storage.deleteNotesPermanently(["char_mara"]);
     const searched = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/search",
@@ -1208,6 +1513,35 @@ async function main() {
         ),
       true,
     );
+    const grammarErrors = [
+      "Failed to initialize samplers: failed to parse grammar",
+      "Failed to parse grammar",
+      "Error parsing grammar",
+    ];
+    for (const errorMessage of grammarErrors) {
+      grammarErrorMessage = errorMessage;
+      failGrammarOnce = true;
+      const grammarFallback = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes/source_route_extract/extract",
+        headers,
+        payload: { chatId: "chat-a" },
+      });
+      assert.equal(grammarFallback.statusCode, 200, grammarFallback.body);
+      assert.deepEqual(
+        grammarFallback
+          .json()
+          .draft?.mutations.map((mutation: any) => mutation.note?.id)
+          .sort(),
+        [
+          "char_mara",
+          "timeline_observatory_gate_sealed_1bbd9d3c48",
+          "world_observatory_gate",
+        ],
+      );
+      assert.equal(completionOptions.at(-2)?.responseFormat?.type, "json_schema");
+      assert.equal("responseFormat" in completionOptions.at(-1), false);
+    }
     fitContextMode = "reduced";
     const reducedBudget = await app.inject({
       method: "POST",
@@ -1802,6 +2136,42 @@ async function main() {
           (sample: any) => sample.sourceId === "game-a:game-session-1",
         ),
       true,
+    );
+    const branchSourceId = branchPreview
+      .json()
+      .samples.find((sample: any) => sample.sourceId === "game-a:game-session-1")
+      .sourceId;
+    const currentChatOnlyImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: [branchSourceId],
+        chatId: "chat-a",
+        extract: false,
+      },
+    });
+    assert.equal(currentChatOnlyImport.statusCode, 200, currentChatOnlyImport.body);
+    assert.deepEqual(currentChatOnlyImport.json().missingSourceIds, [
+      branchSourceId,
+    ]);
+    const scopedBranchImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: [branchSourceId],
+        chatId: "chat-a",
+        scope: { groupId: "observatory-branches" },
+        extract: false,
+      },
+    });
+    assert.equal(scopedBranchImport.statusCode, 200, scopedBranchImport.body);
+    assert.deepEqual(
+      scopedBranchImport.json().imported.map((item: any) => item.sourceId),
+      [branchSourceId],
     );
     const gamePreview = await app.inject({
       method: "POST",

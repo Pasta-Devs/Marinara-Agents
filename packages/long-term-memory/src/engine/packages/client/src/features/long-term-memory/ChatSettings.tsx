@@ -15,6 +15,7 @@ import {
 import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation } from "./localization";
+import { recallStyleDescriptionKey } from "./recall-style";
 
 export function ChatSettings({ props }: { props: CapabilityProps }) {
   const { t: localizeUi } = useLtmTranslation();
@@ -80,13 +81,19 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         </StatusSurface>
       ) : null}
       <div className="grid gap-2">
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.chatsettings.recallExplanation")}
+        </p>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.chatsettings.lastInjectionSummaryGuidance")}
+        </p>
         <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
           <span id={recallStyleLabelId} className="flex items-center gap-1">
             {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
             <InfoPopover
               label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
               content={localizeUi(
-                "ui.longTermMemory.chatsettings.controlsHowBroadlyThisChatMatchesSavedMemoriesThis",
+                recallStyleDescriptionKey(effectiveStyle),
               )}
             />
           </span>
@@ -172,6 +179,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         data={lastInjection.data}
         loading={lastInjection.isFetching}
         error={lastInjection.isError}
+        onRetry={() => void lastInjection.refetch()}
       />
       {props.onOpenAgentSettings ? (
         <button

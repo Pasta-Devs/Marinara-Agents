@@ -10,6 +10,7 @@ import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import { writeEnglishPackageLocale } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
@@ -43,7 +44,9 @@ const longTermMemoryOwnedSourcePaths = [
 const longTermMemorySourceRoot = join(packagesDir, "long-term-memory/src/engine");
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
-  String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "").split(",").filter(Boolean),
+  String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "")
+    .split(",")
+    .filter(Boolean),
 );
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const featureSource = (relativePath, buildRoot = sourceRoot) => {
@@ -57,7 +60,10 @@ async function prepareFeatureBuildRoot(feature) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
     const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
-    await cp(feature.packageSourceRoot, buildRoot, { recursive: true, force: true });
+    await cp(feature.packageSourceRoot, buildRoot, {
+      recursive: true,
+      force: true,
+    });
     return {
       buildRoot,
       cleanup: () => rm(buildRoot, { recursive: true, force: true }),
@@ -70,7 +76,10 @@ async function prepareFeatureBuildRoot(feature) {
     throw new Error("Missing package-owned Hierarchical Maps source");
   }
   const buildRoot = await mkdtemp(join(tmpdir(), "marinara-hierarchical-maps-source-"));
-  await cp(hierarchicalMapsSourceRoot, buildRoot, { recursive: true, force: true });
+  await cp(hierarchicalMapsSourceRoot, buildRoot, {
+    recursive: true,
+    force: true,
+  });
   return {
     buildRoot,
     cleanup: () => rm(buildRoot, { recursive: true, force: true }),
@@ -98,12 +107,18 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
   for (const input of Object.keys(metafile.inputs || {})) {
     const absolute = resolve(engineRoot, input);
     let realAbsolute;
-    try { realAbsolute = realpathSync(absolute); } catch { continue; }
-    if (!realAbsolute.startsWith(`${normalizedBuildRoot}${sep}`) || realAbsolute.includes(`${sep}node_modules${sep}`)) continue;
+    try {
+      realAbsolute = realpathSync(absolute);
+    } catch {
+      continue;
+    }
+    if (!realAbsolute.startsWith(`${normalizedBuildRoot}${sep}`) || realAbsolute.includes(`${sep}node_modules${sep}`))
+      continue;
     const relativePath = relative(normalizedBuildRoot, realAbsolute);
     if (!relativePath || relativePath.startsWith(`..${sep}`) || relativePath === "..") continue;
     const normalizedRelativePath = relativePath.split(sep).join("/");
-    if (excludedPaths.some((path) => normalizedRelativePath === path || normalizedRelativePath.startsWith(`${path}/`))) continue;
+    if (excludedPaths.some((path) => normalizedRelativePath === path || normalizedRelativePath.startsWith(`${path}/`)))
+      continue;
     const destination = join(sourcesRoot, relativePath);
     if (absolute === destination) continue;
     await mkdir(dirname(destination), { recursive: true });
@@ -114,11 +129,12 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 const features = [
   {
     id: "long-term-memory",
-    version: "1.1.0",
-    minEngineVersion: "2.3.5",
+    version: "1.2.3",
+    minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
-    description: "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
+    description:
+      "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
@@ -138,11 +154,12 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.2.9",
-    minEngineVersion: "2.3.5",
+    version: "1.3.3",
+    minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
-    description: "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game.",
+    description:
+      "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game.",
     category: "tracker",
     kind: ["agent", "maps"],
     modes: ["roleplay", "game"],
@@ -154,7 +171,8 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.8",
+    version: "1.0.9",
+    minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -166,10 +184,42 @@ const features = [
   ...[
     ["uno", "UNO", "Play UNO with Conversation characters.", "Uno", "/uno", ["uno"], "Group card game"],
     ["chess", "Chess", "Play Chess with a Conversation character.", "Chess", "/chess", ["chess"], "1v1 strategy"],
-    ["poker", "Poker", "Play Texas Hold’em Poker with Conversation characters.", "Poker", "/poker", ["poker", "hold'em", "texas hold'em"], "Table game"],
-    ["eightball", "8-Ball Pool", "Play 8-Ball Pool with a Conversation character.", "EightBall", "/8ball", ["8-ball", "8 ball", "eightball", "pool", "billiards"], "1v1 table sport"],
-    ["tic-tac-toe", "Tic-Tac-Toe", "Play Tic-Tac-Toe with a Conversation character.", "TicTacToe", "/tictactoe", ["tic-tac-toe", "tic tac toe", "noughts and crosses", "ttt"], "1v1 strategy"],
-    ["rock-paper-scissors", "Rock-Paper-Scissors", "Play Rock-Paper-Scissors with a Conversation character.", "RockPaperScissors", "/rps", ["rock paper scissors", "rock-paper-scissors", "rps"], "1v1 quick game"],
+    [
+      "poker",
+      "Poker",
+      "Play Texas Hold’em Poker with Conversation characters.",
+      "Poker",
+      "/poker",
+      ["poker", "hold'em", "texas hold'em"],
+      "Table game",
+    ],
+    [
+      "eightball",
+      "8-Ball Pool",
+      "Play 8-Ball Pool with a Conversation character.",
+      "EightBall",
+      "/8ball",
+      ["8-ball", "8 ball", "eightball", "pool", "billiards"],
+      "1v1 table sport",
+    ],
+    [
+      "tic-tac-toe",
+      "Tic-Tac-Toe",
+      "Play Tic-Tac-Toe with a Conversation character.",
+      "TicTacToe",
+      "/tictactoe",
+      ["tic-tac-toe", "tic tac toe", "noughts and crosses", "ttt"],
+      "1v1 strategy",
+    ],
+    [
+      "rock-paper-scissors",
+      "Rock-Paper-Scissors",
+      "Play Rock-Paper-Scissors with a Conversation character.",
+      "RockPaperScissors",
+      "/rps",
+      ["rock paper scissors", "rock-paper-scissors", "rps"],
+      "1v1 quick game",
+    ],
   ].map(([id, name, description, clientName, command, aliases, playerLabel]) => ({
     id,
     name,
@@ -180,7 +230,14 @@ const features = [
     modes: ["conversation"],
     permissions: ["agent-runtime", "chat-read", "chat-write", "storage", "ui"],
     engineImport: `packages/shared/src/features/turn-games/${id}/engine.ts`,
-    engineExport: id === "eightball" ? "eightBallEngine" : id === "tic-tac-toe" ? "ticTacToeEngine" : id === "rock-paper-scissors" ? "rockPaperScissorsEngine" : `${id}Engine`,
+    engineExport:
+      id === "eightball"
+        ? "eightBallEngine"
+        : id === "tic-tac-toe"
+          ? "ticTacToeEngine"
+          : id === "rock-paper-scissors"
+            ? "rockPaperScissorsEngine"
+            : `${id}Engine`,
     clientName,
     command,
     aliases,
@@ -190,9 +247,8 @@ const features = [
 ];
 
 const requestedFeatureIds = new Set(process.argv.slice(2));
-const selectedFeatures = requestedFeatureIds.size > 0
-  ? features.filter((feature) => requestedFeatureIds.has(feature.id))
-  : features;
+const selectedFeatures =
+  requestedFeatureIds.size > 0 ? features.filter((feature) => requestedFeatureIds.has(feature.id)) : features;
 if (selectedFeatures.length !== requestedFeatureIds.size && requestedFeatureIds.size > 0) {
   const knownIds = new Set(features.map((feature) => feature.id));
   const unknownIds = [...requestedFeatureIds].filter((id) => !knownIds.has(id));
@@ -218,7 +274,7 @@ async function bundleServer(feature, output) {
     const source = feature.serverEntry
       ? `export { activate, selfCheck } from ${JSON.stringify(target)};\n`
       : feature.id === "hierarchical-maps"
-      ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
+        ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
 import * as projection from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/projection.ts"))};
 import * as stateResolution from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/state-resolution.ts"))};
 import * as ownerTurn from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/owner-turn.ts"))};
@@ -283,8 +339,8 @@ export async function selfCheck({ api }) {
   const parsed = api.runtime.json.parseJsonish('Preface\\n{"ready":true}');
   if (!parsed || typeof parsed !== "object" || parsed.ready !== true) throw new Error("World Maps JSON parser self-check failed");
 }\n`
-      : feature.id === "conversation-calls"
-      ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
+        : feature.id === "conversation-calls"
+          ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
 import * as commandRuntime from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
 import * as characterVideos from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
 import { createConversationCallsStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
@@ -302,27 +358,41 @@ export async function selfCheck() {
   if (!readinessStorage) throw new Error("Conversation Calls storage did not initialize");
   await readinessStorage.getActiveForChat("__marinara_capability_self_check__");
 }\n`
-      : feature.serverImport
-      ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};\nexport async function activate({ app }) { await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} }); }\n`
-      : `import { ${feature.engineExport} as engine } from ${JSON.stringify(target)};\nexport async function activate({ api }) { const cleanups = [api.registerTurnGameEngine(engine), api.registerConversationCommand({ commandType: ${JSON.stringify(feature.commandType)}, tags: [${JSON.stringify(feature.commandType)}] })]; return () => { for (const cleanup of cleanups.reverse()) cleanup(); }; }\n`;
+          : feature.serverImport
+            ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};\nexport async function activate({ app }) { await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} }); }\n`
+            : `import { ${feature.engineExport} as engine } from ${JSON.stringify(target)};\nexport async function activate({ api }) { const cleanups = [api.registerTurnGameEngine(engine), api.registerConversationCommand({ commandType: ${JSON.stringify(feature.commandType)}, tags: [${JSON.stringify(feature.commandType)}] })]; return () => { for (const cleanup of cleanups.reverse()) cleanup(); }; }\n`;
     const entry = join(temporary, "entry.mjs");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync("pnpm", [
-      "exec", "esbuild", entry,
-      "--bundle", "--platform=node", "--format=esm", "--target=node22", "--minify",
-      "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
-      "--external:@huggingface/transformers", "--external:onnxruntime-node", "--external:onnxruntime-web", "--external:sharp",
-      "--external:pino", "--external:pino-pretty",
-      ...(feature.id === "long-term-memory" ? ["--external:zod"] : []),
-      `--alias:@marinara-engine/shared=${packageSharedEntry}`,
-      `--metafile=${metafile}`,
-      `--outfile=${output}`,
-    ], {
-      cwd: engineRoot,
-      encoding: "utf8",
-      env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
-    });
+    const result = spawnSync(
+      "pnpm",
+      [
+        "exec",
+        "esbuild",
+        entry,
+        "--bundle",
+        "--platform=node",
+        "--format=esm",
+        "--target=node22",
+        "--minify",
+        "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
+        "--external:@huggingface/transformers",
+        "--external:onnxruntime-node",
+        "--external:onnxruntime-web",
+        "--external:sharp",
+        "--external:pino",
+        "--external:pino-pretty",
+        ...(feature.id === "long-term-memory" ? ["--external:zod"] : []),
+        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+        `--metafile=${metafile}`,
+        `--outfile=${output}`,
+      ],
+      {
+        cwd: engineRoot,
+        encoding: "utf8",
+        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+      },
+    );
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
     }
@@ -389,17 +459,34 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync("pnpm", [
-      "exec", "esbuild", entry,
-      "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify",
-      "--jsx=automatic",
-      "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false",
-      "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"",
-      `--alias:@marinara-engine/shared=${packageSharedEntry}`,
-      `--metafile=${metafile}`,
-      `--outfile=${output}`,
-    ], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
-    if (result.status !== 0) throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
+    const result = spawnSync(
+      "pnpm",
+      [
+        "exec",
+        "esbuild",
+        entry,
+        "--bundle",
+        "--platform=browser",
+        "--format=esm",
+        "--target=es2020",
+        "--minify",
+        "--jsx=automatic",
+        '--define:process.env.NODE_ENV="production"',
+        "--define:import.meta.env.DEV=false",
+        "--define:import.meta.env.PROD=true",
+        '--define:import.meta.env.MODE="production"',
+        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+        `--metafile=${metafile}`,
+        `--outfile=${output}`,
+      ],
+      {
+        cwd: engineRoot,
+        encoding: "utf8",
+        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+      },
+    );
+    if (result.status !== 0)
+      throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
     await captureEngineSources(metafile);
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -413,16 +500,31 @@ async function bundleSpecialClient(feature, output) {
     let source = "";
     const tag = `marinara-capability-${feature.id}`;
     if (feature.id === "hierarchical-maps") {
-      const settings = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/SpatialContextSettingsSection.tsx");
+      const settings = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/SpatialContextSettingsSection.tsx",
+      );
       const home = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/SpatialMapsHome.tsx");
-      const workspace = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx");
+      const workspace = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/SpatialMapWorkspace.tsx",
+      );
       const library = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/SpatialMapLibrary.tsx");
-      const runtimeBar = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx");
+      const runtimeBar = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx",
+      );
       const worldMap = resolve(prepared.buildRoot, "packages/client/src/components/game/GameWorldMap.tsx");
       const spatialHooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-spatial-context.ts");
       const packageApi = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/package-api.ts");
-      const pendingTransitions = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/pending-spatial-transitions.ts");
-      const routePlans = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/spatial-route-plans.ts");
+      const pendingTransitions = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/pending-spatial-transitions.ts",
+      );
+      const routePlans = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/spatial-route-plans.ts",
+      );
       const workspaceStyles = `
 [data-marinara-maps-workspace-overlay] {
   display: flex;
@@ -662,8 +764,8 @@ import { SpatialContextRuntimeBar } from ${JSON.stringify(runtimeBar)};
 import { GameWorldMap } from ${JSON.stringify(worldMap)};
 import { useSpatialContext } from ${JSON.stringify(spatialHooks)};
 import { packageApi } from ${JSON.stringify(packageApi)};
-import { clearPendingSpatialTransition, getPendingSpatialTransition, setPendingSpatialTransition, setPendingSpatialTransitionStatus, usePendingSpatialTransition } from ${JSON.stringify(pendingTransitions)};
-import { getSpatialRoutePlan, reconcileSpatialRoutePlan } from ${JSON.stringify(routePlans)};
+import { clearPendingSpatialTransition, getPendingSpatialTransition, reconcileCommittedSpatialTravel, setPendingSpatialTransition, setPendingSpatialTransitionStatus, usePendingSpatialTransition } from ${JSON.stringify(pendingTransitions)};
+import { findSpatialRoute } from ${JSON.stringify(routePlans)};
 const workspaceStyles = ${JSON.stringify(workspaceStyles)};
 const worldMapStyles = ${JSON.stringify(worldMapStyles)};
 const runtimeStyles = ${JSON.stringify(runtimeStyles)};
@@ -686,19 +788,93 @@ class CapabilityClientErrorBoundary extends React.Component {
   }
   static getDerivedStateFromError(error) { return { error }; }
 }
-window.addEventListener("marinara-capability-server-event", (event) => { if (event.detail?.packageId === "hierarchical-maps") void client.invalidateQueries({ queryKey: ["spatial-context"] }); });
-function PendingBridge({ chatId, onChange, disabled }) { const pending = usePendingSpatialTransition(chatId); const onChangeRef = useRef(onChange); const wasDisabledRef = useRef(disabled === true); const submittedPendingRef = useRef(pending); const bridgeChatIdRef = useRef(chatId); if (bridgeChatIdRef.current !== chatId) { bridgeChatIdRef.current = chatId; wasDisabledRef.current = disabled === true; submittedPendingRef.current = pending; } useEffect(() => { onChangeRef.current = onChange; }, [onChange]); useEffect(() => { if (typeof onChangeRef.current === "function") onChangeRef.current(pending); }, [pending]); useEffect(() => { const turnStarted = !wasDisabledRef.current && disabled === true; const turnFinished = wasDisabledRef.current && disabled !== true; if (turnStarted) submittedPendingRef.current = getPendingSpatialTransition(chatId); wasDisabledRef.current = disabled === true; if (!turnFinished) return; const submittedPending = submittedPendingRef.current; submittedPendingRef.current = null; if (!submittedPending) return; let cancelled = false; void packageApi.get("/chats/" + encodeURIComponent(chatId) + "/spatial-context").then((spatial) => { if (cancelled || !spatial) return; client.setQueryData(["spatial-context", chatId], spatial); if (getSpatialRoutePlan(chatId)) { reconcileSpatialRoutePlan(chatId, spatial); return; } const currentPending = getPendingSpatialTransition(chatId); if (spatial.currentLocationId === submittedPending.transition.destinationId) clearPendingSpatialTransition(chatId, submittedPending.transition.commandId); else if (currentPending?.transition.commandId === submittedPending.transition.commandId) setPendingSpatialTransitionStatus(chatId, "needs_review"); }).catch(() => { const currentPending = getPendingSpatialTransition(chatId); if (!cancelled && currentPending?.transition.commandId === submittedPending.transition.commandId) setPendingSpatialTransitionStatus(chatId, "needs_review"); }); return () => { cancelled = true; }; }, [chatId, disabled]); return null; }
+const spatialEventSequence = new Map();
+const spatialTransitionReviewMessages = new Map([
+  ["spatial_transition_stale_definition", "The world map changed. Review the available destinations."],
+  ["spatial_transition_stale_location", "The current location changed. Review the available destinations."],
+]);
+async function reconcileSpatialCapabilityEvent(detail) {
+  if (detail?.packageId !== "hierarchical-maps" || typeof detail.chatId !== "string") return;
+  const chatId = detail.chatId;
+  const sequence = (spatialEventSequence.get(chatId) || 0) + 1;
+  spatialEventSequence.set(chatId, sequence);
+  const data = detail.data && typeof detail.data === "object" ? detail.data : null;
+  const commandId = typeof data?.commandId === "string" ? data.commandId : null;
+  if (detail.type === "spatial_transition_rejected") {
+    const pending = getPendingSpatialTransition(chatId);
+    if (commandId && pending?.transition.commandId === commandId) {
+      const reviewMessage =
+        typeof data?.message === "string" && data.message.trim()
+          ? data.message.trim()
+          : typeof data?.code === "string"
+            ? spatialTransitionReviewMessages.get(data.code)
+            : undefined;
+      setPendingSpatialTransitionStatus(chatId, "needs_review", reviewMessage);
+    }
+    void client.invalidateQueries({ queryKey: ["spatial-context", chatId] });
+    return;
+  }
+  let spatial;
+  try {
+    spatial = await packageApi.get("/chats/" + encodeURIComponent(chatId) + "/spatial-context");
+  } catch {
+    void client.invalidateQueries({ queryKey: ["spatial-context", chatId] });
+    return;
+  }
+  if (!spatial || spatialEventSequence.get(chatId) !== sequence) return;
+  client.setQueryData(["spatial-context", chatId], spatial);
+  if (detail.type === "spatial_transition_committed" && commandId) {
+    const pending = getPendingSpatialTransition(chatId);
+    let travel = data?.travel;
+    if (!travel && pending?.transition.commandId === commandId && pending.transition.travelMode === "step_by_step") {
+      const currentLocationId = spatial.currentLocationId;
+      const targetLocationId = pending.transition.destinationId;
+      const remainingRoute = spatial.definition
+        ? findSpatialRoute(spatial.definition, currentLocationId, targetLocationId)
+        : null;
+      if (currentLocationId === targetLocationId) {
+        travel = {
+          mode: "step_by_step",
+          fromLocationId: pending.transition.expectedCurrentLocationId,
+          targetLocationId,
+          routeLocationIds: [targetLocationId],
+          remainingLocationIds: [],
+          complete: true,
+        };
+      } else if (currentLocationId && remainingRoute) {
+        travel = {
+          mode: "step_by_step",
+          fromLocationId: pending.transition.expectedCurrentLocationId,
+          targetLocationId,
+          routeLocationIds: remainingRoute.locationIds,
+          remainingLocationIds: remainingRoute.locationIds.slice(1),
+          complete: false,
+        };
+      } else {
+        setPendingSpatialTransitionStatus(chatId, "needs_review", "The accepted route could not be reconstructed.");
+        return;
+      }
+    }
+    if (travel?.mode === "step_by_step" && travel.complete === false) {
+      reconcileCommittedSpatialTravel(chatId, spatial, travel);
+    } else {
+      clearPendingSpatialTransition(chatId, commandId);
+    }
+  }
+}
+window.addEventListener("marinara-capability-server-event", (event) => { void reconcileSpatialCapabilityEvent(event.detail); });
+function PendingBridge({ chatId, onChange }) { const pending = usePendingSpatialTransition(chatId); const onChangeRef = useRef(onChange); useEffect(() => { onChangeRef.current = onChange; }, [onChange]); useEffect(() => { if (typeof onChangeRef.current === "function") onChangeRef.current(pending); }, [pending]); return null; }
 function WorldMapView({ props, chatId, onOpenEditor, useParentScroll = false }) {
   const spatial = useSpatialContext(chatId);
   if (spatial.isLoading) return <div className="h-full min-h-32 space-y-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] p-3" aria-label="Loading world map"><span role="status" className="sr-only">Loading world map</span><div className="h-3 w-28 animate-pulse rounded bg-[var(--muted)]" /><div className="h-24 animate-pulse rounded-lg bg-[var(--muted)]/55" /></div>;
   if (spatial.isError) return <div role="alert" className="flex min-h-32 items-center gap-3 rounded-lg border border-[var(--destructive)]/25 bg-[var(--destructive)]/10 p-3 text-xs"><span className="min-w-0 flex-1">The world map could not be loaded.</span><button type="button" onClick={() => void spatial.refetch()} className="min-h-11 rounded-lg px-3 font-semibold text-[var(--destructive)] hover:bg-[var(--destructive)]/10">Retry</button></div>;
   if (!spatial.data?.definition) return <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-[var(--marinara-chat-chrome-panel-border)] px-4 text-center text-xs text-[var(--marinara-chat-chrome-accent)]">No world map yet. Create one from Agents → World Maps.</div>;
   if (!spatial.data.definition.enabled) return <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-[var(--marinara-chat-chrome-panel-border)] px-4 text-center text-xs text-[var(--marinara-chat-chrome-accent)]">World map disabled. Its saved hierarchy and history are preserved.</div>;
-  return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><GameWorldMap chatId={chatId} spatial={spatial.data} disabled={props.disabled === true} compact={props.compact === true} useParentScroll={useParentScroll} onOpenEditor={onOpenEditor} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>;
+  return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><GameWorldMap chatId={chatId} spatial={spatial.data} disabled={props.disabled === true} compact={props.compact === true} useParentScroll={useParentScroll} onOpenEditor={onOpenEditor} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} /></>;
 }
 function stopOverlayEvent(event) { event.stopPropagation(); }
-function WorkspaceOverlay({ chatId, props, stagedTemplate, onClose, onOpenTemplates }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} debugMode={props.debugMode === true} stagedTemplate={stagedTemplate} pendingDraftReview={props.pendingDraftReview?.mode === "template" ? null : props.pendingDraftReview || null} onClearPendingDraftReview={() => props.onClearPendingDraftReview?.()} onDirtyChange={(dirty) => props.onDirtyChange?.(dirty)} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onOpenTemplates={onOpenTemplates} onClose={onClose} /><Toaster richColors /></div>, document.body); }
-function LibraryOverlay({ chatId, props, setupSelection, onClose, onAppliedToChat, onSelectForSetup, onSelectSharedWorldForSetup }) { const sharedWorldSetupSupported = Array.isArray(props.supportedSelectionKinds) && props.supportedSelectionKinds.includes("shared-world"); return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onSelectSharedWorldForSetup={setupSelection && sharedWorldSetupSupported ? onSelectSharedWorldForSetup : undefined} onClose={onClose} /><Toaster richColors /></div>, document.body); }
+function WorkspaceOverlay({ chatId, props, stagedTemplate, onClose, onOpenTemplates }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} debugMode={props.debugMode === true} stagedTemplate={stagedTemplate} pendingDraftReview={props.pendingDraftReview?.mode === "template" ? null : props.pendingDraftReview || null} onClearPendingDraftReview={() => props.onClearPendingDraftReview?.()} onDirtyChange={(dirty) => props.onDirtyChange?.(dirty)} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onLorebooksChanged={() => props.onLorebooksChanged?.()} onOpenTemplates={onOpenTemplates} onClose={onClose} /><Toaster richColors /></div>, document.body); }
+function LibraryOverlay({ chatId, props, setupSelection, onClose, onAppliedToChat, onSelectForSetup, onSelectSharedWorldForSetup }) { const sharedWorldSetupSupported = Array.isArray(props.supportedSelectionKinds) && props.supportedSelectionKinds.includes("shared-world"); return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onLorebooksChanged={() => props.onLorebooksChanged?.()} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onSelectSharedWorldForSetup={setupSelection && sharedWorldSetupSupported ? onSelectSharedWorldForSetup : undefined} onClose={onClose} /><Toaster richColors /></div>, document.body); }
 function SetupSharedWorldApply({ chatId, props }) {
   const attemptRef = useRef("");
   const onAppliedRef = useRef(props.onApplied);
@@ -757,7 +933,7 @@ function WorldMapOverlay({ chatId, props, onClose, onOpenEditor }) {
     </header>
     <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6 sm:py-6">
       <div className="mx-auto w-full max-w-5xl">
-        <p className="mb-4 max-w-2xl text-xs leading-relaxed text-[var(--marinara-chat-chrome-accent)]">Browse nested places and linked routes. Choose a nearby place to set the next destination, or plan a multi-step route to a farther location.</p>
+        <p className="mb-4 max-w-2xl text-xs leading-relaxed text-[var(--marinara-chat-chrome-accent)]">Browse nested places and linked routes. Choose step-by-step travel for one hop per turn, or travel now along the full route.</p>
         <WorldMapView props={props} chatId={chatId} useParentScroll />
       </div>
     </main>
@@ -844,7 +1020,7 @@ function Root({ element }) {
   if (worldMapOpen && chatId) return <WorldMapOverlay chatId={chatId} props={props} onClose={() => setWorldMapOpen(false)} onOpenEditor={editFromWorldMap} />;
   if (view === "detail") return <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} agentInfo={props.agent || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenMap={() => setWorldMapOpen(true)} onOpenEditor={() => setWorkspaceOpen(true)} onOpenLibrary={() => setLibraryOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} confirmAction={typeof props.confirmAction === "function" ? props.confirmAction : undefined} onDirtyChange={typeof props.onDirtyChange === "function" ? props.onDirtyChange : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /><Toaster richColors /></>;
   if (!chatId) return null;
-  if (view === "runtime") return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><style data-marinara-maps-runtime-styles>{runtimeStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} disabled={props.disabled === true} /></>;
+  if (view === "runtime") return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><style data-marinara-maps-runtime-styles>{runtimeStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} /></>;
   if (view === "world-map") return <WorldMapView props={props} chatId={chatId} onOpenEditor={() => setWorkspaceOpen(true)} />;
   if (view === "workspace") return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={() => setLibraryOpen(true)} />;
   return <><SpatialContextSettingsSection chatId={chatId} style={props.style} enabledForChat={props.enabledForChat === true} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenEditor={() => setWorkspaceOpen(true)} /><Toaster richColors /></>;
@@ -891,6 +1067,11 @@ function Settings({ props }) {
     updateConfig.mutate({ ...value, callSttConnectionId: "", callSttModel: "", ...next });
   };
   const callsEnabled = metadata.conversationCallsEnabled === true;
+  const connectionsKnown = Array.isArray(props.connections);
+  const connections = connectionsKnown ? props.connections.filter((connection) => connection && typeof connection.id === "string") : [];
+  const summaryConnectionId = typeof metadata.conversationCallSummaryConnectionId === "string" ? metadata.conversationCallSummaryConnectionId : "";
+  const summaryConnectionPending = !connectionsKnown && summaryConnectionId;
+  const summaryConnectionMissing = connectionsKnown && summaryConnectionId && !connections.some((connection) => connection.id === summaryConnectionId);
   const audio = value?.callAudioEnabled === true;
   const videoInput = value?.callVideoInputEnabled === true;
   const videoPresence = value?.callCharacterVideoEnabled === true;
@@ -908,6 +1089,16 @@ function Settings({ props }) {
     {callsEnabled ? <>
       <div className="space-y-1.5 border-t border-[var(--border)]/60 pt-3">
         <Toggle label="Generate voice cues in [tags]" description="Ask call models for cues like [whispering], [laughing], and [sighs] for TTS/video timing." enabled={metadata.conversationCallVoiceCues !== false} onClick={() => updateMetadata({ conversationCallVoiceCues: metadata.conversationCallVoiceCues === false })} />
+        <label className="flex flex-col gap-1.5 rounded-lg bg-[var(--background)]/35 px-2.5 py-2">
+          <span className="text-[0.6875rem] font-medium text-[var(--foreground)]">Call summary connection</span>
+          <select value={summaryConnectionId} onChange={(event) => updateMetadata({ conversationCallSummaryConnectionId: event.target.value || null })} className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50">
+            <option value="">Agent default (falls back to chat connection)</option>
+            {summaryConnectionPending ? <option value={summaryConnectionId}>Loading connection…</option> : null}
+            {summaryConnectionMissing ? <option value={summaryConnectionId}>Missing connection</option> : null}
+            {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name || "Connection"}{connection.model ? " · " + connection.model : ""}</option>)}
+          </select>
+          <span className="text-[0.55rem] leading-snug text-[var(--muted-foreground)]">Used after a call ends. Connection custom parameters and reasoning settings are preserved.</span>
+        </label>
         <Toggle label="Call Audio Pipeline" description="Request microphone access, listen while unmuted, and transcribe speech into the call." enabled={audio} disabled={disabled} pending={updateConfig.isPending} onClick={() => patch({ callAudioEnabled: !audio, ...(!audio ? { callAudioInputMode: "local_whisper" } : {}) })} />
       </div>
       {audio ? <div className="space-y-2 border-t border-[var(--border)]/60 pt-3">
@@ -967,9 +1158,37 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     } else if (feature.clientImport) {
       source = `import ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
     } else return;
-    const entry = join(temporary, "entry.tsx"); const metafile = join(temporary, "meta.json"); await writeFile(entry, source);
-    const result = spawnSync("pnpm", ["exec", "esbuild", entry, "--bundle", "--platform=browser", "--format=esm", "--target=es2020", "--minify", "--jsx=automatic", "--define:process.env.NODE_ENV=\"production\"", "--define:import.meta.env.DEV=false", "--define:import.meta.env.PROD=true", "--define:import.meta.env.MODE=\"production\"", `--alias:@marinara-engine/shared=${packageSharedEntry}`, `--metafile=${metafile}`, `--outfile=${output}`], { cwd: engineRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") } });
-    if (result.status !== 0) throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
+    const entry = join(temporary, "entry.tsx");
+    const metafile = join(temporary, "meta.json");
+    await writeFile(entry, source);
+    const result = spawnSync(
+      "pnpm",
+      [
+        "exec",
+        "esbuild",
+        entry,
+        "--bundle",
+        "--platform=browser",
+        "--format=esm",
+        "--target=es2020",
+        "--minify",
+        "--jsx=automatic",
+        '--define:process.env.NODE_ENV="production"',
+        "--define:import.meta.env.DEV=false",
+        "--define:import.meta.env.PROD=true",
+        '--define:import.meta.env.MODE="production"',
+        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+        `--metafile=${metafile}`,
+        `--outfile=${output}`,
+      ],
+      {
+        cwd: engineRoot,
+        encoding: "utf8",
+        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+      },
+    );
+    if (result.status !== 0)
+      throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
     if (feature.id === "long-term-memory") {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
     } else {
@@ -1014,9 +1233,8 @@ for (const feature of selectedFeatures) {
   };
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
   const serverPath = join(sourceDir, "server.mjs");
-  const serverSourceRoot = feature.id === "hierarchical-maps"
-    ? hierarchicalMapsSourceRoot
-    : feature.packageSourceRoot ?? sourceRoot;
+  const serverSourceRoot =
+    feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : (feature.packageSourceRoot ?? sourceRoot);
   const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
   if (!reuseExistingRuntime && existsSync(serverSource)) {
     await bundleServer(feature, serverPath);
@@ -1024,7 +1242,12 @@ for (const feature of selectedFeatures) {
     throw new Error(`Missing package-owned server source for ${feature.id}`);
   }
   const serverBuffer = await readFile(serverPath);
-  const hasClient = Boolean(feature.clientName || feature.clientImport || feature.id === "hierarchical-maps" || feature.id === "conversation-calls");
+  const hasClient = Boolean(
+    feature.clientName ||
+    feature.clientImport ||
+    feature.id === "hierarchical-maps" ||
+    feature.id === "conversation-calls",
+  );
   const clientPath = hasClient ? join(sourceDir, "client.js") : null;
   if (clientPath && (!reuseExistingRuntime || rebuiltFeatureClients.has(feature.id))) {
     if (feature.clientName) await bundleGameClient(feature, clientPath);
@@ -1034,17 +1257,20 @@ for (const feature of selectedFeatures) {
   }
   const clientBuffer = clientPath ? await readFile(clientPath) : null;
   await writeFile(join(sourceDir, "agents.json"), agentsBuffer);
-  const boundary = feature.id === "hierarchical-maps"
-    ? hierarchicalMapsBoundary
-    : feature.id === "long-term-memory"
-      ? longTermMemoryBoundary
-      : null;
+  const boundary =
+    feature.id === "hierarchical-maps"
+      ? hierarchicalMapsBoundary
+      : feature.id === "long-term-memory"
+        ? longTermMemoryBoundary
+        : null;
   const manifest = {
     schemaVersion: boundary ? 2 : 1,
-    ...(boundary ? {
-      capabilityApi: boundary.capabilityApi,
-      builtAgainst: boundary.builtAgainst,
-    } : {}),
+    ...(boundary
+      ? {
+          capabilityApi: boundary.capabilityApi,
+          builtAgainst: boundary.builtAgainst,
+        }
+      : {}),
     id: feature.id,
     name: feature.name,
     version,
@@ -1059,34 +1285,61 @@ for (const feature of selectedFeatures) {
       server: "server.mjs",
       ...(clientBuffer ? { client: "client.js" } : {}),
     },
-    ...(feature.clientName ? {
-      contributions: {
-        slots: ["conversation-surface"],
-        conversationGame: {
-          command: feature.command,
-          aliases: feature.aliases,
-          playerLabel: feature.playerLabel,
-        },
-      },
-    } : feature.contributions ? {
-      contributions: feature.contributions,
-    } : feature.id === "hierarchical-maps" ? {
-      contributions: {
-        agentDetail: { agentIds: ["hierarchical-maps"] },
-        slots: ["chat-settings", "spatial-workspace", "chat-runtime", "game-world-map"],
-      },
-    } : feature.id === "conversation-calls" ? {
-      contributions: { slots: ["conversation-toolbar", "conversation-surface", "chat-settings"] },
-    } : {}),
+    ...(feature.clientName
+      ? {
+          contributions: {
+            slots: ["conversation-surface"],
+            conversationGame: {
+              command: feature.command,
+              aliases: feature.aliases,
+              playerLabel: feature.playerLabel,
+            },
+          },
+        }
+      : feature.contributions
+        ? {
+            contributions: feature.contributions,
+          }
+        : feature.id === "hierarchical-maps"
+          ? {
+              contributions: {
+                agentDetail: { agentIds: ["hierarchical-maps"] },
+                slots: ["chat-settings", "spatial-workspace", "chat-runtime", "game-world-map"],
+              },
+            }
+          : feature.id === "conversation-calls"
+            ? {
+                contributions: {
+                  slots: ["conversation-toolbar", "conversation-surface", "chat-settings"],
+                },
+              }
+            : {}),
     files: [
-      { path: "agents.json", sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength },
-      { path: "server.mjs", sha256: sha256(serverBuffer), bytes: serverBuffer.byteLength },
-      ...(clientBuffer ? [{ path: "client.js", sha256: sha256(clientBuffer), bytes: clientBuffer.byteLength }] : []),
+      {
+        path: "agents.json",
+        sha256: sha256(agentsBuffer),
+        bytes: agentsBuffer.byteLength,
+      },
+      {
+        path: "server.mjs",
+        sha256: sha256(serverBuffer),
+        bytes: serverBuffer.byteLength,
+      },
+      ...(clientBuffer
+        ? [
+            {
+              path: "client.js",
+              sha256: sha256(clientBuffer),
+              bytes: clientBuffer.byteLength,
+            },
+          ]
+        : []),
     ],
     permissions: feature.permissions,
     restartRequired: true,
   };
   await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeEnglishPackageLocale(sourceDir, manifest, [agentDefinition]);
 
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-${feature.id}-`));
   try {
@@ -1103,11 +1356,10 @@ for (const feature of selectedFeatures) {
     const artifactName = `${feature.id}-${version}.zip`;
     const artifactPath = join(artifactsDir, artifactName);
     await rm(artifactPath, { force: true });
-    const zipped = spawnSync(
-      "zip",
-      ["-X", "-q", artifactPath, ...artifactFiles],
-      { cwd: temporary, env: { ...process.env, TZ: "UTC" } },
-    );
+    const zipped = spawnSync("zip", ["-X", "-q", artifactPath, ...artifactFiles], {
+      cwd: temporary,
+      env: { ...process.env, TZ: "UTC" },
+    });
     if (zipped.status !== 0) throw new Error(`zip failed for ${feature.id}`);
     const artifact = await readFile(artifactPath);
     catalog.packages.push({

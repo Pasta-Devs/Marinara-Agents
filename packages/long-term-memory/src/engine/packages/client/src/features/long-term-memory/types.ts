@@ -22,6 +22,7 @@ export type CapabilityProps = {
   localization?: LtmLocalizationContext;
   chatId?: string | null;
   chatName?: string | null;
+  chatMode?: "conversation" | "roleplay" | "game" | null;
   enabledForChat?: boolean;
   chatSettings?: {
     longTermMemoryRecallStyle?: string;
@@ -33,6 +34,8 @@ export type CapabilityProps = {
     patch: Record<string, unknown>,
   ) => void | Promise<void>;
   onOpenAgentSettings?: () => void;
+  onOpenChatSummarySettings?: () => void;
+  onOpenActivePromptPresetEditor?: () => void;
   onClose?: () => void;
   onManagePackage?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -51,10 +54,9 @@ export type CapabilityElement = HTMLElement & {
 };
 
 export type LongTermMemoryDestination =
-  | "vault"
-  | "review"
-  | "sources"
-  | "settings";
+  "vault" | "review" | "sources" | "settings";
+
+export type SourceTab = "characters" | "lorebooks" | "chats";
 
 export type LtmRecoveryHandoff = {
   key: number;
@@ -66,8 +68,13 @@ export type LtmRecoveryHandoff = {
 
 export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
+  requestedSource?: { key: number; source: SourceTab } | null;
+  onRequestedSourceHandled?: () => void;
+  selectedSource?: SourceTab;
+  onSourceChange?: (source: SourceTab) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onOpenMemory?: (noteId: string) => void;
+  onOpenVault?: () => void;
   onOpenReview?: (sourceNoteId?: string) => void;
   onRecoverCandidate?: (
     candidate: LtmExtractionDroppedCandidate,

@@ -11,6 +11,8 @@ export const SPATIAL_CONTEXT_LIMITS = {
     maxCommandIdLength: 200,
     maxPromptDestinations: 50,
     maxLorebookEntryIdsPerLocation: 50,
+    /** Maximum number of destination IDs returned for one routed transition. */
+    maxRouteLocations: 64,
 };
 export function buildSpatialLocationIndex(definition) {
     const byId = new Map();
@@ -257,6 +259,76 @@ export function resolveSpatialDestinations(definition, currentLocationId) {
     }
     return Array.from(destinations.values()).sort(compareDestinations);
 }
+/**
+ * Resolve the shortest directed route using the same one-hop authority as
+ * ordinary movement. The returned IDs exclude the current location and are
+ * bounded so a malformed or very large graph cannot expand request data.
+ */
+export function resolveSpatialRoute(definition, currentLocationId, targetLocationId) {
+    if (!definition.enabled || currentLocationId === null || currentLocationId === targetLocationId)
+        return null;
+    const byId = buildSpatialLocationIndex(definition);
+    const current = byId.get(currentLocationId);
+    const target = byId.get(targetLocationId);
+    if (!current || current.status !== "active" || !target || target.status !== "active")
+        return null;
+    const adjacency = new Map();
+    const addEdge = (fromId, destination, relation, label) => {
+        if (byId.get(fromId)?.status !== "active" || !destination || destination.status !== "active")
+            return;
+        const outgoing = adjacency.get(fromId) ?? new Map();
+        if (!outgoing.has(destination.id)) {
+            outgoing.set(destination.id, destinationFromLocation(destination, relation, label));
+            adjacency.set(fromId, outgoing);
+        }
+    };
+    for (const location of definition.locations) {
+        if (location.status !== "active" || location.parentId === null)
+            continue;
+        addEdge(location.id, byId.get(location.parentId), "leave");
+        addEdge(location.parentId, location, "enter");
+    }
+    for (const location of definition.locations) {
+        if (location.status !== "active")
+            continue;
+        for (const link of location.links) {
+            if (link.state === "available")
+                addEdge(location.id, byId.get(link.targetId), "link", link.label);
+        }
+    }
+    for (const location of definition.locations) {
+        if (location.status !== "active")
+            continue;
+        for (const link of location.links) {
+            if (link.bidirectional && link.state === "available") {
+                addEdge(link.targetId, location, "link", link.label);
+            }
+        }
+    }
+    const outgoingIds = new Map(Array.from(adjacency, ([locationId, destinations]) => [
+        locationId,
+        Array.from(destinations.values())
+            .sort(compareDestinations)
+            .map((destination) => destination.id),
+    ]));
+    const queue = [{ locationId: currentLocationId, path: [] }];
+    const visited = new Set([currentLocationId]);
+    while (queue.length > 0) {
+        const entry = queue.shift();
+        for (const destinationId of outgoingIds.get(entry.locationId) ?? []) {
+            if (visited.has(destinationId))
+                continue;
+            const path = [...entry.path, destinationId];
+            if (destinationId === targetLocationId)
+                return path;
+            visited.add(destinationId);
+            if (path.length < SPATIAL_CONTEXT_LIMITS.maxRouteLocations) {
+                queue.push({ locationId: destinationId, path });
+            }
+        }
+    }
+    return null;
+}
 function validReplacement(byId, locationId, replacementLocationId) {
     if (!replacementLocationId || replacementLocationId === locationId)
         return false;
@@ -296,21 +368,21 @@ export function validateSpatialTransition(definition, currentLocationId, request
         return {
             ok: false,
             code: "spatial_definition_invalid",
-            message: "The hierarchical map must be repaired before moving.",
+            message: "The world map must be repaired before moving.",
         };
     }
     if (!definition.enabled) {
         return {
             ok: false,
             code: "spatial_context_disabled",
-            message: "Hierarchical maps are disabled for this chat.",
+            message: "World maps are disabled for this chat.",
         };
     }
     if (request.expectedDefinitionRevision !== definition.revision) {
         return {
             ok: false,
             code: "spatial_transition_stale_definition",
-            message: "The hierarchical map changed. Review the available destinations.",
+            message: "The world map changed. Review the available destinations.",
         };
     }
     if (request.expectedCurrentLocationId !== currentLocationId) {
@@ -335,7 +407,46 @@ export function validateSpatialTransition(definition, currentLocationId, request
             message: "The selected destination is no longer available.",
         };
     }
-    const destination = resolveSpatialDestinations(definition, currentLocationId).find((candidate) => candidate.id === request.destinationId);
+    const destinations = resolveSpatialDestinations(definition, currentLocationId);
+    if (request.travelMode) {
+        const routeLocationIds = resolveSpatialRoute(definition, currentLocationId, request.destinationId);
+        if (!routeLocationIds) {
+            return {
+                ok: false,
+                code: "spatial_destination_unreachable",
+                message: "The selected destination is not reachable from the current location.",
+            };
+        }
+        const acceptedDestinationId = request.travelMode === "step_by_step" ? routeLocationIds[0] : routeLocationIds[routeLocationIds.length - 1];
+        if (!acceptedDestinationId) {
+            return {
+                ok: false,
+                code: "spatial_destination_unreachable",
+                message: "The selected destination is not reachable from the current location.",
+            };
+        }
+        const destination = request.travelMode === "step_by_step"
+            ? destinations.find((candidate) => candidate.id === acceptedDestinationId)
+            : destinationFromLocation(byId.get(acceptedDestinationId), "link");
+        if (!destination) {
+            return {
+                ok: false,
+                code: "spatial_destination_unreachable",
+                message: "The selected destination is not reachable from the current location.",
+            };
+        }
+        const remainingLocationIds = request.travelMode === "step_by_step" ? routeLocationIds.slice(1) : [];
+        const travel = {
+            mode: request.travelMode,
+            fromLocationId: currentLocationId,
+            targetLocationId: request.destinationId,
+            routeLocationIds,
+            remainingLocationIds,
+            complete: remainingLocationIds.length === 0,
+        };
+        return { ok: true, destination, travel };
+    }
+    const destination = destinations.find((candidate) => candidate.id === request.destinationId);
     if (!destination) {
         return {
             ok: false,

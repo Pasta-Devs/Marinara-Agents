@@ -81,6 +81,7 @@ interface SpatialMapLibraryProps {
   onSelectForSetup?: (template: SpatialMapTemplateRecord) => void;
   onSelectSharedWorldForSetup?: (world: SpatialSharedWorldRecord) => void;
   onOpenLorebook?: (lorebookId: string) => void;
+  onLorebooksChanged?: () => void | Promise<void>;
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
 }
 
@@ -122,6 +123,7 @@ export function SpatialMapLibrary({
   onSelectForSetup,
   onSelectSharedWorldForSetup,
   onOpenLorebook,
+  onLorebooksChanged,
   onEnabledForChatChange,
 }: SpatialMapLibraryProps) {
   const templates = useSpatialMapTemplates();
@@ -336,6 +338,10 @@ export function SpatialMapLibrary({
       if (portableLore && portableLore.books.length > 0) {
         const entries = lorebookEntriesQuery.entries;
         if (!entries) throw new Error("Lore entries are still loading. Try the import again in a moment.");
+        const importedMapName =
+          typeof record?.name === "string" && record.name.trim()
+            ? record.name.trim()
+            : importedTemplateName(file.name);
         setPendingPortableLoreImport({
           record,
           data,
@@ -343,7 +349,7 @@ export function SpatialMapLibrary({
           fileName: file.name,
           target,
           bundle: portableLore,
-          plan: planPortableLoreImport(portableLore, lorebooks, entries),
+          plan: planPortableLoreImport(portableLore, lorebooks, entries, importedMapName),
         });
         return;
       }
@@ -426,7 +432,7 @@ export function SpatialMapLibrary({
       return;
     }
     try {
-      await lorebooksQuery.refetch();
+      await Promise.all([lorebooksQuery.refetch(), onLorebooksChanged?.()]);
     } catch {
       toast.error("The map was imported, but the lorebook list could not be refreshed.");
     }
@@ -657,6 +663,7 @@ export function SpatialMapLibrary({
         sharedWorld={editingSharedWorld}
         initialUnresolvedLoreReferences={editingUnresolvedLoreReferences}
         onOpenLorebook={onOpenLorebook}
+        onLorebooksChanged={onLorebooksChanged}
         onClose={() => {
           setEditingSharedWorldId(null);
           setEditingUnresolvedLoreReferences([]);
@@ -672,6 +679,7 @@ export function SpatialMapLibrary({
         template={editingTemplate}
         initialUnresolvedLoreReferences={editingUnresolvedLoreReferences}
         onOpenLorebook={onOpenLorebook}
+        onLorebooksChanged={onLorebooksChanged}
         onClose={() => {
           setEditingId(null);
           setEditingUnresolvedLoreReferences([]);

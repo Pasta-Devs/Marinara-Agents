@@ -561,6 +561,7 @@ export default function ActivityView({
           loading={lastInjection.isFetching}
           error={lastInjection.isError}
           onOpenMemory={onOpenMemory}
+          onRetry={() => void lastInjection.refetch()}
         />
       ) : null}
 

@@ -87,23 +87,44 @@ function artifactFixture(version: string): ArtifactFixture {
     version === "1.2.6" ||
     version === "1.2.7" ||
     version === "1.2.8" ||
-    version === "1.2.9"
+    version === "1.2.9" ||
+    version === "1.3.0" ||
+    version === "1.3.1" ||
+    version === "1.3.2"
   ) {
     const clientSource = execFileSync("unzip", ["-p", path, "client.js"], { encoding: "utf8" });
     assert.ok(clientSource.includes(artifactWorldMapsGuideUrl));
     assert.match(clientSource, /Open World Maps movement help/u);
     assert.match(clientSource, /Open shared-world guide/u);
-    if (version === "1.2.7" || version === "1.2.8" || version === "1.2.9") {
+    if (
+      version === "1.2.7" ||
+      version === "1.2.8" ||
+      version === "1.2.9" ||
+      version === "1.3.0" ||
+      version === "1.3.1" ||
+      version === "1.3.2"
+    ) {
       assert.match(
         clientSource,
         /\[data-marinara-maps-world-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
       );
     }
-    if (version === "1.2.9") {
+    if (version === "1.2.9" || version === "1.3.0" || version === "1.3.1" || version === "1.3.2") {
       assert.match(
         clientSource,
         /\[data-marinara-maps-workspace-overlay\]\s+\[data-marinara-maps-editor-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
       );
+    }
+    if (version === "1.3.1" || version === "1.3.2") {
+      assert.match(clientSource, /spatial_transition_rejected/u);
+      assert.match(clientSource, /spatial_transition_committed/u);
+      assert.match(clientSource, /marinara-capability-server-event/u);
+      assert.match(clientSource, /The current location changed\. Review the available destinations\./u);
+      assert.match(clientSource, /new Map\(\[\["spatial_transition_stale_definition"/u);
+    }
+    if (version === "1.3.2") {
+      assert.match(clientSource, /Incoming one-way/u);
+      assert.match(clientSource, /data-marinara-direct-link-direction/u);
     }
   }
   return {
@@ -134,11 +155,15 @@ const fixtures = new Map(
     artifactFixture("1.2.7"),
     artifactFixture("1.2.8"),
     artifactFixture("1.2.9"),
+    artifactFixture("1.3.0"),
+    artifactFixture("1.3.1"),
+    artifactFixture("1.3.2"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
 let catalogOnline = true;
 let generationProviderRequestCount = 0;
+let generationProviderFailure = false;
 const generationProviderRequests: Array<{
   messages?: Array<{ role?: string; content?: unknown }>;
 }> = [];
@@ -157,11 +182,11 @@ assert.deepEqual(candidateFixture.manifest.builtAgainst, {
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
-const currentFixture = fixtures.get("1.2.9");
+const currentFixture = fixtures.get("1.3.2");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
-  engineVersion: "2.3.5",
-  engineCommit: "ed0e2422b17b747aa5c392d9019bb92a71b00260",
+  engineVersion: "2.4.1",
+  engineCommit: "bb40d3feba0cb96062526f19e11fbe3a97ced9c9",
 });
 
 function seedInstalledProfile(version: string) {
@@ -219,7 +244,13 @@ function catalogFixture(version: string) {
           bytes: fixture.bytes.byteLength,
         },
         documentationUrl:
-          version === "1.2.6" || version === "1.2.7" || version === "1.2.8" || version === "1.2.9"
+          version === "1.2.6" ||
+          version === "1.2.7" ||
+          version === "1.2.8" ||
+          version === "1.2.9" ||
+          version === "1.3.0" ||
+          version === "1.3.1" ||
+          version === "1.3.2"
             ? catalogWorldMapsGuideUrl
             : "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
       },
@@ -243,6 +274,12 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
           ? ((await input.clone().json()) as { messages?: Array<{ role?: string; content?: unknown }> })
           : {};
     generationProviderRequests.push(body);
+    if (generationProviderFailure) {
+      return new Response(JSON.stringify({ error: "Lifecycle provider failure" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      });
+    }
     const providerPrompt = capturedProviderPrompt(body);
     const responseContent = providerPrompt.includes("You design practical hierarchical world maps")
         ? JSON.stringify({
@@ -312,7 +349,11 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
               },
             ],
           })
-        : "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.";
+        : providerPrompt.includes("Repeat the already committed move into Lifecycle Harbor.")
+          ? "RETRY_PROVIDER_RESPONSE_SHOULD_NOT_PERSIST"
+          : providerPrompt.includes("Move into Lifecycle Harbor.")
+            ? 'GAME_HISTORY_PROVIDER_RESPONSE: The party reaches Lifecycle Harbor.\n[spatial_move: destination_id="lifecycle_harbor"]'
+          : "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.";
     return new Response(
       JSON.stringify({
         id: `chatcmpl-maps-lifecycle-${generationProviderRequestCount}`,
@@ -2743,14 +2784,288 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.2.9";
+    catalogVersion = "1.3.2";
     catalogOnline = true;
-    const upgraded129 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded129.version, "1.2.9");
-    assert.equal(upgraded129.previousVersion, "1.1.7");
+    const upgraded132 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded132.version, "1.3.2");
+    assert.equal(upgraded132.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
+
+    const impersonateConnection = (await expectJson(app, {
+      method: "POST",
+      url: "/api/connections",
+      headers: csrfHeaders,
+      payload: {
+        name: "Hierarchical Maps impersonate movement provider",
+        provider: "custom",
+        baseUrl: generationProviderBaseUrl,
+        model: "maps-lifecycle-e2e",
+        apiKey: "maps-lifecycle-e2e",
+        treatAsLocalEndpoint: true,
+      },
+    })) as { id: string };
+    const impersonateChat = (await expectJson(app, {
+      method: "POST",
+      url: "/api/chats",
+      headers: csrfHeaders,
+      payload: {
+        name: "Roleplay impersonate movement fixture",
+        mode: "roleplay",
+        characterIds: [],
+        connectionId: impersonateConnection.id,
+      },
+    })) as { id: string };
+    await expectJson(app, {
+      method: "PATCH",
+      url: `/api/chats/${impersonateChat.id}/metadata`,
+      headers: csrfHeaders,
+      payload: { enableAgents: true, activeAgentIds: ["hierarchical-maps"] },
+    });
+    const impersonateSpatial = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${impersonateChat.id}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition,
+      },
+    })) as { currentLocationId: string; definition: { revision: number } };
+    assert.equal(impersonateSpatial.currentLocationId, "lifecycle_world");
+
+    const guidedGeneration = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: impersonateChat.id,
+        connectionId: impersonateConnection.id,
+        generationGuide: "Keep the scene at Lifecycle World while the NPC waits.",
+        generationGuideSource: "narrator",
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+      },
+    });
+    assert.equal(guidedGeneration.statusCode, 200, guidedGeneration.body);
+    assert.doesNotMatch(guidedGeneration.body, /spatial_transition_(?:committed|rejected)/u);
+    const afterGuidedSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(afterGuidedSpatial.currentLocationId, "lifecycle_world");
+    // The queued transition is browser-local rather than part of the chat API.
+    // Its ready-state preservation across /guided is covered by spatial-context.e2e.ts.
+
+    const providerRequestsBeforeGuidedMove = generationProviderRequestCount;
+    const guidedMoveGeneration = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: impersonateChat.id,
+        connectionId: impersonateConnection.id,
+        generationGuide: "Move the NPC into Lifecycle Harbor.",
+        generationGuideSource: "guide",
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+        pendingSpatialTransition: {
+          destinationId: "lifecycle_harbor",
+          expectedDefinitionRevision: impersonateSpatial.definition.revision,
+          expectedCurrentLocationId: "lifecycle_world",
+          commandId: "guided-must-not-consume-owner-move",
+        },
+      },
+    });
+    assert.equal(guidedMoveGeneration.statusCode, 400, guidedMoveGeneration.body);
+    assert.match(guidedMoveGeneration.body, /spatial_transition_requires_new_turn/u);
+    assert.equal(generationProviderRequestCount, providerRequestsBeforeGuidedMove);
+    const afterGuidedMoveSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(afterGuidedMoveSpatial.currentLocationId, "lifecycle_world");
+
+    const impersonateGeneration = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: impersonateChat.id,
+        connectionId: impersonateConnection.id,
+        impersonate: true,
+        userMessage: "Move into Lifecycle Harbor.",
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+        pendingSpatialTransition: {
+          destinationId: "lifecycle_harbor",
+          expectedDefinitionRevision: impersonateSpatial.definition.revision,
+          expectedCurrentLocationId: "lifecycle_world",
+          commandId: "roleplay-impersonate-to-harbor",
+        },
+      },
+    });
+    assert.equal(impersonateGeneration.statusCode, 200, impersonateGeneration.body);
+    assert.match(impersonateGeneration.body, /spatial_transition_committed/u);
+    assert.doesNotMatch(impersonateGeneration.body, /spatial_transition_rejected/u);
+    const movedImpersonateSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(movedImpersonateSpatial.currentLocationId, "lifecycle_harbor");
+    const impersonateMessages = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/messages`,
+    })) as Array<{ id: string; role: string; content: string; extra: unknown }>;
+    assert.equal(impersonateMessages.length, 2);
+    const impersonatedUserMessage = impersonateMessages.find((message) => message.role === "user");
+    assert.ok(impersonatedUserMessage);
+    assert.match(impersonatedUserMessage.content, /GAME_HISTORY_PROVIDER_RESPONSE/u);
+    assert.doesNotMatch(
+      impersonatedUserMessage.content,
+      /\[spatial_(?:move|discover):/u,
+      "Impersonated owner turns must not persist package-owned spatial directives in visible user text",
+    );
+
+    const providerRequestsBeforeRepeatedImpersonate = generationProviderRequestCount;
+    const repeatedImpersonateGeneration = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: impersonateChat.id,
+        connectionId: impersonateConnection.id,
+        impersonate: true,
+        userMessage: "Repeat the already committed move into Lifecycle Harbor.",
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+        pendingSpatialTransition: {
+          destinationId: "lifecycle_harbor",
+          expectedDefinitionRevision: impersonateSpatial.definition.revision,
+          expectedCurrentLocationId: "lifecycle_world",
+          commandId: "roleplay-impersonate-to-harbor",
+        },
+      },
+    });
+    assert.equal(repeatedImpersonateGeneration.statusCode, 200, repeatedImpersonateGeneration.body);
+    assert.match(repeatedImpersonateGeneration.body, /spatial_transition_committed/u);
+    assert.match(repeatedImpersonateGeneration.body, /message_saved/u);
+    assert.match(repeatedImpersonateGeneration.body, /content_replace/u);
+    assert.doesNotMatch(repeatedImpersonateGeneration.body, /spatial_transition_rejected/u);
+    assert.doesNotMatch(repeatedImpersonateGeneration.body, /"type":"error"/u);
+    assert.equal(generationProviderRequestCount, providerRequestsBeforeRepeatedImpersonate);
+    const repeatedImpersonateEvents = repeatedImpersonateGeneration.body
+      .split("\n\n")
+      .filter((event) => event.startsWith("data: "))
+      .map((event) => JSON.parse(event.slice("data: ".length)) as { type: string; data: unknown });
+    const authoritativeReplacement = repeatedImpersonateEvents.find((event) => event.type === "content_replace");
+    assert.equal(authoritativeReplacement?.data, impersonatedUserMessage.content);
+    const afterRepeatedImpersonateMessages = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/messages`,
+    })) as Array<{ id: string; role: string; content: string; extra: unknown }>;
+    assert.equal(afterRepeatedImpersonateMessages.length, impersonateMessages.length);
+    const recoveredUserMessage = afterRepeatedImpersonateMessages.find(
+      (message) => message.id === impersonatedUserMessage.id,
+    );
+    assert.ok(recoveredUserMessage);
+    assert.equal(recoveredUserMessage.content, impersonatedUserMessage.content);
+    assert.doesNotMatch(recoveredUserMessage.content, /RETRY_PROVIDER_RESPONSE_SHOULD_NOT_PERSIST/u);
+    assert.deepEqual(recoveredUserMessage.extra, impersonatedUserMessage.extra);
+
+    generationProviderFailure = true;
+    let failedImpersonateGeneration: Awaited<ReturnType<NonNullable<typeof app>["inject"]>>;
+    try {
+      failedImpersonateGeneration = await app.inject({
+        method: "POST",
+        url: "/api/generate",
+        headers: csrfHeaders,
+        payload: {
+          chatId: impersonateChat.id,
+          connectionId: impersonateConnection.id,
+          impersonate: true,
+          userMessage: "Try to return to Lifecycle World.",
+          streaming: false,
+          skipPresenceDelay: true,
+          musicPlayerEnabled: false,
+          pendingSpatialTransition: {
+            destinationId: "lifecycle_world",
+            expectedDefinitionRevision: impersonateSpatial.definition.revision,
+            expectedCurrentLocationId: "lifecycle_harbor",
+            commandId: "failed-roleplay-impersonate-to-world",
+          },
+        },
+      });
+    } finally {
+      generationProviderFailure = false;
+    }
+    assert.equal(failedImpersonateGeneration.statusCode, 200, failedImpersonateGeneration.body);
+    assert.doesNotMatch(failedImpersonateGeneration.body, /spatial_transition_committed/u);
+    assert.doesNotMatch(failedImpersonateGeneration.body, /spatial_transition_rejected/u);
+    const afterFailedImpersonateMessages = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/messages`,
+    })) as Array<{ id: string }>;
+    assert.equal(afterFailedImpersonateMessages.length, impersonateMessages.length);
+    const afterFailedImpersonateSpatial = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/spatial-context`,
+    })) as { currentLocationId: string };
+    assert.equal(afterFailedImpersonateSpatial.currentLocationId, "lifecycle_harbor");
+
+    const staleImpersonateGeneration = await app.inject({
+      method: "POST",
+      url: "/api/generate",
+      headers: csrfHeaders,
+      payload: {
+        chatId: impersonateChat.id,
+        connectionId: impersonateConnection.id,
+        impersonate: true,
+        userMessage: "Attempt a stale move.",
+        streaming: false,
+        skipPresenceDelay: true,
+        musicPlayerEnabled: false,
+        pendingSpatialTransition: {
+          destinationId: "lifecycle_world",
+          expectedDefinitionRevision: impersonateSpatial.definition.revision,
+          expectedCurrentLocationId: "lifecycle_world",
+          commandId: "stale-roleplay-impersonate-to-world",
+        },
+      },
+    });
+    assert.equal(staleImpersonateGeneration.statusCode, 200, staleImpersonateGeneration.body);
+    assert.match(staleImpersonateGeneration.body, /spatial_transition_rejected/u);
+    assert.match(staleImpersonateGeneration.body, /spatial_transition_stale_location/u);
+    const afterStaleImpersonateMessages = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${impersonateChat.id}/messages`,
+    })) as Array<{ id: string }>;
+    assert.equal(afterStaleImpersonateMessages.length, impersonateMessages.length);
+
+    await expectJson(
+      app,
+      {
+        method: "DELETE",
+        url: `/api/chats/${impersonateChat.id}?force=true`,
+        headers: csrfHeaders,
+      },
+      204,
+    );
+    await expectJson(
+      app,
+      {
+        method: "DELETE",
+        url: `/api/connections/${impersonateConnection.id}`,
+        headers: csrfHeaders,
+      },
+      204,
+    );
+
     const upgradedBranchSpatial = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${branch.id}/spatial-context`,
@@ -3180,11 +3495,13 @@ async function main() {
       },
     });
     assert.equal(knownLevelSnapshot?.currentLocationId, "lifecycle_level_5");
+    assert.match(knownLevelSnapshot?.transitionCommandId ?? "", /^assistant:/u);
     const routedKnownLevel = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${branch.id}/spatial-context`,
     })) as {
       definition: {
+        revision: number;
         locations: Array<{
           id: string;
           name: string;
@@ -3200,6 +3517,11 @@ async function main() {
       routedKnownLevel.definition.locations
         .find((location) => location.id === "lifecycle_harbor")
         ?.links.some((link) => link.targetId === "lifecycle_level_5" && link.state === "available"),
+    );
+    assert.equal(
+      routedKnownLevel.definition.revision,
+      knownLevelSnapshot?.definitionRevision,
+      "Matching a reachable known location must move without editing topology",
     );
 
     const returnToHarborMessage = (await expectJson(app, {
@@ -3234,10 +3556,25 @@ async function main() {
         type: "discover",
         name: "Deck A",
         relation: "link",
+        direction: "outgoing",
         description: "A lettered deck that is distinct from the generic Deck location.",
       },
     });
-    assert.equal(deckASnapshot?.currentLocationId, "lifecycle_deck_a");
+    assert.equal(deckASnapshot?.currentLocationId, "lifecycle_harbor");
+    assert.equal(deckASnapshot?.transitionCommandId, null);
+    const afterKnownDeckDiscovery = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${branch.id}/spatial-context`,
+    })) as {
+      definition: { locations: Array<{ id: string; links: Array<{ targetId: string }> }> };
+    };
+    assert.equal(
+      afterKnownDeckDiscovery.definition.locations
+        .find((location) => location.id === "lifecycle_harbor")
+        ?.links.some((link) => link.targetId === "lifecycle_deck_a"),
+      false,
+      "Matching an unreachable known location must not synthesize a direct link",
+    );
 
     const deckReturnMessage = (await expectJson(app, {
       method: "POST",
@@ -3395,7 +3732,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.2.9");
+    assert.equal(reinstalled.version, "1.3.2");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -3483,11 +3820,11 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.2.9", status: "active", readiness: "ready" }],
+      [{ version: "1.3.2", status: "active", readiness: "ready" }],
     );
 
     console.info(
-      "Hierarchical Maps exact-artifact lifecycle regression passed: update, shared template artwork, canonical shared worlds, private linked-chat drafts, publish/conflict/fork protection, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
+      "Hierarchical Maps exact-artifact lifecycle regression passed: update, shared template artwork, canonical shared worlds, private linked-chat drafts, publish/conflict/fork protection, AI-created connected route graphs, AI expansion links to existing siblings, owner-turn persistence, Roleplay /guided queue isolation and impersonate movement success/failure/stale rejection, live prompt parity, Roleplay/Game swipe/regeneration/continuation history, branch/delete/import/export/checkpoint preservation, reviewed Game reconciliation, offline restart, remove, reinstall, backup, and restore.",
     );
   } finally {
     if (app) await app.close().catch(() => undefined);

@@ -222,7 +222,7 @@ export function ExtractionPromptTemplates({
                 "ui.longTermMemory.extractionprompttemplates.promptTemplates",
               )}
               content={localizeUi(
-                "ui.longTermMemory.extractionprompttemplates.customTemplatesCanBeActivatedIndependentlyForConversationRoleplay",
+                "ui.longTermMemory.extractionprompttemplates.promptTemplatesHelp",
               )}
             />
           </h4>
@@ -385,7 +385,7 @@ export function ExtractionPromptTemplates({
                 onClick={duplicate}
               >
                 {localizeUi(
-                  "ui.longTermMemory.extractionprompttemplates.duplicate",
+                  "ui.longTermMemory.extractionprompttemplates.copyToEdit",
                 )}
               </Button>
             </div>

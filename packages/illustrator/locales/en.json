@@ -1,0 +1,39 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Illustrator",
+    "description": "Creates images and videos, with optional automatic scene backgrounds for Roleplay location changes. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes."
+  },
+  "agents": {
+    "illustrator": {
+      "name": "Illustrator",
+      "description": "Creates images and videos, with optional automatic scene backgrounds for Roleplay location changes. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
+      "promptTemplates": {
+        "comic-page": {
+          "name": "Comic Page",
+          "description": "Panelled comic page with dialogue, captions, and SFX."
+        },
+        "colored-manga": {
+          "name": "Colored Manga",
+          "description": "Colored manga scene with stylized dialogue and SFX."
+        },
+        "bw-manga": {
+          "name": "B&W Manga",
+          "description": "Black-and-white manga with dialogue, SFX, inks, and screentones."
+        },
+        "background": {
+          "name": "Background",
+          "description": "Environment or establishing-shot background without characters."
+        },
+        "selfie": {
+          "name": "Selfie",
+          "description": "In-character selfie or casual portrait prompt."
+        }
+      }
+    }
+  }
+}

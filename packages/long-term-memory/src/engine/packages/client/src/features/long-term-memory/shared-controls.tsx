@@ -24,7 +24,14 @@ export const Button = forwardRef<
     destructive?: boolean;
   }
 >(function Button(
-  { children, primary = false, destructive = false, className = "", ...props },
+  {
+    children,
+    primary = false,
+    destructive = false,
+    className = "",
+    style,
+    ...props
+  },
   ref,
 ) {
   const tone = primary
@@ -38,6 +45,11 @@ export const Button = forwardRef<
       type="button"
       data-ltm-control="button"
       className={`mari-editor-action min-h-11 px-3 ${tone} ${className}`}
+      style={
+        className.includes("mari-editor-action--compact")
+          ? style
+          : { minHeight: "2.75rem", ...style }
+      }
       {...props}
     >
       {children}
@@ -343,7 +355,11 @@ export function StatusSurface({
       {...props}
     >
       {busy ? (
-        <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" />
+        <Loader2
+          aria-hidden="true"
+          size="0.875rem"
+          className="animate-spin motion-reduce:animate-none"
+        />
       ) : null}
       {children}
     </p>

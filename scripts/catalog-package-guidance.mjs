@@ -102,7 +102,8 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   "long-term-memory": {
     modes: ["conversation", "roleplay", "game"],
-    activation: "Add the Agent in Chat Settings → Agents → Misc Agents for Conversation, Roleplay, and Game modes.",
+    activation:
+      "Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
   },
   spotify: {
     modes: ["conversation", "roleplay", "game"],

@@ -4,12 +4,11 @@ import {
   resolveSpatialBreadcrumb,
   resolveSpatialDestinations,
   type ResolvedOwnerSpatialProjection,
+  type ResolvedSpatialTravel,
   type SpatialContextDefinition,
+  type SpatialTravelPromptSummary,
 } from "@marinara-engine/shared";
-import {
-  defaultSpatialTurnPromptTemplates,
-  renderSpatialTurnPromptTemplate,
-} from "./maps-model.js";
+import { defaultSpatialTurnPromptTemplates, renderSpatialTurnPromptTemplate } from "./maps-model.js";
 
 const MAX_PROMPT_BREADCRUMB_NODES = 20;
 const MAX_PROMPT_KNOWN_LOCATIONS = 50;
@@ -30,6 +29,7 @@ export function buildOwnerSpatialProjection(
   chatId: string,
   definition: SpatialContextDefinition | null,
   currentLocationId: string | null,
+  acceptedTravel?: ResolvedSpatialTravel | null,
 ): ResolvedOwnerSpatialProjectionWithKnownLocationLimit | null {
   if (!definition?.enabled || !currentLocationId) return null;
 
@@ -39,15 +39,36 @@ export function buildOwnerSpatialProjection(
   const allDestinations = resolveSpatialDestinations(definition, currentLocationId);
   const destinations = allDestinations.slice(0, SPATIAL_CONTEXT_LIMITS.maxPromptDestinations);
   const allKnownLocations = definition.locations.filter((location) => location.status === "active");
-  const knownLocations = allKnownLocations
-    .slice(0, MAX_PROMPT_KNOWN_LOCATIONS)
-    .map((location) => ({
-      id: location.id,
-      path: resolveSpatialBreadcrumb(definition, location.id)
-        .slice(-MAX_PROMPT_BREADCRUMB_NODES)
-        .map(({ name }) => boundedText(name, SPATIAL_CONTEXT_LIMITS.maxNameLength))
-        .join(" > "),
-    }));
+  const knownLocations = allKnownLocations.slice(0, MAX_PROMPT_KNOWN_LOCATIONS).map((location) => ({
+    id: location.id,
+    path: resolveSpatialBreadcrumb(definition, location.id)
+      .slice(-MAX_PROMPT_BREADCRUMB_NODES)
+      .map(({ name }) => boundedText(name, SPATIAL_CONTEXT_LIMITS.maxNameLength))
+      .join(" > "),
+  }));
+  const travelSummary: SpatialTravelPromptSummary | undefined = acceptedTravel
+    ? (() => {
+        const byId = buildSpatialLocationIndex(definition);
+        const nameFor = (locationId: string): string =>
+          boundedText(byId.get(locationId)?.name ?? locationId, SPATIAL_CONTEXT_LIMITS.maxNameLength);
+        return {
+          mode: acceptedTravel.mode,
+          fromLocationName: nameFor(acceptedTravel.fromLocationId),
+          acceptedLocationName: nameFor(
+            acceptedTravel.mode === "step_by_step"
+              ? (acceptedTravel.routeLocationIds[0] ?? acceptedTravel.targetLocationId)
+              : acceptedTravel.targetLocationId,
+          ),
+          targetLocationName: nameFor(acceptedTravel.targetLocationId),
+          routeLocationNames: acceptedTravel.routeLocationIds
+            .slice(0, SPATIAL_CONTEXT_LIMITS.maxRouteLocations)
+            .map(nameFor),
+          remainingLocationNames: acceptedTravel.remainingLocationIds
+            .slice(0, SPATIAL_CONTEXT_LIMITS.maxRouteLocations)
+            .map(nameFor),
+        };
+      })()
+    : undefined;
   return {
     kind: "owner",
     chatId,
@@ -56,7 +77,10 @@ export function buildOwnerSpatialProjection(
     currentLocationId,
     breadcrumb: resolveSpatialBreadcrumb(definition, currentLocationId)
       .slice(-MAX_PROMPT_BREADCRUMB_NODES)
-      .map(({ id, name }) => ({ id, name: boundedText(name, SPATIAL_CONTEXT_LIMITS.maxNameLength) })),
+      .map(({ id, name }) => ({
+        id,
+        name: boundedText(name, SPATIAL_CONTEXT_LIMITS.maxNameLength),
+      })),
     description: boundedText(current.description, SPATIAL_CONTEXT_LIMITS.maxDescriptionLength),
     modelMemory: current.modelMemory
       ? boundedText(current.modelMemory, SPATIAL_CONTEXT_LIMITS.maxModelMemoryLength) || null
@@ -68,6 +92,8 @@ export function buildOwnerSpatialProjection(
     omittedKnownLocationCount: Math.max(0, allKnownLocations.length - knownLocations.length),
     lorebookEntryIds: current.lorebookEntryIds,
     omittedDestinationCount: Math.max(0, allDestinations.length - destinations.length),
+    ...(acceptedTravel ? { travel: acceptedTravel } : {}),
+    ...(travelSummary ? { travelSummary } : {}),
   };
 }
 
@@ -79,10 +105,7 @@ type ResolvedOwnerSpatialProjectionWithTemplate = ResolvedOwnerSpatialProjection
   turnPromptTemplate?: string;
 };
 
-export function formatOwnerSpatialPrompt(
-  projection: ResolvedOwnerSpatialProjection,
-  template?: string,
-): string {
+export function formatOwnerSpatialPrompt(projection: ResolvedOwnerSpatialProjection, template?: string): string {
   const breadcrumb = escapeXmlText(formatOwnerSpatialBreadcrumb(projection));
   const description = projection.description
     ? escapeXmlText(projection.description)
@@ -97,9 +120,7 @@ export function formatOwnerSpatialPrompt(
     destinationLines.push(`- ${projection.omittedDestinationCount} additional destinations omitted.`);
   }
   const knownLocationLines = projection.knownLocations?.length
-    ? projection.knownLocations.map(
-        ({ id, path }) => `- ${escapeXmlText(path)} [${escapeXmlText(id)}]`,
-      )
+    ? projection.knownLocations.map(({ id, path }) => `- ${escapeXmlText(path)} [${escapeXmlText(id)}]`)
     : ["- None"];
   const omittedKnownLocationCount =
     (projection as ResolvedOwnerSpatialProjectionWithKnownLocationLimit).omittedKnownLocationCount ?? 0;
@@ -111,8 +132,23 @@ export function formatOwnerSpatialPrompt(
     ...knownLocationLines,
     "",
   ].join("\n");
+  const travelFacts =
+    projection.travel && projection.travelSummary
+      ? [
+          `<movement_this_turn mode="${projection.travel.mode}">`,
+          `From: ${escapeXmlText(projection.travelSummary.fromLocationName)}`,
+          `Accepted destination: ${escapeXmlText(projection.travelSummary.acceptedLocationName)}`,
+          `Target: ${escapeXmlText(projection.travelSummary.targetLocationName)}`,
+          `Validated route: ${projection.travelSummary.routeLocationNames.map(escapeXmlText).join(" > ")}`,
+          `Remaining route: ${projection.travelSummary.remainingLocationNames.length ? projection.travelSummary.remainingLocationNames.map(escapeXmlText).join(" > ") : "None"}`,
+          `Complete: ${projection.travel.complete ? "yes" : "no"}`,
+          "Movement is already canonical for this turn. Do not emit another location change or topology mutation.",
+          "</movement_this_turn>",
+          "",
+        ].join("\n")
+      : "";
   const userLedTransitionInstruction =
-    'Use the latest user message as the authority for map changes. Treat direct present-tense or imperative movement by the focal party, such as “We go to the Kitchen” or “We follow her into the outdoor section,” as establishing arrival for this turn. When that user-led arrival matches a known map location, append [spatial_move: destination_id="exact_id"] as the final line, even when it was reached through a newly revealed or secret route; the application records that direct route. When the user explicitly establishes discovery or arrival at a significant named, durable, revisitable place that has no known match, such as “We discover a hidden room,” append [spatial_discover: name="Place Name" relation="enter" description="Short orientation"] as the final line; use relation="link" for a neighboring or travel-connected place rather than a place inside the current one. The visible response may narrate the consequence, but your own narration alone never authorizes either command. Do not emit either command for future intentions, failed or unfinished travel, mentions, NPC-only movement, imagined places, temporary camps, hallways, vehicles, or other transient scene details. These commands are hidden from the user and validated by the application.';
+    'Use the latest user message as the authority for map changes. Treat direct present-tense or imperative movement by the focal party, such as “We go to the Kitchen” or “We follow her into the outdoor section,” as establishing arrival for this turn. When that user-led arrival matches a known map location, append [spatial_move: destination_id="exact_id"] as the final line, even when it was reached through a newly revealed or secret route; the application records that direct route. When the user explicitly establishes discovery or arrival at a significant named, durable, revisitable place that has no known match, such as “We discover a hidden room,” append [spatial_discover: name="Place Name" relation="enter" description="Short orientation"] as the final line. For a newly discovered neighboring or travel-connected place, use relation="link" and include direction="outgoing", direction="incoming", or direction="both" relative to the current location; a link discovery without direction is invalid. A known but unreachable location is not discovery and must not create a link. The visible response may narrate the consequence, but your own narration alone never authorizes either command. Do not emit either command for future intentions, failed or unfinished travel, mentions, NPC-only movement, imagined places, temporary camps, hallways, vehicles, or other transient scene details. These commands are hidden from the user and validated by the application.';
   const authorityInstruction =
     projection.ownerMode === "game"
       ? `${knownLocationIndex}Treat this as the authoritative world location for the GM and party. A legacy Game map, when present, is only local/tactical detail inside this location. Keep the current location unless the latest user message establishes a change. ${userLedTransitionInstruction}`
@@ -135,6 +171,7 @@ export function formatOwnerSpatialPrompt(
   }).trim();
   return [
     `<spatial_context mode="${projection.ownerMode}" authority="application">`,
+    travelFacts,
     body,
     "</spatial_context>",
   ].join("\n");

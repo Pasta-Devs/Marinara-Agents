@@ -41,7 +41,7 @@ import {
   inputClass,
 } from "./shared-controls";
 import { humanizeLabel } from "./display-labels";
-import type { LongTermMemoryDestinationProps } from "./types";
+import type { LongTermMemoryDestinationProps, SourceTab } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace } from "./LtmWorkspace";
 import type { LtmWorkspacePane } from "./LtmWorkspace";
@@ -54,7 +54,7 @@ import {
   type ScopeTargetGroup,
 } from "./scope-targets";
 
-type Source = "characters" | "lorebooks" | "chats";
+type Source = SourceTab;
 type FlatPanel = "available" | "imported";
 type PreviewRow = LtmInteropPreviewResponse["samples"][number];
 type LorebookCandidate = LtmInteropPreviewSample;
@@ -81,6 +81,11 @@ const sourceTabs: Array<{ id: Source; labelKey: string }> = [
     labelKey: "ui.longTermMemory.sourcesworkspace.lorebooks",
   },
 ];
+const sourceDescriptionKeys: Record<Source, string> = {
+  characters: "ui.longTermMemory.sourcesworkspace.characterDescription",
+  lorebooks: "ui.longTermMemory.sourcesworkspace.lorebookDescription",
+  chats: "ui.longTermMemory.sourcesworkspace.chatSummaryDescription",
+};
 
 const flatPanelTabs: Array<{ id: FlatPanel; labelKey: string }> = [
   {
@@ -112,7 +117,9 @@ type ScopeTargets = {
   characters: ScopeTargetCharacter[];
 };
 
-function resultTone(status: string): "neutral" | "success" | "warning" | "danger" {
+function resultTone(
+  status: string,
+): "neutral" | "success" | "warning" | "danger" {
   return status === "success" ||
     status === "succeeded" ||
     status === "created" ||
@@ -120,7 +127,9 @@ function resultTone(status: string): "neutral" | "success" | "warning" | "danger
     ? "success"
     : status === "failed" || status === "cancelled"
       ? "danger"
-      : status === "partial_success" || status === "no_suggestions_created" || status === "not_started"
+      : status === "partial_success" ||
+          status === "no_suggestions_created" ||
+          status === "not_started"
         ? "warning"
         : "neutral";
 }
@@ -480,6 +489,10 @@ export default function SourcesWorkspace({
   props,
   onOpenMemory,
   onOpenReview,
+  requestedSource,
+  onRequestedSourceHandled,
+  selectedSource,
+  onSourceChange,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi } = useLtmTranslation();
   const importScopeLabelId = useId();
@@ -491,13 +504,12 @@ export default function SourcesWorkspace({
     null,
   );
   const importControllerRef = useRef<AbortController | null>(null);
-  const [source, setSource] = useState<Source>("chats");
+  const [source, setSource] = useState<Source>(selectedSource ?? "chats");
   const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(
     null,
   );
-  const [lorebookMobilePane, setLorebookMobilePane] = useState<
-    Exclude<LtmWorkspacePane, "inspector">
-  >("navigator");
+  const [lorebookMobilePane, setLorebookMobilePane] =
+    useState<Exclude<LtmWorkspacePane, "inspector">>("navigator");
   const [importTargetId, setImportTargetId] = useState(
     props.chatId ? `chat:${props.chatId}` : "all",
   );
@@ -780,6 +792,31 @@ export default function SourcesWorkspace({
         item.draft?.status === "pending",
     ),
   );
+  const proposalCount =
+    importResult?.imported.reduce(
+      (count, item) => count + (item.draft?.mutations.length ?? 0),
+      0,
+    ) ?? 0;
+  const importResultMessage = !importResult
+    ? ""
+    : importResult.counts.sourceNotesWritten === 0
+      ? localizeUi(
+          "ui.longTermMemory.sourcesworkspace.importFailedBeforeSaving",
+        )
+      : importResult.counts.failed || importResult.counts.cancelled
+        ? localizeUi(
+            "ui.longTermMemory.sourcesworkspace.sourceSavedExtractionFailed",
+          )
+        : proposalCount
+          ? localizeUi(
+              "ui.longTermMemory.sourcesworkspace.sourceSavedProposalsReady",
+              {
+                count: proposalCount,
+              },
+            )
+          : localizeUi(
+              "ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals",
+            );
 
   useEffect(() => {
     if (!importTargets.some((target) => target.id === importTargetId))
@@ -791,6 +828,16 @@ export default function SourcesWorkspace({
     setImportCharacterId(null);
     setTransferDestinationId(props.chatId ?? "");
   }, [props.chatId]);
+
+  useEffect(() => {
+    if (!requestedSource) return;
+    changeSource(requestedSource.source);
+    onRequestedSourceHandled?.();
+  }, [onRequestedSourceHandled, requestedSource?.key]);
+
+  useEffect(() => {
+    if (selectedSource) setSource(selectedSource);
+  }, [selectedSource]);
 
   useEffect(() => () => importControllerRef.current?.abort(), []);
 
@@ -858,6 +905,7 @@ export default function SourcesWorkspace({
 
   const changeSource = (next: Source) => {
     setSource(next);
+    onSourceChange?.(next);
     if (next === "lorebooks") setLorebookMobilePane("navigator");
     clearImportResult();
   };
@@ -949,6 +997,7 @@ export default function SourcesWorkspace({
           selectionKey: selectionKeyOverride ?? selectionKey,
         };
     setImporting(true);
+    setImportResultContract(contract);
     setImportError("");
     setReviewMessage("");
     setCancelledImport(null);
@@ -1228,6 +1277,7 @@ export default function SourcesWorkspace({
           }}
           data-ltm-source-action="re-extract"
           data-ltm-source-note-id={noteId}
+          className={extractingId === noteId ? "[&>svg]:animate-spin" : ""}
         />
         <IconButton
           icon={BookOpen}
@@ -1369,6 +1419,22 @@ export default function SourcesWorkspace({
           </button>
         ))}
       </div>
+      <StatusSurface data-ltm-source-guidance>
+        {source === "characters"
+          ? localizeUi(
+              "ui.longTermMemory.sourcesworkspace.characterGuidedImport",
+            )
+          : source === "chats"
+            ? localizeUi(
+                "ui.longTermMemory.sourcesworkspace.chatSummaryGuidedImport",
+              )
+            : localizeUi(
+                "ui.longTermMemory.sourcesworkspace.lorebookGuidedImport",
+              )}
+      </StatusSurface>
+      <p className="text-xs text-[var(--muted-foreground)]">
+        {localizeUi(sourceDescriptionKeys[source])}
+      </p>
 
       <div className="mari-editor-panel mari-editor-panel--soft flex flex-wrap items-center gap-3 p-3">
         <div
@@ -1625,19 +1691,27 @@ export default function SourcesWorkspace({
         <StatusSurface tone="success">{reviewMessage}</StatusSurface>
       ) : null}
       {!reviewMessage && !importResult && !importError ? (
-        <StatusSurface>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.importExplanation")}
+        </p>
+      ) : null}
+      {importing ? (
+        <p role="status" className="text-xs text-[var(--muted-foreground)]">
           {localizeUi(
-            "ui.longTermMemory.sourcesworkspace.importingSavesSourceMaterialFirstExtractProposedMemoriesThen",
+            "ui.longTermMemory.sourcesworkspace.savingAndExtracting",
+            {
+              count: importResultContract?.sourceIds.length ?? 0,
+            },
           )}
-        </StatusSurface>
+        </p>
       ) : null}
 
       {source === "lorebooks" ? (
-          <div
-            id="ltm-source-preview-lorebooks"
-            role="tabpanel"
-            aria-labelledby="ltm-source-tab-lorebooks"
-            data-ltm-source-preview="lorebooks"
+        <div
+          id="ltm-source-preview-lorebooks"
+          role="tabpanel"
+          aria-labelledby="ltm-source-tab-lorebooks"
+          data-ltm-source-preview="lorebooks"
           data-ltm-lorebook-browser
           className="space-y-3"
         >
@@ -1653,65 +1727,69 @@ export default function SourcesWorkspace({
               label: localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks"),
               content: (
                 <section
-              data-ltm-lorebook-list
-              className="mari-editor-panel overflow-hidden"
-            >
-              <div className="flex min-h-11 items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2">
-                <h2 className="text-sm font-semibold">
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks")}
-                </h2>
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  {lorebookPreview.data?.books.length ?? 0}
-                </span>
-              </div>
-              <div role="list" className="divide-y divide-[var(--border)]">
-                {(lorebookPreview.data?.books ?? []).map((book) => (
-                  <div key={book.id} role="listitem">
-                    <button
-                      type="button"
-                      aria-current={selectedLorebookId === book.id || undefined}
-                      data-ltm-lorebook-id={book.id}
-                      onClick={() => {
-                        setSelectedLorebookId(book.id);
-                        setLorebookMobilePane("workbench");
-                      }}
-                      className={`flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--secondary)]/35 ${selectedLorebookId === book.id ? "bg-[var(--primary)]/10" : ""}`}
-                    >
-                    <BookOpen
-                      size="1rem"
-                      className="shrink-0 text-[var(--muted-foreground)]"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">
-                        {book.name}
-                      </span>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
-                        {book.category} · {book.counts.entries}{" "}
-                        {localizeUi(
-                          "ui.longTermMemory.sourcesworkspace.entries",
-                        )}{" "}
-                        {book.counts.imported}{" "}
-                        {localizeUi(
-                          "ui.longTermMemory.sourcesworkspace.imported",
-                        )}
-                      </span>
+                  data-ltm-lorebook-list
+                  className="mari-editor-panel overflow-hidden"
+                >
+                  <div className="flex min-h-11 items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2">
+                    <h2 className="text-sm font-semibold">
+                      {localizeUi(
+                        "ui.longTermMemory.sourcesworkspace.lorebooks",
+                      )}
+                    </h2>
+                    <span className="text-xs text-[var(--muted-foreground)]">
+                      {lorebookPreview.data?.books.length ?? 0}
                     </span>
-                    <ChevronRight
-                      size="0.875rem"
-                      className="shrink-0 text-[var(--muted-foreground)]"
-                    />
-                    </button>
                   </div>
-                ))}
-                {!lorebookPreview.isLoading &&
-                lorebookPreview.data?.books.length === 0 ? (
-                  <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                    {localizeUi(
-                      "ui.longTermMemory.sourcesworkspace.noLorebooksAreAvailableInThisScope",
-                    )}
-                  </p>
-                ) : null}
-              </div>
+                  <div role="list" className="divide-y divide-[var(--border)]">
+                    {(lorebookPreview.data?.books ?? []).map((book) => (
+                      <div key={book.id} role="listitem">
+                        <button
+                          type="button"
+                          aria-current={
+                            selectedLorebookId === book.id || undefined
+                          }
+                          data-ltm-lorebook-id={book.id}
+                          onClick={() => {
+                            setSelectedLorebookId(book.id);
+                            setLorebookMobilePane("workbench");
+                          }}
+                          className={`flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--secondary)]/35 ${selectedLorebookId === book.id ? "bg-[var(--primary)]/10" : ""}`}
+                        >
+                          <BookOpen
+                            size="1rem"
+                            className="shrink-0 text-[var(--muted-foreground)]"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">
+                              {book.name}
+                            </span>
+                            <span className="block text-xs text-[var(--muted-foreground)]">
+                              {book.category} · {book.counts.entries}{" "}
+                              {localizeUi(
+                                "ui.longTermMemory.sourcesworkspace.entries",
+                              )}{" "}
+                              {book.counts.imported}{" "}
+                              {localizeUi(
+                                "ui.longTermMemory.sourcesworkspace.imported",
+                              )}
+                            </span>
+                          </span>
+                          <ChevronRight
+                            size="0.875rem"
+                            className="shrink-0 text-[var(--muted-foreground)]"
+                          />
+                        </button>
+                      </div>
+                    ))}
+                    {!lorebookPreview.isLoading &&
+                    lorebookPreview.data?.books.length === 0 ? (
+                      <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                        {localizeUi(
+                          "ui.longTermMemory.sourcesworkspace.noLorebooksAreAvailableInThisScope",
+                        )}
+                      </p>
+                    ) : null}
+                  </div>
                 </section>
               ),
             }}
@@ -1720,285 +1798,307 @@ export default function SourcesWorkspace({
               disabled: !selectedLorebook,
               content: (
                 <section
-              data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
-              className="mari-editor-panel overflow-hidden"
-            >
-              {selectedLorebook ? (
-                <>
-                  <header className="space-y-2 border-b border-[var(--border)] bg-[var(--secondary)]/25 p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="text-base font-semibold">
-                          {selectedLorebook.name}
-                        </h2>
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          {selectedLorebook.category} ·{" "}
-                          {selectedLorebook.counts.entries}{" "}
-                          {localizeUi(
-                            "ui.longTermMemory.sourcesworkspace.entries",
-                          )}{" "}
-                          {selectedLorebook.counts.candidates}{" "}
-                          {localizeUi(
-                            "ui.longTermMemory.sourcesworkspace.sourceParts",
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          primary
-                          disabled={
-                            importing || selectedBookImportIds.length === 0
-                          }
-                          onClick={() =>
-                            void runImport(
-                              selectedBookImportIds,
-                              "import",
-                              undefined,
-                              lorebookImportSelectionKey,
-                            )
-                          }
-                          data-ltm-lorebook-action="import-selected"
-                        >
-                          <Check size="0.75rem" />{" "}
-                          {localizeUi(
-                            "ui.longTermMemory.sourcesworkspace.importSelectedCount",
-                            { count: selectedBookImportIds.length },
-                          )}
-                        </Button>
-                        <Button
-                          disabled={
-                            importing || selectedBookRefreshIds.length === 0
-                          }
-                          onClick={() =>
-                            void runImport(
-                              selectedBookRefreshIds,
-                              "refresh",
-                              undefined,
-                              lorebookRefreshSelectionKey,
-                            )
-                          }
-                          data-ltm-lorebook-action="refresh-selected"
-                        >
-                          <RefreshCw size="0.75rem" />{" "}
-                          {localizeUi(
-                            "ui.longTermMemory.sourcesworkspace.syncSelectedCount",
-                            { count: selectedBookRefreshIds.length },
-                          )}
-                        </Button>
-                        {selectedLorebookTransferNoteIds.size ? (
-                          <Button
-                            primary
-                            onClick={() => setTransferOpen((open) => !open)}
-                            aria-expanded={transferOpen}
-                            aria-controls={
-                              transferOpen
-                                ? "ltm-source-transfer-workbench"
-                                : undefined
-                            }
-                            data-ltm-lorebook-action="transfer-selected"
-                          >
-                            <Send size="0.75rem" />{" "}
-                            {localizeUi(
-                              "ui.longTermMemory.sourcesworkspace.transferSelectedCount",
-                              {
-                                count: selectedLorebookTransferNoteIds.size,
-                              },
-                            )}
-                          </Button>
-                        ) : null}
-                        {importing ? (
-                          <Button
-                            destructive
-                            onClick={() => importControllerRef.current?.abort()}
-                            data-ltm-lorebook-action="cancel-import"
-                          >
-                            {localizeUi("ui.longTermMemory.memoryvault.cancel")}
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                    {selectedLorebook.description ? (
-                      <p className="max-w-[75ch] text-xs text-[var(--muted-foreground)]">
-                        {selectedLorebook.description}
-                      </p>
-                    ) : null}
-                    {selectedLorebook.tags.length ? (
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        {selectedLorebook.tags.join(", ")}
-                      </p>
-                    ) : null}
-                    {transferOpen &&
-                    (selectedLorebookTransferNoteIds.size || transferResult) ? (
-                      <TransferWorkbench
-                        destinationChatId={transferDestinationId}
-                        destinations={scopeTargets.data?.chats ?? []}
-                        noteCount={selectedLorebookTransferNoteIds.size}
-                        mode={transferMode}
-                        includeDerived={includeDerived}
-                        busy={transferBusy}
-                        error={transferError}
-                        preview={transferPreview}
-                        result={transferResult}
-                        onModeChange={(mode) => {
-                          setTransferMode(mode);
-                          setTransferPreview(null);
-                          setTransferResult(null);
-                        }}
-                        onIncludeDerivedChange={(includeDerived) => {
-                          setIncludeDerived(includeDerived);
-                          setTransferPreview(null);
-                          setTransferResult(null);
-                        }}
-                        onDestinationChange={(chatId) => {
-                          setTransferDestinationId(chatId);
-                          setTransferPreview(null);
-                          setTransferResult(null);
-                        }}
-                        onPreview={() => void previewTransfer()}
-                        onApply={() => void applyTransfer()}
-                      />
-                    ) : null}
-                  </header>
-
-                  <div role="list" className="divide-y divide-[var(--border)]">
-                    {selectedLorebook.entries.map((entry) => {
-                      const candidateIds = entry.candidates.map(
-                          (candidate) => candidate.sourceId,
-                        ),
-                        selectedCount = candidateIds.filter((id) =>
-                          selectedLorebookCandidateIds.has(id),
-                        ).length;
-                      return (
-                        <article
-                          key={entry.id}
-                          role="listitem"
-                          data-ltm-lorebook-entry={entry.id}
-                          className="space-y-3 p-3"
-                        >
-                          <div className="flex items-start gap-3">
-                            <EntrySelect
-                              entry={entry}
-                              checked={
-                                candidateIds.length > 0 &&
-                                selectedCount === candidateIds.length
+                  data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
+                  className="mari-editor-panel overflow-hidden"
+                >
+                  {selectedLorebook ? (
+                    <>
+                      <header className="space-y-2 border-b border-[var(--border)] bg-[var(--secondary)]/25 p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h2 className="text-base font-semibold">
+                              {selectedLorebook.name}
+                            </h2>
+                            <p className="text-xs text-[var(--muted-foreground)]">
+                              {selectedLorebook.category} ·{" "}
+                              {selectedLorebook.counts.entries}{" "}
+                              {localizeUi(
+                                "ui.longTermMemory.sourcesworkspace.entries",
+                              )}{" "}
+                              {selectedLorebook.counts.candidates}{" "}
+                              {localizeUi(
+                                "ui.longTermMemory.sourcesworkspace.sourceParts",
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              primary
+                              disabled={
+                                importing || selectedBookImportIds.length === 0
                               }
-                              indeterminate={
-                                selectedCount > 0 &&
-                                selectedCount < candidateIds.length
-                              }
-                              onChange={(checked) =>
-                                toggleLorebookCandidates(
-                                  entry.candidates,
-                                  checked,
+                              onClick={() =>
+                                void runImport(
+                                  selectedBookImportIds,
+                                  "import",
+                                  undefined,
+                                  lorebookImportSelectionKey,
                                 )
                               }
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="text-sm font-semibold">
-                                  {entry.name}
-                                </h3>
-                                <span className={`rounded-full px-2 py-0.5 text-[0.625rem] font-semibold uppercase ${entryStatusToneClass(entry)}`}>
-                                  {entryStatusLabel(entry, localizeUi)}
-                                </span>
-                                {entry.candidateCount > 1 ? (
-                                  <span className="text-xs text-[var(--muted-foreground)]">
-                                    {entry.candidateCount}{" "}
-                                    {localizeUi(
-                                      "ui.longTermMemory.sourcesworkspace.parts",
-                                    )}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[var(--muted-foreground)]">
-                                {entry.candidates[0]?.snippet}
-                              </p>
-                            </div>
-                          </div>
-                          <div role="list" className="space-y-2">
-                            {entry.candidates.map((candidate) => (
-                              <ClickSurface
-                                key={candidate.sourceId}
-                                role="listitem"
-                                className="group ml-7 space-y-2"
-                                data-ltm-source-existing-note={
-                                  candidate.existingNoteId
+                              data-ltm-lorebook-action="import-selected"
+                            >
+                              <Check size="0.75rem" />{" "}
+                              {localizeUi(
+                                "ui.longTermMemory.sourcesworkspace.importSelectedCount",
+                                { count: selectedBookImportIds.length },
+                              )}
+                            </Button>
+                            <Button
+                              disabled={
+                                importing || selectedBookRefreshIds.length === 0
+                              }
+                              onClick={() =>
+                                void runImport(
+                                  selectedBookRefreshIds,
+                                  "refresh",
+                                  undefined,
+                                  lorebookRefreshSelectionKey,
+                                )
+                              }
+                              data-ltm-lorebook-action="refresh-selected"
+                            >
+                              <RefreshCw size="0.75rem" />{" "}
+                              {localizeUi(
+                                "ui.longTermMemory.sourcesworkspace.syncSelectedCount",
+                                { count: selectedBookRefreshIds.length },
+                              )}
+                            </Button>
+                            {selectedLorebookTransferNoteIds.size ? (
+                              <Button
+                                primary
+                                onClick={() => setTransferOpen((open) => !open)}
+                                aria-expanded={transferOpen}
+                                aria-controls={
+                                  transferOpen
+                                    ? "ltm-source-transfer-workbench"
+                                    : undefined
                                 }
-                                data-ltm-source-actions-open={
-                                  openSourceActionId ===
-                                    candidate.existingNoteId || undefined
-                                }
+                                data-ltm-lorebook-action="transfer-selected"
                               >
-                              <div className="flex items-start gap-2">
-                                {candidate.status === "pending" ? (
-                                  <IconButton
-                                    icon={importing ? Loader2 : FileInput}
-                                    label={localizeUi(
-                                      "ui.longTermMemory.sourcesworkspace.importValue1",
-                                      { value1: candidate.title },
-                                    )}
-                                    disabled={importing}
-                                    onClick={(event) => {
-                                      stopRowAction(event);
-                                      void runImport([candidate.sourceId]);
-                                    }}
-                                    className={
-                                      importing ? "[&>svg]:animate-spin" : ""
-                                    }
-                                    data-ltm-source-action="import"
-                                    data-ltm-source-id={candidate.sourceId}
-                                  />
-                                ) : null}
-                                {candidate.status !== "imported" ? null : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      data-ltm-source-memory-id={
-                                        candidate.existingNoteId
-                                      }
-                                      aria-label={localizeUi(
-                                        "ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1",
-                                        { value1: candidate.existingNoteTitle },
-                                      )}
-                                      className="inline-flex min-h-11 flex-1 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
-                                      onClick={() =>
-                                        onOpenMemory?.(candidate.existingNoteId)
-                                      }
-                                    >
-                                      {localizeUi(
-                                        "ui.longTermMemory.sourcesworkspace.sourceMemory",
-                                      )}{" "}
-                                      {candidate.existingNoteTitle}
-                                    </button>
-                                    {sourceInlineActions(
-                                      candidate.existingNoteId,
-                                      candidate.existingNoteTitle,
-                                    )}
-                                  </>
+                                <Send size="0.75rem" />{" "}
+                                {localizeUi(
+                                  "ui.longTermMemory.sourcesworkspace.transferSelectedCount",
+                                  {
+                                    count: selectedLorebookTransferNoteIds.size,
+                                  },
                                 )}
-                              </div>
-                              </ClickSurface>
-                            ))}
+                              </Button>
+                            ) : null}
+                            {importing ? (
+                              <Button
+                                destructive
+                                onClick={() =>
+                                  importControllerRef.current?.abort()
+                                }
+                                data-ltm-lorebook-action="cancel-import"
+                              >
+                                {localizeUi(
+                                  "ui.longTermMemory.memoryvault.cancel",
+                                )}
+                              </Button>
+                            ) : null}
                           </div>
-                        </article>
-                      );
-                    })}
-                    {selectedLorebook.entries.length === 0 ? (
-                      <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                        {localizeUi(
-                          "ui.longTermMemory.sourcesworkspace.thisLorebookHasNoImportableEntries",
-                        )}
-                      </p>
-                    ) : null}
-                  </div>
-                </>
-              ) : (
-                <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                  {localizeUi(
-                    "ui.longTermMemory.sourcesworkspace.selectALorebookToInspectItsEntries",
+                        </div>
+                        {selectedLorebook.description ? (
+                          <p className="max-w-[75ch] text-xs text-[var(--muted-foreground)]">
+                            {selectedLorebook.description}
+                          </p>
+                        ) : null}
+                        {selectedLorebook.tags.length ? (
+                          <p className="text-xs text-[var(--muted-foreground)]">
+                            {selectedLorebook.tags.join(", ")}
+                          </p>
+                        ) : null}
+                        {transferOpen &&
+                        (selectedLorebookTransferNoteIds.size ||
+                          transferResult) ? (
+                          <TransferWorkbench
+                            destinationChatId={transferDestinationId}
+                            destinations={scopeTargets.data?.chats ?? []}
+                            noteCount={selectedLorebookTransferNoteIds.size}
+                            mode={transferMode}
+                            includeDerived={includeDerived}
+                            busy={transferBusy}
+                            error={transferError}
+                            preview={transferPreview}
+                            result={transferResult}
+                            onModeChange={(mode) => {
+                              setTransferMode(mode);
+                              setTransferPreview(null);
+                              setTransferResult(null);
+                            }}
+                            onIncludeDerivedChange={(includeDerived) => {
+                              setIncludeDerived(includeDerived);
+                              setTransferPreview(null);
+                              setTransferResult(null);
+                            }}
+                            onDestinationChange={(chatId) => {
+                              setTransferDestinationId(chatId);
+                              setTransferPreview(null);
+                              setTransferResult(null);
+                            }}
+                            onPreview={() => void previewTransfer()}
+                            onApply={() => void applyTransfer()}
+                          />
+                        ) : null}
+                      </header>
+
+                      <div
+                        role="list"
+                        className="divide-y divide-[var(--border)]"
+                      >
+                        {selectedLorebook.entries.map((entry) => {
+                          const candidateIds = entry.candidates.map(
+                              (candidate) => candidate.sourceId,
+                            ),
+                            selectedCount = candidateIds.filter((id) =>
+                              selectedLorebookCandidateIds.has(id),
+                            ).length;
+                          return (
+                            <article
+                              key={entry.id}
+                              role="listitem"
+                              data-ltm-lorebook-entry={entry.id}
+                              className="space-y-3 p-3"
+                            >
+                              <div className="flex items-start gap-3">
+                                <EntrySelect
+                                  entry={entry}
+                                  checked={
+                                    candidateIds.length > 0 &&
+                                    selectedCount === candidateIds.length
+                                  }
+                                  indeterminate={
+                                    selectedCount > 0 &&
+                                    selectedCount < candidateIds.length
+                                  }
+                                  onChange={(checked) =>
+                                    toggleLorebookCandidates(
+                                      entry.candidates,
+                                      checked,
+                                    )
+                                  }
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="text-sm font-semibold">
+                                      {entry.name}
+                                    </h3>
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-[0.625rem] font-semibold uppercase ${entryStatusToneClass(entry)}`}
+                                    >
+                                      {entryStatusLabel(entry, localizeUi)}
+                                    </span>
+                                    {entry.candidateCount > 1 ? (
+                                      <span className="text-xs text-[var(--muted-foreground)]">
+                                        {entry.candidateCount}{" "}
+                                        {localizeUi(
+                                          "ui.longTermMemory.sourcesworkspace.parts",
+                                        )}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[var(--muted-foreground)]">
+                                    {entry.candidates[0]?.snippet}
+                                  </p>
+                                </div>
+                              </div>
+                              <div role="list" className="space-y-2">
+                                {entry.candidates.map((candidate) => (
+                                  <ClickSurface
+                                    key={candidate.sourceId}
+                                    role="listitem"
+                                    className="group ml-7 space-y-2"
+                                    data-ltm-source-existing-note={
+                                      candidate.existingNoteId
+                                    }
+                                    data-ltm-source-actions-open={
+                                      openSourceActionId ===
+                                        candidate.existingNoteId || undefined
+                                    }
+                                  >
+                                    <div className="flex items-start gap-2">
+                                      {candidate.status === "pending" ? (
+                                        <IconButton
+                                          icon={importing ? Loader2 : FileInput}
+                                          label={localizeUi(
+                                            "ui.longTermMemory.sourcesworkspace.importValue1",
+                                            { value1: candidate.title },
+                                          )}
+                                          disabled={importing}
+                                          onClick={(event) => {
+                                            stopRowAction(event);
+                                            void runImport([
+                                              candidate.sourceId,
+                                            ]);
+                                          }}
+                                          className={
+                                            importing
+                                              ? "[&>svg]:animate-spin"
+                                              : ""
+                                          }
+                                          data-ltm-source-action="import"
+                                          data-ltm-source-id={
+                                            candidate.sourceId
+                                          }
+                                        />
+                                      ) : null}
+                                      {candidate.status !==
+                                      "imported" ? null : (
+                                        <>
+                                          <button
+                                            type="button"
+                                            data-ltm-source-memory-id={
+                                              candidate.existingNoteId
+                                            }
+                                            aria-label={localizeUi(
+                                              "ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1",
+                                              {
+                                                value1:
+                                                  candidate.existingNoteTitle,
+                                              },
+                                            )}
+                                            className="inline-flex min-h-11 flex-1 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+                                            onClick={() =>
+                                              onOpenMemory?.(
+                                                candidate.existingNoteId,
+                                              )
+                                            }
+                                          >
+                                            {localizeUi(
+                                              "ui.longTermMemory.sourcesworkspace.sourceMemory",
+                                            )}{" "}
+                                            {candidate.existingNoteTitle}
+                                          </button>
+                                          {sourceInlineActions(
+                                            candidate.existingNoteId,
+                                            candidate.existingNoteTitle,
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                  </ClickSurface>
+                                ))}
+                              </div>
+                            </article>
+                          );
+                        })}
+                        {selectedLorebook.entries.length === 0 ? (
+                          <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                            {localizeUi(
+                              "ui.longTermMemory.sourcesworkspace.thisLorebookHasNoImportableEntries",
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                      {localizeUi(
+                        "ui.longTermMemory.sourcesworkspace.selectALorebookToInspectItsEntries",
+                      )}
+                    </p>
                   )}
-                </p>
-              )}
                 </section>
               ),
             }}
@@ -2322,13 +2422,9 @@ export default function SourcesWorkspace({
               "ui.longTermMemory.sourcesworkspace.sourceImportComplete",
             )}
           </h2>
-          {pendingDraftsProduced ? (
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {localizeUi(
-                "ui.longTermMemory.sourcesworkspace.proposedMemoriesAreReadyForReviewTheyAreNot",
-              )}
-            </p>
-          ) : null}
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {importResultMessage}
+          </p>
           <div className="flex flex-wrap gap-2">
             {retryableIds.length ? (
               <Button
