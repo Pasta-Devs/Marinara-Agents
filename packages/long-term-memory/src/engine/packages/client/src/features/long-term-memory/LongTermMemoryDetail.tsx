@@ -349,6 +349,14 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       : props.chatMode === "roleplay" || props.chatMode === "game"
         ? "ui.longTermMemory.longtermmemorydetail.promptBlockPlacement"
         : null;
+  const openPromptPresetSections = () => {
+    completeOnboarding();
+    props.onOpenActivePromptPresetEditor?.();
+  };
+  const openChatSummarySettings = () => {
+    completeOnboarding();
+    props.onOpenChatSummarySettings?.();
+  };
   const advanceOnboarding = () =>
     setOnboardingStep((step) => Math.min(step + 1, onboardingSteps.length - 1));
   const activateForOnboarding = async () => {
@@ -954,11 +962,22 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             </Button>
                           ) : onboardingStep === 1 ? (
                             activeChat ? (
-                              <Button primary onClick={advanceOnboarding}>
-                                {localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.nextChooseASource",
-                                )}
-                              </Button>
+                              <>
+                                <Button primary onClick={advanceOnboarding}>
+                                  {localizeUi(
+                                    "ui.longTermMemory.longtermmemorydetail.nextChooseASource",
+                                  )}
+                                </Button>
+                                {(props.chatMode === "roleplay" ||
+                                  props.chatMode === "game") &&
+                                props.onOpenActivePromptPresetEditor ? (
+                                  <Button onClick={openPromptPresetSections}>
+                                    {localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.openPromptPresetSections",
+                                    )}
+                                  </Button>
+                                ) : null}
+                              </>
                             ) : connectedChat ? (
                               <>
                                 <Button
@@ -978,6 +997,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     "ui.longTermMemory.longtermmemorydetail.continueWithoutActivating",
                                   )}
                                 </Button>
+                                {(props.chatMode === "roleplay" ||
+                                  props.chatMode === "game") &&
+                                props.onOpenActivePromptPresetEditor ? (
+                                  <Button onClick={openPromptPresetSections}>
+                                    {localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.openPromptPresetSections",
+                                    )}
+                                  </Button>
+                                ) : null}
                               </>
                             ) : (
                               <Button primary onClick={advanceOnboarding}>
@@ -990,6 +1018,14 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             <>
                               {onboardingSource === "chats" ? (
                                 <>
+                                  {props.chatMode === "roleplay" &&
+                                  props.onOpenChatSummarySettings ? (
+                                    <Button onClick={openChatSummarySettings}>
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.openChatSummarySettings",
+                                      )}
+                                    </Button>
+                                  ) : null}
                                   <Button
                                     primary
                                     onClick={async () => {
@@ -1071,31 +1107,23 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           )}
                           {onboardingStep === 4 && !status.data?.notes.total ? (
                             <Button
-                              onClick={() => void openSources("characters")}
+                              onClick={async () => {
+                                if (await openSources("characters"))
+                                  completeOnboarding();
+                              }}
                             >
                               {localizeUi(
                                 "ui.longTermMemory.longtermmemorydetail.chooseASource",
                               )}
                             </Button>
                           ) : null}
-                          <Button
-                            onClick={() => {
-                              if (
-                                onboardingStep < onboardingSteps.length - 1 ||
-                                destination === "vault"
-                              )
-                                completeOnboarding();
-                              else void selectDestination("vault");
-                            }}
-                          >
-                            {onboardingStep === onboardingSteps.length - 1
-                              ? localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.goToSavedMemories",
-                                )
-                              : localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.skip",
-                                )}
-                          </Button>
+                          {onboardingStep < onboardingSteps.length - 1 ? (
+                            <Button onClick={completeOnboarding}>
+                              {localizeUi(
+                                "ui.longTermMemory.longtermmemorydetail.skip",
+                              )}
+                            </Button>
+                          ) : null}
                         </div>
                         <p className="text-xs text-[var(--muted-foreground)]">
                           {localizeUi(

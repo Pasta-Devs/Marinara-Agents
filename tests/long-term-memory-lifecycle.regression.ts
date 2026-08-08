@@ -189,10 +189,10 @@ async function main() {
         "Preserves the character card, then proposes durable identity",
         "Preserves selected lorebook entries, then proposes durable world",
         "Preserves the summary, then proposes events, relationships, threads",
-        "The source note was saved and",
+        "accepted proposals become recallable.",
         "Review what extraction found. Accept saves a proposal to Memory Vault",
         "Stable appearance can help the character remain visually consistent",
-        "This source note preserves the imported material for evidence. It is not recalled directly.",
+        "This source note preserves imported material as audit evidence. It is not recalled directly; accepted derived memories appear below.",
         "Saved memories are not added to every reply.",
         "Import a character",
         "Summary Prompt -> Chat Summary -> Long-Term Memory",
@@ -450,6 +450,8 @@ async function main() {
           );
         if (url.pathname === "/client.js")
           return send(200, artifactClient, "application/javascript");
+        if (request.method === "GET" && url.pathname === "/api/connections")
+          return send(200, []);
         if (!url.pathname.startsWith("/api/long-term-memory/"))
           return send(404, {});
         if (request.method === "GET" && url.pathname.endsWith("/status"))
@@ -473,6 +475,15 @@ async function main() {
               embeddedChunkCount: 0,
             },
           });
+        if (request.method === "GET" && url.pathname.endsWith("/settings"))
+          return send(200, {});
+        if (
+          request.method === "GET" &&
+          url.pathname.endsWith("/extraction-settings")
+        )
+          return send(200, {});
+        if (request.method === "GET" && url.pathname.endsWith("/integrity"))
+          return send(200, { health: "healthy", ok: true, noteCount: 3, issues: [] });
         if (
           request.method === "GET" &&
           url.pathname.endsWith("/drafts/pending-count")
@@ -818,12 +829,20 @@ async function main() {
       const browserContext = await browser.newContext({ hasTouch: true });
       const page = await browserContext.newPage();
       const desktopActivationChanges: boolean[] = [];
+      const chatSummarySettingsOpens: number[] = [];
+      const promptPresetEditorOpens: number[] = [];
       await page.exposeFunction(
         "onDesktopActivationChange",
         (enabled: boolean) => {
           desktopActivationChanges.push(enabled);
         },
       );
+      await page.exposeFunction("onOpenChatSummarySettings", () => {
+        chatSummarySettingsOpens.push(Date.now());
+      });
+      await page.exposeFunction("onOpenActivePromptPresetEditor", () => {
+        promptPresetEditorOpens.push(Date.now());
+      });
       await page.exposeFunction("declineDestinationChange", () => false);
       await page.addInitScript(() => {
         Object.defineProperty(Crypto.prototype, "randomUUID", {
@@ -906,6 +925,7 @@ async function main() {
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
         /send a message relevant to a saved fact.*zero results/iu,
       );
+      assert.equal(await page.getByRole("button", { name: "Skip" }).count(), 0);
       await page
         .getByRole("button", { name: "Go to saved memories" })
         .first()
@@ -1061,6 +1081,11 @@ async function main() {
           .count(),
         1,
       );
+      assert.equal(
+        await page.getByRole("button", { name: "Open Chat Summary settings" }).count(),
+        0,
+        "Chat Summary handoff must remain hidden without a compatible Roleplay host callback",
+      );
       await page
         .getByRole("button", { name: "Continue without changing it" })
         .click();
@@ -1084,6 +1109,13 @@ async function main() {
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
         /Prompt Preset Editor -> Sections -> Add Section -> Agent Sections -> Long-Term Memory/u,
       );
+      assert.equal(
+        await page
+          .getByRole("button", { name: "Open prompt preset Sections" })
+          .count(),
+        0,
+        "Prompt preset handoff must remain hidden without a host callback",
+      );
       await page.getByRole("button", { name: "Turn on for this chat" }).click();
       assert.deepEqual(desktopActivationChanges, [true]);
       await page
@@ -1093,6 +1125,62 @@ async function main() {
         .locator('[data-ltm-surface="onboarding"]')
         .getByRole("button", { name: "Back", exact: true })
         .click();
+      await page.evaluate(() => {
+        const element = document.querySelector(
+          "marinara-capability-long-term-memory",
+        ) as HTMLElement & { capabilityProps?: Record<string, unknown> };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          enabledForChat: true,
+          onOpenChatSummarySettings: (window as Window & {
+            onOpenChatSummarySettings: () => void;
+          }).onOpenChatSummarySettings,
+          onOpenActivePromptPresetEditor: (window as Window & {
+            onOpenActivePromptPresetEditor: () => void;
+          }).onOpenActivePromptPresetEditor,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
+      });
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page
+        .getByRole("button", { name: "Open prompt preset Sections" })
+        .click();
+      assert.deepEqual(promptPresetEditorOpens.length, 1);
+      assert.equal(
+        await page.locator('[data-ltm-surface="onboarding"]').count(),
+        0,
+      );
+      assert.equal(
+        await page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+        "complete",
+      );
+      await page.evaluate(() =>
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1"),
+      );
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: turn it on" }).click();
+      await page.getByRole("button", { name: "Next: choose a source" }).click();
+      await page
+        .getByRole("button", { name: "Chat summary", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Open Chat Summary settings" })
+        .click();
+      assert.deepEqual(chatSummarySettingsOpens.length, 1);
+      assert.equal(
+        await page.locator('[data-ltm-surface="onboarding"]').count(),
+        0,
+      );
+      assert.equal(
+        await page.evaluate(() =>
+          localStorage.getItem("marinara-long-term-memory-onboarding-v1"),
+        ),
+        "complete",
+      );
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
       await page
         .locator(
@@ -1133,10 +1221,6 @@ async function main() {
         ) <= 2,
         true,
       );
-      await page.screenshot({
-        path: "/tmp/opencode/ltm-activation-desktop-final.png",
-        fullPage: true,
-      });
       await page.evaluate((version) => {
         const element = document.createElement(
           "marinara-capability-long-term-memory",
@@ -1386,13 +1470,9 @@ async function main() {
         .click();
       await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
       await page.locator("[data-ltm-review-draft-title]").waitFor();
-      await page.screenshot({
-        path: "/tmp/opencode/ltm-review-mobile-final.png",
-        fullPage: true,
-      });
       assert.equal(
         await page.locator("[data-ltm-review-draft-title]").innerText(),
-        "Mobile review source",
+        "Source note: Mobile review source",
       );
       const reviewText = await page
         .locator('[data-ltm-workspace-pane="workbench"]')
@@ -1955,10 +2035,6 @@ async function main() {
       console.log(
         `LTM mobile activation baseline: ${JSON.stringify(activationMetrics)}`,
       );
-      await mobilePage.screenshot({
-        path: "/tmp/opencode/ltm-activation-mobile-final.png",
-        fullPage: true,
-      });
       assert.ok(
         activationMetrics.box.width > 0 && activationMetrics.box.height > 0,
       );

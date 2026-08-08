@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Background",
+    "description": "Selects the most fitting existing background image for the current scene from your background library. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+  },
+  "agents": {
+    "background": {
+      "name": "Background",
+      "description": "Selects the most fitting existing background image for the current scene from your background library. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+    }
+  }
+}

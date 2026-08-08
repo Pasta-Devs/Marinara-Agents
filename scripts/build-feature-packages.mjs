@@ -10,6 +10,7 @@ import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import { writeEnglishPackageLocale } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
@@ -129,7 +130,7 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 const features = [
   {
     id: "long-term-memory",
-    version: "1.2.0",
+    version: "1.2.3",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -1374,6 +1375,7 @@ for (const feature of selectedFeatures) {
     restartRequired: Boolean(serverBuffer),
   };
   await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeEnglishPackageLocale(sourceDir, manifest, [agentDefinition]);
 
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-${feature.id}-`));
   try {

@@ -30,6 +30,9 @@ jobs:
       - name: Test catalog lane routing and build provenance
         run: node scripts/test-catalog-lanes.mjs
 
+      - name: Validate package localization catalogs
+        run: node scripts/validate-package-locales.mjs
+
       - name: Validate catalogs, packages, artifacts, and README coverage
         run: node scripts/validate-catalog.mjs
 
