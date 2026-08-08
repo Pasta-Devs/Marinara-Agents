@@ -5,6 +5,15 @@ import { recordActivity, rememberWorldFact } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { adjacent, findMatches, freshBoard, resolve, SIZE, START_MOVES, type Tile } from "./engine";
 
+// Each tile is a pasta-night ingredient rather than a bare colour.
+const PASTA: Record<Tile, { glyph: string; name: string }> = {
+  red: { glyph: "🍅", name: "tomato" },
+  yellow: { glyph: "🧀", name: "cheese" },
+  green: { glyph: "🌿", name: "basil" },
+  blue: { glyph: "🫒", name: "olive" },
+  pink: { glyph: "🍤", name: "shrimp" },
+};
+
 type Progress = { board: Tile[]; score: number; best: number; streak: number; moves: number };
 const initial = (): Progress => ({ board: freshBoard(), score: 0, best: 0, streak: 0, moves: START_MOVES });
 
@@ -49,7 +58,7 @@ export function PastasafariShell({ phoneId, onBack, onClose }: { phoneId: string
     <div className="vp-game-head"><span><strong>{game?.score ?? 0}</strong><small>score</small></span><span><strong>{game?.moves ?? 0}</strong><small>moves</small></span><span><Trophy size="1rem" aria-hidden="true" /><strong>{game?.best ?? 0}</strong><small>best</small></span></div>
     {notice ? <p role="alert" className="vp-muted-note">{notice}</p> : null}
     <div className="vp-pasta-stage">
-      <div className="vp-pasta-board" role="grid" aria-label="Pastasafari game board">{(game?.board ?? Array(SIZE * SIZE).fill("red")).map((tile, index) => <button key={index} type="button" role="gridcell" aria-label={`${tile} pasta tile`} aria-pressed={selected === index} disabled={over} className={`vp-pasta-tile vp-pasta-tile--${tile}${selected === index ? " is-selected" : ""}`} onClick={() => tap(index)} />)}</div>
+      <div className="vp-pasta-board" role="grid" aria-label="Pastasafari game board">{(game?.board ?? Array(SIZE * SIZE).fill("red")).map((tile, index) => <button key={index} type="button" role="gridcell" aria-label={`${PASTA[tile].name} tile`} aria-pressed={selected === index} disabled={over} className={`vp-pasta-tile vp-pasta-tile--${tile}${selected === index ? " is-selected" : ""}`} onClick={() => tap(index)}><span aria-hidden="true">{PASTA[tile].glyph}</span></button>)}</div>
       {over ? <div className="vp-pasta-over" role="status"><strong>Out of moves</strong><span>{game?.score ?? 0} points</span><button type="button" className="vp-accent-btn" onClick={reset}>Play again</button></div> : null}
     </div>
     <p className="vp-pasta-flash" aria-live="polite">{over ? "" : flash || "Swap two neighbours to line up three. Chains score more."}</p>

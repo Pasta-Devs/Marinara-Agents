@@ -246,7 +246,7 @@ export const phoneStylesheet = `
 .vp-game-head strong { color: var(--vp-text); font-size: 1.15rem; }
 .vp-game-head small { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.08em; }
 .vp-pasta-board { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.35rem; padding: 0.65rem; border-radius: 1rem; background: #24334a; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12); }
-.vp-pasta-tile { aspect-ratio: 1; border: 0; border-radius: 0.55rem; cursor: pointer; box-shadow: inset 0 -0.18rem 0 rgba(0,0,0,0.18), 0 0.15rem 0.2rem rgba(0,0,0,0.18); transition: transform 120ms ease, box-shadow 120ms ease; }
+.vp-pasta-tile { aspect-ratio: 1; border: 0; border-radius: 0.55rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; line-height: 1; box-shadow: inset 0 -0.18rem 0 rgba(0,0,0,0.18), 0 0.15rem 0.2rem rgba(0,0,0,0.18); transition: transform 120ms ease, box-shadow 120ms ease; }
 .vp-pasta-tile:hover, .vp-pasta-tile.is-selected { transform: scale(1.08); box-shadow: 0 0 0 0.18rem #fff, 0 0.2rem 0.35rem rgba(0,0,0,0.28); }
 .vp-pasta-tile--red { background: #ef6461; } .vp-pasta-tile--yellow { background: #f2c14e; } .vp-pasta-tile--green { background: #5dbb78; } .vp-pasta-tile--blue { background: #5c9ded; } .vp-pasta-tile--pink { background: #db78b7; }
 .vp-pasta-tile:disabled { cursor: default; }
