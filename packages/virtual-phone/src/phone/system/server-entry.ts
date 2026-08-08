@@ -1494,6 +1494,77 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "The marketplace could not be reached" });
       }
     });
+    /**
+     * Messaging a seller. A marketplace you can only read is a classifieds column — the point is
+     * that you can haggle, ask whether it still runs, and be told no. The seller may move on price;
+     * whether the user accepts is theirs to decide.
+     */
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/marketplace/message", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const seller = String(body.seller ?? "").slice(0, 120);
+        const item = String(body.item ?? "").slice(0, 200);
+        const price = String(body.price ?? "").slice(0, 60);
+        const history = String(body.history ?? "").slice(0, 2000);
+        const text = String(body.text ?? "").trim().slice(0, 800);
+        if (!text) return reply.status(400).send({ error: "Say something first" });
+        const model = await resolvePhoneModel(phone, "light");
+        if (!model) return { reply: "", offer: 0 };
+        const storyContext = await worldContext(targetChat(phone, request.query.chatId), phone);
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You are ${seller}, selling "${item}" for ${price} in the classifieds of a fictional roleplay world. ${phone.document.identity.ownerName} is messaging you about it. Reply in character and briefly, the way someone selling their own stuff replies — helpful, cagey, rude, or desperate, whichever fits. You may hold your price, drop it, or refuse to sell. Respond with only JSON: {"reply":"your message","offer":number} where offer is the price you would now accept as a plain number, or 0 if you are not moving or not selling.${storyContext}${await customInstructions(phone)}`,
+          },
+          { role: "user", content: `${history ? `${history}\n\n` : ""}${phone.document.identity.ownerName}: ${text}` },
+        ], { temperature: 0.9, maxTokens: 400 });
+        const answer = parseBoundedContent(completion.content, {
+          fields: { reply: "string", offer: "number" },
+          defaults: { reply: "", offer: 0 },
+          limits: { maxString: 700 },
+        }) as { reply: string; offer: number };
+        return { reply: answer.reply, offer: Math.max(0, Math.round(answer.offer)) };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "The seller could not be reached" });
+      }
+    });
+
+    /**
+     * Selling your own thing. The world answers with an interested buyer and what they will pay —
+     * accepting is what turns the phone into a way of earning money rather than only spending it.
+     */
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/marketplace/interest", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const title = String(body.title ?? "").slice(0, 200);
+        const price = String(body.price ?? "").slice(0, 60);
+        const description = String(body.description ?? "").slice(0, 800);
+        const model = await resolvePhoneModel(phone, "light");
+        if (!model) return { buyer: "", amount: 0, message: "" };
+        const storyContext = await worldContext(targetChat(phone, request.query.chatId), phone);
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `${phone.document.identity.ownerName} has listed "${title}" for ${price} in the classifieds of a fictional roleplay world. Invent one person from this world who replies about it, and what they would actually pay — they may lowball, haggle, or offer the asking price. Respond with only JSON: {"buyer":"their name","amount":number,"message":"what they say"}. If nobody in this world would want it, respond with {"buyer":"","amount":0,"message":""}.${description ? `\n\nThe listing says: ${description}` : ""}${storyContext}${await customInstructions(phone)}`,
+          },
+          { role: "user", content: "Who is interested?" },
+        ], { temperature: 1, maxTokens: 400 });
+        const answer = parseBoundedContent(completion.content, {
+          fields: { buyer: "string", amount: "number", message: "string" },
+          defaults: { buyer: "", amount: 0, message: "" },
+          limits: { maxString: 600, perField: { buyer: 120 } },
+        }) as { buyer: string; amount: number; message: string };
+        return { buyer: answer.buyer, amount: Math.max(0, Math.round(answer.amount)), message: answer.message };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Nobody answered the listing" });
+      }
+    });
     // "About this phone" — the facts Settings shows about the device itself.
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/about", async (request, reply) => {
       try {

@@ -12,9 +12,19 @@ export const marketplaceManifest: AppManifest = {
   routes: [
     { id: "listings", path: "/", title: "Marketplace" },
     { id: "listing", path: "/listing", title: "Listing" },
+    { id: "yours", path: "/yours", title: "Your stuff" },
   ],
-  records: [{ type: "listing-cache", ownership: "phone-local" }],
-  actions: [{ id: "refresh-listings", tier: "ambient" }],
+  records: [
+    { type: "listing-cache", ownership: "phone-local" },
+    { type: "purchase", ownership: "phone-local" },
+    { type: "own-listing", ownership: "phone-local" },
+  ],
+  actions: [
+    { id: "refresh-listings", tier: "ambient" },
+    { id: "buy", tier: "story" },
+    { id: "haggle", tier: "ambient" },
+    { id: "sell", tier: "story" },
+  ],
   content: { listings: { fields: { listings: "string[]" } } },
   notifications: null,
 };
@@ -24,6 +34,31 @@ export interface Listing {
   price: string;
   seller: string;
   description: string;
+}
+
+/** Stable enough to key saved items and message threads across a refresh. */
+export function listingKey(listing: Listing) {
+  return `${listing.seller}::${listing.title}`.toLowerCase();
+}
+
+/** Free-text prices ("40 marks", "5 coins/month", "offers"). 0 means it is not a number. */
+export function priceValue(price: string) {
+  const found = price.match(/\d[\d,]*/u);
+  return found ? Number.parseInt(found[0].replace(/,/gu, ""), 10) : 0;
+}
+
+export interface OwnListing {
+  id: string;
+  title: string;
+  price: string;
+  description: string;
+  offer: { from: string; amount: number; message: string } | null;
+  sold: boolean;
+}
+
+export interface HaggleTurn {
+  from: "you" | "seller";
+  text: string;
 }
 
 /** "Seller | Price | Title | description". */

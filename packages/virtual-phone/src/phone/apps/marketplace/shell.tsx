@@ -1,19 +1,31 @@
 import React from "react";
+import { Send } from "lucide-react";
 import { PhoneAppHeader } from "../../platform/app-header";
-import { phoneRequest } from "../../platform/api";
+import { phoneRequest, recordActivity } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
-import { glyphFor, parseListing, type Listing } from "./manifest";
+import { applyTransaction, formatMoney, readAccount } from "../banking/manifest";
+import { glyphFor, listingKey, parseListing, priceValue, type HaggleTurn, type Listing, type OwnListing } from "./manifest";
+
+const newId = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `l-${Math.random().toString(36).slice(2)}`);
 
 export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "marketplace");
+  const bank = usePhoneStore(phoneId, "banking");
   const [listings, setListings] = React.useState<Listing[] | null>(null);
-  const [openIndex, setOpenIndex] = React.useState<number | null>(null);
+  const [owned, setOwned] = React.useState<Listing[]>([]);
+  const [selling, setSelling] = React.useState<OwnListing[]>([]);
+  const [threads, setThreads] = React.useState<Record<string, HaggleTurn[]>>({});
+  const [tab, setTab] = React.useState<"browse" | "yours">("browse");
+  const [openKey, setOpenKey] = React.useState<string | null>(null);
+  const [draft, setDraft] = React.useState("");
+  const [sellDraft, setSellDraft] = React.useState<{ title: string; price: string; description: string } | null>(null);
+  const [busy, setBusy] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
 
   const refresh = React.useCallback(() => {
     setLoading(true);
-    setError(null);
+    setNotice(null);
     void phoneRequest<{ listings: string[] }>(`/phones/${encodeURIComponent(phoneId)}/marketplace/listings`, {
       method: "POST", body: JSON.stringify({}),
     })
@@ -23,7 +35,7 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
         void store.set("listings", parsed).catch(() => undefined);
       })
       .catch((cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : "The marketplace could not be reached.");
+        setNotice(cause instanceof Error ? cause.message : "The marketplace could not be reached.");
         setListings((current) => current ?? []);
       })
       .finally(() => setLoading(false));
@@ -31,67 +43,281 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
 
   React.useEffect(() => {
     let active = true;
-    void store.get("listings").then((value) => {
-      if (!active) return;
-      const cached = Array.isArray(value) ? value.filter((item): item is Listing => !!item && typeof (item as Listing).title === "string") : [];
-      if (cached.length) setListings(cached);
-      else refresh();
-    }).catch(() => { if (active) refresh(); });
+    void Promise.all([store.get("listings"), store.get("owned"), store.get("selling"), store.get("threads")])
+      .then(([cachedListings, cachedOwned, cachedSelling, cachedThreads]) => {
+        if (!active) return;
+        if (Array.isArray(cachedOwned)) setOwned(cachedOwned as Listing[]);
+        if (Array.isArray(cachedSelling)) setSelling(cachedSelling as OwnListing[]);
+        if (cachedThreads && typeof cachedThreads === "object") setThreads(cachedThreads as Record<string, HaggleTurn[]>);
+        const cached = Array.isArray(cachedListings) ? cachedListings as Listing[] : [];
+        if (cached.length) setListings(cached);
+        else refresh();
+      })
+      .catch(() => { if (active) refresh(); });
     return () => { active = false; };
   }, [store, refresh]);
 
-  const open = openIndex !== null && listings ? listings[openIndex] ?? null : null;
+  const open = listings?.find((listing) => listingKey(listing) === openKey) ?? null;
+  const openThread = openKey ? threads[openKey] ?? [] : [];
+  /** The price the seller has come down to in this thread, if they have moved at all. */
+  const agreed = openThread.reduce((best, turn) => turn.from === "seller" && turn.text.startsWith("§") ? Number(turn.text.slice(1).split("|")[0]) || best : best, 0);
+  const askingPrice = open ? priceValue(open.price) : 0;
+  const payable = agreed || askingPrice;
 
-  /**
-   * The image slot renders whether or not an image exists. Step 11.3 fills it; until then the
-   * caption and source carry the listing on their own, which is a finished page rather than a
-   * placeholder.
-   */
-  const photo = (listing: Listing, hero = false) => (
+  const persistOwned = (next: Listing[]) => { setOwned(next); void store.set("owned", next).catch(() => undefined); };
+  const persistSelling = (next: OwnListing[]) => { setSelling(next); void store.set("selling", next).catch(() => undefined); };
+  const persistThreads = (next: Record<string, HaggleTurn[]>) => { setThreads(next); void store.set("threads", next).catch(() => undefined); };
+
+  /** Money leaves the same account Banking shows, or the purchase does not happen. */
+  const buy = async (listing: Listing) => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const cost = payable;
+      const account = readAccount(await bank.get("account").catch(() => null));
+      const hasBanking = account.transactions.length > 0 || account.balance !== 0;
+      if (cost > 0 && hasBanking) {
+        if (account.balance < cost) {
+          setNotice(`You are short. ${listing.price} wanted, ${formatMoney(account.balance, account.currency)} in the account.`);
+          return;
+        }
+        await bank.set("account", applyTransaction(account, {
+          id: newId(),
+          at: new Date().toISOString(),
+          amount: -cost,
+          description: `Bought ${listing.title} from ${listing.seller}`,
+          source: "user",
+        })).catch(() => undefined);
+      }
+      persistOwned([listing, ...owned]);
+      recordActivity(phoneId, `bought ${listing.title} from ${listing.seller}${cost ? ` for ${cost}` : ""}`);
+      setNotice(`Bought. ${listing.seller} is expecting you.`);
+      setOpenKey(null);
+      setTab("yours");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const message = async (listing: Listing) => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    const key = listingKey(listing);
+    const history = (threads[key] ?? [])
+      .filter((turn) => !turn.text.startsWith("§"))
+      .map((turn) => `${turn.from === "you" ? "You" : listing.seller}: ${turn.text}`)
+      .join("\n");
+    const withMine = { ...threads, [key]: [...(threads[key] ?? []), { from: "you" as const, text }] };
+    persistThreads(withMine);
+    setDraft("");
+    setBusy(true);
+    try {
+      const response = await phoneRequest<{ reply: string; offer: number }>(`/phones/${encodeURIComponent(phoneId)}/marketplace/message`, {
+        method: "POST",
+        body: JSON.stringify({ seller: listing.seller, item: listing.title, price: listing.price, history, text }),
+      });
+      const turns: HaggleTurn[] = [];
+      if (response.reply.trim()) turns.push({ from: "seller", text: response.reply.trim() });
+      // A moved price is recorded as a marker turn so it survives a reload without another field.
+      if (response.offer > 0 && response.offer !== askingPrice) turns.push({ from: "seller", text: `§${response.offer}|` });
+      persistThreads({ ...withMine, [key]: [...(withMine[key] ?? []), ...turns] });
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "No reply.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const listForSale = async () => {
+    if (!sellDraft?.title.trim() || busy) return;
+    setBusy(true);
+    setNotice(null);
+    const entry: OwnListing = {
+      id: newId(),
+      title: sellDraft.title.trim(),
+      price: sellDraft.price.trim() || "Offers",
+      description: sellDraft.description.trim(),
+      offer: null,
+      sold: false,
+    };
+    const next = [entry, ...selling];
+    persistSelling(next);
+    recordActivity(phoneId, `listed ${entry.title} for sale at ${entry.price}`);
+    setSellDraft(null);
+    setTab("yours");
+    try {
+      const response = await phoneRequest<{ buyer: string; amount: number; message: string }>(`/phones/${encodeURIComponent(phoneId)}/marketplace/interest`, {
+        method: "POST", body: JSON.stringify({ title: entry.title, price: entry.price, description: entry.description }),
+      });
+      if (response.buyer.trim() && response.amount > 0) {
+        persistSelling(next.map((item) => item.id === entry.id
+          ? { ...item, offer: { from: response.buyer.trim(), amount: response.amount, message: response.message } }
+          : item));
+      }
+    } catch {
+      // Nobody answering is a valid outcome for a classified ad.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const acceptOffer = async (entry: OwnListing) => {
+    if (!entry.offer) return;
+    const account = readAccount(await bank.get("account").catch(() => null));
+    if (account.transactions.length > 0 || account.balance !== 0) {
+      await bank.set("account", applyTransaction(account, {
+        id: newId(),
+        at: new Date().toISOString(),
+        amount: entry.offer.amount,
+        description: `Sold ${entry.title} to ${entry.offer.from}`,
+        source: "user",
+      })).catch(() => undefined);
+    }
+    persistSelling(selling.map((item) => item.id === entry.id ? { ...item, sold: true } : item));
+    recordActivity(phoneId, `sold ${entry.title} to ${entry.offer.from} for ${entry.offer.amount}`);
+    setNotice(`Sold to ${entry.offer.from}.`);
+  };
+
+  const photo = (listing: { title: string; description: string }, hero = false) => (
     <span className={`vp-market-photo${hero ? " vp-market-photo--hero" : ""}`} aria-hidden="true">
-      {glyphFor(listing)}
+      {glyphFor({ title: listing.title, description: listing.description, price: "", seller: "" })}
     </span>
   );
+
+  const headerTitle = sellDraft ? "List something" : open ? open.title : tab === "yours" ? "Your stuff" : "Marketplace";
 
   return (
     <section aria-labelledby="marketplace-title" className="vp-appview">
       <PhoneAppHeader
-        title={open ? open.title : "Marketplace"}
+        title={headerTitle}
         titleId="marketplace-title"
         closeLabel="Close Marketplace"
-        onBack={() => open ? setOpenIndex(null) : onBack()}
+        onBack={() => {
+          if (sellDraft) return setSellDraft(null);
+          if (open) return setOpenKey(null);
+          if (tab === "yours") return setTab("browse");
+          onBack();
+        }}
         onClose={onClose}
-        actions={open ? [] : [{ id: "refresh-listings", icon: "refresh", label: "Refresh listings", kind: "button", disabled: loading, reason: "Refreshing" }]}
-        onAction={(actionId) => { if (actionId === "refresh-listings") refresh(); }}
+        actions={open || sellDraft ? [] : [
+          { id: "sell", icon: "add", label: "List something", kind: "button" },
+          { id: "refresh-listings", icon: "refresh", label: "Refresh listings", kind: "button", disabled: loading, reason: "Refreshing" },
+        ]}
+        onAction={(actionId) => {
+          if (actionId === "sell") setSellDraft({ title: "", price: "", description: "" });
+          if (actionId === "refresh-listings") refresh();
+        }}
       />
-      {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
-      {open ? (
+      {notice ? <p role="status" className="vp-muted-note">{notice}</p> : null}
+
+      {sellDraft ? (
+        <form className="vp-card vp-stack" style={{ gap: "0.5rem" }} onSubmit={(event) => { event.preventDefault(); void listForSale(); }}>
+          <p className="vp-muted-note">Someone in this world will answer, or nobody will.</p>
+          <label><span className="vp-sr-only">What are you selling</span>
+            <input value={sellDraft.title} onChange={(event) => setSellDraft({ ...sellDraft, title: event.target.value })} placeholder="What are you selling?" maxLength={120} required autoFocus className="vp-input" />
+          </label>
+          <label><span className="vp-sr-only">Asking price</span>
+            <input value={sellDraft.price} onChange={(event) => setSellDraft({ ...sellDraft, price: event.target.value })} placeholder="Asking price" maxLength={60} className="vp-input" />
+          </label>
+          <label><span className="vp-sr-only">Description</span>
+            <textarea value={sellDraft.description} onChange={(event) => setSellDraft({ ...sellDraft, description: event.target.value })} placeholder="Describe it. Be honest, or don't." maxLength={600} rows={4} className="vp-textarea" />
+          </label>
+          <button type="submit" className="vp-accent-btn" disabled={busy || !sellDraft.title.trim()}>{busy ? "Posting…" : "Post listing"}</button>
+        </form>
+      ) : open ? (
         <div className="vp-stack" style={{ gap: "0.625rem" }}>
           {photo(open, true)}
-          <h3 className="vp-page-heading">{open.title}</h3>
-          <p className="vp-thread-name">{open.price}</p>
-          <p className="vp-muted-note">Listed by {open.seller}</p>
-          <div className="vp-page-body"><p style={{ whiteSpace: "pre-wrap" }}>{open.description}</p></div>
-        </div>
-      ) : !listings ? (
-        <div role="status" aria-label="Loading listings" className="vp-market-grid">
-          {[0, 1, 2, 3].map((index) => <span key={index} className="vp-skeleton" style={{ aspectRatio: "1 / 1", borderRadius: "1rem" }} />)}
-        </div>
-      ) : listings.length === 0 ? (
-        <p className="vp-muted-note">Nothing for sale right now. Refresh to see what turns up.</p>
-      ) : (
-        <div className="vp-market-grid" aria-busy={loading}>
-          {listings.map((listing, index) => (
-            <button key={`${listing.title}-${index}`} type="button" onClick={() => setOpenIndex(index)} className="vp-market-tile">
-              {photo(listing)}
-              <span className="vp-market-body">
-                <span className="vp-market-price">{listing.price}</span>
-                <span className="vp-market-title">{listing.title}</span>
-                <span className="vp-market-seller">{listing.seller}</span>
-              </span>
+          <div className="vp-market-headline">
+            <span className="vp-market-price vp-market-price--hero">{agreed ? formatMoney(agreed, "") .trim() : open.price}</span>
+            {agreed ? <span className="vp-market-was">{open.price}</span> : null}
+          </div>
+          <h3 className="vp-page-heading" style={{ margin: 0 }}>{open.title}</h3>
+          <p className="vp-market-seller">Listed by {open.seller}</p>
+          <p className="vp-page-body" style={{ whiteSpace: "pre-wrap" }}>{open.description}</p>
+          <div className="vp-review-actions">
+            <button type="button" className="vp-accent-btn" disabled={busy} onClick={() => void buy(open)}>
+              {payable ? `Buy for ${payable}` : "Take it"}
             </button>
-          ))}
+            <button type="button" className="vp-surface-btn" onClick={() => setOpenKey(openKey)}>Ask about it</button>
+          </div>
+
+          {openThread.length ? (
+            <div className="vp-bubbles" style={{ maxHeight: "12rem" }}>
+              {openThread.filter((turn) => !turn.text.startsWith("§")).map((turn, index) => (
+                <div key={index} className={`vp-bubble ${turn.from === "you" ? "vp-bubble--self" : "vp-bubble--other"}`}>{turn.text}</div>
+              ))}
+            </div>
+          ) : null}
+          <form className="vp-composer" onSubmit={(event) => { event.preventDefault(); void message(open); }}>
+            <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Message {open.seller}</span>
+              <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={`Message ${open.seller}`} maxLength={800} disabled={busy} className="vp-input" />
+            </label>
+            <button type="submit" aria-label="Send" disabled={busy || !draft.trim()} className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Send size="1rem" aria-hidden="true" /></button>
+          </form>
         </div>
+      ) : (
+        <>
+          <div className="vp-chip-row" role="tablist" aria-label="Marketplace sections">
+            <button type="button" role="tab" aria-selected={tab === "browse"} onClick={() => setTab("browse")} className={`vp-chip${tab === "browse" ? " vp-chip--active" : ""}`}>Browse</button>
+            <button type="button" role="tab" aria-selected={tab === "yours"} onClick={() => setTab("yours")} className={`vp-chip${tab === "yours" ? " vp-chip--active" : ""}`}>
+              Your stuff{owned.length + selling.length ? ` (${owned.length + selling.length})` : ""}
+            </button>
+          </div>
+
+          {tab === "yours" ? (
+            <div className="vp-stack" style={{ gap: "0.5rem" }}>
+              {selling.length === 0 && owned.length === 0 ? (
+                <p className="vp-muted-note">Nothing bought and nothing listed. Sell something with the + button.</p>
+              ) : null}
+              {selling.map((entry) => (
+                <div key={entry.id} className={entry.offer && !entry.sold ? "vp-review-card" : "vp-ledger-row"}>
+                  <span className="vp-ledger-what">
+                    <span className="vp-ledger-desc">{entry.title}</span>
+                    <span className="vp-ledger-meta">{entry.sold ? "Sold" : `Listed at ${entry.price}`}</span>
+                    {entry.offer && !entry.sold ? (
+                      <>
+                        <span className="vp-ledger-meta" style={{ whiteSpace: "normal", marginTop: "0.25rem" }}>
+                          <strong>{entry.offer.from}</strong>: {entry.offer.message}
+                        </span>
+                        <div className="vp-review-actions" style={{ marginTop: "0.5rem" }}>
+                          <button type="button" className="vp-accent-btn" onClick={() => void acceptOffer(entry)}>Accept {entry.offer.amount}</button>
+                          <button type="button" className="vp-store-remove" onClick={() => persistSelling(selling.filter((item) => item.id !== entry.id))}>Withdraw</button>
+                        </div>
+                      </>
+                    ) : null}
+                  </span>
+                </div>
+              ))}
+              {owned.map((listing, index) => (
+                <div key={`${listingKey(listing)}-${index}`} className="vp-ledger-row">
+                  <span className="vp-ledger-what">
+                    <span className="vp-ledger-desc">{listing.title}</span>
+                    <span className="vp-ledger-meta">Bought from {listing.seller}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : !listings ? (
+            <div role="status" aria-label="Loading listings" className="vp-market-grid">
+              {[0, 1, 2, 3].map((index) => <span key={index} className="vp-skeleton" style={{ aspectRatio: "1 / 1", borderRadius: "1rem" }} />)}
+            </div>
+          ) : listings.length === 0 ? (
+            <p className="vp-muted-note">Nothing for sale right now. Refresh to see what turns up.</p>
+          ) : (
+            <div className="vp-market-grid" aria-busy={loading}>
+              {listings.map((listing, index) => (
+                <button key={`${listingKey(listing)}-${index}`} type="button" onClick={() => setOpenKey(listingKey(listing))} className="vp-market-tile">
+                  {photo(listing)}
+                  <span className="vp-market-body">
+                    <span className="vp-market-price">{listing.price}</span>
+                    <span className="vp-market-title">{listing.title}</span>
+                    <span className="vp-market-seller">{listing.seller}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </section>
   );

@@ -111,6 +111,9 @@ export const phoneStylesheet = `
 .vp-market-title { font-size: 0.75rem; font-weight: 650; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .vp-market-price { font-size: 0.8125rem; font-weight: 700; color: var(--vp-accent); }
 .vp-market-seller { font-size: 0.625rem; color: var(--vp-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-market-headline { display: flex; align-items: baseline; gap: 0.5rem; }
+.vp-market-price--hero { font-size: 1.5rem; font-weight: 700; }
+.vp-market-was { font-size: 0.8125rem; color: var(--vp-muted); text-decoration: line-through; }
 
 /* Banking leads with the balance on a card face, and the log reads as a ledger. */
 .vp-bank-card { position: relative; overflow: hidden; display: grid; gap: 0.25rem; padding: 1.125rem 1.25rem 1.25rem; border-radius: 1.25rem; color: #fff; background: linear-gradient(140deg, #065f46 0%, #047857 45%, #0f766e 100%); box-shadow: 0 2px 6px rgb(0 0 0 / 0.12), 0 16px 40px rgb(0 0 0 / 0.22); }

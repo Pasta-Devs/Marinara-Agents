@@ -21,7 +21,7 @@ import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, p
 import { noodlerRManifest } from "../packages/virtual-phone/src/phone/apps/noodler-r/manifest";
 import { cameraManifest } from "../packages/virtual-phone/src/phone/apps/camera/manifest";
 import { applyTransaction, bankingManifest, emptyAccount, parseProposal, readAccount } from "../packages/virtual-phone/src/phone/apps/banking/manifest";
-import { glyphFor, marketplaceManifest, parseListing } from "../packages/virtual-phone/src/phone/apps/marketplace/manifest";
+import { glyphFor, listingKey, marketplaceManifest, parseListing, priceValue } from "../packages/virtual-phone/src/phone/apps/marketplace/manifest";
 import { draftMail, mailFromLine, mailManifest, mergeMail, parseEmail, readStoredMail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
@@ -464,6 +464,12 @@ async function main() {
   assert.equal(parseListing("").title, "Unnamed item");
   assert.equal(glyphFor(parseListing("Nel | 40 | Rusted bicycle | downhill")), "\u25a4");
   assert.equal(glyphFor(parseListing("Nel | 40 | Odd trinket | unclear")), "\u25a2");
+  // Buying charges the real balance, so a price that will not parse must not silently cost 0.
+  assert.equal(priceValue("40 marks"), 40);
+  assert.equal(priceValue("1,200 crowns"), 1200);
+  assert.equal(priceValue("Offers"), 0);
+  assert.equal(priceValue(""), 0);
+  assert.equal(listingKey(parseListing("Nel | 40 | Rusted bicycle | x")), "nel::rusted bicycle");
   assert.deepEqual(parsePagePost("Morning swamp yoga pics | locked"), { text: "Morning swamp yoga pics", locked: true });
   assert.deepEqual(parsePagePost("Hello everyone | free"), { text: "Hello everyone", locked: false });
   assert.deepEqual(parsePagePost("No marker at all"), { text: "No marker at all", locked: false });
