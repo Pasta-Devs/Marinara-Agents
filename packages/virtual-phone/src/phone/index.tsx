@@ -66,7 +66,7 @@ phoneAppRegistry.register({
 phoneAppRegistry.register({
   manifest: noodlerManifest,
   component: lazyShell(() => import("./apps/noodler/shell"), "NoodlerShell"),
-  props: (context) => ({ phoneId: context.phone.phoneId, ownerName: context.phone.ownerName }),
+  props: (context) => ({ phoneId: context.phone.phoneId, ownerName: context.phone.ownerName, chatId: context.chatId }),
 });
 phoneAppRegistry.register({
   manifest: contactsManifest,
@@ -77,7 +77,7 @@ phoneAppRegistry.register({
 phoneAppRegistry.register({
   manifest: mailManifest,
   component: lazyShell(() => import("./apps/mail/shell"), "MailShell"),
-  props: (context) => ({ phoneId: context.phone.phoneId, ownerName: context.phone.ownerName }),
+  props: (context) => ({ phoneId: context.phone.phoneId, ownerName: context.phone.ownerName, chatId: context.chatId }),
 });
 phoneAppRegistry.register({
   manifest: galleryManifest,

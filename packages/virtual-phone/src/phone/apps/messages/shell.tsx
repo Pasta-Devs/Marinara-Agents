@@ -19,6 +19,7 @@ interface Thread {
   reply: { status: "pending" | "failed"; at: string; error?: string } | null;
   /** "chat" threads are Engine conversations: real story history, and sending posts into the chat. */
   kind: "chat" | "phone";
+  mode?: "conversation" | "roleplay" | "game";
 }
 interface MessagingPayload {
   contacts: Array<{ phoneId: string; ownerId?: string; ownerName: string }>;
@@ -163,7 +164,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
               <button key={thread.id} type="button" onClick={() => setActiveThreadId(thread.id)} className="vp-thread-row">
                 <PhoneAvatar name={thread.otherName} url={avatarFor(thread.otherPhoneId)} />
                 <span className="vp-thread-body">
-                  <span className="vp-thread-name">{thread.otherName}{thread.kind === "chat" ? <span className="vp-muted-note"> · in the story</span> : null}</span>
+                 <span className="vp-thread-name">{thread.otherName}{thread.kind === "chat" ? <span className="vp-muted-note"> · {thread.mode ?? "roleplay"}</span> : null}</span>
                   <span className="vp-thread-preview">{last ? `${last.from === phoneId ? "You: " : ""}${last.text}` : "No messages yet"}</span>
                 </span>
                 {thread.unread > 0 ? <span className="vp-badge" aria-label={`${thread.unread} unread`}>{thread.unread}</span> : null}

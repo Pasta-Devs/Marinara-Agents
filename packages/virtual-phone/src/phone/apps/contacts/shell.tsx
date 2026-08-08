@@ -121,6 +121,7 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
             {openContact.phoneLabel?.trim() ? <span className="vp-thread-preview">{openContact.phoneLabel}</span> : null}
             {openContact.bio?.trim() ? <p className="vp-thread-preview">{openContact.bio}</p> : null}
             {openContact.source?.trim() ? <span className="vp-muted-note">{openContact.source}</span> : null}
+            {openContact.kind === "phone" ? <span className="vp-muted-note">Engine character or persona</span> : null}
             <span className="vp-muted-note">
               {openContact.phoneId ? threadStatus(openContact.phoneId) : "No phone in this chat"}
             </span>

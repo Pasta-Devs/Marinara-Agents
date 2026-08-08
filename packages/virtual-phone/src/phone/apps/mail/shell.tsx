@@ -20,13 +20,13 @@ function when(at: string) {
     : date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phoneId: string; ownerName?: string; onBack: () => void; onClose: () => void }) {
+export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }: { phoneId: string; ownerName?: string; chatId: string | null; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "mail");
   const [mail, setMail] = React.useState<MailMessage[] | null>(null);
   const [folder, setFolder] = React.useState<MailFolder>("inbox");
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [composing, setComposing] = React.useState<{ to: string; subject: string; body: string; replyTo?: string } | null>(null);
-  const [contacts, setContacts] = React.useState<string[]>([]);
+  const [contacts, setContacts] = React.useState<Array<{ name: string; ownerId?: string; phoneId?: string }>>([]);
   const [loading, setLoading] = React.useState(false);
   const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -41,7 +41,7 @@ export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phon
   const refresh = React.useCallback(() => {
     setLoading(true);
     setError(null);
-    void phoneRequest<{ emails: string[] }>(`/phones/${encodeURIComponent(phoneId)}/mail/inbox`, { method: "POST", body: JSON.stringify({}) })
+      void phoneRequest<{ emails: string[] }>(`/phones/${encodeURIComponent(phoneId)}/mail/inbox`, { method: "POST", body: JSON.stringify({}) })
       .then((response) => {
         const at = new Date().toISOString();
         const arrived = response.emails.map((line) => mailFromLine(line, ownerName, at));
@@ -64,7 +64,7 @@ export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phon
         setMail((current) => current ?? []);
       })
       .finally(() => setLoading(false));
-  }, [phoneId, ownerName, store]);
+  }, [phoneId, ownerName, store, chatId]);
 
   React.useEffect(() => {
     let active = true;
@@ -81,8 +81,10 @@ export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phon
   // stranger and letting the model decide who is behind it is the point.
   React.useEffect(() => {
     let active = true;
-    void phoneRequest<{ contacts: Array<{ ownerName: string }> }>(`/phones/${encodeURIComponent(phoneId)}/messaging`)
-      .then((payload) => { if (active) setContacts(payload.contacts.map((contact) => contact.ownerName)); })
+      void phoneRequest<{ contacts: Array<{ ownerName: string; ownerId?: string; phoneId?: string }> }>(`/phones/${encodeURIComponent(phoneId)}/messaging`)
+        .then((payload) => {
+          if (active) setContacts(payload.contacts.map((contact) => ({ name: contact.ownerName, ownerId: contact.ownerId, phoneId: contact.phoneId })));
+        })
       .catch((cause: unknown) => {
         if (active) setError(cause instanceof Error ? cause.message : "Contacts could not be loaded.");
       });
@@ -191,7 +193,7 @@ export function MailShell({ phoneId, ownerName = "Me", onBack, onClose }: { phon
             />
           </label>
           <datalist id="vp-mail-contacts">
-            {contacts.map((name) => <option key={name} value={name} />)}
+             {contacts.map((contact) => <option key={contact.phoneId ?? contact.ownerId ?? contact.name} value={contact.name} />)}
           </datalist>
           <label><span className="vp-sr-only">Subject</span>
             <input value={composing.subject} onChange={(event) => setComposing({ ...composing, subject: event.target.value })} placeholder="Subject" maxLength={200} className="vp-input" />

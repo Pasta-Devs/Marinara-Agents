@@ -22,8 +22,10 @@ interface CapabilityContext {
         documents: ConstructorParameters<typeof PhoneIdentityService>[0];
         getChat(chatId: string): Promise<{
           id: string;
+          mode?: "conversation" | "roleplay" | "game";
           personaId: string | null;
           characterIds: string[];
+          metadata?: unknown;
         } | null>;
         listMessages?(chatId: string): Promise<Array<{
           id: string;
@@ -48,7 +50,7 @@ interface CapabilityContext {
         listCharacters(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
         listPersonas(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
         listLorebooks?(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
-        listEligibleLorebookEntries?(selection: { lorebookIds: string[] }): Promise<Array<{
+        listEligibleLorebookEntries?(selection: { lorebookIds: string[]; entryIds?: string[] }): Promise<Array<{
           name: string;
           content: string;
           description: string;
@@ -285,17 +287,38 @@ export async function activate({ api }: CapabilityContext) {
    * entries *without* character/persona scope. The filter fields never reach us. That is an Engine
    * change and belongs with the Stage 11 contract ask.
    */
-  const loreContext = async (phone?: Awaited<ReturnType<typeof findPhone>>) => {
-    try {
-      if (!api.runtime.resources.listLorebooks || !api.runtime.resources.listEligibleLorebookEntries) return "";
-       const settings = phone ? phoneGenSettings(phone) : null;
-       if (settings?.lorebookMode === "none") return "";
-       const selectedOnly = settings?.lorebookMode === "selected";
-       const attached = selectedOnly ? settings.lorebookIds : [];
-       const books = (await api.runtime.resources.listLorebooks())
-        .filter((book) => !selectedOnly || attached.includes(book.id));
-      if (!books.length) return "";
-      const entries = await api.runtime.resources.listEligibleLorebookEntries({ lorebookIds: books.map((book) => book.id) });
+  const loreContext = async (phone?: Awaited<ReturnType<typeof findPhone>>, chatId?: string) => {
+     try {
+       if (!api.runtime.resources.listLorebooks || !api.runtime.resources.listEligibleLorebookEntries) return "";
+        const settings = phone ? phoneGenSettings(phone) : null;
+        if (settings?.lorebookMode === "none") return "";
+        const selectedOnly = settings?.lorebookMode === "selected";
+        const attached = selectedOnly ? settings.lorebookIds : [];
+        const chat = chatId ? await api.runtime.persistence.getChat(chatId).catch(() => null) : null;
+        const books = (await api.runtime.resources.listLorebooks()).filter((book) => {
+          if (selectedOnly) return attached.includes(book.id);
+          const data = book.data && typeof book.data === "object" ? book.data as Record<string, unknown> : {};
+          const characterIds = [
+            ...(Array.isArray(data.characterIds) ? data.characterIds.filter((id): id is string => typeof id === "string") : []),
+            ...(typeof data.characterId === "string" ? [data.characterId] : []),
+          ];
+          const personaIds = [
+            ...(Array.isArray(data.personaIds) ? data.personaIds.filter((id): id is string => typeof id === "string") : []),
+            ...(typeof data.personaId === "string" ? [data.personaId] : []),
+          ];
+          const bookChatId = typeof data.chatId === "string" ? data.chatId : null;
+          const metadata = chat?.metadata && typeof chat.metadata === "object" ? chat.metadata as Record<string, unknown> : {};
+          const activeLorebookIds = Array.isArray(metadata.activeLorebookIds)
+            ? metadata.activeLorebookIds.filter((id): id is string => typeof id === "string")
+            : [];
+          return data.isGlobal === true
+            || activeLorebookIds.includes(book.id)
+            || bookChatId === chatId
+            || Boolean(chat && characterIds.some((id) => chat.characterIds.includes(id)))
+            || Boolean(chat?.personaId && personaIds.includes(chat.personaId));
+        });
+       if (!books.length) return "";
+       const entries = await api.runtime.resources.listEligibleLorebookEntries({ lorebookIds: books.map((book) => book.id), entryIds: [] });
       return entries.slice(0, 8)
         .map((entry) => `${entry.name}: ${(entry.content || entry.description || "").slice(0, 200)}`)
         .filter((line) => !line.endsWith(": "))
@@ -314,7 +337,7 @@ export async function activate({ api }: CapabilityContext) {
   /** Total ceiling, keeping the most recent end. ~3k tokens, so a small-context model still fits. */
   const STORY_BUDGET_CHARS = 12_000;
   const worldContext = async (chatId: string | undefined, phone?: Awaited<ReturnType<typeof findPhone>>) => {
-    const lore = await loreContext(phone);
+    const lore = await loreContext(phone, chatId);
     let story = "";
     if (chatId && api.runtime.persistence.listMessages) {
       story = (await api.runtime.persistence.listMessages(chatId)).slice(-STORY_MESSAGES)
@@ -341,13 +364,19 @@ export async function activate({ api }: CapabilityContext) {
       const history = thread.document.messages.slice(-20)
         .map((message) => `${message.from === recipientPhoneId ? recipientName : senderName}: ${message.text}`)
         .join("\n");
-      const sharedChatId = recipient.document.identity.chatScope
-        .find((chatId) => sender.document.identity.chatScope.includes(chatId));
-      const storyContext = await worldContext(sharedChatId, recipient);
+       const sharedChatId = recipient.document.identity.chatScope
+         .find((chatId) => sender.document.identity.chatScope.includes(chatId));
+       const sharedChat = sharedChatId ? await api.runtime.persistence.getChat(sharedChatId).catch(() => null) : null;
+       const modeInstruction = sharedChat?.mode === "conversation"
+         ? "This is a conversation chat: answer naturally and directly, without roleplay narration."
+         : sharedChat?.mode === "game"
+           ? "This is a game chat: keep the reply actionable and consistent with the current game state or turn."
+           : "This is a roleplay chat: stay in character and keep the reply grounded in the scene.";
+       const storyContext = await worldContext(sharedChatId, recipient);
       const completion = await model.chatComplete([
         {
           role: "system",
-          content: `You are ${recipientName}, texting ${senderName} on your phone inside an ongoing roleplay. Write one short in-character text message reply. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${await ownerCard(recipient, "Who is texting — about")}${storyContext}${await customInstructions(recipient)}`,
+           content: `You are ${recipientName}, texting ${senderName} on your phone. ${modeInstruction} Write one short reply in your own voice. Respond with only JSON: {"reply":"your message"}. If ${recipientName} would leave the message on read, respond with {"reply":""}.${await ownerCard(recipient, "Who is texting — about")}${storyContext}${await customInstructions(recipient)}`,
         },
         { role: "user", content: history },
       ], { temperature: 0.9, maxTokens: 250 });
@@ -572,6 +601,12 @@ export async function activate({ api }: CapabilityContext) {
         const reason = leftOnRead
           ? `${other.document.identity.ownerName} never replied to your last exchange.`
           : "The conversation has gone quiet for a while.";
+        const chat = chatId ? await api.runtime.persistence.getChat(chatId).catch(() => null) : null;
+        const modeInstruction = chat?.mode === "conversation"
+          ? "This is a conversation chat: keep the reply natural and direct."
+          : chat?.mode === "game"
+            ? "This is a game chat: make the reply useful for the current turn and state."
+            : "This is a roleplay chat: stay in character and grounded in the scene.";
         const completion = await model.chatComplete([
           {
             role: "system",
@@ -828,7 +863,7 @@ export async function activate({ api }: CapabilityContext) {
         .filter((character) => isPersona || character.id !== ownerId)
         .map((character) => readName(character.data, "Character"))
         .join(", ") || "The story";
-      const messages = conversationTexts(await api.runtime.persistence.listMessages(chatId).catch(() => []))
+       const messages = conversationTexts(await api.runtime.persistence.listMessages(chatId).catch(() => []))
         .slice(-STORY_MESSAGES)
         .map((message) => ({
           id: message.id,
@@ -846,9 +881,10 @@ export async function activate({ api }: CapabilityContext) {
         otherName,
         unread: 0,
         messages,
-        reply: null,
-        kind: "chat" as const,
-      });
+         reply: null,
+         kind: "chat" as const,
+         mode: chat.mode ?? "roleplay",
+       });
     }
     return threads;
   };
@@ -891,7 +927,7 @@ export async function activate({ api }: CapabilityContext) {
               kind: "phone" as const,
             })),
         ];
-        return { contacts, threads };
+         return { contacts, threads };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
       }
@@ -1592,15 +1628,17 @@ export async function activate({ api }: CapabilityContext) {
 
         // A recipient who has a phone in this chat answers in their own voice; anyone else is
         // whoever the model decides lives behind that address.
-        const contact = (await contactsFor(request.params.phoneId))
-          .find((candidate) => candidate.ownerName.toLowerCase() === to.toLowerCase()
-            || to.toLowerCase().startsWith(`${candidate.ownerName.toLowerCase().replace(/\s+/gu, ".")}@`));
+         const contact = (await contactsFor(request.params.phoneId))
+           .find((candidate) => candidate.ownerName.toLowerCase() === to.toLowerCase()
+             || to.toLowerCase().startsWith(`${candidate.ownerName.toLowerCase().replace(/\s+/gu, ".")}@`));
+        const manual = (await phones.listContacts(request.params.phoneId)).find(({ document }) =>
+          document.name.toLowerCase() === to.toLowerCase());
         const recipientPhone = contact ? await findPhone(contact.phoneId) : null;
         const storyContext = await worldContext(chatId, phone);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are ${recipientPhone ? recipientPhone.document.identity.ownerName : `whoever reads mail sent to "${to}" in this fictional world — a person, a company's support desk, or an automated system, whichever fits`}, replying to an email from ${phone.document.identity.ownerName} inside a roleplay story. Write the reply they would actually send: it may be warm, curt, boilerplate, an auto-responder, or a refusal. Respond with only JSON: {"from":"sender name","subject":"reply subject","body":"the reply"}. If nobody would reply to this, respond with {"from":"","subject":"","body":""}.${recipientPhone ? await ownerCard(recipientPhone, "About the recipient") : ""}${storyContext}${await customInstructions(phone)}`,
+             content: `You are ${recipientPhone ? recipientPhone.document.identity.ownerName : manual ? manual.document.name : `whoever reads mail sent to "${to}" in this fictional world — a person, a company's support desk, or an automated system, whichever fits`}, replying to an email from ${phone.document.identity.ownerName} inside a roleplay story. ${modeInstruction} Write the reply they would actually send: it may be warm, curt, boilerplate, an auto-responder, or a refusal. Respond with only JSON: {"from":"sender name","subject":"reply subject","body":"the reply"}. If nobody would reply to this, respond with {"from":"","subject":"","body":""}.${recipientPhone ? await ownerCard(recipientPhone, "About the recipient") : manual?.document.bio ? `\n\nAbout the recipient:\n${manual.document.bio}` : ""}${storyContext}${await customInstructions(phone)}`,
           },
           { role: "user", content: `To: ${to}\nSubject: ${subject}\n\n${text}` },
         ], { temperature: 0.9, maxTokens: 1200 });
