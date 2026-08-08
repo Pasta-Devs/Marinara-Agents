@@ -217,14 +217,23 @@ async function main() {
         "Import a character",
         "Open Summary Prompt, then Chat Summary.",
         "Open Prompt Preset Editor.",
-        "Add Agent Sections -> Long-Term Memory.",
+        "Add an Agent Section for Long-Term Memory.",
         "These didn't make it through extraction cleanly. Recover anything worth keeping, or delete the rest.",
+        "When you get a response, peek the prompt and make sure the memories are reaching your chat context.",
+        "Under the Hood",
+        "Writing to memory (Extraction)",
+        "Reading from memory (Recall)",
         "Close",
         ])
         assert.ok(
           artifactClient.includes(copy),
           `Generated client is missing: ${copy}`,
         );
+      assert.doesNotMatch(
+        artifactClient,
+        /gentlest on-ramp/u,
+        "The removed Character recommendation must not return to the wizard",
+      );
       for (const copy of [
         "Branch group",
         "Persona",
@@ -937,7 +946,7 @@ async function main() {
       assert.equal(
         await page
           .locator('[data-ltm-surface="onboarding"]')
-          .getByText("Step 1 of 6 · Save")
+           .getByText("Step 1 of 7 · Save")
           .count(),
         1,
       );
@@ -957,7 +966,7 @@ async function main() {
       await onboardingNext.click();
       assert.match(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
-        /In Conversation, the Engine places recalled memory automatically/u,
+        /In Conversation mode, the Engine places recalled memories automatically/u,
       );
       assert.doesNotMatch(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
@@ -966,7 +975,7 @@ async function main() {
       assert.equal(
         await page
           .locator('[data-ltm-surface="onboarding"]')
-          .getByText("Step 3 of 6 · Activate")
+           .getByText("Step 3 of 7 · Activate")
           .count(),
         1,
       );
@@ -993,6 +1002,10 @@ async function main() {
       assert.deepEqual(
         await page.locator("[data-ltm-source-choice] > button").allInnerTexts(),
         ["Chat Summary", "Lorebook", "Character"],
+      );
+      assert.deepEqual(
+        await page.locator("[data-ltm-onboarding-actions] > button").allInnerTexts(),
+        ["Back", "Next: Reviewing and saving memories", "Open chat sources"],
       );
       assert.ok(
         Math.abs(
@@ -1021,18 +1034,37 @@ async function main() {
       );
       assert.match(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
-        /send a message relevant to a saved fact[\s\S]*zero results/iu,
+        /send a message related to a saved fact[\s\S]*zero results/iu,
       );
       assert.equal(
         await page
           .locator('[data-ltm-surface="onboarding"]')
-          .getByText("Step 6 of 6 · Check")
+           .getByText("Step 6 of 7 · Check")
           .count(),
         1,
       );
       assert.equal(
         await page.locator("#ltm-onboarding-description ol li").count(),
-        1,
+        2,
+      );
+      assert.equal(
+        await page
+          .locator("#ltm-onboarding-description ol li")
+          .nth(1)
+          .innerText(),
+        "When you get a response, peek the prompt and make sure the memories are reaching your chat context.",
+      );
+      await page
+        .getByRole("button", { name: "Next: Under the Hood" })
+        .click();
+      assert.equal(await onboardingTitle.innerText(), "Under the Hood");
+      assert.equal(
+        await page.locator("#ltm-onboarding-description details").count(),
+        2,
+      );
+      assert.deepEqual(
+        await page.locator("#ltm-onboarding-description details summary").allInnerTexts(),
+        ["Writing to memory (Extraction)", "Reading from memory (Recall)"],
       );
       assert.equal(await page.getByRole("button", { name: "Close" }).count(), 1);
       await page
@@ -1243,7 +1275,7 @@ async function main() {
         .click();
       assert.match(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
-        /Open Prompt Preset Editor.*Open Sections.*Add Agent Sections -> Long-Term Memory/isu,
+        /Open Prompt Preset Editor.*Open Sections.*Add an Agent Section for Long-Term Memory/isu,
       );
       assert.equal(
         await page
@@ -1558,7 +1590,7 @@ async function main() {
        const restoredGuide = page.locator('[data-ltm-surface="onboarding"]');
        await restoredGuide.waitFor();
        assert.equal(
-         await restoredGuide.getByText("Step 4 of 6 · Import").count(),
+         await restoredGuide.getByText("Step 4 of 7 · Import").count(),
          1,
        );
        await restoredGuide.getByRole("button", { name: "Close" }).click();
@@ -2409,9 +2441,21 @@ async function main() {
       assert.equal(mobileNavigationLayout.fits, true);
       assert.equal(mobileNavigationLayout.touchTargets, true);
       assert.equal(mobileNavigationLayout.oneRow, true);
-      await mobilePage
-        .getByRole("button", { name: "Show setup guide" })
-        .click();
+       await mobilePage
+         .getByRole("button", { name: "Show setup guide" })
+         .click();
+       const onboardingFooter = mobilePage.locator(
+         '[data-ltm-onboarding-footer]',
+       );
+       const footerCloseBox = await onboardingFooter
+         .getByRole("button", { name: "Close" })
+         .boundingBox();
+       const footerNoteBox = await onboardingFooter
+         .locator(":scope > p")
+         .boundingBox();
+       assert.ok(footerCloseBox);
+       assert.ok(footerNoteBox);
+       assert.ok(footerNoteBox.x >= footerCloseBox.x + footerCloseBox.width);
        assert.ok(
          await mobilePage
            .locator(

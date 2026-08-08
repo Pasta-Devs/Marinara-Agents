@@ -84,6 +84,14 @@ const onboardingSteps = [
     mobileFlip: false,
     alt: "",
   },
+  {
+    labelKey: "ui.longTermMemory.longtermmemorydetail.underTheHood",
+    titleKey: "ui.longTermMemory.longtermmemorydetail.underTheHoodTitle",
+    mobileSprite: "Mari_thinking.png",
+    desktopSprite: "Mari_thinking.png",
+    mobileFlip: false,
+    alt: "",
+  },
 ] as const;
 
 const destinations = {
@@ -904,6 +912,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   border-top: 1px solid var(--border);
                   padding: 0.75rem 1rem;
                 }
+                [data-ltm-onboarding-footer] > p {
+                  min-width: 0;
+                  flex: 1;
+                }
                 [data-ltm-onboarding-close] {
                   min-height: 2.75rem;
                   padding: 0.375rem 0.625rem;
@@ -1198,16 +1210,6 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     "ui.longTermMemory.longtermmemorydetail.sourceChoiceAfterList",
                                   )}
                                 </p>
-                                <p>
-                                  <strong className="font-semibold text-[var(--foreground)]">
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.sourceCharacters",
-                                    )}
-                                  </strong>{" "}
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.sourceChoiceRecommendation",
-                                  )}
-                                </p>
                               </>
                             ) : onboardingStep === 4 ? (
                               <>
@@ -1259,48 +1261,181 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                   )}
                                 </p>
                               </>
-                            ) : activeChat ? (
+                            ) : onboardingStep === 5 ? (
+                              activeChat ? (
+                                <>
+                                  <p>
+                                    {localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.verifyIntro",
+                                    )}
+                                  </p>
+                                  <ol className="list-decimal list-outside space-y-1 ps-6">
+                                    <li>
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.verifySendMessage",
+                                        { value1: chatLabel },
+                                      )}
+                                    </li>
+                                    <li>
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.verifyPeekPrompt",
+                                      )}
+                                    </li>
+                                  </ol>
+                                  <p>
+                                    {localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.verifyZeroResults",
+                                    )}
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p>
+                                    {localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.verifyPrerequisite",
+                                    )}
+                                  </p>
+                                  <ol className="list-decimal list-outside space-y-1 ps-6">
+                                    <li>
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.verifyWithoutChatSendMessage",
+                                      )}
+                                    </li>
+                                    <li>
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.verifyWithoutChatInspectSummary",
+                                      )}
+                                    </li>
+                                  </ol>
+                                </>
+                              )
+                            ) : onboardingStep === 6 ? (
                               <>
                                 <p>
                                   {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.verifyIntro",
+                                    "ui.longTermMemory.longtermmemorydetail.underTheHoodIntro",
                                   )}
                                 </p>
-                                <ol className="list-decimal list-outside space-y-1 ps-6">
-                                  <li>
+                                <details className="rounded-md border border-[var(--border)] px-3 py-2">
+                                  <summary className="cursor-pointer font-semibold text-[var(--foreground)]">
                                     {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.verifySendMessage",
-                                      { value1: chatLabel },
+                                      "ui.longTermMemory.longtermmemorydetail.underTheHoodExtraction",
                                     )}
-                                  </li>
-                                </ol>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.verifyZeroResults",
-                                  )}
-                                </p>
+                                  </summary>
+                                  <div className="mt-3 space-y-3 text-sm leading-6 text-[var(--muted-foreground)]">
+                                    <p>
+                                      <strong className="font-semibold text-[var(--foreground)]">
+                                        Source notes.
+                                      </strong>{" "}
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodSourceNotes",
+                                      )}
+                                    </p>
+                                    <p>
+                                      <strong className="font-semibold text-[var(--foreground)]">
+                                        Fingerprints.
+                                      </strong>{" "}
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodFingerprints",
+                                      )}
+                                    </p>
+                                    <p>
+                                      <strong className="font-semibold text-[var(--foreground)]">
+                                        Candidate memories.
+                                      </strong>{" "}
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodCandidates",
+                                      )}
+                                    </p>
+                                    <p>
+                                      <strong className="font-semibold text-[var(--foreground)]">
+                                        Evidence.
+                                      </strong>{" "}
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodEvidence",
+                                      )}
+                                    </p>
+                                    <p>
+                                      <strong className="font-semibold text-[var(--foreground)]">
+                                        Duplicate checks.
+                                      </strong>{" "}
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodDuplicates",
+                                      )}
+                                    </p>
+                                    <p>
+                                      <strong className="font-semibold text-[var(--foreground)]">
+                                        Review.
+                                      </strong>{" "}
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodReview",
+                                      )}
+                                    </p>
+                                  </div>
+                                </details>
+                                <details className="rounded-md border border-[var(--border)] px-3 py-2">
+                                  <summary className="cursor-pointer font-semibold text-[var(--foreground)]">
+                                    {localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.underTheHoodRecall",
+                                    )}
+                                  </summary>
+                                  <div className="mt-3 space-y-3 text-sm leading-6 text-[var(--muted-foreground)]">
+                                    <ul className="list-disc list-outside space-y-2 ps-6">
+                                      <li>
+                                        <strong className="font-semibold text-[var(--foreground)]">
+                                          Direct matches.
+                                        </strong>{" "}
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodDirectMatches",
+                                        )}
+                                      </li>
+                                      <li>
+                                        <strong className="font-semibold text-[var(--foreground)]">
+                                          Word matching.
+                                        </strong>{" "}
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodWordMatching",
+                                        )}
+                                      </li>
+                                      <li>
+                                        <strong className="font-semibold text-[var(--foreground)]">
+                                          Keywords.
+                                        </strong>{" "}
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodKeywords",
+                                        )}
+                                      </li>
+                                      <li>
+                                        <strong className="font-semibold text-[var(--foreground)]">
+                                          Related memories.
+                                        </strong>{" "}
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodRelatedMemories",
+                                        )}
+                                      </li>
+                                      <li>
+                                        <strong className="font-semibold text-[var(--foreground)]">
+                                          Meaning.
+                                        </strong>{" "}
+                                        {localizeUi(
+                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodMeaning",
+                                        )}
+                                      </li>
+                                    </ul>
+                                    <p>
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodFusion",
+                                      )}
+                                    </p>
+                                    <p>
+                                      {localizeUi(
+                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodCooldown",
+                                      )}
+                                    </p>
+                                  </div>
+                                </details>
                               </>
-                            ) : (
-                              <>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.verifyPrerequisite",
-                                  )}
-                                </p>
-                                <ol className="list-decimal list-outside space-y-1 ps-6">
-                                  <li>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.verifyWithoutChatSendMessage",
-                                    )}
-                                  </li>
-                                  <li>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.verifyWithoutChatInspectSummary",
-                                    )}
-                                  </li>
-                                </ol>
-                              </>
-                            )}
+                            ) : null}
                           {onboardingStep === 3 ? (
                             <>
                               <div
@@ -1429,6 +1564,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             )
                           ) : onboardingStep === 3 ? (
                             <>
+                              <Button onClick={advanceOnboarding}>
+                                {localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.continueToReview",
+                                )}
+                              </Button>
                               {onboardingSource === "chats" ? (
                                 <>
                                   {props.chatMode === "roleplay" &&
@@ -1464,14 +1604,14 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                   )}
                                 </Button>
                               )}
-                              <Button onClick={advanceOnboarding}>
-                                {localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.continueToReview",
-                                )}
-                              </Button>
                             </>
                           ) : onboardingStep === 4 ? (
                             <>
+                              <Button onClick={advanceOnboarding}>
+                                {localizeUi(
+                                  "ui.longTermMemory.longtermmemorydetail.continueToCheck",
+                                )}
+                              </Button>
                               <Button
                                 primary
                                 onClick={async () => {
@@ -1485,9 +1625,25 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     : "ui.longTermMemory.longtermmemorydetail.chooseASource",
                                 )}
                               </Button>
-                              <Button onClick={advanceOnboarding}>
+                            </>
+                          ) : onboardingStep === 5 ? (
+                            <>
+                              <Button primary onClick={advanceOnboarding}>
                                 {localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.continueToCheck",
+                                  "ui.longTermMemory.longtermmemorydetail.nextUnderTheHood",
+                                )}
+                              </Button>
+                              <Button
+                                onClick={async () => {
+                                  if (status.data?.notes.total)
+                                    await selectDestination("vault");
+                                  else await openSources("characters");
+                                }}
+                              >
+                                {localizeUi(
+                                  status.data?.notes.total
+                                    ? "ui.longTermMemory.longtermmemorydetail.goToSavedMemories"
+                                    : "ui.longTermMemory.longtermmemorydetail.chooseASource",
                                 )}
                               </Button>
                             </>
@@ -1508,11 +1664,6 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             </Button>
                           )}
                         </div>
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          {localizeUi(
-                            "ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton",
-                          )}
-                        </p>
                       </div>
                       <div data-ltm-onboarding-sprite-wrap>
                         <picture>
@@ -1535,7 +1686,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                         </picture>
                       </div>
                     </div>
-                    <div data-ltm-onboarding-footer>
+                    <div
+                      data-ltm-onboarding-footer
+                      className="items-center gap-3"
+                    >
                       <Button
                         data-ltm-onboarding-close
                         onClick={completeOnboarding}
@@ -1544,6 +1698,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           "ui.longTermMemory.longtermmemorydetail.close",
                         )}
                       </Button>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {localizeUi(
+                          "ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton",
+                        )}
+                      </p>
                     </div>
                   </section>
                 ) : null}
