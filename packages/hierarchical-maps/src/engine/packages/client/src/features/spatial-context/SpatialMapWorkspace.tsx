@@ -51,6 +51,7 @@ import {
   usePublishSpatialSharedWorldDraft,
   useSpatialContext,
   useSpatialSharedWorlds,
+  useStartOverSpatialContext,
   useUpdateSpatialContext,
   useUpdateSpatialMapTemplate,
   useUpdateSpatialSharedWorld,
@@ -439,6 +440,7 @@ export function SpatialMapWorkspace({
   const templateMode = template !== undefined || sharedWorldMode;
   const spatial = useSpatialContext(templateMode ? null : chatId);
   const updateSpatial = useUpdateSpatialContext();
+  const startOverSpatial = useStartOverSpatialContext();
   const updateTemplate = useUpdateSpatialMapTemplate();
   const updateSharedWorld = useUpdateSpatialSharedWorld();
   const publishSharedWorld = usePublishSpatialSharedWorldDraft();
@@ -501,6 +503,8 @@ export function SpatialMapWorkspace({
   const [replacementCurrentLocationId, setReplacementCurrentLocationId] = useState<string | null>(null);
   const [replaceMapOpen, setReplaceMapOpen] = useState(false);
   const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
+  const [aiBuilderStartOver, setAiBuilderStartOver] = useState(false);
+  const [startOverPending, setStartOverPending] = useState(false);
   const [layoutEditingMode, setLayoutEditingMode] = useState<LayoutEditingMode>(null);
   const [importIdReport, setImportIdReport] = useState<ImportIdReport | null>(null);
   const [includeArtworkInExport, setIncludeArtworkInExport] = useState(true);
@@ -616,6 +620,8 @@ export function SpatialMapWorkspace({
     setMobileActionsOpen(false);
     setConflict(false);
     setAiBuilderOpen(false);
+    setAiBuilderStartOver(false);
+    setStartOverPending(false);
     setFirstSaveResult(null);
     setFirstMapGenerationSession(null);
     setRegenerateRequestId(0);
@@ -737,6 +743,8 @@ export function SpatialMapWorkspace({
     setDraftHierarchyProfile(serverHierarchyProfile);
     setServerIssues(spatial.data.warnings);
     setConflict(false);
+    setAiBuilderStartOver(false);
+    setStartOverPending(false);
     setSelectedId((current) =>
       current && nextDraft.locations.some((location) => location.id === current)
         ? current
@@ -871,12 +879,22 @@ export function SpatialMapWorkspace({
   const artworkPreviewStale =
     artworkPreview !== null &&
     (artworkPreviewSourceSignature !== artworkPreviewInputSignature || artworkPreviewSourceEnvironment === null);
+  const spatialUpdatePending = updateSpatial.isPending || startOverSpatial.isPending;
   const artworkActionsDisabled =
-    artworkProgress !== null || previewGalleryImages.isPending || conflict || updateSpatial.isPending;
+    artworkProgress !== null || previewGalleryImages.isPending || conflict || spatialUpdatePending;
   const canEnable =
     !!draft?.startingLocationId &&
     draft.locations.some((location) => location.id === draft.startingLocationId && location.status === "active");
   const isFirstMapDraft = baseDefinition === null && (draft?.locations.length ?? 0) > 0;
+  const startOverBuilderDefinition = useMemo(
+    () => createEmptySpatialDefinition(ownerMode),
+    [ownerMode],
+  );
+  const startOverBuilderProfile = useMemo(
+    () => defaultHierarchyProfile(startOverBuilderDefinition),
+    [startOverBuilderDefinition],
+  );
+  const aiBuilderDefinition = aiBuilderStartOver ? startOverBuilderDefinition : draft;
   const firstMapDepth = useMemo(
     () =>
       draft
@@ -1301,9 +1319,11 @@ export function SpatialMapWorkspace({
 
     const locationCount = savedDefinition.locations.length;
     const confirmed = await confirmAction({
-      title: preserveExistingLocations ? "Archive this map and start over?" : "Delete this map and start over?",
+      title: preserveExistingLocations
+        ? "Break breadcrumb continuity and start a new map?"
+        : "Delete this map and start over?",
       message: preserveExistingLocations
-        ? `Are you sure? This is dangerous.\n\nCampaign history uses this map, so its ${locationCount} saved ${locationCount === 1 ? "location" : "locations"} cannot be erased. Delete will instead archive every existing location and preserve its stable ID for older messages, then create one blank New world starting location. Existing routes and details will remain only in the archived hierarchy. Any unsaved map edits are discarded.\n\nNothing changes until you click Save. Export first if you want a separate backup.`
+        ? `Are you sure? This is dangerous.\n\nStarting over breaks breadcrumb continuity. Old messages remain, but historical map links may no longer resolve because all ${locationCount} existing ${locationCount === 1 ? "location" : "locations"} will be removed from this map. A new blank New world starting location will become current. Any unsaved map edits are discarded.\n\nNothing changes until you click Save. Export first if you want a separate backup.`
         : `Are you sure? This is dangerous.\n\nDeleting replaces ${locationCount} saved ${locationCount === 1 ? "location" : "locations"} with one blank New world starting location. Existing map names, descriptions, routes, lore links, layout, and other map-only edits will be removed. Any unsaved map edits are also discarded.\n\nNothing changes until you click Save. After Save, the deleted map cannot be restored unless you exported a backup.`,
       confirmLabel: "Start blank",
       cancelLabel: "Go back and backup first",
@@ -1311,13 +1331,14 @@ export function SpatialMapWorkspace({
     });
     if (!confirmed) return false;
 
-    const result = startNewSpatialMap(savedDefinition, preserveExistingLocations);
+    const result = startNewSpatialMap(savedDefinition, false);
     applyDraft(result.definition);
     setDraftHierarchyProfile(normalizeHierarchyProfile(baseHierarchyProfile, result.definition));
     setSelectedId(result.location.id);
     setEnteredParentId(null);
     setMobilePane("hierarchy");
-    setReplacementCurrentLocationId(currentLocationId ? result.location.id : null);
+    setReplacementCurrentLocationId(result.location.id);
+    setStartOverPending(true);
     setArchiveRequestId(null);
     setArchiveReplacementId("");
     setImportIdReport(null);
@@ -1325,7 +1346,7 @@ export function SpatialMapWorkspace({
     setAiBuilderOpen(false);
     toast.success(
       preserveExistingLocations
-        ? "Fresh map started. Previous locations remain archived for campaign history. Review it, then Save."
+        ? "Fresh map started. Old messages remain, but previous map locations will not resolve after Save. Review it, then Save."
         : "Fresh map started in the working copy. Review it, then Save.",
     );
     return true;
@@ -1338,6 +1359,23 @@ export function SpatialMapWorkspace({
     draft,
     spatial.data?.hasCommittedSpatialHistory,
   ]);
+
+  const beginAiStartOver = useCallback(async () => {
+    if (dirty || spatial.data?.hasCommittedSpatialHistory) {
+      const confirmed = await confirmAction({
+        title: "Break breadcrumb continuity and start a new map?",
+        message:
+          `Old messages will remain, but historical map links may no longer resolve after the replacement is saved. ${dirty ? "Any unsaved map edits will also be discarded. " : ""}This cannot be undone unless you exported a backup.`,
+        confirmLabel: "Start new map",
+        cancelLabel: "Keep current map",
+        tone: "destructive",
+      });
+      if (!confirmed) return;
+    }
+    setReplaceMapOpen(false);
+    setAiBuilderStartOver(true);
+    setAiBuilderOpen(true);
+  }, [confirmAction, dirty, spatial.data?.hasCommittedSpatialHistory]);
 
   const portableExportBundle = useMemo(
     () =>
@@ -2044,7 +2082,7 @@ export function SpatialMapWorkspace({
       setConflict(false);
       setReviewConflict(false);
       try {
-        const response = await updateSpatial.mutateAsync({
+        const request = {
           chatId,
           expectedRevision: baseDefinition?.revision ?? 0,
           expectedCurrentLocationId: currentLocationId,
@@ -2055,7 +2093,10 @@ export function SpatialMapWorkspace({
             revision: baseDefinition?.revision ?? 0,
           },
           hierarchyProfile: normalizeHierarchyProfile(draftHierarchyProfile, definitionToSave),
-        });
+        };
+        const response = startOverPending
+          ? await startOverSpatial.mutateAsync({ ...request, breakHistoryContinuity: true })
+          : await updateSpatial.mutateAsync(request);
         const saved = response.definition;
         if (!saved) throw new Error("The server did not return the saved map.");
         setBaseDefinition(cloneSpatialDefinition(saved));
@@ -2065,6 +2106,7 @@ export function SpatialMapWorkspace({
         setServerIssues(response.warnings);
         if (replacementCurrentLocationId !== null) clearPendingSpatialTransition(chatId);
         setReplacementCurrentLocationId(null);
+        setStartOverPending(false);
         setSavedFlash(true);
         setFirstMapGenerationSession(null);
         if (completingFirstMap) {
@@ -2078,7 +2120,9 @@ export function SpatialMapWorkspace({
         toast.success(
           completingFirstMap
             ? "Map ready for turns."
-            : response.sharedWorld.pendingChanges
+            : startOverPending
+              ? "New map saved. Historical map links may no longer resolve."
+              : response.sharedWorld.pendingChanges
               ? "Map saved for this chat. Review it, then publish or fork it."
               : "World map saved.",
         );
@@ -2105,6 +2149,8 @@ export function SpatialMapWorkspace({
       libraryRecord,
       ownerMode,
       replacementCurrentLocationId,
+      startOverPending,
+      startOverSpatial,
       onDirtyChange,
       sharedWorldMode,
       spatial,
@@ -2132,6 +2178,8 @@ export function SpatialMapWorkspace({
     setReviewConflict(false);
     setServerIssues(result.data.warnings);
     setReplacementCurrentLocationId(null);
+    setAiBuilderStartOver(false);
+    setStartOverPending(false);
     setFirstSaveResult(null);
     setFirstMapGenerationSession(null);
   }, [ownerMode, spatial]);
@@ -2146,7 +2194,8 @@ export function SpatialMapWorkspace({
         return;
       }
       const normalizedGenerated = parsedGenerated.data;
-      const previousIds = new Set(draft.locations.map((location) => location.id));
+      const applyingStartOver = aiBuilderStartOver;
+      const previousIds = new Set(applyingStartOver ? [] : draft.locations.map((location) => location.id));
       const next = {
         ...cloneSpatialDefinition(normalizedGenerated),
         ownerMode,
@@ -2170,10 +2219,14 @@ export function SpatialMapWorkspace({
       setConflict(false);
       setReviewConflict(false);
       setReplacementCurrentLocationId(
-        currentLocationId && !next.locations.some((location) => location.id === currentLocationId)
+        applyingStartOver
           ? next.startingLocationId
-          : null,
+          : currentLocationId && !next.locations.some((location) => location.id === currentLocationId)
+            ? next.startingLocationId
+            : null,
       );
+      if (applyingStartOver) setStartOverPending(true);
+      setAiBuilderStartOver(false);
       onClearPendingDraftReview?.();
       if (baseDefinition === null && session.result.operation !== "expand") {
         setFirstMapGenerationSession(session);
@@ -2189,6 +2242,7 @@ export function SpatialMapWorkspace({
     },
     [
       applyDraft,
+      aiBuilderStartOver,
       baseDefinition,
       currentLocationId,
       draft,
@@ -2241,6 +2295,7 @@ export function SpatialMapWorkspace({
       return;
     }
     setAiBuilderOpen(false);
+    setAiBuilderStartOver(false);
   }, [onClearPendingDraftReview, onClose, pendingSetupReview]);
 
   if (!spatial.isError && (spatial.isLoading || !initialized || !draft)) {
@@ -2303,7 +2358,7 @@ export function SpatialMapWorkspace({
     dirty,
     conflict,
     invalid: issues.length > 0,
-    pending: updateSpatial.isPending || updateTemplate.isPending || updateSharedWorld.isPending,
+    pending: spatialUpdatePending || updateTemplate.isPending || updateSharedWorld.isPending,
     savedFlash,
   });
   const saveLabel = sharedWorldMode
@@ -2970,7 +3025,7 @@ export function SpatialMapWorkspace({
                   void spatial.refetch();
                   setAiBuilderOpen(true);
                 }}
-                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                disabled={aiBuilderOpen || conflict || spatialUpdatePending}
                 className="mari-editor-action inline-flex min-h-11 px-3 text-xs disabled:opacity-45"
               >
                 <Sparkles size="0.8125rem" />{" "}
@@ -3061,7 +3116,7 @@ export function SpatialMapWorkspace({
             disabled={
               !dirty ||
               issues.length > 0 ||
-              updateSpatial.isPending ||
+              spatialUpdatePending ||
               updateTemplate.isPending ||
               updateSharedWorld.isPending ||
               conflict ||
@@ -3206,7 +3261,7 @@ export function SpatialMapWorkspace({
                   void spatial.refetch();
                   setAiBuilderOpen(true);
                 }}
-                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                disabled={aiBuilderOpen || conflict || spatialUpdatePending}
                 className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
               >
                 <Sparkles size="0.8125rem" />{" "}
@@ -3235,7 +3290,7 @@ export function SpatialMapWorkspace({
                 setMobileActionsOpen(false);
                 importInputRef.current?.click();
               }}
-              disabled={conflict || updateSpatial.isPending || isImporting}
+              disabled={conflict || spatialUpdatePending || isImporting}
               className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
               aria-label="Import world map"
             >
@@ -3249,7 +3304,7 @@ export function SpatialMapWorkspace({
                   setMobileActionsOpen(false);
                   onOpenTemplates();
                 }}
-                disabled={conflict || updateSpatial.isPending}
+                disabled={conflict || spatialUpdatePending}
                 className="mari-editor-action inline-flex min-h-11 w-full justify-center px-3 text-xs disabled:opacity-45"
                 aria-label="Open shared worlds and map templates"
               >
@@ -3299,7 +3354,7 @@ export function SpatialMapWorkspace({
                   setMobileActionsOpen(false);
                   setReplaceMapOpen(true);
                 }}
-                disabled={aiBuilderOpen || conflict || updateSpatial.isPending}
+                disabled={aiBuilderOpen || conflict || spatialUpdatePending}
                 className="mari-editor-action col-span-2 inline-flex min-h-11 w-full justify-center px-3 text-xs text-[var(--destructive)] disabled:opacity-45"
                 aria-label="Replace map or start over"
                 aria-expanded={replaceMapOpen}
@@ -3405,10 +3460,7 @@ export function SpatialMapWorkspace({
                 <div className="mt-3 grid gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setReplaceMapOpen(false);
-                      setAiBuilderOpen(true);
-                    }}
+                    onClick={() => void beginAiStartOver()}
                     className="mari-chrome-control min-h-11 justify-start px-3 text-xs"
                   >
                     <Sparkles size="0.75rem" /> Create with AI
@@ -3460,17 +3512,20 @@ export function SpatialMapWorkspace({
         debugMode={debugMode}
         ownerMode={ownerMode}
         open={aiBuilderOpen}
-        definition={draft}
-        hierarchyProfile={draftHierarchyProfile}
+        definition={aiBuilderDefinition ?? startOverBuilderDefinition}
+        hierarchyProfile={aiBuilderStartOver ? startOverBuilderProfile : draftHierarchyProfile}
         generationPreferences={spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode)}
-        currentLocationId={currentLocationId}
-        preferredTargetLocationId={selected?.id ?? null}
+        currentLocationId={aiBuilderStartOver ? null : currentLocationId}
+        preferredTargetLocationId={aiBuilderStartOver ? null : selected?.id ?? null}
         hasCommittedSpatialHistory={spatial.data?.hasCommittedSpatialHistory ?? false}
         dirty={dirty}
         initialResult={pendingSetupReview?.result}
         initialSession={firstMapGenerationSession}
         regenerateRequestId={regenerateRequestId}
-        allowDirtyGeneratedReplacement={baseDefinition === null && firstMapGenerationSession !== null}
+        allowDirtyGeneratedReplacement={
+          aiBuilderStartOver || (baseDefinition === null && firstMapGenerationSession !== null)
+        }
+        startOver={aiBuilderStartOver}
         setupReview={Boolean(pendingSetupReview)}
         lorebooks={lorebooks}
         excludedLorebookIds={excludedLorebookIds}

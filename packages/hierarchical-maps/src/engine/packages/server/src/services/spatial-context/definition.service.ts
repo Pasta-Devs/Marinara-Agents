@@ -16,6 +16,7 @@ import {
   applyGameMapBindingReconciliation,
   bindGameMapsToExactSpatialLocations,
   buildGameMapBindingReconciliationPreview,
+  clearGameMapSpatialLocationBindings,
   countGameMapBindingsBySpatialLocation,
   GameMapBindingError,
   type GameMapBindingReconciliationSelection,
@@ -343,7 +344,7 @@ export function createSpatialContextService() {
       input: UpdateSpatialContextRequestInput & {
         hierarchyProfile?: SpatialHierarchyProfile;
       },
-      options: { detachSharedWorld?: boolean } = {},
+      options: { detachSharedWorld?: boolean; breakHistoryContinuity?: boolean } = {},
     ): Promise<MapsSpatialContextResponse> {
       return persistence.withChatLock(chatId, async () => {
         const chat = await persistence.getChat(chatId);
@@ -417,7 +418,7 @@ export function createSpatialContextService() {
               409,
             );
           }
-          if (removedLocations.length > 0) {
+          if (removedLocations.length > 0 && !options.breakHistoryContinuity) {
             const deletionProtections = await resolveLocationDeletionProtections(chatId, metadata, persistence);
             const protectionById = new Map(
               deletionProtections.map((protection) => [protection.locationId, protection]),
@@ -472,10 +473,13 @@ export function createSpatialContextService() {
           );
         }
 
+        const metadataForUpdate = options.breakHistoryContinuity
+          ? clearGameMapSpatialLocationBindings(metadata)
+          : metadata;
         const initialGameMapBindings =
           chat.mode === "game" && !stored.definition && metadata.gameSessionStatus === "ready"
-            ? bindGameMapsToExactSpatialLocations(metadata, definition)
-            : { metadata, bindingCount: 0 };
+            ? bindGameMapsToExactSpatialLocations(metadataForUpdate, definition)
+            : { metadata: metadataForUpdate, bindingCount: 0 };
         const nextMetadata =
           stored.link && !options.detachSharedWorld
             ? withSpatialSharedWorldDraft(

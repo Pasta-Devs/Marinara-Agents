@@ -66,6 +66,7 @@ interface SpatialMapAiBuilderProps {
   initialSession?: SpatialMapAiBuilderSession | null;
   regenerateRequestId?: number;
   allowDirtyGeneratedReplacement?: boolean;
+  startOver?: boolean;
   setupReview?: boolean;
   lorebooks?: Lorebook[];
   excludedLorebookIds?: string[];
@@ -182,6 +183,7 @@ export function SpatialMapAiBuilder({
   initialSession = null,
   regenerateRequestId = 0,
   allowDirtyGeneratedReplacement = false,
+  startOver = false,
   setupReview = false,
   lorebooks = [],
   excludedLorebookIds = [],
@@ -212,9 +214,11 @@ export function SpatialMapAiBuilder({
         : definition.startingLocationId) ??
     activeLocations[0]?.id ??
     "";
-  const initialOperation = standalone
-    ? "create"
-    : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
+  const initialOperation = startOver
+    ? "replace"
+    : standalone
+      ? "create"
+      : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
   const [operation, setOperation] = useState<SpatialMapDraftOperation>(initialOperation);
   const [targetLocationId, setTargetLocationId] = useState(defaultTargetLocationId);
   const [size, setSize] = useState<SpatialMapDraftSize>(initialSession?.size ?? initialResult?.size ?? "medium");
@@ -328,9 +332,11 @@ export function SpatialMapAiBuilder({
 
   useEffect(() => {
     if (!open) return;
-    const nextOperation = standalone
-      ? "create"
-      : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
+    const nextOperation = startOver
+      ? "replace"
+      : standalone
+        ? "create"
+        : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
     setOperation(nextOperation);
     setTargetLocationId(initialSession?.targetLocationId ?? initialResult?.targetLocationId ?? defaultTargetLocationId);
     setSize(initialSession?.size ?? initialResult?.size ?? "medium");
@@ -352,7 +358,17 @@ export function SpatialMapAiBuilder({
     setSelectedPreviewId(null);
     setExpandedPreviewIds(new Set());
     setPreviewQuery("");
-  }, [chatId, defaultTargetLocationId, definition, hasLocations, hierarchyProfile, initialResult, initialSession, open]);
+  }, [
+    chatId,
+    defaultTargetLocationId,
+    definition,
+    hasLocations,
+    hierarchyProfile,
+    initialResult,
+    initialSession,
+    open,
+    startOver,
+  ]);
 
   const runGeneration = useCallback(
     async (request: SpatialMapAiBuilderRequest) => {
@@ -361,7 +377,7 @@ export function SpatialMapAiBuilder({
         const requestInput = {
           operation: standalone ? "create" : request.operation,
           size: request.size,
-          ...(request.operation === "expand" ? { targetLocationCount: request.targetLocationCount } : {}),
+          ...(startOver ? { breakHistoryContinuity: true as const } : {}),
           ...(!standalone && request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
           instructions: request.instructions.trim() || undefined,
           groundingMode: request.groundingMode,
@@ -380,7 +396,16 @@ export function SpatialMapAiBuilder({
         setError(generationError instanceof Error ? generationError.message : "The map draft could not be generated.");
       }
     },
-    [chatId, debugMode, generateDraft, generateTemplateDraft, generationPreferencesOverride, standalone, workingHierarchyProfile],
+    [
+      chatId,
+      debugMode,
+      generateDraft,
+      generateTemplateDraft,
+      generationPreferencesOverride,
+      standalone,
+      startOver,
+      workingHierarchyProfile,
+    ],
   );
 
   useEffect(() => {
@@ -416,12 +441,12 @@ export function SpatialMapAiBuilder({
   }, [open, previewIds, previewLocations.length, previewRoots, result]);
 
   useEffect(() => {
-    if (!open || !hasCommittedSpatialHistory || operation !== "replace") return;
+    if (!open || startOver || !hasCommittedSpatialHistory || operation !== "replace") return;
     setOperation("expand");
     setTargetLocationId(defaultTargetLocationId);
     setResult(null);
     setError(null);
-  }, [defaultTargetLocationId, hasCommittedSpatialHistory, open, operation]);
+  }, [defaultTargetLocationId, hasCommittedSpatialHistory, open, operation, startOver]);
 
   if (!open) return null;
 
@@ -587,7 +612,7 @@ export function SpatialMapAiBuilder({
             </div>
           )}
 
-          {!standalone && advancedOpen && hasLocations && !hasCommittedSpatialHistory && (
+          {!standalone && !startOver && advancedOpen && hasLocations && !hasCommittedSpatialHistory && (
             <fieldset className="mb-4">
               <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">AI action</legend>
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -1039,10 +1064,16 @@ export function SpatialMapAiBuilder({
               Applying changes only the working copy. Enable the map and press Save when you want it to affect turns.
             </p>
           )}
-          {hasCommittedSpatialHistory && (
+          {hasCommittedSpatialHistory && !startOver && (
             <p className="mt-2 flex items-start gap-2 text-xs text-emerald-300">
               <ShieldCheck size="0.75rem" className="mt-0.5 shrink-0" />
               Campaign history is protected. AI can add places, but it cannot replace or remove the current map.
+            </p>
+          )}
+          {hasCommittedSpatialHistory && startOver && (
+            <p className="mt-2 flex items-start gap-2 text-xs text-amber-300">
+              <AlertCircle size="0.75rem" className="mt-0.5 shrink-0" />
+              Saving this replacement starts a new map. Old messages remain, but historical map links may no longer resolve.
             </p>
           )}
           {operation === "replace" && (
@@ -1307,7 +1338,11 @@ export function SpatialMapAiBuilder({
                   className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs disabled:opacity-50"
                 >
                   <Check size="0.8125rem" />{" "}
-                  {result.operation === "expand" ? "Add to working map" : hasLocations ? "Replace working draft" : "Continue to editor"}
+                  {result.operation === "expand"
+                    ? "Add to working map"
+                    : startOver || hasLocations
+                      ? "Replace working draft"
+                      : "Continue to editor"}
                 </button>
               </div>
             </div>

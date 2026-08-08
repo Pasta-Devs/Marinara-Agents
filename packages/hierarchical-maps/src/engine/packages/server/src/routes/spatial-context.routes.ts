@@ -1103,7 +1103,12 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         ? null
         : spatialCustomTargetLocationSchema.safeParse(body.targetLocationCount);
     const parsed = generateSpatialMapDraftRequestSchema.safeParse(
-      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "generationPreferencesOverride", "targetLocationCount"]),
+      withoutKeys(body, [
+        "hierarchyMode",
+        "hierarchyProfile",
+        "generationPreferencesOverride",
+        "breakHistoryContinuity",
+      ]),
     );
     const hierarchyMode = z.enum(["auto", "template", "custom"]).safeParse(body.hierarchyMode ?? "auto");
     const requestedProfile =
@@ -1318,7 +1323,12 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
     const targetLocationCount = targetLocationCountResult?.success ? targetLocationCountResult.data : undefined;
     const parsed = generateSpatialMapDraftRequestSchema.safeParse(
-      withoutKeys(body, ["hierarchyMode", "hierarchyProfile", "generationPreferencesOverride", "targetLocationCount"]),
+      withoutKeys(body, [
+        "hierarchyMode",
+        "hierarchyProfile",
+        "generationPreferencesOverride",
+        "breakHistoryContinuity",
+      ]),
     );
     if (!parsed.success) {
       throw new SpatialMapPromptRequestError(
@@ -1395,7 +1405,11 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         "There is no existing map to replace. Create the first map instead.",
       );
     }
-    if (operation === "replace" && spatial.hasCommittedSpatialHistory) {
+    if (
+      operation === "replace" &&
+      spatial.hasCommittedSpatialHistory &&
+      body.breakHistoryContinuity !== true
+    ) {
       throw new SpatialMapPromptRequestError(
         409,
         "spatial_ai_replacement_protected",
@@ -1698,6 +1712,54 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         ...parsed.data,
         ...(parsedHierarchyProfile?.success ? { hierarchyProfile: parsedHierarchyProfile.data } : {}),
       });
+    } catch (error) {
+      return sendServiceError(reply, error);
+    }
+  });
+
+  app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/start-over", async (req, reply) => {
+    const body = isRecord(req.body) ? req.body : {};
+    if (body.breakHistoryContinuity !== true) {
+      return reply.status(400).send({
+        error: "Confirm that starting over may break historical map links.",
+        code: "spatial_start_over_confirmation_required",
+      });
+    }
+    const parsed = updateSpatialContextRequestSchema.safeParse(
+      withoutKeys(body, ["hierarchyProfile", "breakHistoryContinuity"]),
+    );
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message ?? "Invalid replacement world map.",
+        code: "spatial_request_invalid",
+        issues: parsed.error.issues,
+      });
+    }
+    if (parsed.data.replacementCurrentLocationId !== parsed.data.definition.startingLocationId) {
+      return reply.status(400).send({
+        error: "Starting over must move the story to the new map's starting location.",
+        code: "spatial_start_over_location_invalid",
+      });
+    }
+    const parsedHierarchyProfile =
+      body.hierarchyProfile === undefined ? null : spatialHierarchyProfileSchema.safeParse(body.hierarchyProfile);
+    if (parsedHierarchyProfile && !parsedHierarchyProfile.success) {
+      return reply.status(400).send({
+        error: parsedHierarchyProfile.error.issues[0]?.message ?? "Invalid hierarchy profile.",
+        code: "spatial_request_invalid",
+        issues: parsedHierarchyProfile.error.issues,
+      });
+    }
+
+    try {
+      return await service.update(
+        req.params.chatId,
+        {
+          ...parsed.data,
+          ...(parsedHierarchyProfile?.success ? { hierarchyProfile: parsedHierarchyProfile.data } : {}),
+        },
+        { detachSharedWorld: true, breakHistoryContinuity: true },
+      );
     } catch (error) {
       return sendServiceError(reply, error);
     }

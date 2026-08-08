@@ -111,7 +111,13 @@ function artifactFixture(version: string): ArtifactFixture {
         /\[data-marinara-maps-world-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
       );
     }
-    if (version === "1.2.9" || version === "1.3.0" || version === "1.3.1" || version === "1.3.2" || version === "1.3.3") {
+    if (
+      version === "1.2.9" ||
+      version === "1.3.0" ||
+      version === "1.3.1" ||
+      version === "1.3.2" ||
+      version === "1.3.3"
+    ) {
       assert.match(
         clientSource,
         /\[data-marinara-maps-workspace-overlay\]\s+\[data-marinara-maps-editor-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
@@ -127,6 +133,13 @@ function artifactFixture(version: string): ArtifactFixture {
     if (version === "1.3.2" || version === "1.3.3") {
       assert.match(clientSource, /Incoming one-way/u);
       assert.match(clientSource, /data-marinara-direct-link-direction/u);
+    }
+    if (version === "1.3.3") {
+      assert.match(clientSource, /Break breadcrumb continuity and start a new map/u);
+      assert.match(clientSource, /breakHistoryContinuity/u);
+      const serverSource = execFileSync("unzip", ["-p", path, "server.mjs"], { encoding: "utf8" });
+      assert.match(serverSource, /spatial-context\/start-over/u);
+      assert.match(serverSource, /spatial_start_over_confirmation_required/u);
     }
   }
   return {
@@ -3673,7 +3686,107 @@ async function main() {
     assert.equal(guidanceSnapshot?.currentLocationId, "lifecycle_harbor");
     assert.match(guidanceSnapshot?.transitionCommandId ?? "", /^assistant:/u);
 
-    for (const disposableChatId of [branch.id, imported.chatId]) {
+    const startOverChat = (await expectJson(app, {
+      method: "POST",
+      url: "/api/chats",
+      headers: csrfHeaders,
+      payload: {
+        name: "Hierarchical Maps start-over lifecycle fixture",
+        mode: "roleplay",
+        characterIds: [],
+      },
+    })) as { id: string };
+    const startOverChatId = startOverChat.id;
+    await expectJson(app, {
+      method: "PATCH",
+      url: `/api/chats/${startOverChatId}/metadata`,
+      headers: csrfHeaders,
+      payload: { enableAgents: true, activeAgentIds: ["hierarchical-maps"] },
+    });
+    const startOverMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${startOverChatId}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The old breadcrumb remains in the transcript." },
+    })) as { id: string };
+    const startOverInitial = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${startOverChatId}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition,
+      },
+    })) as { definition: { revision: number }; currentLocationId: string; hasCommittedSpatialHistory: boolean };
+    assert.equal(startOverInitial.hasCommittedSpatialHistory, true);
+    const startOverDefinition = {
+      ...definition,
+      startingLocationId: "fresh_world",
+      locations: [
+        {
+          ...definition.locations[0],
+          id: "fresh_world",
+          name: "Fresh world",
+          links: [],
+        },
+      ],
+    };
+    const missingStartOverConfirmation = (await expectJson(
+      app,
+      {
+        method: "POST",
+        url: `/api/chats/${startOverChatId}/spatial-context/start-over`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: startOverInitial.definition.revision,
+          expectedCurrentLocationId: startOverInitial.currentLocationId,
+          replacementCurrentLocationId: "fresh_world",
+          definition: startOverDefinition,
+        },
+      },
+      400,
+    )) as { code: string };
+    assert.equal(missingStartOverConfirmation.code, "spatial_start_over_confirmation_required");
+    const messagesBeforeStartOver = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${startOverChatId}/messages`,
+    })) as Array<{ id: string }>;
+    const startOverSaved = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${startOverChatId}/spatial-context/start-over`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: startOverInitial.definition.revision,
+        expectedCurrentLocationId: startOverInitial.currentLocationId,
+        replacementCurrentLocationId: "fresh_world",
+        breakHistoryContinuity: true,
+        definition: startOverDefinition,
+      },
+    })) as {
+      currentLocationId: string;
+      hasCommittedSpatialHistory: boolean;
+      definition: { startingLocationId: string; locations: Array<{ id: string; status: string }> };
+    };
+    assert.equal(startOverSaved.currentLocationId, "fresh_world");
+    assert.equal(startOverSaved.definition.startingLocationId, "fresh_world");
+    assert.deepEqual(
+      startOverSaved.definition.locations.map(({ id, status }) => ({ id, status })),
+      [{ id: "fresh_world", status: "active" }],
+    );
+    assert.equal(startOverSaved.hasCommittedSpatialHistory, true);
+    const messagesAfterStartOver = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${startOverChatId}/messages`,
+    })) as Array<{ id: string }>;
+    assert.deepEqual(
+      messagesAfterStartOver.map((message) => message.id),
+      messagesBeforeStartOver.map((message) => message.id),
+      "Starting over must retain old messages while breaking their map continuity",
+    );
+    assert.ok(messagesAfterStartOver.some((message) => message.id === startOverMessage.id));
+
+    for (const disposableChatId of [branch.id, imported.chatId, startOverChatId]) {
       await expectJson(
         app,
         {
