@@ -369,7 +369,7 @@ interface SpatialMapWorkspaceProps {
   onDirtyChange?: (dirty: boolean) => void;
   onOpenLorebook?: (lorebookId: string) => void;
   onLorebooksChanged?: () => void | Promise<void>;
-  onOpenTemplates?: () => void;
+  onOpenTemplates?: (options?: { startOver?: boolean }) => void;
   onClose: () => void;
 }
 
@@ -1597,6 +1597,9 @@ export function SpatialMapWorkspace({
         enabled: draft?.enabled ?? remappedDefinition.enabled,
         revision: baseDefinition?.revision ?? 0,
       };
+      if (!templateMode && startOverPending) {
+        setReplacementCurrentLocationId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
+      }
       const importedProfile = normalizeHierarchyProfile(rawRecord?.hierarchyProfile, imported);
       applyDraft(imported);
       onDraftApplied?.();
@@ -1629,6 +1632,7 @@ export function SpatialMapWorkspace({
       globalGalleryImages,
       lorebookEntriesQuery.entries,
       ownerMode,
+      startOverPending,
       templateMode,
     ],
   );
@@ -1657,7 +1661,7 @@ export function SpatialMapWorkspace({
         const missing = (baseDefinition?.locations ?? [])
           .filter((location) => !importedIds.has(location.id))
           .map((location) => ({ id: location.id, name: location.name }));
-        if (spatial.data?.hasCommittedSpatialHistory && missing.length > 0) {
+        if (spatial.data?.hasCommittedSpatialHistory && missing.length > 0 && !startOverPending) {
           setImportIdReport({ missing });
           throw new Error(
             `Campaign history uses ${missing.length} location ID${missing.length === 1 ? "" : "s"} missing from this file. Review the repair steps shown in the editor.`,
@@ -1697,6 +1701,7 @@ export function SpatialMapWorkspace({
       isImporting,
       lorebookEntriesQuery.entries,
       lorebooks,
+      startOverPending,
       spatial.data?.hasCommittedSpatialHistory,
     ],
   );
@@ -3470,7 +3475,7 @@ export function SpatialMapWorkspace({
                       type="button"
                       onClick={() => {
                         setReplaceMapOpen(false);
-                        onOpenTemplates();
+                        onOpenTemplates({ startOver: true });
                       }}
                       className="mari-chrome-control min-h-11 justify-start px-3 text-xs"
                     >

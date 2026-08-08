@@ -8,6 +8,13 @@ const workspaceSource = readFileSync(
   ),
   "utf8",
 );
+const librarySource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/SpatialMapLibrary.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const inspectorSource = readFileSync(
   new URL(
     "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/LocationInspector.tsx",
@@ -106,6 +113,21 @@ assert.match(aiDraftSource, /resolveSpatialDraftSizeSpec/u, "The server must res
 assert.match(aiDraftSource, /SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT/u, "Custom targets must retain a bounded one-call generation ceiling.");
 assert.match(builtClient, /Custom place target/u, "The built client must include the editable expansion target.");
 assert.match(builtServer, /targetLocationCount/u, "The built server must accept and apply the expansion target.");
+assert.match(
+  workspaceSource,
+  /onOpenTemplates\(\{ startOver: true \}\)/u,
+  "Replace/start over must carry replacement intent into the map library.",
+);
+assert.match(
+  librarySource,
+  /startOverReplacement[\s\S]*?useStartOverSpatialContext/u,
+  "The map library must retain replacement intent and use the history-breaking save contract.",
+);
+assert.match(
+  librarySource,
+  /if \(startOverReplacement\) \{[\s\S]*?breakHistoryContinuity: true/u,
+  "Template and independent shared-world replacement must explicitly break history continuity.",
+);
 
 assert.match(
   workspaceSource,
