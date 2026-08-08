@@ -56,6 +56,12 @@ Across its Engine compatibility lanes, the catalog currently contains **31 first
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
 
+### Localization sources
+
+Every downloadable package keeps its canonical user-visible metadata in `packages/<id>/locales/en.json`. These catalogs cover package and Agent names and descriptions plus selectable named prompt options, while deliberately excluding model instructions. Translators can add partial BCP 47 catalogs such as `ko.json`; untranslated fields fall back to English once Engine-side catalog localization support consumes them. See [Contributing](CONTRIBUTING.md#localizing-package-metadata) for the format and validation workflow.
+
+Package-owned interfaces maintain their UI catalogs separately. The metadata catalogs prepared here do not change the Engine's catalog schema or runtime behavior on their own.
+
 ## Package trust and storage
 
 The Engine downloads only entries from its Engine-major lane in this official HTTPS catalog, validates the catalog schema, checks Engine version compatibility, verifies the archive SHA-256 checksum, rejects unsafe archive paths and undeclared files, validates each declared file hash and size, and installs atomically into the Engine data directory. Installed packages remain available offline. Server-capability packages run with their declared permissions and require a restart when their runtime changes.

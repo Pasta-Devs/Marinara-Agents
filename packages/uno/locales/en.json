@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "UNO",
+    "description": "Play UNO with Conversation characters. Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it."
+  },
+  "agents": {
+    "uno": {
+      "name": "UNO",
+      "description": "Play UNO with Conversation characters. Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it."
+    }
+  }
+}
