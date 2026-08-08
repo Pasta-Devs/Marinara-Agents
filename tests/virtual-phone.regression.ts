@@ -20,6 +20,8 @@ import { contactsManifest } from "../packages/virtual-phone/src/phone/apps/conta
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "../packages/virtual-phone/src/phone/system/noodle";
 import { noodlerRManifest } from "../packages/virtual-phone/src/phone/apps/noodler-r/manifest";
 import { cameraManifest } from "../packages/virtual-phone/src/phone/apps/camera/manifest";
+import { applyTransaction, bankingManifest, emptyAccount, parseProposal, readAccount } from "../packages/virtual-phone/src/phone/apps/banking/manifest";
+import { glyphFor, marketplaceManifest, parseListing } from "../packages/virtual-phone/src/phone/apps/marketplace/manifest";
 import { draftMail, mailFromLine, mailManifest, mergeMail, parseEmail, readStoredMail } from "../packages/virtual-phone/src/phone/apps/mail/manifest";
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
@@ -437,6 +439,31 @@ async function main() {
 
   validateAppManifest(noodlerRManifest);
   validateAppManifest(cameraManifest);
+  validateAppManifest(bankingManifest);
+  validateAppManifest(marketplaceManifest);
+  // Banking moves money: a balance that drifts from its own history cannot be audited, which is
+  // the whole reason the transaction log exists.
+  const account = applyTransaction(applyTransaction(emptyAccount("credits"), {
+    id: "t1", at: "2026-08-08T10:00:00.000Z", amount: 250, description: "Wages", source: "story",
+  }), {
+    id: "t2", at: "2026-08-08T11:00:00.000Z", amount: -40, description: "Taxi", source: "user",
+  });
+  assert.equal(account.balance, 210);
+  assert.equal(account.balance, account.transactions.reduce((total, entry) => total + entry.amount, 0));
+  assert.deepEqual(account.transactions.map((entry) => entry.id), ["t2", "t1"]);
+  assert.deepEqual(parseProposal("+120 :: sold the bike"), { amount: 120, description: "sold the bike" });
+  assert.deepEqual(parseProposal("-40 :: taxi across town"), { amount: -40, description: "taxi across town" });
+  assert.equal(parseProposal("nonsense"), null);
+  assert.equal(parseProposal("0 :: nothing"), null);
+  assert.equal(readAccount(undefined).balance, 0);
+  assert.equal(readAccount({ balance: "x", transactions: null }).currency, "credits");
+  // A listing keeps title, price and seller with no image; only the picture is missing.
+  assert.deepEqual(parseListing("Nel | 40 marks | Rusted bicycle | Rides fine downhill."), {
+    seller: "Nel", price: "40 marks", title: "Rusted bicycle", description: "Rides fine downhill.",
+  });
+  assert.equal(parseListing("").title, "Unnamed item");
+  assert.equal(glyphFor(parseListing("Nel | 40 | Rusted bicycle | downhill")), "\u25a4");
+  assert.equal(glyphFor(parseListing("Nel | 40 | Odd trinket | unclear")), "\u25a2");
   assert.deepEqual(parsePagePost("Morning swamp yoga pics | locked"), { text: "Morning swamp yoga pics", locked: true });
   assert.deepEqual(parsePagePost("Hello everyone | free"), { text: "Hello everyone", locked: false });
   assert.deepEqual(parsePagePost("No marker at all"), { text: "No marker at all", locked: false });

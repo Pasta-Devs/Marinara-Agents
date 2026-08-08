@@ -45,6 +45,8 @@ export const appDescriptions: Record<string, string> = {
   tindler: "Dating profiles of people who live in this world. Swipe, match, and talk.",
   "noodler-r": "Creator pages with subscriber-only posts, for the cast and for strangers.",
   camera: "Point at the story and take a photo. You can edit what it saw before keeping it.",
+  marketplace: "What the world is selling — the odd, the desperate and the mundane, listed by strangers and occasionally by someone you know.",
+  banking: "A balance that follows this persona across chats, with a transaction history. The story proposes what moved; you approve, reject, or set the number yourself.",
 };
 
 export function appDescription(appId: string) {

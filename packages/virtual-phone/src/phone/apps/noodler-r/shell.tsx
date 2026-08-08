@@ -4,6 +4,7 @@ import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { PhoneAvatar, hueFor, useAvatarMap } from "../../platform/avatars";
+import { applyTransaction, formatMoney, readAccount, type BankAccount } from "../banking/manifest";
 
 interface PagePost {
   id: string;
@@ -20,6 +21,8 @@ interface CreatorPage {
 
 export function NoodlerRShell({ phoneId, chatId, onBack, onClose }: { phoneId: string; chatId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "noodler-r");
+  const bank = usePhoneStore(phoneId, "banking");
+  const [chargeError, setChargeError] = React.useState<string | null>(null);
   const [contacts, setContacts] = React.useState<Array<{ phoneId: string; ownerId?: string; ownerName: string }> | null>(null);
   const avatars = useAvatarMap();
   const [page, setPage] = React.useState<CreatorPage | null>(null);
@@ -48,8 +51,37 @@ export function NoodlerRShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
       .finally(() => setLoading(false));
   };
   const subscribed = page ? subs.includes(page.creatorPhoneId) : false;
-  const toggleSubscribe = () => {
+  /**
+   * Subscribing was free, so the price on a creator page was decoration. When Banking is on the
+   * phone it is charged for real, which is what gives earning money an in-roleplay point. Without
+   * Banking installed, nothing changes and subscribing stays free.
+   */
+  const priceOf = (price: string) => {
+    const found = price.match(/-?\d+/u);
+    return found ? Math.abs(Number.parseInt(found[0], 10)) : 0;
+  };
+  const toggleSubscribe = async () => {
     if (!page) return;
+    setChargeError(null);
+    const cost = priceOf(page.price);
+    if (!subscribed && cost > 0) {
+      const account = readAccount(await bank.get("account").catch(() => null));
+      // No account at all means Banking is not installed on this phone; leave it free.
+      if (account.transactions.length || account.balance) {
+        if (account.balance < cost) {
+          setChargeError(`Not enough in the bank — ${page.price} needed, ${formatMoney(account.balance, account.currency)} available.`);
+          return;
+        }
+        const charged: BankAccount = applyTransaction(account, {
+          id: `sub-${page.creatorPhoneId}-${Date.now()}`,
+          at: new Date().toISOString(),
+          amount: -cost,
+          description: `Subscribed to ${page.creatorName} on NoodleR`,
+          source: "user",
+        });
+        await bank.set("account", charged).catch(() => undefined);
+      }
+    }
     const next = subscribed ? subs.filter((id) => id !== page.creatorPhoneId) : [page.creatorPhoneId, ...subs];
     setSubs(next);
     void store.set("subs", next).catch(() => undefined);
@@ -81,8 +113,9 @@ export function NoodlerRShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
           </header>
           <div className="vp-noodlerr-subrow">
             <span className="vp-muted-note">{page.price || "Free page"}</span>
-            <button type="button" onClick={toggleSubscribe} className="vp-accent-btn">{subscribed ? "Subscribed ✓" : "Subscribe"}</button>
+            <button type="button" onClick={() => void toggleSubscribe()} className="vp-accent-btn">{subscribed ? "Subscribed ✓" : "Subscribe"}</button>
           </div>
+          {chargeError ? <p role="alert" className="vp-muted-note">{chargeError}</p> : null}
           {page.posts.length === 0 ? <p className="vp-muted-note">No posts yet.</p> : page.posts.map((post) => (
             post.locked && !subscribed ? (
               <div key={post.id} className="vp-card vp-noodlerr-locked" aria-label="Locked post">

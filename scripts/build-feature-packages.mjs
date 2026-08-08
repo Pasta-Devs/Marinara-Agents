@@ -154,7 +154,7 @@ const features = [
   },
   {
     id: "virtual-phone",
-    version: "2.0.55",
+    version: "2.0.56",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Virtual Phone",

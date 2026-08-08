@@ -1377,6 +1377,71 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "The mail could not be sent" });
       }
     });
+    /**
+     * Step 7.6 — the model proposes what money moved in the story; nothing is written until the
+     * user accepts it in the app. User-triggered rather than per-turn on purpose: a banking app
+     * that polls the model forever is a banking app that quietly spends tokens forever.
+     */
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/banking/activity", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+          ? request.body as Record<string, unknown>
+          : {};
+        const balance = Number.isFinite(Number(body.balance)) ? Number(body.balance) : 0;
+        const currency = String(body.currency ?? "credits").slice(0, 40);
+        const model = await resolvePhoneModel(phone, "light");
+        if (!model) return { changes: [] };
+        const chatId = targetChat(phone, request.query.chatId);
+        const storyContext = await worldContext(chatId, phone);
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You keep the books for ${phone.document.identity.ownerName} inside a roleplay story. Their balance is ${balance} ${currency}. Read the recent story and list only money that plausibly moved because of what happened — wages, a purchase, a fare, a debt, a theft. Invent nothing that the story does not support, and return an empty list if nothing moved. Respond with only JSON: {"changes":["+120 :: sold the bike", "-40 :: taxi across town"]} with at most 4 entries. Every entry uses that exact 'amount :: reason' format and the amount is a whole number with a sign.${storyContext}${await customInstructions(phone)}`,
+          },
+          { role: "user", content: "What moved?" },
+        ], { temperature: 0.6, maxTokens: 400 });
+        const proposed = parseBoundedContent(completion.content, {
+          fields: { changes: "string[]" },
+          defaults: { changes: [] as string[] },
+          limits: { maxString: 240, maxItems: 4 },
+        }) as { changes: string[] };
+        return { changes: proposed.changes };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "The bank could not be reached" });
+      }
+    });
+    /**
+     * Step 11.5 — classifieds scoped to the world. Goodle already has a `shop` page kind, so the
+     * generation side largely existed; this is mostly a front end over content the phone can
+     * already produce. Text-first by design: with no image connection the listing still carries its
+     * title, price and seller, which is Step 11.2(b).
+     */
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/marketplace/listings", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const model = await resolvePhoneModel(phone, "heavy");
+        if (!model) return { listings: [] };
+        const chatId = targetChat(phone, request.query.chatId);
+        const storyContext = await worldContext(chatId, phone);
+        const cast = (await contactsFor(request.params.phoneId)).map((contact) => contact.ownerName).join(", ");
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You write the local classifieds of a fictional roleplay world — the place people sell the odd, the desperate and the mundane. Invent 5 to 7 listings that fit this world. Most sellers are strangers; at most one may be from the story's cast${cast ? ` (${cast})` : ""}. Respond with only JSON: {"listings":["Seller Name | Price | Item title | description", ...]}. Every listing uses that exact four-part format and the description is one or two sentences in the seller's own voice.${storyContext}${await customInstructions(phone)}`,
+          },
+          { role: "user", content: "What is for sale right now?" },
+        ], { temperature: 1, maxTokens: 1000 });
+        const generated = parseBoundedContent(completion.content, {
+          fields: { listings: "string[]" },
+          defaults: { listings: [] as string[] },
+          limits: { maxString: 700, maxItems: 12 },
+        }) as { listings: string[] };
+        return { listings: generated.listings };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "The marketplace could not be reached" });
+      }
+    });
     // "About this phone" — the facts Settings shows about the device itself.
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/about", async (request, reply) => {
       try {

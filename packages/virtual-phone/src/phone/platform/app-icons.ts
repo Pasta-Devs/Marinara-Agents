@@ -1,4 +1,4 @@
-import { AtSign, BookUser, Camera, Flame, Images, Lock, Mail, MessageCircle, Search, Settings, StickyNote, Store } from "lucide-react";
+import { AtSign, BookUser, Camera, Flame, Images, Landmark, Lock, Mail, MessageCircle, Search, Settings, ShoppingBag, StickyNote, Store } from "lucide-react";
 
 /**
  * Single source for app glyphs and icon styling. Previously duplicated in three places
@@ -18,6 +18,8 @@ export const appGlyphs: Record<string, typeof Store> = {
   tindler: Flame,
   "noodler-r": Lock,
   camera: Camera,
+  banking: Landmark,
+  marketplace: ShoppingBag,
 };
 
 export function appGlyph(appId: string) {

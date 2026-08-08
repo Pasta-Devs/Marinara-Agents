@@ -24,6 +24,8 @@ import { galleryManifest } from "./apps/gallery/manifest";
 import { tindlerManifest } from "./apps/tindler/manifest";
 import { noodlerRManifest } from "./apps/noodler-r/manifest";
 import { cameraManifest } from "./apps/camera/manifest";
+import { bankingManifest } from "./apps/banking/manifest";
+import { marketplaceManifest } from "./apps/marketplace/manifest";
 
 const lazyShell = <Module, Key extends keyof Module>(load: () => Promise<Module>, exportName: Key) =>
   React.lazy(() => load().then((module) => ({ default: module[exportName] as React.ComponentType<any> })));
@@ -92,6 +94,16 @@ phoneAppRegistry.register({
   component: lazyShell(() => import("./apps/noodler-r/shell"), "NoodlerRShell"),
   requiresChat: true,
   props: (context) => ({ phoneId: context.phone.phoneId, chatId: context.chatId }),
+});
+phoneAppRegistry.register({
+  manifest: bankingManifest,
+  component: lazyShell(() => import("./apps/banking/shell"), "BankingShell"),
+  props: phoneId,
+});
+phoneAppRegistry.register({
+  manifest: marketplaceManifest,
+  component: lazyShell(() => import("./apps/marketplace/shell"), "MarketplaceShell"),
+  props: phoneId,
 });
 phoneAppRegistry.register({
   manifest: cameraManifest,
