@@ -1423,20 +1423,6 @@ export default function SourcesWorkspace({
           </button>
         ))}
       </div>
-      <StatusSurface data-ltm-source-guidance>
-        {source === "characters"
-          ? localizeUi(
-              "ui.longTermMemory.sourcesworkspace.characterGuidedImport",
-            )
-          : source === "chats"
-            ? localizeUi(
-                "ui.longTermMemory.sourcesworkspace.chatSummaryGuidedImport",
-              )
-            : localizeUi(
-                "ui.longTermMemory.sourcesworkspace.lorebookGuidedImport",
-              )}
-      </StatusSurface>
-
       <div className="mari-editor-panel mari-editor-panel--soft flex flex-wrap items-center gap-3 p-3">
         <div
           role="group"

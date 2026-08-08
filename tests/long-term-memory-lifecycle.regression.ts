@@ -206,11 +206,7 @@ async function main() {
         "Workflow guidance must remain contextual rather than repeated on each destination",
       );
       for (const copy of [
-        "Keeps the character card as a source note, then proposes smaller identity",
-        "Keeps selected lorebook entries as source notes, then proposes durable world",
-        "extraction proposes events, relationships, threads, and continuity that may matter later",
         "accepted proposals become recallable.",
-        "Review what extraction found. Accept saves a proposal to Memory Vault",
         "Stable appearance can help the character remain visually consistent",
         "This source note preserves imported material as audit evidence. It is not recalled directly; accepted derived memories appear below.",
         "Saving something does not mean it shows up in every reply.",
@@ -218,7 +214,7 @@ async function main() {
         "Open Summary Prompt, then Chat Summary.",
         "Open Prompt Preset Editor.",
         "Add an Agent Section for Long-Term Memory.",
-        "These didn't make it through extraction cleanly. Recover anything worth keeping, or delete the rest.",
+        "Correct and save anything worth keeping, delete the rest.",
         "When you get a response, peek the prompt and make sure the memories are reaching your chat context.",
         "Under the Hood",
         "Writing to memory (Extraction)",
@@ -234,6 +230,16 @@ async function main() {
         /gentlest on-ramp/u,
         "The removed Character recommendation must not return to the wizard",
       );
+      for (const copy of [
+        "Review what extraction found.",
+        "Keeps the character card as a source note",
+        "For chat-summary imports, first pick",
+        "Keeps selected lorebook entries as source notes",
+      ])
+        assert.ok(
+          !artifactClient.includes(copy),
+          `Generated client retains removed guidance: ${copy}`,
+        );
       for (const copy of [
         "Branch group",
         "Persona",
@@ -2061,21 +2067,10 @@ async function main() {
         .first()
         .click();
       await page.locator('[data-ltm-source-tab="chats"]').click();
-      const characterGuidance = page.locator("[data-ltm-source-guidance]");
       await page.locator('[data-ltm-source-tab="characters"]').click();
-      await characterGuidance.waitFor();
-      assert.match(
-        await characterGuidance.innerText(),
-        /character card.*source note/iu,
-      );
       assert.doesNotMatch(
-        await characterGuidance.innerText(),
-        /Summary Prompt/iu,
-      );
-      await page.locator('[data-ltm-source-tab="chats"]').click();
-      assert.match(
-        await characterGuidance.innerText(),
-        /Summary Prompt -> Chat Summary -> Long-Term Memory/u,
+        await page.locator('[data-ltm-surface="sources"]').innerText(),
+        /character card|Summary Prompt|lorebook entries as source notes/iu,
       );
       await page.locator('[data-ltm-source-section="imported"]').click();
       const desktopReextractRow = page.locator(
