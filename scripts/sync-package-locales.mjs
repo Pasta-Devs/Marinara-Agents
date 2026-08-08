@@ -3,6 +3,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildEnglishPackageLocale,
+  readPackageAgentDefinitions,
+  readPackageManifest,
   serializePackageLocale,
   writeEnglishPackageLocale,
 } from "./package-locales.mjs";
@@ -26,14 +28,10 @@ if (requestedIds.size > 0 && packageIds.length !== requestedIds.size) {
 const drifted = [];
 for (const id of packageIds) {
   const packageRoot = join(packagesRoot, id);
-  let manifest;
-  try {
-    manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
-  } catch {
-    continue;
-  }
+  const manifest = await readPackageManifest(packageRoot);
+  if (!manifest) continue;
   if (!manifest.entrypoints?.agents) continue;
-  const agentDefinitions = JSON.parse(await readFile(join(packageRoot, manifest.entrypoints.agents), "utf8"));
+  const agentDefinitions = await readPackageAgentDefinitions(packageRoot, manifest);
   const expected = serializePackageLocale(buildEnglishPackageLocale(manifest, agentDefinitions));
 
   if (checkOnly) {

@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import {
   buildEnglishPackageLocale,
   PACKAGE_LOCALE_SCHEMA_REFERENCE,
+  readPackageAgentDefinitions,
+  readPackageManifest,
   serializePackageLocale,
 } from "./package-locales.mjs";
 
@@ -87,14 +89,10 @@ for (const entry of (await readdir(packagesRoot, { withFileTypes: true })).sort(
 )) {
   if (!entry.isDirectory()) continue;
   const packageRoot = join(packagesRoot, entry.name);
-  let manifest;
-  try {
-    manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
-  } catch {
-    continue;
-  }
+  const manifest = await readPackageManifest(packageRoot);
+  if (!manifest) continue;
   if (!manifest.entrypoints?.agents) continue;
-  const agentDefinitions = JSON.parse(await readFile(join(packageRoot, manifest.entrypoints.agents), "utf8"));
+  const agentDefinitions = await readPackageAgentDefinitions(packageRoot, manifest);
   const localesRoot = join(packageRoot, "locales");
   const localeFiles = (await readdir(localesRoot, { withFileTypes: true }).catch(() => []))
     .filter((localeEntry) => localeEntry.isFile() && localeEntry.name.endsWith(".json"))
