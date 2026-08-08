@@ -3,7 +3,8 @@
 ## catalog/catalog.json — artifact/icon URLs repointed to `hold-the-phone`
 
 To let ME on this branch install quest 1.0.4 (and others) before the artifacts
-land on `main`, all 64 URLs in `catalog/catalog.json` were changed:
+land on `main`, all URLs in **`catalog/catalog.json`, `catalog/v2/catalog.json`,
+and `catalog/v3/catalog.json`** were changed (prod reads v3):
 
     /Pasta-Devs/Marinara-Agents/main/  ->  /Pasta-Devs/Marinara-Agents/hold-the-phone/
 
