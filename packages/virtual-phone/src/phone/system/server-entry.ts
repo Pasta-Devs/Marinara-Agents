@@ -1831,6 +1831,22 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Nobody answered the listing" });
       }
     });
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/azmoron/search", async (request, reply) => {
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const body = request.body && typeof request.body === "object" && !Array.isArray(request.body) ? request.body as Record<string, unknown> : {};
+        const query = String(body.query ?? "").trim().slice(0, 160);
+        const model = await resolvePhoneModel(phone, "heavy");
+        if (!model) return { products: [] };
+        const chatId = targetChat(phone, request.query.chatId);
+        const completion = await model.chatComplete([
+          { role: "system", content: `You are Azmoron, the in-world marketplace for a fictional roleplay setting. Generate 4 to 8 plausible products for the search "${query || "things worth buying"}". Make sellers distinct people or shops from this world, and make some products useful, suspicious, sentimental, or story-relevant. Respond only JSON: {"products":["Seller | price as a whole number | product name | one or two sentence detail", ...]}. Do not use real-world brands.${await worldContext(chatId, phone)}${await customInstructions(phone)}` },
+          { role: "user", content: query || "Show me what is available." },
+        ], { temperature: 1, maxTokens: 1100 });
+        const result = parseBoundedContent(completion.content, { fields: { products: "string[]" }, defaults: { products: [] as string[] }, limits: { maxString: 700, maxItems: 12 } }) as { products: string[] };
+        return { products: result.products };
+      } catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : "Azmoron could not be reached" }); }
+    });
     // "About this phone" — the facts Settings shows about the device itself.
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/about", async (request, reply) => {
       try {

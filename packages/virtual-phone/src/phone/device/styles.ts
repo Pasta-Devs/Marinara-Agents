@@ -227,6 +227,19 @@ export const phoneStylesheet = `
 .vp-chip:active { transform: scale(0.96); }
 .vp-chip--active { background: var(--vp-accent); color: #fff; box-shadow: none; }
 .vp-post-image { display: block; width: 100%; margin-top: 0.5rem; border-radius: 0.75rem; }
+.vp-game-head { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0.25rem 1rem; text-align: center; }
+.vp-game-head span { display: grid; gap: 0.125rem; min-width: 4rem; color: var(--vp-muted); }
+.vp-game-head strong { color: var(--vp-text); font-size: 1.15rem; }
+.vp-game-head small { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.vp-pasta-board { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.35rem; padding: 0.65rem; border-radius: 1rem; background: #24334a; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12); }
+.vp-pasta-tile { aspect-ratio: 1; border: 0; border-radius: 0.55rem; cursor: pointer; box-shadow: inset 0 -0.18rem 0 rgba(0,0,0,0.18), 0 0.15rem 0.2rem rgba(0,0,0,0.18); transition: transform 120ms ease, box-shadow 120ms ease; }
+.vp-pasta-tile:hover, .vp-pasta-tile.is-selected { transform: scale(1.08); box-shadow: 0 0 0 0.18rem #fff, 0 0.2rem 0.35rem rgba(0,0,0,0.28); }
+.vp-pasta-tile--red { background: #ef6461; } .vp-pasta-tile--yellow { background: #f2c14e; } .vp-pasta-tile--green { background: #5dbb78; } .vp-pasta-tile--blue { background: #5c9ded; } .vp-pasta-tile--pink { background: #db78b7; }
+.vp-az-product { display: flex; justify-content: space-between; gap: 0.75rem; align-items: end; }
+.vp-az-product h3 { margin: 0.15rem 0; font-size: 0.95rem; }
+.vp-az-product p { margin: 0; color: var(--vp-muted); font-size: 0.78rem; }
+.vp-az-buy { display: grid; justify-items: end; gap: 0.45rem; flex: 0 0 auto; }
+.vp-az-buy strong { color: var(--vp-accent); }
 .vp-result-list { list-style: none; margin: 0.875rem 0 0; padding: 0; display: grid; gap: 0.375rem; }
 .vp-result-card { display: grid; gap: 0.125rem; width: 100%; text-align: left; padding: 0.625rem 0.75rem; border-radius: 0.75rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
 .vp-result-card:active { transform: scale(0.98); }

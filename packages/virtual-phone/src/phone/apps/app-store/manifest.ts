@@ -47,6 +47,8 @@ export const appDescriptions: Record<string, string> = {
   camera: "Point at the story and take a photo. You can edit what it saw before keeping it.",
   marketplace: "What the world is selling — the odd, the desperate and the mundane, listed by strangers and occasionally by someone you know.",
   banking: "A balance that follows this persona across chats, with a transaction history. The story proposes what moved; you approve, reject, or set the number yourself.",
+  pastasafari: "A match-three pasta game. Scores, streaks, and the moments you played can become part of the phone owner's story.",
+  azmoron: "A world-aware marketplace where useful, suspicious, and sentimental parcels can arrive at your door and in your story.",
 };
 
 export function appDescription(appId: string) {

@@ -26,6 +26,8 @@ import { noodlerRManifest } from "./apps/noodler-r/manifest";
 import { cameraManifest } from "./apps/camera/manifest";
 import { bankingManifest } from "./apps/banking/manifest";
 import { marketplaceManifest } from "./apps/marketplace/manifest";
+import { pastasafariManifest } from "./apps/pastasafari/manifest";
+import { azmoronManifest } from "./apps/azmoron/manifest";
 
 const lazyShell = <Module, Key extends keyof Module>(load: () => Promise<Module>, exportName: Key) =>
   React.lazy(() => load().then((module) => ({ default: module[exportName] as React.ComponentType<any> })));
@@ -108,6 +110,16 @@ phoneAppRegistry.register({
 phoneAppRegistry.register({
   manifest: cameraManifest,
   component: lazyShell(() => import("./apps/camera/shell"), "CameraShell"),
+  props: phoneId,
+});
+phoneAppRegistry.register({
+  manifest: pastasafariManifest,
+  component: lazyShell(() => import("./apps/pastasafari/shell"), "PastasafariShell"),
+  props: phoneId,
+});
+phoneAppRegistry.register({
+  manifest: azmoronManifest,
+  component: lazyShell(() => import("./apps/azmoron/shell"), "AzmoronShell"),
   props: phoneId,
 });
 

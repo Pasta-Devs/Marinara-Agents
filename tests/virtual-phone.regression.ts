@@ -383,7 +383,7 @@ async function main() {
     { from: "Duloc Parks Dept", subject: "Overdue swamp permit", body: "Your permit expired on the 3rd." },
   );
   assert.deepEqual(parseEmail("weird"), { from: "weird", subject: "(no subject)", body: "(empty message)" });
-  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera"]);
+  assert.deepEqual(defaultDeviceSettings().installedApps, ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera", "pastasafari", "azmoron"]);
   assert.equal(defaultDeviceSettings().lightConnectionId, "");
   assert.equal(defaultDeviceSettings().wallpaperTint, "");
   assert.equal(defaultDeviceSettings().caseColor, "");
