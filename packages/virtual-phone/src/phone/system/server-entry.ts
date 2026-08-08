@@ -529,6 +529,54 @@ export async function activate({ api }: CapabilityContext) {
     }
   };
 
+    /**
+     * Stage 10 — picking up someone else's phone is a story event, not a dev shortcut.
+     *
+     * The model judges from the current scene whether you could plausibly be holding this
+     * character's phone right now: you took it, they handed it over, they left it on the table. A
+     * refusal comes back with the in-fiction reason, which is the interesting half.
+     *
+     * Access granted is recorded in the chat as quiet context, so anyone who can see you reacts to
+     * you going through their phone — being caught is the point, and the reaction needs to know it
+     * happened. Your own phone is never gated; nothing about opening your own phone is a story beat.
+     */
+    app.post<{ Params: { chatId: string; phoneId: string } }>("/chats/:chatId/phones/:phoneId/access", async (request, reply) => {
+      try {
+        const { phone, chatId } = await chatForPhone(request.params.phoneId, request.params.chatId);
+        if (phone.document.identity.ownerType === "persona") return { allowed: true, reason: "" };
+        const model = await resolvePhoneModel(phone, "light");
+        if (!model) return { allowed: true, reason: "" };
+        const ownerName = phone.document.identity.ownerName;
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `In this roleplay, the user is trying to pick up and look through ${ownerName}'s phone right now. Judge only from the current scene whether they could plausibly get at it this moment — they took it, ${ownerName} handed it over, ${ownerName} left it behind or is asleep or out of the room. If ${ownerName} is holding it, or is watching, or is nowhere near, they cannot. Respond with only JSON: {"allowed":true or false,"reason":"one short in-fiction sentence"}. The reason is shown to the user on the lock screen, so write it as narration, not as a rule.${await worldContext(chatId, phone)}`,
+          },
+          { role: "user", content: `Can they get at ${ownerName}'s phone right now?` },
+        ], { temperature: 0.6, maxTokens: 200 });
+        const verdict = parseBoundedContent(completion.content, {
+          fields: { allowed: "boolean", reason: "string" },
+          defaults: { allowed: false, reason: `${ownerName}'s phone is not within reach.` },
+          limits: { maxString: 300 },
+        }) as { allowed: boolean; reason: string };
+
+        if (verdict.allowed && api.runtime.persistence.createMessageWithSwipe) {
+          await api.runtime.persistence.createMessageWithSwipe({
+            id: randomUUID(),
+            swipeId: randomUUID(),
+            chatId,
+            role: "user",
+            characterId: null,
+            content: `[picks up ${ownerName}'s phone and starts going through it]`,
+            extra: { virtualPhone: "access" },
+            createdAt: new Date().toISOString(),
+          }).catch(() => undefined);
+        }
+        return verdict;
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "That phone is out of reach" });
+      }
+    });
     app.get<{ Params: { chatId: string } }>("/chats/:chatId/unread", async (request, reply) => {
       const chat = await api.runtime.persistence.getChat(request.params.chatId);
       if (!chat) return reply.status(404).send({ error: "Chat not found" });

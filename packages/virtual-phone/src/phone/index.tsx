@@ -179,6 +179,9 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [phones, setPhones] = React.useState<Phone[]>([]);
   const [session, setSession] = React.useState(() => initialDeviceSession());
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
+  /** Set when the model refused access to another character's phone, shown on the lock screen. */
+  const [accessDenied, setAccessDenied] = React.useState<string | null>(null);
+  const [accessPending, setAccessPending] = React.useState(false);
   const [activeApp, setActiveApp] = React.useState<ActiveApp>(null);
   const [notifications, setNotifications] = React.useState<PhoneNotification[]>([]);
   const [homeSearch, setHomeSearch] = React.useState("");
@@ -319,6 +322,46 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const SignalIcon = signalIcons[deviceSettings.cellularSignal] ?? SignalHigh;
   const signalLabel = signalLabels[deviceSettings.cellularSignal] ?? "Full";
   const BatteryIcon = batteryIcon(deviceSettings.batteryLevel);
+  /**
+   * Stage 10 — another character's phone opens only if the model judges you could plausibly get at
+   * it right now, and picking it up is recorded in the chat so anyone who sees you can react. Your
+   * own phone is never gated. The old unconditional switcher survives behind a dev flag, since it
+   * is genuinely useful while building.
+   */
+  const devSwitcher = (() => {
+    try {
+      return window.localStorage.getItem("marinara_vp_dev_switcher") === "1";
+    } catch {
+      return false;
+    }
+  })();
+  const switchToPhone = async (phone: Phone) => {
+    setSwitcherOpen(false);
+    setAccessDenied(null);
+    const select = () => setSession((current) => ({ ...current, selectedPhoneId: phone.phoneId }));
+    if (devSwitcher || phone.ownerType === "persona" || phone.phoneId === session.selectedPhoneId || !chatId) {
+      select();
+      return;
+    }
+    setAccessPending(true);
+    try {
+      const verdict = await phoneRequest<{ allowed: boolean; reason: string }>(
+        `/chats/${encodeURIComponent(chatId)}/phones/${encodeURIComponent(phone.phoneId)}/access`,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      if (verdict.allowed) {
+        select();
+        setSession((current) => ({ ...current, surface: "lock" }));
+      } else {
+        setAccessDenied(verdict.reason || `${phone.ownerName}'s phone is out of reach.`);
+      }
+    } catch (cause) {
+      setAccessDenied(cause instanceof Error ? cause.message : "That phone is out of reach.");
+    } finally {
+      setAccessPending(false);
+    }
+  };
+
   const openApp = (appId: string) => {
     if (appId === "goodle") setPendingSearch("");
     openAppRoute(appId, "/");
@@ -393,7 +436,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
               {switcherOpen ? (
                 <div role="listbox" aria-label="Available phones" className="vp-switcher">
                   {phones.map((phone) => (
-                    <button key={phone.phoneId} type="button" role="option" aria-selected={phone.phoneId === session.selectedPhoneId} onClick={() => { setSession((current) => ({ ...current, selectedPhoneId: phone.phoneId })); setSwitcherOpen(false); }} className="vp-switcher-option">
+                    <button key={phone.phoneId} type="button" role="option" aria-selected={phone.phoneId === session.selectedPhoneId} disabled={accessPending} onClick={() => { void switchToPhone(phone); }} className="vp-switcher-option">
                       <span>{phone.ownerName}</span>
                     </button>
                   ))}
@@ -408,6 +451,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                     <p className="vp-lock-date">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
                     {deviceSettings.deviceName.trim() ? <p className="vp-lock-device">{deviceSettings.deviceName}</p> : null}
                   </div>
+                  {accessDenied ? <div role="alert" className="vp-lock-card">{accessDenied}</div> : null}
                   {notifications.length === 0 ? <div className="vp-lock-card">No notifications</div> : (
                     <div className="vp-lock-list" aria-label="Notifications">
                       {notifications.slice(0, 3).map((notification) => (
