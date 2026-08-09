@@ -656,6 +656,38 @@ export async function activate({ api }: CapabilityContext) {
       }
     }
 
+    // 3c. Seed owner-state apps — the private stuff a real owner would already have on the device.
+    const nowIso = new Date().toISOString();
+    const seedList = async (appId: string, key: string, field: string, promptText: string, map: (line: string) => unknown | null) => {
+      if (!installed.has(appId)) return;
+      const m = await resolvePhoneModel(phone, "light");
+      if (!m) return;
+      try {
+        const completion = await m.chatComplete([
+          { role: "system", content: `${promptText}${await ownerCard(phone, "About the phone owner")}${await customInstructions(phone)}` },
+          { role: "user", content: "Generate them." },
+        ], { temperature: 1, maxTokens: 600 });
+        const parsed = parseBoundedContent(completion.content, { fields: { [field]: "string[]" }, defaults: { [field]: [] as string[] }, limits: { maxString: 800, maxItems: 12 } }) as Record<string, string[]>;
+        const items = (parsed[field] ?? []).map(map).filter((item): item is Record<string, unknown> => item !== null);
+        if (items.length) await phones.setAppStorageKey(phoneId, appId, key, items);
+      } catch { /* app starts blank if this call fails */ }
+    };
+
+    await seedList("notes", "notes", "notes",
+      `Invent 2 to 4 private notes this character would already have written to themselves — reminders, lists, half-thoughts, in their own voice. Respond with only JSON: {"notes":["note text", ...]}.`,
+      (text) => text.trim() ? { id: randomUUID(), text: text.trim(), updatedAt: nowIso } : null);
+
+    await seedList("camera", "shots", "shots",
+      `Describe 2 to 4 photos already in this character's camera roll — what they'd have taken, one vivid sentence each, in character. Respond with only JSON: {"shots":["photo description", ...]}.`,
+      (text) => text.trim() ? { id: randomUUID(), text: text.trim(), at: nowIso } : null);
+
+    await seedList("azmoron", "orders", "orders",
+      `Invent 2 to 4 past online-shopping orders this character has waiting or delivered. Respond with only JSON: {"orders":["Item name | Seller | $price | short detail", ...]}. Every order uses that exact four-part format.`,
+      (line) => {
+        const [name, seller, price, detail] = line.split("|").map((part) => part.trim());
+        return name ? { id: randomUUID(), name, seller: seller || "Azmoron", price: price || "", detail: detail || "", status: "Delivered", at: nowIso } : null;
+      });
+
     // 4. Seed the public feed, which already persists its own posts.
     if (installed.has("noodler") && chatId) {
       const heavy = await resolvePhoneModel(phone, "heavy");
