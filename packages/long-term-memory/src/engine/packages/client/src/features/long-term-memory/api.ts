@@ -68,10 +68,15 @@ export async function request<TResponse, TBody = unknown>(
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {
       error?: unknown;
+      code?: unknown;
     } | null;
     const message =
       typeof payload?.error === "string" ? payload.error : response.statusText;
-    throw new Error(message || "Long-Term Memory request failed");
+    const error = new Error(message || "Long-Term Memory request failed");
+    Object.assign(error, { status: response.status });
+    if (typeof payload?.code === "string")
+      Object.assign(error, { code: payload.code });
+    throw error;
   }
   return response.json() as Promise<TResponse>;
 }
