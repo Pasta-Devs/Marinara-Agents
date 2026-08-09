@@ -1332,6 +1332,7 @@ export default function MemoryVault({
     update("scope", next);
   };
   const scopeSelectionIds = new Set([
+    ...(draft?.scope.chatId ? [draft.scope.chatId] : []),
     ...(draft?.scope.chatIds ?? []),
     ...(draft?.scope.characterIds ?? []),
     ...(draft?.scope.groupId ? [`group:${draft.scope.groupId}`] : []),
@@ -1345,7 +1346,13 @@ export default function MemoryVault({
         mutateScope({ groupId: group.id, chatIds: group.chatIds, chatId: group.chatIds[0] });
     } else if (target.kind === "chat") {
       mutateScope({
-        chatIds: [...new Set([...(draft.scope.chatIds ?? []), target.id])],
+        chatIds: [
+          ...new Set([
+            ...(draft.scope.chatId ? [draft.scope.chatId] : []),
+            ...(draft.scope.chatIds ?? []),
+            target.id,
+          ]),
+        ],
         chatId: draft.scope.chatId ?? target.id,
       });
     } else if (target.kind === "character") {

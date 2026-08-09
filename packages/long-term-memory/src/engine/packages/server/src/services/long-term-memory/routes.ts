@@ -214,7 +214,12 @@ function resourceDisplay(resource: { id: string; data: unknown; comment?: unknow
   return {
     id: resource.id,
     label: typeof data?.name === "string" && data.name.trim() ? data.name.trim() : "",
-    comment: typeof resource.comment === "string" ? resource.comment.trim() : "",
+    comment:
+      typeof resource.comment === "string"
+        ? resource.comment.trim()
+        : typeof data?.comment === "string"
+          ? data.comment.trim()
+          : "",
   };
 }
 const createNoteBody = z

@@ -94,7 +94,7 @@ export function TargetPicker({
           <IconButton
             icon={X}
             label={clearLabel}
-            className="mari-editor-action--compact absolute right-1 top-1 h-9 min-h-9 w-9 min-w-9"
+            className="absolute right-1 top-1"
             onClick={() => setQuery("")}
           />
         ) : null}
@@ -108,7 +108,7 @@ export function TargetPicker({
               type="button"
               role="option"
               aria-selected={index === activeIndex}
-              className="block w-full border-b border-[var(--border)] px-3 py-2 text-left last:border-b-0 hover:bg-[var(--accent)] aria-selected:bg-[var(--accent)]"
+              className="block min-h-11 w-full border-b border-[var(--border)] px-3 py-2 text-left last:border-b-0 hover:bg-[var(--accent)] aria-selected:bg-[var(--accent)]"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => select(target)}
             >

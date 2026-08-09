@@ -371,13 +371,11 @@ async function main() {
               return [
                 {
                   id: "persona-a",
-                  data: { name: "Kira Luna" },
-                  comment: "Space explorer",
+                  data: { name: "Kira Luna", comment: "Space explorer" },
                 },
                 {
                   id: "persona-b",
-                  data: { name: "Kira Luna" },
-                  comment: "Private detective",
+                  data: { name: "Kira Luna", comment: "Private detective" },
                 },
               ];
             },
