@@ -8,6 +8,13 @@ const workspaceSource = readFileSync(
   ),
   "utf8",
 );
+const librarySource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/SpatialMapLibrary.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const inspectorSource = readFileSync(
   new URL(
     "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/LocationInspector.tsx",
@@ -59,14 +66,78 @@ const runtimeBarSource = readFileSync(
   ),
   "utf8",
 );
+const aiBuilderSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/SpatialMapAiBuilder.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const aiDraftSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/server/src/services/spatial-context/ai-draft.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const builtClient = readFileSync(new URL("../packages/hierarchical-maps/client.js", import.meta.url), "utf8");
+const builtServer = readFileSync(new URL("../packages/hierarchical-maps/server.mjs", import.meta.url), "utf8");
 
 assert.match(runtimeBarSource, /travelMode/u, "Runtime location controls must persist the selected travel mode.");
 assert.match(runtimeBarSource, /Step by step/u, "Runtime location controls must expose step-by-step travel.");
 assert.match(runtimeBarSource, /Travel now/u, "Runtime location controls must expose immediate travel.");
+assert.match(
+  runtimeBarSource,
+  /\{enabled && mapAvailable && \(\s*<div data-marinara-maps-runtime-mobile\b[^>]*>/u,
+  "The mobile story-map trigger must remain available while a step-by-step move is pending.",
+);
+assert.doesNotMatch(
+  runtimeBarSource,
+  /\{!pending && enabled && mapAvailable && \(\s*<div data-marinara-maps-runtime-mobile\b[^>]*>/u,
+  "A queued move must not suppress the mobile story-map trigger.",
+);
 assert.doesNotMatch(runtimeBarSource, /Set destination/u, "Runtime location controls must replace the legacy destination-only action.");
 assert.match(builtClient, /Step by step/u, "The built client must include the travel-mode control.");
 assert.match(builtClient, /Travel now/u, "The built client must include the immediate-travel control.");
+assert.match(
+  aiBuilderSource,
+  /aria-pressed=\{targetLocationCount === option\.targetLocationCount\}[\s\S]*?Custom place target/u,
+  "Every AI map-size screen must expose the editable custom place target alongside the presets.",
+);
+assert.match(
+  aiBuilderSource,
+  /targetLocationCount,\s*instructions/u,
+  "The custom place target must be carried in every AI builder request.",
+);
+assert.match(aiDraftSource, /resolveSpatialDraftSizeSpec/u, "The server must resolve custom targets through the existing size tiers.");
+assert.match(aiDraftSource, /SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT/u, "Custom targets must retain a bounded one-call generation ceiling.");
+assert.match(builtClient, /Custom place target/u, "The built client must include the editable expansion target.");
+assert.match(builtServer, /targetLocationCount/u, "The built server must accept and apply the expansion target.");
+assert.match(
+  workspaceSource,
+  /onOpenTemplates\(\{ startOver: true \}\)/u,
+  "Replace/start over must carry replacement intent into the map library.",
+);
+assert.match(
+  workspaceSource,
+  /setReplaceMapOpen\(false\);\s*pendingStartOverImportRef\.current\s*=\s*true;\s*importInputRef\.current\?\.click\(\)/u,
+  "Replace/start over imports must carry replacement intent into the file-import flow.",
+);
+assert.match(
+  workspaceSource,
+  /setMobileActionsOpen\(false\);\s*pendingStartOverImportRef\.current\s*=\s*false;\s*setStartOverPending\(false\);\s*importInputRef\.current\?\.click\(\)/u,
+  "Ordinary map imports must clear any stale replacement intent.",
+);
+assert.match(
+  librarySource,
+  /startOverReplacement[\s\S]*?useStartOverSpatialContext/u,
+  "The map library must retain replacement intent and use the history-breaking save contract.",
+);
+assert.match(
+  librarySource,
+  /if \(startOverReplacement\) \{[\s\S]*?breakHistoryContinuity: true/u,
+  "Template and independent shared-world replacement must explicitly break history continuity.",
+);
 
 assert.match(
   workspaceSource,

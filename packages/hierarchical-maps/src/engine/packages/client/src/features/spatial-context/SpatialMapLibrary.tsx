@@ -27,6 +27,7 @@ import {
   useDeleteSpatialMapTemplate,
   useLinkSpatialSharedWorld,
   useReplaceWithIndependentSpatialWorld,
+  useStartOverSpatialContext,
   useSpatialContext,
   useSpatialMapTemplates,
   useSpatialSharedWorlds,
@@ -83,6 +84,7 @@ interface SpatialMapLibraryProps {
   onOpenLorebook?: (lorebookId: string) => void;
   onLorebooksChanged?: () => void | Promise<void>;
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
+  startOverReplacement?: boolean;
 }
 
 interface LibraryConfirmationOptions {
@@ -125,6 +127,7 @@ export function SpatialMapLibrary({
   onOpenLorebook,
   onLorebooksChanged,
   onEnabledForChatChange,
+  startOverReplacement = false,
 }: SpatialMapLibraryProps) {
   const templates = useSpatialMapTemplates();
   const sharedWorlds = useSpatialSharedWorlds();
@@ -134,6 +137,7 @@ export function SpatialMapLibrary({
   const deleteSharedWorld = useDeleteSpatialSharedWorld();
   const linkSharedWorld = useLinkSpatialSharedWorld();
   const replaceWithIndependentWorld = useReplaceWithIndependentSpatialWorld();
+  const startOverSpatial = useStartOverSpatialContext();
   const globalGalleryImages = useSpatialGlobalGalleryImages();
   const [isImporting, setIsImporting] = useState(false);
   const [importEntriesPrimed, setImportEntriesPrimed] = useState(false);
@@ -514,15 +518,40 @@ export function SpatialMapLibrary({
     if (!supportedChat || !chatId || !spatial.data) return;
     const current = spatial.data.definition;
     const confirmed = await ask({
-      title: "Link this chat to the shared world?",
-      message: `Link ${chatName || "this chat"} to “${world.name}”? The world definition and artwork stay account-owned. This chat keeps its own current location, route history, snapshots, and Game bindings. Story discoveries remain unpublished until reviewed.`,
-      confirmLabel: "Link shared world",
-      tone: "accent",
+      title: startOverReplacement ? "Break breadcrumb continuity and replace this map?" : "Link this chat to the shared world?",
+      message: startOverReplacement
+        ? `Replace ${chatName || "this chat"} with “${world.name}”? Old messages remain, but prior map locations may no longer resolve. Game map bindings will be reset. The world definition and artwork stay account-owned.`
+        : `Link ${chatName || "this chat"} to “${world.name}”? The world definition and artwork stay account-owned. This chat keeps its own current location, route history, snapshots, and Game bindings. Story discoveries remain unpublished until reviewed.`,
+      confirmLabel: startOverReplacement ? "Replace map" : "Link shared world",
+      tone: startOverReplacement ? "destructive" : "accent",
     });
     if (!confirmed) return;
     const enablementChanged = !enabledForChat && Boolean(onEnabledForChatChange);
+    const ownerMode: SpatialOwnerMode = chatMode === "game" ? "game" : "roleplay";
+    const instantiated = instantiateSpatialSharedWorld(world.data, ownerMode, current?.revision ?? 0);
     try {
       if (enablementChanged) await onEnabledForChatChange?.(true);
+      if (startOverReplacement) {
+        const replaced = await startOverSpatial.mutateAsync({
+          chatId,
+          expectedRevision: current?.revision ?? 0,
+          expectedCurrentLocationId: spatial.data.currentLocationId,
+          replacementCurrentLocationId: instantiated.definition.startingLocationId,
+          definition: instantiated.definition,
+          hierarchyProfile: instantiated.hierarchyProfile,
+          breakHistoryContinuity: true,
+        });
+        await linkSharedWorld.mutateAsync({
+          chatId,
+          worldId: world.id,
+          expectedWorldRevision: world.revision,
+          expectedRevision: replaced.definition?.revision ?? 0,
+          expectedCurrentLocationId: replaced.currentLocationId,
+        });
+        toast.success(`Replaced ${chatName || "the chat"} with “${world.name}” and linked the shared world.`);
+        onAppliedToChat?.();
+        return;
+      }
       await linkSharedWorld.mutateAsync({
         chatId,
         worldId: world.id,
@@ -559,18 +588,20 @@ export function SpatialMapLibrary({
     if (!supportedChat || !chatId || !spatial.data) return;
     const existing = spatial.data.definition;
     const confirmed = await ask({
-      title: existing ? "Replace with an independent copy?" : "Add an independent copy?",
-      message: `Copy “${world.name}” into ${chatName || "this chat"}? Future edits to the shared world will not appear here. Shared artwork references remain account-wide.`,
-      confirmLabel: "Use independent copy",
-      tone: existing ? "destructive" : "accent",
+      title: startOverReplacement ? "Break breadcrumb continuity and replace this map?" : existing ? "Replace with an independent copy?" : "Add an independent copy?",
+      message: startOverReplacement
+        ? `Replace ${chatName || "this chat"} with an independent copy of “${world.name}”? Old messages remain, but prior map locations may no longer resolve. Game map bindings will be reset. Future edits to the shared world will not appear here.`
+        : `Copy “${world.name}” into ${chatName || "this chat"}? Future edits to the shared world will not appear here. Shared artwork references remain account-wide.`,
+      confirmLabel: startOverReplacement ? "Replace map" : "Use independent copy",
+      tone: startOverReplacement || existing ? "destructive" : "accent",
     });
     if (!confirmed) return;
     const ownerMode: SpatialOwnerMode = chatMode === "game" ? "game" : "roleplay";
-    const instantiated = instantiateSpatialSharedWorld(world.data, ownerMode, existing?.revision ?? 0);
     const enablementChanged = !enabledForChat && Boolean(onEnabledForChatChange);
+    const instantiated = instantiateSpatialSharedWorld(world.data, ownerMode, existing?.revision ?? 0);
     try {
       if (enablementChanged) await onEnabledForChatChange?.(true);
-      await replaceWithIndependentWorld.mutateAsync({
+      const request = {
         chatId,
         expectedRevision: existing?.revision ?? 0,
         expectedCurrentLocationId: spatial.data.currentLocationId,
@@ -582,8 +613,17 @@ export function SpatialMapLibrary({
           : {}),
         definition: instantiated.definition,
         hierarchyProfile: instantiated.hierarchyProfile,
-      });
-      toast.success(`Added an independent copy of “${world.name}”.`);
+      };
+      if (startOverReplacement) {
+        await startOverSpatial.mutateAsync({
+          ...request,
+          replacementCurrentLocationId: instantiated.definition.startingLocationId,
+          breakHistoryContinuity: true,
+        });
+      } else {
+        await replaceWithIndependentWorld.mutateAsync(request);
+      }
+      toast.success(`${startOverReplacement ? "Replaced with" : "Added an independent copy of"} “${world.name}”.`);
       onAppliedToChat?.();
     } catch (error) {
       if (enablementChanged) {
@@ -611,12 +651,14 @@ export function SpatialMapLibrary({
     if (!supportedChat || !chatId || !spatial.data) return;
     const existing = spatial.data.definition;
     const confirmed = await ask({
-      title: existing ? "Replace this chat's map?" : "Add map template to this chat?",
-      message: existing
-        ? `Replace the current working hierarchy with a copy of “${template.name}”? Campaign history may prevent replacement once locations have been used.`
-        : `Add a fresh copy of “${template.name}” to ${chatName || "this chat"}? The saved template will stay unchanged.`,
-      confirmLabel: existing ? "Replace map" : "Add to chat",
-      tone: existing ? "destructive" : "accent",
+      title: startOverReplacement ? "Break breadcrumb continuity and replace this map?" : existing ? "Replace this chat's map?" : "Add map template to this chat?",
+      message: startOverReplacement
+        ? `Replace ${chatName || "this chat"} with “${template.name}”? Old messages remain, but prior map locations may no longer resolve. Game map bindings will be reset. The saved template will stay unchanged.`
+        : existing
+          ? `Replace the current working hierarchy with a copy of “${template.name}”? Campaign history may prevent replacement once locations have been used.`
+          : `Add a fresh copy of “${template.name}” to ${chatName || "this chat"}? The saved template will stay unchanged.`,
+      confirmLabel: startOverReplacement ? "Replace map" : existing ? "Replace map" : "Add to chat",
+      tone: startOverReplacement || existing ? "destructive" : "accent",
     });
     if (!confirmed) return;
     const ownerMode: SpatialOwnerMode = chatMode === "game" ? "game" : "roleplay";
@@ -624,7 +666,7 @@ export function SpatialMapLibrary({
     const enablementChanged = !enabledForChat && Boolean(onEnabledForChatChange);
     try {
       if (enablementChanged) await onEnabledForChatChange?.(true);
-      await updateSpatial.mutateAsync({
+      const request = {
         chatId,
         expectedRevision: existing?.revision ?? 0,
         expectedCurrentLocationId: spatial.data.currentLocationId,
@@ -641,8 +683,19 @@ export function SpatialMapLibrary({
           revision: existing?.revision ?? 0,
         },
         hierarchyProfile: instantiated.hierarchyProfile,
-      });
-      toast.success(`Added “${template.name}” to ${chatName || "the chat"}.`);
+      };
+      if (startOverReplacement) {
+        await startOverSpatial.mutateAsync({
+          ...request,
+          replacementCurrentLocationId: instantiated.definition.startingLocationId,
+          breakHistoryContinuity: true,
+        });
+      } else {
+        await updateSpatial.mutateAsync(request);
+      }
+      toast.success(
+        startOverReplacement ? `Replaced with “${template.name}”.` : `Added “${template.name}” to ${chatName || "the chat"}.`,
+      );
       onAppliedToChat?.();
     } catch (error) {
       if (enablementChanged) {
