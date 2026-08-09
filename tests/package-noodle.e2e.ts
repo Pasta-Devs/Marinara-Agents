@@ -11,6 +11,10 @@ const APP_VERSION = (
 ).version;
 const NOODLE_BLUE_RGB = "rgb(126, 167, 255)";
 const NOODLER_PINK_RGB = "rgb(255, 126, 193)";
+const NOODLE_LIGHT_FOREGROUND =
+  "color(srgb 0.360482 0.453112 0.708674 / 0.986)";
+const NOODLER_LIGHT_FOREGROUND =
+  "color(srgb 0.693974 0.347118 0.548391 / 0.986)";
 
 function createDeferred() {
   let resolve!: () => void;
@@ -90,24 +94,38 @@ async function setStoredTheme(page: Page, theme: "dark" | "light") {
   );
 }
 
-async function expectSurfaceAccent(locator: Locator, accent: string) {
+async function expectSurfaceAccent(
+  locator: Locator,
+  accent: string,
+  foreground: string,
+) {
   await expect
     .poll(() =>
-      locator.evaluate((element, expectedAccent) => {
-        const probe = document.createElement("span");
-        probe.style.color = "var(--noodle-accent-foreground)";
-        element.appendChild(probe);
-        const elementStyle = getComputedStyle(element);
-        const result = {
-          accent: elementStyle.getPropertyValue("--noodle-accent").trim(),
-          colorMatches: elementStyle.color === getComputedStyle(probe).color,
-          expectedAccent,
-        };
-        probe.remove();
-        return result;
-      }, accent),
+      locator.evaluate(
+        (element, expected) => {
+          const probe = document.createElement("span");
+          probe.style.color = "var(--noodle-accent-foreground)";
+          element.appendChild(probe);
+          const elementStyle = getComputedStyle(element);
+          const resolvedForeground = getComputedStyle(probe).color;
+          const result = {
+            accent: elementStyle.getPropertyValue("--noodle-accent").trim(),
+            color: elementStyle.color,
+            expected,
+            resolvedForeground,
+          };
+          probe.remove();
+          return result;
+        },
+        { accent, foreground },
+      ),
     )
-    .toEqual({ accent, colorMatches: true, expectedAccent: accent });
+    .toEqual({
+      accent,
+      color: foreground,
+      expected: { accent, foreground },
+      resolvedForeground: foreground,
+    });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -366,10 +384,12 @@ test.describe("package-owned Noodle interface", () => {
       await expectSurfaceAccent(
         lightComment.locator("[data-noodle-comment-metadata]"),
         "#FF7EC1",
+        NOODLER_LIGHT_FOREGROUND,
       );
       await expectSurfaceAccent(
         lightComment.getByRole("button", { name: "Like comment" }),
         "#FF7EC1",
+        NOODLER_LIGHT_FOREGROUND,
       );
 
       const bottomNav = lightNoodle.locator(
@@ -411,10 +431,12 @@ test.describe("package-owned Noodle interface", () => {
       await expectSurfaceAccent(
         lightNoodle.locator("[data-noodle-profile-handle]"),
         "#FF7EC1",
+        NOODLER_LIGHT_FOREGROUND,
       );
       await expectSurfaceAccent(
         lightNoodle.locator("[data-noodle-avatar-fallback]:visible").last(),
         "#FF7EC1",
+        NOODLER_LIGHT_FOREGROUND,
       );
     } finally {
       if (postId) {
@@ -1518,15 +1540,18 @@ test.describe("package-owned Noodle interface", () => {
       await expectSurfaceAccent(
         ownComment.locator("[data-noodle-avatar-fallback]"),
         "#7EA7FF",
+        NOODLE_LIGHT_FOREGROUND,
       );
       await expectSurfaceAccent(
         ownComment.locator("[data-noodle-comment-metadata]"),
         "#7EA7FF",
+        NOODLE_LIGHT_FOREGROUND,
       );
       for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
         await expectSurfaceAccent(
           ownComment.getByRole("button", { name }),
           "#7EA7FF",
+          NOODLE_LIGHT_FOREGROUND,
         );
       }
 
