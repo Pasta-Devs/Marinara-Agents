@@ -68,6 +68,7 @@ async function main() {
   const completionMessages: any[] = [];
   const debugOverrides: any[] = [];
   let failGameRefine = false;
+  let emptyModelResponse = false;
   let failGrammarOnce = false;
   let grammarErrorMessage = "";
   let fitContextMode: "normal" | "reduced" | "trimmed" = "normal";
@@ -272,8 +273,10 @@ async function main() {
                     });
                   }
                   return {
-                    content: JSON.stringify({
-                      summary: "Extracted observatory facts.",
+                    content: emptyModelResponse
+                      ? ""
+                      : JSON.stringify({
+                          summary: "Extracted observatory facts.",
                       units: [
                         {
                           bucket: "timeline_event",
@@ -326,7 +329,7 @@ async function main() {
                           sourceHash: "replaced-by-package",
                         },
                       ],
-                    }),
+                        }),
                     finishReason: "stop",
                     usage: {
                       promptTokens: 100,
@@ -368,7 +371,16 @@ async function main() {
               ];
             },
             async listPersonas() {
-              return [];
+              return [
+                {
+                  id: "persona-a",
+                  data: { name: "Kira Luna", comment: "Space explorer" },
+                },
+                {
+                  id: "persona-b",
+                  data: { name: "Kira Luna", comment: "Private detective" },
+                },
+              ];
             },
           },
           persistence: {
@@ -777,6 +789,10 @@ async function main() {
         .chats.some((chat: any) => chat.id === "game-empty"),
       true,
     );
+    assert.deepEqual(allScopeTargets.json().personas, [
+      { id: "persona-a", label: "Kira Luna", comment: "Space explorer" },
+      { id: "persona-b", label: "Kira Luna", comment: "Private detective" },
+    ]);
     assert.equal(
       allScopeTargets
         .json()
@@ -2356,6 +2372,8 @@ async function main() {
       refreshedChat.json().imported[0].extractionStatus,
       "not_started",
     );
+    assert.equal(refreshedChat.json().imported[0].outcome.state, "no_suggestions_created");
+    assert.equal(refreshedChat.json().imported[0].draft, null);
     assert.equal(modelCalls, importCalls + 1);
     const refreshedNote = refreshedChat.json().imported[0].note;
     assert.equal(refreshedNote.tags.includes("user_tag"), true);
@@ -2364,6 +2382,36 @@ async function main() {
       { target: "world_route_fixture", relation: "evidenced_by" },
     ]);
     assert.equal(refreshedNote.sections.notes.text, "User-owned section.");
+    chats[0].metadata.summaryEntries.push({
+      id: "summary-empty-response",
+      content: "An empty provider response must remain retryable.",
+      enabled: true,
+    });
+    emptyModelResponse = true;
+    const emptyResponseImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: { source: "chats", sourceIds: ["chat-a:summary-empty-response"] },
+    });
+    emptyModelResponse = false;
+    assert.equal(emptyResponseImport.statusCode, 200, emptyResponseImport.body);
+    assert.equal(emptyResponseImport.json().imported[0].extractionStatus, "failed");
+    assert.equal(emptyResponseImport.json().imported[0].error.code, "extract_failed");
+    assert.match(emptyResponseImport.json().imported[0].error.message, /empty_output/u);
+    assert.equal(emptyResponseImport.json().imported[0].retryable, true);
+    assert.equal(emptyResponseImport.json().imported[0].draft, null);
+    assert.equal(emptyResponseImport.json().counts.sourceNotesWritten, 1);
+    const emptyResponsePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "chats", limit: 100 },
+    });
+    const emptyResponseSample = emptyResponsePreview
+      .json()
+      .samples.find((sample: any) => sample.sourceId === "chat-a:summary-empty-response");
+    assert.equal(emptyResponseSample.freshness, "extraction_incomplete");
     chats[0].metadata.summaryEntries.push({
       id: "summary-legacy",
       content: "Legacy identity should migrate to canonical provenance.",
