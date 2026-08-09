@@ -336,6 +336,23 @@ export async function activate({ api }: CapabilityContext) {
   const STORY_MESSAGE_CHARS = 900;
   /** Total ceiling, keeping the most recent end. ~3k tokens, so a small-context model still fits. */
   const STORY_BUDGET_CHARS = 12_000;
+  // A const arrow, not a function declaration: as the lone hoisted declaration among arrow helpers it
+  // got minified to a name the earlier call site couldn't resolve, throwing "sharedPhoneContext is not
+  // defined" and blanking every app that builds world context. Defined before worldContext, its caller.
+  const sharedPhoneContext = async (phone: Awaited<ReturnType<typeof findPhone>>, chatId: string) => {
+    const inChat = (await phones.list()).filter(({ document }) =>
+      document.identity.phoneId !== phone.document.identity.phoneId &&
+      document.provisioning.enabled && document.identity.chatScope.includes(chatId));
+    const known = new Map<string, string>();
+    for (const { document } of inChat) known.set(document.identity.ownerName, "you share this story with them");
+    for (const { document } of await phones.listContacts(phone.document.identity.phoneId)) {
+      known.set(document.name, document.source || "you saved them in Contacts");
+    }
+    const facts = await phones.worldFactsFor(phone.document.identity.phoneId);
+    const people = [...known.entries()].slice(0, 20).map(([name, why]) => `${name} — ${why}`).join("\n");
+    const remembered = facts.slice(0, 20).map((fact) => `${fact.text} (${fact.source})`).join("\n");
+    return `${people ? `\n\nPeople this phone knows:\n${people}` : ""}${remembered ? `\n\nThings the owner deliberately kept or established on this phone:\n${remembered}` : ""}`;
+  };
   const worldContext = async (chatId: string | undefined, phone?: Awaited<ReturnType<typeof findPhone>>) => {
     const lore = await loreContext(phone, chatId);
     let story = "";
@@ -534,20 +551,6 @@ export async function activate({ api }: CapabilityContext) {
     const lines = [...known.entries()].slice(0, 30).map(([name, why]) => `${name} — ${why}`).join("\n");
     return `\n\nWhose details this phone holds:\n${lines}\nAnyone not on that list is a stranger to the owner. That is allowed, but it must read like a stranger: they explain how they got the address, or they clearly should not have it.`;
   };
-  async function sharedPhoneContext(phone: Awaited<ReturnType<typeof findPhone>>, chatId: string) {
-    const inChat = (await phones.list()).filter(({ document }) =>
-      document.identity.phoneId !== phone.document.identity.phoneId &&
-      document.provisioning.enabled && document.identity.chatScope.includes(chatId));
-    const known = new Map<string, string>();
-    for (const { document } of inChat) known.set(document.identity.ownerName, "you share this story with them");
-    for (const { document } of await phones.listContacts(phone.document.identity.phoneId)) {
-      known.set(document.name, document.source || "you saved them in Contacts");
-    }
-    const facts = await phones.worldFactsFor(phone.document.identity.phoneId);
-    const people = [...known.entries()].slice(0, 20).map(([name, why]) => `${name} — ${why}`).join("\n");
-    const remembered = facts.slice(0, 20).map((fact) => `${fact.text} (${fact.source})`).join("\n");
-    return `${people ? `\n\nPeople this phone knows:\n${people}` : ""}${remembered ? `\n\nThings the owner deliberately kept or established on this phone:\n${remembered}` : ""}`;
-  }
 
   /**
    * Apps the model may choose from when tailoring a character's loadout. The standard apps —
