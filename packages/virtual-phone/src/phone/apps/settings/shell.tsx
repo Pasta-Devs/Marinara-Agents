@@ -4,6 +4,7 @@ import type { Phone } from "../../system/PhonesSettings";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { defaultDeviceSettings } from "../../device/settings";
+import { WallpaperCropper } from "./wallpaper-cropper";
 
 interface SettingsShellProps {
   phone: Phone;
@@ -54,6 +55,7 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
   const [tab, setTab] = React.useState<"device" | "generation" | "about">("device");
   const [loreQuery, setLoreQuery] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+  const [cropSrc, setCropSrc] = React.useState<string | null>(null);
   const writeQueue = React.useRef<Promise<void>>(Promise.resolve());
 
   React.useEffect(() => {
@@ -157,15 +159,16 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
                 const file = event.target.files?.[0];
                 event.target.value = "";
                 if (!file) return;
-                if (file.size > 3_000_000) { setError("Pick an image under 3 MB."); return; }
+                if (file.size > 8_000_000) { setError("Pick an image under 8 MB."); return; }
                 const reader = new FileReader();
-                reader.onload = () => { const result = reader.result; if (typeof result === "string") void update({ wallpaperImage: result }); };
+                reader.onload = () => { const result = reader.result; if (typeof result === "string") setCropSrc(result); };
                 reader.onerror = () => setError("That image could not be read.");
                 reader.readAsDataURL(file);
               }} />
             </label>
             {settings.wallpaperImage ? <button type="button" onClick={() => void update({ wallpaperImage: "" })} className="vp-accent-btn" style={{ minHeight: "1.875rem" }}>Clear</button> : <span className="vp-muted-note">None</span>}
           </span></div>
+          {cropSrc ? <WallpaperCropper src={cropSrc} onCancel={() => setCropSrc(null)} onDone={(dataUrl) => { setCropSrc(null); void update({ wallpaperImage: dataUrl }); }} /> : null}
           <div className="vp-row"><span>Wallpaper tint</span><span className="vp-color-row">
             <input type="color" aria-label="Wallpaper tint color" value={settings.wallpaperTint || "#3a6ea5"} onChange={(event) => void update({ wallpaperTint: event.target.value })} className="vp-color-input" />
             {settings.wallpaperTint ? <button type="button" onClick={() => void update({ wallpaperTint: "" })} className="vp-accent-btn" style={{ minHeight: "1.875rem" }}>Clear</button> : <span className="vp-muted-note">None</span>}

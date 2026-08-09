@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-09T07:16:50.708Z",
+  "generatedAt": "2026-08-09T07:20:35.296Z",
   "packages": [
     {
       "manifest": {
@@ -1439,7 +1439,7 @@
         "schemaVersion": 1,
         "id": "virtual-phone",
         "name": "Virtual Phone",
-        "version": "2.0.79",
+        "version": "2.0.80",
         "description": "Adds persistent in-story phones for personas and configured characters, with per-phone baseline themes and a docked device shell. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar.",
         "engine": {
           "min": "2.4.1",
@@ -1478,8 +1478,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "a58731afaf0711cbff7f7ce1b31016366ce1444deadc842be60ca47128e015ad",
-            "bytes": 427238
+            "sha256": "a022be8da9464ccc71b5defb0442212488b2c829268afe67c8415dd9ba341947",
+            "bytes": 429878
           }
         ],
         "permissions": [
@@ -1492,9 +1492,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/virtual-phone.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/virtual-phone-2.0.79.zip",
-        "sha256": "37d87bd149720dfd4b1a08472c1d392c3e378067322c1175d46e2c45cc5f3d03",
-        "bytes": 145450
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/virtual-phone-2.0.80.zip",
+        "sha256": "1e37e8e909280cddeb05c391a5997c78c37454f47fd2a47e857572e539e59f96",
+        "bytes": 146399
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#virtual-phone"
     },

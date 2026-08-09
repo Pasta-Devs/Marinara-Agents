@@ -49,6 +49,10 @@ export const phoneStylesheet = `
 .vp-switcher-option:hover { background: color-mix(in srgb, var(--vp-text) 7%, var(--vp-surface)); }
 .vp-switcher-option[aria-selected="true"] { color: var(--vp-accent); }
 .vp-switcher-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-cropper { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; margin-top: 0.6rem; padding: 0.75rem; border-radius: 0.85rem; background: color-mix(in srgb, var(--vp-text) 5%, var(--vp-bg)); box-shadow: inset 0 0 0 1px var(--vp-border); }
+.vp-cropper-view { position: relative; overflow: hidden; border-radius: 1rem; background: #000; box-shadow: inset 0 0 0 1px var(--vp-border); cursor: grab; touch-action: none; }
+.vp-cropper-view:active { cursor: grabbing; }
+.vp-cropper-actions { display: flex; gap: 0.5rem; }
 .vp-access-denied { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.375rem 0.75rem 0; padding: 0.5rem 0.625rem; border-radius: 0.75rem; background: color-mix(in srgb, #ff453a 18%, var(--vp-surface)); color: var(--vp-text); font-size: 0.6875rem; font-weight: 500; box-shadow: inset 0 0 0 1px color-mix(in srgb, #ff453a 45%, transparent); }
 .vp-access-denied span { flex: 1; }
 .vp-access-denied button { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; border-radius: 0.5rem; color: var(--vp-muted); }
