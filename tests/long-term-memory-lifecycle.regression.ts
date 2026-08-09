@@ -98,7 +98,7 @@ function assertCatalogArtifact() {
       readFileSync(join(repoRoot, relativePath), "utf8"),
     ) as {
       packages: Array<{
-        manifest?: { id?: string };
+        manifest?: { id?: string; version?: string };
         artifact?: { url?: string; sha256?: string; bytes?: number };
       }>;
     };
@@ -106,6 +106,7 @@ function assertCatalogArtifact() {
       (item) => item.manifest?.id === "long-term-memory",
     );
     assert.ok(entry, `${relativePath} must contain Long-Term Memory`);
+    assert.equal(entry.manifest?.version, packageManifest.version);
     assert.equal(
       entry.artifact?.url,
       `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-${packageManifest.version}.zip`,
@@ -300,7 +301,7 @@ async function main() {
       );
       assert.match(
         artifactClient,
-        /extract:\w+!=="refresh"/u,
+        /extract:(?:\w+\.)?\w+!=="refresh"/u,
         "Normal imports must continue extracting source notes",
       );
       assert.match(

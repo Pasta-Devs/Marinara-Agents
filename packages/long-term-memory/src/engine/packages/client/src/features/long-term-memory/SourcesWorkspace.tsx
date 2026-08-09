@@ -1008,12 +1008,13 @@ export default function SourcesWorkspace({
       );
       return;
     }
+    const effectiveAction = retryContract?.action ?? action;
     const contract: ImportContract = retryContract
-      ? { ...retryContract, sourceIds: ids, action }
+      ? { ...retryContract, sourceIds: ids, action: effectiveAction }
       : {
           source,
           sourceIds: ids,
-          action,
+          action: effectiveAction,
           ...(sourceScope
             ? {
                 scope: {
@@ -1057,7 +1058,7 @@ export default function SourcesWorkspace({
           source: contract.source,
           sourceIds: contract.sourceIds,
           limit: 100,
-          extract: action !== "refresh",
+          extract: contract.action !== "refresh",
           ...(contract.scope ? { scope: contract.scope } : {}),
           ...(contract.mode ? { mode: contract.mode } : {}),
           ...(contract.chatId ? { chatId: contract.chatId } : {}),

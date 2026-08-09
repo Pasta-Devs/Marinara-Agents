@@ -21,6 +21,7 @@ cd ../Marinara-Engine
   MARINARA_ENGINE_ROOT="$PWD" pnpm --filter @marinara-engine/server exec tsx \
     "$PWD/../Marinara-Agents/tests/long-term-memory-${test}.regression.ts"
 done
+node "$PWD/../Marinara-Agents/tests/long-term-memory-feedback-clarity-ui.regression.mjs"
 ```
 
 ## Exact-artifact lifecycle regression

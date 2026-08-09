@@ -96,6 +96,14 @@ async function main() {
     assert.equal(calls.length, 1, "unusable output must not trigger a repair call");
 
     calls.length = 0;
+    response = { content: "{malformed", finishReason: "stop" };
+    await assert.rejects(
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      (error: any) => error.code === "ltm_model_output_unusable",
+    );
+    assert.equal(calls.length, 1, "malformed output must not trigger a repair call");
+
+    calls.length = 0;
     response = { content: '{"summary":"unfinished', finishReason: "length" };
     await assert.rejects(
       () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
@@ -117,11 +125,13 @@ async function main() {
     options.languageModel.chatComplete = async (_messages: any[], chatOptions: any) => {
       calls.push(chatOptions);
       fallbackCalls += 1;
-      if (fallbackCalls === 1) throw response;
+      if (fallbackCalls <= 2) throw new Error("400 response_format unsupported");
       return { content: validContent, finishReason: "stop", usage: { promptTokens: 40, completionTokens: 12, totalTokens: 52 } };
     };
-    const fallback = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() });
-    assert.equal(fallback.response.units.length, 1);
+    await assert.rejects(
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      /response_format unsupported/u,
+    );
     assert.equal(calls.length, 2, "schema compatibility is the only allowed second call");
     assert.equal("responseFormat" in calls[1], false);
   } finally {

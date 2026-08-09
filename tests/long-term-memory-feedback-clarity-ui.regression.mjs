@@ -31,7 +31,9 @@ const locale = JSON.parse(
   ),
 );
 
-assert.match(workspace, /extract: action !== "refresh"/u);
+assert.match(workspace, /const effectiveAction = retryContract\?\.action \?\? action/u);
+assert.match(workspace, /extract: contract\.action !== "refresh"/u);
+assert.match(workspace, /retryContract\?\.action/u);
 assert.match(workspace, /refreshSelectedSources/u);
 assert.match(workspace, /sourceRefreshCompletedWithFailures/u);
 assert.match(
@@ -39,6 +41,10 @@ assert.match(
   /action === "refresh"[\s\S]*!result\.counts\.missing[\s\S]*!result\.counts\.sourceWriteFailed/u,
 );
 assert.match(workspace, /sourceRefreshedExtractionNotRun/u);
+assert.match(workspace, /retry-cancelled/u);
+assert.match(workspace, /cancelledImport\.sourceIds[\s\S]*"import"[\s\S]*cancelledImport/u);
+assert.match(workspace, /retry-failed/u);
+assert.match(workspace, /retryableIds[\s\S]*"import"[\s\S]*importResultContract/u);
 assert.match(workspace, /readyForReviewWithRejectedSuggestions/u);
 assert.match(workspace, /extractionDidNotFinish/u);
 assert.match(activity, /completionReasoningTokens/u);

@@ -2399,8 +2399,19 @@ async function main() {
     assert.equal(emptyResponseImport.json().imported[0].extractionStatus, "failed");
     assert.equal(emptyResponseImport.json().imported[0].error.code, "extract_failed");
     assert.match(emptyResponseImport.json().imported[0].error.message, /empty_output/u);
+    assert.equal(emptyResponseImport.json().imported[0].retryable, true);
     assert.equal(emptyResponseImport.json().imported[0].draft, null);
     assert.equal(emptyResponseImport.json().counts.sourceNotesWritten, 1);
+    const emptyResponsePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "chats", limit: 100 },
+    });
+    const emptyResponseSample = emptyResponsePreview
+      .json()
+      .samples.find((sample: any) => sample.sourceId === "chat-a:summary-empty-response");
+    assert.equal(emptyResponseSample.freshness, "extraction_incomplete");
     chats[0].metadata.summaryEntries.push({
       id: "summary-legacy",
       content: "Legacy identity should migrate to canonical provenance.",

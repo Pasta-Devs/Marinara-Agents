@@ -1044,6 +1044,14 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       });
       return parsed;
     } catch (parseErr) {
+      const error =
+        parseErr instanceof LtmServiceError
+          ? parseErr
+          : new LtmServiceError(
+              "unusable_output: extraction model returned malformed JSON; the source remains retryable",
+              400,
+              "ltm_model_output_unusable",
+            );
       await recordLtmDebugEvent({
         operationId: options.operationId,
         root: options.root,
@@ -1052,10 +1060,10 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
         status: "error",
         sourceNoteId: options.sourceNote.id,
         counts: { responseChars: content.length },
-        error: parseErr,
+        error,
         details: { responseSnippet: content.slice(0, 1_500) },
       });
-      throw parseErr;
+      throw error;
     }
   } catch (err) {
     logger.error(err, "[ltm] Evidence unit extraction failed for note %s", options.sourceNote.id);
