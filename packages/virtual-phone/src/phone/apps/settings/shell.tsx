@@ -127,18 +127,6 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
       setError(cause instanceof Error ? cause.message : "Settings could not be reset.");
     }
   };
-  const [regenState, setRegenState] = React.useState<"idle" | "pending" | "done">("idle");
-  const regenerate = async () => {
-    setError(null);
-    setRegenState("pending");
-    try {
-      await phoneRequest(`/phones/${encodeURIComponent(phone.phoneId)}/pregenerate`, { method: "POST" });
-      setRegenState("done");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The phone could not be regenerated.");
-      setRegenState("idle");
-    }
-  };
   const visibleLorebooks = lorebooks?.filter((lorebook) => lorebook.name.toLocaleLowerCase().includes(loreQuery.trim().toLocaleLowerCase())) ?? [];
   const selectedLorebooks = settings.lorebookIds.length;
   const toggleRow = (label: string, description: string, checked: boolean, patch: Record<string, unknown>) => (
@@ -228,11 +216,6 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
         </div></section>
         <section><div className="vp-group">
           <button type="button" onClick={() => { if (window.confirm("Reset this phone's device settings?")) void reset(); }} className="vp-row vp-row--danger"><RotateCcw size="0.875rem" aria-hidden="true" /> Reset device settings</button>
-        </div></section>
-        <section><h3 className="vp-section-label">Content</h3><div className="vp-group">
-          <p className="vp-muted-note">Clears everything the phone generated and rebuilds the app loadout and content to fit the character. Runs in the background.</p>
-          {regenState === "done" ? <p className="vp-muted-note">Regenerating… reopen apps in a moment to see fresh content.</p> : null}
-          <button type="button" disabled={regenState === "pending"} onClick={() => { if (window.confirm("Reset and regenerate this phone's content?")) void regenerate(); }} className="vp-row vp-row--danger"><RotateCcw size="0.875rem" aria-hidden="true" /> {regenState === "pending" ? "Starting…" : "Reset & regenerate content"}</button>
         </div></section>
       </div>}
       </div>

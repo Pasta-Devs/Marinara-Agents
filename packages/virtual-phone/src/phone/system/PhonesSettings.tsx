@@ -112,12 +112,41 @@ function EditPhoneButton({ phoneId, editingId, setEditingId }: { phoneId: string
   );
 }
 
+function RegenButton({ phoneId, regenId, onRegen }: { phoneId: string; regenId: string | null; onRegen(id: string): void }) {
+  const busy = regenId === phoneId;
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => onRegen(phoneId)}
+      className="min-h-11 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-4 text-xs font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-60"
+    >
+      {busy ? "Starting…" : "Regenerate"}
+    </button>
+  );
+}
+
 export function PhonesSettings({ chatId }: { chatId: string | null }) {
   const [data, setData] = useState<ProvisioningResponse | null>(null);
   const [error, setError] = useState("");
   const [pendingOwnerId, setPendingOwnerId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [regenId, setRegenId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
   const [freeSwitch, setFreeSwitch] = useState(readFreeSwitch);
+  const regenerate = async (phoneId: string) => {
+    if (!chatId || !window.confirm("Reset and regenerate this phone? It rebuilds the app loadout, look and content to fit the character.")) return;
+    setRegenId(phoneId);
+    setNotice("");
+    try {
+      await phoneRequest(`/phones/${encodeURIComponent(phoneId)}/pregenerate?chatId=${encodeURIComponent(chatId)}`, { method: "POST" });
+      setNotice("Regenerating in the background — reopen the phone in a moment.");
+    } catch (requestError) {
+      setNotice(requestError instanceof Error ? requestError.message : "The phone could not be regenerated.");
+    } finally {
+      setRegenId(null);
+    }
+  };
   const setFreeSwitchFlag = (on: boolean) => {
     setFreeSwitch(on);
     try { on ? localStorage.setItem(FREE_SWITCH_KEY, "1") : localStorage.removeItem(FREE_SWITCH_KEY); } catch { /* storage blocked — toggle is best-effort */ }
@@ -172,6 +201,8 @@ export function PhonesSettings({ chatId }: { chatId: string | null }) {
           </span>
         </label>
 
+        {notice ? <p role="status" className="rounded-md border border-[var(--border)] bg-[var(--card)] p-3 text-xs text-[var(--muted-foreground)]">{notice}</p> : null}
+
         {data.persona ? (
           <article className="rounded-md border border-[var(--border)] bg-[var(--card)] p-4">
             <div className="flex flex-wrap items-center gap-4">
@@ -181,6 +212,7 @@ export function PhonesSettings({ chatId }: { chatId: string | null }) {
               </div>
               <ThemeSelect phone={data.persona} chatId={chatId} ownerType="persona" onChange={updatePhone} />
               <EditPhoneButton phoneId={data.persona.phoneId} editingId={editingId} setEditingId={setEditingId} />
+              <RegenButton phoneId={data.persona.phoneId} regenId={regenId} onRegen={regenerate} />
             </div>
             {editingId === data.persona.phoneId ? <InlinePhoneEditor phone={data.persona} onChange={updatePhone} onClose={() => setEditingId(null)} /> : null}
           </article>
@@ -228,6 +260,7 @@ export function PhonesSettings({ chatId }: { chatId: string | null }) {
                 </label>
                 {character.phone ? <ThemeSelect phone={character.phone} chatId={chatId} ownerType="character" onChange={updatePhone} /> : null}
                 {enabled && character.phone ? <EditPhoneButton phoneId={character.phone.phoneId} editingId={editingId} setEditingId={setEditingId} /> : null}
+                {enabled && character.phone ? <RegenButton phoneId={character.phone.phoneId} regenId={regenId} onRegen={regenerate} /> : null}
                 </div>
                 {enabled && character.phone && editingId === character.phone.phoneId ? <InlinePhoneEditor phone={character.phone} onChange={updatePhone} onClose={() => setEditingId(null)} /> : null}
               </article>

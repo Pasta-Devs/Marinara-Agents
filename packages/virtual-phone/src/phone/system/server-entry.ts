@@ -610,6 +610,36 @@ export async function activate({ api }: CapabilityContext) {
       } catch { /* keep the default loadout if the model cannot decide */ }
     }
 
+    // 2b. Device look and status bar — the wallpaper, case, screen wear and battery/signal that fit them.
+    if (model) {
+      try {
+        const completion = await model.chatComplete([
+          { role: "system", content: `Set up this character's phone hardware to fit who they are. Respond with only JSON: {"deviceName":"what they'd name it, or empty","wallpaper":"gradient|midnight|paper","wallpaperTint":"#hex or empty","caseColor":"#hex or empty","pattern":"none|dots|grid|noise|waves","patternIntensity":0-3,"screenEffect":"none|cracks|smudge|blood|scanlines","screenEffectIntensity":0-3,"batteryLevel":0-100,"cellularSignal":0-4}. A careless or rough character has a cracked or smudged screen and a low battery; a tidy one is clean and charged.${await ownerCard(phone, "About the phone owner")}${await customInstructions(phone)}` },
+          { role: "user", content: "Describe their phone." },
+        ], { temperature: 0.8, maxTokens: 300 });
+        const look = parseBoundedContent(completion.content, {
+          fields: { deviceName: "string", wallpaper: "string", wallpaperTint: "string", caseColor: "string", pattern: "string", patternIntensity: "number", screenEffect: "string", screenEffectIntensity: "number", batteryLevel: "number", cellularSignal: "number" },
+          defaults: { deviceName: "", wallpaper: "", wallpaperTint: "", caseColor: "", pattern: "", patternIntensity: 0, screenEffect: "", screenEffectIntensity: 0, batteryLevel: -1, cellularSignal: -1 },
+          limits: { maxString: 60 },
+        }) as Record<string, string | number>;
+        const hex = (value: unknown) => (typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : undefined);
+        const oneOf = (value: unknown, allowed: string[]) => (typeof value === "string" && allowed.includes(value) ? value : undefined);
+        const range = (value: unknown, min: number, max: number) => (typeof value === "number" && value >= min && value <= max ? Math.round(value) : undefined);
+        const patch: Partial<DeviceSettings> = {};
+        if (typeof look.deviceName === "string" && look.deviceName.trim()) patch.deviceName = look.deviceName.trim().slice(0, 40);
+        const wallpaper = oneOf(look.wallpaper, ["gradient", "midnight", "paper"]); if (wallpaper) patch.wallpaper = wallpaper;
+        const pattern = oneOf(look.pattern, ["none", "dots", "grid", "noise", "waves"]); if (pattern) patch.pattern = pattern as DeviceSettings["pattern"];
+        const screenEffect = oneOf(look.screenEffect, ["none", "cracks", "smudge", "blood", "scanlines"]); if (screenEffect) patch.screenEffect = screenEffect as DeviceSettings["screenEffect"];
+        const wallpaperTint = hex(look.wallpaperTint); if (wallpaperTint) patch.wallpaperTint = wallpaperTint;
+        const caseColor = hex(look.caseColor); if (caseColor) patch.caseColor = caseColor;
+        const patternIntensity = range(look.patternIntensity, 0, 3); if (patternIntensity !== undefined) patch.patternIntensity = patternIntensity as DeviceSettings["patternIntensity"];
+        const screenEffectIntensity = range(look.screenEffectIntensity, 0, 3); if (screenEffectIntensity !== undefined) patch.screenEffectIntensity = screenEffectIntensity as DeviceSettings["screenEffectIntensity"];
+        const batteryLevel = range(look.batteryLevel, 0, 100); if (batteryLevel !== undefined) patch.batteryLevel = batteryLevel;
+        const cellularSignal = range(look.cellularSignal, 0, 4); if (cellularSignal !== undefined) patch.cellularSignal = cellularSignal as DeviceSettings["cellularSignal"];
+        if (Object.keys(patch).length) { await phones.updateSettings(phoneId, patch); phone = (await findPhone(phoneId).catch(() => null)) ?? phone; }
+      } catch { /* keep default hardware if the model cannot decide */ }
+    }
+
     const installed = new Set(normalizeDeviceSettings(phone.document.namespaces.phone.settings, phone.document.provisioning.baselineTheme).installedApps);
 
     // 3. Seed the stateless live apps the character actually has.
