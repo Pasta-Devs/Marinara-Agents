@@ -90,7 +90,6 @@ import {
   type ImagePromptOverride,
   type ImagePromptReviewItem,
 } from "../ui/ImagePromptReviewModal";
-import { BrowserChrome } from "./NoodleBrowserChrome";
 import {
   NoodleAnchoredPopover,
   NoodleComposerShell,
@@ -1065,9 +1064,6 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       ? () => onNavigate({ mode: "noodler", view: "profile", accountId: mainAuthorProfile.id })
       : undefined,
     onOpenSettings: openSettings,
-    overlays: (
-      <BrowserChrome badgeLabel="NoodleR" url="https://noodler.local" mobileUrl="noodle.marinara.local/noodler" />
-    ),
   } as const;
 
   // Reserve the same rail width as the feed view (see NoodleHome's "settings" rail) so

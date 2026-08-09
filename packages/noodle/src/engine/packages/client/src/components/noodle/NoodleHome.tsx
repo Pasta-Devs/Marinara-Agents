@@ -153,7 +153,7 @@ import { NoodlerAgeGate } from "./NoodlerAgeGate";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
 import { NoodlerPublishingSettings } from "./NoodlerPublishingSettings";
 import { NoodlerOnboardingWizard } from "./NoodlerBulkCreatePanel";
-import { BrowserChrome, formatTime } from "./NoodleBrowserChrome";
+import { formatTime } from "./NoodleDateTime";
 import { NoodleImageComposer } from "./NoodleImageComposer";
 import { NoodlePollComposer } from "./NoodlePollComposer";
 import {
@@ -5721,17 +5721,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       rightRail={rightRail}
       overlays={
         <>
-          {/* Settings is rendered here for both products, so the chrome has to follow the active
-              product tab instead of always claiming the blue Noodle identity. */}
-          {noodlerSettingsActive ? (
-            <BrowserChrome
-              badgeLabel="NoodleR"
-              url="https://noodler.local"
-              mobileUrl="noodle.marinara.local/noodler"
-            />
-          ) : (
-            <BrowserChrome />
-          )}
           <NoodlerOnboardingWizard
             open={addCreatorsOpen}
             selectionOnly

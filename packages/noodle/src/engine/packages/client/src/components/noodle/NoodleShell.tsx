@@ -309,7 +309,7 @@ export interface NoodleShellProps {
   enableNoodler?: boolean;
   /** Optional right-hand rail (search box, suggestions, etc). Omitted entirely on surfaces that don't need one. */
   rightRail?: ReactNode;
-  /** Theme-dependent overlays (browser chrome strip, lightboxes, modals) that must render inside the token scope. */
+  /** Theme-dependent overlays (lightboxes and modals) that must render inside the token scope. */
   overlays?: ReactNode;
   /** Accent hex driving `--noodle-accent` for every reused surface. NoodleR passes NOODLE_PINK; defaults to Noodle blue. */
   accent?: string;

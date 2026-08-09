@@ -36,7 +36,7 @@ import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPan
 import type { ChatImage } from "../../hooks/use-gallery";
 import { Modal } from "../ui/Modal";
 import { Avatar, ProfileInitial } from "./NoodleShell";
-import { formatTime } from "./NoodleBrowserChrome";
+import { formatTime } from "./NoodleDateTime";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
   countInteractions,

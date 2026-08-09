@@ -57,7 +57,7 @@ import {
   NOODLE_ICON_SCOPE_CLASS,
   useNoodleAccent,
 } from "./NoodleShell";
-import { formatTime } from "./NoodleBrowserChrome";
+import { formatTime } from "./NoodleDateTime";
 import { NoodleImageComposer } from "./NoodleImageComposer";
 import { NoodlePollComposer } from "./NoodlePollComposer";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
