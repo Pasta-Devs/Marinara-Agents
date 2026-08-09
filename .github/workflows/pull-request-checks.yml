@@ -39,6 +39,9 @@ jobs:
       - name: Test World Maps UI contracts
         run: node tests/world-maps-ui-contract.regression.mjs
 
+      - name: Test Long-Term Memory feedback clarity UI contracts
+        run: node tests/long-term-memory-feedback-clarity-ui.regression.mjs
+
       - name: Validate pull request gate topology
         run: node scripts/validate-pr-triage.mjs
 
