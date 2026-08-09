@@ -24,7 +24,7 @@ are the only diffs — confirm each is intended and that the matching
 - [ ] hierarchical-maps  1.3.1 → **1.3.3**
 - [ ] long-term-memory   1.1.6 → **1.2.3**
 - [ ] quest              1.0.3 → **1.0.4**
-- [ ] virtual-phone      (new) → **2.0.68**
+- [ ] virtual-phone      (new) → **2.0.90**
 
 Everything else matches `main` exactly.
 
