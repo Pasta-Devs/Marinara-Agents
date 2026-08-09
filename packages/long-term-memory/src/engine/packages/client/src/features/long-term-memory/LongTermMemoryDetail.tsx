@@ -57,7 +57,7 @@ const onboardingSteps = [
     titleKey: "ui.longTermMemory.longtermmemorydetail.turnItOnForThisChat",
     mobileSprite: "Mari_point_up_left.png",
     desktopSprite: "Mari_point_up_left.png",
-    mobileFlip: true,
+    mobileFlip: false,
     alt: "",
   },
   {
