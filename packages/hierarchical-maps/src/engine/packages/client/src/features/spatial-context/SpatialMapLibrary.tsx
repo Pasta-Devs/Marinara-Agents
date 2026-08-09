@@ -518,10 +518,12 @@ export function SpatialMapLibrary({
     if (!supportedChat || !chatId || !spatial.data) return;
     const current = spatial.data.definition;
     const confirmed = await ask({
-      title: "Link this chat to the shared world?",
-      message: `Link ${chatName || "this chat"} to “${world.name}”? The world definition and artwork stay account-owned. This chat keeps its own current location, route history, snapshots, and Game bindings. Story discoveries remain unpublished until reviewed.`,
-      confirmLabel: "Link shared world",
-      tone: "accent",
+      title: startOverReplacement ? "Break breadcrumb continuity and replace this map?" : "Link this chat to the shared world?",
+      message: startOverReplacement
+        ? `Replace ${chatName || "this chat"} with “${world.name}”? Old messages remain, but prior map locations may no longer resolve. Game map bindings will be reset. The world definition and artwork stay account-owned.`
+        : `Link ${chatName || "this chat"} to “${world.name}”? The world definition and artwork stay account-owned. This chat keeps its own current location, route history, snapshots, and Game bindings. Story discoveries remain unpublished until reviewed.`,
+      confirmLabel: startOverReplacement ? "Replace map" : "Link shared world",
+      tone: startOverReplacement ? "destructive" : "accent",
     });
     if (!confirmed) return;
     const enablementChanged = !enabledForChat && Boolean(onEnabledForChatChange);
@@ -586,10 +588,12 @@ export function SpatialMapLibrary({
     if (!supportedChat || !chatId || !spatial.data) return;
     const existing = spatial.data.definition;
     const confirmed = await ask({
-      title: existing ? "Replace with an independent copy?" : "Add an independent copy?",
-      message: `Copy “${world.name}” into ${chatName || "this chat"}? Future edits to the shared world will not appear here. Shared artwork references remain account-wide.`,
-      confirmLabel: "Use independent copy",
-      tone: existing ? "destructive" : "accent",
+      title: startOverReplacement ? "Break breadcrumb continuity and replace this map?" : existing ? "Replace with an independent copy?" : "Add an independent copy?",
+      message: startOverReplacement
+        ? `Replace ${chatName || "this chat"} with an independent copy of “${world.name}”? Old messages remain, but prior map locations may no longer resolve. Game map bindings will be reset. Future edits to the shared world will not appear here.`
+        : `Copy “${world.name}” into ${chatName || "this chat"}? Future edits to the shared world will not appear here. Shared artwork references remain account-wide.`,
+      confirmLabel: startOverReplacement ? "Replace map" : "Use independent copy",
+      tone: startOverReplacement || existing ? "destructive" : "accent",
     });
     if (!confirmed) return;
     const ownerMode: SpatialOwnerMode = chatMode === "game" ? "game" : "roleplay";
@@ -647,12 +651,14 @@ export function SpatialMapLibrary({
     if (!supportedChat || !chatId || !spatial.data) return;
     const existing = spatial.data.definition;
     const confirmed = await ask({
-      title: existing ? "Replace this chat's map?" : "Add map template to this chat?",
-      message: existing
-        ? `Replace the current working hierarchy with a copy of “${template.name}”? Campaign history may prevent replacement once locations have been used.`
-        : `Add a fresh copy of “${template.name}” to ${chatName || "this chat"}? The saved template will stay unchanged.`,
-      confirmLabel: existing ? "Replace map" : "Add to chat",
-      tone: existing ? "destructive" : "accent",
+      title: startOverReplacement ? "Break breadcrumb continuity and replace this map?" : existing ? "Replace this chat's map?" : "Add map template to this chat?",
+      message: startOverReplacement
+        ? `Replace ${chatName || "this chat"} with “${template.name}”? Old messages remain, but prior map locations may no longer resolve. Game map bindings will be reset. The saved template will stay unchanged.`
+        : existing
+          ? `Replace the current working hierarchy with a copy of “${template.name}”? Campaign history may prevent replacement once locations have been used.`
+          : `Add a fresh copy of “${template.name}” to ${chatName || "this chat"}? The saved template will stay unchanged.`,
+      confirmLabel: startOverReplacement ? "Replace map" : existing ? "Replace map" : "Add to chat",
+      tone: startOverReplacement || existing ? "destructive" : "accent",
     });
     if (!confirmed) return;
     const ownerMode: SpatialOwnerMode = chatMode === "game" ? "game" : "roleplay";

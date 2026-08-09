@@ -30,7 +30,6 @@ import {
   getSpatialDescendantIds,
   resolveSpatialLocationDepth,
   resolveSpatialBreadcrumb,
-  SPATIAL_CONTEXT_LIMITS,
   spatialContextDefinitionSchema,
   validateSpatialArchive,
   type GameMap,
@@ -174,6 +173,7 @@ type PendingPortableLoreImport = {
   definition: SpatialContextDefinition;
   bundle: PortableLoreBundle;
   plan: PortableLoreImportPlan;
+  startOverReplacement: boolean;
 };
 
 const EMPTY_PORTABLE_LORE_REFERENCES: PortableLoreReference[] = [];
@@ -495,6 +495,7 @@ export function SpatialMapWorkspace({
   const [regenerateRequestId, setRegenerateRequestId] = useState(0);
   const [archiveRequestId, setArchiveRequestId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const pendingStartOverImportRef = useRef(false);
   const [archiveReplacementId, setArchiveReplacementId] = useState("");
   const lorebooksQuery = useSpatialLorebooks();
   const { data: lorebooks = [] } = lorebooksQuery;
@@ -1310,13 +1311,6 @@ export function SpatialMapWorkspace({
     const savedDefinition = baseDefinition ?? draft;
     if (!savedDefinition || savedDefinition.locations.length === 0) return false;
     const preserveExistingLocations = spatial.data?.hasCommittedSpatialHistory ?? false;
-    if (preserveExistingLocations && savedDefinition.locations.length >= SPATIAL_CONTEXT_LIMITS.maxLocations) {
-      toast.error(
-        "This map is at the location limit, so a history-safe new starting location cannot be added. Export it and start a new chat instead.",
-      );
-      return false;
-    }
-
     const locationCount = savedDefinition.locations.length;
     const confirmed = await confirmAction({
       title: preserveExistingLocations
@@ -1554,6 +1548,7 @@ export function SpatialMapWorkspace({
       definition: SpatialContextDefinition,
       portableLore: PortableLoreBundle | null,
       entryIdMap: ReadonlyMap<string, string>,
+      startOverReplacement = false,
       onDraftApplied?: () => void,
     ) => {
       const loreRemappedDefinition = portableLore
@@ -1597,7 +1592,7 @@ export function SpatialMapWorkspace({
         enabled: draft?.enabled ?? remappedDefinition.enabled,
         revision: baseDefinition?.revision ?? 0,
       };
-      if (!templateMode && startOverPending) {
+      if (!templateMode && startOverReplacement) {
         setReplacementCurrentLocationId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
       }
       const importedProfile = normalizeHierarchyProfile(rawRecord?.hierarchyProfile, imported);
@@ -1609,6 +1604,7 @@ export function SpatialMapWorkspace({
       setSelectedId(imported.startingLocationId ?? imported.locations[0]?.id ?? null);
       setEnteredParentId(null);
       setMobilePane("hierarchy");
+      if (!templateMode && startOverReplacement) setStartOverPending(true);
       const existingLoreEntryIds = new Set((lorebookEntriesQuery.entries ?? []).map((entry) => entry.id));
       setUnresolvedLoreReferences(
         portableLore
@@ -1632,7 +1628,6 @@ export function SpatialMapWorkspace({
       globalGalleryImages,
       lorebookEntriesQuery.entries,
       ownerMode,
-      startOverPending,
       templateMode,
     ],
   );
@@ -1641,6 +1636,8 @@ export function SpatialMapWorkspace({
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       event.target.value = "";
+      const startOverReplacement = pendingStartOverImportRef.current;
+      pendingStartOverImportRef.current = false;
       if (!file || !draft || isImporting) return;
       setIsImporting(true);
       try {
@@ -1684,10 +1681,11 @@ export function SpatialMapWorkspace({
             definition: parsed.data,
             bundle: portableLore,
             plan: planPortableLoreImport(portableLore, lorebooks, entries, importedMapName),
+            startOverReplacement,
           });
           return;
         }
-        await applyImportedMap(rawRecord, parsed.data, portableLore, new Map());
+        await applyImportedMap(rawRecord, parsed.data, portableLore, new Map(), startOverReplacement);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "The world map could not be imported.");
       } finally {
@@ -1701,7 +1699,6 @@ export function SpatialMapWorkspace({
       isImporting,
       lorebookEntriesQuery.entries,
       lorebooks,
-      startOverPending,
       spatial.data?.hasCommittedSpatialHistory,
     ],
   );
@@ -1726,6 +1723,7 @@ export function SpatialMapWorkspace({
           pendingPortableLoreImport.definition,
           pendingPortableLoreImport.bundle,
           result.entryIdMap,
+          pendingPortableLoreImport.startOverReplacement,
           () => {
             draftApplied = true;
           },
@@ -3293,6 +3291,7 @@ export function SpatialMapWorkspace({
               type="button"
               onClick={() => {
                 setMobileActionsOpen(false);
+                pendingStartOverImportRef.current = false;
                 setStartOverPending(false);
                 importInputRef.current?.click();
               }}
@@ -3487,7 +3486,7 @@ export function SpatialMapWorkspace({
                     type="button"
                     onClick={() => {
                       setReplaceMapOpen(false);
-                      setStartOverPending(true);
+                      pendingStartOverImportRef.current = true;
                       importInputRef.current?.click();
                     }}
                     disabled={isImporting}
@@ -4161,6 +4160,7 @@ export function SpatialMapWorkspace({
                   <button
                     type="button"
                     onClick={() => {
+                      pendingStartOverImportRef.current = false;
                       setStartOverPending(false);
                       importInputRef.current?.click();
                     }}

@@ -108,6 +108,12 @@ function sizeForTargetLocationCount(targetLocationCount: number): SpatialMapDraf
   return "large";
 }
 
+function normalizedTargetLocationCount(value: string): number | null {
+  const parsed = Number(value);
+  if (!value.trim() || !Number.isInteger(parsed) || !Number.isFinite(parsed)) return null;
+  return Math.max(1, Math.min(SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT, parsed));
+}
+
 function sourceCopy(ownerMode: SpatialOwnerMode, standalone: boolean): string {
   if (standalone) return "Uses only your instructions and any lorebooks you explicitly select. No chat or Game plot is used.";
   return ownerMode === "game"
@@ -227,6 +233,7 @@ export function SpatialMapAiBuilder({
       SIZE_OPTIONS.find((option) => option.value === (initialSession?.size ?? initialResult?.size ?? "medium"))!
         .targetLocationCount,
   );
+  const [targetLocationCountInput, setTargetLocationCountInput] = useState(() => String(targetLocationCount));
   const [instructions, setInstructions] = useState(initialSession?.instructions ?? "");
   const [result, setResult] = useState<MapsGenerateSpatialMapDraftResponse | null>(() =>
     withHierarchyProfile(initialSession?.result ?? initialResult, hierarchyProfile),
@@ -344,6 +351,13 @@ export function SpatialMapAiBuilder({
       initialSession?.targetLocationCount ??
         SIZE_OPTIONS.find((option) => option.value === (initialSession?.size ?? initialResult?.size ?? "medium"))!
           .targetLocationCount,
+    );
+    setTargetLocationCountInput(
+      String(
+        initialSession?.targetLocationCount ??
+          SIZE_OPTIONS.find((option) => option.value === (initialSession?.size ?? initialResult?.size ?? "medium"))!
+            .targetLocationCount,
+      ),
     );
     setInstructions(initialSession?.instructions ?? "");
     setResult(withHierarchyProfile(initialSession?.result ?? initialResult, hierarchyProfile));
@@ -474,6 +488,7 @@ export function SpatialMapAiBuilder({
   };
   const requestInvalid =
     (dirty && !allowDirtyGeneratedReplacement) ||
+    normalizedTargetLocationCount(targetLocationCountInput) === null ||
     (operation === "expand" && targetLocationId.length === 0) ||
     (operation !== "expand" && hierarchyMode === "custom" &&
       (!workingHierarchyProfile.name.trim() || workingHierarchyProfile.types.some((type) => !type.label.trim()))) ||
@@ -1014,6 +1029,7 @@ export function SpatialMapAiBuilder({
                   onClick={() => {
                     setSize(option.value);
                     setTargetLocationCount(option.targetLocationCount);
+                    setTargetLocationCountInput(String(option.targetLocationCount));
                     resetResult();
                   }}
                   className={cn(
@@ -1036,15 +1052,25 @@ export function SpatialMapAiBuilder({
                 min={1}
                 max={SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT}
                 step={1}
-                value={targetLocationCount}
+                value={targetLocationCountInput}
                 disabled={generationPending}
                 onChange={(event) => {
-                  const next = Number(event.target.value);
-                  if (!Number.isInteger(next)) return;
-                  const normalized = Math.max(1, Math.min(SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT, next));
-                  setTargetLocationCount(normalized);
-                  setSize(sizeForTargetLocationCount(normalized));
+                  const raw = event.target.value;
+                  setTargetLocationCountInput(raw);
+                  const normalized = normalizedTargetLocationCount(raw);
+                  if (normalized !== null) {
+                    setTargetLocationCount(normalized);
+                    setSize(sizeForTargetLocationCount(normalized));
+                  }
                   resetResult();
+                }}
+                onBlur={() => {
+                  const normalized = normalizedTargetLocationCount(targetLocationCountInput);
+                  if (normalized !== null) {
+                    setTargetLocationCount(normalized);
+                    setTargetLocationCountInput(String(normalized));
+                    setSize(sizeForTargetLocationCount(normalized));
+                  }
                 }}
                 className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)] disabled:opacity-60"
               />

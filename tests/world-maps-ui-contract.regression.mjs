@@ -120,12 +120,12 @@ assert.match(
 );
 assert.match(
   workspaceSource,
-  /setReplaceMapOpen\(false\);\s*setStartOverPending\(true\);\s*importInputRef\.current\?\.click\(\)/u,
+  /setReplaceMapOpen\(false\);\s*pendingStartOverImportRef\.current\s*=\s*true;\s*importInputRef\.current\?\.click\(\)/u,
   "Replace/start over imports must carry replacement intent into the file-import flow.",
 );
 assert.match(
   workspaceSource,
-  /setMobileActionsOpen\(false\);\s*setStartOverPending\(false\);\s*importInputRef\.current\?\.click\(\)/u,
+  /setMobileActionsOpen\(false\);\s*pendingStartOverImportRef\.current\s*=\s*false;\s*setStartOverPending\(false\);\s*importInputRef\.current\?\.click\(\)/u,
   "Ordinary map imports must clear any stale replacement intent.",
 );
 assert.match(

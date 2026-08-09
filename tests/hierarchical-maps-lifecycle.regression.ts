@@ -2874,6 +2874,26 @@ async function main() {
       headers: csrfHeaders,
       payload: { enableAgents: true, activeAgentIds: ["hierarchical-maps"] },
     });
+    const customCreatePreviewRequestCount = generationProviderRequests.length;
+    const customCreatePreview = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${customCreateChat.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        targetLocationCount: 10,
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: impersonateConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+      },
+    })) as { operation: string; system: string; user: string };
+    assert.equal(generationProviderRequests.length, customCreatePreviewRequestCount);
+    assert.equal(customCreatePreview.operation, "create");
+    assert.match(customCreatePreview.system, /Create about 10 locations/u);
     const customCreateRequestIndex = generationProviderRequests.length;
     const customCreate = (await expectJson(app, {
       method: "POST",
@@ -2908,6 +2928,26 @@ async function main() {
     );
 
     mapExpansionExistingTargetId = "lifecycle_harbor";
+    const customExpansionPreviewRequestCount = generationProviderRequests.length;
+    const customExpansionPreview = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${impersonateChat.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "expand",
+        targetLocationId: "lifecycle_world",
+        size: "small",
+        targetLocationCount: 10,
+        instructions: "Add a canal ward connected to the existing harbor.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: impersonateConnection.id,
+        debugMode: false,
+      },
+    })) as { operation: string; system: string; user: string };
+    assert.equal(generationProviderRequests.length, customExpansionPreviewRequestCount);
+    assert.equal(customExpansionPreview.operation, "expand");
+    assert.match(customExpansionPreview.system, /Create about 10 new locations/u);
     const customExpansionRequestIndex = generationProviderRequests.length;
     const customExpansion = (await expectJson(app, {
       method: "POST",
