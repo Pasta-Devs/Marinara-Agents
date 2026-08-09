@@ -84,7 +84,7 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
     <section aria-labelledby="camera-title" className="vp-appview">
       <PhoneAppHeader title="Camera" titleId="camera-title" closeLabel="Close Camera" onBack={onBack} onClose={onClose} />
       {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
-      <div className="vp-viewfinder" aria-live="polite" aria-label={draft !== null ? "Photo review" : "Camera viewfinder"}>
+      <div className={`vp-viewfinder${draft !== null ? " vp-viewfinder--review" : ""}`} aria-live="polite" aria-label={draft !== null ? "Photo review" : "Camera viewfinder"}>
         {shooting ? (
           <span className="vp-skeleton vp-skeleton--line" style={{ width: "70%" }} />
         ) : draft !== null ? (
@@ -135,7 +135,7 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
                 <p>{shot.text}</p>
                 <figcaption>
                   {`${clock.shortDate(shot.at)}, ${clock.time(shot.at)}`}
-                  <button type="button" onClick={() => deleteShot(shot.id)} className="vp-surface-btn" style={{ marginLeft: "0.5rem" }}>Delete</button>
+                  <button type="button" onClick={() => deleteShot(shot.id)} className="vp-surface-btn">Delete</button>
                 </figcaption>
               </figure>
             ))}

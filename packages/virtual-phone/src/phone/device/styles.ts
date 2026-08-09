@@ -182,12 +182,29 @@ export const phoneStylesheet = `
 .vp-review-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .vp-viewfinder { display: flex; align-items: center; justify-content: center; min-height: 11rem; padding: 1rem; border-radius: 1rem; background: linear-gradient(160deg, #14161a, #05070b); color: #e8ecf2; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), inset 0 0 3rem rgb(0 0 0 / 0.6); }
 .vp-viewfinder-text { margin: 0; font-size: 0.8125rem; line-height: 1.5; text-align: center; font-style: italic; }
+/* The viewfinder was an empty rounded box with a sentence in it. Framing marks, a rule-of-thirds
+   grid and a focus reticle cost nothing and make the shutter button mean something. */
+.vp-viewfinder { position: relative; overflow: hidden; }
+.vp-viewfinder::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(90deg, transparent calc(33.33% - 0.5px), color-mix(in srgb, var(--vp-text) 12%, transparent) calc(33.33% - 0.5px) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)), linear-gradient(90deg, transparent calc(66.66% - 0.5px), color-mix(in srgb, var(--vp-text) 12%, transparent) calc(66.66% - 0.5px) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)), linear-gradient(0deg, transparent calc(33.33% - 0.5px), color-mix(in srgb, var(--vp-text) 12%, transparent) calc(33.33% - 0.5px) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)), linear-gradient(0deg, transparent calc(66.66% - 0.5px), color-mix(in srgb, var(--vp-text) 12%, transparent) calc(66.66% - 0.5px) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)); }
+.vp-viewfinder::after { content: ""; position: absolute; inset: 0.75rem; pointer-events: none; border-radius: 0.25rem; background:
+  linear-gradient(var(--vp-accent), var(--vp-accent)) 0 0 / 1rem 2px no-repeat,
+  linear-gradient(var(--vp-accent), var(--vp-accent)) 0 0 / 2px 1rem no-repeat,
+  linear-gradient(var(--vp-accent), var(--vp-accent)) 100% 0 / 1rem 2px no-repeat,
+  linear-gradient(var(--vp-accent), var(--vp-accent)) 100% 0 / 2px 1rem no-repeat,
+  linear-gradient(var(--vp-accent), var(--vp-accent)) 0 100% / 1rem 2px no-repeat,
+  linear-gradient(var(--vp-accent), var(--vp-accent)) 0 100% / 2px 1rem no-repeat,
+  linear-gradient(var(--vp-accent), var(--vp-accent)) 100% 100% / 1rem 2px no-repeat,
+  linear-gradient(var(--vp-accent), var(--vp-accent)) 100% 100% / 2px 1rem no-repeat;
+  opacity: 0.75; }
+.vp-viewfinder--review::before, .vp-viewfinder--review::after { display: none; }
 .vp-shutter-row { display: flex; justify-content: center; margin-top: 0.875rem; }
 .vp-shutter { height: 3.5rem; width: 3.5rem; border-radius: 999px; background: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / 0.3), inset 0 0 0 3px rgb(0 0 0 / 0.15); transition: transform 120ms ease; }
 .vp-shutter:active:not(:disabled) { transform: scale(0.9); }
 .vp-polaroid { display: grid; gap: 0.375rem; }
 .vp-polaroid p { margin: 0; font-size: 0.75rem; line-height: 1.5; font-style: italic; }
-.vp-polaroid figcaption { font-size: 0.5625rem; font-weight: 500; color: var(--vp-muted); }
+.vp-polaroid figcaption { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.5625rem; font-weight: 500; color: var(--vp-muted); }
+/* The delete control is a footnote on a photo, not a page-wide button. */
+.vp-polaroid figcaption .vp-surface-btn { width: auto; min-height: 1.5rem; padding: 0 0.5rem; margin: 0; font-size: 0.5625rem; }
 .vp-noodlerr-subrow { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .vp-noodlerr-locked { display: flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 4rem; font-size: 0.75rem; font-weight: 600; color: var(--vp-muted); border-style: dashed; box-shadow: inset 0 0 0 1.5px var(--vp-border); }
 .vp-app-icon--default { background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 92%, #ffffff), var(--vp-surface)); color: var(--vp-text); }
@@ -365,6 +382,16 @@ export const phoneStylesheet = `
 .vp-thread-name { font-size: 0.8125rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-thread-preview { font-size: 0.6875rem; color: var(--vp-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 1.125rem; height: 1.125rem; padding: 0 0.3125rem; flex-shrink: 0; border-radius: 999px; background: #ff3b30; color: #fff; font-size: 0.625rem; font-weight: 700; box-shadow: 0 1px 3px rgb(0 0 0 / 0.25); }
+/* A conversation that spans a night should read like one, so days are marked. */
+.vp-day-break { align-self: center; margin: 0.375rem 0 0.125rem; padding: 0.125rem 0.625rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 8%, var(--vp-bg)); font-size: 0.5625rem; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; color: var(--vp-muted); }
+.vp-receipt { align-self: flex-end; margin-top: -0.125rem; font-size: 0.5625rem; font-weight: 600; color: var(--vp-muted); }
+.vp-thread-intro { margin: auto; max-width: 14rem; text-align: center; font-size: 0.6875rem; line-height: 1.45; color: var(--vp-muted); }
+/* Three dots that actually move, rather than the words "is typing". */
+.vp-bubble--typing { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.625rem 0.75rem; }
+.vp-bubble--typing span { height: 0.375rem; width: 0.375rem; border-radius: 999px; background: var(--vp-muted); animation: vp-typing 1.1s infinite ease-in-out; }
+.vp-bubble--typing span:nth-child(2) { animation-delay: 0.15s; }
+.vp-bubble--typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes vp-typing { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
 .vp-thread-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .vp-thread-view .vp-composer { flex-shrink: 0; }
 .vp-bubbles { display: flex; flex-direction: column; gap: 0.375rem; flex: 1; overflow-y: auto; padding-bottom: 0.875rem; }

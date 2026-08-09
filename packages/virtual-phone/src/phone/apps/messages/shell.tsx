@@ -1,5 +1,5 @@
 import React from "react";
-import { MessageSquare, Send } from "lucide-react";
+import { ChevronRight, MessageSquare, Send } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
@@ -28,6 +28,16 @@ interface MessagingPayload {
   threads: Thread[];
 }
 
+/** "Today" / "Yesterday" / the weekday, on the phone's own clock. */
+function dayLabel(clock: ReturnType<typeof useStoryClock>, at: string) {
+  const when = clock.at(at).toDateString();
+  const today = clock.at().toDateString();
+  const yesterday = new Date(clock.at().getTime() - 86_400_000).toDateString();
+  if (when === today) return "Today";
+  if (when === yesterday) return "Yesterday";
+  return clock.at(at).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+}
+
 export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
   phoneId: string;
   /** A phone id handed over by another app — Contacts opening the conversation with someone. */
@@ -38,6 +48,12 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
   const [data, setData] = React.useState<MessagingPayload | null>(null);
   const [error, setError] = React.useState("");
   const [activeThreadId, setActiveThreadId] = React.useState<string | null>(null);
+  /**
+   * A conversation that does not exist yet. Starting one used to mean typing into one of a stack of
+   * little forms on the list screen, one per person — so the first message to someone happened in a
+   * different place from every message after it.
+   */
+  const [newTo, setNewTo] = React.useState<{ phoneId: string; name: string } | null>(null);
   const [draft, setDraft] = React.useState("");
   const [sending, setSending] = React.useState(false);
   const bubblesRef = React.useRef<HTMLDivElement>(null);
@@ -121,16 +137,29 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
     if (existing) setActiveThreadId(existing.id);
   }, [openWith, data]);
 
+  /** The open conversation: an existing thread, or a new one aimed at someone with no history. */
+  const conversation = activeThread
+    ? {
+      name: activeThread.otherName,
+      otherPhoneId: activeThread.otherPhoneId,
+      messages: activeThread.messages,
+      reply: activeThread.reply,
+      kind: activeThread.kind,
+    }
+    : newTo
+      ? { name: newTo.name, otherPhoneId: newTo.phoneId, messages: [] as ThreadMessage[], reply: null, kind: "phone" as const }
+      : null;
+
   const startedContactIds = new Set(data?.threads.map((thread) => thread.otherPhoneId));
   const newContacts = data?.contacts.filter((contact) => !startedContactIds.has(contact.phoneId)) ?? [];
 
   return (
     <section aria-labelledby="messages-title" className={`vp-appview${activeThread ? " vp-appview--fixed" : ""}`}>
       <PhoneAppHeader
-        title={activeThread ? activeThread.otherName : "Messages"}
+        title={conversation ? conversation.name : "Messages"}
         titleId="messages-title"
         closeLabel="Close Messages"
-        onBack={() => activeThread ? setActiveThreadId(null) : onBack()}
+        onBack={() => conversation ? (setActiveThreadId(null), setNewTo(null)) : onBack()}
         onClose={onClose}
         actions={[{ id: "refresh", icon: "refresh", label: "Refresh messages", kind: "button" }]}
         onAction={(actionId) => { if (actionId === "refresh") void load(); }}
@@ -148,27 +177,44 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
             </div>
           ))}
         </div>
-      ) : activeThread ? (
+      ) : conversation ? (
         <div className="vp-thread-view">
-          <div ref={bubblesRef} className="vp-bubbles" aria-label={`Conversation with ${activeThread.otherName}`}>
-            {activeThread.messages.map((message) => (
-              <div key={message.id} className={`vp-bubble ${message.from === phoneId ? "vp-bubble--self" : "vp-bubble--other"}`}>
-                {message.text}
-                {message.at ? <span className="vp-bubble-time">{clock.time(message.at)}</span> : null}
-              </div>
-            ))}
-            {activeThread.reply?.status === "pending" ? (
-              <div className="vp-bubble vp-bubble--other" role="status">
-                <span className="vp-muted-note">{activeThread.otherName} is typing…</span>
+          <div ref={bubblesRef} className="vp-bubbles" aria-label={`Conversation with ${conversation.name}`}>
+            {conversation.messages.length === 0 ? (
+              <p className="vp-thread-intro">This is the start of your conversation with {conversation.name}.</p>
+            ) : null}
+            {conversation.messages.map((message, index) => {
+              const previous = conversation.messages[index - 1];
+              // A day separator, so a conversation that spans a night reads like one.
+              const day = clock.at(message.at).toDateString();
+              const newDay = !previous || clock.at(previous.at).toDateString() !== day;
+              const mine = message.from === phoneId;
+              const last = index === conversation.messages.length - 1;
+              return (
+                <React.Fragment key={message.id}>
+                  {newDay && message.at ? <span className="vp-day-break">{dayLabel(clock, message.at)}</span> : null}
+                  <div className={`vp-bubble ${mine ? "vp-bubble--self" : "vp-bubble--other"}`}>
+                    {message.text}
+                    {message.at ? <span className="vp-bubble-time">{clock.time(message.at)}</span> : null}
+                  </div>
+                  {mine && last && conversation.reply?.status !== "pending" ? (
+                    <span className="vp-receipt">Delivered</span>
+                  ) : null}
+                </React.Fragment>
+              );
+            })}
+            {conversation.reply?.status === "pending" ? (
+              <div className="vp-bubble vp-bubble--other vp-bubble--typing" role="status" aria-label={`${conversation.name} is typing`}>
+                <span /><span /><span />
               </div>
             ) : null}
-            {activeThread.reply?.status === "failed" ? (
-              <p role="alert" className="vp-muted-note">{activeThread.reply.error ?? "The reply could not be generated."}</p>
+            {conversation.reply?.status === "failed" ? (
+              <p role="alert" className="vp-muted-note">{conversation.reply.error ?? "The reply could not be generated."}</p>
             ) : null}
           </div>
-          <form className="vp-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void send(activeThread.otherPhoneId, draft); }}>
-            <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Message {activeThread.otherName}</span>
-              <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={activeThread.kind === "chat" ? "Text into the story" : "Message"} maxLength={2000} disabled={sending} className="vp-input" />
+          <form className="vp-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void send(conversation.otherPhoneId, draft); }}>
+            <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Message {conversation.name}</span>
+              <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={conversation.kind === "chat" ? "Text into the story" : "Message"} maxLength={2000} disabled={sending} className="vp-input" autoFocus={conversation.messages.length === 0} />
             </label>
             <button type="submit" aria-label="Send message" disabled={sending || !draft.trim()} className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Send size="1rem" aria-hidden="true" /></button>
           </form>
@@ -203,19 +249,23 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
           {newContacts.length ? (
             <div className="vp-stack">
               <h3 className="vp-section-label">Start a chat</h3>
-              {newContacts.map((contact) => (
-                <form key={contact.phoneId} className="vp-composer" onSubmit={(event) => {
-                  event.preventDefault();
-                  const input = event.currentTarget.elements.namedItem("draft") as HTMLInputElement;
-                  if (input.value.trim()) void send(contact.phoneId, input.value);
-                }}>
-                  <PhoneAvatar name={contact.ownerName} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
-                  <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Message {contact.ownerName}</span>
-                    <input name="draft" placeholder={`Message ${contact.ownerName}`} maxLength={2000} className="vp-input" />
-                  </label>
-                  <button type="submit" aria-label={`Send message to ${contact.ownerName}`} className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Send size="1rem" aria-hidden="true" /></button>
-                </form>
-              ))}
+              <div className="vp-list vp-list--inset-rules">
+                {newContacts.map((contact) => (
+                  <button
+                    key={contact.phoneId}
+                    type="button"
+                    className="vp-thread-row"
+                    onClick={() => { setDraft(""); setNewTo({ phoneId: contact.phoneId, name: contact.ownerName }); }}
+                  >
+                    <PhoneAvatar name={contact.ownerName} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
+                    <span className="vp-thread-body">
+                      <span className="vp-thread-name">{contact.ownerName}</span>
+                      <span className="vp-thread-preview">No messages yet</span>
+                    </span>
+                    <ChevronRight size="1rem" aria-hidden="true" className="vp-row-chevron" />
+                  </button>
+                ))}
+              </div>
             </div>
           ) : null}
         </div>

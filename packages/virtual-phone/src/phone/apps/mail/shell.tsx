@@ -4,6 +4,7 @@ import { draftMail, mailFromLine, mergeMail, parseEmail, readStoredMail, type Ma
 import { phoneRequest, recordActivity } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { useStoryClock } from "../../platform/story-clock";
+import { PhoneAvatar } from "../../platform/avatars";
 import { PhoneEmptyState } from "../../platform/empty-state";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { rememberPerson } from "../../platform/people";
@@ -266,6 +267,7 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
             <div className="vp-list vp-list--inset-rules" aria-busy={loading}>
               {shown.map((item) => (
                 <button key={item.id} type="button" onClick={() => open(item)} className="vp-thread-row">
+                  <PhoneAvatar name={item.folder === "sent" ? item.to : item.from} url={null} />
                   <span className="vp-thread-body">
                     <span className="vp-thread-name" style={item.read ? { fontWeight: 500 } : undefined}>
                       {!item.read ? <span className="vp-mail-dot" aria-label="Unread" /> : null}
