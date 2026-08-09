@@ -13,7 +13,7 @@ import { fallbackSearchResults } from "../apps/goodle/manifest";
 import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
-import { applyTransaction, readAccount } from "../apps/banking/manifest";
+import { applyTransaction, parseProposal, readAccount } from "../apps/banking/manifest";
 
 interface CapabilityContext {
   api: {
@@ -687,6 +687,28 @@ export async function activate({ api }: CapabilityContext) {
         const [name, seller, price, detail] = line.split("|").map((part) => part.trim());
         return name ? { id: randomUUID(), name, seller: seller || "Azmoron", price: price || "", detail: detail || "", status: "Delivered", at: nowIso } : null;
       });
+
+    // 3d. Seed the (fictional) bank account — a plausible balance built from real history so it audits.
+    if (installed.has("banking")) {
+      const m = await resolvePhoneModel(phone, "light");
+      if (m) {
+        try {
+          const completion = await m.chatComplete([
+            { role: "system", content: `Invent this character's recent money history in a fictional roleplay world — the movements that add up to what's in their account now. Respond with only JSON: {"currency":"one word, e.g. credits or dollars","transactions":["+amount :: what it was for", "-amount :: what it was for", ...]}. 4 to 7 movements; start with the larger income so the balance ends up positive and in character.${await ownerCard(phone, "About the account holder")}${await customInstructions(phone)}` },
+            { role: "user", content: "What does their account look like?" },
+          ], { temperature: 1, maxTokens: 500 });
+          const parsed = parseBoundedContent(completion.content, { fields: { currency: "string", transactions: "string[]" }, defaults: { currency: "credits", transactions: [] as string[] }, limits: { maxString: 240, maxItems: 12 } }) as { currency: string; transactions: string[] };
+          const transactions = parsed.transactions
+            .map((line) => parseProposal(line))
+            .filter((entry): entry is { amount: number; description: string } => entry !== null)
+            .map((entry) => ({ id: randomUUID(), at: nowIso, amount: entry.amount, description: entry.description, source: "story" as const }));
+          if (transactions.length) {
+            const balance = transactions.reduce((total, entry) => total + entry.amount, 0);
+            await phones.setAppStorageKey(phoneId, "banking", "account", { balance, currency: (parsed.currency || "credits").trim().slice(0, 24), transactions, pending: [] });
+          }
+        } catch { /* account starts empty if this call fails */ }
+      }
+    }
 
     // 4. Seed the public feed, which already persists its own posts.
     if (installed.has("noodler") && chatId) {
