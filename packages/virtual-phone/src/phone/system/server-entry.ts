@@ -1246,7 +1246,8 @@ export async function activate({ api }: CapabilityContext) {
       try {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
-        if (!model) return { results: fallback };
+        // Diagnostic: silently returning fallback hides why generation is empty. Log the cause once here.
+        if (!model) { api.runtime.logger?.error(new Error("no model resolved"), "[virtual-phone] goodle search fell back: no generation connection resolved"); return { results: fallback }; }
         const storyContext = await worldContext(targetChat(phone, request.query.chatId), phone);
         const completion = await model.chatComplete([
           {
@@ -1259,12 +1260,14 @@ export async function activate({ api }: CapabilityContext) {
           fields: { title: "string", summary: "string", items: "string[]" },
           defaults: fallback,
           limits: { maxString: 500, maxItems: 12 },
-        });
+        }) as { title: string; summary: string; items: string[] };
+        if (!results.items.length) api.runtime.logger?.error(new Error("empty parse"), `[virtual-phone] goodle search produced no items; model returned: ${JSON.stringify(completion.content).slice(0, 500)}`);
         return { results };
       } catch (error) {
         if (error instanceof Error && error.message === "Phone not found") {
           return reply.status(400).send({ error: error.message });
         }
+        api.runtime.logger?.error(error, "[virtual-phone] goodle search threw; returning fallback");
         return { results: fallback };
       }
     });
