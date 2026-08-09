@@ -28,6 +28,15 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
   // The list is the app; adding is a sheet behind the + action, and a contact opens a detail page.
   const [view, setView] = React.useState<"list" | "add">("list");
   const [openId, setOpenId] = React.useState<string | null>(null);
+  const [library, setLibrary] = React.useState<Array<{ id: string; type: string; name: string; bio: string }> | null>(null);
+  const [libraryQuery, setLibraryQuery] = React.useState("");
+
+  React.useEffect(() => {
+    if (view !== "add" || library !== null) return;
+    void phoneRequest<{ people: Array<{ id: string; type: string; name: string; bio: string }> }>(`/phones/${encodeURIComponent(phoneId)}/library`)
+      .then((payload) => setLibrary(payload.people))
+      .catch(() => setLibrary([]));
+  }, [view, library, phoneId]);
 
   React.useEffect(() => {
     let active = true;
@@ -128,12 +137,28 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
           </div>
         </div>
       ) : view === "add" ? (
+        <>
+        <div className="vp-card vp-stack" style={{ gap: "0.5rem", marginBottom: "0.6rem" }}>
+          <span className="vp-section-label">Import a saved character or persona</span>
+          {library === null ? <p className="vp-muted-note">Loading your library…</p> : library.length === 0 ? <p className="vp-muted-note">No saved characters or personas found.</p> : <>
+            <label><span className="vp-sr-only">Search library</span><input className="vp-input" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved characters…" /></label>
+            <div className="vp-stack" style={{ gap: "0.25rem", maxHeight: "12rem", overflowY: "auto" }}>
+              {library.filter((person) => person.name.toLowerCase().includes(libraryQuery.trim().toLowerCase())).slice(0, 40).map((person) => (
+                <button key={`${person.type}:${person.id}`} type="button" className="vp-thread-row" onClick={() => { setDraft({ name: person.name, bio: person.bio, phoneLabel: "" }); setLibraryQuery(""); }}>
+                  <PhoneAvatar name={person.name} url={avatars?.get(person.id) ?? null} />
+                  <span className="vp-thread-body"><span className="vp-thread-name">{person.name}</span><span className="vp-thread-preview">{person.type === "persona" ? "Persona" : "Character"}{person.bio ? ` · ${person.bio}` : ""}</span></span>
+                </button>
+              ))}
+            </div>
+          </>}
+        </div>
         <form className="vp-card vp-stack" onSubmit={addContact} style={{ gap: "0.5rem" }}>
           <label><span className="vp-sr-only">Name</span><input className="vp-input" required maxLength={120} autoFocus value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Name" /></label>
           <label><span className="vp-sr-only">Phone or contact detail</span><input className="vp-input" maxLength={80} value={draft.phoneLabel} onChange={(event) => setDraft({ ...draft, phoneLabel: event.target.value })} placeholder="Phone or contact detail (optional)" /></label>
           <label><span className="vp-sr-only">Bio</span><input className="vp-input" maxLength={500} value={draft.bio} onChange={(event) => setDraft({ ...draft, bio: event.target.value })} placeholder="Bio (optional)" /></label>
           <button type="submit" disabled={adding || !draft.name.trim()} className="vp-accent-btn">{adding ? "Adding..." : "Add contact"}</button>
         </form>
+        </>
       ) : (
         <>
           {!data && !error ? (

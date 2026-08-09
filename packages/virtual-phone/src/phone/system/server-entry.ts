@@ -1165,6 +1165,25 @@ export async function activate({ api }: CapabilityContext) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid messaging request" });
       }
     });
+    // The whole saved library, so Contacts can import a character or persona instead of retyping them.
+    app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/library", async (request, reply) => {
+      try {
+        await findPhone(request.params.phoneId);
+        const [characters, personas] = await Promise.all([
+          api.runtime.resources.listCharacters().catch(() => []),
+          api.runtime.resources.listPersonas().catch(() => []),
+        ]);
+        const map = (records: Array<{ id: string; data: unknown }>, type: "character" | "persona") => records.map((record) => ({
+          id: record.id,
+          type,
+          name: readName(record.data, type === "persona" ? "Persona" : "Character"),
+          bio: readCardText(record.data).split("\n")[0]?.slice(0, 200) ?? "",
+        })).filter((entry) => entry.name.trim());
+        return { people: [...map(personas, "persona"), ...map(characters, "character")] };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Library unavailable" });
+      }
+    });
     app.get<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/contacts", async (request, reply) => {
       try {
         const { phone, chatId } = await chatForPhone(request.params.phoneId, String(request.query.chatId ?? ""));
