@@ -11,16 +11,25 @@ pnpm exec playwright test ../Marinara-Agents/tests/spatial-context.e2e.ts -c pla
 
 The package must be installed in the test data directory before launching the Playwright web server.
 
+Noodle prompt-boundary escaping and hinted-identity redaction can be checked with
+the Engine TypeScript runner:
+
+```bash
+cd ../Marinara-Engine
+pnpm --filter @marinara-engine/server exec tsx ../Marinara-Agents/tests/noodle-prompt-safety.regression.ts
+```
+
 The Long-Term Memory regressions cover storage, extraction, runtime recall,
 privileged routes, debug logging, and the exact release artifact lifecycle:
 
 ```bash
 cd ../Marinara-Engine
  set -e
- for test in storage extraction-graph runtime routes conversation-summary-import debug-log lifecycle; do
+ for test in storage extraction-graph extraction-reliability runtime routes conversation-summary-import debug-log lifecycle; do
   MARINARA_ENGINE_ROOT="$PWD" pnpm --filter @marinara-engine/server exec tsx \
     "$PWD/../Marinara-Agents/tests/long-term-memory-${test}.regression.ts"
 done
+node "$PWD/../Marinara-Agents/tests/long-term-memory-feedback-clarity-ui.regression.mjs"
 ```
 
 ## Exact-artifact lifecycle regression

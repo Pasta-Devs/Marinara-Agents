@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Speaker-segment parsing for merged multi-character conversation replies.
 // A merged reply carries several characters' turns in one message, either as
-// <speaker="Name">...</speaker> tags or as `Name: text` line prefixes. The client
+// <speaker="Name">...</speaker> tags or as `Name: text` / `Name:\ntext` prefixes. The client
 // splits on these for the grouped display; the server splits on them to attribute
 // reactions to the exact part they were aimed at. Shared so the two sides can
 // never drift: a segment index stored by one is resolvable by the other.
@@ -81,8 +81,8 @@ export function parseSpeakerTags(content, knownNames) {
     return foundTag ? segments : null;
 }
 /**
- * Parse `Name: text` line-prefixed segments (the fallback format when no speaker
- * tags are present). Returns null when no known name prefixes any line.
+ * Parse `Name: text` or `Name:\ntext` line-prefixed segments (the fallback format
+ * when no speaker tags are present). Returns null when no known name prefixes any line.
  * `knownNames` holds normalizeTextForMatch()-normalized character names.
  */
 export function parseNamePrefixFormat(content, knownNames, leadingSpeaker) {
@@ -117,15 +117,18 @@ export function parseNamePrefixFormat(content, knownNames, leadingSpeaker) {
     let found = false;
     for (let li = 0; li < lines.length; li++) {
         const line = lines[li];
-        const colonIdx = line.indexOf(": ");
+        const colonIdx = line.indexOf(":");
         if (colonIdx > 0) {
             const potentialName = line.slice(0, colonIdx).trim();
-            if (knownNames.has(normalizeTextForMatch(potentialName))) {
+            const rawText = line.slice(colonIdx + 1);
+            const sameLineText = rawText.endsWith("\r") ? rawText.slice(0, -1) : rawText;
+            if ((sameLineText.length === 0 || /^[\t ]/u.test(sameLineText)) &&
+                knownNames.has(normalizeTextForMatch(potentialName))) {
                 flush();
                 currentSpeaker = potentialName;
-                currentLines = [line.slice(colonIdx + 2)];
+                currentLines = [sameLineText.replace(/^[\t ]+/u, "")];
                 currentStartLine = li;
-                currentLastContentLine = line.slice(colonIdx + 2).trim() ? li : -1;
+                currentLastContentLine = sameLineText.trim() ? li : -1;
                 found = true;
                 continue;
             }
@@ -164,6 +167,14 @@ export function groupConsecutiveSegments(segments) {
         }
     }
     return groups;
+}
+/**
+ * Expand the source lines inside one canonical speaker group for Bubble display.
+ * Reaction indexes stay attached to the stable group while inherited `Name:`
+ * lines can still render as individual message bubbles.
+ */
+export function splitGroupedSegmentDisplayLines(segment) {
+    return segment.lines.flatMap((chunk) => chunk.split(/\r?\n/)).filter((line) => line.trim().length > 0);
 }
 /**
  * The full grouped-segment derivation for a message's content: complete speaker

@@ -11,6 +11,7 @@ export const GENERATION_PARAMETER_SEND_KEYS = [
     "reasoningEffort",
     "verbosity",
 ];
+export const CUSTOM_GENERATION_PARAMETERS_SETTINGS_KEY = "custom-generation-parameters";
 /** Well-known built-in marker identifiers (match ST). */
 export const BUILTIN_MARKERS = {
     MAIN: "main",

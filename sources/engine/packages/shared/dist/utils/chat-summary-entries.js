@@ -1,7 +1,6 @@
 const VALID_KINDS = new Set(["rolling"]);
 const VALID_ORIGINS = new Set(["manual", "automated", "legacy"]);
 const VALID_SOURCES = new Set(["last", "range", "agent"]);
-export const COMPILED_CHAT_SUMMARY_MAX_BYTES = 64 * 1024;
 export const MAX_AUTOMATED_CHAT_SUMMARY_ENTRIES = 200;
 function defaultNow() {
     return new Date().toISOString();
@@ -16,52 +15,6 @@ function fallbackId(prefix, seed) {
 }
 function trimString(value) {
     return typeof value === "string" ? value.trim() : "";
-}
-function utf8ByteLength(text) {
-    let bytes = 0;
-    for (let i = 0; i < text.length; i += 1) {
-        const code = text.charCodeAt(i);
-        if (code < 0x80) {
-            bytes += 1;
-        }
-        else if (code < 0x800) {
-            bytes += 2;
-        }
-        else if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
-            const next = text.charCodeAt(i + 1);
-            if (next >= 0xdc00 && next <= 0xdfff) {
-                bytes += 4;
-                i += 1;
-            }
-            else {
-                bytes += 3;
-            }
-        }
-        else {
-            bytes += 3;
-        }
-    }
-    return bytes;
-}
-function trimToUtf8Bytes(text, maxBytes, fromStart = true) {
-    if (maxBytes <= 0)
-        return "";
-    if (utf8ByteLength(text) <= maxBytes)
-        return text;
-    let low = 0;
-    let high = text.length;
-    while (low < high) {
-        const mid = Math.ceil((low + high) / 2);
-        const candidate = fromStart ? text.slice(text.length - mid) : text.slice(0, mid);
-        if (utf8ByteLength(candidate) <= maxBytes) {
-            low = mid;
-        }
-        else {
-            high = mid - 1;
-        }
-    }
-    const trimmed = fromStart ? text.slice(text.length - low) : text.slice(0, low);
-    return fromStart ? trimmed.replace(/^[\uDC00-\uDFFF]/, "") : trimmed.replace(/[\uD800-\uDBFF]$/, "");
 }
 function normalizeIsoTimestamp(value, fallback) {
     const text = trimString(value);
@@ -92,11 +45,6 @@ export function generateChatSummaryEntryTitle(entry) {
         return "Legacy summary";
     if (entry.origin === "automated")
         return "Automated summary";
-    if (entry.sourceMode === "range" && entry.rangeStartIndex && entry.rangeEndIndex) {
-        return `Summary messages ${entry.rangeStartIndex}-${entry.rangeEndIndex}`;
-    }
-    if (entry.messageCount)
-        return `Summary of ${entry.messageCount} messages`;
     return "Manual summary";
 }
 export function createLegacyChatSummaryEntry(summary, options = {}) {
@@ -253,7 +201,13 @@ export function compileChatSummaryEntries(entries) {
         .trim();
     if (!compiled)
         return null;
-    return trimToUtf8Bytes(compiled, COMPILED_CHAT_SUMMARY_MAX_BYTES, true).trim() || null;
+    return compiled;
+}
+export function combineChatSummaryEntryHistory(entries, sourceEntryIds, combinedEntry, now) {
+    const firstIndex = entries.findIndex((entry) => sourceEntryIds.has(entry.id));
+    const nextEntries = entries.map((entry) => sourceEntryIds.has(entry.id) ? { ...entry, enabled: false, updatedAt: now } : entry);
+    nextEntries.splice(Math.max(0, firstIndex), 0, combinedEntry);
+    return normalizeChatSummaryEntries(nextEntries);
 }
 export function appendChatSummaryEntryToMetadata(metadata, input, options = {}) {
     const entries = normalizeChatSummaryEntries(metadata.summaryEntries, {

@@ -1,0 +1,15 @@
+{
+  "capabilities.actions.backToAgents": "Wróć do Agentów",
+  "capabilities.actions.close": "Zamknij",
+  "capabilities.actions.tryAgain": "Spróbuj ponownie",
+  "navigation.topbar.characters": "Postacie",
+  "navigation.topbar.connections": "Połączenia",
+  "navigation.topbar.noodle": "Noodle",
+  "navigation.topbar.personas": "Persony",
+  "navigation.topbar.settings": "Ustawienia",
+  "settings.modes.conversations": "Rozmowy",
+  "settings.notifications.customSound.actions.remove": "Usuń",
+  "settings.notifications.customSound.status.custom": "Własny",
+  "settings.sections.imageGeneration.title": "Generowanie obrazów",
+  "settings.sections.notifications.title": "Powiadomienia"
+}

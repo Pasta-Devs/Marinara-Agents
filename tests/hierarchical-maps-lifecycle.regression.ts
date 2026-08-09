@@ -90,7 +90,9 @@ function artifactFixture(version: string): ArtifactFixture {
     version === "1.2.9" ||
     version === "1.3.0" ||
     version === "1.3.1" ||
-    version === "1.3.2"
+    version === "1.3.2" ||
+    version === "1.3.3" ||
+    version === "1.3.4"
   ) {
     const clientSource = execFileSync("unzip", ["-p", path, "client.js"], { encoding: "utf8" });
     assert.ok(clientSource.includes(artifactWorldMapsGuideUrl));
@@ -102,29 +104,45 @@ function artifactFixture(version: string): ArtifactFixture {
       version === "1.2.9" ||
       version === "1.3.0" ||
       version === "1.3.1" ||
-      version === "1.3.2"
+      version === "1.3.2" ||
+      version === "1.3.3" ||
+      version === "1.3.4"
     ) {
       assert.match(
         clientSource,
         /\[data-marinara-maps-world-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
       );
     }
-    if (version === "1.2.9" || version === "1.3.0" || version === "1.3.1" || version === "1.3.2") {
+    if (
+      version === "1.2.9" ||
+      version === "1.3.0" ||
+      version === "1.3.1" ||
+      version === "1.3.2" ||
+      version === "1.3.3" ||
+      version === "1.3.4"
+    ) {
       assert.match(
         clientSource,
         /\[data-marinara-maps-workspace-overlay\]\s+\[data-marinara-maps-editor-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
       );
     }
-    if (version === "1.3.1" || version === "1.3.2") {
+    if (version === "1.3.1" || version === "1.3.2" || version === "1.3.3" || version === "1.3.4") {
       assert.match(clientSource, /spatial_transition_rejected/u);
       assert.match(clientSource, /spatial_transition_committed/u);
       assert.match(clientSource, /marinara-capability-server-event/u);
       assert.match(clientSource, /The current location changed\. Review the available destinations\./u);
       assert.match(clientSource, /new Map\(\[\["spatial_transition_stale_definition"/u);
     }
-    if (version === "1.3.2") {
+    if (version === "1.3.2" || version === "1.3.3" || version === "1.3.4") {
       assert.match(clientSource, /Incoming one-way/u);
       assert.match(clientSource, /data-marinara-direct-link-direction/u);
+    }
+    if (version === "1.3.3" || version === "1.3.4") {
+      assert.match(clientSource, /Break breadcrumb continuity and start a new map/u);
+      assert.match(clientSource, /breakHistoryContinuity/u);
+      const serverSource = execFileSync("unzip", ["-p", path, "server.mjs"], { encoding: "utf8" });
+      assert.match(serverSource, /spatial-context\/start-over/u);
+      assert.match(serverSource, /spatial_start_over_confirmation_required/u);
     }
   }
   return {
@@ -158,6 +176,8 @@ const fixtures = new Map(
     artifactFixture("1.3.0"),
     artifactFixture("1.3.1"),
     artifactFixture("1.3.2"),
+    artifactFixture("1.3.3"),
+    artifactFixture("1.3.4"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -182,11 +202,11 @@ assert.deepEqual(candidateFixture.manifest.builtAgainst, {
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
-const currentFixture = fixtures.get("1.3.2");
+const currentFixture = fixtures.get("1.3.4");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
-  engineVersion: "2.4.1",
-  engineCommit: "bb40d3feba0cb96062526f19e11fbe3a97ced9c9",
+  engineVersion: "2.4.2",
+  engineCommit: "00986ff5bfdcd5705d70c7fca8d8ade86665b217",
 });
 
 function seedInstalledProfile(version: string) {
@@ -250,7 +270,9 @@ function catalogFixture(version: string) {
           version === "1.2.9" ||
           version === "1.3.0" ||
           version === "1.3.1" ||
-          version === "1.3.2"
+          version === "1.3.2" ||
+          version === "1.3.3" ||
+          version === "1.3.4"
             ? catalogWorldMapsGuideUrl
             : "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
       },
@@ -2784,11 +2806,11 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.3.2";
+    catalogVersion = "1.3.4";
     catalogOnline = true;
-    const upgraded132 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded132.version, "1.3.2");
-    assert.equal(upgraded132.previousVersion, "1.1.7");
+    const upgraded134 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded134.version, "1.3.4");
+    assert.equal(upgraded134.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
@@ -2834,6 +2856,122 @@ async function main() {
       },
     })) as { currentLocationId: string; definition: { revision: number } };
     assert.equal(impersonateSpatial.currentLocationId, "lifecycle_world");
+
+    const customCreateChat = (await expectJson(app, {
+      method: "POST",
+      url: "/api/chats",
+      headers: csrfHeaders,
+      payload: {
+        name: "Custom create target lifecycle fixture",
+        mode: "roleplay",
+        characterIds: [],
+        connectionId: impersonateConnection.id,
+      },
+    })) as { id: string };
+    await expectJson(app, {
+      method: "PATCH",
+      url: `/api/chats/${customCreateChat.id}/metadata`,
+      headers: csrfHeaders,
+      payload: { enableAgents: true, activeAgentIds: ["hierarchical-maps"] },
+    });
+    const customCreatePreviewRequestCount = generationProviderRequests.length;
+    const customCreatePreview = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${customCreateChat.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        targetLocationCount: 10,
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: impersonateConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+      },
+    })) as { operation: string; system: string; user: string };
+    assert.equal(generationProviderRequests.length, customCreatePreviewRequestCount);
+    assert.equal(customCreatePreview.operation, "create");
+    assert.match(customCreatePreview.system, /Create about 10 locations/u);
+    const customCreateRequestIndex = generationProviderRequests.length;
+    const customCreate = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${customCreateChat.id}/spatial-context/generate`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "create",
+        size: "small",
+        targetLocationCount: 10,
+        instructions: "Create a compact city with practical streets.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: impersonateConnection.id,
+        debugMode: false,
+        hierarchyMode: "auto",
+      },
+    })) as { operation: string };
+    assert.equal(customCreate.operation, "create");
+    assert.match(
+      capturedProviderPrompt(generationProviderRequests[customCreateRequestIndex]),
+      /Create about 10 locations/u,
+      "Custom create targets must reach the provider prompt.",
+    );
+    await expectJson(
+      app,
+      {
+        method: "DELETE",
+        url: `/api/chats/${customCreateChat.id}?force=true`,
+        headers: csrfHeaders,
+      },
+      204,
+    );
+
+    mapExpansionExistingTargetId = "lifecycle_harbor";
+    const customExpansionPreviewRequestCount = generationProviderRequests.length;
+    const customExpansionPreview = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${impersonateChat.id}/spatial-context/generation-prompt/preview`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "expand",
+        targetLocationId: "lifecycle_world",
+        size: "small",
+        targetLocationCount: 10,
+        instructions: "Add a canal ward connected to the existing harbor.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: impersonateConnection.id,
+        debugMode: false,
+      },
+    })) as { operation: string; system: string; user: string };
+    assert.equal(generationProviderRequests.length, customExpansionPreviewRequestCount);
+    assert.equal(customExpansionPreview.operation, "expand");
+    assert.match(customExpansionPreview.system, /Create about 10 new locations/u);
+    const customExpansionRequestIndex = generationProviderRequests.length;
+    const customExpansion = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${impersonateChat.id}/spatial-context/generate`,
+      headers: csrfHeaders,
+      payload: {
+        operation: "expand",
+        targetLocationId: "lifecycle_world",
+        size: "small",
+        targetLocationCount: 10,
+        instructions: "Add a canal ward connected to the existing harbor.",
+        groundingMode: "setup",
+        sourceLorebookIds: [],
+        connectionId: impersonateConnection.id,
+        debugMode: false,
+      },
+    })) as { operation: string; definition: { locations: Array<{ id: string }> } };
+    mapExpansionExistingTargetId = null;
+    assert.equal(customExpansion.operation, "expand");
+    assert.match(
+      capturedProviderPrompt(generationProviderRequests[customExpansionRequestIndex]),
+      /Create about 10 new locations/u,
+      "Custom expansion targets must reach the provider prompt.",
+    );
 
     const guidedGeneration = await app.inject({
       method: "POST",
@@ -3643,7 +3781,107 @@ async function main() {
     assert.equal(guidanceSnapshot?.currentLocationId, "lifecycle_harbor");
     assert.match(guidanceSnapshot?.transitionCommandId ?? "", /^assistant:/u);
 
-    for (const disposableChatId of [branch.id, imported.chatId]) {
+    const startOverChat = (await expectJson(app, {
+      method: "POST",
+      url: "/api/chats",
+      headers: csrfHeaders,
+      payload: {
+        name: "Hierarchical Maps start-over lifecycle fixture",
+        mode: "roleplay",
+        characterIds: [],
+      },
+    })) as { id: string };
+    const startOverChatId = startOverChat.id;
+    await expectJson(app, {
+      method: "PATCH",
+      url: `/api/chats/${startOverChatId}/metadata`,
+      headers: csrfHeaders,
+      payload: { enableAgents: true, activeAgentIds: ["hierarchical-maps"] },
+    });
+    const startOverMessage = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${startOverChatId}/messages`,
+      headers: csrfHeaders,
+      payload: { role: "assistant", content: "The old breadcrumb remains in the transcript." },
+    })) as { id: string };
+    const startOverInitial = (await expectJson(app, {
+      method: "PUT",
+      url: `/api/chats/${startOverChatId}/spatial-context`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition,
+      },
+    })) as { definition: { revision: number }; currentLocationId: string; hasCommittedSpatialHistory: boolean };
+    assert.equal(startOverInitial.hasCommittedSpatialHistory, true);
+    const startOverDefinition = {
+      ...definition,
+      startingLocationId: "fresh_world",
+      locations: [
+        {
+          ...definition.locations[0],
+          id: "fresh_world",
+          name: "Fresh world",
+          links: [],
+        },
+      ],
+    };
+    const missingStartOverConfirmation = (await expectJson(
+      app,
+      {
+        method: "POST",
+        url: `/api/chats/${startOverChatId}/spatial-context/start-over`,
+        headers: csrfHeaders,
+        payload: {
+          expectedRevision: startOverInitial.definition.revision,
+          expectedCurrentLocationId: startOverInitial.currentLocationId,
+          replacementCurrentLocationId: "fresh_world",
+          definition: startOverDefinition,
+        },
+      },
+      400,
+    )) as { code: string };
+    assert.equal(missingStartOverConfirmation.code, "spatial_start_over_confirmation_required");
+    const messagesBeforeStartOver = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${startOverChatId}/messages`,
+    })) as Array<{ id: string }>;
+    const startOverSaved = (await expectJson(app, {
+      method: "POST",
+      url: `/api/chats/${startOverChatId}/spatial-context/start-over`,
+      headers: csrfHeaders,
+      payload: {
+        expectedRevision: startOverInitial.definition.revision,
+        expectedCurrentLocationId: startOverInitial.currentLocationId,
+        replacementCurrentLocationId: "fresh_world",
+        breakHistoryContinuity: true,
+        definition: startOverDefinition,
+      },
+    })) as {
+      currentLocationId: string;
+      hasCommittedSpatialHistory: boolean;
+      definition: { startingLocationId: string; locations: Array<{ id: string; status: string }> };
+    };
+    assert.equal(startOverSaved.currentLocationId, "fresh_world");
+    assert.equal(startOverSaved.definition.startingLocationId, "fresh_world");
+    assert.deepEqual(
+      startOverSaved.definition.locations.map(({ id, status }) => ({ id, status })),
+      [{ id: "fresh_world", status: "active" }],
+    );
+    assert.equal(startOverSaved.hasCommittedSpatialHistory, true);
+    const messagesAfterStartOver = (await expectJson(app, {
+      method: "GET",
+      url: `/api/chats/${startOverChatId}/messages`,
+    })) as Array<{ id: string }>;
+    assert.deepEqual(
+      messagesAfterStartOver.map((message) => message.id),
+      messagesBeforeStartOver.map((message) => message.id),
+      "Starting over must retain old messages while breaking their map continuity",
+    );
+    assert.ok(messagesAfterStartOver.some((message) => message.id === startOverMessage.id));
+
+    for (const disposableChatId of [branch.id, imported.chatId, startOverChatId]) {
       await expectJson(
         app,
         {
@@ -3732,7 +3970,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.3.2");
+    assert.equal(reinstalled.version, "1.3.4");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -3820,7 +4058,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.3.2", status: "active", readiness: "ready" }],
+      [{ version: "1.3.4", status: "active", readiness: "ready" }],
     );
 
     console.info(

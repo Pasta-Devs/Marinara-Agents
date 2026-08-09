@@ -706,12 +706,14 @@ async function openGameSetupMapDraftReview(
     const request = route.request().postDataJSON() as {
       operation: string;
       size: string;
+      targetLocationCount?: number;
       connectionId?: string;
       debugMode: boolean;
     };
     expect(request).toMatchObject({
       operation: "create",
       size: "small",
+      targetLocationCount: 8,
       connectionId: connection.id,
       debugMode: false,
     });
@@ -791,6 +793,7 @@ async function openGameSetupMapDraftReview(
   } else {
     await wizard.getByRole("button", { name: /Draft with AI/ }).click();
     await wizard.getByRole("button", { name: /Small About 8 places/ }).click();
+    await expect(wizard.getByLabel("Custom place target")).toHaveValue("8");
   }
   await wizard.getByRole("button", { name: "Next" }).click();
   await expect(wizard.getByRole("heading", { name: "GM", exact: true })).toBeVisible();
@@ -3479,6 +3482,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     const request = route.request().postDataJSON() as {
       operation: string;
       size: string;
+      targetLocationCount?: number;
       instructions?: string;
       debugMode: boolean;
       promptOverride?: { system: string; user: string };
@@ -3486,6 +3490,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     expect(request).toMatchObject({
       operation: "create",
       size: "small",
+      targetLocationCount: 8,
       instructions: "A foggy port with a lighthouse and secret sewers.",
       debugMode: false,
     });
@@ -3546,6 +3551,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expectAiBuilderLayout(page, mobile);
     await page.getByLabel("What should this world include?").fill("A foggy port with a lighthouse and secret sewers.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
+    await expect(page.getByLabel("Custom place target")).toHaveValue("8");
     await page.getByRole("button", { name: /^Custom Edit every type/u }).click();
     await page.getByRole("button", { name: "Move Region down" }).click();
     await expect(page.getByLabel("Location type 1 label")).toHaveValue("Settlement");
@@ -4311,13 +4317,47 @@ test("AI map expansion preserves a campaign map and its current location", async
       operation: string;
       targetLocationId?: string;
       size: string;
+      targetLocationCount?: number;
       instructions?: string;
       debugMode: boolean;
+      breakHistoryContinuity?: boolean;
     };
+    if (request.operation === "replace") {
+      expect(request.targetLocationId).toBeUndefined();
+      expect(request.breakHistoryContinuity).toBe(true);
+      expect(request.size).toBe("small");
+      expect(request.targetLocationCount).toBe(10);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          operation: "replace",
+          size: "small",
+          source: "roleplay_setup",
+          generatedLocationCount: 1,
+          definition: {
+            ...generatedDefinition,
+            startingLocationId: "fresh_world",
+            locations: [
+              {
+                ...generatedDefinition.locations[0],
+                id: "fresh_world",
+                name: "Fresh world",
+                parentId: null,
+                kind: "region",
+                links: [],
+              },
+            ],
+          },
+        }),
+      });
+      return;
+    }
     expect(request).toMatchObject({
       operation: "expand",
       targetLocationId: "ai_harbor",
       size: "small",
+      targetLocationCount: 8,
       instructions: "Add a riverside ward with an inn for ferrymen.",
       debugMode: false,
     });
@@ -4608,28 +4648,49 @@ test("AI map expansion preserves a campaign map and its current location", async
     await replaceMap.click();
     const replacePanel = page.getByRole("region", { name: "Replace the current map" });
     await expect(replacePanel).toContainText("6 locations");
+    await replacePanel.getByRole("button", { name: "Create with AI" }).click();
+    const aiStartOverDialog = page.getByRole("dialog", {
+      name: "Break breadcrumb continuity and start a new map?",
+    });
+    await expect(aiStartOverDialog).toContainText("Old messages will remain");
+    await expect(aiStartOverDialog).toContainText("historical map links may no longer resolve");
+    await aiStartOverDialog.getByRole("button", { name: "Start new map", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Replace the map draft with AI" })).toBeVisible();
+    await expect(page.getByLabel("Expand beneath")).toHaveCount(0);
+    await expect(page.getByLabel("Custom place target")).toHaveValue("16");
+    await expect(page.getByText("AI action", { exact: true })).toHaveCount(0);
+    await page.getByLabel("What should this world include?").fill("A fresh map after the old campaign.");
+    await page.getByRole("button", { name: /Small About 8 places/ }).click();
+    await page.getByLabel("Custom place target").fill("10");
+    await page.getByRole("button", { name: "Generate draft" }).click();
+    await expect(page.getByText("Validated", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Discard draft", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "World map" })).toBeVisible();
+    if (mobile) await page.getByRole("button", { name: "More map actions" }).click();
+    await page.getByRole("button", { name: "Replace map or start over" }).click();
     const startBlank = replacePanel.getByRole("button", { name: "Start blank" });
     await startBlank.click();
-    const protectedDeleteDialog = page.getByRole("dialog", { name: "Archive this map and start over?" });
+    const protectedDeleteDialog = page.getByRole("dialog", {
+      name: "Break breadcrumb continuity and start a new map?",
+    });
     await expect(protectedDeleteDialog).toHaveAttribute("data-marinara-maps-confirmation", "true");
     await expect(protectedDeleteDialog).toContainText("Are you sure? This is dangerous.");
-    await expect(protectedDeleteDialog).toContainText("Campaign history uses this map");
-    await expect(protectedDeleteDialog).toContainText("6 saved locations cannot be erased");
-    await expect(protectedDeleteDialog).toContainText("preserve its stable ID for older messages");
+    await expect(protectedDeleteDialog).toContainText("Starting over breaks breadcrumb continuity");
+    await expect(protectedDeleteDialog).toContainText("Old messages remain");
+    await expect(protectedDeleteDialog).toContainText("historical map links may no longer resolve");
     await protectedDeleteDialog.getByRole("button", { name: "Start blank", exact: true }).click();
     await expect(
-      page.getByText("Fresh map started. Previous locations remain archived for campaign history. Review it, then Save."),
+      page.getByText(
+        "Fresh map started. Old messages remain, but previous map locations will not resolve after Save. Review it, then Save.",
+      ),
     ).toBeVisible();
     const hierarchy = page.locator('section[aria-label="Location hierarchy"]:visible');
     await expect(hierarchy.getByRole("button", { name: "New world region" })).toBeVisible();
-    await expect(hierarchy).toContainText("Shrouded Coast");
-    await expect(hierarchy).toContainText("archived");
+    await expect(hierarchy).not.toContainText("Shrouded Coast");
+    await expect(hierarchy).not.toContainText("archived");
 
     const beforeProtectedSave = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
-    expect(
-      ((await beforeProtectedSave.json()) as { definition: { locations: Array<{ status: string }> } }).definition.locations
-        .filter((location) => location.status === "archived"),
-    ).toHaveLength(0);
+    expect(((await beforeProtectedSave.json()) as { definition: { locations: Array<{ status: string }> } }).definition.locations).toHaveLength(6);
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .poll(async () => {
@@ -4654,8 +4715,8 @@ test("AI map expansion preserves a campaign map and its current location", async
       })
       .toEqual({
         history: true,
-        oldIds: ["ai_world", "ai_harbor", "ai_lighthouse", "ai_sewers", "ai_riverside", "ai_minnow"],
-        archivedOldCount: 6,
+        oldIds: [],
+        archivedOldCount: 0,
         activeNames: ["New world"],
         currentMatchesStart: true,
       });
@@ -5401,6 +5462,12 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await routeMap.getByRole("button", { name: "Plan route to Upper Level" }).click();
     await expect(recoveredStoryLocation).toContainText("Route to Upper Level");
     await expect(recoveredStoryLocation).toContainText("Next step 1 of 2 · Blackglass Lighthouse");
+    if (mobileRuntime) {
+      const queuedStoryMap = recoveredStoryLocation.getByRole("button", { name: "Open story map" });
+      await expectMinimumInteractiveSize(queuedStoryMap, "Queued mobile story-map control");
+      await queuedStoryMap.click();
+      await expect(recoveredStoryLocation.getByRole("region", { name: "Hierarchical world map" })).toBeVisible();
+    }
 
     await page.evaluate(() => {
       const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as

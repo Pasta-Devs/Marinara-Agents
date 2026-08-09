@@ -17,7 +17,7 @@ import { spotifySearchToolManifest } from "./tools/spotify-search/manifest.js";
 import { spotifyPlayToolManifest } from "./tools/spotify-play/manifest.js";
 import { spotifySetVolumeToolManifest } from "./tools/spotify-set-volume/manifest.js";
 import { editChatMessageToolManifest } from "./tools/edit-chat-message/manifest.js";
-export const BUILT_IN_TOOL_MANIFESTS = [
+export const BUILT_IN_TOOLS = [
     rollDiceToolManifest,
     updateGameStateToolManifest,
     setExpressionToolManifest,

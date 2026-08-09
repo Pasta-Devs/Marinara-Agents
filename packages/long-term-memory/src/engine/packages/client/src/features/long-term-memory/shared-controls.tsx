@@ -208,6 +208,7 @@ export function InfoPopover({
         aria-describedby={open && !pinned ? `${id}-panel` : undefined}
         data-ltm-info={label}
         className="inline-grid h-11 w-11 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        style={{ height: "2.75rem", width: "2.75rem", flexShrink: 0 }}
         onMouseEnter={show}
         onMouseLeave={scheduleClose}
         onFocus={show}
@@ -224,7 +225,7 @@ export function InfoPopover({
         }}
         onMouseDown={(event) => event.preventDefault()}
       >
-        <Info aria-hidden="true" size="0.75rem" />
+        <Info aria-hidden="true" size="0.875rem" />
       </button>
       {open
         ? createPortal(

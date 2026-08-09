@@ -43,9 +43,11 @@ import {
 import type { LongTermMemoryDestinationProps } from "./types";
 import {
   humanizeLabel,
-  memoryLabel,
-  noteTypeLabel,
-  scopeTargetLabel,
+  labelKeys,
+  localizedLabel,
+  memoryLabel as formatMemoryLabel,
+  noteTypeLabel as formatNoteTypeLabel,
+  scopeTargetLabel as formatScopeTargetLabel,
 } from "./display-labels";
 import {
   selectLtmPluralForm,
@@ -57,10 +59,9 @@ import {
   buildScopeIndexes,
   deriveScopeBranches,
   deriveScopeConversations,
-  type ScopeTargetChat,
-  type ScopeTargetCharacter,
-  type ScopeTargetGroup,
+  type ScopeTargets,
 } from "./scope-targets";
+import { TargetPicker, type PickerTarget } from "./TargetPicker";
 
 const noteTypes: readonly LtmNoteType[] = [
   "timeline_event",
@@ -141,12 +142,6 @@ const prefixes: Record<LtmNoteType, string> = {
   tone: "tone",
 };
 
-type ScopeTargets = {
-  currentScope: LtmScope | null;
-  chats: ScopeTargetChat[];
-  groups: ScopeTargetGroup[];
-  characters: ScopeTargetCharacter[];
-};
 type Target = { id: string; label: string; scope?: LtmScope };
 type NoteResponse = { note: LtmNote };
 type RemoveCurrentChatResponse = {
@@ -189,7 +184,11 @@ function searchable(note: LtmNote) {
     .join(" ")
     .toLocaleLowerCase();
 }
-function preview(note: LtmNote, search: string) {
+function preview(
+  note: LtmNote,
+  search: string,
+  localizeUi: LtmTranslationFunction,
+) {
   const sections = Object.entries(note.sections).filter(([, section]) =>
     section.text.trim(),
   );
@@ -204,7 +203,7 @@ function preview(note: LtmNote, search: string) {
   const match = query ? text.toLocaleLowerCase().indexOf(query) : -1;
   const start = match > 60 ? match - 60 : 0;
   return {
-    label: noteTypeLabel(key),
+    label: formatNoteTypeLabel(key, localizeUi),
     text: `${start ? "..." : ""}${text.slice(start, start + 180)}${start + 180 < text.length ? "..." : ""}`,
   };
 }
@@ -285,15 +284,17 @@ function Pill({
   onRemove: () => void;
 }) {
   const { t: localizeUi } = useLtmTranslation();
+  const removeLabel = localizeUi("ui.longTermMemory.pill.removeValue1", {
+    value1: label ?? String(children),
+  });
   return (
     <span className="inline-flex min-h-8 max-w-full items-center gap-1 rounded-md bg-[var(--secondary)] px-2 text-xs text-[var(--foreground)]">
       <span className="truncate">{children}</span>
       <button
         type="button"
         onClick={onRemove}
-        aria-label={localizeUi("ui.longTermMemory.pill.removeValue1", {
-          value1: label ?? String(children),
-        })}
+        aria-label={removeLabel}
+        title={removeLabel}
         className="grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
       >
         <X aria-hidden="true" size="0.75rem" />
@@ -374,6 +375,30 @@ export default function MemoryVault({
   recoveryHandoff,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
+  const untitledMemoryLabel = localizeUi(
+    "ui.longTermMemory.memoryvault.untitledMemory",
+  );
+  const memoryLabel = (note: Pick<LtmNote, "title"> | null | undefined) =>
+    formatMemoryLabel(note, untitledMemoryLabel);
+  const noteTypeLabel = (type: string) =>
+    formatNoteTypeLabel(type, localizeUi);
+  const statusLabel = (status: string) =>
+    localizedLabel(status, localizeUi, labelKeys.status);
+  const modeLabel = (mode: string) =>
+    localizedLabel(mode, localizeUi, labelKeys.mode);
+  const relationLabel = (relation: string) =>
+    localizedLabel(relation, localizeUi, labelKeys.relation);
+  const scopeTargetLabel = (
+    kind: "chat" | "character" | "group" | "persona",
+    id: string,
+    targets: ReadonlyArray<{ id: string; label: string }>,
+  ) =>
+    formatScopeTargetLabel(kind, id, targets, {
+      chat: localizeUi("ui.longTermMemory.memoryvault.chat"),
+      character: localizeUi("ui.longTermMemory.memoryvault.character"),
+      group: localizeUi("ui.longTermMemory.memoryvault.branchGroup"),
+      persona: localizeUi("ui.longTermMemory.memoryvault.persona"),
+    });
   const client = useQueryClient();
   const statusInputId = useId();
   const vaultRef = useRef<HTMLElement>(null);
@@ -422,10 +447,17 @@ export default function MemoryVault({
   const [linkTarget, setLinkTarget] = useState("");
   const [linkRelation, setLinkRelation] =
     useState<LtmLink["relation"]>("involves");
-  const [subjectKey, setSubjectKey] = useState("");
   const [sectionKey, setSectionKey] = useState("");
   const editorSession = useRef(0);
   const noteLoadSession = useRef(0);
+  const legacyGroupNoteId = useRef<string | null>(null);
+  const legacyGroupInitializedNoteId = useRef<string | null>(null);
+  const legacyGroupChatIds = useRef<Set<string>>(new Set());
+  const clearLegacyGroupTracking = () => {
+    legacyGroupNoteId.current = null;
+    legacyGroupInitializedNoteId.current = null;
+    legacyGroupChatIds.current.clear();
+  };
 
   const scopeTargets = useQuery({
     queryKey: queryKeys.scopeTargets(props.chatId),
@@ -498,14 +530,31 @@ export default function MemoryVault({
     setDetailsOpen(false);
     setLinkTarget("");
     setLinkRelation("involves");
-    setSubjectKey("");
     setSectionKey("");
+    clearLegacyGroupTracking();
     setChecked(new Set());
     setMobilePaneAndFocus("navigator");
     // Context switches are the only reset boundary. Dedicated effects above
     // update chat labels without discarding an open draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextKey]);
+  useEffect(() => {
+    if (
+      legacyGroupNoteId.current !== draft?.id ||
+      legacyGroupInitializedNoteId.current === draft?.id ||
+      !scopeTargets.isSuccess
+    ) return;
+    const group = scopeTargets.data?.groups.find(
+      (item) => item.id === draft.scope.groupId,
+    );
+    const chatIds = draft.scope.chatIds ??
+      (draft.scope.chatId ? [draft.scope.chatId] : []);
+    const groupChatIds = new Set(group?.chatIds ?? []);
+    legacyGroupChatIds.current = group
+      ? new Set(chatIds.filter((id) => groupChatIds.has(id)))
+      : new Set();
+    legacyGroupInitializedNoteId.current = draft.id;
+  }, [draft?.id, draft?.scope.chatId, draft?.scope.chatIds, draft?.scope.groupId, scopeTargets.data?.groups, scopeTargets.isSuccess]);
   useEffect(() => {
     if (
       target?.id === `chat:${props.chatId}` &&
@@ -589,7 +638,7 @@ export default function MemoryVault({
       label: localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
         group: group.label,
       }),
-      scope: { groupId: group.id, chatIds: group.chatIds },
+      scope: { groupId: group.id },
     })),
     ...(scopeTargets.data?.characters ?? []).map((character) => ({
       id: `character:${character.id}`,
@@ -600,6 +649,11 @@ export default function MemoryVault({
               character: character.label,
             }),
       scope: { characterIds: [character.id] },
+    })),
+    ...(scopeTargets.data?.personas ?? []).map((persona) => ({
+      id: `persona:${persona.id}`,
+      label: persona.label,
+      scope: { personaId: persona.id },
     })),
   ].filter(
     (candidate, index, items) =>
@@ -669,10 +723,45 @@ export default function MemoryVault({
     if (kind === "chat") return scopeTargetLabel("chat", id, targets);
     return humanizeLabel(kind);
   };
+  const pickerTargets = useMemo<PickerTarget[]>(
+    () => [
+      ...(scopeTargets.data?.chats ?? []).map((chat) => ({
+        kind: "chat" as const,
+        id: chat.id,
+        label: chat.label,
+      })),
+      ...(scopeTargets.data?.groups ?? []).map((group) => ({
+        kind: "group" as const,
+        id: group.id,
+        label: group.label,
+      })),
+      ...(scopeTargets.data?.characters ?? []).map((character) => ({
+        kind: "character" as const,
+        id: character.id,
+        label: character.label,
+        comment: character.comment,
+      })),
+      ...(scopeTargets.data?.personas ?? []).map((persona) => ({
+        kind: "persona" as const,
+        id: persona.id,
+        label: persona.label,
+        comment: persona.comment,
+      })),
+    ],
+    [
+      scopeTargets.data?.characters,
+      scopeTargets.data?.chats,
+      scopeTargets.data?.groups,
+      scopeTargets.data?.personas,
+    ],
+  );
   const subjectLabel = (subject: LtmSubject) => {
     if (subject.ref)
-      return scopeTargetLabel(subject.ref.kind, subject.ref.id, targets);
-    return referenceLabel(subject.key);
+      return scopeTargetLabel(subject.ref.kind, subject.ref.id, pickerTargets, {
+        character: localizeUi("ui.longTermMemory.memoryvault.deletedCharacter"),
+        persona: localizeUi("ui.longTermMemory.memoryvault.missingPersona"),
+      });
+    return localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject");
   };
   const provenanceSourceLabel = () => {
     if (!draft?.provenance) return "";
@@ -721,6 +810,7 @@ export default function MemoryVault({
   useEffect(() => {
     if (!recoveryHandoff) return;
     const next = recoveredNote(recoveryHandoff, localizeUi);
+    clearLegacyGroupTracking();
     setDraft(next);
     setSaved("");
     setIsNew(true);
@@ -786,6 +876,7 @@ export default function MemoryVault({
     editorSession.current += 1;
     noteLoadSession.current += 1;
     setTarget(next);
+    clearLegacyGroupTracking();
     setDraft(null);
     setChecked(new Set());
     setSaved("");
@@ -793,7 +884,6 @@ export default function MemoryVault({
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
-    setSubjectKey("");
     setSectionKey("");
     setMobilePaneAndFocus("navigator");
   }
@@ -812,6 +902,8 @@ export default function MemoryVault({
       return;
     if (expectedContextKey !== targetContextKey.current) return;
     const next = structuredClone(note);
+    legacyGroupNoteId.current = next.id;
+    legacyGroupInitializedNoteId.current = null;
     editorSession.current += 1;
     setDraft(next);
     setSaved(fingerprint(next));
@@ -819,7 +911,6 @@ export default function MemoryVault({
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
-    setSubjectKey("");
     setSectionKey("");
     setError("");
     setNotice("");
@@ -840,6 +931,7 @@ export default function MemoryVault({
     )
       return;
     const next = newNote(target?.scope ?? {}, localizeUi);
+    clearLegacyGroupTracking();
     editorSession.current += 1;
     setDraft(next);
     setSaved("");
@@ -847,7 +939,6 @@ export default function MemoryVault({
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
-    setSubjectKey("");
     setSectionKey("");
     setDetailsOpen(false);
     setMobilePaneAndFocus("workbench");
@@ -871,13 +962,13 @@ export default function MemoryVault({
     )
       return;
     editorSession.current += 1;
+    clearLegacyGroupTracking();
     setDraft(null);
     setSaved("");
     setIsNew(false);
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
-    setSubjectKey("");
     setSectionKey("");
     setMobilePaneAndFocus("navigator");
   }
@@ -1028,6 +1119,7 @@ export default function MemoryVault({
       setDeleteIds(null);
       setOpenActionNoteId(null);
       if (draft && result.deletedIds.includes(draft.id)) {
+        clearLegacyGroupTracking();
         setDraft(null);
         setSaved("");
         setMobilePaneAndFocus("navigator");
@@ -1226,6 +1318,7 @@ export default function MemoryVault({
       });
       if (session !== editorSession.current) return;
       if (result.deleted) {
+        clearLegacyGroupTracking();
         setDraft(null);
         setSaved("");
          setMobilePaneAndFocus("navigator");
@@ -1262,14 +1355,90 @@ export default function MemoryVault({
   }
   const update = <K extends keyof LtmNote>(key: K, value: LtmNote[K]) =>
     setDraft((current) => (current ? { ...current, [key]: value } : current));
+  const removeScopeGroup = () => {
+    if (!draft) return;
+    const chatIds = (draft.scope.chatIds ??
+      (draft.scope.chatId ? [draft.scope.chatId] : [])
+    ).filter((id) => !legacyGroupChatIds.current.has(id));
+    legacyGroupChatIds.current.clear();
+    mutateScope({
+      groupId: undefined,
+      ...(chatIds.length
+        ? { chatIds, chatId: chatIds[0] }
+        : { chatIds: undefined, chatId: undefined }),
+    });
+  };
   const mutateScope = (patch: Partial<LtmScope>) =>
     update("scope", { ...(draft?.scope ?? {}), ...patch });
   const removeScope = (key: "chatIds" | "characterIds", id: string) => {
     if (!draft) return;
+    if (key === "chatIds") legacyGroupChatIds.current.delete(id);
     const values = (draft.scope[key] ?? []).filter((value) => value !== id);
     const next = { ...draft.scope, [key]: values.length ? values : undefined };
     if (key === "chatIds") next.chatId = values[0];
     update("scope", next);
+  };
+  const scopeSelectionIds = new Set([
+    ...(draft?.scope.chatId ? [draft.scope.chatId] : []),
+    ...(draft?.scope.chatIds ?? []),
+    ...(draft?.scope.characterIds ?? []),
+    ...(draft?.scope.groupId ? [`group:${draft.scope.groupId}`] : []),
+    ...(draft?.scope.personaId ? [`persona:${draft.scope.personaId}`] : []),
+  ]);
+  const selectScopeTarget = (target: PickerTarget) => {
+    if (!draft) return;
+    if (target.kind === "group") {
+      const group = scopeTargets.data?.groups.find((item) => item.id === target.id);
+      if (group) {
+        const chatIds = (draft.scope.chatIds ??
+          (draft.scope.chatId ? [draft.scope.chatId] : [])
+        ).filter((id) => !legacyGroupChatIds.current.has(id));
+        legacyGroupChatIds.current.clear();
+        mutateScope({
+          groupId: group.id,
+          chatIds: chatIds.length ? chatIds : undefined,
+          chatId: chatIds[0],
+        });
+      }
+    } else if (target.kind === "chat") {
+      legacyGroupChatIds.current.delete(target.id);
+      mutateScope({
+        chatIds: [
+          ...new Set([
+            ...(draft.scope.chatId ? [draft.scope.chatId] : []),
+            ...(draft.scope.chatIds ?? []),
+            target.id,
+          ]),
+        ],
+        chatId: draft.scope.chatId ?? target.id,
+      });
+    } else if (target.kind === "character") {
+      mutateScope({
+        characterIds: [...new Set([...(draft.scope.characterIds ?? []), target.id])],
+      });
+    } else {
+      mutateScope({ personaId: target.id });
+    }
+  };
+  const subjectSelectionIds = new Set(
+    (draft?.subjects ?? []).map((subject) =>
+      subject.ref ? `${subject.ref.kind}:${subject.ref.id}` : subject.key,
+    ),
+  );
+  const subjectLimit = draft?.type === "character" ? 1 : 2;
+  const subjectLimitReached =
+    Boolean(draft) && (draft?.subjects?.length ?? 0) >= subjectLimit;
+  const selectSubjectTarget = (target: PickerTarget) => {
+    if (!draft || (draft.type !== "character" && draft.type !== "relationship")) return;
+    if (target.kind !== "character" && target.kind !== "persona") return;
+    if ((draft.subjects?.length ?? 0) >= subjectLimit) return;
+    const ref = { kind: target.kind, id: target.id };
+    const key = `${ref.kind}:${ref.id}`;
+    if (subjectSelectionIds.has(key)) return;
+    const subjects = [...(draft.subjects ?? []), { key, ref }].sort((left, right) =>
+      left.key.localeCompare(right.key),
+    );
+    update("subjects", subjects);
   };
   const addSection = () => {
     const key = sectionKey
@@ -1320,22 +1489,6 @@ export default function MemoryVault({
       );
     }
   };
-  const addSubject = () => {
-    if (
-      !draft ||
-      !subjectKey.trim() ||
-      !(draft.type === "character" || draft.type === "relationship")
-    )
-      return;
-    const subjects = [
-      ...(draft.subjects ?? []),
-      { key: subjectKey.trim() },
-    ].sort((left, right) => left.key.localeCompare(right.key));
-    if (subjects.length <= (draft.type === "character" ? 1 : 2))
-      update("subjects", subjects);
-    setSubjectKey("");
-  };
-
   return (
     <section
       ref={vaultRef}
@@ -1386,6 +1539,9 @@ export default function MemoryVault({
             <button
               type="button"
               aria-label={localizeUi(
+                "ui.longTermMemory.memoryvault.clearMemorySearch",
+              )}
+              title={localizeUi(
                 "ui.longTermMemory.memoryvault.clearMemorySearch",
               )}
               onClick={() => setSearch("")}
@@ -1574,7 +1730,7 @@ export default function MemoryVault({
           </option>
           {statuses.map((status) => (
             <option key={status} value={status}>
-              {humanizeLabel(status)}
+              {statusLabel(status)}
             </option>
           ))}
         </select>
@@ -1641,7 +1797,7 @@ export default function MemoryVault({
             >
               {statuses.map((status) => (
                 <option key={status} value={status}>
-                  {humanizeLabel(status)}
+                  {statusLabel(status)}
                 </option>
               ))}
             </select>
@@ -1671,7 +1827,7 @@ export default function MemoryVault({
                       )
                     }
                   />
-                  {humanizeLabel(mode)}
+                  {modeLabel(mode)}
                 </label>
               ))}
             </fieldset>
@@ -1826,7 +1982,7 @@ export default function MemoryVault({
                   </span>
                 </summary>
                 {group.map((note) => {
-                  const notePreview = preview(note, search);
+                  const notePreview = preview(note, search, localizeUi);
                   return (
                     <ClickSurface
                       key={note.id}
@@ -1872,12 +2028,12 @@ export default function MemoryVault({
                               className="shrink-0"
                             />
                           </span>
-                          <span className="mt-1 flex gap-1 text-[0.6875rem]">
+                           <span className="mt-1 flex gap-1 text-xs">
                             <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
                               {noteTypeLabel(note.type)}
                             </span>
                             <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
-                              {humanizeLabel(note.status)}
+                              {statusLabel(note.status)}
                             </span>
                           </span>
                           {notePreview ? (
@@ -2099,7 +2255,7 @@ export default function MemoryVault({
                       >
                         {statuses.map((status) => (
                           <option key={status} value={status}>
-                            {humanizeLabel(status)}
+                            {statusLabel(status)}
                           </option>
                         ))}
                       </select>
@@ -2168,7 +2324,7 @@ export default function MemoryVault({
                                 )
                               }
                             />
-                            {humanizeLabel(mode)}
+                            {modeLabel(mode)}
                           </label>
                         ))}
                       </div>
@@ -2228,6 +2384,10 @@ export default function MemoryVault({
                                 update("sections", next);
                               }}
                               aria-label={localizeUi(
+                                "ui.longTermMemory.memoryvault.removeValue1Section",
+                                { value1: key },
+                              )}
+                              title={localizeUi(
                                 "ui.longTermMemory.memoryvault.removeValue1Section",
                                 { value1: key },
                               )}
@@ -2354,7 +2514,11 @@ export default function MemoryVault({
                               {["critical", "major", "moderate", "minor"].map(
                                 (value) => (
                                   <option key={value} value={value}>
-                                    {humanizeLabel(value)}
+                                    {localizedLabel(
+                                      value,
+                                      localizeUi,
+                                      labelKeys.importance,
+                                    )}
                                   </option>
                                 ),
                               )}
@@ -2459,7 +2623,7 @@ export default function MemoryVault({
                       ))}
                       {draft.scope.groupId ? (
                         <Pill
-                          onRemove={() => mutateScope({ groupId: undefined })}
+                          onRemove={removeScopeGroup}
                         >
                           {scopeTargetLabel(
                             "group",
@@ -2475,7 +2639,12 @@ export default function MemoryVault({
                           {scopeTargetLabel(
                             "persona",
                             draft.scope.personaId,
-                            [],
+                            pickerTargets,
+                            {
+                              persona: localizeUi(
+                                "ui.longTermMemory.memoryvault.missingPersona",
+                              ),
+                            },
                           )}
                         </Pill>
                       ) : null}
@@ -2484,87 +2653,14 @@ export default function MemoryVault({
                       data-ltm-inspector-fields
                       className="grid gap-2"
                     >
-                      <select
-                        className={inputClass}
-                        defaultValue=""
-                        aria-label={localizeUi(
-                          "ui.longTermMemory.memoryvault.addAnotherChat",
-                        )}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          if (!value) return;
-                          const [kind, id] = value.split(/:(.+)/, 2);
-                          if (kind === "group") {
-                            const group = scopeTargets.data?.groups.find(
-                              (item) => item.id === id,
-                            );
-                            if (group)
-                              mutateScope({
-                                groupId: id,
-                                chatIds: group.chatIds,
-                                chatId: group.chatIds[0],
-                              });
-                          } else if (kind === "chat" && id) {
-                            mutateScope({
-                              chatIds: [
-                                ...new Set([
-                                  ...(draft.scope.chatId
-                                    ? [draft.scope.chatId]
-                                    : []),
-                                  ...(draft.scope.chatIds ?? []),
-                                  id,
-                                ]),
-                              ],
-                              chatId: draft.scope.chatId ?? id,
-                            });
-                          }
-                          event.currentTarget.value = "";
-                        }}
-                      >
-                        <option value="">
-                          {localizeUi(
-                            "ui.longTermMemory.memoryvault.addAnotherChat",
-                          )}
-                        </option>
-                        {(scopeTargets.data?.chats ?? []).map((chat) => (
-                          <option key={chat.id} value={`chat:${chat.id}`}>
-                            {chat.label}
-                          </option>
-                        ))}
-                        {(scopeTargets.data?.groups ?? []).map((group) => (
-                          <option key={group.id} value={`group:${group.id}`}>
-                            {localizeUi(
-                              "ui.longTermMemory.memoryvault.groupBranches",
-                              { group: group.label },
-                            )}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        className={inputClass}
-                        placeholder={localizeUi(
-                          "ui.longTermMemory.memoryvault.addAnotherCharacter",
-                        )}
-                        aria-label={localizeUi(
-                          "ui.longTermMemory.memoryvault.addAnotherCharacter",
-                        )}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            const id = event.currentTarget.value.trim();
-                            if (id) {
-                              mutateScope({
-                                characterIds: [
-                                  ...new Set([
-                                    ...(draft.scope.characterIds ?? []),
-                                    id,
-                                  ]),
-                                ],
-                              });
-                              event.currentTarget.value = "";
-                            }
-                          }
-                        }}
+                      <TargetPicker
+                        targets={pickerTargets}
+                        selectedIds={scopeSelectionIds}
+                        allowedKinds={new Set(["chat", "group", "character", "persona"])}
+                        placeholder={localizeUi("ui.longTermMemory.memoryvault.chooseScope")}
+                        emptyLabel={localizeUi("ui.longTermMemory.memoryvault.noScopeTargets")}
+                        clearLabel={localizeUi("ui.longTermMemory.memoryvault.clearTargetSearch")}
+                        onSelect={selectScopeTarget}
                       />
                     </div>
                   </section>
@@ -2589,7 +2685,7 @@ export default function MemoryVault({
                           label={localizeUi(
                             "ui.longTermMemory.longtermmemorydetail.value1Value2",
                             {
-                              value1: humanizeLabel(link.relation),
+                               value1: relationLabel(link.relation),
                               value2: memoryLabel(
                                 allNotes.find(
                                   (note) => note.id === link.target,
@@ -2604,7 +2700,7 @@ export default function MemoryVault({
                             )
                           }
                         >
-                          {humanizeLabel(link.relation)}
+                            {relationLabel(link.relation)}
                           {" -> "}
                           <button
                             type="button"
@@ -2663,7 +2759,7 @@ export default function MemoryVault({
                       >
                         {relations.map((relation) => (
                           <option key={relation} value={relation}>
-                            {humanizeLabel(relation)}
+                            {relationLabel(relation)}
                           </option>
                         ))}
                       </select>
@@ -2710,31 +2806,21 @@ export default function MemoryVault({
                           </Pill>
                         ))}
                       </div>
-                      <div className="flex gap-2">
-                        <input
-                          className={inputClass}
-                          value={subjectKey}
-                          aria-label={localizeUi(
-                            "ui.longTermMemory.memoryvault.characterIdOrPersonaId",
-                          )}
-                          onChange={(event) =>
-                            setSubjectKey(event.target.value)
-                          }
-                          placeholder={localizeUi(
-                            "ui.longTermMemory.memoryvault.characterIdOrPersonaId",
-                          )}
+                      {subjectLimitReached ? (
+                        <p className="text-xs text-[var(--muted-foreground)]" role="status">
+                          {localizeUi("ui.longTermMemory.memoryvault.subjectLimitReached")}
+                        </p>
+                      ) : (
+                        <TargetPicker
+                          targets={pickerTargets}
+                          selectedIds={subjectSelectionIds}
+                          allowedKinds={new Set(["character", "persona"])}
+                          placeholder={localizeUi("ui.longTermMemory.memoryvault.chooseSubject")}
+                          emptyLabel={localizeUi("ui.longTermMemory.memoryvault.noSubjectTargets")}
+                          clearLabel={localizeUi("ui.longTermMemory.memoryvault.clearTargetSearch")}
+                          onSelect={selectSubjectTarget}
                         />
-                        <Button
-                          onClick={addSubject}
-                          disabled={
-                            !subjectKey.trim() ||
-                            (draft.subjects?.length ?? 0) >=
-                              (draft.type === "character" ? 1 : 2)
-                          }
-                        >
-                          {localizeUi("ui.longTermMemory.tokeneditor.add")}
-                        </Button>
-                      </div>
+                      )}
                     </section>
                   ) : null}
                   {draft.conflicts?.length ? (

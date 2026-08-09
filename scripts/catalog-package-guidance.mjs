@@ -105,6 +105,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     activation:
       "Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
   },
+  noodle: {
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+  },
   spotify: {
     modes: ["conversation", "roleplay", "game"],
     activation: "Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",

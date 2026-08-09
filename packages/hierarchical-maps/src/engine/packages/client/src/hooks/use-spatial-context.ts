@@ -95,8 +95,13 @@ export interface UpdateSpatialContextInput {
   hierarchyProfile?: SpatialHierarchyProfile;
 }
 
+export interface StartOverSpatialContextInput extends UpdateSpatialContextInput {
+  breakHistoryContinuity: true;
+}
+
 export interface GenerateSpatialMapDraftInput extends GenerateSpatialMapDraftRequest {
   chatId: string;
+  breakHistoryContinuity?: true;
   hierarchyMode?: SpatialHierarchyProfile["mode"];
   hierarchyProfile?: SpatialHierarchyProfile;
   generationPreferencesOverride?: SpatialGenerationPreferences;
@@ -298,6 +303,27 @@ export function useUpdateSpatialContext() {
       packageApi.put<MapsSpatialContextResponse>(`/chats/${chatId}/spatial-context`, request),
     onSuccess: (response, variables) => {
       queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), response);
+    },
+    onError: (error, variables) => {
+      if (getSpatialContextProblem(error).conflict) {
+        void queryClient.invalidateQueries({
+          queryKey: spatialContextKeys.detail(variables.chatId),
+        });
+      }
+    },
+  });
+}
+
+export function useStartOverSpatialContext() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, ...request }: StartOverSpatialContextInput) =>
+      packageApi.post<MapsSpatialContextResponse>(`/chats/${chatId}/spatial-context/start-over`, request),
+    onSuccess: (response, variables) => {
+      queryClient.setQueryData(spatialContextKeys.detail(variables.chatId), response);
+      void queryClient.invalidateQueries({
+        queryKey: spatialContextKeys.sharedWorlds,
+      });
     },
     onError: (error, variables) => {
       if (getSpatialContextProblem(error).conflict) {

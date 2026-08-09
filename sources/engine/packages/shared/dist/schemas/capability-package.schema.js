@@ -40,7 +40,33 @@ const capabilityPackageManifestBaseSchema = z
             "spatial-workspace",
             "chat-runtime",
             "game-world-map",
+            // Adds a top-level destination to Home's browser shell.
+            "home-browser-tab",
+            // Mounts the package's own game UI over the narration.
+            "game-surface",
         ]))
+            .optional(),
+        /** Options for the `game-surface` slot. */
+        gameSurface: z
+            .object({
+            /** Class the host puts on the game area while this surface is mounted, so the package can
+             *  restyle the shared chrome that renders outside its element. Declared rather than pushed at
+             *  runtime, so the theme applies on first paint. */
+            surfaceClass: z
+                .string()
+                .regex(/^[a-z][a-z0-9-]*$/)
+                .max(60)
+                .optional(),
+        })
+            .strict()
+            .optional(),
+        /** Browser metadata is declarative so Home can paint the tab before the client bundle loads. */
+        homeBrowserTab: z
+            .object({
+            label: z.string().min(1).max(40),
+            ariaLabel: z.string().min(1).max(100).optional(),
+        })
+            .strict()
             .optional(),
         conversationGame: z
             .object({
@@ -82,7 +108,7 @@ const capabilityPackageManifestBaseSchema = z
     restartRequired: z.boolean().default(false),
 })
     .strict();
-export const supportedCapabilityApi = Object.freeze({ major: 1, minor: 7 });
+export const supportedCapabilityApi = Object.freeze({ major: 1, minor: 8 });
 const capabilityApiVersionSchema = z
     .object({
     major: z.number().int().positive(),
@@ -107,10 +133,36 @@ export const capabilityPackageManifestV2Schema = capabilityPackageManifestBaseSc
     builtAgainst: capabilityPackageBuiltAgainstSchema,
 })
     .strict();
-export const capabilityPackageManifestSchema = z.discriminatedUnion("schemaVersion", [
-    capabilityPackageManifestV1Schema,
-    capabilityPackageManifestV2Schema,
-]);
+export const capabilityPackageManifestSchema = z
+    .discriminatedUnion("schemaVersion", [capabilityPackageManifestV1Schema, capabilityPackageManifestV2Schema])
+    .superRefine((manifest, ctx) => {
+    // A game-surface package draws the whole mode from its client bundle: without a client entrypoint the
+    // module loader skips it, so it would be offered in the setup wizard and then render nothing. Caught
+    // here so it fails at install with a clear reason rather than as an empty screen later.
+    if (manifest.contributions?.slots?.includes("game-surface") && !manifest.entrypoints.client?.trim()) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["entrypoints", "client"],
+            message: 'A package declaring the "game-surface" slot must provide a client entrypoint to render it',
+        });
+    }
+    if (manifest.contributions?.slots?.includes("home-browser-tab")) {
+        if (!manifest.entrypoints.client?.trim()) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["entrypoints", "client"],
+                message: 'A package declaring the "home-browser-tab" slot must provide a client entrypoint',
+            });
+        }
+        if (!manifest.contributions.homeBrowserTab) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["contributions", "homeBrowserTab"],
+                message: 'A package declaring the "home-browser-tab" slot must describe its browser tab',
+            });
+        }
+    }
+});
 export const capabilityCatalogPackageSchema = z
     .object({
     manifest: capabilityPackageManifestSchema,

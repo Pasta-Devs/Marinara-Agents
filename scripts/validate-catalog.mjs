@@ -360,6 +360,18 @@ for (const entry of catalog.packages) {
       throw new Error(`Undeclared entrypoint ${entrypoint} for ${manifest.id}`);
     }
   }
+  const browserTabIconPaths = manifest.contributions?.homeBrowserTab?.iconPaths ?? [];
+  if (browserTabIconPaths.length > 2) {
+    throw new Error(`${manifest.id} declares more than two Home browser tab icons`);
+  }
+  for (const iconPath of browserTabIconPaths) {
+    if (!declaredPaths.has(iconPath)) {
+      throw new Error(`Undeclared Home browser tab icon ${iconPath} for ${manifest.id}`);
+    }
+    if (!/\.(?:gif|jpe?g|png|webp)$/iu.test(iconPath)) {
+      throw new Error(`Unsupported Home browser tab icon format ${iconPath} for ${manifest.id}`);
+    }
+  }
   for (const declared of manifest.files) {
     const sourcePayload = await readFile(join(packageRoot, declared.path));
     const archivedPayload = readZip(["-p", artifactPath, declared.path], {

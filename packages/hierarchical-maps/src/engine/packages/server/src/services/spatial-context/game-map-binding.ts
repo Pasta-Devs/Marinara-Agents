@@ -268,6 +268,37 @@ export function countGameMapBindingsBySpatialLocation(metadata: Record<string, u
   return counts;
 }
 
+export function clearGameMapSpatialLocationBindings(metadata: Record<string, unknown>): Record<string, unknown> {
+  const maps = getGameMapsFromMeta(metadata);
+  if (maps.length === 0) return metadata;
+
+  const clearedMaps = maps.map((map) => {
+    const clearedMap = withSpatialLocationId(map, null);
+    if (clearedMap.type === "node") {
+      return {
+        ...clearedMap,
+        nodes: (clearedMap.nodes ?? []).map((node) => withSpatialLocationId(node, null)),
+      };
+    }
+    return {
+      ...clearedMap,
+      cells: (clearedMap.cells ?? []).map((cell) => withSpatialLocationId(cell, null)),
+    };
+  });
+  const previousActiveId =
+    typeof metadata.activeGameMapId === "string"
+      ? metadata.activeGameMapId
+      : getGameMapId(metadata.gameMap as GameMap | null | undefined);
+  const activeMap =
+    clearedMaps.find((map, index) => getGameMapId(map, index) === previousActiveId) ?? clearedMaps[0]!;
+  return {
+    ...metadata,
+    gameMaps: clearedMaps,
+    gameMap: activeMap,
+    activeGameMapId: getGameMapId(activeMap),
+  };
+}
+
 export function buildGameMapBindingReconciliationPreview(
   metadata: Record<string, unknown>,
   definition: SpatialContextDefinition,

@@ -5,6 +5,7 @@ import type {
   LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import type { LtmLocalizationContext } from "./localization";
+export type { ScopeTargets } from "./scope-targets";
 
 export type CapabilityProps = {
   package?: {

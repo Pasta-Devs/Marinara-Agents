@@ -13,6 +13,8 @@ import type { PromptOverrideKeyDef } from "../types.js";
 export interface ConversationSelfieCtx extends Record<string, string | number | undefined> {
   appearance: string;
   charName: string;
+  characterImageInstructions: string;
+  personality: string;
   /**
    * Chat-level selfie tags to append to the meta-prompt. Currently always ""
    * at runtime — none of the call sites (resolveConversationSelfieSystemPrompt
@@ -32,6 +34,16 @@ export const CONVERSATION_SELFIE: PromptOverrideKeyDef<ConversationSelfieCtx> = 
     },
     { name: "charName", description: "Character display name.", example: "Lyra" },
     {
+      name: "personality",
+      description: "Character personality and traits that should influence the selfie naturally.",
+      example: "reserved, observant, fascinated by old architecture",
+    },
+    {
+      name: "characterImageInstructions",
+      description: "Optional character-specific image quality, subject, camera, and composition instructions.",
+      example: "Uses grainy 35mm film and prefers candid, imperfect framing.",
+    },
+    {
       name: "selfieTagsBlock",
       description:
         "Pre-formatted block listing chat-level selfie tags. Empty when none, otherwise begins with two newlines to preserve the blank line above.",
@@ -43,6 +55,15 @@ export const CONVERSATION_SELFIE: PromptOverrideKeyDef<ConversationSelfieCtx> = 
       `You are an image prompt generator. Create a concise, detailed image generation prompt for a selfie photo.`,
       `The character's appearance: ${ctx.appearance}`,
       `Character name: ${ctx.charName}`,
+      ...(ctx.personality
+        ? [
+            `Character personality and traits: ${ctx.personality}`,
+            `Let those traits naturally affect the subject, expression, quality, camera habits, and composition.`,
+          ]
+        : []),
+      ...(ctx.characterImageInstructions
+        ? [`Character-specific image instructions: ${ctx.characterImageInstructions}`]
+        : []),
       ``,
       `Generate a prompt that describes a selfie photo of this character. Include:`,
       `- Physical appearance details (face, hair, eyes, skin)`,
@@ -57,6 +78,8 @@ export const CONVERSATION_SELFIE: PromptOverrideKeyDef<ConversationSelfieCtx> = 
   exampleContext: {
     appearance: "auburn hair, green eyes, leather jacket, mid-twenties, athletic build",
     charName: "Lyra",
+    personality: "reserved, observant, fascinated by old architecture",
+    characterImageInstructions: "Uses grainy 35mm film and prefers candid, imperfect framing.",
     selfieTagsBlock: "\n\nAlways include these tags/modifiers in the prompt: masterpiece, best quality, sharp focus",
   },
 };

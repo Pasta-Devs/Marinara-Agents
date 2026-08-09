@@ -190,7 +190,9 @@ export const SPRITES_SINGLE_FULL_BODY: PromptOverrideKeyDef<SpritesSingleFullBod
   defaultBuilder: (ctx) =>
     [
       `single full-body character sprite, one character only,`,
-      `entire body visible from head to toe, centered in frame, no cropping,`,
+      `tall pulled-back long-shot composition, entire body visible continuously from the top of the hair through both shoes and the soles of both feet,`,
+      `centered in frame with generous empty space above the head and below the feet, character occupies no more than 76% of the canvas height,`,
+      `no waist-up crop, no portrait framing, no close-up, no missing legs or feet,`,
       `solid white studio background,`,
       `${ctx.appearance},`,
       `pose/action: ${ctx.pose},`,

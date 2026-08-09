@@ -26,6 +26,13 @@ are the only diffs — confirm each is intended and that the matching
 - [ ] quest              1.0.3 → **1.0.4**
 - [ ] virtual-phone      (new) → **2.0.91**
 
+After merging `origin/staging` (035b803) the catalogs came back pointing at `main`
+again, and were repointed wholesale a second time. Expect to redo this after every
+merge from staging, or after any catalog rebuild — the builder hardcodes `main`.
+Noodle 1.0.0, World Maps 1.3.4 and Long-Term Memory 1.2.4 arrived with that merge
+and are advertised from this branch too; every advertised artifact was checked to
+exist in this branch's tree.
+
 Everything else matches `main` exactly.
 
 Delete this file once done.

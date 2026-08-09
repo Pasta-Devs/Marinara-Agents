@@ -1,0 +1,177 @@
+import {
+  CHAT_SUMMARY_OUTPUT_TOKENS,
+  DEFAULT_CHAT_SUMMARY_COMBINE_PROMPT,
+  DEFAULT_CHAT_SUMMARY_PROMPT,
+  DEFAULT_LONG_TERM_MEMORY_CHAT_SUMMARY_PROMPT,
+  LONG_TERM_MEMORY_CHAT_SUMMARY_PROMPT_ID,
+  isLongTermMemoryChatSummaryPromptAllowed,
+  normalizeChatSummaryPromptSettings,
+} from "@marinara-engine/shared";
+
+const RETIRED_CHAT_SUMMARY_AGENT_ID = "chat-summary";
+const DEFAULT_AUTOMATIC_SUMMARY_INTERVAL = 5;
+const MIN_AUTOMATIC_SUMMARY_INTERVAL = 1;
+const MAX_AUTOMATIC_SUMMARY_INTERVAL = 200;
+const MIN_SUMMARY_CONTEXT_SIZE = 5;
+const MAX_SUMMARY_CONTEXT_SIZE = 500;
+
+export const CONTINUE_ASSISTANT_MESSAGE_PROMPT = "Your last message got cut off! Please, continue!";
+export const CONTINUE_ASSISTANT_MESSAGE_DIRECT_PROMPT =
+  "Your last message got cut off. Continue it exactly from where it stopped. Your output will be appended directly to the final character of that message with no newline or separator. Do not restart, repeat, or add leading whitespace.";
+
+export function formatRoleplaySummaryChatLog(messages: readonly { role: string; content: string }[]): string {
+  return messages.map((message) => `[${message.role}]: ${message.content}`).join("\n\n");
+}
+
+export function clampRoleplaySummaryInterval(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_AUTOMATIC_SUMMARY_INTERVAL;
+  return Math.max(MIN_AUTOMATIC_SUMMARY_INTERVAL, Math.min(MAX_AUTOMATIC_SUMMARY_INTERVAL, Math.trunc(parsed)));
+}
+
+export function clampRoleplaySummaryContextSize(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 50;
+  return Math.max(MIN_SUMMARY_CONTEXT_SIZE, Math.min(MAX_SUMMARY_CONTEXT_SIZE, Math.trunc(parsed)));
+}
+
+export function clampRoleplaySummaryMaxTokens(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return CHAT_SUMMARY_OUTPUT_TOKENS.DEFAULT;
+  return Math.max(CHAT_SUMMARY_OUTPUT_TOKENS.MIN, Math.min(CHAT_SUMMARY_OUTPUT_TOKENS.MAX, Math.trunc(parsed)));
+}
+
+export function appendContinuationMessageContent(
+  existingContent: unknown,
+  continuation: string,
+  addNewline = true,
+): string {
+  const existing = typeof existingContent === "string" ? existingContent : "";
+  if (!existing) return continuation;
+  if (!continuation) return existing;
+  if (!addNewline) {
+    return `${existing}${continuation.replace(/^(?:\r?\n)+/, "")}`;
+  }
+  const normalizedExisting = existing.replace(/\s+$/, "");
+  const normalizedContinuation = continuation.replace(/^\s+/, "");
+  return `${normalizedExisting}\n\n${normalizedContinuation}`;
+}
+
+export function isAutomaticRoleplaySummaryEnabled(chatMetadata: Record<string, unknown>): boolean {
+  if (chatMetadata.automaticSummaryEnabled === false) return false;
+  if (chatMetadata.automaticSummaryEnabled === true) return true;
+  const activeAgentIds = Array.isArray(chatMetadata.activeAgentIds) ? chatMetadata.activeAgentIds : [];
+  return chatMetadata.enableAgents === true && activeAgentIds.includes(RETIRED_CHAT_SUMMARY_AGENT_ID);
+}
+
+export function withoutRetiredChatSummaryAgentIds(chatMetadata: Record<string, unknown>): string[] | undefined {
+  if (!Array.isArray(chatMetadata.activeAgentIds)) return undefined;
+  return chatMetadata.activeAgentIds.filter((agentId): agentId is string => {
+    return typeof agentId === "string" && agentId !== RETIRED_CHAT_SUMMARY_AGENT_ID;
+  });
+}
+
+export function resolveChatSummaryPromptFromMetadata(chatMetadata: Record<string, unknown>): string {
+  return resolveChatSummaryPrompt({
+    requestedTemplateId: null,
+    chatMetadata,
+    globalSettingsValue: null,
+  });
+}
+
+export function resolveChatSummaryPrompt(args: {
+  requestedTemplateId?: string | null;
+  chatMetadata: Record<string, unknown>;
+  globalSettingsValue?: string | null;
+}): string {
+  const hasGlobalSettingsValue =
+    typeof args.globalSettingsValue === "string" && args.globalSettingsValue.trim().length > 0;
+  const globalSettings = normalizeChatSummaryPromptSettings(args.globalSettingsValue);
+  const requestedId = typeof args.requestedTemplateId === "string" ? args.requestedTemplateId.trim() : "";
+  const selectedId =
+    requestedId ||
+    globalSettings.activeTemplateId ||
+    (!hasGlobalSettingsValue && typeof args.chatMetadata.activeSummaryPromptTemplateId === "string"
+      ? args.chatMetadata.activeSummaryPromptTemplateId.trim()
+      : "");
+
+  const globalPrompt = resolvePromptFromTemplates(globalSettings.templates, selectedId);
+  if (globalPrompt) return globalPrompt;
+  if (
+    selectedId === LONG_TERM_MEMORY_CHAT_SUMMARY_PROMPT_ID &&
+    isLongTermMemoryChatSummaryPromptAllowed(args.chatMetadata)
+  ) {
+    return DEFAULT_LONG_TERM_MEMORY_CHAT_SUMMARY_PROMPT;
+  }
+  // A saved global settings row is authoritative across roleplay chats.
+  // Legacy chat-local templates remain a fallback only until the user has saved
+  // global summary prompt settings, so old per-chat choices do not silently
+  // override the selected global built-in/default behavior.
+  if (hasGlobalSettingsValue) return DEFAULT_CHAT_SUMMARY_PROMPT;
+
+  const chatTemplates = Array.isArray(args.chatMetadata.summaryPromptTemplates)
+    ? (args.chatMetadata.summaryPromptTemplates as unknown[])
+    : [];
+  const chatPrompt = resolvePromptFromTemplates(chatTemplates, selectedId);
+  if (chatPrompt) return chatPrompt;
+
+  return DEFAULT_CHAT_SUMMARY_PROMPT;
+}
+
+export function resolveChatSummaryCombinePrompt(globalSettingsValue?: string | null): string {
+  return normalizeChatSummaryPromptSettings(globalSettingsValue).combinePrompt || DEFAULT_CHAT_SUMMARY_COMBINE_PROMPT;
+}
+
+export interface ParsedChatSummaryResult {
+  summary: string;
+  title: string;
+}
+
+export function normalizeChatSummaryTitle(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/gu, " ").trim().slice(0, 120);
+}
+
+export function parseChatSummaryResult(rawContent: string): ParsedChatSummaryResult {
+  const cleaned = rawContent
+    .trim()
+    .replace(/```(?:json)?\s*/giu, "")
+    .replace(/```/gu, "");
+  try {
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
+    if (first >= 0 && last > first) {
+      const parsed = JSON.parse(cleaned.slice(first, last + 1)) as {
+        summary?: unknown;
+        name?: unknown;
+        title?: unknown;
+      };
+      if (typeof parsed.summary === "string") {
+        return {
+          summary: parsed.summary.trim(),
+          title: normalizeChatSummaryTitle(parsed.name ?? parsed.title),
+        };
+      }
+    }
+  } catch {
+    // Fall through to raw text.
+  }
+  return { summary: cleaned.trim(), title: "" };
+}
+
+function resolvePromptFromTemplates(templates: unknown[], selectedId: string): string | null {
+  if (!selectedId) return null;
+  for (const template of templates) {
+    if (!template || typeof template !== "object" || Array.isArray(template)) continue;
+    const record = template as Record<string, unknown>;
+    if (typeof record.id === "string" && record.id.trim() === LONG_TERM_MEMORY_CHAT_SUMMARY_PROMPT_ID) continue;
+    if (record.id !== selectedId) continue;
+    const prompt = typeof record.prompt === "string" ? record.prompt.trim() : "";
+    if (prompt) return prompt;
+  }
+  return null;
+}
+
+export function parseChatSummaryText(rawContent: string): string {
+  return parseChatSummaryResult(rawContent).summary;
+}

@@ -1,5 +1,5 @@
 import { readFile, readdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildEnglishPackageLocale,
@@ -90,8 +90,7 @@ for (const entry of (await readdir(packagesRoot, { withFileTypes: true })).sort(
   if (!entry.isDirectory()) continue;
   const packageRoot = join(packagesRoot, entry.name);
   const manifest = await readPackageManifest(packageRoot);
-  if (!manifest) continue;
-  if (!manifest.entrypoints?.agents) continue;
+  if (!manifest?.entrypoints?.agents) continue;
   const agentDefinitions = await readPackageAgentDefinitions(packageRoot, manifest);
   const localesRoot = join(packageRoot, "locales");
   const localeFiles = (await readdir(localesRoot, { withFileTypes: true }).catch(() => []))
@@ -121,4 +120,94 @@ for (const entry of (await readdir(packagesRoot, { withFileTypes: true })).sort(
 
 console.log(
   `Package localization catalogs valid: ${packageCount} canonical English catalogs, ${translationCount} translations.`,
+);
+
+const noodleClientRoot = join(repoRoot, "packages/noodle/src/engine/packages/client/src");
+const noodleLocaleRoot = join(noodleClientRoot, "localization/locales");
+const noodleLocales = ["de", "en", "ko", "pl"];
+const exactSharedKeys = new Set([
+  "chat.delete.dialog.cancel",
+  "editor.avatar.upload",
+  "lorebook.editor.batch.delete",
+  "navigation.topbar.characters",
+  "navigation.topbar.connections",
+  "navigation.topbar.noodle",
+  "navigation.topbar.personas",
+  "navigation.topbar.settings",
+  "settings.modes.conversations",
+  "settings.notifications.customSound.actions.remove",
+  "settings.notifications.customSound.status.custom",
+  "settings.sections.imageGeneration.title",
+  "settings.sections.notifications.title",
+  "ui.characters.charactercliptrimmodal.reset",
+  "ui.chat.dependencyworkspaceapprovalcard.notNow",
+  "ui.chat.homeprofessormarichat.deleteValue1",
+]);
+const sharedPrefixes = ["capabilities.actions.", "ui.agents.agenteditor.", "ui.noodle."];
+
+async function readNoodleUiLocale(locale) {
+  const parsed = JSON.parse(await readFile(join(noodleLocaleRoot, `${locale}.json`), "utf8"));
+  assertRecord(parsed, `Noodle ${locale} UI localization`);
+  return parsed;
+}
+
+async function collectSourceFiles(root) {
+  const files = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) files.push(...(await collectSourceFiles(path)));
+    else if ([".ts", ".tsx"].includes(extname(entry.name))) files.push(path);
+  }
+  return files;
+}
+
+const noodleCatalogs = new Map();
+for (const locale of noodleLocales) noodleCatalogs.set(locale, await readNoodleUiLocale(locale));
+const noodleEnglish = noodleCatalogs.get("en");
+const noodleEnglishKeys = Object.keys(noodleEnglish);
+if (noodleEnglishKeys.length < 1_000) {
+  throw new Error("Noodle English localization unexpectedly lost package UI coverage");
+}
+if (JSON.stringify(noodleEnglishKeys) !== JSON.stringify([...noodleEnglishKeys].sort())) {
+  throw new Error("Noodle English localization keys must stay sorted");
+}
+
+for (const [locale, catalog] of noodleCatalogs) {
+  const keys = Object.keys(catalog);
+  if (JSON.stringify(keys) !== JSON.stringify([...keys].sort())) {
+    throw new Error(`Noodle ${locale} localization keys must stay sorted`);
+  }
+  for (const [key, value] of Object.entries(catalog)) {
+    if (!exactSharedKeys.has(key) && !sharedPrefixes.some((prefix) => key.startsWith(prefix))) {
+      throw new Error(`Noodle ${locale} localization contains unrelated Engine key ${key}`);
+    }
+    if (!(key in noodleEnglish)) {
+      throw new Error(`Noodle ${locale} localization key ${key} has no English fallback`);
+    }
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error(`Noodle ${locale} localization key ${key} is empty`);
+    }
+  }
+}
+
+const referencedNoodleKeys = new Set();
+for (const file of await collectSourceFiles(noodleClientRoot)) {
+  const source = await readFile(file, "utf8");
+  for (const match of source.matchAll(/["'](ui\.noodle\.[A-Za-z0-9_.-]+)["']/gu)) {
+    referencedNoodleKeys.add(match[1]);
+  }
+}
+const missingNoodleKeys = [...referencedNoodleKeys]
+  .filter(
+    (key) =>
+      !(key in noodleEnglish) &&
+      !(`${key}_one` in noodleEnglish && `${key}_other` in noodleEnglish),
+  )
+  .sort();
+if (missingNoodleKeys.length > 0) {
+  throw new Error(`Noodle English localization is missing: ${missingNoodleKeys.join(", ")}`);
+}
+
+console.log(
+  `Noodle UI locales valid: en=${noodleEnglishKeys.length}, de=${Object.keys(noodleCatalogs.get("de")).length}, ko=${Object.keys(noodleCatalogs.get("ko")).length}, pl=${Object.keys(noodleCatalogs.get("pl")).length}.`,
 );

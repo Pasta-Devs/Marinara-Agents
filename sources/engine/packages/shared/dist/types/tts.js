@@ -5,6 +5,13 @@ import { z } from "zod";
 export const ttsSourceSchema = z.enum(["openai", "elevenlabs", "pockettts", "xai"]);
 export const ttsAudioFormatSchema = z.enum(["mp3", "wav"]);
 export const ttsVoiceModeSchema = z.enum(["single", "per-character"]);
+export const TTS_DIALOGUE_PAUSE_MIN_SECONDS = 1;
+export const TTS_DIALOGUE_PAUSE_MAX_SECONDS = 60;
+export const TTS_DIALOGUE_PAUSE_DEFAULT_SECONDS = 1;
+function normalizeDialoguePauseMs(value) {
+    const wholeSeconds = Math.round(value / 1000);
+    return Math.min(TTS_DIALOGUE_PAUSE_MAX_SECONDS, Math.max(TTS_DIALOGUE_PAUSE_MIN_SECONDS, wholeSeconds)) * 1000;
+}
 export const ttsConversationCallAudioInputModeSchema = z.enum(["system", "auto", "transcribe", "local_whisper"]);
 export const ttsVoiceAssignmentSchema = z.object({
     characterId: z.string().default(""),
@@ -102,6 +109,10 @@ const ttsConfigBaseSchema = z.object({
     elevenLabsStability: z.number().min(0).max(1).default(0.5),
     /** ElevenLabs only: optional language_code. Empty means automatic language detection. */
     elevenLabsLanguageCode: z.string().max(8).default(""),
+    /** ElevenLabs only: generate scene-specific Game Mode sound effects. */
+    elevenLabsGameSoundEffects: z.boolean().default(false),
+    /** ElevenLabs only: generate scene-specific Game Mode music. */
+    elevenLabsGameMusic: z.boolean().default(false),
     voiceMode: ttsVoiceModeSchema.default("single"),
     voiceAssignments: z.array(ttsVoiceAssignmentSchema).default([]),
     narratorVoiceEnabled: z.boolean().default(false),
@@ -114,6 +125,13 @@ const ttsConfigBaseSchema = z.object({
     autoplayGame: z.boolean().default(false),
     progressivePlayback: z.boolean().default(false),
     dialogueOnly: z.boolean().default(false),
+    /** Stored in milliseconds for backward compatibility; the setting is configured in whole seconds. */
+    dialoguePauseMs: z
+        .number()
+        .min(0)
+        .max(TTS_DIALOGUE_PAUSE_MAX_SECONDS * 1000)
+        .default(TTS_DIALOGUE_PAUSE_DEFAULT_SECONDS * 1000)
+        .transform(normalizeDialoguePauseMs),
     audioFormat: ttsAudioFormatSchema.default("mp3"),
     /** Global gate for Conversation-mode calls. Individual chats opt in separately. */
     callAudioEnabled: z.boolean().default(false),
@@ -142,6 +160,8 @@ export const ttsSourceProfileSchema = ttsConfigBaseSchema.pick({
     speed: true,
     elevenLabsStability: true,
     elevenLabsLanguageCode: true,
+    elevenLabsGameSoundEffects: true,
+    elevenLabsGameMusic: true,
     voiceMode: true,
     voiceAssignments: true,
     narratorVoiceEnabled: true,
@@ -172,6 +192,8 @@ export function ttsSourceProfileFromConfig(config) {
         speed: config.speed,
         elevenLabsStability: config.elevenLabsStability,
         elevenLabsLanguageCode: config.elevenLabsLanguageCode,
+        elevenLabsGameSoundEffects: config.elevenLabsGameSoundEffects,
+        elevenLabsGameMusic: config.elevenLabsGameMusic,
         voiceMode: config.voiceMode,
         voiceAssignments: config.voiceAssignments,
         narratorVoiceEnabled: config.narratorVoiceEnabled,

@@ -286,6 +286,7 @@ function normalizeRules(raw, fallback) {
     const record = isRecord(raw) ? raw : {};
     return {
         dedupeStrength: readEnum(record.dedupeStrength, ["light", "normal", "strict"], fallback.dedupeStrength),
+        // Legacy no-op fields remain normalized through 2.x so persisted profiles and external consumers keep their shape.
         preferTagsOverNarrative: readBoolean(record.preferTagsOverNarrative, fallback.preferTagsOverNarrative),
         preserveUserPhrases: readBoolean(record.preserveUserPhrases, fallback.preserveUserPhrases),
     };

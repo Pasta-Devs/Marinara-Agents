@@ -43,7 +43,7 @@ export type CapabilityRuntimeHost = {
   };
   resources?: {
     listCharacters(characterIds?: string[]): Promise<Array<{ id: string; data: unknown; comment: string }>>;
-    listPersonas(personaIds?: string[]): Promise<Array<{ id: string; data: unknown }>>;
+    listPersonas(personaIds?: string[]): Promise<Array<{ id: string; data: unknown; comment?: string }>>;
     listLorebooks(lorebookIds?: string[]): Promise<Array<{ id: string; data: unknown; entries: unknown[] }>>;
   };
   persistence?: {

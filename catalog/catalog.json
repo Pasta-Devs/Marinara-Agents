@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-09T15:32:49.949Z",
+  "generatedAt": "2026-08-09T15:59:59.213Z",
   "packages": [
     {
       "manifest": {
@@ -805,7 +805,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.2.3",
+        "version": "1.2.4",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -837,13 +837,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "747a56851d74feea05793443eece9840709075965ad4bb14cc00f3ea3a9a1e2c",
-            "bytes": 348488
+            "sha256": "352232262380fe48858a9b3fdd5b956101ce4c2b2a28ba9d26744607b88fa787",
+            "bytes": 350120
           },
           {
             "path": "client.js",
-            "sha256": "c219ae683b7d8158776c635b26f955efeacb629eea985713e6475175a964b9e8",
-            "bytes": 581742
+            "sha256": "7c2fb1813d2a21ccf77e858115eb56cd5b5656b55f0e11ea63ddf7891482c744",
+            "bytes": 620109
           }
         ],
         "permissions": [
@@ -859,9 +859,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/long-term-memory-1.2.3.zip",
-        "sha256": "2875da211ccfc1be131c3fdfd839e32f5d5fb53a89b7b08848e33d49aa418ccd",
-        "bytes": 256872
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/long-term-memory-1.2.4.zip",
+        "sha256": "2d45793e4a836c09b9ef254da5ff9af77ffdf96222f3e464380e827033a828e9",
+        "bytes": 264023
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -990,6 +990,84 @@
         "bytes": 1440
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "noodle",
+        "name": "Noodle",
+        "version": "1.0.0",
+        "description": "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+        "engine": {
+          "min": "2.4.2",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Noodle",
+            "ariaLabel": "Open Noodle and NoodleR",
+            "iconPaths": [
+              "noodle-klusek.png",
+              "noodler-klusek.png"
+            ]
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "a2d57fb9c2d28f450878395f8eb40a5edff84ce812623999b73a1d8ca5ef51b2",
+            "bytes": 628
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "01f3e41a956ac795270a8389c62c515a780c5345e5a9e36e110be3d8eb6fa0bc",
+            "bytes": 2382557
+          },
+          {
+            "path": "client.js",
+            "sha256": "ca5f1bc6ab1b6b176d0ed2cc05fe42d1132e308d1c87066994eae1403779c359",
+            "bytes": 2469464
+          },
+          {
+            "path": "noodle-klusek.png",
+            "sha256": "003236ad2b83c5eb44731a48048c86b07aa8c1f9c411f881c15f7d4af3c68212",
+            "bytes": 28325
+          },
+          {
+            "path": "noodler-klusek.png",
+            "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
+            "bytes": 27664
+          }
+        ],
+        "permissions": [
+          "chat-read",
+          "chat-write",
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/noodle.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/noodle-1.0.0.zip",
+        "sha256": "48c947d05668e49b32289b775a83f452d8c268c6ec3ff81fb6f262ecf230a6bf",
+        "bytes": 1224765
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
     {
       "manifest": {
@@ -1506,15 +1584,15 @@
           "minor": 4
         },
         "builtAgainst": {
-          "engineVersion": "2.4.1",
+          "engineVersion": "2.4.2",
           "engineCommit": "00986ff5bfdcd5705d70c7fca8d8ade86665b217"
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.3.3",
+        "version": "1.3.4",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
-          "min": "2.4.1",
+          "min": "2.4.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -1547,13 +1625,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "9b584f4ce24460fe4e9bff8d2f0d2e87108b1a3c80fecd86eeb1d75cc2794a31",
-            "bytes": 363367
+            "sha256": "7420614c95cedb67df9f95c88604efd8758eae99f75dfc3a1012c4a598381450",
+            "bytes": 366047
           },
           {
             "path": "client.js",
-            "sha256": "4f072bc52120f55ddf523d846b3a8e3fbc4cd0f913dbc81c5326353fba123421",
-            "bytes": 973568
+            "sha256": "a5f3778b6d3cf70dd86b861e9a89de3529db617994b993f0be13d8bc844c720b",
+            "bytes": 978944
           }
         ],
         "permissions": [
@@ -1571,9 +1649,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/hierarchical-maps-1.3.3.zip",
-        "sha256": "7ccf2c1f80b480c460f104964a44aef88af9646f110a785970c621154d4c6979",
-        "bytes": 351946
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/hierarchical-maps-1.3.4.zip",
+        "sha256": "6cf633e1b1cb11b9c7a7a07af5296fe977f5678e8887a7af3f1db558cce39b3a",
+        "bytes": 353762
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },

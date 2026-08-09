@@ -1,6 +1,8 @@
 export const IMAGE_DEFAULTS_STORAGE_KEY = "imageGeneration";
 export const IMAGE_GENERATION_DEFAULTS_VERSION = 1;
 export const IMAGE_DEFAULTS_SERVICES = ["automatic1111", "comfyui", "novelai"];
+/** Transparent placeholder accepted by ComfyUI image-processing nodes that reject 1×1 inputs. */
+export const COMFYUI_PLACEHOLDER_REFERENCE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAGAAAAABAAAAYAAAAAEAAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGhAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAADZp5qVybcLXwAAABJJREFUOE9jYBgFo2AUjAIIAAAEEAABTLtGVQAAAABJRU5ErkJggg==";
 export const DEFAULT_AUTOMATIC1111_DEFAULTS = {
     promptPrefix: "",
     negativePromptPrefix: "",
@@ -22,6 +24,7 @@ export const DEFAULT_COMFYUI_DEFAULTS = {
     denoisingStrength: 1,
     clipSkip: null,
     uploadPlaceholderOnMissingReference: false,
+    loras: [],
 };
 export const DEFAULT_NOVELAI_DEFAULTS = {
     promptPrefix: "",
@@ -32,6 +35,10 @@ export const DEFAULT_NOVELAI_DEFAULTS = {
     promptGuidance: 6,
     promptGuidanceRescale: 0,
     undesiredContentPreset: 0,
+    dynamicResolutionBySubjectCount: true,
+    styleReferenceImage: null,
+    styleReferenceStrength: 0.6,
+    styleReferenceFidelity: 0.5,
 };
 export const SD_WEBUI_SAMPLER_OPTIONS = [
     { value: "", label: "Automatic / backend default" },
@@ -115,8 +122,10 @@ export function imageSourceToDefaultsService(value) {
     if (typeof value !== "string")
         return null;
     const normalized = value.trim().toLowerCase();
-    if (normalized === "drawthings")
+    if (normalized === "drawthings" || normalized === "arli")
         return "automatic1111";
+    if (normalized === "swarmui")
+        return "comfyui";
     return isImageDefaultsService(normalized) ? normalized : null;
 }
 export function isImageDefaultsService(value) {
@@ -132,14 +141,18 @@ export function createDefaultImageGenerationProfile(service) {
     if (service === "automatic1111")
         profile.automatic1111 = { ...DEFAULT_AUTOMATIC1111_DEFAULTS };
     if (service === "comfyui")
-        profile.comfyui = { ...DEFAULT_COMFYUI_DEFAULTS };
+        profile.comfyui = { ...DEFAULT_COMFYUI_DEFAULTS, loras: [] };
     if (service === "novelai")
         profile.novelai = { ...DEFAULT_NOVELAI_DEFAULTS };
     return profile;
 }
 export function normalizeImageGenerationProfile(rawProfile, service) {
+    const profile = normalizeImageGenerationProfileValue(rawProfile, service);
+    return { profile, changed: JSON.stringify(profile) !== JSON.stringify(rawProfile) };
+}
+function normalizeImageGenerationProfileValue(rawProfile, service) {
     if (!isRecord(rawProfile)) {
-        return { profile: createDefaultImageGenerationProfile(service), changed: true };
+        return createDefaultImageGenerationProfile(service);
     }
     const profile = createDefaultImageGenerationProfile(service);
     profile.seed = readInteger(rawProfile.seed, -1, -1, 4_294_967_295);
@@ -153,11 +166,10 @@ export function normalizeImageGenerationProfile(rawProfile, service) {
     else {
         profile.novelai = normalizeNovelAiDefaults(rawProfile.novelai);
     }
-    const changed = JSON.stringify(profile) !== JSON.stringify(rawProfile);
-    return { profile, changed };
+    return profile;
 }
 export function sanitizeImageGenerationProfile(profile, service) {
-    return normalizeImageGenerationProfile(profile, service).profile;
+    return normalizeImageGenerationProfileValue(profile, service);
 }
 export function mergePromptPrefix(prefix, prompt) {
     const trimmedPrefix = normalizePromptPrefixForMerge(prefix);
@@ -243,7 +255,29 @@ function normalizeComfyUiDefaults(rawDefaults) {
         denoisingStrength: readNumber(raw.denoisingStrength, DEFAULT_COMFYUI_DEFAULTS.denoisingStrength, 0, 1),
         clipSkip: readNullableInteger(raw.clipSkip, DEFAULT_COMFYUI_DEFAULTS.clipSkip, 1, 12),
         uploadPlaceholderOnMissingReference: readBoolean(raw.uploadPlaceholderOnMissingReference, DEFAULT_COMFYUI_DEFAULTS.uploadPlaceholderOnMissingReference),
+        loras: normalizeComfyUiLoraSettings(raw.loras),
     };
+}
+export function normalizeComfyUiLoraSettings(rawLoras) {
+    if (!Array.isArray(rawLoras))
+        return [];
+    return rawLoras.slice(0, 5).map((entry) => {
+        const raw = isRecord(entry) ? entry : {};
+        return {
+            model: readString(raw.model, "").trim(),
+            strength: readNumber(raw.strength, 1, -2, 2),
+        };
+    });
+}
+export function buildComfyUiLoraWorkflowReplacements(loras) {
+    const replacements = {};
+    for (let index = 0; index < 5; index++) {
+        const number = index + 1;
+        const lora = loras?.[index];
+        replacements[`%LORA_${number}%`] = lora?.model ?? "";
+        replacements[`%LORA_${number}_strength%`] = lora?.strength ?? 1;
+    }
+    return replacements;
 }
 function normalizeNovelAiDefaults(rawDefaults) {
     const raw = isRecord(rawDefaults) ? rawDefaults : {};
@@ -256,6 +290,10 @@ function normalizeNovelAiDefaults(rawDefaults) {
         promptGuidance: readNumber(raw.promptGuidance, DEFAULT_NOVELAI_DEFAULTS.promptGuidance, 0, 30),
         promptGuidanceRescale: readNumber(raw.promptGuidanceRescale, DEFAULT_NOVELAI_DEFAULTS.promptGuidanceRescale, 0, 1),
         undesiredContentPreset: readInteger(raw.undesiredContentPreset, DEFAULT_NOVELAI_DEFAULTS.undesiredContentPreset, 0, 4),
+        dynamicResolutionBySubjectCount: readBoolean(raw.dynamicResolutionBySubjectCount, DEFAULT_NOVELAI_DEFAULTS.dynamicResolutionBySubjectCount),
+        styleReferenceImage: readNullableString(raw.styleReferenceImage, DEFAULT_NOVELAI_DEFAULTS.styleReferenceImage),
+        styleReferenceStrength: readNumber(raw.styleReferenceStrength, DEFAULT_NOVELAI_DEFAULTS.styleReferenceStrength, 0, 1),
+        styleReferenceFidelity: readNumber(raw.styleReferenceFidelity, DEFAULT_NOVELAI_DEFAULTS.styleReferenceFidelity, 0, 1),
     };
 }
 function isRecord(value) {

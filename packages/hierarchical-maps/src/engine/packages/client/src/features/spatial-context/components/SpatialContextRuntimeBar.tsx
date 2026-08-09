@@ -281,7 +281,7 @@ export function SpatialContextRuntimeBar({
         )}
       </div>
 
-      {!pending && enabled && mapAvailable && (
+      {enabled && mapAvailable && (
         <div data-marinara-maps-runtime-mobile className="relative flex h-11 w-11 items-center sm:hidden">
           <button
             ref={mobileMapTriggerRef}

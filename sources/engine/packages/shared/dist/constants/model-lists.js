@@ -2,6 +2,7 @@ const CLAUDE_ADAPTIVE_ONLY_OPUS_RE = /claude-opus-4-(?:[7-9]|\d{2,})/;
 export function isClaudeAdaptiveOnlyNoSamplingModel(model) {
     const normalized = model.toLowerCase();
     return (CLAUDE_ADAPTIVE_ONLY_OPUS_RE.test(normalized) ||
+        /claude-(?:opus|sonnet)-5(?:$|[-.])/u.test(normalized) ||
         normalized.includes("claude-fable-5") ||
         normalized.includes("claude-mythos-5"));
 }
@@ -23,7 +24,7 @@ export function resolveOpenAIGpt56ModelForRequest(model) {
     return isOpenAIGpt56SolProAlias(model) ? "gpt-5.6-sol" : model;
 }
 export function resolveProviderReasoningEffort(args) {
-    if (!args.reasoningEffort)
+    if (!args.reasoningEffort || args.reasoningEffort === "none")
         return null;
     const modelLower = args.model.toLowerCase();
     const providerLower = args.provider.toLowerCase();
@@ -160,6 +161,8 @@ export const OPENAI_MODELS = [
 ];
 // ── Anthropic / Claude (from #model_claude_select) ──
 export const ANTHROPIC_MODELS = [
+    { id: "claude-opus-5", name: "claude-opus-5", context: 1000000, maxOutput: 128000 },
+    { id: "claude-sonnet-5", name: "claude-sonnet-5", context: 1000000, maxOutput: 128000 },
     { id: "claude-fable-5", name: "claude-fable-5", context: 1000000, maxOutput: 128000 },
     { id: "claude-mythos-5", name: "claude-mythos-5 (limited access)", context: 1000000, maxOutput: 128000 },
     { id: "claude-opus-4-8", name: "claude-opus-4-8", context: 1000000, maxOutput: 128000 },
@@ -195,6 +198,8 @@ export const ANTHROPIC_MODELS = [
 // to the current tool-eligible families to avoid offering retired aliases that
 // the subscription path no longer accepts.
 export const CLAUDE_SUBSCRIPTION_MODELS = [
+    { id: "claude-opus-5", name: "Claude Opus 5", context: 1000000, maxOutput: 128000 },
+    { id: "claude-sonnet-5", name: "Claude Sonnet 5", context: 1000000, maxOutput: 128000 },
     { id: "claude-fable-5", name: "Claude Fable 5", context: 1000000, maxOutput: 128000 },
     { id: "claude-opus-4-8", name: "Claude Opus 4.8", context: 1000000, maxOutput: 128000 },
     { id: "claude-opus-4-7", name: "Claude Opus 4.7", context: 1000000, maxOutput: 128000 },
@@ -225,6 +230,8 @@ export const OPENAI_CHATGPT_MODELS = [
 ];
 // ── Google AI Studio (from #model_google_select) ──
 export const GOOGLE_MODELS = [
+    // Gemini 3.6
+    { id: "gemini-3.6-flash", name: "gemini-3.6-flash", context: 1000000, maxOutput: 65536 },
     // Gemini 3.5
     { id: "gemini-3.5-flash", name: "gemini-3.5-flash", context: 1000000, maxOutput: 65536 },
     // Gemini 3.1
@@ -332,6 +339,10 @@ export const GOOGLE_MODELS = [
     { id: "gemini-2.0-flash-lite-preview", name: "gemini-2.0-flash-lite-preview", context: 1000000, maxOutput: 8192 },
     { id: "gemini-2.0-flash-lite", name: "gemini-2.0-flash-lite", context: 1000000, maxOutput: 8192 },
     // Gemma
+    { id: "gemma-4-31b-it", name: "gemma-4-31b-it", context: 256000, maxOutput: 8192 },
+    { id: "gemma-4-26b-a4b-it", name: "gemma-4-26b-a4b-it", context: 256000, maxOutput: 8192 },
+    { id: "gemma-4-12b-it", name: "gemma-4-12b-it", context: 256000, maxOutput: 8192 },
+    { id: "gemma-4-4b-it", name: "gemma-4-4b-it", context: 131072, maxOutput: 8192 },
     { id: "gemma-3n-e4b-it", name: "gemma-3n-e4b-it", context: 32768, maxOutput: 8192 },
     { id: "gemma-3n-e2b-it", name: "gemma-3n-e2b-it", context: 32768, maxOutput: 8192 },
     { id: "gemma-3-27b-it", name: "gemma-3-27b-it", context: 32768, maxOutput: 8192 },
@@ -431,9 +442,15 @@ export const GROQ_MODELS = [
 ];
 // DeepSeek (from #model_deepseek_select)
 export const DEEPSEEK_MODELS = [
+    { id: "deepseek-v4-pro", name: "deepseek-v4-pro", context: 1_000_000, maxOutput: 384_000 },
+    { id: "deepseek-v4-flash", name: "deepseek-v4-flash", context: 1_000_000, maxOutput: 384_000 },
     { id: "deepseek-chat", name: "deepseek-chat", context: 131072, maxOutput: 8192 },
     { id: "deepseek-coder", name: "deepseek-coder", context: 131072, maxOutput: 8192 },
     { id: "deepseek-reasoner", name: "deepseek-reasoner", context: 131072, maxOutput: 8192 },
+];
+// Xiaomi MiMo (available through OAI-compatible aggregators and direct APIs)
+export const MIMO_MODELS = [
+    { id: "mimo-v2.5-pro", name: "mimo-v2.5-pro", context: 1_000_000, maxOutput: 128_000 },
 ];
 // Perplexity (from #model_perplexity_select)
 export const PERPLEXITY_MODELS = [
@@ -448,6 +465,8 @@ export const PERPLEXITY_MODELS = [
 ];
 // Moonshot (from #model_moonshot_select)
 export const MOONSHOT_MODELS = [
+    { id: "kimi-k3", name: "kimi-k3", context: 1_048_576, maxOutput: 131_072 },
+    { id: "kimi-k2.6", name: "kimi-k2.6", context: 262_144, maxOutput: 32_768 },
     { id: "kimi-k2-0711-preview", name: "kimi-k2-0711-preview", context: 256000, maxOutput: 8192 },
     { id: "moonshot-v1-8k", name: "moonshot-v1-8k", context: 8192, maxOutput: 4096 },
     { id: "moonshot-v1-32k", name: "moonshot-v1-32k", context: 32768, maxOutput: 4096 },
@@ -462,7 +481,8 @@ export const MOONSHOT_MODELS = [
 // Z.AI / GLM (from #model_zai_select)
 export const ZAI_MODELS = [
     { id: "glm-5.2", name: "glm-5.2", context: 1000000, maxOutput: 128000 },
-    { id: "glm-5", name: "glm-5", context: 200000, maxOutput: 8192 },
+    { id: "glm-5.1", name: "glm-5.1", context: 200_000, maxOutput: 128_000 },
+    { id: "glm-5", name: "glm-5", context: 200000, maxOutput: 128000 },
     { id: "glm-4.7", name: "glm-4.7", context: 200000, maxOutput: 8192 },
     { id: "glm-4.7-flash", name: "glm-4.7-flash", context: 200000, maxOutput: 8192 },
     { id: "glm-4.7-flashx", name: "glm-4.7-flashx", context: 200000, maxOutput: 8192 },
@@ -519,11 +539,25 @@ export const VIDEO_GENERATION_SOURCES = [
         requiresApiKey: true,
     },
     {
+        id: "atlas",
+        name: "Atlas Cloud",
+        description: "Atlas Cloud image and video models through its asynchronous media API.",
+        defaultBaseUrl: "https://api.atlascloud.ai/api/v1",
+        requiresApiKey: true,
+    },
+    {
         id: "seedance",
         name: "Seedance 2.0",
         description: "Seedance 2.0 video generation with text, first-frame, and first/last-frame modes.",
         defaultBaseUrl: "https://api.seedance2.ai",
         requiresApiKey: true,
+    },
+    {
+        id: "comfyui",
+        name: "ComfyUI",
+        description: "Local API-format workflows for WAN and other video models.",
+        defaultBaseUrl: "http://127.0.0.1:8188",
+        requiresApiKey: false,
     },
 ];
 export const IMAGE_GENERATION_SOURCES = [
@@ -549,6 +583,13 @@ export const IMAGE_GENERATION_SOURCES = [
         requiresApiKey: true,
     },
     {
+        id: "arli",
+        name: "Arli.ai",
+        description: "Hosted Stable Diffusion models through Arli.ai's native image API.",
+        defaultBaseUrl: "https://api.arliai.com/v1",
+        requiresApiKey: true,
+    },
+    {
         id: "novelai",
         name: "NovelAI",
         description: "NovelAI Diffusion anime-style image generation.",
@@ -567,6 +608,27 @@ export const IMAGE_GENERATION_SOURCES = [
         name: "xAI / Grok Imagine",
         description: "Grok Imagine image generation via xAI's Images API.",
         defaultBaseUrl: "https://api.x.ai/v1",
+        requiresApiKey: true,
+    },
+    {
+        id: "venice",
+        name: "Venice.ai",
+        description: "Private image generation through Venice's native image API.",
+        defaultBaseUrl: "https://api.venice.ai/api/v1",
+        requiresApiKey: true,
+    },
+    {
+        id: "zai",
+        name: "Z.AI",
+        description: "GLM-Image and CogView image generation through Z.AI's native API.",
+        defaultBaseUrl: "https://api.z.ai/api/paas/v4",
+        requiresApiKey: true,
+    },
+    {
+        id: "atlas",
+        name: "Atlas Cloud",
+        description: "Image generation across Atlas Cloud's model catalog.",
+        defaultBaseUrl: "https://api.atlascloud.ai/api/v1",
         requiresApiKey: true,
     },
     {
@@ -595,6 +657,13 @@ export const IMAGE_GENERATION_SOURCES = [
         name: "ComfyUI",
         description: "Local node-based image generation with ComfyUI.",
         defaultBaseUrl: "http://127.0.0.1:8188",
+        requiresApiKey: false,
+    },
+    {
+        id: "swarmui",
+        name: "SwarmUI",
+        description: "Swarm-managed image generation and distributed ComfyUI workflows.",
+        defaultBaseUrl: "http://127.0.0.1:7801",
         requiresApiKey: false,
     },
     {
@@ -627,6 +696,36 @@ export const IMAGE_GENERATION_SOURCES = [
     },
 ];
 // Known image generation models (grouped by service)
+export const ATLAS_CLOUD_IMAGE_MODELS = [
+    { id: "google/nano-banana/text-to-image", name: "Nano Banana (Atlas Cloud)", context: 0, maxOutput: 0 },
+    {
+        id: "google/gemini-2.5-flash-image/text-to-image",
+        name: "Gemini 2.5 Flash Image (Atlas Cloud)",
+        context: 0,
+        maxOutput: 0,
+    },
+    { id: "black-forest-labs/flux-1.1-pro", name: "FLUX 1.1 Pro (Atlas Cloud)", context: 0, maxOutput: 0 },
+];
+export const ZAI_IMAGE_MODELS = [
+    { id: "glm-image", name: "GLM-Image", context: 0, maxOutput: 0 },
+    { id: "cogview-4-250304", name: "CogView 4", context: 0, maxOutput: 0 },
+];
+export const ATLAS_CLOUD_VIDEO_MODELS = [
+    { id: "google/veo3.1/text-to-video", name: "Veo 3.1 Text to Video (Atlas Cloud)", context: 0, maxOutput: 0 },
+    { id: "google/veo3.1/image-to-video", name: "Veo 3.1 Image to Video (Atlas Cloud)", context: 0, maxOutput: 0 },
+    {
+        id: "bytedance/seedance-2.0-fast/text-to-video",
+        name: "Seedance 2.0 Fast Text to Video (Atlas Cloud)",
+        context: 0,
+        maxOutput: 0,
+    },
+    {
+        id: "bytedance/seedance-2.0-fast/image-to-video",
+        name: "Seedance 2.0 Fast Image to Video (Atlas Cloud)",
+        context: 0,
+        maxOutput: 0,
+    },
+];
 const IMAGE_GEN_MODELS = [
     // OpenAI
     { id: "gpt-image-2", name: "GPT Image 2", context: 0, maxOutput: 0 },
@@ -667,10 +766,22 @@ const IMAGE_GEN_MODELS = [
         context: 0,
         maxOutput: 0,
     },
+    {
+        id: "bytedance-seed/seedream-4.5",
+        name: "Seedream 4.5 (OpenRouter)",
+        context: 0,
+        maxOutput: 0,
+    },
     // xAI / Grok Imagine
     { id: "grok-4.1-fast-image", name: "Grok 4.1 Fast Image", context: 0, maxOutput: 0 },
     { id: "grok-imagine-image", name: "Grok Imagine Image", context: 0, maxOutput: 0 },
     { id: "grok-2-image", name: "Grok 2 Image", context: 0, maxOutput: 0 },
+    // Venice.ai
+    { id: "chroma", name: "Chroma (Venice)", context: 0, maxOutput: 0 },
+    { id: "flux-2-pro", name: "FLUX 2 Pro (Venice)", context: 0, maxOutput: 0 },
+    { id: "venice-sd35", name: "Venice SD3.5", context: 0, maxOutput: 0 },
+    ...ZAI_IMAGE_MODELS,
+    ...ATLAS_CLOUD_IMAGE_MODELS,
     // NovelAI
     { id: "nai-diffusion-4-curated-preview", name: "NAI Diffusion 4 Curated", context: 0, maxOutput: 0 },
     { id: "nai-diffusion-4-5-full", name: "NAI Diffusion 4.5 Full", context: 0, maxOutput: 0 },
@@ -691,10 +802,15 @@ const VIDEO_GEN_MODELS = [
     { id: "alibaba/wan-2.7", name: "Alibaba WAN 2.7 (OpenRouter)", context: 0, maxOutput: 0 },
     { id: "seedance-2-0", name: "Seedance 2.0", context: 0, maxOutput: 0 },
     { id: "seedance-2-0-fast", name: "Seedance 2.0 Fast", context: 0, maxOutput: 0 },
+    ...ATLAS_CLOUD_VIDEO_MODELS,
 ];
 export function inferVideoSource(model, baseUrl) {
     const m = model.toLowerCase();
     const u = baseUrl.toLowerCase();
+    if (m === "comfyui" || u.includes(":8188") || u.includes("comfyui"))
+        return "comfyui";
+    if (m === "atlas" || u.includes("atlascloud.ai"))
+        return "atlas";
     if (m === "seedance" || m.startsWith("seedance-") || u.includes("seedance2.ai"))
         return "seedance";
     if (m === "openrouter" || u.includes("openrouter.ai"))
@@ -719,13 +835,18 @@ export function inferImageSource(model, baseUrl) {
     if (m === "openai" ||
         m === "stability" ||
         m === "togetherai" ||
+        m === "arli" ||
         m === "novelai" ||
         m === "pollinations" ||
         m === "horde" ||
         m === "blockentropy" ||
         m === "openrouter" ||
         m === "xai" ||
+        m === "venice" ||
+        m === "zai" ||
+        m === "atlas" ||
         m === "comfyui" ||
+        m === "swarmui" ||
         m === "automatic1111" ||
         m === "runpod_comfyui" ||
         m === "gemini_image") {
@@ -739,6 +860,16 @@ export function inferImageSource(model, baseUrl) {
         return "openrouter";
     if (u.includes("api.x.ai") || u.includes("x.ai"))
         return "xai";
+    if (u.includes("venice.ai"))
+        return "venice";
+    if (u.includes("api.z.ai"))
+        return "zai";
+    if (u.includes("atlascloud.ai"))
+        return "atlas";
+    if (u.includes("arliai.com"))
+        return "arli";
+    if (m === "glm-image" || m.startsWith("cogview"))
+        return "zai";
     if (m.startsWith("grok-") && m.includes("image"))
         return "xai";
     if (m.includes("grok") && m.includes("imagine"))
@@ -757,6 +888,8 @@ export function inferImageSource(model, baseUrl) {
         return "horde";
     if (u.includes("blockentropy"))
         return "blockentropy";
+    if (u.includes(":7801") || u.includes("swarmui"))
+        return "swarmui";
     if (u.includes(":8188") || u.includes("comfyui"))
         return "comfyui";
     if (u.includes("runpod.ai"))
@@ -790,11 +923,29 @@ export const MODEL_LISTS = {
     image_generation: IMAGE_GEN_MODELS,
     video_generation: VIDEO_GEN_MODELS,
 };
+const OPENAI_COMPATIBLE_AGGREGATOR_MODELS = [
+    ...OPENAI_MODELS,
+    ...ANTHROPIC_MODELS,
+    ...GOOGLE_MODELS,
+    ...DEEPSEEK_MODELS,
+    ...MIMO_MODELS,
+    ...MOONSHOT_MODELS,
+    ...ZAI_MODELS,
+    ...XAI_MODELS,
+];
 /**
  * Look up a known model by ID across all providers.
  */
 export function findKnownModel(provider, modelId) {
-    return MODEL_LISTS[provider]?.find((m) => m.id === modelId);
+    const exact = MODEL_LISTS[provider]?.find((model) => model.id === modelId);
+    if (exact || (provider !== "openrouter" && provider !== "nanogpt" && provider !== "custom"))
+        return exact;
+    // Aggregators namespace model IDs (for example, `deepseek/deepseek-v4-pro`)
+    // while direct OAI-compatible endpoints generally do not. Resolve both
+    // forms without exposing a large, stale static list in their model pickers.
+    const normalizedId = modelId.trim().toLowerCase();
+    const unqualifiedId = normalizedId.split("/").pop()?.split(":", 1)[0] ?? normalizedId;
+    return OPENAI_COMPATIBLE_AGGREGATOR_MODELS.find((model) => model.id.toLowerCase() === unqualifiedId);
 }
 function normalizeProviderForCatalog(provider) {
     const normalized = provider.replace(/-/g, "_");
@@ -805,6 +956,11 @@ export function shouldSuppressUnknownModelParameters(provider, modelId) {
         return false;
     const normalizedProvider = normalizeProviderForCatalog(provider);
     if (!normalizedProvider)
+        return false;
+    // Custom OAI-compatible endpoints are user-defined. Their explicit parameter
+    // switches are the compatibility policy; a built-in catalog cannot know what
+    // an arbitrary endpoint accepts.
+    if (normalizedProvider === "custom")
         return false;
     const catalog = MODEL_LISTS[normalizedProvider];
     if (!catalog || catalog.length === 0)

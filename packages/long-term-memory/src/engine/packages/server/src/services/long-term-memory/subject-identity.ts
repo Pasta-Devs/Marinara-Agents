@@ -314,7 +314,10 @@ export async function loadTrustedLtmSubjectCatalog(
     ...(scope.characterIds ?? []),
     ...chats.flatMap((chat) => normalizeLtmChatCharacterIds(chat.characterIds)),
   ]);
-  const personaIds = uniqueStrings(chats.map((chat) => chat.personaId ?? undefined));
+  const personaIds = uniqueStrings([
+    scope.personaId,
+    ...chats.map((chat) => chat.personaId ?? undefined),
+  ]);
   const [characterRows, personaRows, notes] = await Promise.all([
     resources.listCharacters(characterIds),
     resources.listPersonas(personaIds),

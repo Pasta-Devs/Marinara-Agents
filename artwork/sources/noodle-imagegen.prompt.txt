@@ -1,0 +1,15 @@
+Built-in image generation prompt (2026-08-09)
+
+Use case: stylized-concept
+Asset type: 512x512 square catalog cover for Marinara Engine's Download Agents library
+Primary request: Create Professor Mari cheerfully presenting the official blue Noodle logo as the central thematic object for the optional Noodle and NoodleR agent.
+Input images: Mari_greet.png is Professor Mari's canonical identity reference. illustrator.png is the exact catalog-cover composition, finish, circular medallion, line weight, and illustration-style reference. noodle-klusek.png is the official Noodle logo shape and blue color reference; preserve its recognizable mirrored bow/noodle silhouette accurately.
+Scene/backdrop: Inside a circular medallion, a magical social-media crossroads with one flowing cyan-blue path and one flowing hot-pink path, tiny speech bubbles and stars, suggesting Noodle and NoodleR. Keep the canvas outside the medallion clean warm white.
+Subject: Professor Mari, an adult human woman with voluminous wavy golden-blonde hair, very large bright light-blue eyes, dramatic black lashes, black rectangular glasses, navy-blue hoodie, charcoal trousers, and black boots. No animal ears and no tail. She holds or presents one large official blue Noodle logo clearly near her upper body, smiling proudly and invitingly.
+Style/medium: polished wholesome chibi mascot illustration, thick dark outlines, bold flat colors, gentle cel shading, identical visual family to the catalog-cover reference.
+Composition/framing: Mari large and centered, face fully visible, logo large and unobstructed, dynamic pose, immediately readable at 44 pixels.
+Lighting/mood: playful, welcoming, magical night-console glow.
+Color palette: Noodle cyan-blue, NoodleR hot pink, Marinara warm orange sparks, deep navy, golden blonde.
+Constraints: exactly one Professor Mari; exactly one prominent blue Noodle logo; preserve her identity and glasses; no title, letters, readable words, watermark, photorealism, 3D rendering, extra people, animal traits, malformed hands, duplicated limbs, duplicated logo, or visual clutter.
+
+Generated at 1254x1254 and downsampled to the catalog's canonical 512x512 PNG. The full-resolution source is preserved beside this prompt as noodle-imagegen.png.

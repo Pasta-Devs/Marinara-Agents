@@ -1,4 +1,7 @@
-import type { LtmMode } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type {
+  LtmMode,
+  LtmScope,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 export type ScopeTargetChat = {
   id: string;
@@ -8,7 +11,23 @@ export type ScopeTargetChat = {
   characterIds: string[];
 };
 export type ScopeTargetGroup = { id: string; label: string; chatIds: string[] };
-export type ScopeTargetCharacter = { id: string; label: string };
+export type ScopeTargetCharacter = {
+  id: string;
+  label: string;
+  comment?: string;
+};
+export type ScopeTargetPersona = {
+  id: string;
+  label: string;
+  comment?: string;
+};
+export type ScopeTargets = {
+  currentScope: LtmScope | null;
+  chats: ScopeTargetChat[];
+  groups: ScopeTargetGroup[];
+  characters: ScopeTargetCharacter[];
+  personas: ScopeTargetPersona[];
+};
 export type ScopeIndexes = {
   chatsById: Map<string, ScopeTargetChat>;
   characterIdsByChatId: Map<string, Set<string>>;
