@@ -836,10 +836,15 @@ export default function SourcesWorkspace({
       : importResultContract?.action === "refresh" &&
           !importResult.counts.failed &&
           !importResult.counts.cancelled &&
+          !importResult.counts.missing &&
           !importResult.counts.sourceWriteFailed
         ? localizeUi(
             "ui.longTermMemory.sourcesworkspace.sourceRefreshedExtractionNotRun",
           )
+        : importResultContract?.action === "refresh"
+          ? localizeUi(
+              "ui.longTermMemory.sourcesworkspace.sourceRefreshCompletedWithFailures",
+            )
         : importResult.counts.failed || importResult.counts.cancelled
           ? localizeUi(
               "ui.longTermMemory.sourcesworkspace.sourceSavedExtractionFailed",
@@ -1086,7 +1091,13 @@ export default function SourcesWorkspace({
           ? lorebookPreview.refetch()
           : preview.refetch()
       ).catch(() => undefined);
-      if (action === "refresh")
+      if (
+        action === "refresh" &&
+        !result.counts.failed &&
+        !result.counts.cancelled &&
+        !result.counts.missing &&
+        !result.counts.sourceWriteFailed
+      )
         setReviewMessage(
           localizeUi(
             "ui.longTermMemory.sourcesworkspace.sourceRefreshedRerunExtraction",

@@ -33,6 +33,11 @@ const locale = JSON.parse(
 
 assert.match(workspace, /extract: action !== "refresh"/u);
 assert.match(workspace, /refreshSelectedSources/u);
+assert.match(workspace, /sourceRefreshCompletedWithFailures/u);
+assert.match(
+  workspace,
+  /action === "refresh"[\s\S]*!result\.counts\.missing[\s\S]*!result\.counts\.sourceWriteFailed/u,
+);
 assert.match(workspace, /sourceRefreshedExtractionNotRun/u);
 assert.match(workspace, /readyForReviewWithRejectedSuggestions/u);
 assert.match(workspace, /extractionDidNotFinish/u);
