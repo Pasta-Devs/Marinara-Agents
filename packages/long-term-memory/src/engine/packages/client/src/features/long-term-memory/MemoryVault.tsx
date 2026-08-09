@@ -43,9 +43,11 @@ import {
 import type { LongTermMemoryDestinationProps } from "./types";
 import {
   humanizeLabel,
-  memoryLabel,
-  noteTypeLabel,
-  scopeTargetLabel,
+  labelKeys,
+  localizedLabel,
+  memoryLabel as formatMemoryLabel,
+  noteTypeLabel as formatNoteTypeLabel,
+  scopeTargetLabel as formatScopeTargetLabel,
 } from "./display-labels";
 import {
   selectLtmPluralForm,
@@ -189,7 +191,11 @@ function searchable(note: LtmNote) {
     .join(" ")
     .toLocaleLowerCase();
 }
-function preview(note: LtmNote, search: string) {
+function preview(
+  note: LtmNote,
+  search: string,
+  localizeUi: LtmTranslationFunction,
+) {
   const sections = Object.entries(note.sections).filter(([, section]) =>
     section.text.trim(),
   );
@@ -204,7 +210,7 @@ function preview(note: LtmNote, search: string) {
   const match = query ? text.toLocaleLowerCase().indexOf(query) : -1;
   const start = match > 60 ? match - 60 : 0;
   return {
-    label: noteTypeLabel(key),
+    label: formatNoteTypeLabel(key, localizeUi),
     text: `${start ? "..." : ""}${text.slice(start, start + 180)}${start + 180 < text.length ? "..." : ""}`,
   };
 }
@@ -285,15 +291,17 @@ function Pill({
   onRemove: () => void;
 }) {
   const { t: localizeUi } = useLtmTranslation();
+  const removeLabel = localizeUi("ui.longTermMemory.pill.removeValue1", {
+    value1: label ?? String(children),
+  });
   return (
     <span className="inline-flex min-h-8 max-w-full items-center gap-1 rounded-md bg-[var(--secondary)] px-2 text-xs text-[var(--foreground)]">
       <span className="truncate">{children}</span>
       <button
         type="button"
         onClick={onRemove}
-        aria-label={localizeUi("ui.longTermMemory.pill.removeValue1", {
-          value1: label ?? String(children),
-        })}
+        aria-label={removeLabel}
+        title={removeLabel}
         className="grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
       >
         <X aria-hidden="true" size="0.75rem" />
@@ -374,6 +382,30 @@ export default function MemoryVault({
   recoveryHandoff,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
+  const untitledMemoryLabel = localizeUi(
+    "ui.longTermMemory.memoryvault.untitledMemory",
+  );
+  const memoryLabel = (note: Pick<LtmNote, "title"> | null | undefined) =>
+    formatMemoryLabel(note, untitledMemoryLabel);
+  const noteTypeLabel = (type: string) =>
+    formatNoteTypeLabel(type, localizeUi);
+  const statusLabel = (status: string) =>
+    localizedLabel(status, localizeUi, labelKeys.status);
+  const modeLabel = (mode: string) =>
+    localizedLabel(mode, localizeUi, labelKeys.mode);
+  const relationLabel = (relation: string) =>
+    localizedLabel(relation, localizeUi, labelKeys.relation);
+  const scopeTargetLabel = (
+    kind: "chat" | "character" | "group" | "persona",
+    id: string,
+    targets: ReadonlyArray<{ id: string; label: string }>,
+  ) =>
+    formatScopeTargetLabel(kind, id, targets, {
+      chat: localizeUi("ui.longTermMemory.memoryvault.chat"),
+      character: localizeUi("ui.longTermMemory.memoryvault.character"),
+      group: localizeUi("ui.longTermMemory.memoryvault.branchGroup"),
+      persona: localizeUi("ui.longTermMemory.memoryvault.persona"),
+    });
   const client = useQueryClient();
   const statusInputId = useId();
   const vaultRef = useRef<HTMLElement>(null);
@@ -1388,6 +1420,9 @@ export default function MemoryVault({
               aria-label={localizeUi(
                 "ui.longTermMemory.memoryvault.clearMemorySearch",
               )}
+              title={localizeUi(
+                "ui.longTermMemory.memoryvault.clearMemorySearch",
+              )}
               onClick={() => setSearch("")}
               className="absolute right-1 top-1 grid h-9 w-9 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
             >
@@ -1574,7 +1609,7 @@ export default function MemoryVault({
           </option>
           {statuses.map((status) => (
             <option key={status} value={status}>
-              {humanizeLabel(status)}
+              {statusLabel(status)}
             </option>
           ))}
         </select>
@@ -1641,7 +1676,7 @@ export default function MemoryVault({
             >
               {statuses.map((status) => (
                 <option key={status} value={status}>
-                  {humanizeLabel(status)}
+                  {statusLabel(status)}
                 </option>
               ))}
             </select>
@@ -1671,7 +1706,7 @@ export default function MemoryVault({
                       )
                     }
                   />
-                  {humanizeLabel(mode)}
+                  {modeLabel(mode)}
                 </label>
               ))}
             </fieldset>
@@ -1826,7 +1861,7 @@ export default function MemoryVault({
                   </span>
                 </summary>
                 {group.map((note) => {
-                  const notePreview = preview(note, search);
+                  const notePreview = preview(note, search, localizeUi);
                   return (
                     <ClickSurface
                       key={note.id}
@@ -1877,7 +1912,7 @@ export default function MemoryVault({
                               {noteTypeLabel(note.type)}
                             </span>
                             <span className="rounded bg-[var(--secondary)] px-1.5 py-0.5">
-                              {humanizeLabel(note.status)}
+                              {statusLabel(note.status)}
                             </span>
                           </span>
                           {notePreview ? (
@@ -2099,7 +2134,7 @@ export default function MemoryVault({
                       >
                         {statuses.map((status) => (
                           <option key={status} value={status}>
-                            {humanizeLabel(status)}
+                            {statusLabel(status)}
                           </option>
                         ))}
                       </select>
@@ -2168,7 +2203,7 @@ export default function MemoryVault({
                                 )
                               }
                             />
-                            {humanizeLabel(mode)}
+                            {modeLabel(mode)}
                           </label>
                         ))}
                       </div>
@@ -2228,6 +2263,10 @@ export default function MemoryVault({
                                 update("sections", next);
                               }}
                               aria-label={localizeUi(
+                                "ui.longTermMemory.memoryvault.removeValue1Section",
+                                { value1: key },
+                              )}
+                              title={localizeUi(
                                 "ui.longTermMemory.memoryvault.removeValue1Section",
                                 { value1: key },
                               )}
@@ -2354,7 +2393,11 @@ export default function MemoryVault({
                               {["critical", "major", "moderate", "minor"].map(
                                 (value) => (
                                   <option key={value} value={value}>
-                                    {humanizeLabel(value)}
+                                    {localizedLabel(
+                                      value,
+                                      localizeUi,
+                                      labelKeys.importance,
+                                    )}
                                   </option>
                                 ),
                               )}
@@ -2589,7 +2632,7 @@ export default function MemoryVault({
                           label={localizeUi(
                             "ui.longTermMemory.longtermmemorydetail.value1Value2",
                             {
-                              value1: humanizeLabel(link.relation),
+                               value1: relationLabel(link.relation),
                               value2: memoryLabel(
                                 allNotes.find(
                                   (note) => note.id === link.target,
@@ -2604,7 +2647,7 @@ export default function MemoryVault({
                             )
                           }
                         >
-                          {humanizeLabel(link.relation)}
+                            {relationLabel(link.relation)}
                           {" -> "}
                           <button
                             type="button"
@@ -2663,7 +2706,7 @@ export default function MemoryVault({
                       >
                         {relations.map((relation) => (
                           <option key={relation} value={relation}>
-                            {humanizeLabel(relation)}
+                            {relationLabel(relation)}
                           </option>
                         ))}
                       </select>

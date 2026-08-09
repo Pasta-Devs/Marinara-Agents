@@ -243,9 +243,9 @@ export function ExtractionPromptTemplates({
           >
             <span id={`${id}-${mode}-active-template-label`}>
               <span className="flex items-center gap-1">
-                {localizeUi(modeLabelKeys[mode])}{" "}
                 {localizeUi(
-                  "ui.longTermMemory.extractionprompttemplates.activeTemplate",
+                  "ui.longTermMemory.extractionprompttemplates.value1ActiveTemplate",
+                  { value1: localizeUi(modeLabelKeys[mode]) },
                 )}
                 <InfoPopover
                   label={localizeUi(
