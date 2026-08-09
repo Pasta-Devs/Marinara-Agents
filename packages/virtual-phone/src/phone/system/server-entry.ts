@@ -723,7 +723,7 @@ export async function activate({ api }: CapabilityContext) {
     };
 
     await seedList("notes", "notes", "notes",
-      `Invent 2 to 4 private notes this character would already have written to themselves — reminders, lists, half-thoughts, in their own voice. Respond with only JSON: {"notes":["note text", ...]}.`,
+      `Invent 2 to 4 private notes this character would already have written to themselves — reminders, lists, half-thoughts, in their own voice. In each note the first line is a short title, then a line break, then the body. Respond with only JSON: {"notes":["Title line\\nThe rest is the note body", ...]}.`,
       (text) => text.trim() ? { id: randomUUID(), text: text.trim(), updatedAt: nowIso } : null);
 
     await seedList("camera", "shots", "shots",
