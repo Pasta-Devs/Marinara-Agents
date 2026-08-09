@@ -389,6 +389,18 @@ export async function noodleRoutes(app: FastifyInstance) {
     return bootstrapVisibleNoodle(noodle, characters);
   });
 
+  app.get("/refresh-indicator", async () => {
+    const [latestRefresh] = await noodle.listRefreshRuns({
+      status: "completed",
+      limit: 1,
+    });
+    return {
+      marker: latestRefresh
+        ? `${latestRefresh.id}:${latestRefresh.updatedAt}`
+        : null,
+    };
+  });
+
   app.put("/settings", async (req, reply) => {
     const parsed = noodleSettingsUpdateSchema.safeParse(req.body);
     if (!parsed.success)

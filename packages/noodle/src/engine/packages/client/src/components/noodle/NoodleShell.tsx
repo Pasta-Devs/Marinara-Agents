@@ -852,7 +852,7 @@ export function NoodleShell({
               aria-label={localizeUi(
                 "ui.noodle.noodlehome.openNoodleAccountMenu",
               )}
-              className="flex items-center justify-center transition-colors hover:bg-[var(--accent)]"
+              className="flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
             >
               {personaAccount ? (
                 <Avatar account={personaAccount} size="sm" />
@@ -869,7 +869,7 @@ export function NoodleShell({
                 value1: homeLabel,
               })}
               aria-current={homeActive ? "page" : undefined}
-              className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)]"
+              className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
             >
               <Home size={22} strokeWidth={homeActive ? 2.8 : 2} />
               {homeActive && (
@@ -886,7 +886,7 @@ export function NoodleShell({
                     : localizeUi("ui.noodle.noodlehome.searchNoodle")
                 }
                 aria-current={activeView === "search" ? "page" : undefined}
-                className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
               >
                 <Search
                   size={22}
@@ -907,7 +907,7 @@ export function NoodleShell({
                 aria-current={
                   activeView === "notifications" ? "page" : undefined
                 }
-                className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
               >
                 <span className="relative flex h-6 w-6 items-center justify-center">
                   <Bell
@@ -934,7 +934,7 @@ export function NoodleShell({
                 onClick={onOpenProfile}
                 aria-label={localizeUi("ui.noodle.noodlehome.profile")}
                 aria-current={activeView === "profile" ? "page" : undefined}
-                className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
               >
                 <User
                   size={22}
