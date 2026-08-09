@@ -1,6 +1,8 @@
 import React from "react";
-import { Globe, Search, Star } from "lucide-react";
-import { fallbackSearchResults, looksLikeUrl, normalizeUrl, parseLinkedText, parsePageSection, parseResultItem, slugify } from "./manifest";
+import { Globe, Image as ImageIcon, LayoutList, Search, Star } from "lucide-react";
+import { fallbackSearchResults, looksLikeUrl, normalizeUrl, parseLinkedText, parseResultItem, slugify } from "./manifest";
+import { guessSiteKind, parseImageResult, parsePageSection } from "./sites";
+import { MediaBox, SiteBody, type SitePage } from "./templates";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { phoneRequest, recordActivity, rememberWorldFact } from "../../platform/api";
@@ -9,19 +11,17 @@ import { hueFor } from "../../platform/avatars";
 const MAX_RECENTS = 8;
 const LOGO_COLORS = ["#4285f4", "#ea4335", "#fbbc05", "#4285f4", "#34a853", "#ea4335"];
 
-interface SitePagePayload {
-  site: string;
-  title: string;
-  tagline: string;
-  kind: string;
-  links: string[];
-  sections: string[];
-}
-
-interface PageState extends SitePagePayload {
+interface PageState extends SitePage {
   url: string;
   loading: boolean;
 }
+
+/** A page before its content lands, so the frame can draw with the right template immediately. */
+const pendingPage = (title: string, url: string, site?: string): PageState => ({
+  site: site ?? url.split("/")[0] ?? "goodle.web",
+  title, tagline: "", kind: guessSiteKind(url, title), meta: "", links: [], sections: [], media: [],
+  url, loading: true,
+});
 
 export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { phoneId: string; initialQuery?: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "goodle");
@@ -33,6 +33,9 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   // Pages popped by Back, kept so Forward can re-enter them without regenerating.
   const [forward, setForward] = React.useState<PageState[]>([]);
   const [bookmarks, setBookmarks] = React.useState<PageState[]>([]);
+  const [tab, setTab] = React.useState<"all" | "images">("all");
+  const [images, setImages] = React.useState<string[] | null>(null);
+  const [imagesFor, setImagesFor] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const page = pages.at(-1) ?? null;
   const recentsRef = React.useRef(recents);
@@ -81,16 +84,16 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
 
   const openPage = (title: string, url: string, site?: string) => {
     setForward([]);
-    setPages((current) => [...current, { site: site ?? url.split("/")[0] ?? "goodle.web", title, tagline: "", kind: "official", links: [], sections: [], url, loading: true }]);
+    setPages((current) => [...current, pendingPage(title, url, site)]);
     const settle = (loaded: PageState) => setPages((current) =>
       current.map((entry) => entry.url === url && entry.loading ? loaded : entry));
-    void phoneRequest<{ page: SitePagePayload }>(`/phones/${encodeURIComponent(phoneId)}/goodle/page`, {
+    void phoneRequest<{ page: SitePage }>(`/phones/${encodeURIComponent(phoneId)}/goodle/page`, {
       method: "POST", body: JSON.stringify({ title, url, query: query.trim(), ...(site ? { site } : {}) }),
     })
       .then((response) => settle({ ...response.page, title: response.page.title || title, url, loading: false }))
       .catch(() => settle({
-        site: site ?? url.split("/")[0] ?? "goodle.web", title, tagline: "", kind: "official", links: [],
-        sections: ["Offline :: Goodle can't reach this page right now."], url, loading: false,
+        ...pendingPage(title, url, site),
+        sections: ["Offline :: Goodle can't reach this page right now."], loading: false,
       }));
   };
   const back = () => {
@@ -144,6 +147,27 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
     }
     search(trimmed);
   };
+  const searchImages = React.useCallback((term: string) => {
+    const trimmed = term.trim();
+    if (!trimmed || imagesFor === trimmed) return;
+    setImagesFor(trimmed);
+    setImages(null);
+    void phoneRequest<{ images: string[] }>(`/phones/${encodeURIComponent(phoneId)}/goodle/images`, {
+      method: "POST", body: JSON.stringify({ query: trimmed }),
+    })
+      .then((response) => setImages(response.images))
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Goodle Images could not load.");
+        setImages([]);
+      });
+  }, [phoneId, imagesFor]);
+
+  const showTab = (next: "all" | "images") => {
+    setTab(next);
+    // Pictures cost a generation, so they are fetched when the tab is actually opened.
+    if (next === "images") searchImages(query || results.title);
+  };
+
   const clearRecents = () => {
     setRecents([]);
     void store.remove("recents").catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Recent searches could not be cleared."));
@@ -158,7 +182,6 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
     )
     : <React.Fragment key={index}>{part.text}</React.Fragment>);
   const hue = hueFor(page?.site ?? "");
-  const sections = page?.sections.map(parsePageSection) ?? [];
 
   return (
     <section aria-labelledby="goodle-title" className="vp-appview">
@@ -206,24 +229,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
                   ))}
                 </nav>
               ) : null}
-              <h3 className="vp-page-heading">{page.title}</h3>
-              {page.kind === "shop" ? (
-                <div className="vp-site-grid">
-                  {sections.map((section, index) => (
-                    <article key={index} className="vp-site-card">
-                      <h4>{section.heading || "Item"}</h4>
-                      <p>{renderBody(section.body)}</p>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                sections.map((section, index) => (
-                  <article key={index} className={`vp-site-section${page.kind === "forum" ? " vp-site-section--post" : ""}`}>
-                    {section.heading ? <h4>{section.heading}</h4> : null}
-                    <p>{renderBody(section.body)}</p>
-                  </article>
-                ))
-              )}
+              <SiteBody page={page} body={renderBody} />
             </>
           )}
         </div>
@@ -254,6 +260,46 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
               ))}
             </div>
           ) : null}
+          {results.items.length || searching || images ? (
+            <nav className="vp-goodle-tabs" aria-label="Search tabs">
+              <button type="button" aria-pressed={tab === "all"} onClick={() => showTab("all")}>
+                <LayoutList size="0.75rem" aria-hidden="true" /> All
+              </button>
+              <button type="button" aria-pressed={tab === "images"} onClick={() => showTab("images")}>
+                <ImageIcon size="0.75rem" aria-hidden="true" /> Images
+              </button>
+            </nav>
+          ) : null}
+          {tab === "images" ? (
+            <div aria-busy={images === null}>
+              {images === null ? (
+                <div role="status" aria-label="Loading images" className="vp-image-grid">
+                  {[0, 1, 2, 3, 4, 5].map((index) => <span key={index} className="vp-skeleton" style={{ aspectRatio: "1", borderRadius: "0.75rem" }} />)}
+                </div>
+              ) : images.length === 0 ? (
+                <p className="vp-muted-note">No pictures for that search.</p>
+              ) : (
+                <div className="vp-image-grid">
+                  {images.map((item, index) => {
+                    const image = parseImageResult(item);
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        className="vp-image-cell"
+                        onClick={() => openPage(image.title, image.source)}
+                        title={`${image.caption} — ${image.source}`}
+                      >
+                        <MediaBox glyph={image.glyph} size="md" />
+                        <span className="vp-image-caption">{image.caption}</span>
+                        <span className="vp-image-source">{image.source.split("/")[0]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
           <div aria-busy={searching}>
             <h3 className="vp-result-title">{results.title}</h3>
             <p className="vp-result-summary">{searching ? "Searching…" : results.summary}</p>
@@ -276,6 +322,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
               </div>
             ) : null}
           </div>
+          )}
         </>
       )}
     </section>

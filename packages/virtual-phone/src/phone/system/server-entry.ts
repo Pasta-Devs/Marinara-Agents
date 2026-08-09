@@ -10,6 +10,7 @@ import { normalizeDeviceSettings, type DeviceSettings } from "../device/settings
 import { PhoneMessagingService, unreadCount, unreadMessages, type ThreadDocument } from "./messaging";
 import { parseBoundedContent } from "../platform/content";
 import { fallbackSearchResults } from "../apps/goodle/manifest";
+import { guessSiteKind, normalizeSiteKind, SITE_TEMPLATES } from "../apps/goodle/sites";
 import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
@@ -1415,37 +1416,88 @@ export async function activate({ api }: CapabilityContext) {
       const url = String(body.url ?? "").trim().slice(0, 200);
       const query = String(body.query ?? "").trim().slice(0, 120);
       const site = String(body.site ?? "").trim().slice(0, 80);
+      /**
+       * The template is chosen from the address before generation, so the same URL is the same kind
+       * of place every time it is opened, and the renderer always has a layout it knows. The model
+       * may correct it, but only to another kind in the registry.
+       */
+      const guess = guessSiteKind(url, title, query);
+      const template = SITE_TEMPLATES[guess];
       const fallback = {
         site: site || url.split("/")[0] || "goodle.web",
         title: title || "Page unavailable",
         tagline: "",
-        kind: "official",
+        kind: guess as string,
+        meta: "",
         links: [] as string[],
         sections: ["Offline :: Goodle can't reach this page right now."],
+        media: [] as string[],
       };
       try {
         const phone = await findPhone(request.params.phoneId);
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { page: fallback };
         const storyContext = await worldContext(targetChat(phone, request.query.chatId), phone);
+        const kinds = Object.keys(SITE_TEMPLATES).join(", ");
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: "You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page as a template. Respond with only JSON: {\"site\":\"Site Name\",\"title\":\"page headline\",\"tagline\":\"short site tagline\",\"kind\":\"news, shop, blog, forum, or official\",\"links\":[\"nav label\", ...],\"sections\":[\"Section Heading :: section body text\", ...]} with 3 to 5 nav labels and 3 to 5 sections. Every section uses the exact format 'Heading :: body'. For a shop, each section is one product and its body states the price. For a forum, each section is one post and its heading is the poster's name. Inside section bodies, wrap two to four names, places, products or events in [[double square brackets]] — they become links to further pages, so choose things a reader would want to follow. If the URL resembles a real-world website, do not reproduce the real site: invent this world's equivalent at that address." + storyContext + await customInstructions(phone),
+            content: `You render fictional websites on the in-story internet of a roleplay world. Given a URL and page title, produce the full page. Respond with only JSON: {"site":"Site Name","title":"page headline","tagline":"short site tagline","kind":"${guess}","meta":"one short line of context for this kind of page — a byline and date for news, a price range for a shop, member count for a forum, last-updated for reference, a role for a profile","links":["nav label", ...],"sections":["...", ...],"media":["emoji | short caption", ...]} with 3 to 5 nav labels, ${template.sections[0]} to ${template.sections[1]} sections, and 0 to 3 media items.
+
+This page looks like a "${guess}" (${template.label}) page, so each section is ${template.sectionFormat} Keep "kind" as "${guess}" unless the address plainly says otherwise, in which case use one of: ${kinds}.
+
+Media are placeholders for pictures that are not generated yet: each is a single emoji, then " | ", then a caption describing what the picture shows.${template.hero ? " The first media item is the lead image for the page." : ""}
+
+Inside section bodies, wrap two to four names, places, products or events in [[double square brackets]] — they become links to further pages, so choose things a reader would want to follow. If the URL resembles a real-world website, do not reproduce the real site: invent this world's equivalent at that address.${storyContext}${await customInstructions(phone)}`,
           },
           { role: "user", content: `URL: ${url}\nPage title: ${title}\nFound via search: ${query}${site ? `\nThis page belongs to the site "${site}" — keep its name, tagline, and nav consistent.` : ""}` },
         ], { temperature: 0.9, maxTokens: 1800 });
         const page = parseBoundedContent(completion.content, {
-          fields: { site: "string", title: "string", tagline: "string", kind: "string", links: "string[]", sections: "string[]" },
+          fields: { site: "string", title: "string", tagline: "string", kind: "string", meta: "string", links: "string[]", sections: "string[]", media: "string[]" },
           defaults: fallback,
-          limits: { maxString: 1200, maxItems: 12, perField: { site: 80, tagline: 200, kind: 40 } },
-        });
-        return { page };
+          limits: { maxString: 1200, maxItems: 12, perField: { site: 80, tagline: 200, kind: 40, meta: 160 } },
+        }) as typeof fallback;
+        return { page: { ...page, kind: normalizeSiteKind(page.kind, guess) } };
       } catch (error) {
         if (error instanceof Error && error.message === "Phone not found") {
           return reply.status(400).send({ error: error.message });
         }
         return { page: fallback };
+      }
+    });
+    /**
+     * Image search. Pictures are not generated yet, so a result is an emoji, a caption and the page
+     * it came from — enough to browse and to open the source, which is what the tab is for.
+     */
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/goodle/images", async (request, reply) => {
+      const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+        ? request.body as Record<string, unknown>
+        : {};
+      const query = String(body.query ?? "").trim().slice(0, 120);
+      const fallback = { images: [] as string[] };
+      if (!query) return fallback;
+      try {
+        const phone = await findPhone(request.params.phoneId);
+        const model = await resolvePhoneModel(phone, "heavy");
+        if (!model) return fallback;
+        const storyContext = await worldContext(targetChat(phone, request.query.chatId), phone);
+        const completion = await model.chatComplete([
+          {
+            role: "system",
+            content: `You are Goodle Images, the picture search of an in-story search engine. Respond with only JSON: {"images":["emoji | what the picture shows | site.web/path", ...]} with 8 to 12 items. Each item is one emoji that suits the picture, a short caption of six words or fewer, and the invented in-world page the picture sits on. Vary the sources.${storyContext}${await customInstructions(phone)}`,
+          },
+          { role: "user", content: `Image search: ${query}` },
+        ], { temperature: 0.9, maxTokens: 700 });
+        return parseBoundedContent(completion.content, {
+          fields: { images: "string[]" },
+          defaults: fallback,
+          limits: { maxString: 200, maxItems: 16 },
+        }) as { images: string[] };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Phone not found") {
+          return reply.status(400).send({ error: error.message });
+        }
+        return fallback;
       }
     });
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/noodle/feed", async (request, reply) => {

@@ -34,13 +34,6 @@ export function parseResultItem(item: string) {
   return { title, url, snippet };
 }
 
-export function parsePageSection(section: string) {
-  const [heading, ...rest] = section.split(" :: ");
-  return rest.length
-    ? { heading: heading!.trim(), body: rest.join(" :: ").trim() }
-    : { heading: "", body: section.trim() };
-}
-
 export function fallbackSearchResults(query: string) {
   const normalized = query.trim().slice(0, 120);
   return normalized

@@ -11,7 +11,8 @@ import { ContextProjection } from "../packages/virtual-phone/src/phone/platform/
 import { parseBoundedContent } from "../packages/virtual-phone/src/phone/platform/content";
 import { settingsManifest } from "../packages/virtual-phone/src/phone/apps/settings/manifest";
 import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/phone/apps/app-store/manifest";
-import { fallbackSearchResults, goodleManifest, looksLikeUrl, normalizeUrl, parseLinkedText, parsePageSection, parseResultItem, slugify } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
+import { fallbackSearchResults, goodleManifest, looksLikeUrl, normalizeUrl, parseLinkedText, parseResultItem, slugify } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
+import { guessSiteKind, normalizeSiteKind, parseImageResult, parseMediaItem, parsePageSection, SITE_KINDS, SITE_TEMPLATES } from "../packages/virtual-phone/src/phone/apps/goodle/sites";
 import { defaultDeviceSettings, normalizeDeviceSettings, offsetForStoryTime, storyNow } from "../packages/virtual-phone/src/phone/device/settings";
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
@@ -188,8 +189,37 @@ async function main() {
   );
   assert.deepEqual(parseResultItem("Just A Title"), { title: "Just A Title", url: "goodle.web/just-a-title", snippet: "" });
   assert.equal(slugify("Ferry Times & Fares!"), "ferry-times-fares");
-  assert.deepEqual(parsePageSection("Deals :: Two-for-one noodles :: today only"), { heading: "Deals", body: "Two-for-one noodles :: today only" });
-  assert.deepEqual(parsePageSection("Just a paragraph"), { heading: "", body: "Just a paragraph" });
+  // A section's middle field is the template's business: a price, a duration, a rating, a date.
+  assert.deepEqual(parsePageSection("Noodle pot :: £4.50 :: serves one"),
+    { heading: "Noodle pot", meta: "£4.50", body: "serves one", parts: ["Noodle pot", "£4.50", "serves one"] });
+  assert.equal(parsePageSection("Deals :: Two-for-one noodles").meta, "");
+  assert.equal(parsePageSection("Deals :: Two-for-one noodles").body, "Two-for-one noodles");
+  assert.deepEqual(parsePageSection("Just a paragraph").heading, "");
+  assert.equal(parsePageSection("Just a paragraph").body, "Just a paragraph");
+
+  // The address decides the template before anything is generated, and does so consistently.
+  assert.equal(guessSiteKind("thames-herald.web/city/flood-warning", "Flood warning issued"), "news");
+  assert.equal(guessSiteKind("nightmarket.web/shop/lanterns", "Paper lanterns"), "shop");
+  assert.equal(guessSiteKind("boards.web/thread/2291", "anyone else seen this?"), "forum");
+  assert.equal(guessSiteKind("lorepedia.web/wiki/House_Vance", "House Vance"), "wiki");
+  assert.equal(guessSiteKind("clipper.web/watch/kx01", "Bridge collapse footage"), "video");
+  assert.equal(guessSiteKind("citycouncil.gov.web/permits", "Permits"), "official");
+  assert.equal(guessSiteKind("vance-holdings.web", "Vance Holdings"), "profile");
+  assert.equal(guessSiteKind("some-place.web/a/b/c", "Untitled"), "official");
+  assert.equal(guessSiteKind("x.web/PLACES/Near-Me", "Guide"), "directory");
+  // Every guess is a kind the renderer has a template for.
+  for (const url of ["a.web/news/x", "b.web", "c.web/x/y", "d.web/shop", "e.web/wiki/z"]) {
+    assert.ok(SITE_KINDS.includes(guessSiteKind(url)), url);
+    assert.ok(SITE_TEMPLATES[guessSiteKind(url)]);
+  }
+  // The model may correct the guess, but only to a kind that exists.
+  assert.equal(normalizeSiteKind("newspaper", "official"), "news");
+  assert.equal(normalizeSiteKind("Shop", "official"), "shop");
+  assert.equal(normalizeSiteKind("interpretive dance", "wiki"), "wiki");
+  assert.deepEqual(parseMediaItem("🌉 | the old bridge at dusk"), { glyph: "🌉", caption: "the old bridge at dusk" });
+  assert.deepEqual(parseMediaItem("no emoji here", "📰"), { glyph: "📰", caption: "no emoji here" });
+  assert.deepEqual(parseImageResult("🌉 | the old bridge | herald.web/photos"),
+    { glyph: "🌉", caption: "the old bridge", source: "herald.web/photos", title: "the old bridge" });
   const customized = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, {
     deviceName: "Mira's phone",
     wallpaper: "midnight",

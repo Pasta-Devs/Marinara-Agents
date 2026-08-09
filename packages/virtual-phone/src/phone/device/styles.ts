@@ -111,8 +111,11 @@ export const phoneStylesheet = `
 .vp-app-icon--azmoron { background: linear-gradient(180deg, #ffb84d 0%, #d97706 100%); }
 .vp-app-icon--maps { background: linear-gradient(180deg, #5dbb78 0%, #0f7a4a 100%); }
 .vp-app-icon--find { background: linear-gradient(180deg, #5c9ded 0%, #1d4ed8 100%); }
-.vp-emoji-thumb { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 0.6rem; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--vp-text) 5%, var(--vp-surface)) 0 10px, color-mix(in srgb, var(--vp-text) 8%, var(--vp-surface)) 10px 20px); filter: grayscale(1); opacity: 0.72; }
-.vp-emoji-thumb--sm { height: 2.5rem; width: 2.5rem; font-size: 1.25rem; border-radius: 999px; filter: none; opacity: 1; }
+/* The stand-in for a picture: a grey hatched box with an emoji saying what the picture would be.
+   The emoji used to be greyscaled to 72% opacity along with the box, which made the one part that
+   carries the meaning the hardest part to read. */
+.vp-emoji-thumb { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 0.6rem; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--vp-text) 5%, var(--vp-surface)) 0 10px, color-mix(in srgb, var(--vp-text) 8%, var(--vp-surface)) 10px 20px); box-shadow: inset 0 0 0 1px var(--vp-border); }
+.vp-emoji-thumb--sm { height: 2.5rem; width: 2.5rem; font-size: 1.25rem; border-radius: 999px; }
 .vp-emoji-thumb--md { aspect-ratio: 1; width: 100%; font-size: 2rem; }
 .vp-emoji-thumb--lg { aspect-ratio: 4 / 3; width: 100%; font-size: 3.5rem; border-radius: 1rem; }
 /* The map had no ground: the background shorthand set a green gradient, then background-image on
@@ -423,6 +426,64 @@ export const phoneStylesheet = `
 .vp-site-section--post { padding: 0.75rem 0.875rem; border-radius: 0.875rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); }
 .vp-site-section--post h4 { color: var(--vp-accent); }
 .vp-site-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+
+/* Site templates. One layout per kind of place on the in-story web — a newspaper, a shop, a forum
+   thread and a council notice used to be the same stack of headed paragraphs. */
+.vp-byline { margin: -0.25rem 0 0.625rem; font-size: 0.6875rem; font-weight: 500; color: var(--vp-muted); }
+.vp-lede { margin: 0 0 0.75rem; font-size: 0.8125rem; font-weight: 550; line-height: 1.55; }
+.vp-site-article .vp-site-section { margin-bottom: 0.75rem; }
+/* Pictures are not generated yet, so a labelled grey box stands in and says so. */
+.vp-media { display: grid; gap: 0.3125rem; margin: 0 0 0.75rem; }
+.vp-media figcaption { font-size: 0.625rem; line-height: 1.35; color: var(--vp-muted); }
+/* A lead image is 16:9, not the 4:3 the shared thumb uses — at full column width that filled the
+   screen and pushed the article itself below the fold. */
+.vp-media--lg .vp-emoji-thumb { aspect-ratio: 16 / 9; font-size: 2.5rem; }
+.vp-media--sm { margin: 0; }
+.vp-media--sm figcaption { font-size: 0.5625rem; }
+.vp-media-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+.vp-media-row .vp-emoji-thumb { aspect-ratio: 1; width: 100%; height: auto; font-size: 1.5rem; border-radius: 0.625rem; }
+.vp-product { display: grid; gap: 0.3125rem; align-content: start; }
+.vp-product h4 { margin: 0; font-size: 0.75rem; font-weight: 650; line-height: 1.25; }
+.vp-product p { margin: 0; font-size: 0.6875rem; line-height: 1.4; color: var(--vp-muted); }
+.vp-price { font-size: 0.8125rem; font-weight: 700; color: var(--vp-accent); }
+.vp-thread-post { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0.625rem 0.75rem; border-radius: 0.875rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); }
+.vp-thread-post > div { min-width: 0; flex: 1; }
+.vp-thread-post p { margin: 0.125rem 0 0; font-size: 0.75rem; line-height: 1.5; overflow-wrap: anywhere; }
+.vp-thread-post--op { box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px color-mix(in srgb, var(--vp-accent) 40%, var(--vp-border)); }
+.vp-infobox { float: right; width: 42%; display: grid; gap: 0.3125rem; margin: 0 0 0.5rem 0.625rem; padding: 0.5rem; border-radius: 0.75rem; background: color-mix(in srgb, var(--vp-text) 4%, var(--vp-surface)); box-shadow: inset 0 0 0 1px var(--vp-border); }
+.vp-infobox-caption { font-size: 0.5625rem; line-height: 1.35; color: var(--vp-muted); }
+.vp-wiki-title { font-family: Georgia, "Times New Roman", serif; font-weight: 500; padding-bottom: 0.375rem; border-bottom: 1px solid var(--vp-border); }
+.vp-wiki-section h4 { font-family: Georgia, "Times New Roman", serif; font-weight: 600; }
+.vp-toc { display: grid; gap: 0.25rem; margin-bottom: 0.75rem; padding: 0.5rem 0.625rem; border-radius: 0.75rem; background: color-mix(in srgb, var(--vp-text) 4%, var(--vp-surface)); box-shadow: inset 0 0 0 1px var(--vp-border); }
+.vp-toc ol { margin: 0; padding-left: 1.125rem; font-size: 0.6875rem; line-height: 1.6; color: var(--vp-accent); }
+.vp-profile-head { display: flex; align-items: center; gap: 0.625rem; margin-bottom: 0.875rem; }
+.vp-profile-head h3 { margin: 0; font-size: 0.9375rem; font-weight: 650; }
+.vp-profile-head .vp-byline { margin: 0; }
+.vp-blog-post { margin-bottom: 0.875rem; padding-bottom: 0.875rem; border-bottom: 1px solid var(--vp-border); }
+.vp-blog-post:last-child { border-bottom: 0; }
+.vp-blog-post h4 { margin: 0 0 0.125rem; font-size: 0.8125rem; font-weight: 650; color: var(--vp-accent); }
+.vp-blog-post p { margin: 0.25rem 0 0; font-size: 0.75rem; line-height: 1.5; }
+.vp-listing-meta { font-size: 0.625rem; font-weight: 600; color: var(--vp-accent); }
+.vp-notice { margin: 0 0 0.75rem; padding: 0.5rem 0.625rem; border-radius: 0.5rem; border-left: 3px solid var(--vp-accent); background: color-mix(in srgb, var(--vp-accent) 8%, var(--vp-surface)); font-size: 0.6875rem; line-height: 1.4; }
+.vp-official-row { padding: 0.625rem 0.75rem; }
+.vp-official-row h4 { margin: 0 0 0.1875rem; font-size: 0.75rem; font-weight: 650; }
+.vp-official-row p { margin: 0; font-size: 0.6875rem; line-height: 1.5; color: var(--vp-muted); }
+.vp-video-row { display: flex; gap: 0.5rem; margin-bottom: 0.625rem; }
+.vp-video-thumb { position: relative; flex: 0 0 auto; height: 3.25rem; width: 5.5rem; font-size: 1.5rem; border-radius: 0.5rem; }
+.vp-video-duration { position: absolute; right: 0.1875rem; bottom: 0.1875rem; padding: 0 0.25rem; border-radius: 0.25rem; background: rgb(0 0 0 / 0.75); color: #fff; font-size: 0.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vp-video-body { display: grid; gap: 0.125rem; min-width: 0; }
+
+/* Goodle's own tabs, and the picture grid behind the Images one. */
+.vp-goodle-tabs { display: flex; gap: 1rem; margin: 0.875rem 0 0; padding: 0 0.25rem; border-bottom: 1px solid var(--vp-border); }
+.vp-goodle-tabs button { display: inline-flex; align-items: center; gap: 0.3125rem; padding: 0 0.125rem 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--vp-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.vp-goodle-tabs button[aria-pressed="true"] { color: var(--vp-accent); border-bottom-color: var(--vp-accent); }
+.vp-image-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.875rem; }
+.vp-image-cell { display: grid; gap: 0.1875rem; text-align: left; }
+.vp-image-cell .vp-media { margin: 0; }
+.vp-image-cell .vp-emoji-thumb { aspect-ratio: 1; width: 100%; height: auto; font-size: 1.625rem; border-radius: 0.625rem; transition: transform 120ms ease; }
+.vp-image-cell:active .vp-emoji-thumb { transform: scale(0.96); }
+.vp-image-caption { font-size: 0.5625rem; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.vp-image-source { font-size: 0.5rem; color: var(--vp-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-site-card { display: grid; gap: 0.25rem; padding: 0.75rem; border-radius: 0.875rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); }
 .vp-site-card h4 { margin: 0; font-size: 0.75rem; font-weight: 650; }
 .vp-site-card p { margin: 0; font-size: 0.6875rem; line-height: 1.4; color: var(--vp-muted); overflow-wrap: anywhere; }
