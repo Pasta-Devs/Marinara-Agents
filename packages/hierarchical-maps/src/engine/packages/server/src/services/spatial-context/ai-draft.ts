@@ -23,6 +23,7 @@ import {
   normalizeHierarchyProfile,
   renderSpatialGenerationPromptTemplate,
   resolveSpatialGenerationPromptOption,
+  SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT,
   type SpatialHierarchyProfile,
   type SpatialHierarchyType,
   type SpatialGenerationPromptTemplates,
@@ -40,6 +41,7 @@ interface NormalizeSpatialMapPlanOptions {
   revision: number;
   enabled: boolean;
   size: SpatialMapDraftSize;
+  targetLocations?: number;
   maxLocations?: number;
   maxDepth?: number;
   sourceEntryIdsByKey?: ReadonlyMap<string, string>;
@@ -52,6 +54,7 @@ interface NormalizeSpatialMapPlanOptions {
 interface BuildSpatialMapPromptOptions {
   ownerMode: SpatialOwnerMode;
   size: SpatialMapDraftSize;
+  targetLocations?: number;
   sourceContext: string;
   instructions?: string;
   groundingMode?: SpatialMapGroundingMode;
@@ -68,6 +71,7 @@ interface NormalizeSpatialMapExpansionOptions {
   definition: SpatialContextDefinition;
   targetLocationId: string;
   size: SpatialMapDraftSize;
+  targetLocations?: number;
   sourceEntryIdsByKey?: ReadonlyMap<string, string>;
   requireLoreSource?: boolean;
 }
@@ -76,6 +80,7 @@ interface BuildSpatialMapExpansionPromptOptions {
   definition: SpatialContextDefinition;
   targetLocationId: string;
   size: SpatialMapDraftSize;
+  targetLocations?: number;
   sourceContext: string;
   instructions?: string;
   groundingMode?: SpatialMapGroundingMode;
@@ -106,6 +111,27 @@ export const SPATIAL_DRAFT_SIZE_SPECS: Record<SpatialMapDraftSize, SpatialDraftS
   medium: { targetLocations: 16, maxLocations: 24, maxDepth: 5, maxTokens: 24_000 },
   large: { targetLocations: 28, maxLocations: 40, maxDepth: 7, maxTokens: 40_000 },
 };
+
+export { SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT };
+
+export function resolveSpatialDraftSizeSpec(
+  size: SpatialMapDraftSize,
+  targetLocations?: number,
+): SpatialDraftSizeSpec {
+  const preset = SPATIAL_DRAFT_SIZE_SPECS[size];
+  if (targetLocations === undefined) return preset;
+  const normalizedTarget = Math.max(1, Math.min(Math.trunc(targetLocations), SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT));
+  const targetPreset =
+    normalizedTarget <= SPATIAL_DRAFT_SIZE_SPECS.small.targetLocations
+      ? SPATIAL_DRAFT_SIZE_SPECS.small
+      : normalizedTarget <= SPATIAL_DRAFT_SIZE_SPECS.medium.targetLocations
+        ? SPATIAL_DRAFT_SIZE_SPECS.medium
+        : SPATIAL_DRAFT_SIZE_SPECS.large;
+  return {
+    ...targetPreset,
+    targetLocations: normalizedTarget,
+  };
+}
 
 const LOCATION_KINDS = new Set<SpatialLocationKind>(["region", "settlement", "place", "building", "floor", "room"]);
 const CHILD_PRESENTATIONS = new Set<SpatialChildPresentation>(["map", "layers", "list"]);
@@ -498,9 +524,10 @@ export function normalizeSpatialMapPlan(
   value: unknown,
   options: NormalizeSpatialMapPlanOptions,
 ): SpatialContextDefinition {
+  const size = resolveSpatialDraftSizeSpec(options.size, options.targetLocations);
   const locationLimit = Math.max(
     0,
-    Math.min(options.maxLocations ?? SPATIAL_DRAFT_SIZE_SPECS[options.size].maxLocations, SPATIAL_CONTEXT_LIMITS.maxLocations),
+    Math.min(options.maxLocations ?? size.maxLocations, SPATIAL_CONTEXT_LIMITS.maxLocations),
   );
   const rawLocations = readPlanLocations(value).slice(0, locationLimit);
   if (rawLocations.length === 0) {
@@ -567,7 +594,7 @@ export function normalizeSpatialMapPlan(
   );
   const maxDepth = Math.max(
     1,
-    Math.min(options.maxDepth ?? SPATIAL_DRAFT_SIZE_SPECS[options.size].maxDepth, SPATIAL_CONTEXT_LIMITS.maxDepth),
+    Math.min(options.maxDepth ?? size.maxDepth, SPATIAL_CONTEXT_LIMITS.maxDepth),
   );
   locations = locations.map((location) =>
     resolveSpatialLocationDepth({ locations }, location) > maxDepth ? { ...location, parentId: null } : location,
@@ -664,10 +691,14 @@ export function normalizeSpatialMapExpansionPlan(
     revision: options.definition.revision,
     enabled: options.definition.enabled,
     size: options.size,
-    maxLocations: Math.min(SPATIAL_DRAFT_SIZE_SPECS[options.size].maxLocations, remainingLocationCapacity),
+    targetLocations: options.targetLocations,
+    maxLocations: Math.min(
+      resolveSpatialDraftSizeSpec(options.size, options.targetLocations).maxLocations,
+      remainingLocationCapacity,
+    ),
     sourceEntryIdsByKey: options.sourceEntryIdsByKey,
     requireLoreSource: options.requireLoreSource,
-    maxDepth: Math.min(SPATIAL_DRAFT_SIZE_SPECS[options.size].maxDepth, availableDepth),
+    maxDepth: Math.min(resolveSpatialDraftSizeSpec(options.size, options.targetLocations).maxDepth, availableDepth),
     externalDefinition: options.definition,
     externalLinkTargetIdsByKey,
   });
@@ -843,7 +874,7 @@ export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansion
     throw new Error("This location is already at the maximum nesting depth.");
   }
 
-  const size = SPATIAL_DRAFT_SIZE_SPECS[options.size];
+  const size = resolveSpatialDraftSizeSpec(options.size, options.targetLocations);
   const maxNewLocations = Math.min(size.maxLocations, remainingLocationCapacity);
   const targetLocations = Math.min(size.targetLocations, maxNewLocations);
   const maxNewDepth = Math.min(size.maxDepth, availableDepth);
@@ -936,7 +967,7 @@ export function buildSpatialMapDraftPrompt(options: BuildSpatialMapPromptOptions
   messages: Array<{ role: "system" | "user"; content: string }>;
   maxTokens: number;
 } {
-  const size = SPATIAL_DRAFT_SIZE_SPECS[options.size];
+  const size = resolveSpatialDraftSizeSpec(options.size, options.targetLocations);
   const requiredLocationNames = Array.from(new Set(options.requiredLocationNames ?? []));
   const outputSchema =
     'Schema: {"worldName":string,"hierarchyName":string,"locationTypes":[{"key":string,"label":string,"baseKind":"region"|"settlement"|"place"|"building"|"floor"|"room"}],"startingLocationKey":string,"locations":[{"key":string,"parentKey":string|null,"name":string,"typeKey":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}';

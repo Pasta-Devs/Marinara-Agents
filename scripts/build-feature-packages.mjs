@@ -10,6 +10,7 @@ import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import { writeEnglishPackageLocale } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
@@ -208,8 +209,8 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.3.3",
-    minEngineVersion: "2.4.1",
+    version: "1.3.4",
+    minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
     description:
@@ -981,7 +982,7 @@ function WorldMapView({ props, chatId, onOpenEditor, useParentScroll = false }) 
 }
 function stopOverlayEvent(event) { event.stopPropagation(); }
 function WorkspaceOverlay({ chatId, props, stagedTemplate, onClose, onOpenTemplates }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} debugMode={props.debugMode === true} stagedTemplate={stagedTemplate} pendingDraftReview={props.pendingDraftReview?.mode === "template" ? null : props.pendingDraftReview || null} onClearPendingDraftReview={() => props.onClearPendingDraftReview?.()} onDirtyChange={(dirty) => props.onDirtyChange?.(dirty)} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onLorebooksChanged={() => props.onLorebooksChanged?.()} onOpenTemplates={onOpenTemplates} onClose={onClose} /><Toaster richColors /></div>, document.body); }
-function LibraryOverlay({ chatId, props, setupSelection, onClose, onAppliedToChat, onSelectForSetup, onSelectSharedWorldForSetup }) { const sharedWorldSetupSupported = Array.isArray(props.supportedSelectionKinds) && props.supportedSelectionKinds.includes("shared-world"); return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onLorebooksChanged={() => props.onLorebooksChanged?.()} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onSelectSharedWorldForSetup={setupSelection && sharedWorldSetupSupported ? onSelectSharedWorldForSetup : undefined} onClose={onClose} /><Toaster richColors /></div>, document.body); }
+function LibraryOverlay({ chatId, props, setupSelection, startOverReplacement, onClose, onAppliedToChat, onSelectForSetup, onSelectSharedWorldForSetup }) { const sharedWorldSetupSupported = Array.isArray(props.supportedSelectionKinds) && props.supportedSelectionKinds.includes("shared-world"); return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} startOverReplacement={startOverReplacement} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onLorebooksChanged={() => props.onLorebooksChanged?.()} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onSelectSharedWorldForSetup={setupSelection && sharedWorldSetupSupported ? onSelectSharedWorldForSetup : undefined} onClose={onClose} /><Toaster richColors /></div>, document.body); }
 function SetupSharedWorldApply({ chatId, props }) {
   const attemptRef = useRef("");
   const onAppliedRef = useRef(props.onApplied);
@@ -1051,6 +1052,7 @@ function Root({ element }) {
   const [, redraw] = useState(0);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryStartOver, setLibraryStartOver] = useState(false);
   const [stagedTemplate, setStagedTemplate] = useState(null);
   const [worldMapOpen, setWorldMapOpen] = useState(false);
   const previousPendingRef = useRef({ chatId: "", pending: null });
@@ -1099,6 +1101,7 @@ function Root({ element }) {
       return;
     }
     setLibraryOpen(false);
+    setLibraryStartOver(false);
   };
   const selectTemplateForSetup = (template) => {
     if (view === "setup") {
@@ -1122,14 +1125,14 @@ function Root({ element }) {
   };
   if (view === "setup-apply") return chatId ? <SetupSharedWorldApply chatId={chatId} props={props} /> : null;
   if (view === "setup") return <LibraryOverlay chatId="" props={props} setupSelection onSelectForSetup={selectTemplateForSetup} onSelectSharedWorldForSetup={selectSharedWorldForSetup} onClose={() => props.onClose?.()} />;
-  if (libraryOpen) return <LibraryOverlay chatId={chatId} props={props} setupSelection={setupTemplateNeedsSelection} onSelectForSetup={selectTemplateForSetup} onClose={closeLibrary} onAppliedToChat={() => { setLibraryOpen(false); setWorkspaceOpen(true); }} />;
-  if (workspaceOpen && chatId) return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={() => setLibraryOpen(true)} />;
+  if (libraryOpen) return <LibraryOverlay chatId={chatId} props={props} setupSelection={setupTemplateNeedsSelection} startOverReplacement={libraryStartOver} onSelectForSetup={selectTemplateForSetup} onClose={closeLibrary} onAppliedToChat={() => { setLibraryOpen(false); setLibraryStartOver(false); setWorkspaceOpen(true); }} />;
+  if (workspaceOpen && chatId) return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={(options) => { setLibraryStartOver(options?.startOver === true); setLibraryOpen(true); }} />;
   if (worldMapOpen && chatId) return <WorldMapOverlay chatId={chatId} props={props} onClose={() => setWorldMapOpen(false)} onOpenEditor={editFromWorldMap} />;
   if (view === "detail") return <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} agentInfo={props.agent || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenMap={() => setWorldMapOpen(true)} onOpenEditor={() => setWorkspaceOpen(true)} onOpenLibrary={() => setLibraryOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} confirmAction={typeof props.confirmAction === "function" ? props.confirmAction : undefined} onDirtyChange={typeof props.onDirtyChange === "function" ? props.onDirtyChange : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /><Toaster richColors /></>;
   if (!chatId) return null;
   if (view === "runtime") return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><style data-marinara-maps-runtime-styles>{runtimeStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} /></>;
   if (view === "world-map") return <WorldMapView props={props} chatId={chatId} onOpenEditor={() => setWorkspaceOpen(true)} />;
-  if (view === "workspace") return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={() => setLibraryOpen(true)} />;
+  if (view === "workspace") return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={(options) => { setLibraryStartOver(options?.startOver === true); setLibraryOpen(true); }} />;
   return <><SpatialContextSettingsSection chatId={chatId} style={props.style} enabledForChat={props.enabledForChat === true} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenEditor={() => setWorkspaceOpen(true)} /><Toaster richColors /></>;
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><CapabilityClientErrorBoundary element={this}><Root element={this} /></CapabilityClientErrorBoundary></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
@@ -1466,6 +1469,7 @@ for (const feature of selectedFeatures) {
     restartRequired: true,
   };
   await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeEnglishPackageLocale(sourceDir, manifest, [agentDefinition]);
 
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-${feature.id}-`));
   try {

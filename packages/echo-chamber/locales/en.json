@@ -1,0 +1,43 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Echo Chamber",
+    "description": "Simulates a live streaming-style chat reacting to your roleplay in real time. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode."
+  },
+  "agents": {
+    "echo-chamber": {
+      "name": "Echo Chamber",
+      "description": "Simulates a live streaming-style chat reacting to your roleplay in real time. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
+      "promptTemplates": {
+        "ao3-wattpad": {
+          "name": "AO3 / Wattpad",
+          "description": "Fanfic comment-section energy: shipping, kudos, screaming, favorite lines, and reader speculation."
+        },
+        "twitter-reddit": {
+          "name": "Twitter / Reddit",
+          "description": "A mix of quote-tweet reactions, thread jokes, hot takes, and subreddit analysis."
+        },
+        "imageboard": {
+          "name": "4chan",
+          "description": "Anonymous imageboard chaos with greentext cadence, bait, and blunt reactions."
+        },
+        "constructive": {
+          "name": "Constructive",
+          "description": "Thoughtful reactions that point out strengths, pacing, continuity, and possible next beats."
+        },
+        "hype-squad": {
+          "name": "Hype Squad",
+          "description": "Maximum cheering, caps, celebration, cheering-on, and dramatic overreaction."
+        },
+        "harbingers": {
+          "name": "Harbingers",
+          "description": "Fatui Harbingers and agents reacting from the peanut gallery."
+        }
+      }
+    }
+  }
+}

@@ -26,7 +26,11 @@ import {
   StatusSurface,
   inputClass,
 } from "./shared-controls";
-import { humanizeLabel } from "./display-labels";
+import {
+  humanizeLabel,
+  labelKeys,
+  localizedLabel,
+} from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
@@ -549,7 +553,7 @@ export default function ActivityView({
           </option>
           {debugPhases.map((phase) => (
             <option key={phase} value={phase}>
-              {humanizeLabel(phase)}
+              {localizedLabel(phase, localizeUi, labelKeys.debugPhase)}
             </option>
           ))}
         </select>
@@ -872,7 +876,11 @@ export default function ActivityView({
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="font-medium">
-                              {humanizeLabel(event.phase)} /{" "}
+                              {localizedLabel(
+                                event.phase,
+                                localizeUi,
+                                labelKeys.debugPhase,
+                              )} /{" "}
                               {actionLabel(event.action, localizeUi)}
                             </span>
                             <span

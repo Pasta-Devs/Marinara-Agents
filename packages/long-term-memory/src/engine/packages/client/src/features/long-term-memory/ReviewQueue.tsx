@@ -18,7 +18,11 @@ import {
   request,
   requestAllNotes,
 } from "./api";
-import { humanizeLabel } from "./display-labels";
+import {
+  humanizeLabel,
+  labelKeys,
+  localizedLabel,
+} from "./display-labels";
 import {
   Button,
   IconButton,
@@ -145,7 +149,15 @@ function mutationDisplayLabel(
       ? mutation.note
       : noteById.get(mutationTarget(mutation));
   const title = target && "title" in target ? target.title : undefined;
-  return `${humanizeLabel(mutation.kind)}${title ? ` "${title}"` : ""}`;
+  const label = mutationLabels[mutation.kind]
+    ? localizeUi(mutationLabels[mutation.kind])
+    : humanizeLabel(mutation.kind);
+  return title
+    ? localizeUi("ui.longTermMemory.reviewqueue.mutationWithTitle", {
+        mutation: label,
+        title,
+      })
+    : label;
 }
 
 function draftDisplayTitle(
@@ -469,7 +481,7 @@ function ImportanceField({
         </option>
         {importanceOptions.map((importance) => (
           <option key={importance} value={importance}>
-            {humanizeLabel(importance)}
+            {localizedLabel(importance, localizeUi, labelKeys.importance)}
           </option>
         ))}
       </select>
@@ -1583,7 +1595,7 @@ export default function ReviewQueue({
                   data-ltm-review-type={targetType}
                   className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
                 >
-                  {humanizeLabel(targetType)}
+                  {localizedLabel(targetType, localizeUi, labelKeys.noteType)}
                 </span>
               ) : null}
               <span
@@ -1605,11 +1617,11 @@ export default function ReviewQueue({
                   data-ltm-review-importance={importance}
                   className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
                 >
-                  {humanizeLabel(importance)}
+                  {localizedLabel(importance, localizeUi, labelKeys.importance)}
                 </span>
               ) : null}
               <span className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5">
-                {humanizeLabel(row.mutation.risk)} /{" "}
+                {localizedLabel(row.mutation.risk, localizeUi, labelKeys.risk)} /{" "}
                 {Math.round(row.mutation.confidence * 100)}
                 {localizeUi("ui.longTermMemory.reviewqueue.confidence")}
               </span>
@@ -1978,11 +1990,6 @@ export default function ReviewQueue({
                     blocked: review.data?.counts.blockedDrafts ?? 0,
                   })}
                 </p>
-                {review.data?.sources.length ? (
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    {localizeUi("ui.longTermMemory.reviewqueue.curationGuidance")}
-                  </p>
-                ) : null}
               </header>
               <div className="mari-editor-panel overflow-hidden">
                 {sourceIds.map((id) => {
@@ -2115,7 +2122,11 @@ export default function ReviewQueue({
                   {selectedReviewSource ? (
                     <p className="text-xs text-[var(--muted-foreground)]">
                       {localizeUi("ui.longTermMemory.reviewqueue.modes")}{" "}
-                      {selectedReviewSource.modes.map(humanizeLabel).join(", ")}
+                      {selectedReviewSource.modes
+                        .map((mode) =>
+                          localizedLabel(mode, localizeUi, labelKeys.mode),
+                        )
+                        .join(", ")}
                     </p>
                   ) : null}
                 </div>
