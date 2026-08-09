@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronRight, Plus, Users } from "lucide-react";
+import { ChevronRight, MessageSquare, Plus, Sparkles, Users } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
@@ -35,7 +35,15 @@ interface ContactsPayload {
   threads: Array<{ otherPhoneId: string; unread: number }>;
 }
 
-export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: string; chatId: string; onBack: () => void; onClose: () => void }) {
+export function ContactsShell({ phoneId, chatId, openApp, installedApps = [], onBack, onClose }: {
+  phoneId: string;
+  chatId: string;
+  /** Opens another app on this contact — the reason a contact card is worth having. */
+  openApp?: (appId: string, target?: string) => void;
+  installedApps?: string[];
+  onBack: () => void;
+  onClose: () => void;
+}) {
   const [data, setData] = React.useState<ContactsPayload | null>(null);
   const [error, setError] = React.useState("");
   const avatars = useAvatarMap();
@@ -154,6 +162,28 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
               {openContact.phoneId ? threadStatus(openContact.phoneId) : "No phone in this chat"}
             </span>
           </div>
+          {/* A contact you can only look at is an address book from before phones. */}
+          {openApp ? (
+            <div className="vp-contact-actions">
+              <button
+                type="button"
+                className="vp-contact-action"
+                disabled={!openContact.phoneId || !installedApps.includes("messages")}
+                title={openContact.phoneId ? undefined : "This person has no phone in this chat"}
+                onClick={() => openContact.phoneId && openApp("messages", openContact.phoneId)}
+              >
+                <MessageSquare size="1rem" aria-hidden="true" /><span>Message</span>
+              </button>
+              <button
+                type="button"
+                className="vp-contact-action"
+                disabled={!installedApps.includes("noodler")}
+                onClick={() => openApp("noodler", openContact.name)}
+              >
+                <Sparkles size="1rem" aria-hidden="true" /><span>Noodle</span>
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : view === "add" ? (
         <>

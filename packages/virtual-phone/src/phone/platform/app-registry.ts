@@ -14,7 +14,14 @@ export interface AppRenderContext {
   pendingSearch: string;
   setPendingSearch: (query: string) => void;
   onPhoneChange: (phone: Phone) => void;
-  openApp: (appId: string) => void;
+  /**
+   * Opens another app, optionally handing it something to act on — a contact to message, a place
+   * to look up. Apps were reachable only from the home screen, so a contact and their conversation
+   * were two unconnected screens with the same person on them.
+   */
+  openApp: (appId: string, target?: string) => void;
+  /** What the last openApp call handed this app, if anything. */
+  launchTarget: string;
   installedApps: Array<{ manifest: AppManifest; installed: boolean }>;
   onInstalledChange: (appId: string, installed: boolean) => void;
   /** Lets an app act on the device itself — Gallery setting a photo as the wallpaper, say. */

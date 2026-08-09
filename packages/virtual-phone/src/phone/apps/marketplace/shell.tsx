@@ -289,7 +289,6 @@ export function MarketplaceShell({ phoneId, onBack, onClose }: { phoneId: string
             <button type="button" className="vp-accent-btn" disabled={busy} onClick={() => void buy(open)}>
               {payable ? `Buy for ${payable}` : "Take it"}
             </button>
-            <button type="button" className="vp-surface-btn" onClick={() => setOpenKey(openKey)}>Ask about it</button>
           </div>
 
           {openThread.length ? (

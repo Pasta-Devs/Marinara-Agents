@@ -28,7 +28,13 @@ interface MessagingPayload {
   threads: Thread[];
 }
 
-export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
+export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
+  phoneId: string;
+  /** A phone id handed over by another app — Contacts opening the conversation with someone. */
+  openWith?: string;
+  onBack: () => void;
+  onClose: () => void;
+}) {
   const [data, setData] = React.useState<MessagingPayload | null>(null);
   const [error, setError] = React.useState("");
   const [activeThreadId, setActiveThreadId] = React.useState<string | null>(null);
@@ -103,6 +109,17 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
       setSending(false);
     }
   };
+
+  /**
+   * Opening straight into a conversation, when Contacts sent us here. Runs once the threads land,
+   * and only for a thread that exists — a contact with no history drops you on the list with their
+   * composer visible, which is where you would start one anyway.
+   */
+  React.useEffect(() => {
+    if (!openWith || !data) return;
+    const existing = data.threads.find((thread) => thread.otherPhoneId === openWith);
+    if (existing) setActiveThreadId(existing.id);
+  }, [openWith, data]);
 
   const startedContactIds = new Set(data?.threads.map((thread) => thread.otherPhoneId));
   const newContacts = data?.contacts.filter((contact) => !startedContactIds.has(contact.phoneId)) ?? [];

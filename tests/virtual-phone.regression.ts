@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { PhoneIdentityService, type PhoneDocumentRecord, type PhoneDocumentStore } from "../packages/virtual-phone/src/phone/device/identity";
 import { phoneThemeTokens } from "../packages/virtual-phone/src/phone/device/theme";
+import { phoneStylesheet } from "../packages/virtual-phone/src/phone/device/styles";
 import { initialDeviceSession, unlockDevice } from "../packages/virtual-phone/src/phone/device/surfaces";
 import { InstalledAppRegistry } from "../packages/virtual-phone/src/phone/platform/app-registry";
 import { validateAppManifest, type AppManifest } from "../packages/virtual-phone/src/phone/platform/app-manifest";
@@ -282,6 +283,49 @@ async function main() {
     assert.equal(shifted.getMinutes(), 0);
   }
   assert.equal(offsetForStoryTime("not-a-time", 42), 42);
+  /**
+   * The stylesheet has to parse. A selector left without a block — the residue of deleting a rule
+   * with a regex — is silently valid JavaScript and silently swallows the rule that follows it in
+   * the browser, so `.vp-empty` stopped centring and nothing failed anywhere.
+   */
+  const cssBody = phoneStylesheet.replace(/\/\*[\s\S]*?\*\//gu, "");
+  let cursor = 0;
+  let ruleCount = 0;
+  while (cursor < cssBody.length) {
+    const open = cssBody.indexOf("{", cursor);
+    if (open === -1) {
+      assert.equal(cssBody.slice(cursor).trim(), "", `dangling CSS after the last rule: ${cssBody.slice(cursor).trim().slice(0, 80)}`);
+      break;
+    }
+    const selector = cssBody.slice(cursor, open).trim();
+    assert.ok(selector.length > 0, "empty CSS selector");
+    // A selector containing a closing brace means the previous rule never opened one.
+    assert.ok(!selector.includes("}"), `CSS selector spans a rule boundary: ${selector.slice(0, 80)}`);
+    let depth = 1;
+    let index = open + 1;
+    while (index < cssBody.length && depth > 0) {
+      if (cssBody[index] === "{") depth += 1;
+      if (cssBody[index] === "}") depth -= 1;
+      index += 1;
+    }
+    assert.equal(depth, 0, `unclosed CSS rule: ${selector.slice(0, 80)}`);
+    ruleCount += 1;
+    cursor = index;
+  }
+  assert.ok(ruleCount > 200, `expected the phone stylesheet to have rules, saw ${ruleCount}`);
+  /**
+   * Selectors are compared exactly, not by substring. A selector left dangling does not break the
+   * parse — it merges into the next rule as a descendant selector, so `.vp-large-title-row`
+   * followed by `.vp-empty { … }` quietly became `.vp-large-title-row .vp-empty`, a rule that
+   * matches nothing. Searching for ".vp-empty {" would still have found it and passed.
+   */
+  const selectors = new Set(
+    cssBody.split("}").map((chunk) => chunk.slice(0, chunk.indexOf("{")).replace(/\s+/gu, " ").trim()).filter(Boolean),
+  );
+  for (const required of [".vp-empty", ".vp-list", ".vp-fab", ".vp-contact-actions", ".vp-media", ".vp-thread-row", ".vp-appview"]) {
+    assert.ok(selectors.has(required), `stylesheet has no rule for exactly "${required}" — did a deleted rule leave a dangling selector?`);
+  }
+
   // The turn context is what the story finally hears about the phone. Nothing to say costs nothing.
   assert.equal(buildTurnContext([]), null);
   assert.equal(buildTurnContext([{ ownerName: "Mara", ownerType: "character", unread: [], batteryLevel: 80 }]), null);

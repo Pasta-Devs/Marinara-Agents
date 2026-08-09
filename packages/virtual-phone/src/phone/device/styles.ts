@@ -143,6 +143,11 @@ export const phoneStylesheet = `
 .vp-map-pin:hover { transform: translate(-50%, -108%); filter: brightness(1.04); }
 .vp-map-pin.is-open { position: static; transform: none; height: 4.25rem; width: 4.25rem; font-size: 2.25rem; }
 .vp-map-pin.is-open::after, .vp-map-pin.is-open::before { display: none; }
+/* Contact actions: the row of things you can do with a person, which is what a contact card is for. */
+.vp-contact-actions { display: grid; grid-auto-flow: column; gap: 0.5rem; width: 100%; margin-top: 0.5rem; }
+.vp-contact-action { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; min-height: 3.25rem; border-radius: 0.875rem; background: color-mix(in srgb, var(--vp-accent) 12%, var(--vp-surface)); color: var(--vp-accent); font-size: 0.625rem; font-weight: 650; transition: transform 120ms ease, filter 140ms ease; }
+.vp-contact-action:hover:not(:disabled) { filter: brightness(0.97); }
+.vp-contact-action:active:not(:disabled) { transform: scale(0.97); }
 .vp-find-row { display: flex; align-items: center; gap: 0.625rem; padding: 0.6rem 0.7rem; }
 /* Marketplace is a tile grid. The image slot is sized as if the photo were there, because one day
    it will be (Step 11.3) — an empty slot that reserves its space reads as designed, not broken. */
@@ -335,7 +340,6 @@ export const phoneStylesheet = `
 .vp-row-stamp { flex-shrink: 0; align-self: flex-start; margin-left: auto; padding-top: 0.125rem; font-size: 0.625rem; font-weight: 500; color: var(--vp-muted); font-variant-numeric: tabular-nums; }
 .vp-index-head { position: sticky; top: 0; z-index: 1; padding: 0.25rem 0.875rem; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.02em; color: var(--vp-muted); background: var(--vp-bg); }
 
-.vp-large-title-row 
 /* Empty state: a real one, not a muted sentence. Icon, what this screen is, what to do about it. */
 .vp-empty { display: grid; justify-items: center; align-content: center; gap: 0.4rem; padding: 2.5rem 1.25rem; text-align: center; }
 .vp-empty-icon { display: inline-flex; align-items: center; justify-content: center; height: 3.25rem; width: 3.25rem; margin-bottom: 0.25rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 7%, var(--vp-bg)); color: var(--vp-muted); }

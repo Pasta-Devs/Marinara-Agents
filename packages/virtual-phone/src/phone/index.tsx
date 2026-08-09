@@ -56,7 +56,7 @@ phoneAppRegistry.register({
 phoneAppRegistry.register({
   manifest: messagesManifest,
   component: lazyShell(() => import("./apps/messages/shell"), "MessagesShell"),
-  props: phoneId,
+  props: (context) => ({ phoneId: context.phone.phoneId, openWith: context.launchTarget }),
 });
 phoneAppRegistry.register({
   manifest: goodleManifest,
@@ -77,7 +77,12 @@ phoneAppRegistry.register({
   manifest: contactsManifest,
   component: lazyShell(() => import("./apps/contacts/shell"), "ContactsShell"),
   requiresChat: true,
-  props: (context) => ({ phoneId: context.phone.phoneId, chatId: context.chatId }),
+  props: (context) => ({
+    phoneId: context.phone.phoneId,
+    chatId: context.chatId,
+    openApp: context.openApp,
+    installedApps: context.settings.installedApps,
+  }),
 });
 phoneAppRegistry.register({
   manifest: mailManifest,
@@ -223,6 +228,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
   const [notifications, setNotifications] = React.useState<PhoneNotification[]>([]);
   const [homeSearch, setHomeSearch] = React.useState("");
   const [pendingSearch, setPendingSearch] = React.useState("");
+  const [launchTarget, setLaunchTarget] = React.useState("");
   const [showState, setShowState] = React.useState<"idle" | "pending" | "done">("idle");
   const [refState, setRefState] = React.useState<"idle" | "pending" | "done">("idle");
   const routeStacks = React.useRef(new Map<string, AppRouteStackManager>());
@@ -409,8 +415,9 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     }
   };
 
-  const openApp = (appId: string) => {
+  const openApp = (appId: string, target = "") => {
     if (appId === "goodle") setPendingSearch("");
+    setLaunchTarget(target);
     openAppRoute(appId, "/");
   };
   /** An app is available when it is installed (or not removable) and has the chat it needs. */
@@ -422,6 +429,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     settings: deviceSettings,
     pendingSearch,
     setPendingSearch,
+    launchTarget,
     onPhoneChange: (phone) => setPhones((current) => current.map((item) => item.phoneId === phone.phoneId ? phone : item)),
     openApp,
     installedApps: phoneAppRegistry.list().map(({ manifest }) => ({ manifest, installed: deviceSettings.installedApps.includes(manifest.id) })),
