@@ -106,9 +106,9 @@ function assertCatalogArtifact() {
       (item) => item.manifest?.id === "long-term-memory",
     );
     assert.ok(entry, `${relativePath} must contain Long-Term Memory`);
-    assert.match(
-      entry.artifact?.url ?? "",
-      /artifacts\/long-term-memory-1\.2\.3\.zip$/u,
+    assert.equal(
+      entry.artifact?.url,
+      "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.3.zip",
     );
     assert.equal(entry.artifact?.sha256, sha256(artifactBytes));
     assert.equal(entry.artifact?.bytes, artifactBytes.byteLength);
