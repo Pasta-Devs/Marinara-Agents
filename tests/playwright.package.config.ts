@@ -7,8 +7,11 @@ function parsePort(name: string, fallback: number) {
 
 const clientPort = parsePort("PLAYWRIGHT_CLIENT_PORT", 5188);
 const mobileClientPort = parsePort("PLAYWRIGHT_MOBILE_CLIENT_PORT", 5189);
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${clientPort}`;
-const mobileBaseURL = process.env.PLAYWRIGHT_MOBILE_BASE_URL ?? `http://127.0.0.1:${mobileClientPort}`;
+const baseURL =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${clientPort}`;
+const mobileBaseURL =
+  process.env.PLAYWRIGHT_MOBILE_BASE_URL ??
+  `http://127.0.0.1:${mobileClientPort}`;
 
 export default defineConfig({
   testDir: "..",
@@ -23,20 +26,31 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  webServer: {
-    command: "node scripts/start-package-browser-servers.mjs",
-    url: baseURL,
-    reuseExistingServer: false,
-    timeout: 180_000,
-  },
+  webServer:
+    process.env.PLAYWRIGHT_SKIP_WEBSERVER === "true"
+      ? undefined
+      : {
+          command: "node ../scripts/start-package-browser-servers.mjs",
+          url: baseURL,
+          reuseExistingServer: false,
+          timeout: 180_000,
+        },
   projects: [
     {
       name: "desktop-chromium",
-      use: { ...devices["Desktop Chrome"], baseURL, viewport: { width: 1440, height: 900 } },
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL,
+        viewport: { width: 1440, height: 900 },
+      },
     },
     {
       name: "mobile-chromium",
-      use: { ...devices["Pixel 7"], baseURL: mobileBaseURL, viewport: { width: 390, height: 844 } },
+      use: {
+        ...devices["Pixel 7"],
+        baseURL: mobileBaseURL,
+        viewport: { width: 390, height: 844 },
+      },
     },
   ],
 });
