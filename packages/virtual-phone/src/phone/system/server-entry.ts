@@ -1203,16 +1203,27 @@ export async function activate({ api }: CapabilityContext) {
           };
         }));
         const storedThreads = await messaging.threadsFor(phone.document.identity.phoneId);
-        const manualContacts = (await phones.listContacts(phone.document.identity.phoneId)).map(({ document }) => ({
-          id: document.contactId,
-          kind: "contact" as const,
-          name: document.name,
-          handle: document.handle,
-          bio: document.bio,
+        const manualContacts = await Promise.all((await phones.listContacts(phone.document.identity.phoneId)).map(async ({ document }) => {
+          // Contacts imported from the library stay live: resolve the current card's name, bio and avatar.
+          let live: { name?: string; bio?: string } = {};
+          if (document.linkedOwnerId) {
+            const records = document.linkedOwnerType === "persona"
+              ? await api.runtime.resources.listPersonas([document.linkedOwnerId]).catch(() => [])
+              : await api.runtime.resources.listCharacters([document.linkedOwnerId]).catch(() => []);
+            if (records[0]) live = { name: readName(records[0].data, document.name), bio: readCardText(records[0].data).split("\n")[0]?.slice(0, 200) || document.bio };
+          }
+          return {
+            id: document.contactId,
+            kind: "contact" as const,
+            name: live.name ?? document.name,
+            handle: document.handle,
+            bio: live.bio ?? document.bio,
             phoneLabel: document.phoneLabel,
             source: document.source || "Added in Contacts",
+            ...(document.linkedOwnerId ? { ownerId: document.linkedOwnerId } : {}),
             phoneId: contactThreadIds(document).find((id) => storedThreads.some(({ document: thread }) => thread.participants.includes(id))) ?? contactPhoneId(document.contactId),
             aliases: contactThreadIds(document),
+          };
         }));
         const names = new Map([
           ...phoneContacts.map((contact) => [contact.phoneId, contact.name] as const),
@@ -1235,6 +1246,8 @@ export async function activate({ api }: CapabilityContext) {
         const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
           ? request.body as Record<string, unknown>
           : {};
+        const linkedOwnerType = body.linkedOwnerType === "character" || body.linkedOwnerType === "persona" ? body.linkedOwnerType : undefined;
+        const linkedOwnerId = linkedOwnerType && typeof body.linkedOwnerId === "string" && body.linkedOwnerId.trim() ? body.linkedOwnerId : undefined;
         const contact = await phones.createContact({
           phoneId: request.params.phoneId,
           chatId,
@@ -1242,7 +1255,8 @@ export async function activate({ api }: CapabilityContext) {
           handle: String(body.handle ?? ""),
           bio: String(body.bio ?? ""),
           phoneLabel: String(body.phoneLabel ?? ""),
-          source: String(body.source ?? "Added in Contacts"),
+          source: String(body.source ?? (linkedOwnerId ? "Imported from your saved library" : "Added in Contacts")),
+          ...(linkedOwnerId ? { linkedOwnerId, linkedOwnerType } : {}),
         });
         const firstMessage = String(body.firstMessage ?? "").trim().slice(0, 400);
         if (firstMessage) {

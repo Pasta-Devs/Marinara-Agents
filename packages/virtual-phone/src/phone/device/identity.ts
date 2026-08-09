@@ -60,6 +60,9 @@ export interface ContactDocument {
   phoneLabel: string;
   /** Where this person entered the owner's life, shown in Contacts and generation context. */
   source: string;
+  /** When imported from the saved library, the linked card's id/type — name, bio and avatar stay live. */
+  linkedOwnerId?: string;
+  linkedOwnerType?: "character" | "persona";
   createdAt: string;
   updatedAt: string;
 }
@@ -179,7 +182,7 @@ export class PhoneIdentityService {
       .map((record) => ({ record, document: record.data as ContactDocument }));
   }
 
-  async createContact(input: { phoneId: string; chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string }) {
+  async createContact(input: { phoneId: string; chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string; linkedOwnerId?: string; linkedOwnerType?: "character" | "persona" }) {
     const phoneId = normalizeRequiredString(input.phoneId, "phoneId");
     await this.requirePhone(phoneId);
     const chatId = normalizeRequiredString(input.chatId, "chatId");
@@ -195,7 +198,7 @@ export class PhoneIdentityService {
     }
   }
 
-  private async createContactUnlocked(input: { phoneId: string; chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string }) {
+  private async createContactUnlocked(input: { phoneId: string; chatId: string; name: string; handle?: string; bio?: string; phoneLabel?: string; source?: string; linkedOwnerId?: string; linkedOwnerType?: "character" | "persona" }) {
     const { phoneId, chatId, name } = input;
     const existing = (await this.listContacts(phoneId)).find(({ document }) =>
       document.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
@@ -211,6 +214,7 @@ export class PhoneIdentityService {
         bio: String(input.bio ?? existing.document.bio).trim().slice(0, 500),
         phoneLabel: String(input.phoneLabel ?? existing.document.phoneLabel).trim().slice(0, 80),
         source: String(input.source ?? existing.document.source ?? "Added in Contacts").trim().slice(0, 120),
+        ...(input.linkedOwnerId ? { linkedOwnerId: input.linkedOwnerId, linkedOwnerType: input.linkedOwnerType } : {}),
         updatedAt,
       };
       const record = await this.documents.update({
@@ -236,6 +240,7 @@ export class PhoneIdentityService {
       bio: String(input.bio ?? "").trim().slice(0, 500),
       phoneLabel: String(input.phoneLabel ?? "").trim().slice(0, 80),
       source: String(input.source ?? "Added in Contacts").trim().slice(0, 120),
+      ...(input.linkedOwnerId ? { linkedOwnerId: input.linkedOwnerId, linkedOwnerType: input.linkedOwnerType } : {}),
       createdAt: timestamp,
       updatedAt: timestamp,
     };

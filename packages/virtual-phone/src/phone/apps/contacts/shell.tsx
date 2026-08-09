@@ -54,15 +54,13 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
     return thread.unread > 0 ? `${thread.unread} unread` : "In conversation";
   };
 
-  const addContact = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!draft.name.trim()) return;
+  const createContact = async (body: Record<string, unknown>) => {
     setAdding(true);
     setError("");
     try {
       const response = await phoneRequest<{ contact: Contact }>(`/phones/${encodeURIComponent(phoneId)}/contacts?chatId=${encodeURIComponent(chatId)}`, {
         method: "POST",
-        body: JSON.stringify(draft),
+        body: JSON.stringify(body),
       });
       setData((current) => current ? {
         ...current,
@@ -77,6 +75,11 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
     } finally {
       setAdding(false);
     }
+  };
+  const addContact = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!draft.name.trim()) return;
+    await createContact(draft);
   };
 
   /**
@@ -144,7 +147,7 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
             <label><span className="vp-sr-only">Search library</span><input className="vp-input" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved characters…" /></label>
             <div className="vp-stack" style={{ gap: "0.25rem", maxHeight: "12rem", overflowY: "auto" }}>
               {library.filter((person) => person.name.toLowerCase().includes(libraryQuery.trim().toLowerCase())).slice(0, 40).map((person) => (
-                <button key={`${person.type}:${person.id}`} type="button" className="vp-thread-row" onClick={() => { setDraft({ name: person.name, bio: person.bio, phoneLabel: "" }); setLibraryQuery(""); }}>
+                <button key={`${person.type}:${person.id}`} type="button" disabled={adding} className="vp-thread-row" onClick={() => void createContact({ name: person.name, bio: person.bio, linkedOwnerId: person.id, linkedOwnerType: person.type })}>
                   <PhoneAvatar name={person.name} url={avatars?.get(person.id) ?? null} />
                   <span className="vp-thread-body"><span className="vp-thread-name">{person.name}</span><span className="vp-thread-preview">{person.type === "persona" ? "Persona" : "Character"}{person.bio ? ` · ${person.bio}` : ""}</span></span>
                 </button>
