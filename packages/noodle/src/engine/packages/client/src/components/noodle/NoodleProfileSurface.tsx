@@ -303,7 +303,12 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
               {account.displayName}
             </h3>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
-              <span>@{displayHandle || "noodle"}</span>
+              <span
+                data-noodle-profile-handle
+                className="font-medium !text-[var(--noodle-accent-foreground)]"
+              >
+                @{displayHandle || "noodle"}
+              </span>
               {handleMeta}
             </div>
             {bioContent}

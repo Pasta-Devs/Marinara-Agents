@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -9,6 +9,12 @@ const APP_VERSION = (
     version: string;
   }
 ).version;
+const NOODLE_BLUE_RGB = "rgb(126, 167, 255)";
+const NOODLER_PINK_RGB = "rgb(255, 126, 193)";
+const NOODLE_LIGHT_FOREGROUND =
+  "color(srgb 0.360482 0.453112 0.708674 / 0.986)";
+const NOODLER_LIGHT_FOREGROUND =
+  "color(srgb 0.693974 0.347118 0.548391 / 0.986)";
 
 function createDeferred() {
   let resolve!: () => void;
@@ -51,6 +57,75 @@ async function prepareFreshClient(page: Page) {
 async function openNoodle(page: Page) {
   await page.getByRole("tab", { name: "Open Noodle and NoodleR" }).click();
   await expect(page.locator('[data-component="NoodleView"]')).toBeVisible();
+}
+
+async function setStoredTheme(page: Page, theme: "dark" | "light") {
+  const updatedAt = Date.now() + 1_000;
+  const response = await page.request.get("/api/app-settings/ui");
+  if (!response.ok()) throw new Error("Could not read Marinara UI settings");
+  const data = (await response.json()) as { value?: string };
+  const serverSettings = data.value
+    ? (JSON.parse(data.value) as Record<string, unknown>)
+    : {};
+  const update = await page.request.put("/api/app-settings/ui", {
+    data: {
+      value: JSON.stringify({
+        ...serverSettings,
+        theme,
+        __updatedAt: updatedAt,
+      }),
+    },
+  });
+  if (!update.ok()) throw new Error("Could not update Marinara UI settings");
+
+  await page.evaluate(
+    ({ nextTheme, nextUpdatedAt }) => {
+      const stored = localStorage.getItem("marinara-engine-ui");
+      if (!stored) throw new Error("Marinara UI settings are not initialized");
+      const parsed = JSON.parse(stored) as { state?: { theme?: string } };
+      parsed.state = { ...parsed.state, theme: nextTheme };
+      localStorage.setItem("marinara-engine-ui", JSON.stringify(parsed));
+      localStorage.setItem(
+        "marinara-engine-ui-updated-at",
+        String(nextUpdatedAt),
+      );
+    },
+    { nextTheme: theme, nextUpdatedAt: updatedAt },
+  );
+}
+
+async function expectSurfaceAccent(
+  locator: Locator,
+  accent: string,
+  foreground: string,
+) {
+  await expect
+    .poll(() =>
+      locator.evaluate(
+        (element, expected) => {
+          const probe = document.createElement("span");
+          probe.style.color = "var(--noodle-accent-foreground)";
+          element.appendChild(probe);
+          const elementStyle = getComputedStyle(element);
+          const resolvedForeground = getComputedStyle(probe).color;
+          const result = {
+            accent: elementStyle.getPropertyValue("--noodle-accent").trim(),
+            color: elementStyle.color,
+            expected,
+            resolvedForeground,
+          };
+          probe.remove();
+          return result;
+        },
+        { accent, foreground },
+      ),
+    )
+    .toEqual({
+      accent,
+      color: foreground,
+      expected: { accent, foreground },
+      resolvedForeground: foreground,
+    });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -168,7 +243,7 @@ test.describe("package-owned Noodle interface", () => {
     expect(errors).toEqual([]);
   });
 
-  test("NoodleR profile controls and mobile navigation use its pink accent", async ({
+  test("Noodle and NoodleR fallbacks, profiles, and comments keep their surface accents", async ({
     page,
   }, testInfo) => {
     const initialResponse = await page.request.get("/api/noodle");
@@ -187,12 +262,74 @@ test.describe("package-owned Noodle interface", () => {
     );
     expect(personaResponse.ok()).toBe(true);
     const persona = (await personaResponse.json()) as { id: string };
+    let stageProfileId: string | null = null;
+    let postId: string | null = null;
 
     try {
       const enableResponse = await page.request.put("/api/noodle/settings", {
         data: { enableNoodler: true, noodlerOnboardingState: "completed" },
       });
       expect(enableResponse.ok()).toBe(true);
+
+      const bootstrapResponse = await page.request.get("/api/noodle");
+      expect(bootstrapResponse.ok()).toBe(true);
+      const bootstrap = (await bootstrapResponse.json()) as {
+        accounts: Array<{ id: string; entityId: string }>;
+      };
+      const professorMari = bootstrap.accounts.find(
+        (account) => account.entityId === "__professor_mari__",
+      );
+      expect(professorMari).toBeTruthy();
+
+      const stageProfileResponse = await page.request.post(
+        `/api/noodle/accounts/${professorMari!.id}/noodler`,
+        {
+          data: {
+            stageProfile: {
+              displayName: `NoodleR Accent Stage ${Date.now()}`,
+              handle: `accent_stage_${Date.now()}`,
+              bio: "Temporary package color regression profile.",
+              stagePersonality: "A profile used to verify package colors.",
+              disclosureMode: "secret",
+            },
+          },
+        },
+      );
+      expect(stageProfileResponse.ok()).toBe(true);
+      const stageProfile = (await stageProfileResponse.json()) as {
+        id: string;
+        displayName: string;
+        handle: string;
+      };
+      stageProfileId = stageProfile.id;
+
+      const postResponse = await page.request.post(
+        "/api/noodle/noodler/posts",
+        {
+          data: {
+            targetAccountId: stageProfile.id,
+            title: null,
+            content: `NoodleR accent regression post ${Date.now()}`,
+            access: "public",
+          },
+        },
+      );
+      expect(postResponse.ok()).toBe(true);
+      const post = (await postResponse.json()) as { id: string };
+      postId = post.id;
+
+      const commentResponse = await page.request.post(
+        `/api/noodle/noodler/posts/${post.id}/interactions`,
+        {
+          data: {
+            personaId: persona.id,
+            type: "reply",
+            content: "NoodleR pink comment controls.",
+          },
+        },
+      );
+      expect(commentResponse.ok()).toBe(true);
+      const comment = (await commentResponse.json()) as { id: string };
 
       await page.addInitScript((personaId) => {
         localStorage.setItem(
@@ -207,6 +344,7 @@ test.describe("package-owned Noodle interface", () => {
       await openNoodle(page);
 
       const noodle = page.locator('[data-component="NoodleView"]');
+      await noodle.getByRole("tab", { name: "All creators" }).click();
       await expect
         .poll(() =>
           noodle.evaluate((element) =>
@@ -216,17 +354,45 @@ test.describe("package-owned Noodle interface", () => {
           ),
         )
         .toBe("#FF7EC1");
-      const emptyMessage = noodle.getByText(
-        "No Creator profiles are visible to this persona.",
-        { exact: true },
+      const fallback = noodle
+        .locator("[data-noodle-avatar-fallback]:visible")
+        .first();
+      await expect(fallback).toHaveCSS("color", NOODLER_PINK_RGB);
+
+      const activePost = noodle.locator(`[data-noodle-post-id="${post.id}"]`);
+      const activeComment = activePost.locator(
+        `[data-noodle-interaction-id="${comment.id}"]`,
       );
-      await expect(emptyMessage).toBeVisible();
-      await expect(emptyMessage.locator("..").locator("svg")).toHaveCSS(
-        "color",
-        "rgb(255, 126, 193)",
+      await expect(activeComment).toBeVisible();
+      await expect(
+        activeComment.locator("[data-noodle-comment-metadata]"),
+      ).toHaveCSS("color", NOODLER_PINK_RGB);
+      await expect(
+        activeComment.getByRole("button", { name: "Like comment" }),
+      ).toHaveCSS("color", NOODLER_PINK_RGB);
+
+      await setStoredTheme(page, "light");
+      await page.reload();
+      await openNoodle(page);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+      const lightNoodle = page.locator('[data-component="NoodleView"]');
+      await lightNoodle.getByRole("tab", { name: "All creators" }).click();
+      const lightComment = lightNoodle.locator(
+        `[data-noodle-interaction-id="${comment.id}"]`,
+      );
+      await expect(lightComment).toBeVisible();
+      await expectSurfaceAccent(
+        lightComment.locator("[data-noodle-comment-metadata]"),
+        "#FF7EC1",
+        NOODLER_LIGHT_FOREGROUND,
+      );
+      await expectSurfaceAccent(
+        lightComment.getByRole("button", { name: "Like comment" }),
+        "#FF7EC1",
+        NOODLER_LIGHT_FOREGROUND,
       );
 
-      const bottomNav = noodle.locator(
+      const bottomNav = lightNoodle.locator(
         '[data-component="NoodleView.MobileBottomNav"]',
       );
       if (testInfo.project.name.includes("mobile")) {
@@ -239,25 +405,52 @@ test.describe("package-owned Noodle interface", () => {
             ),
           );
         expect(colors.length).toBeGreaterThan(0);
-        expect(colors).toEqual(["rgb(255, 126, 193)"]);
+        expect(colors).toEqual([NOODLER_PINK_RGB]);
       } else {
         await expect(bottomNav).toBeHidden();
-        const search = noodle
+        const search = lightNoodle
           .getByPlaceholder("Search posts or @creators")
           .locator("..")
           .locator("svg")
           .first();
-        await expect(search).toHaveCSS("color", "rgb(255, 126, 193)");
-        const refresh = noodle.getByRole("button", {
+        await expect(search).toHaveCSS("color", NOODLER_PINK_RGB);
+        const refresh = lightNoodle.getByRole("button", {
           name: "Refresh timeline",
           exact: true,
         });
         await expect(refresh.locator("svg")).toHaveCSS(
           "color",
-          "rgb(255, 126, 193)",
+          NOODLER_PINK_RGB,
         );
       }
+
+      await lightNoodle
+        .locator(`[data-noodle-post-id="${post.id}"]`)
+        .getByRole("button", { name: stageProfile.displayName, exact: true })
+        .click();
+      await expectSurfaceAccent(
+        lightNoodle.locator("[data-noodle-profile-handle]"),
+        "#FF7EC1",
+        NOODLER_LIGHT_FOREGROUND,
+      );
+      await expectSurfaceAccent(
+        lightNoodle.locator("[data-noodle-avatar-fallback]:visible").last(),
+        "#FF7EC1",
+        NOODLER_LIGHT_FOREGROUND,
+      );
     } finally {
+      if (postId) {
+        await page.request
+          .delete(`/api/noodle/noodler/posts/${postId}`, { timeout: 5_000 })
+          .catch(() => undefined);
+      }
+      if (stageProfileId) {
+        await page.request
+          .delete(`/api/noodle/noodler/accounts/${stageProfileId}`, {
+            timeout: 5_000,
+          })
+          .catch(() => undefined);
+      }
       await page.request.put("/api/noodle/settings", {
         data: {
           enableNoodler: initial.settings.enableNoodler,
@@ -1326,6 +1519,41 @@ test.describe("package-owned Noodle interface", () => {
       await expect(
         characterComment.getByRole("button", { name: "Delete comment" }),
       ).toBeVisible();
+      await expect(
+        ownComment.locator("[data-noodle-avatar-fallback]"),
+      ).toHaveCSS("color", NOODLE_BLUE_RGB);
+      await expect(
+        ownComment.locator("[data-noodle-comment-metadata]"),
+      ).toHaveCSS("color", NOODLE_BLUE_RGB);
+      for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
+        await expect(ownComment.getByRole("button", { name })).toHaveCSS(
+          "color",
+          NOODLE_BLUE_RGB,
+        );
+      }
+
+      await setStoredTheme(page, "light");
+      await page.reload();
+      await openNoodle(page);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+      await expect(ownComment).toBeVisible();
+      await expectSurfaceAccent(
+        ownComment.locator("[data-noodle-avatar-fallback]"),
+        "#7EA7FF",
+        NOODLE_LIGHT_FOREGROUND,
+      );
+      await expectSurfaceAccent(
+        ownComment.locator("[data-noodle-comment-metadata]"),
+        "#7EA7FF",
+        NOODLE_LIGHT_FOREGROUND,
+      );
+      for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
+        await expectSurfaceAccent(
+          ownComment.getByRole("button", { name }),
+          "#7EA7FF",
+          NOODLE_LIGHT_FOREGROUND,
+        );
+      }
 
       await characterComment
         .getByRole("button", { name: "Edit comment" })

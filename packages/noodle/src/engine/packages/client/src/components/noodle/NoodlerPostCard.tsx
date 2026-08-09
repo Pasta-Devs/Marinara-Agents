@@ -43,6 +43,7 @@ import {
   createNoodleLightboxImage,
   fieldClass,
   labelClass,
+  noodleCommentActionClass,
   noodleIconButtonClass,
   NOODLE_MEDIA_PICKER_TABS,
   NOODLE_TEXT_MEDIA_PICKER_TABS,
@@ -153,7 +154,7 @@ export function LockedNoodlerPostCard({
                 : localizeUi("ui.noodle.postaccess.locked")}
             </span>
           </div>
-          <p className="text-xs text-[var(--muted-foreground)]">
+          <p className="text-xs font-medium !text-[var(--noodle-accent-foreground)]">
             @{profile.handle} · {formatTime(post.createdAt, i18n.language)}
           </p>
         </div>
@@ -855,7 +856,7 @@ export function NoodlerPostCard({
                 )}
               </span>
             </div>
-            <p className="text-xs text-[var(--muted-foreground)]">
+            <p className="text-xs font-medium !text-[var(--noodle-accent-foreground)]">
               @
               {author?.handle ??
                 localizeUi("ui.noodle.noodleshell.noodleHandle")}{" "}
@@ -882,7 +883,7 @@ export function NoodlerPostCard({
                   <button
                     type="button"
                     onClick={() => startEditingPost(post)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
                   >
                     <Pencil size={14} className="text-[var(--noodle-accent)]" />
                     {localizeUi("ui.noodle.noodlepostcard.edit")}
@@ -890,7 +891,7 @@ export function NoodlerPostCard({
                   <button
                     type="button"
                     onClick={() => deleteNoodlePost(post)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
                   >
                     <Trash2 size={14} className="text-[var(--noodle-accent)]" />
                     {localizeUi("lorebook.editor.batch.delete")}
@@ -1181,20 +1182,23 @@ export function NoodlerPostCard({
                       />
                     </button>
                     <div className="min-w-0 bg-transparent">
-                      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      <div
+                        data-noodle-comment-metadata
+                        className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[var(--noodle-accent-foreground)]"
+                      >
                         <button
                           type="button"
                           onClick={() => openProfile(actorAccount)}
                           disabled={!actorAccount}
-                          className="max-w-full truncate font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
+                          className="max-w-full truncate font-semibold !text-[var(--foreground)] transition-colors enabled:hover:!text-[var(--noodle-accent)] disabled:cursor-default"
                         >
                           {actor?.displayName ??
                             localizeUi("ui.noodle.noodlepostcard.noodleUser")}
                         </button>
-                        <span className="truncate text-[var(--muted-foreground)]">
+                        <span className="truncate !text-[var(--noodle-accent-foreground)]">
                           @{actor?.handle ?? "noodle"}
                         </span>
-                        <span className="text-[var(--muted-foreground)]">
+                        <span className="!text-[var(--noodle-accent-foreground)] opacity-75">
                           · {formatTime(reply.createdAt, i18n.language)}
                         </span>
                       </div>
@@ -1243,7 +1247,7 @@ export function NoodlerPostCard({
                               type="button"
                               onClick={cancelEditingReply}
                               disabled={updateInteraction.isPending}
-                              className="h-8 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
+                              className="h-8 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70 disabled:opacity-50"
                             >
                               {localizeUi("chat.delete.dialog.cancel")}
                             </button>
@@ -1318,7 +1322,8 @@ export function NoodlerPostCard({
                             reactionPendingFor(post.id, "like", reply.id)
                           }
                           className={cn(
-                            "inline-flex h-7 items-center gap-1 rounded-full px-2 font-medium text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50",
+                            noodleCommentActionClass,
+                            "px-2 font-medium",
                             likedReplyByPersona &&
                               "bg-[var(--noodle-accent)]/10",
                           )}
@@ -1352,7 +1357,7 @@ export function NoodlerPostCard({
                           type="button"
                           onClick={() => openReplyComposer(post.id, reply.id)}
                           disabled={!personaAccount}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                          className={cn(noodleCommentActionClass, "w-7")}
                           title={localizeUi("ui.noodle.noodlepostcard.reply")}
                           aria-label={localizeUi(
                             "ui.noodle.noodlepostcard.reply",
@@ -1369,7 +1374,7 @@ export function NoodlerPostCard({
                                 updateInteraction.isPending ||
                                 deleteInteraction.isPending
                               }
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                              className={cn(noodleCommentActionClass, "w-7")}
                               title={localizeUi(
                                 "ui.noodle.noodlepostcard.editComment",
                               )}
@@ -1386,7 +1391,7 @@ export function NoodlerPostCard({
                                 updateInteraction.isPending ||
                                 deleteInteraction.isPending
                               }
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                              className={cn(noodleCommentActionClass, "w-7")}
                               title={localizeUi(
                                 "ui.noodle.noodlepostcard.deleteComment",
                               )}
