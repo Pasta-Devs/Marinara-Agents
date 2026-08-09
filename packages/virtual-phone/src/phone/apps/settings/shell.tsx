@@ -207,7 +207,7 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
           </label>
           <button
             type="button"
-            className="vp-row vp-row--danger"
+            className="vp-row vp-row--action"
             disabled={settings.storyClockOffsetMinutes === 0}
             onClick={() => void update({ storyClockOffsetMinutes: 0 })}
           >

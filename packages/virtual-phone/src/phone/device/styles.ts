@@ -112,14 +112,34 @@ export const phoneStylesheet = `
 .vp-app-icon--maps { background: linear-gradient(180deg, #5dbb78 0%, #0f7a4a 100%); }
 .vp-app-icon--find { background: linear-gradient(180deg, #5c9ded 0%, #1d4ed8 100%); }
 .vp-emoji-thumb { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 0.6rem; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--vp-text) 5%, var(--vp-surface)) 0 10px, color-mix(in srgb, var(--vp-text) 8%, var(--vp-surface)) 10px 20px); filter: grayscale(1); opacity: 0.72; }
-.vp-emoji-thumb--sm { height: 2.5rem; width: 2.5rem; font-size: 1.25rem; border-radius: 999px; }
+.vp-emoji-thumb--sm { height: 2.5rem; width: 2.5rem; font-size: 1.25rem; border-radius: 999px; filter: none; opacity: 1; }
 .vp-emoji-thumb--md { aspect-ratio: 1; width: 100%; font-size: 2rem; }
 .vp-emoji-thumb--lg { aspect-ratio: 4 / 3; width: 100%; font-size: 3.5rem; border-radius: 1rem; }
-.vp-map-canvas { position: relative; display: flex; align-items: center; justify-content: center; min-height: 12rem; border-radius: 1.1rem; overflow: hidden; background: linear-gradient(160deg, #dcede0, #c7e0cf); background-image: linear-gradient(#ffffff88 1px, transparent 1px), linear-gradient(90deg, #ffffff88 1px, transparent 1px); background-size: 100% 100%, 2rem 2rem, 2rem 2rem; box-shadow: inset 0 0 0 1px var(--vp-border), inset 0 0 3rem rgb(15 122 74 / 0.08); }
+/* The map had no ground: the background shorthand set a green gradient, then background-image on
+   the same rule replaced it outright, leaving grid lines floating on nothing (and three
+   background-size values for two layers). Rebuilt as an actual map — land, a park, water, minor
+   streets and two through-roads. Every colour is mixed into the theme's own surface rather than
+   being a fixed green, and the roads are white at low alpha, so the same rule reads as a paper map
+   in light mode and a night map in dark mode instead of a bright green slab. */
+.vp-map-canvas { --vp-map-land: color-mix(in srgb, #7ba883 22%, var(--vp-surface)); --vp-map-road: rgb(255 255 255 / 0.5); --vp-map-street: rgb(255 255 255 / 0.16); --vp-map-water: color-mix(in srgb, #4f88ad 34%, var(--vp-surface)); --vp-map-park: color-mix(in srgb, #5f9c61 26%, var(--vp-surface)); position: relative; display: flex; align-items: center; justify-content: center; min-height: 12rem; border-radius: 1.1rem; overflow: hidden; background-color: var(--vp-map-land); background-image:
+    linear-gradient(66deg, transparent calc(50% - 0.26rem), var(--vp-map-road) calc(50% - 0.26rem) calc(50% + 0.26rem), transparent calc(50% + 0.26rem)),
+    linear-gradient(-24deg, transparent calc(38% - 0.17rem), var(--vp-map-road) calc(38% - 0.17rem) calc(38% + 0.17rem), transparent calc(38% + 0.17rem)),
+    linear-gradient(90deg, var(--vp-map-street) 0 1px, transparent 1px),
+    linear-gradient(0deg, var(--vp-map-street) 0 1px, transparent 1px),
+    radial-gradient(ellipse 44% 27% at 89% 93%, var(--vp-map-water) 0 62%, transparent 64%),
+    radial-gradient(ellipse 23% 19% at 13% 21%, var(--vp-map-park) 0 70%, transparent 72%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(0 0 0 / 0.07));
+  background-size: 100% 100%, 100% 100%, 3.5rem 3.5rem, 3.5rem 3.5rem, 100% 100%, 100% 100%, 100% 100%; background-position: 0 0, 0 0, -0.8rem 0, 0 -0.55rem, 0 0, 0 0, 0 0; box-shadow: inset 0 0 0 1px var(--vp-border), inset 0 0 3.5rem rgb(0 0 0 / 0.1); }
 .vp-map-canvas--detail { min-height: 9rem; }
-.vp-map-pin { position: absolute; transform: translate(-50%, -50%); border: 0; background: none; font-size: 1.6rem; line-height: 1; cursor: pointer; filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.3)); transition: transform 120ms ease; }
-.vp-map-pin:hover { transform: translate(-50%, -55%) scale(1.15); }
-.vp-map-pin.is-open { position: static; transform: none; font-size: 2.75rem; }
+/* A bare emoji dropped on a map reads as clip art. Seat it in a circular marker with a tail and a
+   shadow on the ground beneath, which is what makes a pin look placed rather than pasted. The tail
+   is a pseudo-element rather than a rotated button, so the emoji inside stays upright. */
+.vp-map-pin { position: absolute; transform: translate(-50%, -100%); display: inline-flex; align-items: center; justify-content: center; height: 2.125rem; width: 2.125rem; border: 0; padding: 0; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 94%, #ffffff), var(--vp-surface)); box-shadow: 0 2px 5px rgb(0 0 0 / 0.25), inset 0 0 0 1.5px color-mix(in srgb, var(--vp-accent) 50%, var(--vp-border)); font-size: 1.0625rem; line-height: 1; cursor: pointer; transition: transform 140ms ease, filter 140ms ease; }
+.vp-map-pin::after { content: ""; position: absolute; top: calc(100% - 3px); left: 50%; translate: -50% 0; border: 0.3125rem solid transparent; border-top-color: var(--vp-surface); filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--vp-accent) 50%, var(--vp-border))); }
+.vp-map-pin::before { content: ""; position: absolute; top: calc(100% + 0.25rem); left: 50%; translate: -50% 0; height: 0.25rem; width: 1rem; border-radius: 999px; background: rgb(0 0 0 / 0.18); filter: blur(1.5px); }
+.vp-map-pin:hover { transform: translate(-50%, -108%); filter: brightness(1.04); }
+.vp-map-pin.is-open { position: static; transform: none; height: 4.25rem; width: 4.25rem; font-size: 2.25rem; }
+.vp-map-pin.is-open::after, .vp-map-pin.is-open::before { display: none; }
 .vp-find-row { display: flex; align-items: center; gap: 0.625rem; padding: 0.6rem 0.7rem; }
 /* Marketplace is a tile grid. The image slot is sized as if the photo were there, because one day
    it will be (Step 11.3) — an empty slot that reserves its space reads as designed, not broken. */
@@ -180,8 +200,9 @@ export const phoneStylesheet = `
 .vp-app-error .vp-surface-btn { width: auto; padding: 0 1.5rem; }
 .vp-app-title-spacer { width: 2.75rem; flex-shrink: 0; }
 .vp-stack { display: grid; gap: 0.625rem; font-size: 0.8125rem; }
-.vp-section-label { margin: 0 0 -0.25rem; padding-left: 0.875rem; font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--vp-muted); }
-.vp-section-label--spaced { padding-top: 0.875rem; }
+.vp-section-label { margin: 0 0 0.375rem; padding-left: 0.875rem; font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--vp-muted); }
+.vp-section-label--spaced { margin-top: 0.875rem; }
+.vp-settings-sections .vp-section-label { margin-bottom: 0; }
 .vp-field { display: grid; gap: 0.375rem; }
 .vp-field > span { padding-left: 0.25rem; font-weight: 500; }
 .vp-input, .vp-select { width: 100%; min-height: 2.75rem; padding: 0 0.75rem; border: 0; border-radius: 0.75rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); color: var(--vp-text); font: inherit; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); }
@@ -191,6 +212,8 @@ export const phoneStylesheet = `
 .vp-textarea--fill { flex: 1; min-height: 0; resize: none; }
 .vp-group { border-radius: 1rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 4px 12px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); overflow: hidden; }
 .vp-group > * + * { border-top: 1px solid var(--vp-border); }
+/* Copy dropped into a group is not a row and had no padding, so it touched the rounded edge. */
+.vp-group > .vp-muted-note, .vp-group > p { margin: 0; padding: 0.5rem 0.75rem; line-height: 1.4; }
 .vp-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; width: 100%; min-height: 2.75rem; padding: 0.375rem 0.75rem; font-size: 0.75rem; font-weight: 500; text-align: left; }
 .vp-row > span:first-child { flex-shrink: 0; }
 .vp-row-control { flex: 1; min-width: 0; max-width: 55%; min-height: 2.125rem; padding: 0 0.625rem; border: 0; border-radius: 0.625rem; background: color-mix(in srgb, var(--vp-text) 6%, var(--vp-surface)); color: var(--vp-text); font: inherit; font-size: 0.75rem; }
@@ -227,6 +250,9 @@ export const phoneStylesheet = `
 .vp-row--stacked { flex-wrap: wrap; }
 .vp-row--stacked .vp-range { width: 100%; min-height: 2.125rem; }
 .vp-row--danger { justify-content: center; gap: 0.5rem; color: #ff3b30; font-weight: 600; transition: background 120ms ease; }
+/* Centred like a danger row, but for a reset that destroys nothing. */
+.vp-row--action { justify-content: center; gap: 0.5rem; color: var(--vp-accent); font-weight: 600; transition: background 120ms ease; }
+.vp-row--action:hover:not(:disabled) { background: color-mix(in srgb, var(--vp-accent) 8%, var(--vp-surface)); }
 .vp-row--danger:hover { background: color-mix(in srgb, #ff3b30 7%, var(--vp-surface)); }
 .vp-range { width: 100%; min-height: 2.875rem; accent-color: var(--vp-accent); }
 .vp-surface-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; min-height: 2.75rem; padding: 0 1rem; border: 0; border-radius: 0.75rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); color: var(--vp-accent); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
@@ -241,9 +267,13 @@ export const phoneStylesheet = `
 .vp-card-body h3 { margin: 0; font-size: 0.8125rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-card-body p { margin: 0.25rem 0 0; font-size: 0.6875rem; color: var(--vp-muted); }
 .vp-muted-note { font-size: 0.6875rem; font-weight: 500; color: var(--vp-muted); }
+.vp-appview > .vp-muted-note[role="alert"], .vp-appview > .vp-muted-note[role="status"] { display: block; margin-bottom: 0.625rem; }
 .vp-search-row { display: flex; gap: 0.5rem; }
 .vp-search-row label { flex: 1; min-width: 0; }
-.vp-chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.875rem; }
+/* A row of pills is a control for what is under it, so it needs air on both sides — with only a
+   top margin the Mail folder tabs sat flush on the first row of the list. */
+.vp-chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.25rem 0 0.875rem; }
+.vp-chip-row:last-child { margin-bottom: 0.25rem; }
 .vp-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 1.875rem; padding: 0 0.75rem; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); font-size: 0.6875rem; font-weight: 500; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-chip:active { transform: scale(0.96); }
 .vp-chip--active { background: var(--vp-accent); color: #fff; box-shadow: none; }
@@ -268,12 +298,6 @@ export const phoneStylesheet = `
 .vp-az-product p { margin: 0; color: var(--vp-muted); font-size: 0.72rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .vp-az-buy { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-top: auto; padding-top: 0.35rem; }
 .vp-az-buy strong { color: var(--vp-accent); font-size: 0.95rem; }
-.vp-notes-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
-.vp-note-card { display: grid; align-content: start; gap: 0.3rem; min-height: 6.5rem; padding: 0.7rem; border-radius: 0.9rem; text-align: left; background: linear-gradient(180deg, #fff9e6, #fdf1c9); box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 14px rgb(0 0 0 / 0.08), inset 0 0 0 1px rgb(0 0 0 / 0.04); color: #3a3320; transition: transform 120ms ease; }
-.vp-note-card:active { transform: scale(0.97); }
-.vp-note-card h3 { margin: 0; font-size: 0.82rem; font-weight: 650; line-height: 1.25; }
-.vp-note-card p { margin: 0; font-size: 0.72rem; line-height: 1.35; color: #6b6244; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-.vp-note-card time { font-size: 0.6rem; color: #9a8f68; }
 .vp-result-list { list-style: none; margin: 0.875rem 0 0; padding: 0; display: grid; gap: 0.375rem; }
 .vp-result-card { display: grid; gap: 0.125rem; width: 100%; text-align: left; padding: 0.625rem 0.75rem; border-radius: 0.75rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
 .vp-result-card:active { transform: scale(0.98); }
@@ -305,11 +329,7 @@ export const phoneStylesheet = `
 .vp-row-stamp { flex-shrink: 0; align-self: flex-start; margin-left: auto; padding-top: 0.125rem; font-size: 0.625rem; font-weight: 500; color: var(--vp-muted); font-variant-numeric: tabular-nums; }
 .vp-index-head { position: sticky; top: 0; z-index: 1; padding: 0.25rem 0.875rem; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.02em; color: var(--vp-muted); background: var(--vp-bg); }
 
-/* Large title. Both platforms lead a root screen with the app's name at size, under the nav bar. */
-.vp-large-title { margin: 0 0 0.75rem; padding: 0 0.25rem; font-size: 1.625rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
-.vp-large-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.75rem; }
-.vp-large-title-row .vp-large-title { margin-bottom: 0; }
-
+.vp-large-title-row 
 /* Empty state: a real one, not a muted sentence. Icon, what this screen is, what to do about it. */
 .vp-empty { display: grid; justify-items: center; align-content: center; gap: 0.4rem; padding: 2.5rem 1.25rem; text-align: center; }
 .vp-empty-icon { display: inline-flex; align-items: center; justify-content: center; height: 3.25rem; width: 3.25rem; margin-bottom: 0.25rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 7%, var(--vp-bg)); color: var(--vp-muted); }
@@ -323,7 +343,8 @@ export const phoneStylesheet = `
    simply scroll away with the content. */
 .vp-fab-layer { position: sticky; bottom: 1rem; z-index: 8; display: flex; justify-content: flex-end; height: 0; pointer-events: none; }
 .vp-fab-layer > .vp-fab { position: relative; top: -3.25rem; pointer-events: auto; }
-.vp-appview:has(.vp-fab-layer) { padding-bottom: 5rem; }
+.vp-appview:has(.vp-fab-layer) { display: flex; flex-direction: column; padding-bottom: 5rem; }
+.vp-fab-layer { margin-top: auto; }
 .vp-fab { display: inline-flex; align-items: center; justify-content: center; height: 3.25rem; width: 3.25rem; border-radius: 999px; background: var(--vp-accent); color: #fff; box-shadow: 0 6px 16px rgb(0 0 0 / 0.28), 0 2px 4px rgb(0 0 0 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.25); transition: transform 120ms ease, filter 140ms ease; }
 .vp-fab:hover:not(:disabled) { filter: brightness(1.08); }
 .vp-fab:active:not(:disabled) { transform: scale(0.94); }
@@ -349,7 +370,7 @@ export const phoneStylesheet = `
 .vp-gallery-skeleton { aspect-ratio: 1; border-radius: 0.5rem; }
 .vp-photo-view { margin: 0; }
 .vp-photo-view img { display: block; width: 100%; border-radius: 1.125rem; box-shadow: 0 4px 16px rgb(0 0 0 / 0.25); }
-.vp-tab-content { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 0.875rem; }
+.vp-tab-content { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 0.875rem; margin-bottom: 0.5rem; }
 .vp-tabbar { display: flex; flex-shrink: 0; gap: 0.25rem; padding: 0.3125rem; border-radius: 1rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--vp-border); }
 .vp-tabbar-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.125rem; flex: 1; min-height: 2.5rem; border-radius: 0.75rem; font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); transition: background 120ms ease, color 120ms ease; }
 .vp-tabbar-btn[aria-current="true"] { color: var(--vp-accent); background: color-mix(in srgb, var(--vp-accent) 12%, var(--vp-surface)); }
@@ -425,9 +446,15 @@ export const phoneStylesheet = `
 .vp-store-remove { font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); padding: 0.125rem 0.375rem; border-radius: 0.375rem; }
 .vp-store-remove:hover { color: #ff3b30; }
 .vp-fx { position: absolute; inset: 0; z-index: 40; pointer-events: none; border-radius: 43px; }
-.vp-fx--cracks { background: repeating-linear-gradient(17deg, transparent 0 42px, rgb(255 255 255 / 0.22) 42px 43px, transparent 43px 96px), repeating-linear-gradient(-63deg, transparent 0 57px, rgb(255 255 255 / 0.16) 57px 58px, transparent 58px 128px), radial-gradient(circle at 68% 18%, rgb(255 255 255 / 0.18) 0 2px, transparent 3%); }
+/* A real impact crack: eleven cracks radiating from one strike point, each kinked and of a
+   different length, joined by four irregular rings into shards, with short branches off the long
+   runs. This was two sets of evenly spaced parallel diagonals across the whole screen, which is
+   the one thing broken glass never looks like. Drawn twice — a dark pass offset by half a pixel
+   under a fine bright pass — so the shards read as depth rather than as lines drawn on top. The
+   viewBox matches the screen's 9:19.5 aspect, so nothing stretches. */
+.vp-fx--cracks { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 433' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%23000' stroke-width='1' stroke-opacity='0.28' stroke-linecap='round' transform='translate(0.5,0.5)'%3E%3Cpath d='M132 104 L174 121 L193 128 M132 104 L179 228 L226 331 M132 104 L129 152 L126 184 M132 104 L7 244 L-47 309 M132 104 L20 133 L-95 163 M132 104 L95 89 L57 75 M132 104 L108 78 L91 61 M132 104 L92 -44 L70 -121 M132 104 L172 -9 L191 -64 M132 104 L157 81 L173 68 M147 141 L130 139 M104 113 L101 90 M77 117 L79 83 M120 99 L125 95 M118 89 L128 88 M114 82 L124 77 M125 71 L143 74 M155 81 L164 116 M145 91 L151 111'/%3E%3C/g%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 433' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%23fff' stroke-width='0.55' stroke-opacity='0.42' stroke-linecap='round' transform='translate(0,0)'%3E%3Cpath d='M132 104 L174 121 L193 128 M132 104 L179 228 L226 331 M132 104 L129 152 L126 184 M132 104 L7 244 L-47 309 M132 104 L20 133 L-95 163 M132 104 L95 89 L57 75 M132 104 L108 78 L91 61 M132 104 L92 -44 L70 -121 M132 104 L172 -9 L191 -64 M132 104 L157 81 L173 68 M147 141 L130 139 M104 113 L101 90 M77 117 L79 83 M120 99 L125 95 M118 89 L128 88 M114 82 L124 77 M125 71 L143 74 M155 81 L164 116 M145 91 L151 111'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(circle at 66% 24%, rgb(255 255 255 / 0.5) 0 1px, rgb(255 255 255 / 0.1) 2.5px, transparent 4%); background-size: 100% 100%; background-repeat: no-repeat; }
 .vp-fx--smudge { background: radial-gradient(ellipse 40% 25% at 70% 22%, rgb(255 255 255 / 0.1), transparent), radial-gradient(ellipse 35% 20% at 28% 62%, rgb(255 255 255 / 0.08), transparent), radial-gradient(ellipse 30% 15% at 55% 85%, rgb(255 255 255 / 0.07), transparent); }
-.vp-fx--blood { background: radial-gradient(circle at 80% 10%, rgb(150 10 20 / 0.55) 0 6%, transparent 16%), radial-gradient(circle at 73% 20%, rgb(130 5 15 / 0.45) 0 3%, transparent 9%), radial-gradient(circle at 16% 76%, rgb(140 8 18 / 0.4) 0 8%, transparent 20%), radial-gradient(circle at 24% 88%, rgb(120 5 12 / 0.35) 0 4%, transparent 10%); }
-.vp-fx--scanlines { background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.16) 0 1px, transparent 1px 3px); }
+.vp-fx--blood { background-image: radial-gradient(ellipse 9% 6% at 79% 11%, rgb(122 6 14 / 0.62) 0 60%, rgb(122 6 14 / 0.25) 78%, transparent 100%), radial-gradient(ellipse 2.5% 7% at 80% 17%, rgb(110 5 12 / 0.5) 0 55%, transparent 100%), radial-gradient(ellipse 3% 2.2% at 71% 21%, rgb(130 8 16 / 0.5) 0 60%, transparent 100%), radial-gradient(ellipse 1.6% 1.2% at 66% 27%, rgb(130 8 16 / 0.45) 0 60%, transparent 100%), radial-gradient(ellipse 1% 0.8% at 88% 25%, rgb(130 8 16 / 0.4) 0 60%, transparent 100%), radial-gradient(ellipse 11% 7% at 17% 77%, rgb(116 5 12 / 0.5) 0 58%, rgb(116 5 12 / 0.2) 80%, transparent 100%), radial-gradient(ellipse 2% 9% at 14% 84%, rgb(104 4 10 / 0.42) 0 55%, transparent 100%), radial-gradient(ellipse 2.4% 1.8% at 27% 88%, rgb(126 7 15 / 0.42) 0 60%, transparent 100%), radial-gradient(ellipse 1.2% 1% at 34% 71%, rgb(126 7 15 / 0.35) 0 60%, transparent 100%); }
+.vp-fx--scanlines { background-image: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.18) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgb(255 0 0 / 0.03) 0 1px, rgb(0 255 0 / 0.03) 1px 2px, rgb(0 0 255 / 0.03) 2px 3px), linear-gradient(180deg, rgb(255 255 255 / 0.05), transparent 12%, transparent 88%, rgb(0 0 0 / 0.12)); }
 .vp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 `;
