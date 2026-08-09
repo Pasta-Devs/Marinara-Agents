@@ -15,6 +15,7 @@ import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
 import { applyTransaction, parseProposal, readAccount } from "../apps/banking/manifest";
+import { buildTurnContext, type TurnPhoneState } from "./turn-context";
 
 interface CapabilityContext {
   api: {
@@ -36,6 +37,13 @@ interface CapabilityContext {
           extra: string;
           createdAt: string;
         }>>;
+        /** Engine 2.4.2. Read-only view of the images the Engine generated for a chat. */
+        listChatImages?(chatId: string): Promise<Array<{
+          id: string;
+          url: string;
+          prompt: string;
+          createdAt: string;
+        }>>;
         createMessageWithSwipe?(input: {
           id: string;
           swipeId: string;
@@ -55,6 +63,15 @@ interface CapabilityContext {
           name: string;
           content: string;
           description: string;
+          /**
+           * Engine 2.4.2. The entry's own character scope, which the Engine deliberately resolves
+           * without applying so a package that cares can evaluate it. Optional here so the package
+           * still runs against 2.4.1, where the fields are simply absent.
+           */
+          characterFilterMode?: "any" | "include" | "exclude";
+          characterFilterIds?: string[];
+          characterTagFilterMode?: "any" | "include" | "exclude";
+          characterTagFilterIds?: string[];
         }>>;
       };
       languageModels?: {
@@ -68,6 +85,20 @@ interface CapabilityContext {
       logger?: { error(error: unknown, message: string, ...args: unknown[]): void };
     };
     registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void>;
+    /**
+     * Engine 2.4.2. Contribute text to each turn's system prompt; requires the `prompt-context`
+     * permission in the manifest. Called once per generation with a read-only view of the turn,
+     * under a deadline the Engine enforces, and a throw is swallowed by the collector.
+     */
+    registerPromptContext?(
+      contributor: (request: { chatId: string; chatMeta: Record<string, unknown>; mode: string }) =>
+        Promise<string | null> | string | null,
+    ): () => void;
+    /**
+     * Engine 2.4.2. Claims the in-scene tags that route to this package. The Engine gates the
+     * command on the package being installed and gives it a per-chat toggle; the payload is ours.
+     */
+    registerConversationCommand?(registration: { commandType: string; tags: string[] }): () => void;
   };
 }
 
@@ -155,6 +186,8 @@ export async function activate({ api }: CapabilityContext) {
     if (asked && scope.includes(asked)) return asked;
     return scope[scope.length - 1];
   };
+  /** The in-scene tag the Engine maps to this package (CONVERSATION_COMMAND_AGENT_IDS.phone). */
+  const PHONE_COMMAND_TAG = "phone";
   const CONTACT_PHONE_PREFIX = "contact:";
   const contactPhoneId = (contactId: string) => `${CONTACT_PHONE_PREFIX}${contactId}`;
   const contactIdFromPhone = (phoneId: string) => {
@@ -282,11 +315,10 @@ export async function activate({ api }: CapabilityContext) {
    * unrelated stories bled into each other — wrong content, not merely too much. The phone's own
    * settings now choose; empty still means all, which keeps existing phones working unchanged.
    *
-   * Note for whoever picks up Step 7.2: honouring an entry's own Characters filter is NOT possible
-   * on this API. `listEligibleLorebookEntries` returns id, lorebookId, lorebookName, name, content
-   * and description only, and `listEligibleEntriesByIds` behind it deliberately resolves attached
-   * entries *without* character/persona scope. The filter fields never reach us. That is an Engine
-   * change and belongs with the Stage 11 contract ask.
+   * Step 7.2, closed: Engine 2.4.2 returns each entry's own character scope on
+   * `listEligibleLorebookEntries`, which the Engine resolves but deliberately does not apply. An
+   * entry written for one character no longer bleeds into another character's phone. The fields are
+   * optional, so on 2.4.1 every entry still passes and behaviour is unchanged.
    */
   const loreContext = async (phone?: Awaited<ReturnType<typeof findPhone>>, chatId?: string) => {
      try {
@@ -320,7 +352,18 @@ export async function activate({ api }: CapabilityContext) {
         });
        if (!books.length) return "";
        const entries = await api.runtime.resources.listEligibleLorebookEntries({ lorebookIds: books.map((book) => book.id), entryIds: [] });
-      return entries.slice(0, 8)
+      const owner = phone?.document.identity.ownerType === "character" ? phone.document.identity.ownerId : null;
+      const scoped = entries.filter((entry) => {
+        const mode = entry.characterFilterMode;
+        if (!mode || mode === "any") return true;
+        const ids = entry.characterFilterIds ?? [];
+        if (!ids.length) return true;
+        // A persona's phone has no character to match, so an entry scoped to specific characters
+        // is not for it; an exclude list, though, still lets it through.
+        const matches = owner !== null && ids.includes(owner);
+        return mode === "include" ? matches : !matches;
+      });
+      return scoped.slice(0, 8)
         .map((entry) => `${entry.name}: ${(entry.content || entry.description || "").slice(0, 200)}`)
         .filter((line) => !line.endsWith(": "))
         .join("\n")
@@ -532,6 +575,50 @@ export async function activate({ api }: CapabilityContext) {
       summary = `the ${app_[0]!.toUpperCase()}${app_.slice(1)} app`;
     }
     return { summary, detail };
+  };
+
+  /**
+   * The per-turn phone state handed to the story. Read-only, and deliberately cheap: it runs on
+   * every generation, so it touches phone documents and threads and nothing else — no model calls,
+   * no lorebook reads, no story history.
+   */
+  const turnPhoneStates = async (chatId: string): Promise<TurnPhoneState[]> => {
+    const states: TurnPhoneState[] = [];
+    for (const { document } of await phones.list()) {
+      if (!document.provisioning.enabled || !document.identity.chatScope.includes(chatId)) continue;
+      const phoneId = document.identity.phoneId;
+      const settings = normalizeDeviceSettings(document.namespaces.phone.settings, document.provisioning.baselineTheme);
+      const names = new Map<string, string>([
+        ...(await contactsFor(phoneId)).map((contact) => [contact.phoneId, contact.ownerName] as const),
+        ...(await phones.listContacts(phoneId)).flatMap(({ document: contact }) =>
+          contactThreadIds(contact).map((id) => [id, contact.name] as const)),
+      ]);
+      const unread: TurnPhoneState["unread"] = [];
+      for (const thread of await messaging.threadsFor(phoneId)) {
+        const pending = unreadMessages(thread.document, phoneId);
+        if (!pending.length) continue;
+        const other = thread.document.participants.find((participant) => participant !== phoneId) ?? "";
+        unread.push({
+          from: names.get(other) ?? "an unknown number",
+          count: pending.length,
+          latest: pending.at(-1)?.text ?? "",
+        });
+      }
+      const notes = await phones.getAppStorageKey(phoneId, "notes", "notes").catch(() => null);
+      const firstNote = Array.isArray(notes) ? (notes[0] as { text?: unknown } | undefined) : undefined;
+      states.push({
+        ownerName: document.identity.ownerName,
+        ownerType: document.identity.ownerType,
+        clock: settings.storyClockOffsetMinutes
+          ? new Date(Date.now() + settings.storyClockOffsetMinutes * 60_000)
+            .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+          : undefined,
+        unread,
+        note: typeof firstNote?.text === "string" && firstNote.text.trim() ? firstNote.text : undefined,
+        batteryLevel: settings.batteryLevel,
+      });
+    }
+    return states;
   };
 
   const routes: FastifyPluginAsync = async (app) => {
@@ -1601,20 +1688,40 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
     app.get<{ Params: { phoneId: string } }>("/phones/:phoneId/gallery", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
-        if (!api.runtime.persistence.listMessages) return { images: [] };
         const images: string[] = [];
         const seen = new Set<string>();
+        /**
+         * Engine 2.4.2 hands packages the chat's real images. Before it existed the only way to
+         * find a picture was to scrape URLs out of message text, which found whatever a character
+         * happened to paste and nothing the Engine actually generated. That scrape stays as the
+         * fallback for older Engines and for pasted links.
+         */
+        if (api.runtime.persistence.listChatImages) {
+          for (const chatId of phone.document.identity.chatScope) {
+            for (const image of await api.runtime.persistence.listChatImages(chatId).catch(() => [])) {
+              if (image.url && !seen.has(image.url)) {
+                seen.add(image.url);
+                images.push(image.url);
+              }
+            }
+          }
+        }
+        if (!api.runtime.persistence.listMessages) return { images: images.slice(0, 60) };
+        // Scraped URLs come out of the transcript oldest-first, so they are reversed on their own
+        // before being appended: listChatImages already arrives newest-first.
+        const scraped: string[] = [];
         for (const chatId of phone.document.identity.chatScope) {
           for (const message of await api.runtime.persistence.listMessages(chatId)) {
             for (const url of extractImageUrls(message.content)) {
               if (!seen.has(url)) {
                 seen.add(url);
-                images.push(url);
+                scraped.push(url);
               }
             }
           }
         }
-        return { images: images.reverse().slice(0, 60) };
+        images.push(...scraped.reverse());
+        return { images: images.slice(0, 60) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Gallery unavailable" });
       }
@@ -2364,7 +2471,32 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
       }
     });
   };
-  return api.registerPrivilegedRoutes(routes, { prefix: "/api/virtual-phone" });
+  const releases: Array<() => void> = [];
+
+  /**
+   * The story finally hears about the phone. Registration is optional so the package still runs on
+   * the Engine versions that predate the capability — it simply stays silent there, which is what
+   * it did everywhere before 2.4.2.
+   */
+  if (api.registerPromptContext) {
+    releases.push(api.registerPromptContext(async ({ chatId }) => {
+      try {
+        return buildTurnContext(await turnPhoneStates(chatId));
+      } catch (error) {
+        api.runtime.logger?.error(error, "[virtual-phone] prompt context failed; the turn continues without it");
+        return null;
+      }
+    }));
+  }
+  if (api.registerConversationCommand) {
+    releases.push(api.registerConversationCommand({ commandType: PHONE_COMMAND_TAG, tags: [PHONE_COMMAND_TAG] }));
+  }
+
+  const releaseRoutes = await api.registerPrivilegedRoutes(routes, { prefix: "/api/virtual-phone" });
+  return async () => {
+    for (const release of releases.reverse()) release();
+    await releaseRoutes();
+  };
 }
 
 export function projectConversationTexts<T extends { role: string; extra: unknown }>(messages: T[]) {

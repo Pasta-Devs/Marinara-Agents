@@ -210,15 +210,19 @@ const features = [
   },
   {
     id: "virtual-phone",
-    version: "2.0.91",
-    minEngineVersion: "2.4.1",
+    version: "2.1.0",
+    // 2.4.2 brings registerPromptContext, the "phone" conversation command key, listChatImages and
+    // lorebook entry filters. The phone uses all four, and the prompt-context one is what finally
+    // lets the story see the phone at all, so it is not worth shipping a 2.4.1 variant without it.
+    minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Virtual Phone",
     description: "Adds persistent in-story phones for personas and configured characters, with per-phone baseline themes and a docked device shell.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["routes", "storage", "ui"],
+    // `prompt-context` is enforced: the Engine throws if registerPromptContext is called without it.
+    permissions: ["prompt-context", "routes", "storage", "ui"],
     serverImport: "phone/system/server-entry.ts",
     serverEntry: true,
     clientImport: "phone/index.tsx",

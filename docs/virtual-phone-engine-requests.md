@@ -1,5 +1,10 @@
 # Virtual Phone — Engine capabilities we need
 
+> **Engine 2.4.2 landed four of these.** Items 1, 2 (partly), 3 (read half) and 5 are done and the
+> package uses them as of 2.1.0; they are kept below with what shipped, because the shape of what
+> arrived is what the next ask has to fit. The live asks are the **payload half of item 2** and the
+> **generation half of item 3**.
+
 Everything in this file is blocked on Marinara Engine, not on the package. Each entry says what the
 phone does today without it, what it would do with it, and the smallest API that would unblock us.
 Ordered by how much roleplay value each one unlocks per unit of Engine work.
@@ -9,9 +14,14 @@ this file is the detail behind it.
 
 ---
 
-## 1. Pre-generation context injection (highest value by a distance)
+## 1. Pre-generation context injection — ✅ SHIPPED in 2.4.2
 
-**Today.** The agent is `phase: "pre_generation"`, `runtimeDisabled: true`, with an empty
+`api.registerPromptContext(({ chatId, chatMeta, mode }) => string | { text, provides } | null)`,
+gated on a `prompt-context` manifest permission, called once per turn, 2s deadline enforced by the
+Engine, throws swallowed. Every safety property this doc would have asked for, the Engine already
+enforces. The phone contributes from `system/turn-context.ts`.
+
+**Was:** The agent is `phase: "pre_generation"`, `runtimeDisabled: true`, with an empty
 `defaultPromptTemplate`. Nothing about the phone reaches the story's prompt. Context flows one way
 only: the phone reads the last N story messages and the lorebooks, and the story reads nothing back.
 
@@ -43,9 +53,29 @@ api.runtime.generation.contributeContext(async ({ chatId, mode }) => string | nu
 
 A static, package-authored string would not be enough: the content is per-chat and per-turn.
 
-## 2. Phone commands available to character generation
+## 2. Phone commands — ◐ HALF SHIPPED: the Engine routes the tag but drops the payload
 
-**Today.** A model can write "*I'll text you when I land*" and nothing lands. Phone state only
+`CONVERSATION_COMMAND_KEYS` gained `"phone"` and `CONVERSATION_COMMAND_AGENT_IDS` maps it to
+`virtual-phone`, so `[phone]` is recognised, gated on the package being installed, given a per-chat
+toggle, and stripped from the visible prose. The package registers it via
+`registerConversationCommand({ commandType: "phone", tags: ["phone"] })`.
+
+**What is still missing is the payload.** `parseCapabilityConversationCommands` matches
+`\[tag(:payload)?\]` but returns only `{ type: "capability", commandType }` — the text after the
+colon is discarded, and `handleTurnGameCommand` receives just the command type. So a character can
+write `[phone: text Mara "on my way"]`, the Engine will correctly recognise and strip it, and
+nothing can act on it: the words are gone before any package sees them.
+
+`registerTurnGameEngine` is not the answer either — it is a board-game contract (`legalMoves`,
+`applyMove`, `publicView`) that does not carry free text.
+
+**Smallest fix:** keep the captured group and hand it to the package —
+`{ type: "capability", commandType, payload }`, delivered either through the existing turn-game
+dispatch or a dedicated `registerConversationCommandHandler(commandType, handler)`. Until then the
+phone deliberately does **not** tell the model the tag exists, because instructing a model to write
+something with no effect is worse than silence.
+
+**Was:** A model can write "*I'll text you when I land*" and nothing lands. Phone state only
 changes when the user touches the phone. Characters cannot initiate; every incoming message is
 generated because the user pressed something.
 
@@ -64,9 +94,15 @@ rather than a document you open.
 The second option is meaningfully cheaper for the Engine and works on models without tool calling,
 so it is our preference if only one ships.
 
-## 3. `runtime.images.generate` and `chat_images` access
+## 3. Images — ◐ HALF SHIPPED: reading works, generating does not
 
-**Today.** Camera, Gallery, Tindler profiles and Goodle Images are all text standing in for
+`persistence.listChatImages(chatId)` returns the chat's real images with safe gallery URLs. Gallery
+uses it as of 2.1.0 and falls back to the old URL scrape for older Engines and pasted links.
+
+Still missing: `runtime.images.generate`. Camera, Tindler photos and the whole in-story web are
+still emoji placeholders — the web ones are not chat images, so `listChatImages` cannot help there.
+
+**Was:** Camera, Gallery, Tindler profiles and Goodle Images are all text standing in for
 pictures. Tindler shows a generated description where the photo should be.
 
 **With it.** The visual apps become the thing they are pretending to be. This is the largest visible
@@ -102,9 +138,13 @@ Note the ordering dependency: the awareness directory (`directoryFor`) must be c
 ships, or the first thing Calls does is let a stranger ring a character who never gave out the
 number.
 
-## 5. Lorebook entry filter fields
+## 5. Lorebook entry filters — ✅ SHIPPED in 2.4.2
 
-**Today.** `listEligibleLorebookEntries` returns entries without their character/persona scope, so
+`listEligibleLorebookEntries` now returns `characterFilterMode` / `characterFilterIds` (and the tag
+equivalents), resolved but deliberately not applied, so the package evaluates them itself. The phone
+does that as of 2.1.0: an entry written for one character no longer bleeds into another's phone.
+
+**Was:** `listEligibleLorebookEntries` returns entries without their character/persona scope, so
 the package cannot honour an entry's own filters. We compensate with per-phone lorebook selection,
 which is a user-facing workaround for missing metadata.
 
@@ -129,4 +169,6 @@ and told to every generation), Show/Reference sending real screen content into t
 awareness directory that tells the model who is a stranger, per-phone lorebook scope, per-phone
 jailbreak text, and unprompted texts as an opt-in.
 
-The gap that remains is genuinely the injection hook. Item 1 is worth more than items 2–6 combined.
+The injection hook has landed and the phone uses it. The gap that remains is the **payload half of
+the phone command** (item 2) — without it a character still cannot actually do anything on their
+phone in-scene — followed by **image generation** (item 3).
