@@ -1,3 +1,5 @@
+import type { NoodleAuthorSnapshot } from "@marinara-engine/shared";
+
 export const NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION = 1 as const;
 export const NOODLE_FAN_ACTIVITY_RUNS_PER_DAY = 4 as const;
 export const NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY = 24 as const;
@@ -468,4 +470,3 @@ export function claimManualNoodleFanActivityRun(
     run,
   };
 }
-import type { NoodleAuthorSnapshot } from "@marinara-engine/shared";
