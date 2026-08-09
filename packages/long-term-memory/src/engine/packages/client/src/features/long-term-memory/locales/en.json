@@ -796,6 +796,7 @@
   "ui.longTermMemory.sourcesworkspace.sourceCouldNotBeReextracted": "Source note could not be re-extracted.",
   "ui.longTermMemory.sourcesworkspace.sourceRefreshedRerunExtraction": "Source refreshed. Imported text and metadata were updated; extraction was not run. Re-extract when you want a new draft.",
   "ui.longTermMemory.sourcesworkspace.sourceRefreshedExtractionNotRun": "Source refreshed; extraction not run.",
+  "ui.longTermMemory.sourcesworkspace.sourceRefreshCompletedWithFailures": "Some selected sources could not be refreshed. Review the failures and retry them.",
   "ui.longTermMemory.sourcesworkspace.refreshExplanation": "Refresh updates imported source text and metadata only. It does not call the model or create a draft.",
   "ui.longTermMemory.sourcesworkspace.readyForReview": "Ready for review",
   "ui.longTermMemory.sourcesworkspace.readyForReviewWithRejectedSuggestions": "Ready for review, with some suggestions rejected",
