@@ -57,6 +57,8 @@ export function getNoodleAccentStyle(
 ): CSSProperties {
   return {
     "--noodle-accent": accent,
+    "--noodle-accent-foreground":
+      "light-dark(color-mix(in srgb, var(--noodle-accent) 65%, var(--foreground)), var(--noodle-accent))",
     "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
     ...style,
   } as CSSProperties;
@@ -207,9 +209,10 @@ export function Avatar({
   }
   return (
     <div
+      data-noodle-avatar-fallback
       className={cn(
         dimension,
-        "flex aspect-square flex-none items-center justify-center rounded-full text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-[var(--noodle-accent)]/25",
+        "flex aspect-square flex-none items-center justify-center rounded-full text-xs font-bold !text-[var(--noodle-accent-foreground)] ring-1 ring-[var(--noodle-accent)]/25",
         solid
           ? "bg-[color-mix(in_srgb,var(--noodle-accent)_15%,var(--background))]"
           : "bg-[var(--noodle-accent)]/15",
@@ -245,8 +248,9 @@ export function ProfileInitial({
     );
   return (
     <span
+      data-noodle-avatar-fallback
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 font-black text-[var(--noodle-accent)]",
+        "flex shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 font-black !text-[var(--noodle-accent-foreground)] ring-1 ring-[var(--noodle-accent)]/25",
         large ? "h-24 w-24 text-3xl" : "h-11 w-11",
       )}
     >
