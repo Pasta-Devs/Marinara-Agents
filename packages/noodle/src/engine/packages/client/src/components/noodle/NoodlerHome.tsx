@@ -478,6 +478,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [acceptSourceChangesForProfileId, setAcceptSourceChangesForProfileId] = useState<string | null>(null);
   const [draftSourceSnapshot, setDraftSourceSnapshot] = useState<NoodlerSourceSnapshot | null>(null);
+  const [draftSourceRevisionToken, setDraftSourceRevisionToken] = useState<string | null>(null);
   const profileDraftGenerationIdRef = useRef(0);
   const invalidateProfileDraftGeneration = () => {
     profileDraftGenerationIdRef.current += 1;
@@ -493,6 +494,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   }, [profileDraftRouteKey]);
   useEffect(() => {
     setDraftSourceSnapshot(null);
+    setDraftSourceRevisionToken(null);
   }, [editingProfileId]);
   // Back from a stage profile returns to wherever it was opened from (hub feed, sidebar,
   // profile list) instead of always dumping the user on the profile list. Hub is the fallback.
@@ -783,6 +785,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     invalidateProfileDraftGeneration();
     setAcceptSourceChangesForProfileId(null);
     setDraftSourceSnapshot(null);
+    setDraftSourceRevisionToken(null);
     setEditingProfileId(profile.id);
     setDraftNoodleAccountId(profile.noodleAccountId);
     setCreationDisclosure(profile.disclosureMode ?? "hinted");
@@ -808,6 +811,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     setCreationStep(null);
     setAcceptSourceChangesForProfileId(null);
     setDraftSourceSnapshot(null);
+    setDraftSourceRevisionToken(null);
   };
 
   const changeDisclosure = (value: NoodleIdentityDisclosure) => {
@@ -842,8 +846,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           if (generationId !== profileDraftGenerationIdRef.current) return;
           if (draftForGeneration) setPreviousDraft(draftForGeneration);
           if (noodlerAccountId) setAcceptSourceChangesForProfileId(noodlerAccountId);
-          const { sourceSnapshot, ...stageProfile } = draft;
+          const { sourceSnapshot, sourceRevisionToken, ...stageProfile } = draft;
           setDraftSourceSnapshot(sourceSnapshot ?? null);
+          setDraftSourceRevisionToken(sourceRevisionToken ?? null);
           setProfileDraft(stageProfile);
           setCreationStep("draft");
         },
@@ -924,6 +929,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
            ...(acceptSourceChangesForProfileId === editingProfileId && draftSourceSnapshot
              ? { sourceSnapshot: draftSourceSnapshot }
              : {}),
+          ...(acceptSourceChangesForProfileId === editingProfileId && draftSourceRevisionToken
+            ? { sourceRevisionToken: draftSourceRevisionToken }
+            : {}),
         },
         { onSuccess, onError },
       );

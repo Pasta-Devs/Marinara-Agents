@@ -18,7 +18,9 @@ export async function activate({
     registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void | Promise<void>>;
   };
 }) {
-  // Capability routes are registered through the host's revocable route slots.
+  // Capability routes are registered through the host's revocable privileged route slots.
+  // This is also the authentication boundary for owner-only NoodleR management paths;
+  // do not register these handlers through an unrestricted route API.
   // Noodle's existing plugin creates storage adapters while it registers, so
   // expose only the host database on the otherwise constrained collector.
   const routes: FastifyPluginAsync = async (router) => {

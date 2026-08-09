@@ -31,6 +31,7 @@ import {
 import { resolveNoodlerSourceSnapshot } from "./noodle-noodler-source.js";
 import { hintedNoodlerSourceBrief } from "./noodle-prompt-safety.js";
 import { parseRecord } from "./noodle-public-support.js";
+import { createNoodlerSourceRevisionToken } from "./noodle-source-revision.js";
 
 type GenerationConnection = NonNullable<
   Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
@@ -184,6 +185,7 @@ export async function generateNoodlerStageProfileDraft(
 ): Promise<
   NoodleStageProfileInput & {
     sourceSnapshot?: Awaited<ReturnType<typeof resolveNoodlerSourceSnapshot>>;
+    sourceRevisionToken?: string;
   }
 > {
   const noodle = createNoodleStorage(db);
@@ -289,6 +291,16 @@ export async function generateNoodlerStageProfileDraft(
     ...draft,
     ...(input.request.disclosureMode === "open" && sourceSnapshot
       ? { sourceSnapshot }
+      : {}),
+    ...(input.request.disclosureMode !== "open" &&
+    input.request.noodlerAccountId &&
+    sourceSnapshot
+      ? {
+          sourceRevisionToken: createNoodlerSourceRevisionToken(
+            input.request.noodlerAccountId,
+            sourceSnapshot,
+          ),
+        }
       : {}),
   };
 }

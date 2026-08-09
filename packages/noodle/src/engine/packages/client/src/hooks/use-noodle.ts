@@ -291,6 +291,7 @@ export function useUpdateNoodlerStageProfile() {
       accountId: string;
       acceptSourceChanges?: boolean;
       sourceSnapshot?: NoodlerSourceSnapshot;
+      sourceRevisionToken?: string;
     } & NoodleStageProfileInput) =>
       api.put<NoodlerStageProfile>(
         `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/stage-profile`,
@@ -359,7 +360,10 @@ export function useGenerateNoodlerStageProfileDraft() {
       const timer = setTimeout(() => controller.abort(), 60_000);
       return api
         .post<
-          NoodleStageProfileInput & { sourceSnapshot?: NoodlerSourceSnapshot }
+          NoodleStageProfileInput & {
+            sourceSnapshot?: NoodlerSourceSnapshot;
+            sourceRevisionToken?: string;
+          }
         >("/noodle/noodler/stage-profile-draft", input, {
           signal: controller.signal,
         })

@@ -3,6 +3,10 @@ import {
   characterContextFromRow,
   hintedNoodlerSourceBrief,
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-prompt-safety";
+import {
+  createNoodlerSourceRevisionToken,
+  verifyNoodlerSourceRevisionToken,
+} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-source-revision";
 
 const characterBlock = characterContextFromRow({
   id: "prompt-safety",
@@ -35,6 +39,53 @@ assert.match(hintedBrief, /Approved source themes: playful\./u);
 assert.doesNotMatch(
   hintedBrief,
   /researcher|inventor|snowy laboratory|Blue coat|clockwork companions/u,
+);
+
+const privateSource = {
+  publicDisplayName: "Maukie",
+  publicHandle: "maukie-secret",
+  name: "Canonical Maukie",
+  description: "Identifying biography",
+  personality: "Playful",
+  scenario: "A snowy laboratory",
+  appearance: "Blue coat",
+  backstory: "Builds clockwork companions",
+};
+const sourceRevisionToken = createNoodlerSourceRevisionToken(
+  "noodler-account",
+  privateSource,
+);
+assert.match(sourceRevisionToken, /^[A-Za-z0-9_-]{43}$/u);
+assert.equal(
+  verifyNoodlerSourceRevisionToken(
+    sourceRevisionToken,
+    "noodler-account",
+    privateSource,
+  ),
+  true,
+);
+assert.equal(
+  verifyNoodlerSourceRevisionToken(
+    sourceRevisionToken,
+    "other-account",
+    privateSource,
+  ),
+  false,
+);
+assert.equal(
+  verifyNoodlerSourceRevisionToken(sourceRevisionToken, "noodler-account", {
+    ...privateSource,
+    personality: "Changed after draft generation",
+  }),
+  false,
+);
+assert.equal(
+  verifyNoodlerSourceRevisionToken(
+    `${sourceRevisionToken[0] === "A" ? "B" : "A"}${sourceRevisionToken.slice(1)}`,
+    "noodler-account",
+    privateSource,
+  ),
+  false,
 );
 
 console.log("Noodle prompt-safety regressions passed.");

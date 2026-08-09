@@ -90,6 +90,7 @@ import {
   isConnectionAdmissionFailure,
 } from "../services/generation/connection-admission.js";
 import { generateNoodlerStageProfileDraft } from "../services/noodle/noodle-stage-profile-draft.service.js";
+import { verifyNoodlerSourceRevisionToken } from "../services/noodle/noodle-source-revision.js";
 import {
   compareNoodlerSourceSnapshots,
   resolveNoodlerSourceSnapshot,
@@ -141,6 +142,10 @@ const noodleImagePromptConfirmationSchema = z.object({
     )
     .max(20),
   debugMode: z.boolean().optional(),
+});
+
+const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.extend({
+  sourceRevisionToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/u).optional(),
 });
 
 /** The `identity` lock is shared by refresh, reroll, and profile edits, so the 409 stays operation-neutral. */
@@ -638,7 +643,9 @@ export async function noodleRoutes(app: FastifyInstance) {
     return readable;
   }
 
-  // Access-checked serving for NoodleR-owned media. A persona query gates as a fan
+  // Access-checked serving for NoodleR-owned media. This entire router is installed
+  // through registerPrivilegedRoutes, so the host authenticates the Engine owner before
+  // any handler runs. A persona query additionally gates that owner-scoped request as a fan
   // (subscriber/unlock/hidden all enforced), which is why audience-facing projections bind
   // the viewer's persona into every media URL they hand out. No persona is the owner path,
   // the same trusted management surface as the other /noodler/accounts routes. The bytes
@@ -1434,7 +1441,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     const settings = await noodle.getSettings();
     if (!settings.enableNoodler)
       return reply.code(404).send({ error: "Not Found" });
-    const parsed = noodleStageProfileUpdateSchema.safeParse(req.body);
+    const parsed = noodleStageProfileUpdateRequestSchema.safeParse(req.body);
     if (!parsed.success)
       return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
@@ -1462,15 +1469,31 @@ export async function noodleRoutes(app: FastifyInstance) {
           parsed.data.sourceSnapshot,
           currentSourceSnapshot,
         ).state === "current";
+      const submittedRevisionIsCurrent =
+        parsed.data.sourceRevisionToken &&
+        currentSourceSnapshot &&
+        verifyNoodlerSourceRevisionToken(
+          parsed.data.sourceRevisionToken,
+          id,
+          currentSourceSnapshot,
+        );
+      const sourceRevisionIsCurrent =
+        parsed.data.disclosureMode === "open"
+          ? submittedSnapshotIsCurrent
+          : submittedRevisionIsCurrent;
+      if (parsed.data.acceptSourceChanges && !sourceRevisionIsCurrent) {
+        return { status: "source_revision_conflict" } as const;
+      }
       const sourceSnapshot =
         parsed.data.acceptSourceChanges &&
         currentSourceSnapshot &&
-        (parsed.data.disclosureMode !== "open" || submittedSnapshotIsCurrent)
+        sourceRevisionIsCurrent
           ? currentSourceSnapshot
           : undefined;
       const {
         acceptSourceChanges: _acceptSourceChanges,
         sourceSnapshot: _sourceSnapshot,
+        sourceRevisionToken: _sourceRevisionToken,
         ...stageProfile
       } = parsed.data;
       const updated = await noodle.updateNoodlerStageProfile(
@@ -1502,6 +1525,12 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
     if (locked.value.status === "not_found") {
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
+    }
+    if (locked.value.status === "source_revision_conflict") {
+      return reply.code(409).send({
+        error:
+          "The linked source changed or this draft expired. Generate a fresh draft before accepting source changes.",
+      });
     }
     return locked.value.profile;
   });
