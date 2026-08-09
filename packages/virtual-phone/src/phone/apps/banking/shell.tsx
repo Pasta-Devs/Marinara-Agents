@@ -1,5 +1,8 @@
 import React from "react";
+import { Receipt } from "lucide-react";
 import { PhoneAppHeader } from "../../platform/app-header";
+import { useStoryClock } from "../../platform/story-clock";
+import { PhoneEmptyState } from "../../platform/empty-state";
 import { phoneRequest, recordActivity } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { applyTransaction, emptyAccount, formatMoney, parseProposal, readAccount, type BankAccount } from "./manifest";
@@ -8,6 +11,7 @@ const newId = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUI
 
 export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "banking");
+  const clock = useStoryClock();
   const [account, setAccount] = React.useState<BankAccount | null>(null);
   const [view, setView] = React.useState<"balance" | "history">("balance");
   const [adjust, setAdjust] = React.useState({ amount: "", description: "" });
@@ -116,13 +120,15 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
         </div>
       ) : view === "history" ? (
         <div className="vp-stack" style={{ gap: "0.5rem" }}>
-          {account.transactions.length === 0 ? <p className="vp-muted-note">No transactions yet.</p> : null}
+          {account.transactions.length === 0 ? (
+            <PhoneEmptyState icon={Receipt} title="No transactions" body="Money the story moves, and anything you adjust by hand, is listed here." />
+          ) : null}
           {account.transactions.map((entry) => (
             <div key={entry.id} className="vp-ledger-row">
               <span className="vp-ledger-what">
                 <span className="vp-ledger-desc">{entry.description}</span>
                 <span className="vp-ledger-meta">
-                  {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  {`${clock.shortDate(entry.at)}, ${clock.time(entry.at)}`}
                   {entry.source === "story" ? " · from the story" : " · you"}
                 </span>
               </span>

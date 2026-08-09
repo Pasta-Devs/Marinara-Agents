@@ -1,8 +1,9 @@
 import React from "react";
-import { Navigation, Search } from "lucide-react";
+import { MapPinned, Navigation, Search } from "lucide-react";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { phoneRequest, recordActivity, rememberWorldFact } from "../../platform/api";
 import { emojiFor } from "../../platform/emoji-thumb";
+import { PhoneEmptyState } from "../../platform/empty-state";
 import { parsePlace, type MapPlace } from "./manifest";
 
 // Deterministic scatter so pins hold their spot between renders without storing coordinates.
@@ -22,6 +23,7 @@ export function MapsShell({ phoneId, chatId, onBack, onClose }: { phoneId: strin
   const [openName, setOpenName] = React.useState<string | null>(null);
 
   const search = () => {
+    if (!query.trim()) return;
     setLoading(true);
     setNotice("");
     void phoneRequest<{ places: string[] }>(`/phones/${encodeURIComponent(phoneId)}/maps/search?chatId=${encodeURIComponent(chatId)}`, { method: "POST", body: JSON.stringify({ query }) })
@@ -39,7 +41,7 @@ export function MapsShell({ phoneId, chatId, onBack, onClose }: { phoneId: strin
 
   return <section aria-labelledby="maps-title" className="vp-appview">
     <PhoneAppHeader title={open ? open.name : "Maps"} titleId="maps-title" closeLabel="Close Maps" onBack={() => open ? setOpenName(null) : onBack()} onClose={onClose}
-      actions={open ? [] : [{ id: "refresh", icon: "refresh", label: "Search", kind: "button", disabled: loading }]} onAction={() => search()} />
+      actions={open ? [] : [{ id: "refresh", icon: "refresh", label: "Search", kind: "button", disabled: loading || !query.trim(), reason: "Type what to look for first" }]} onAction={() => search()} />
     {notice ? <p role="status" className="vp-muted-note">{notice}</p> : null}
     {open ? (
       <div className="vp-stack" style={{ gap: "0.75rem" }}>
@@ -51,8 +53,10 @@ export function MapsShell({ phoneId, chatId, onBack, onClose }: { phoneId: strin
         <form className="vp-composer" onSubmit={(e) => { e.preventDefault(); search(); }}><label style={{ flex: 1 }}><span className="vp-sr-only">Search Maps</span><input className="vp-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search places nearby" /></label><button className="vp-icon-btn" aria-label="Search" type="submit"><Search size="1rem" aria-hidden="true" /></button></form>
         <div className="vp-map-canvas" role="img" aria-label="Map of nearby places">
           {places.map((p) => <button key={p.name} type="button" className="vp-map-pin" style={pin(p.name)} aria-label={`${p.name}, ${p.category}`} onClick={() => route(p)}>{emojiFor(`${p.category} ${p.name}`, "📍")}</button>)}
-          {places.length === 0 ? <span className="vp-muted-note">Search to drop places on the map.</span> : null}
         </div>
+        {places.length === 0 && !loading ? (
+          <PhoneEmptyState icon={MapPinned} title="Nothing dropped yet" body="Search for what would be nearby in this world — a bar, a clinic, the street the scene is on." />
+        ) : null}
         <div className="vp-stack" style={{ gap: "0.5rem" }}>{places.map((p) => (
           <button key={p.name} type="button" className="vp-thread-row" onClick={() => route(p)}>
             <span className="vp-emoji-thumb vp-emoji-thumb--sm" aria-hidden="true">{emojiFor(`${p.category} ${p.name}`, "📍")}</span>

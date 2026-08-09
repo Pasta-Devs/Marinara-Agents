@@ -1,5 +1,6 @@
 import React from "react";
 import { PhoneAppHeader } from "../../platform/app-header";
+import { useStoryClock } from "../../platform/story-clock";
 import { phoneRequest, recordActivity } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
 
@@ -13,6 +14,7 @@ const MAX_SHOTS = 24;
 
 export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "camera");
+  const clock = useStoryClock();
   const [shots, setShots] = React.useState<Shot[] | null>(null);
   const [shooting, setShooting] = React.useState(false);
   const [subject, setSubject] = React.useState("");
@@ -132,7 +134,7 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
               <figure key={shot.id} className="vp-card vp-polaroid">
                 <p>{shot.text}</p>
                 <figcaption>
-                  {new Date(shot.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  {`${clock.shortDate(shot.at)}, ${clock.time(shot.at)}`}
                   <button type="button" onClick={() => deleteShot(shot.id)} className="vp-surface-btn" style={{ marginLeft: "0.5rem" }}>Delete</button>
                 </figcaption>
               </figure>
