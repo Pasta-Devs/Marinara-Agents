@@ -8,7 +8,13 @@ import type {
   LtmIntegrityResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
-import { invalidateLtmQueries, queryKeys, request, requestHost, requestRaw } from "./api";
+import {
+  invalidateLtmQueries,
+  queryKeys,
+  request,
+  requestHost,
+  requestRaw,
+} from "./api";
 import {
   Button,
   InfoPopover,
@@ -199,7 +205,7 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
   return {
     version: 1,
     connectionId: resolved.connectionId ?? null,
-    reasoningEffort: resolved.reasoningEffort ?? "medium",
+    reasoningEffort: resolved.reasoningEffort ?? "low",
     verbosity: resolved.verbosity ?? "medium",
     maxOutputTokens: resolved.maxOutputTokens ?? 4096,
     temperature: resolved.temperature ?? 0.2,
@@ -443,17 +449,25 @@ export default function MemorySettings({
       const result = await request<{
         actions: Array<{ action: string; result: string; count?: number }>;
       }>("/repair", "POST", { actions: selectedActions });
-       setMessage(
-         result.actions
-           .map((item) =>
-             localizeUi("ui.longTermMemory.memorysettings.maintenanceResult", {
-               action: localizedLabel(item.action, localizeUi, labelKeys.maintenanceAction),
-               result: localizedLabel(item.result, localizeUi, labelKeys.maintenanceResult),
-               count: item.count ?? 0,
-             }),
-           )
-           .join(" "),
-       );
+      setMessage(
+        result.actions
+          .map((item) =>
+            localizeUi("ui.longTermMemory.memorysettings.maintenanceResult", {
+              action: localizedLabel(
+                item.action,
+                localizeUi,
+                labelKeys.maintenanceAction,
+              ),
+              result: localizedLabel(
+                item.result,
+                localizeUi,
+                labelKeys.maintenanceResult,
+              ),
+              count: item.count ?? 0,
+            }),
+          )
+          .join(" "),
+      );
       setSelectedActions([]);
       await invalidateLtmQueries(queryClient, [
         queryKeys.integrity,
@@ -745,7 +759,11 @@ export default function MemorySettings({
     try {
       const backup = JSON.parse(await file.text());
       const preview = await request<{
-        incoming: { notes: number; drafts: number; rejectedSuggestions: number };
+        incoming: {
+          notes: number;
+          drafts: number;
+          rejectedSuggestions: number;
+        };
         current: { notes: number; drafts: number; rejectedSuggestions: number };
       }>("/backup/preview", "POST", backup);
       setBackupPreview({ ...preview, backup });
@@ -1010,7 +1028,10 @@ export default function MemorySettings({
       aria-labelledby={memorySettingsTitleId}
       data-ltm-surface="memory-settings"
       className="space-y-5"
-      style={{ containerName: "ltm-memory-settings", containerType: "inline-size" }}
+      style={{
+        containerName: "ltm-memory-settings",
+        containerType: "inline-size",
+      }}
     >
       <style>{`
         [data-ltm-extraction-grid] {
@@ -1149,7 +1170,9 @@ export default function MemorySettings({
               <InfoPopover
                 label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
                 content={localizeUi(
-                  recallStyleDescriptionKey(globalForm.longTermMemoryRecallStyle),
+                  recallStyleDescriptionKey(
+                    globalForm.longTermMemoryRecallStyle,
+                  ),
                 )}
               />
             </span>
@@ -1663,11 +1686,12 @@ export default function MemorySettings({
           </h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
             {localizeUi("ui.longTermMemory.memorysettings.integrityState")}{" "}
-             {localizedLabel(
-               integrity.data?.health ?? "loading",
-               localizeUi,
-               labelKeys.integrity,
-             )}.
+            {localizedLabel(
+              integrity.data?.health ?? "loading",
+              localizeUi,
+              labelKeys.integrity,
+            )}
+            .
           </p>
         </div>
         <div className="border-t border-[var(--border)] pt-3">
@@ -1744,9 +1768,14 @@ export default function MemorySettings({
                 {backupPreview.incoming.drafts}{" "}
                 {localizeUi("ui.longTermMemory.memorysettings.drafts")} {" | "}
                 {backupPreview.current.rejectedSuggestions}{" "}
-                {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsCurrent")} {" | "}
+                {localizeUi(
+                  "ui.longTermMemory.memorysettings.rejectedSuggestionsCurrent",
+                )}{" "}
+                {" | "}
                 {backupPreview.incoming.rejectedSuggestions}{" "}
-                {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsIncoming")}
+                {localizeUi(
+                  "ui.longTermMemory.memorysettings.rejectedSuggestionsIncoming",
+                )}
               </p>
               <Button
                 primary
