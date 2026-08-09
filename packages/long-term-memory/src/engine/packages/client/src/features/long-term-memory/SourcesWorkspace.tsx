@@ -49,9 +49,8 @@ import {
   buildScopeIndexes,
   deriveScopeBranches,
   deriveScopeConversations,
-  type ScopeTargetCharacter,
   type ScopeTargetChat,
-  type ScopeTargetGroup,
+  type ScopeTargets,
 } from "./scope-targets";
 
 type Source = SourceTab;
@@ -104,13 +103,6 @@ const importStatusLabelKeys: Record<string, string> = {
   partial_success: "ui.longTermMemory.sourcesworkspace.statusPartialSuccess",
   no_suggestions_created:
     "ui.longTermMemory.sourcesworkspace.statusNoSuggestionsCreated",
-};
-
-type ScopeTargets = {
-  currentScope: LtmScope | null;
-  chats: ScopeTargetChat[];
-  groups: ScopeTargetGroup[];
-  characters: ScopeTargetCharacter[];
 };
 
 function resultTone(

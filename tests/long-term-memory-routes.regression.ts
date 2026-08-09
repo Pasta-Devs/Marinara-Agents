@@ -368,7 +368,16 @@ async function main() {
               ];
             },
             async listPersonas() {
-              return [];
+              return [
+                {
+                  id: "persona-a",
+                  data: { name: "Kira Luna", comment: "Space explorer" },
+                },
+                {
+                  id: "persona-b",
+                  data: { name: "Kira Luna", comment: "Private detective" },
+                },
+              ];
             },
           },
           persistence: {
@@ -777,6 +786,10 @@ async function main() {
         .chats.some((chat: any) => chat.id === "game-empty"),
       true,
     );
+    assert.deepEqual(allScopeTargets.json().personas, [
+      { id: "persona-a", label: "Kira Luna", comment: "Space explorer" },
+      { id: "persona-b", label: "Kira Luna", comment: "Private detective" },
+    ]);
     assert.equal(
       allScopeTargets
         .json()
