@@ -32,6 +32,7 @@ export type Phone = {
   settings?: {
     deviceName: string;
     wallpaper: string;
+    wallpaperImage: string;
     wallpaperTint: string;
     caseColor: string;
     screenEffect: "none" | "cracks" | "smudge" | "blood" | "scanlines";

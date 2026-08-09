@@ -150,6 +150,22 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
           <label className="vp-row"><span>Device name</span><input key={`${phone.phoneId}:${settings.deviceName}`} defaultValue={settings.deviceName} placeholder={`${phone.ownerName}'s phone`} onBlur={(event) => void update({ deviceName: event.target.value })} className="vp-row-control" /></label>
           <label className="vp-row"><span>Theme</span><select value={settings.theme} onChange={(event) => void update({ theme: event.target.value })} className="vp-row-control"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
           <label className="vp-row"><span>Wallpaper</span><select value={settings.wallpaper} onChange={(event) => void update({ wallpaper: event.target.value })} className="vp-row-control"><option value="gradient">Gradient</option><option value="midnight">Midnight</option><option value="paper">Paper</option></select></label>
+          <div className="vp-row"><span>Background image</span><span className="vp-color-row">
+            <label className="vp-accent-btn" style={{ minHeight: "1.875rem", cursor: "pointer" }}>
+              {settings.wallpaperImage ? "Replace" : "Upload"}
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                if (file.size > 3_000_000) { setError("Pick an image under 3 MB."); return; }
+                const reader = new FileReader();
+                reader.onload = () => { const result = reader.result; if (typeof result === "string") void update({ wallpaperImage: result }); };
+                reader.onerror = () => setError("That image could not be read.");
+                reader.readAsDataURL(file);
+              }} />
+            </label>
+            {settings.wallpaperImage ? <button type="button" onClick={() => void update({ wallpaperImage: "" })} className="vp-accent-btn" style={{ minHeight: "1.875rem" }}>Clear</button> : <span className="vp-muted-note">None</span>}
+          </span></div>
           <div className="vp-row"><span>Wallpaper tint</span><span className="vp-color-row">
             <input type="color" aria-label="Wallpaper tint color" value={settings.wallpaperTint || "#3a6ea5"} onChange={(event) => void update({ wallpaperTint: event.target.value })} className="vp-color-input" />
             {settings.wallpaperTint ? <button type="button" onClick={() => void update({ wallpaperTint: "" })} className="vp-accent-btn" style={{ minHeight: "1.875rem" }}>Clear</button> : <span className="vp-muted-note">None</span>}

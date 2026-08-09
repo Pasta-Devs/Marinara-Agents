@@ -6,6 +6,8 @@ export type ScreenEffect = "none" | "cracks" | "smudge" | "blood" | "scanlines";
 export interface DeviceSettings {
   deviceName: string;
   wallpaper: string;
+  /** A user-uploaded background image (data URL). Takes precedence over `wallpaper` when set. */
+  wallpaperImage: string;
   wallpaperTint: string;
   caseColor: string;
   screenEffect: ScreenEffect;
@@ -52,6 +54,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
   return {
     deviceName: "",
     wallpaper: "gradient",
+    wallpaperImage: "",
     wallpaperTint: "",
     caseColor: "",
     screenEffect: "none",
@@ -84,6 +87,8 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
   return {
     deviceName: typeof input.deviceName === "string" ? input.deviceName.slice(0, 80) : defaults.deviceName,
     wallpaper: typeof input.wallpaper === "string" && input.wallpaper.trim() ? input.wallpaper.slice(0, 1000) : defaults.wallpaper,
+    // An uploaded image is a data: URL and can be large; cap at ~4MB so one wallpaper can't bloat the document unboundedly.
+    wallpaperImage: typeof input.wallpaperImage === "string" && /^data:image\//u.test(input.wallpaperImage) && input.wallpaperImage.length <= 4_000_000 ? input.wallpaperImage : defaults.wallpaperImage,
     wallpaperTint: typeof input.wallpaperTint === "string" && /^#[0-9a-fA-F]{6}$/u.test(input.wallpaperTint) ? input.wallpaperTint.toLowerCase() : defaults.wallpaperTint,
     caseColor: typeof input.caseColor === "string" && /^#[0-9a-fA-F]{6}$/u.test(input.caseColor) ? input.caseColor.toLowerCase() : defaults.caseColor,
     screenEffect: ["none", "cracks", "smudge", "blood", "scanlines"].includes(String(input.screenEffect)) ? input.screenEffect as ScreenEffect : defaults.screenEffect,

@@ -492,7 +492,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                 <button type="button" aria-label="Dismiss" onClick={() => setAccessDenied(null)}><X size="0.75rem" aria-hidden="true" /></button>
               </div>
             ) : null}
-            <main className="vp-surface-area" style={{ backgroundImage: `${patternBackground(deviceSettings.pattern, deviceSettings.patternIntensity)}, ${deviceSettings.wallpaperTint ? `linear-gradient(${deviceSettings.wallpaperTint}59, ${deviceSettings.wallpaperTint}59)` : "linear-gradient(rgb(0 0 0 / 0), rgb(0 0 0 / 0))"}, ${wallpaperBackground(deviceSettings.wallpaper)}`, backgroundSize: "16px 16px, cover, cover" }}>
+            <main className="vp-surface-area" style={{ backgroundImage: `${patternBackground(deviceSettings.pattern, deviceSettings.patternIntensity)}, ${deviceSettings.wallpaperTint ? `linear-gradient(${deviceSettings.wallpaperTint}59, ${deviceSettings.wallpaperTint}59)` : "linear-gradient(rgb(0 0 0 / 0), rgb(0 0 0 / 0))"}, ${wallpaperBackground(deviceSettings.wallpaperImage || deviceSettings.wallpaper)}`, backgroundSize: "16px 16px, cover, cover" }}>
               {session.surface === "lock" ? (
                 <div className="vp-lock">
                   <div>
