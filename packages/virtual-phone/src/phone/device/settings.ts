@@ -114,6 +114,6 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
     storyNotices: input.storyNotices !== false,
     lightConnectionId: typeof input.lightConnectionId === "string" ? input.lightConnectionId.slice(0, 100) : defaults.lightConnectionId,
     heavyConnectionId: typeof input.heavyConnectionId === "string" ? input.heavyConnectionId.slice(0, 100) : defaults.heavyConnectionId,
-    generationInstructions: typeof input.generationInstructions === "string" ? input.generationInstructions.slice(0, 2000) : defaults.generationInstructions,
+    generationInstructions: typeof input.generationInstructions === "string" ? input.generationInstructions.slice(0, 12000) : defaults.generationInstructions,
   };
 }

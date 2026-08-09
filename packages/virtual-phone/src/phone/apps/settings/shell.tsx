@@ -213,13 +213,13 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
             </> : <p className="vp-lore-summary">{settings.lorebookMode === "all" ? "Every available lorebook can ground this phone." : "Lorebooks are excluded from phone generation."}</p>}
           </div>
         </section>
-        <section><h3 className="vp-section-label">Instructions</h3><div className="vp-group"><label className="vp-row vp-row--stacked"><span>Custom instructions</span>
+        <section><h3 className="vp-section-label">Instructions &amp; jailbreak</h3><div className="vp-group"><label className="vp-row vp-row--stacked"><span>System prompt / jailbreak</span>
             <textarea
               key={`${phone.phoneId}:instructions`}
               defaultValue={settings.generationInstructions}
               onBlur={(event) => void update({ generationInstructions: event.target.value })}
-              placeholder="Extra style or tone instructions added to everything this phone generates"
-              maxLength={2000}
+              placeholder="Added to the end of the system prompt for everything this phone generates. Paste a jailbreak or preset system prompt here to match your Marinara preset's tone and lift filtering."
+              maxLength={12000}
               className="vp-textarea"
               style={{ minHeight: "5.5rem", width: "100%" }}
             />
