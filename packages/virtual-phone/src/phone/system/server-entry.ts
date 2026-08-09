@@ -431,6 +431,85 @@ export async function activate({ api }: CapabilityContext) {
     return messaging.send(recipientPhoneId, senderPhoneId, reply);
   };
 
+  /** Per-line and total caps for what Show/Reference copies into the story. */
+  const SCREEN_LINE_CHARS = 160;
+  const SCREEN_DETAIL_CHARS = 900;
+
+  /**
+   * What Show and Reference put in front of the character. This used to be a one-line précis —
+   * "the Messages chat with Mara: two truncated quotes" — which is not what the user pressing Show
+   * meant. They wanted the character to read the screen, so send the screen: the actual visible
+   * lines, capped. The summary line survives as the stage direction above it.
+   */
+  const screenContent = async (
+    phone: Awaited<ReturnType<typeof findPhone>>,
+    app_: string | null,
+    surface: "lock" | "home",
+  ) => {
+    const phoneId = phone.document.identity.phoneId;
+    const clip = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, SCREEN_LINE_CHARS);
+    const block = (lines: string[]) => lines.filter(Boolean).join("\n").slice(0, SCREEN_DETAIL_CHARS);
+    let summary = surface === "lock" ? "the lock screen" : "the home screen";
+    let detail = "";
+
+    if (app_ === "messages") {
+      const [thread] = await messaging.threadsFor(phoneId);
+      if (thread) {
+        // Contact threads use synthetic `contact:` phone ids, so resolving names from real phones
+        // alone left every saved-contact conversation reading as "someone".
+        const names = new Map<string, string>([
+          ...(await contactsFor(phoneId)).map((contact) => [contact.phoneId, contact.ownerName] as const),
+          ...(await phones.listContacts(phoneId)).flatMap(({ document }) =>
+            contactThreadIds(document).map((id) => [id, document.name] as const)),
+        ]);
+        const other = thread.document.participants.find((participant) => participant !== phoneId) ?? "";
+        const otherName = names.get(other) ?? "someone";
+        summary = `the Messages chat with ${otherName}`;
+        detail = block(thread.document.messages.slice(-10).map((message) =>
+          `${message.from === phoneId ? phone.document.identity.ownerName : otherName}: ${clip(message.text)}`));
+      } else {
+        summary = "the Messages app, no conversations yet";
+      }
+    } else if (app_ === "goodle") {
+      const recents = await phones.getAppStorageKey(phoneId, "goodle", "recents").catch(() => null);
+      const queries = Array.isArray(recents) ? recents.filter((item): item is string => typeof item === "string") : [];
+      summary = queries[0] ? `Goodle, searching for "${clip(queries[0])}"` : "the Goodle search app";
+      detail = block(queries.slice(0, 6).map((query, index) => `${index === 0 ? "Searching" : "Earlier"}: ${clip(query)}`));
+    } else if (app_ === "notes") {
+      const notes = await phones.getAppStorageKey(phoneId, "notes", "notes").catch(() => null);
+      const first = Array.isArray(notes) ? (notes[0] as { text?: unknown } | undefined) : undefined;
+      const text = typeof first?.text === "string" ? first.text.trim() : "";
+      summary = text ? `a note that starts: "${clip(text.split("\n")[0]!)}"` : "the Notes app";
+      detail = text.slice(0, SCREEN_DETAIL_CHARS);
+    } else if (app_ === "mail") {
+      const stored = await phones.getAppStorageKey(phoneId, "mail", "inbox").catch(() => null);
+      const inbox = Array.isArray(stored)
+        ? stored.filter((item): item is { text: string; read?: boolean } =>
+          !!item && typeof (item as { text?: unknown }).text === "string")
+        : [];
+      summary = inbox.length ? "the Mail inbox" : "the Mail app, nothing in the inbox";
+      detail = block(inbox.slice(0, 6).map((item) => {
+        const [from, subject] = item.text.split(" | ");
+        return `${item.read === true ? "" : "• "}${clip(from ?? "Unknown")} — ${clip(subject ?? "")}`;
+      }));
+    } else if (app_ === "noodler") {
+      const posts = await noodle.feedFor(phone.document.identity.chatScope);
+      summary = posts.length ? "the Noodle feed" : "the Noodle feed, nothing posted yet";
+      detail = block(posts.slice(0, 5).map((post) => `${post.author} ${post.handle}: ${clip(post.text)}`));
+    } else if (app_ === "contacts") {
+      const saved = (await phones.listContacts(phoneId)).map(({ document }) => document.name);
+      const scene = (await contactsFor(phoneId)).map((contact) => contact.ownerName);
+      const all = [...new Set([...saved, ...scene])];
+      summary = all.length ? "the Contacts list" : "the Contacts app, empty";
+      detail = block(all.slice(0, 20).map((name) => `- ${name}`));
+    } else if (app_ === "settings" || app_ === "app-store") {
+      summary = `the ${app_ === "app-store" ? "App Store" : "Settings"} app`;
+    } else if (app_) {
+      summary = `the ${app_[0]!.toUpperCase()}${app_.slice(1)} app`;
+    }
+    return { summary, detail };
+  };
+
   const routes: FastifyPluginAsync = async (app) => {
     app.get("/phones", async () => ({ phones: (await phones.list()).map(phoneResponse) }));
     app.get<{ Params: { ownerType: string; ownerId: string } }>("/phones/:ownerType/:ownerId", async (request, reply) => {
@@ -467,45 +546,27 @@ export async function activate({ api }: CapabilityContext) {
         const app_ = typeof body.app === "string" ? body.app : null;
         const surface = body.surface === "lock" ? "lock" : "home";
         const ownerName = phone.document.identity.ownerName;
-        const phoneId = phone.document.identity.phoneId;
-        let summary = surface === "lock" ? "the lock screen" : "the home screen";
-        if (app_ === "messages") {
-          const [thread] = await messaging.threadsFor(phoneId);
-          if (thread) {
-            const other = thread.document.participants.find((participant) => participant !== phoneId) ?? "";
-            const otherName = (await contactsFor(phoneId)).find((contact) => contact.phoneId === other)?.ownerName ?? "someone";
-            const lastTwo = thread.document.messages.slice(-2)
-              .map((message) => `"${message.text.slice(0, 120)}"`).join(" / ");
-            summary = `the Messages chat with ${otherName}: ${lastTwo}`;
-          } else {
-            summary = "the Messages app, no conversations yet";
-          }
-        } else if (app_ === "goodle") {
-          const recents = await phones.getAppStorageKey(phoneId, "goodle", "recents").catch(() => null);
-          summary = Array.isArray(recents) && typeof recents[0] === "string"
-            ? `Goodle, searching for "${recents[0].slice(0, 120)}"`
-            : "the Goodle search app";
-        } else if (app_ === "notes") {
-          const notes = await phones.getAppStorageKey(phoneId, "notes", "notes").catch(() => null);
-          const first = Array.isArray(notes) ? (notes[0] as { text?: unknown } | undefined) : undefined;
-          summary = typeof first?.text === "string" && first.text.trim()
-            ? `a note that starts: "${first.text.split("\n")[0]!.slice(0, 120)}"`
-            : "the Notes app";
-        } else if (app_ === "noodler") {
-          summary = "the Noodle feed";
-        } else if (app_ === "settings" || app_ === "app-store" || app_ === "contacts") {
-          summary = `the ${app_ === "app-store" ? "App Store" : app_[0]!.toUpperCase() + app_.slice(1)} app`;
-        }
+        const { summary, detail } = await screenContent(phone, app_, surface);
+        /**
+         * Showing a character's own phone was written as a user message, so the story read as the
+         * user having done it. Attribute it to the character when the phone is theirs and they are
+         * actually in this chat; anything else stays user-side.
+         */
+        const asCharacter = phone.document.identity.ownerType === "character"
+          && chat.characterIds.includes(phone.document.identity.ownerId)
+          ? phone.document.identity.ownerId
+          : null;
         const mode = body.mode === "reference" ? "reference" : "show";
+        const screen = detail ? `\n\nOn screen:\n${detail}` : "";
         const content = mode === "reference"
-          ? `[${ownerName}'s phone right now — ${summary}]`
-          : `*${ownerName} shows their phone — ${summary}*`;
+          ? `[${ownerName}'s phone right now — ${summary}]${screen}`
+          : `*${ownerName} shows their phone — ${summary}*${screen}`;
         await api.runtime.persistence.createMessageWithSwipe({
           id: randomUUID(),
           swipeId: randomUUID(),
           chatId: chat.id,
-          role: "user",
-          characterId: null,
+          role: asCharacter ? "assistant" : "user",
+          characterId: asCharacter,
           content,
           extra: { virtualPhone: mode },
           createdAt: new Date().toISOString(),
