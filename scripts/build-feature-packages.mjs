@@ -210,7 +210,7 @@ const features = [
   },
   {
     id: "virtual-phone",
-    version: "2.3.0",
+    version: "2.3.1",
     // 2.4.2 brings registerPromptContext, the "phone" conversation command key, listChatImages and
     // lorebook entry filters. The phone uses all four, and the prompt-context one is what finally
     // lets the story see the phone at all, so it is not worth shipping a 2.4.1 variant without it.

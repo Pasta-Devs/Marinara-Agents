@@ -267,9 +267,14 @@ async function main() {
   // Status-bar state now lives in device settings so the story can drive it.
   assert.equal(defaultDeviceSettings("dark").batteryLevel, 80);
   assert.equal(defaultDeviceSettings("dark").cellularSignal, 4);
-  assert.equal(defaultDeviceSettings("dark").lorebookMode, "all");
-  assert.equal(normalizeDeviceSettings({ lorebookIds: ["book-1"] }).lorebookMode, "all");
+  // The default is the chat's own lorebooks. "All" was the old name for it and every phone written
+  // before the scoping fix still carries that value, so it has to keep working.
+  assert.equal(defaultDeviceSettings("dark").lorebookMode, "chat");
+  assert.equal(normalizeDeviceSettings({ lorebookIds: ["book-1"] }).lorebookMode, "chat");
+  assert.equal(normalizeDeviceSettings({ lorebookMode: "all" }).lorebookMode, "chat");
+  assert.equal(normalizeDeviceSettings({ lorebookMode: "nonsense" }).lorebookMode, "chat");
   assert.equal(normalizeDeviceSettings({ lorebookMode: "selected", lorebookIds: [] }).lorebookMode, "selected");
+  assert.equal(normalizeDeviceSettings({ lorebookMode: "none" }).lorebookMode, "none");
   // Story clock: the phone shows the scene's hour, not the host machine's, and keeps running.
   assert.equal(defaultDeviceSettings("dark").storyClockOffsetMinutes, 0);
   assert.equal(normalizeDeviceSettings({ storyClockOffsetMinutes: "nonsense" }).storyClockOffsetMinutes, 0);

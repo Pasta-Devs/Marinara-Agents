@@ -272,6 +272,10 @@ export const phoneStylesheet = `
 /* The row says why a book is in this chat, so choosing what grounds a phone is not guesswork. */
 .vp-lore-option span { display: grid; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-lore-option small { font-size: 0.5625rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--vp-muted); }
+/* What is actually grounding this phone, named. "This chat" is otherwise a promise you cannot check. */
+.vp-lore-inplay { display: grid; gap: 0.25rem; margin: 0.5rem 0 0; padding: 0; list-style: none; }
+.vp-lore-inplay li { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; font-size: 0.6875rem; font-weight: 550; }
+.vp-lore-inplay small { flex-shrink: 0; font-size: 0.5625rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--vp-muted); }
 .vp-lore-more { width: 100%; min-height: 2.25rem; padding: 0 0.625rem; border-top: 1px solid var(--vp-border); font-size: 0.625rem; font-weight: 650; color: var(--vp-accent); text-align: left; }
 .vp-lore-option input { height: 1.125rem; width: 1.125rem; flex-shrink: 0; accent-color: var(--vp-accent); }
 .vp-lore-summary { margin: 0; padding: 0.375rem 0.5rem 0.25rem; color: var(--vp-muted); font-size: 0.6875rem; line-height: 1.4; }

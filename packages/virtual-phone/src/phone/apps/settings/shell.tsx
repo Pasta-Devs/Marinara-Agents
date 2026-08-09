@@ -154,6 +154,7 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
   };
   const visibleLorebooks = lorebooks?.filter((lorebook) => lorebook.name.toLocaleLowerCase().includes(loreQuery.trim().toLocaleLowerCase())) ?? [];
   const otherLorebooks = visibleLorebooks.filter((lorebook) => lorebook.scope === null);
+  const chatLorebooks = lorebooks?.filter((lorebook) => lorebook.scope !== null) ?? [];
   const selectedLorebooks = settings.lorebookIds.length;
   const toggleRow = (label: string, description: string, checked: boolean, patch: Record<string, unknown>) => (
     <label className="vp-setting-toggle">
@@ -243,10 +244,14 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
           {toggleRow("The story notices", "Adds one quiet summary when you put the phone down.", settings.storyNotices, { storyNotices: settings.storyNotices })}
           {toggleRow("Characters text first", "Allows occasional background replies and uses tokens.", settings.unpromptedTexts, { unpromptedTexts: settings.unpromptedTexts })}
         </div></section>
-        <section className="vp-lore-section"><div className="vp-settings-heading"><h3 className="vp-section-label">Lorebooks</h3><span>{settings.lorebookMode === "all" ? "All" : settings.lorebookMode === "none" ? "Off" : `${selectedLorebooks} selected`}</span></div>
+        <section className="vp-lore-section"><div className="vp-settings-heading"><h3 className="vp-section-label">Lorebooks</h3><span>{settings.lorebookMode === "chat" ? "This chat" : settings.lorebookMode === "none" ? "Off" : `${selectedLorebooks} chosen`}</span></div>
           <div className="vp-group vp-lore-picker">
             <div className="vp-segmented" aria-label="Lorebook scope">
-              {(["all", "selected", "none"] as const).map((mode) => <button key={mode} type="button" aria-pressed={settings.lorebookMode === mode} onClick={() => void update({ lorebookMode: mode })}>{mode === "all" ? "All" : mode === "selected" ? "Selected" : "None"}</button>)}
+              {(["chat", "selected", "none"] as const).map((mode) => (
+                <button key={mode} type="button" aria-pressed={settings.lorebookMode === mode} onClick={() => void update({ lorebookMode: mode })}>
+                  {mode === "chat" ? "This chat" : mode === "selected" ? "Chosen" : "Off"}
+                </button>
+              ))}
             </div>
             {settings.lorebookMode === "selected" ? <>
               <label className="vp-lore-search"><span className="vp-sr-only">Search lorebooks</span><Search size="0.875rem" aria-hidden="true" /><input type="search" value={loreQuery} onChange={(event) => setLoreQuery(event.target.value)} placeholder="Search lorebooks" /></label>
@@ -272,7 +277,18 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
                   </label>
                 )) : null}
               </div>
-            </> : <p className="vp-lore-summary">{settings.lorebookMode === "all" ? "Lorebooks active in this chat ground this phone." : "Lorebooks are excluded from phone generation."}</p>}
+            </> : settings.lorebookMode === "chat" ? (
+              <div className="vp-lore-summary">
+                <p>This phone reads the lorebooks this chat is using. Nothing from your other stories reaches it.</p>
+                {chatLorebooks.length ? (
+                  <ul className="vp-lore-inplay">
+                    {chatLorebooks.map((lorebook) => (
+                      <li key={lorebook.id}><span>{lorebook.name}</span><small>{SCOPE_LABELS[lorebook.scope!]}</small></li>
+                    ))}
+                  </ul>
+                ) : <p className="vp-muted-note">This chat has no lorebooks, so the phone invents the world as it goes.</p>}
+              </div>
+            ) : <p className="vp-lore-summary">Lorebooks are excluded from phone generation.</p>}
           </div>
         </section>
         <section><h3 className="vp-section-label">Instructions &amp; jailbreak</h3><div className="vp-group"><label className="vp-row vp-row--stacked"><span>System prompt / jailbreak</span>
