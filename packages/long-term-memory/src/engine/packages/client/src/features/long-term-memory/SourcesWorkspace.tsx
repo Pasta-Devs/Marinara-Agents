@@ -49,9 +49,8 @@ import {
   buildScopeIndexes,
   deriveScopeBranches,
   deriveScopeConversations,
-  type ScopeTargetCharacter,
   type ScopeTargetChat,
-  type ScopeTargetGroup,
+  type ScopeTargets,
 } from "./scope-targets";
 
 type Source = SourceTab;
@@ -61,6 +60,7 @@ type LorebookCandidate = LtmInteropPreviewSample;
 type ImportContract = {
   source: Source;
   sourceIds: string[];
+  action: "import" | "refresh";
   scope?: LtmScope;
   mode?: LtmMode;
   chatId?: string;
@@ -81,7 +81,6 @@ const sourceTabs: Array<{ id: Source; labelKey: string }> = [
     labelKey: "ui.longTermMemory.sourcesworkspace.lorebooks",
   },
 ];
-
 
 const flatPanelTabs: Array<{ id: FlatPanel; labelKey: string }> = [
   {
@@ -104,13 +103,6 @@ const importStatusLabelKeys: Record<string, string> = {
   partial_success: "ui.longTermMemory.sourcesworkspace.statusPartialSuccess",
   no_suggestions_created:
     "ui.longTermMemory.sourcesworkspace.statusNoSuggestionsCreated",
-};
-
-type ScopeTargets = {
-  currentScope: LtmScope | null;
-  chats: ScopeTargetChat[];
-  groups: ScopeTargetGroup[];
-  characters: ScopeTargetCharacter[];
 };
 
 function resultTone(
@@ -200,6 +192,27 @@ function entryStatusToneClass(entry: LtmLorebookPreviewEntry) {
         ? "unknown"
         : "success",
   );
+}
+
+function extractionResultLabel(
+  item: LtmImportSourceNotesResponse["imported"][number],
+  localizeUi: LtmTranslationFunction,
+) {
+  if (item.extractionStatus === "not_started")
+    return localizeUi(
+      "ui.longTermMemory.sourcesworkspace.sourceRefreshedExtractionNotRun",
+    );
+  if (item.extractionStatus !== "succeeded")
+    return localizeUi(
+      "ui.longTermMemory.sourcesworkspace.extractionDidNotFinish",
+    );
+  if (item.outcome.state === "partial_success")
+    return localizeUi(
+      "ui.longTermMemory.sourcesworkspace.readyForReviewWithRejectedSuggestions",
+    );
+  if (item.outcome.state === "no_suggestions_created")
+    return localizeUi("ui.longTermMemory.sourcesworkspace.noMemoriesSuggested");
+  return localizeUi("ui.longTermMemory.sourcesworkspace.readyForReview");
 }
 
 async function confirmSourceAction(
@@ -402,7 +415,11 @@ function TransferWorkbench({
           data-ltm-transfer-action="preview"
         >
           {busy === "preview" ? (
-            <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+            <Loader2
+              aria-hidden="true"
+              size="0.75rem"
+              className="animate-spin"
+            />
           ) : (
             <Send aria-hidden="true" size="0.75rem" />
           )}
@@ -430,7 +447,8 @@ function TransferWorkbench({
                 data-ltm-transfer-item={item.classification}
                 className="rounded bg-[var(--secondary)]/45 p-2"
               >
-                <strong>{item.title}</strong>: {localizedLabel(
+                <strong>{item.title}</strong>:{" "}
+                {localizedLabel(
                   item.classification,
                   localizeUi,
                   labelKeys.transferClassification,
@@ -451,7 +469,11 @@ function TransferWorkbench({
             data-ltm-transfer-ready-count={preview.buckets.ready.length}
           >
             {busy === "apply" ? (
-              <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+              <Loader2
+                aria-hidden="true"
+                size="0.75rem"
+                className="animate-spin"
+              />
             ) : (
               <Check aria-hidden="true" size="0.75rem" />
             )}
@@ -803,20 +825,32 @@ export default function SourcesWorkspace({
       ? localizeUi(
           "ui.longTermMemory.sourcesworkspace.importFailedBeforeSaving",
         )
-      : importResult.counts.failed || importResult.counts.cancelled
+      : importResultContract?.action === "refresh" &&
+          !importResult.counts.failed &&
+          !importResult.counts.cancelled &&
+          !importResult.counts.missing &&
+          !importResult.counts.sourceWriteFailed
         ? localizeUi(
-            "ui.longTermMemory.sourcesworkspace.sourceSavedExtractionFailed",
+            "ui.longTermMemory.sourcesworkspace.sourceRefreshedExtractionNotRun",
           )
-        : proposalCount
+        : importResultContract?.action === "refresh"
           ? localizeUi(
-              "ui.longTermMemory.sourcesworkspace.sourceSavedProposalsReady",
-              {
-                count: proposalCount,
-              },
+              "ui.longTermMemory.sourcesworkspace.sourceRefreshCompletedWithFailures",
             )
-          : localizeUi(
-              "ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals",
-            );
+        : importResult.counts.failed || importResult.counts.cancelled
+          ? localizeUi(
+              "ui.longTermMemory.sourcesworkspace.sourceSavedExtractionFailed",
+            )
+          : proposalCount
+            ? localizeUi(
+                "ui.longTermMemory.sourcesworkspace.sourceSavedProposalsReady",
+                {
+                  count: proposalCount,
+                },
+              )
+            : localizeUi(
+                "ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals",
+              );
 
   useEffect(() => {
     if (!importTargets.some((target) => target.id === importTargetId))
@@ -974,11 +1008,13 @@ export default function SourcesWorkspace({
       );
       return;
     }
+    const effectiveAction = retryContract?.action ?? action;
     const contract: ImportContract = retryContract
-      ? { ...retryContract, sourceIds: ids }
+      ? { ...retryContract, sourceIds: ids, action: effectiveAction }
       : {
           source,
           sourceIds: ids,
+          action: effectiveAction,
           ...(sourceScope
             ? {
                 scope: {
@@ -1022,7 +1058,7 @@ export default function SourcesWorkspace({
           source: contract.source,
           sourceIds: contract.sourceIds,
           limit: 100,
-          extract: action !== "refresh",
+          extract: contract.action !== "refresh",
           ...(contract.scope ? { scope: contract.scope } : {}),
           ...(contract.mode ? { mode: contract.mode } : {}),
           ...(contract.chatId ? { chatId: contract.chatId } : {}),
@@ -1048,10 +1084,16 @@ export default function SourcesWorkspace({
           ? lorebookPreview.refetch()
           : preview.refetch()
       ).catch(() => undefined);
-      if (action === "refresh")
+      if (
+        contract.action === "refresh" &&
+        !result.counts.failed &&
+        !result.counts.cancelled &&
+        !result.counts.missing &&
+        !result.counts.sourceWriteFailed
+      )
         setReviewMessage(
           localizeUi(
-            "ui.longTermMemory.sourcesworkspace.sourceSyncedRerunExtraction",
+            "ui.longTermMemory.sourcesworkspace.sourceRefreshedRerunExtraction",
           ),
         );
     } catch (error) {
@@ -1311,10 +1353,10 @@ export default function SourcesWorkspace({
           <>
             <IconButton
               icon={extractingId === noteId ? Loader2 : Sparkles}
-               label={localizeUi(
-                 "ui.longTermMemory.sourcesworkspace.reExtractValue1",
-                 { value1: title },
-               )}
+              label={localizeUi(
+                "ui.longTermMemory.sourcesworkspace.reExtractValue1",
+                { value1: title },
+              )}
               disabled={extractingId !== null}
               onClick={(event) => {
                 stopRowAction(event);
@@ -1325,10 +1367,10 @@ export default function SourcesWorkspace({
             />
             <IconButton
               icon={BookOpen}
-               label={localizeUi(
-                 "ui.longTermMemory.sourcesworkspace.reviewDraftsForValue1",
-                 { value1: title },
-               )}
+              label={localizeUi(
+                "ui.longTermMemory.sourcesworkspace.reviewDraftsForValue1",
+                { value1: title },
+              )}
               onClick={(event) => {
                 stopRowAction(event);
                 setOpenSourceActionId(null);
@@ -1627,7 +1669,7 @@ export default function SourcesWorkspace({
                 className="animate-spin"
               />
             ) : (
-               <RefreshCw aria-hidden="true" size="0.75rem" />
+              <RefreshCw aria-hidden="true" size="0.75rem" />
             )}
             {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
           </Button>
@@ -1665,7 +1707,7 @@ export default function SourcesWorkspace({
               disabled={importing}
               data-ltm-source-action="retry-cancelled"
             >
-               <RefreshCw aria-hidden="true" size="0.75rem" />
+              <RefreshCw aria-hidden="true" size="0.75rem" />
               {localizeUi(
                 "ui.longTermMemory.sourcesworkspace.retryOriginalSelection",
                 { count: cancelledImport.sourceIds.length },
@@ -1679,7 +1721,8 @@ export default function SourcesWorkspace({
       ) : null}
       {!reviewMessage && !importResult && !importError ? (
         <p className="text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.sourcesworkspace.importExplanation")}
+          {localizeUi("ui.longTermMemory.sourcesworkspace.importExplanation")}{" "}
+          {localizeUi("ui.longTermMemory.sourcesworkspace.refreshExplanation")}
         </p>
       ) : null}
       {importing ? (
@@ -1742,8 +1785,8 @@ export default function SourcesWorkspace({
                           }}
                           className={`flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--secondary)]/35 ${selectedLorebookId === book.id ? "bg-[var(--primary)]/10" : ""}`}
                         >
-                           <BookOpen
-                             aria-hidden="true"
+                          <BookOpen
+                            aria-hidden="true"
                             size="1rem"
                             className="shrink-0 text-[var(--muted-foreground)]"
                           />
@@ -1762,8 +1805,8 @@ export default function SourcesWorkspace({
                               )}
                             </span>
                           </span>
-                           <ChevronRight
-                             aria-hidden="true"
+                          <ChevronRight
+                            aria-hidden="true"
                             size="0.875rem"
                             className="shrink-0 text-[var(--muted-foreground)]"
                           />
@@ -1848,7 +1891,7 @@ export default function SourcesWorkspace({
                             >
                               <RefreshCw aria-hidden="true" size="0.75rem" />{" "}
                               {localizeUi(
-                                "ui.longTermMemory.sourcesworkspace.syncSelectedCount",
+                                "ui.longTermMemory.sourcesworkspace.refreshSelectedSourcesCount",
                                 { count: selectedBookRefreshIds.length },
                               )}
                             </Button>
@@ -2198,7 +2241,11 @@ export default function SourcesWorkspace({
                   data-ltm-source-selected-count={activeFlatSelectedIds.length}
                 >
                   {importing ? (
-                    <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                    <Loader2
+                      aria-hidden="true"
+                      size="0.75rem"
+                      className="animate-spin"
+                    />
                   ) : (
                     <Check aria-hidden="true" size="0.75rem" />
                   )}
@@ -2218,9 +2265,9 @@ export default function SourcesWorkspace({
                       activeFlatSelectedIds.length
                     }
                   >
-                      <RefreshCw aria-hidden="true" size="0.75rem" />{" "}
+                    <RefreshCw aria-hidden="true" size="0.75rem" />{" "}
                     {localizeUi(
-                      "ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb",
+                      "ui.longTermMemory.sourcesworkspace.refreshSelectedSources",
                     )}
                   </Button>
                   {transferNoteIds.size ? (
@@ -2476,15 +2523,22 @@ export default function SourcesWorkspace({
                 </span>
                 <span
                   data-ltm-extraction-status={item.extractionStatus}
-                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.extractionStatus)}`}
+                  data-ltm-extraction-outcome={item.outcome.state}
+                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.extractionStatus === "succeeded" ? item.outcome.state : item.extractionStatus)}`}
                 >
-                  {importStatusLabel(item.extractionStatus, localizeUi)}
+                  {extractionResultLabel(item, localizeUi)}
                 </span>
                 <span
-                  data-ltm-extraction-outcome={item.outcome.state}
-                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.outcome.state)}`}
+                  data-ltm-extraction-accounting
+                  className="text-[0.6875rem] text-[var(--muted-foreground)]"
                 >
-                  {importStatusLabel(item.outcome.state, localizeUi)}
+                  {localizeUi(
+                    "ui.longTermMemory.sourcesworkspace.suggestionsKeptOfTotal",
+                    {
+                      kept: item.outcome.keptUnits,
+                      total: item.outcome.totalCandidates,
+                    },
+                  )}
                 </span>
               </div>
               {item.extractionStatus === "failed" ||
@@ -2492,6 +2546,27 @@ export default function SourcesWorkspace({
                 <StatusSurface tone={resultTone(item.extractionStatus)}>
                   {item.error.message}
                 </StatusSurface>
+              ) : null}
+              {item.extractionStatus === "succeeded" &&
+              item.outcome.droppedUnits > 0 ? (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {localizeUi(
+                    "ui.longTermMemory.sourcesworkspace.rejectedSuggestionCount",
+                    { count: item.outcome.droppedUnits },
+                  )}
+                </p>
+              ) : null}
+              {item.diagnostics.length ? (
+                <ul
+                  className="space-y-1 text-xs text-[var(--muted-foreground)]"
+                  data-ltm-extraction-diagnostics
+                >
+                  {item.diagnostics.map((diagnostic, index) => (
+                    <li key={`${diagnostic.code}-${index}`}>
+                      {diagnostic.message}
+                    </li>
+                  ))}
+                </ul>
               ) : null}
               <div className="flex flex-wrap gap-2">
                 <button
@@ -2515,9 +2590,13 @@ export default function SourcesWorkspace({
                   data-ltm-source-note-id={item.note.id}
                 >
                   {extractingId === item.note.id ? (
-                      <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                    <Loader2
+                      aria-hidden="true"
+                      size="0.75rem"
+                      className="animate-spin"
+                    />
                   ) : (
-                      <Sparkles aria-hidden="true" size="0.75rem" />
+                    <Sparkles aria-hidden="true" size="0.75rem" />
                   )}
                   {localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
                 </Button>
@@ -2538,8 +2617,8 @@ export default function SourcesWorkspace({
               tone="danger"
               data-ltm-source-write-failure={failure.sourceId}
             >
-              <CircleAlert aria-hidden="true" size="0.875rem" /> {failure.title}:{" "}
-              {failure.error.message} (
+              <CircleAlert aria-hidden="true" size="0.875rem" /> {failure.title}
+              : {failure.error.message} (
               {importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
               {importStatusLabel(failure.extractionStatus, localizeUi)})
             </StatusSurface>
