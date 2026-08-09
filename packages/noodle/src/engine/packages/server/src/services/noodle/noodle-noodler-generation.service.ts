@@ -442,7 +442,7 @@ export async function generateNoodlerPost(
       { role: "assistant", content },
       {
         role: "user",
-        content: input.imagesEnabled
+        content: imagesEnabled
           ? "The response was not one valid NoodleR-post JSON object. Return exactly one object with title, content, and an optional imagePrompt. Do not include a poll. Return JSON only."
           : "The response was not one valid NoodleR-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
       },
@@ -588,22 +588,14 @@ export async function generateNoodlerPost(
   // Manual Guide review path: persist a pending prompt and hand back a preview for the
   // reviewed-image confirmation route to claim and finalize later.
   if (input.request.reviewImagePromptsBeforeSend === true) {
+    let preview: Awaited<ReturnType<typeof generateNoodlerPostImage>>;
     try {
-      const preview = await generateNoodlerPostImage({
+      preview = await generateNoodlerPostImage({
         ...imageInput,
         previewOnly: true,
       });
-      const post = await persist({
-        imagePrompt: draftImagePrompt,
-        metadata: { imagePendingReview: true },
-      });
-      return {
-        post,
-        imagePromptReview: preview.preview
-          ? { id: post.id, ...preview.preview }
-          : null,
-      };
     } catch (err) {
+      if (isConnectionAdmissionFailure(err)) throw err;
       logger.warn(
         err,
         "[noodler] Failed to prepare image prompt review for %s",
@@ -619,6 +611,16 @@ export async function generateNoodlerPost(
         imagePromptReview: null,
       };
     }
+    const post = await persist({
+      imagePrompt: draftImagePrompt,
+      metadata: { imagePendingReview: true },
+    });
+    return {
+      post,
+      imagePromptReview: preview.preview
+        ? { id: post.id, ...preview.preview }
+        : null,
+    };
   }
 
   // Immediate generation: only a provider failure falls back to a text-only post. Persistence

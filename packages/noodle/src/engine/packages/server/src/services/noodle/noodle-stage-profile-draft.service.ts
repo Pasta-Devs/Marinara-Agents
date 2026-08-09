@@ -91,8 +91,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   const sourceDetails = input.source
     ? noodlerSourceText(input.source.data)
     : "General temperament and creative interests from the source profile.";
-  const initialHintedDraft =
-    input.request.disclosureMode === "hinted" && !input.request.currentDraft;
+  const hintedBrief = input.request.disclosureMode === "hinted";
   const rawSourceContext =
     input.request.disclosureMode === "secret"
       ? [
@@ -101,7 +100,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
           "Do not infer canonical facts or recognizable story details.",
           `Public bio themes, redacted: ${input.publicAccount.bio ? "A source bio exists; do not reproduce its wording." : "None."}`,
         ].join("\n")
-      : initialHintedDraft
+      : hintedBrief
         ? [
             "# Non-identifying inspiration brief",
             "Use only broad temperament, creative interests, and non-identifying aesthetic direction.",

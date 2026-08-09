@@ -287,7 +287,7 @@ export function reconcileNoodleFanActivityDayPlan(
     offset = creators.length === 0 ? 0 : (offset + count) % creators.length;
   }
   return {
-    version: 1,
+    version: NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION,
     localDate: date,
     timezone: zone,
     runs,

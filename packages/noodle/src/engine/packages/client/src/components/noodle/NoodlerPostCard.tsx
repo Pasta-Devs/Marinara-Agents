@@ -723,7 +723,9 @@ export function NoodlerPostCard({
           <button
             type="button"
             className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!replyHasText || postReplyPending}
+            disabled={
+              (!replyHasText && !replyImageUrl.trim()) || postReplyPending
+            }
             onClick={() => submitReply(post)}
           >
             {postReplyPending
@@ -1013,7 +1015,9 @@ export function NoodlerPostCard({
                 {post.title}
               </h3>
             )}
-            {!poll || post.content.trim() !== poll.question ? (
+            {!poll ||
+            ctx.deduplicatePollBody === false ||
+            post.content.trim() !== poll.question ? (
               <NoodleTextContent
                 content={post.content}
                 accountByHandle={accountByHandle}

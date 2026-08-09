@@ -53,6 +53,41 @@ export function parseStringArray(value: unknown): string[] {
   }
 }
 
+export function escapePromptAttribute(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export function characterContextFromRow(row: {
+  id: string;
+  data: unknown;
+  avatarPath?: string | null;
+}) {
+  const data = parseRecord(row.data);
+  const extensions = parseRecord(data.extensions);
+  const name =
+    typeof data.name === "string" && data.name.trim()
+      ? data.name.trim()
+      : "Character";
+  const lines = [`<character name="${escapePromptAttribute(name)}">`];
+  for (const [label, value] of [
+    ["Description", data.description],
+    ["Personality", data.personality],
+    ["Scenario", data.scenario],
+    ["First message", data.first_mes],
+    ["Appearance", data.appearance ?? extensions.appearance],
+    ["Backstory", data.backstory ?? extensions.backstory],
+  ] as const) {
+    if (typeof value === "string" && value.trim())
+      lines.push(`${label}: ${value.trim()}`);
+  }
+  lines.push(`</character>`);
+  return lines.join("\n");
+}
+
 export function galleryImageUrl(filePath: string, fallbackChatId: string) {
   const filename = basename(filePath.replace(/\\/g, "/"));
   return `/api/gallery/file/${encodeURIComponent(fallbackChatId)}/${encodeURIComponent(filename)}`;
