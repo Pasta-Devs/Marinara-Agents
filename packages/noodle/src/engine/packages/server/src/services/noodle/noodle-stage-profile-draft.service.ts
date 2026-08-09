@@ -287,6 +287,8 @@ export async function generateNoodlerStageProfileDraft(
   }
   return {
     ...draft,
-    sourceSnapshot,
+    ...(input.request.disclosureMode === "open" && sourceSnapshot
+      ? { sourceSnapshot }
+      : {}),
   };
 }

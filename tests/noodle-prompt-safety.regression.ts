@@ -31,7 +31,10 @@ const hintedBrief = hintedNoodlerSourceBrief({
   backstory: "Builds clockwork companions",
 });
 assert.doesNotMatch(hintedBrief, /Maukie|maukie-secret|Identifying biography/u);
-assert.match(hintedBrief, /Playful &lt;researcher&gt; &amp; inventor/u);
-assert.match(hintedBrief, /snowy laboratory/u);
+assert.match(hintedBrief, /Approved source themes: playful\./u);
+assert.doesNotMatch(
+  hintedBrief,
+  /researcher|inventor|snowy laboratory|Blue coat|clockwork companions/u,
+);
 
 console.log("Noodle prompt-safety regressions passed.");

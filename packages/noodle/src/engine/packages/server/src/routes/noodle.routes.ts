@@ -1455,14 +1455,17 @@ export async function noodleRoutes(app: FastifyInstance) {
       const currentSourceSnapshot = publicAccount
         ? await resolveNoodlerSourceSnapshot(app.db, publicAccount)
         : null;
-      const sourceSnapshot =
-        parsed.data.acceptSourceChanges &&
+      const submittedSnapshotIsCurrent =
         parsed.data.sourceSnapshot &&
         currentSourceSnapshot &&
         compareNoodlerSourceSnapshots(
           parsed.data.sourceSnapshot,
           currentSourceSnapshot,
-        ).state === "current"
+        ).state === "current";
+      const sourceSnapshot =
+        parsed.data.acceptSourceChanges &&
+        currentSourceSnapshot &&
+        (parsed.data.disclosureMode !== "open" || submittedSnapshotIsCurrent)
           ? currentSourceSnapshot
           : undefined;
       const {

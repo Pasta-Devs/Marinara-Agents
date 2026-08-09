@@ -53,21 +53,42 @@ export function characterContextFromRow(row: {
   return lines.join("\n");
 }
 
-/** A hinted identity receives only broad, allowlisted source themes. */
+const REVIEWED_HINTED_THEME_TOKENS = [
+  "adventurous",
+  "artistic",
+  "bookish",
+  "calm",
+  "cheerful",
+  "creative",
+  "curious",
+  "friendly",
+  "gentle",
+  "inventive",
+  "kind",
+  "musical",
+  "outgoing",
+  "playful",
+  "reserved",
+  "scientific",
+  "sporty",
+  "technical",
+  "thoughtful",
+  "witty",
+] as const;
+
+/** A hinted identity receives only reviewed, non-identifying theme tokens. */
 export function hintedNoodlerSourceBrief(
   snapshot: NoodlerSourceSnapshot | null,
 ) {
   if (!snapshot)
     return "General temperament and creative interests from the source profile.";
-  const themes = Object.fromEntries(
-    (["personality", "scenario", "appearance", "backstory"] as const).flatMap(
-      (field) => {
-        const value = snapshot[field].trim();
-        return value ? [[field, escapePromptText(value)]] : [];
-      },
-    ),
+  const personalityWords = new Set(
+    snapshot.personality.toLocaleLowerCase().match(/[a-z]+/gu) ?? [],
   );
-  return Object.keys(themes).length > 0
-    ? JSON.stringify(themes, null, 2)
+  const themes = REVIEWED_HINTED_THEME_TOKENS.filter((token) =>
+    personalityWords.has(token),
+  );
+  return themes.length > 0
+    ? `Approved source themes: ${themes.join(", ")}.`
     : "General temperament and creative interests from the source profile.";
 }
