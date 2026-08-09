@@ -237,13 +237,18 @@ async function main() {
         "Stable appearance can help the character remain visually consistent",
         "This source note preserves imported material as audit evidence. It is not recalled directly; accepted derived memories appear below.",
         "Saving something does not mean it shows up in every reply.",
-        "Import a character",
-        "Open Summary Prompt, then Chat Summary.",
+         "Import a character",
+         "Note: You can use any summary.",
+         "Open Summary Prompt, then Chat Summary.",
         "Open Prompt Preset Editor.",
         "Add an Agent Section for Long-Term Memory.",
         "Correct and save anything worth keeping, delete the rest.",
         "When you get a response, peek the prompt and make sure the memories are reaching your chat context.",
-        "Under the Hood",
+         "Under the Hood",
+         "Choose What to Remember",
+         "Review Before Saving",
+         "Check What the Chat Used",
+         "Enabling It for the Current Chat",
         "Writing to memory (Extraction)",
         "Reading from memory (Recall)",
         "Close",
@@ -1020,7 +1025,7 @@ async function main() {
       await page.getByRole("button", { name: "Next: Choose a source" }).click();
       assert.equal(
         await onboardingTitle.innerText(),
-        "Choose what to remember",
+        "Choose What to Remember",
       );
       assert.equal(
         await page.locator("#ltm-onboarding-description ul li").count(),
@@ -1055,7 +1060,7 @@ async function main() {
       await page
         .getByRole("button", { name: "Next: Reviewing and saving memories" })
         .click();
-      assert.equal(await onboardingTitle.innerText(), "Review before saving");
+      assert.equal(await onboardingTitle.innerText(), "Review Before Saving");
       assert.equal(
         await page.locator("#ltm-onboarding-description ul li").count(),
         3,
@@ -1063,7 +1068,7 @@ async function main() {
       await page.getByRole("button", { name: "Next: Check it works" }).click();
       assert.equal(
         await onboardingTitle.innerText(),
-        "Check what the chat used",
+        "Check What the Chat Used",
       );
       assert.match(
         await page.locator('[data-ltm-surface="onboarding"]').innerText(),
@@ -1145,7 +1150,7 @@ async function main() {
         .getByRole("button", { name: "Next: Reviewing and saving memories" })
         .click();
       await page.getByRole("button", { name: "Open Review Queue" }).click();
-      assert.equal(await onboardingTitle.innerText(), "Review before saving");
+      assert.equal(await onboardingTitle.innerText(), "Review Before Saving");
       assert.equal(
         await page.locator('[data-ltm-surface="review-queue"]').count(),
         1,
@@ -1204,7 +1209,7 @@ async function main() {
         .getByRole("button", { name: "Next: Reviewing and saving memories" })
         .click();
       await page.getByRole("button", { name: "Choose a Source" }).click();
-      assert.equal(await onboardingTitle.innerText(), "Review before saving");
+      assert.equal(await onboardingTitle.innerText(), "Review Before Saving");
       assert.equal(
         await page.locator('[data-ltm-surface="review-queue"]').count(),
         1,

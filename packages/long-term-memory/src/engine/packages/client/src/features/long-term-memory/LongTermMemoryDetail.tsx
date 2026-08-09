@@ -1496,13 +1496,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       "ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntro",
                                     )}
                                   </p>
-                                  <ol className="list-decimal list-outside space-y-1 ps-6">
-                                    <li>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.chatSummarySetupOpen",
-                                      )}
-                                    </li>
-                                  </ol>
+                                  <p>
+                                    {localizeUi(
+                                      "ui.longTermMemory.longtermmemorydetail.chatSummarySetupOpen",
+                                    )}
+                                  </p>
                                 </div>
                               ) : null}
                             </>
