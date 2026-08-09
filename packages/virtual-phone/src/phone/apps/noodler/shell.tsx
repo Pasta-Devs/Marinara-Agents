@@ -1,8 +1,10 @@
 import React from "react";
-import { AtSign, Flame, Heart, MessageCircle, Newspaper, Repeat2, Send } from "lucide-react";
+import { AtSign, Flame, Heart, MessageCircle, Newspaper, Repeat2, Send, Soup, TrendingUp } from "lucide-react";
 import { phoneRequest, recordActivity, rememberWorldFact } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
+import { useStoryClock } from "../../platform/story-clock";
+import { PhoneEmptyState } from "../../platform/empty-state";
 import { rememberPerson } from "../../platform/people";
 
 interface NoodlePost {
@@ -39,6 +41,7 @@ function splitTopic(topic: string) {
 export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { phoneId: string; ownerName?: string; onBack: () => void; onClose: () => void }) {
   const [openPostId, setOpenPostId] = React.useState<string | null>(null);
   const store = usePhoneStore(phoneId, "noodler");
+  const postClock = useStoryClock();
   const [tab, setTab] = React.useState<"feed" | "trending">("feed");
   const [feed, setFeed] = React.useState<NoodlePost[] | null>(null);
   const [trending, setTrending] = React.useState<string[] | null>(null);
@@ -142,7 +145,7 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
             <span className="vp-post-author">{post.author}</span>
             <span className="vp-post-handle">{post.handle}</span>
           </span>
-          <span className="vp-post-time">{new Date(post.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+          <span className="vp-post-time">{postClock.time(post.at)}</span>
         </div>
         <p className="vp-post-text">{post.text}</p>
         {post.image ? <img src={post.image} alt={post.text} className="vp-post-image" loading="lazy" /> : null}
@@ -197,7 +200,7 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
             </form>
             {(loading || feed === null) && !feed?.length ? skeleton : null}
             {feed && feed.length === 0 && !loading ? (
-              <p className="vp-muted-note">The plate is empty. Refresh to see what's simmering.</p>
+              <PhoneEmptyState icon={Soup} title="Nothing on the feed" body="Refresh to see what the world is posting about right now." action={{ label: "Refresh", onClick: () => void refreshFeed() }} />
             ) : null}
             {feed?.length ? (
               <div className="vp-stack" style={{ gap: "0.5rem" }} aria-busy={loading}>
@@ -209,7 +212,7 @@ export function NoodlerShell({ phoneId, ownerName = "You", onBack, onClose }: { 
           <>
             {loading && !trending?.length ? skeleton : null}
             {trending && trending.length === 0 && !loading ? (
-              <p className="vp-muted-note">Nothing is trending yet. Refresh to see what's bubbling up.</p>
+              <PhoneEmptyState icon={TrendingUp} title="Nothing trending" body="Refresh to see what is bubbling up in this world." action={{ label: "Refresh", onClick: () => void refreshTrending() }} />
             ) : null}
             {trending?.length ? (
               <div className="vp-stack" style={{ gap: "0.5rem" }} aria-busy={loading}>

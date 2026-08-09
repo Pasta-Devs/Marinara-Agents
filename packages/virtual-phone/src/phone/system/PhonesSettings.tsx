@@ -3,6 +3,7 @@ import { phoneRequest } from "../platform/api";
 import { SettingsShell } from "../apps/settings/shell";
 import { phoneStylesheet } from "../device/styles";
 import { phoneThemeTokens } from "../device/theme";
+import type { DeviceSettings } from "../device/settings";
 
 /** The device switcher gate is a client-global flag PhoneOverlay reads live; agent settings just toggles it. */
 const FREE_SWITCH_KEY = "marinara_vp_dev_switcher";
@@ -29,29 +30,8 @@ export type Phone = {
   ownerName: string;
   enabled: boolean;
   baselineTheme: BaselineTheme;
-  settings?: {
-    deviceName: string;
-    wallpaper: string;
-    wallpaperImage: string;
-    wallpaperTint: string;
-    caseColor: string;
-    screenEffect: "none" | "cracks" | "smudge" | "blood" | "scanlines";
-    screenEffectIntensity: 0 | 1 | 2 | 3;
-    theme: BaselineTheme;
-    pattern: "none" | "dots" | "grid" | "noise" | "waves";
-    patternIntensity: 0 | 1 | 2 | 3;
-    reduceDeviceEffects: boolean;
-    batteryLevel: number;
-    cellularSignal: 0 | 1 | 2 | 3 | 4;
-    installedApps: string[];
-    lorebookIds: string[];
-    lorebookMode: "all" | "selected" | "none";
-    unpromptedTexts: boolean;
-    storyNotices: boolean;
-    lightConnectionId: string;
-    heavyConnectionId: string;
-    generationInstructions: string;
-  };
+  /** The real settings type. This was a hand-copied structural duplicate and had already drifted. */
+  settings?: DeviceSettings;
 };
 export type ProvisioningResponse = {
   persona: Phone | null;

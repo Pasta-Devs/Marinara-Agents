@@ -48,6 +48,41 @@ export interface DeviceSettings {
   lightConnectionId: string;
   heavyConnectionId: string;
   generationInstructions: string;
+  /**
+   * Minutes between the host machine's clock and the story's. A phone read at 3am in the scene
+   * showing the user's real 14:22 is the loudest continuity break the device has, and it is on
+   * every screen at once. Stored as an offset rather than a fixed time so the clock still runs —
+   * a frozen phone clock reads as broken, not as fiction.
+   *
+   * Timestamps stay real ISO in storage; the offset is applied at render, so ordering, unread
+   * arithmetic and generation-time comparisons are untouched.
+   */
+  storyClockOffsetMinutes: number;
+}
+
+/** ±1 year. Wide enough for any scene, narrow enough that a bad value can't render Invalid Date. */
+const MAX_CLOCK_OFFSET = 366 * 24 * 60;
+
+/** The story's current time, given a phone's offset. */
+export function storyNow(offsetMinutes: number, at?: string | number | Date) {
+  const base = at === undefined ? Date.now() : new Date(at).getTime();
+  return new Date(base + offsetMinutes * 60_000);
+}
+
+/** The offset that puts the story clock at `target` (an HH:MM on today's story date) right now. */
+export function offsetForStoryTime(target: string, offsetMinutes: number) {
+  const [hours, minutes] = target.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return offsetMinutes;
+  const current = storyNow(offsetMinutes);
+  const wanted = new Date(current);
+  wanted.setHours(hours!, minutes!, 0, 0);
+  /**
+   * Measured from the start of the current minute, not from the current instant. Rounding the raw
+   * difference lost up to 30 seconds in the wrong direction, so picking 03:00 could leave the phone
+   * reading 02:59 — the one number the user was looking at when they set it.
+   */
+  const minuteStart = Math.floor(current.getTime() / 60_000) * 60_000;
+  return offsetMinutes + (wanted.getTime() - minuteStart) / 60_000;
 }
 
 export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): DeviceSettings {
@@ -73,6 +108,7 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     lightConnectionId: "",
     heavyConnectionId: "",
     generationInstructions: "",
+    storyClockOffsetMinutes: 0,
   };
 }
 
@@ -115,5 +151,8 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
     lightConnectionId: typeof input.lightConnectionId === "string" ? input.lightConnectionId.slice(0, 100) : defaults.lightConnectionId,
     heavyConnectionId: typeof input.heavyConnectionId === "string" ? input.heavyConnectionId.slice(0, 100) : defaults.heavyConnectionId,
     generationInstructions: typeof input.generationInstructions === "string" ? input.generationInstructions.slice(0, 12000) : defaults.generationInstructions,
+    storyClockOffsetMinutes: Number.isFinite(Number(input.storyClockOffsetMinutes))
+      ? Math.min(MAX_CLOCK_OFFSET, Math.max(-MAX_CLOCK_OFFSET, Math.round(Number(input.storyClockOffsetMinutes))))
+      : defaults.storyClockOffsetMinutes,
   };
 }

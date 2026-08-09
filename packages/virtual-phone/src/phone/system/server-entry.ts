@@ -353,6 +353,34 @@ export async function activate({ api }: CapabilityContext) {
     const remembered = facts.slice(0, 20).map((fact) => `${fact.text} (${fact.source})`).join("\n");
     return `${people ? `\n\nPeople this phone knows:\n${people}` : ""}${remembered ? `\n\nThings the owner deliberately kept or established on this phone:\n${remembered}` : ""}`;
   };
+  /**
+   * The phone's own clock, in words, for anything it generates. Without it a model writing an
+   * inbox or a feed invents its own hour and produces breakfast newsletters during a midnight
+   * scene — the screen said 03:00 and the content did not.
+   */
+  const storyTimeContext = (phone?: Awaited<ReturnType<typeof findPhone>>) => {
+    if (!phone) return "";
+    const offset = phoneGenSettings(phone).storyClockOffsetMinutes;
+    if (!offset) return "";
+    const when = new Date(Date.now() + offset * 60_000);
+    return `\n\nThe time on this phone right now is ${when.getHours().toString().padStart(2, "0")}:${when.getMinutes().toString().padStart(2, "0")}, ${when.toLocaleDateString("en-US", { weekday: "long" })}. Write what fits that hour.`;
+  };
+
+  /**
+   * How a generated reply should read for the chat's mode. Written out three times with three
+   * wordings, and the Mail reply route referenced a `modeInstruction` that only existed inside the
+   * unprompted-texts loop — an out-of-scope read that throws at runtime, so every emailed reply
+   * failed. One helper, one wording, no free variables.
+   */
+  const modeInstructionFor = async (chatId?: string | null) => {
+    const chat = chatId ? await api.runtime.persistence.getChat(chatId).catch(() => null) : null;
+    return chat?.mode === "conversation"
+      ? "This is a conversation chat: answer naturally and directly, without roleplay narration."
+      : chat?.mode === "game"
+        ? "This is a game chat: keep the reply actionable and consistent with the current game state or turn."
+        : "This is a roleplay chat: stay in character and keep the reply grounded in the scene.";
+  };
+
   const worldContext = async (chatId: string | undefined, phone?: Awaited<ReturnType<typeof findPhone>>) => {
     const lore = await loreContext(phone, chatId);
     let story = "";
@@ -363,7 +391,7 @@ export async function activate({ api }: CapabilityContext) {
         .slice(-STORY_BUDGET_CHARS);
     }
     const shared = chatId && phone ? await sharedPhoneContext(phone, chatId) : "";
-    return `${lore ? `\n\nWorld lore to stay true to:\n${lore}` : ""}${story ? `\n\nRecent story events:\n${story}` : ""}${shared}`;
+    return `${storyTimeContext(phone)}${lore ? `\n\nWorld lore to stay true to:\n${lore}` : ""}${story ? `\n\nRecent story events:\n${story}` : ""}${shared}`;
   };
 
   const generateCharacterReply = async (senderPhoneId: string, recipientPhoneId: string) => {
@@ -383,12 +411,7 @@ export async function activate({ api }: CapabilityContext) {
         .join("\n");
        const sharedChatId = recipient.document.identity.chatScope
          .find((chatId) => sender.document.identity.chatScope.includes(chatId));
-       const sharedChat = sharedChatId ? await api.runtime.persistence.getChat(sharedChatId).catch(() => null) : null;
-       const modeInstruction = sharedChat?.mode === "conversation"
-         ? "This is a conversation chat: answer naturally and directly, without roleplay narration."
-         : sharedChat?.mode === "game"
-           ? "This is a game chat: keep the reply actionable and consistent with the current game state or turn."
-           : "This is a roleplay chat: stay in character and keep the reply grounded in the scene.";
+       const modeInstruction = await modeInstructionFor(sharedChatId);
        const storyContext = await worldContext(sharedChatId, recipient);
       const completion = await model.chatComplete([
         {
@@ -558,9 +581,14 @@ export async function activate({ api }: CapabilityContext) {
           : null;
         const mode = body.mode === "reference" ? "reference" : "show";
         const screen = detail ? `\n\nOn screen:\n${detail}` : "";
+        const offset = phoneGenSettings(phone).storyClockOffsetMinutes;
+        const shownAt = offset
+          ? new Date(Date.now() + offset * 60_000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+          : "";
+        const stamp = shownAt ? `, ${shownAt}` : "";
         const content = mode === "reference"
-          ? `[${ownerName}'s phone right now — ${summary}]${screen}`
-          : `*${ownerName} shows their phone — ${summary}*${screen}`;
+          ? `[${ownerName}'s phone right now${stamp} — ${summary}]${screen}`
+          : `*${ownerName} shows their phone${stamp} — ${summary}*${screen}`;
         await api.runtime.persistence.createMessageWithSwipe({
           id: randomUUID(),
           swipeId: randomUUID(),
@@ -889,16 +917,11 @@ export async function activate({ api }: CapabilityContext) {
         const reason = leftOnRead
           ? `${other.document.identity.ownerName} never replied to your last exchange.`
           : "The conversation has gone quiet for a while.";
-        const chat = chatId ? await api.runtime.persistence.getChat(chatId).catch(() => null) : null;
-        const modeInstruction = chat?.mode === "conversation"
-          ? "This is a conversation chat: keep the reply natural and direct."
-          : chat?.mode === "game"
-            ? "This is a game chat: make the reply useful for the current turn and state."
-            : "This is a roleplay chat: stay in character and grounded in the scene.";
+        const modeInstruction = await modeInstructionFor(chatId);
         const completion = await model.chatComplete([
           {
             role: "system",
-            content: `You are ${phone.document.identity.ownerName}, texting ${other.document.identity.ownerName} on your phone inside an ongoing roleplay. ${reason} Send one short in-character text picking the thread back up, in your own voice. Respond with only JSON: {"reply":"your message"}. If you would not text them right now, respond with {"reply":""}.${await ownerCard(phone, "Who you are — about")}${await directoryContext(phone)}${await worldContext(chatId, phone)}${await customInstructions(phone)}`,
+            content: `You are ${phone.document.identity.ownerName}, texting ${other.document.identity.ownerName} on your phone inside an ongoing roleplay. ${reason} ${modeInstruction} Send one short in-character text picking the thread back up, in your own voice. Respond with only JSON: {"reply":"your message"}. If you would not text them right now, respond with {"reply":""}.${await ownerCard(phone, "Who you are — about")}${await directoryContext(phone)}${await worldContext(chatId, phone)}${await customInstructions(phone)}`,
           },
           { role: "user", content: history || "No messages yet." },
         ], { temperature: 0.95, maxTokens: 250 });
@@ -1968,6 +1991,7 @@ export async function activate({ api }: CapabilityContext) {
           document.name.toLowerCase() === to.toLowerCase());
         const recipientPhone = contact ? await findPhone(contact.phoneId) : null;
         const storyContext = await worldContext(chatId, phone);
+        const modeInstruction = await modeInstructionFor(chatId);
         const completion = await model.chatComplete([
           {
             role: "system",

@@ -1,7 +1,8 @@
 import React from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Images } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
+import { PhoneEmptyState } from "../../platform/empty-state";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { ShareSheet } from "../../platform/share-sheet";
 
@@ -156,7 +157,11 @@ export function GalleryShell({ phoneId, onSettingsPatch, onBack, onClose }: { ph
           {[0, 1, 2, 3, 4, 5].map((index) => <span key={index} className="vp-skeleton vp-gallery-skeleton" />)}
         </div>
       ) : visible.length === 0 ? (
-        <p className="vp-muted-note">No photos yet. Images that appear in this story's chat show up here.</p>
+        <PhoneEmptyState
+          icon={Images}
+          title="No photos"
+          body="Images that appear in this story's chat show up here, and anything taken with the Camera."
+        />
       ) : (
         <div className="vp-gallery-grid" aria-label="Story photos" aria-busy={loading}>
           {visible.map((url, index) => (

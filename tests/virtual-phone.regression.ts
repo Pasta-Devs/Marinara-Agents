@@ -12,7 +12,7 @@ import { parseBoundedContent } from "../packages/virtual-phone/src/phone/platfor
 import { settingsManifest } from "../packages/virtual-phone/src/phone/apps/settings/manifest";
 import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/phone/apps/app-store/manifest";
 import { fallbackSearchResults, goodleManifest, looksLikeUrl, normalizeUrl, parseLinkedText, parsePageSection, parseResultItem, slugify } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
-import { defaultDeviceSettings, normalizeDeviceSettings } from "../packages/virtual-phone/src/phone/device/settings";
+import { defaultDeviceSettings, normalizeDeviceSettings, offsetForStoryTime, storyNow } from "../packages/virtual-phone/src/phone/device/settings";
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
 import { fallbackFeed, noodlerManifest } from "../packages/virtual-phone/src/phone/apps/noodler/manifest";
@@ -213,6 +213,19 @@ async function main() {
   assert.equal(defaultDeviceSettings("dark").lorebookMode, "all");
   assert.equal(normalizeDeviceSettings({ lorebookIds: ["book-1"] }).lorebookMode, "all");
   assert.equal(normalizeDeviceSettings({ lorebookMode: "selected", lorebookIds: [] }).lorebookMode, "selected");
+  // Story clock: the phone shows the scene's hour, not the host machine's, and keeps running.
+  assert.equal(defaultDeviceSettings("dark").storyClockOffsetMinutes, 0);
+  assert.equal(normalizeDeviceSettings({ storyClockOffsetMinutes: "nonsense" }).storyClockOffsetMinutes, 0);
+  assert.equal(normalizeDeviceSettings({ storyClockOffsetMinutes: 9_999_999 }).storyClockOffsetMinutes, 366 * 24 * 60);
+  assert.equal(normalizeDeviceSettings({ storyClockOffsetMinutes: -9_999_999 }).storyClockOffsetMinutes, -366 * 24 * 60);
+  assert.equal(storyNow(90, "2026-03-04T10:00:00.000Z").toISOString(), "2026-03-04T11:30:00.000Z");
+  // Picking 03:00 lands the story clock on 03:00, from any starting offset, and stays there.
+  for (const start of [0, 137, -642]) {
+    const shifted = storyNow(offsetForStoryTime("03:00", start));
+    assert.equal(shifted.getHours(), 3);
+    assert.equal(shifted.getMinutes(), 0);
+  }
+  assert.equal(offsetForStoryTime("not-a-time", 42), 42);
   const conversationProjection = projectConversationTexts([
     { id: "ordinary-user", role: "user", extra: "{}" },
     { id: "ordinary-reply", role: "assistant", extra: "{}" },

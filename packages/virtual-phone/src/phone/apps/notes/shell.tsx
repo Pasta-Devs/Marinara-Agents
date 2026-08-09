@@ -1,6 +1,9 @@
 import React from "react";
+import { NotebookPen, Plus } from "lucide-react";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { useDebouncedSave, usePhoneStore } from "../../platform/use-phone-store";
+import { useStoryClock } from "../../platform/story-clock";
+import { PhoneEmptyState } from "../../platform/empty-state";
 
 interface Note {
   id: string;
@@ -14,6 +17,7 @@ function noteTitle(note: Note) {
 
 export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "notes");
+  const clock = useStoryClock();
   const [notes, setNotes] = React.useState<Note[] | null>(null);
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -88,17 +92,27 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
           className="vp-textarea vp-textarea--fill"
         />
       ) : notes.length === 0 ? (
-        <p className="vp-muted-note">No notes yet. Everything written here stays on this phone.</p>
+        <PhoneEmptyState
+          icon={NotebookPen}
+          title="No notes"
+          body="Anything written here stays on this phone, and can be shown to the scene."
+          action={{ label: "Write a note", onClick: addNote }}
+        />
       ) : (
-        <div className="vp-notes-grid">
-          {notes.map((note) => (
-            <button key={note.id} type="button" onClick={() => setActiveId(note.id)} className="vp-note-card">
-              <h3>{noteTitle(note)}</h3>
-              <p>{note.text.split("\n").slice(1).join(" ").trim() || "No additional text"}</p>
-              <time dateTime={note.updatedAt}>{new Date(note.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}</time>
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="vp-list">
+            {notes.map((note) => (
+              <button key={note.id} type="button" onClick={() => setActiveId(note.id)} className="vp-thread-row">
+                <span className="vp-thread-body">
+                  <span className="vp-thread-name">{noteTitle(note)}</span>
+                  <span className="vp-thread-preview">{note.text.split("\n").slice(1).join(" ").trim() || "No additional text"}</span>
+                </span>
+                <time dateTime={note.updatedAt} className="vp-row-stamp">{clock.shortDate(note.updatedAt)}</time>
+              </button>
+            ))}
+          </div>
+          <div className="vp-fab-layer"><button type="button" className="vp-fab" aria-label="New note" onClick={addNote}><Plus size="1.375rem" aria-hidden="true" /></button></div>
+        </>
       )}
     </section>
   );

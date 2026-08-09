@@ -3,7 +3,7 @@ import { RotateCcw, Search } from "lucide-react";
 import type { Phone } from "../../system/PhonesSettings";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
-import { defaultDeviceSettings } from "../../device/settings";
+import { defaultDeviceSettings, offsetForStoryTime, storyNow } from "../../device/settings";
 import { WallpaperCropper } from "./wallpaper-cropper";
 
 interface SettingsShellProps {
@@ -49,6 +49,8 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
    */
   const [pending, setPending] = React.useState<Record<string, unknown>>({});
   const settings = { ...saved, ...pending } as typeof saved;
+  // The <input type="time"> shows where the story clock stands right now, not a stored wall time.
+  const storyClockValue = storyNow(settings.storyClockOffsetMinutes).toTimeString().slice(0, 5);
   const [about, setAbout] = React.useState<PhoneAbout | null>(null);
   const [connections, setConnections] = React.useState<EngineConnection[] | null>(null);
   const [lorebooks, setLorebooks] = React.useState<Array<{ id: string; name: string }> | null>(null);
@@ -189,6 +191,28 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
           <p className="vp-muted-note">This is the character's phone, not yours — set these to fit the story.</p>
           <label className="vp-row vp-row--stacked"><span>Battery ({settings.batteryLevel}%)</span><input type="range" min="0" max="100" step="1" value={settings.batteryLevel} onChange={(event) => void update({ batteryLevel: Number(event.target.value) })} className="vp-range" /></label>
           <label className="vp-row"><span>Signal</span><select value={settings.cellularSignal} onChange={(event) => void update({ cellularSignal: Number(event.target.value) })} className="vp-row-control"><option value="4">Full</option><option value="3">Good</option><option value="2">Fair</option><option value="1">Weak</option><option value="0">No signal</option></select></label>
+        </div></section>
+        <section><h3 className="vp-section-label">Story time</h3><div className="vp-group">
+          <p className="vp-muted-note">Set what time it is in the scene. The clock keeps running from there, and every timestamp on the phone follows it.</p>
+          <label className="vp-row"><span>Time on this phone</span>
+            <input
+              type="time"
+              value={storyClockValue}
+              onChange={(event) => {
+                if (!event.target.value) return;
+                void update({ storyClockOffsetMinutes: offsetForStoryTime(event.target.value, settings.storyClockOffsetMinutes) });
+              }}
+              className="vp-row-control"
+            />
+          </label>
+          <button
+            type="button"
+            className="vp-row vp-row--danger"
+            disabled={settings.storyClockOffsetMinutes === 0}
+            onClick={() => void update({ storyClockOffsetMinutes: 0 })}
+          >
+            <span>Match real time</span>
+          </button>
         </div></section>
       </div> : tab === "generation" ? <div className="vp-settings-sections">
         <section><h3 className="vp-section-label">Models &amp; activity</h3><div className="vp-group">

@@ -7,7 +7,8 @@ import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
 import { initialDeviceSession, unlockDevice } from "./device/surfaces";
 import { phoneRequest, setActiveChatId, waitForPhoneWrites } from "./platform/api";
-import { defaultDeviceSettings } from "./device/settings";
+import { defaultDeviceSettings, storyNow } from "./device/settings";
+import { StoryClockProvider } from "./platform/story-clock";
 import { conditionOpacity, patternBackground } from "./device/effects";
 import { InstalledAppRegistry, type AppRenderContext, type InstalledApp } from "./platform/app-registry";
 import { AppRouteStackManager } from "./platform/app-lifecycle";
@@ -443,8 +444,11 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
       badge: manifest.id === "messages" ? messagesUnread : undefined,
     }));
   const theme = deviceSettings.theme === "system" ? selectedPhone?.baselineTheme ?? "system" : deviceSettings.theme;
-  const clock = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  // The whole device reads the story's clock, not the host machine's.
+  const storyTime = storyNow(deviceSettings.storyClockOffsetMinutes, now);
+  const clock = storyTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return createPortal(
+    <StoryClockProvider value={deviceSettings.storyClockOffsetMinutes}>
     <div ref={overlayRef} className="vp-root" data-chat-floating-panel style={{ ...phoneThemeTokens(theme), ...(deviceSettings.caseColor ? { "--vp-bezel": deviceSettings.caseColor } : {}) } as React.CSSProperties}>
       <style data-virtual-phone-styles>{phoneStylesheet}</style>
       <div className="vp-scrim" aria-hidden="true" onClick={close} />
@@ -497,7 +501,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                 <div className="vp-lock">
                   <div>
                     <p className="vp-lock-clock">{clock}</p>
-                    <p className="vp-lock-date">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
+                    <p className="vp-lock-date">{storyTime.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
                     {deviceSettings.deviceName.trim() ? <p className="vp-lock-device">{deviceSettings.deviceName}</p> : null}
                   </div>
                   {accessDenied ? <div role="alert" className="vp-lock-card">{accessDenied}</div> : null}
@@ -541,7 +545,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                     <button type="button" aria-label="Device settings" title="Device settings" onClick={() => openAppRoute("settings", "/")} className="vp-icon-btn vp-icon-btn--surface"><Settings size="1rem" aria-hidden="true" /></button>
                   </div>
                   <p className="vp-home-clock">{clock}</p>
-                  <p className="vp-home-date">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
+                  <p className="vp-home-date">{storyTime.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>
                   <div className="vp-home-spacer" aria-hidden="true" />
                   <div aria-label="Installed apps" className="vp-home-apps">
                     <div className="vp-app-grid">
@@ -603,7 +607,8 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
         </div>
         </div>
       </section>
-    </div>,
+    </div>
+    </StoryClockProvider>,
     document.body,
   );
 }

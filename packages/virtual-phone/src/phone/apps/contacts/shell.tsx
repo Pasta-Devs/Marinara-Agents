@@ -1,7 +1,9 @@
 import React from "react";
+import { ChevronRight, Plus, Users } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
+import { PhoneEmptyState } from "../../platform/empty-state";
 
 type Contact = {
   id: string;
@@ -13,6 +15,20 @@ type Contact = {
   bio?: string;
   source?: string;
 };
+
+/**
+ * A-Z sections, as every contacts app on both platforms does it. A flat list of everyone the story
+ * has introduced stops being scannable at about a dozen names, which one scene can produce.
+ */
+function groupContacts(contacts: Contact[]) {
+  const groups = new Map<string, Contact[]>();
+  for (const contact of [...contacts].sort((a, b) => a.name.localeCompare(b.name))) {
+    const first = contact.name.trim()[0]?.toLocaleUpperCase() ?? "#";
+    const letter = /\p{Letter}/u.test(first) ? first : "#";
+    groups.set(letter, [...(groups.get(letter) ?? []), contact]);
+  }
+  return [...groups.entries()];
+}
 
 interface ContactsPayload {
   contacts: Contact[];
@@ -178,22 +194,40 @@ export function ContactsShell({ phoneId, chatId, onBack, onClose }: { phoneId: s
             </div>
           ) : null}
           {data && data.contacts.length === 0 ? (
-            <p className="vp-muted-note">No contacts yet. Add a person with the + button, or enable more character phones in Chat Settings.</p>
+            <PhoneEmptyState
+              icon={Users}
+              title="No contacts"
+              body="Add someone by hand, import a saved character, or turn on more character phones in Chat Settings."
+              action={{ label: "Add someone", onClick: () => setView("add") }}
+            />
           ) : null}
           {data?.contacts.length ? (
-            <div className="vp-stack" style={{ gap: "0.5rem" }}>
-              {data.contacts.map((contact) => (
-                <button key={contact.id} type="button" onClick={() => setOpenId(contact.id)} className="vp-thread-row">
-                  <PhoneAvatar name={contact.name} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
-                  <span className="vp-thread-body">
-                    <span className="vp-thread-name">{contact.name}</span>
-                    {contact.bio?.trim() ? <span className="vp-thread-preview">{contact.bio}</span> : null}
-                    {contact.source?.trim() ? <span className="vp-thread-preview">{contact.source}</span> : null}
-                    <span className="vp-thread-preview">{contact.phoneLabel?.trim() ? `${contact.phoneLabel} · ` : ""}{contact.phoneId ? threadStatus(contact.phoneId) : "No phone in this chat"}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="vp-list-group">
+                {groupContacts(data.contacts).map(([letter, group]) => (
+                  <section key={letter}>
+                    <h3 className="vp-index-head">{letter}</h3>
+                    <div className="vp-list vp-list--inset-rules">
+                      {group.map((contact) => (
+                        <button key={contact.id} type="button" onClick={() => setOpenId(contact.id)} className="vp-thread-row">
+                          <PhoneAvatar name={contact.name} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
+                          <span className="vp-thread-body">
+                            <span className="vp-thread-name">{contact.name}</span>
+                            {contact.bio?.trim() ? <span className="vp-thread-preview">{contact.bio}</span> : null}
+                            {contact.source?.trim() ? <span className="vp-thread-preview">{contact.source}</span> : null}
+                            <span className="vp-thread-preview">{contact.phoneLabel?.trim() ? `${contact.phoneLabel} · ` : ""}{contact.phoneId ? threadStatus(contact.phoneId) : "No phone in this chat"}</span>
+                          </span>
+                          <ChevronRight size="1rem" aria-hidden="true" className="vp-row-chevron" />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+              <div className="vp-fab-layer">
+                <button type="button" className="vp-fab" aria-label="Add someone" onClick={() => setView("add")}><Plus size="1.375rem" aria-hidden="true" /></button>
+              </div>
+            </>
           ) : null}
         </>
       )}

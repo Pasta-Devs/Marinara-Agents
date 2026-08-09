@@ -289,6 +289,44 @@ export const phoneStylesheet = `
 
 .vp-thread-row { display: flex; align-items: center; gap: 0.625rem; width: 100%; min-height: 3.5rem; padding: 0.5rem 0.75rem; border-radius: 1rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); text-align: left; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 4px 12px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
 .vp-thread-row:active { transform: scale(0.98); }
+
+/* Grouped inset list — one container, hairline separators, iOS structure. Rows inside keep their
+   own markup: wrapping an existing list in .vp-list is all an app has to change. Individually
+   floating cards per row read as a stack of unrelated things; a list reads as one list. */
+.vp-list { display: flex; flex-direction: column; border-radius: 1rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 4px 12px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--vp-border); overflow: hidden; }
+.vp-list > * { border-radius: 0; background: none; box-shadow: none; }
+/* The separator is inset past the leading avatar, as both platforms draw it. */
+.vp-list > * + * { box-shadow: inset 0 1px 0 var(--vp-border); }
+.vp-list--inset-rules > * + * { box-shadow: inset 3.75rem 1px 0 -3.6875rem var(--vp-border); }
+.vp-list > *:active { transform: none; background: color-mix(in srgb, var(--vp-text) 7%, transparent); }
+.vp-list-group { display: grid; gap: 1rem; }
+/* Disclosure chevron for rows that push a detail view. */
+.vp-row-chevron { flex-shrink: 0; margin-left: auto; color: color-mix(in srgb, var(--vp-muted) 70%, transparent); }
+.vp-row-stamp { flex-shrink: 0; align-self: flex-start; margin-left: auto; padding-top: 0.125rem; font-size: 0.625rem; font-weight: 500; color: var(--vp-muted); font-variant-numeric: tabular-nums; }
+.vp-index-head { position: sticky; top: 0; z-index: 1; padding: 0.25rem 0.875rem; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.02em; color: var(--vp-muted); background: var(--vp-bg); }
+
+/* Large title. Both platforms lead a root screen with the app's name at size, under the nav bar. */
+.vp-large-title { margin: 0 0 0.75rem; padding: 0 0.25rem; font-size: 1.625rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.vp-large-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.75rem; }
+.vp-large-title-row .vp-large-title { margin-bottom: 0; }
+
+/* Empty state: a real one, not a muted sentence. Icon, what this screen is, what to do about it. */
+.vp-empty { display: grid; justify-items: center; align-content: center; gap: 0.4rem; padding: 2.5rem 1.25rem; text-align: center; }
+.vp-empty-icon { display: inline-flex; align-items: center; justify-content: center; height: 3.25rem; width: 3.25rem; margin-bottom: 0.25rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 7%, var(--vp-bg)); color: var(--vp-muted); }
+.vp-empty h3 { margin: 0; font-size: 0.9375rem; font-weight: 650; letter-spacing: -0.01em; }
+.vp-empty p { margin: 0; max-width: 15rem; font-size: 0.75rem; line-height: 1.45; color: var(--vp-muted); }
+.vp-empty .vp-accent-btn { margin-top: 0.5rem; }
+
+/* Floating compose button. The header + is a 40px target in the corner most thumbs cannot reach.
+   A zero-height sticky layer pins it to the bottom of the scroll viewport without a fixed
+   position — .vp-appview is itself the scroll container, so an absolutely placed button would
+   simply scroll away with the content. */
+.vp-fab-layer { position: sticky; bottom: 1rem; z-index: 8; display: flex; justify-content: flex-end; height: 0; pointer-events: none; }
+.vp-fab-layer > .vp-fab { position: relative; top: -3.25rem; pointer-events: auto; }
+.vp-appview:has(.vp-fab-layer) { padding-bottom: 5rem; }
+.vp-fab { display: inline-flex; align-items: center; justify-content: center; height: 3.25rem; width: 3.25rem; border-radius: 999px; background: var(--vp-accent); color: #fff; box-shadow: 0 6px 16px rgb(0 0 0 / 0.28), 0 2px 4px rgb(0 0 0 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.25); transition: transform 120ms ease, filter 140ms ease; }
+.vp-fab:hover:not(:disabled) { filter: brightness(1.08); }
+.vp-fab:active:not(:disabled) { transform: scale(0.94); }
 .vp-thread-avatar { display: inline-flex; align-items: center; justify-content: center; height: 2.5rem; width: 2.5rem; flex-shrink: 0; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-accent) 85%, #ffffff), var(--vp-accent)); color: #fff; font-size: 0.75rem; font-weight: 650; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), 0 2px 6px rgb(0 0 0 / 0.15); }
 .vp-thread-avatar { overflow: hidden; }
 .vp-thread-avatar img { height: 100%; width: 100%; object-fit: cover; }

@@ -1,7 +1,10 @@
 import React from "react";
+import { Inbox } from "lucide-react";
 import { draftMail, mailFromLine, mergeMail, parseEmail, readStoredMail, type MailFolder, type MailMessage } from "./manifest";
 import { phoneRequest, recordActivity } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
+import { useStoryClock } from "../../platform/story-clock";
+import { PhoneEmptyState } from "../../platform/empty-state";
 import { usePhoneStore } from "../../platform/use-phone-store";
 import { rememberPerson } from "../../platform/people";
 
@@ -11,17 +14,12 @@ const FOLDERS: Array<{ id: MailFolder; label: string }> = [
   { id: "archive", label: "Archive" },
 ];
 
-function when(at: string) {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return "";
-  const sameDay = new Date().toDateString() === date.toDateString();
-  return sameDay
-    ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    : date.toLocaleDateString([], { month: "short", day: "numeric" });
-}
+
 
 export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }: { phoneId: string; ownerName?: string; chatId: string | null; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "mail");
+  const clock = useStoryClock();
+  const when = (at: string) => (Number.isNaN(new Date(at).getTime()) ? "" : clock.stamp(at));
   const [mail, setMail] = React.useState<MailMessage[] | null>(null);
   const [folder, setFolder] = React.useState<MailFolder>("inbox");
   const [openId, setOpenId] = React.useState<string | null>(null);
@@ -258,12 +256,14 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
             </div>
           ) : null}
           {mail && shown.length === 0 && !loading ? (
-            <p className="vp-muted-note">
-              {folder === "inbox" ? "The inbox is empty. Refresh to check for new mail." : folder === "sent" ? "Nothing sent yet." : "Nothing archived."}
-            </p>
+            <PhoneEmptyState
+              icon={Inbox}
+              title={folder === "inbox" ? "Inbox is empty" : folder === "sent" ? "Nothing sent" : "Nothing archived"}
+              body={folder === "inbox" ? "Mail arrives from the world the story is set in. Refresh to check." : undefined}
+            />
           ) : null}
           {shown.length ? (
-            <div className="vp-stack" style={{ gap: "0.5rem" }} aria-busy={loading}>
+            <div className="vp-list vp-list--inset-rules" aria-busy={loading}>
               {shown.map((item) => (
                 <button key={item.id} type="button" onClick={() => open(item)} className="vp-thread-row">
                   <span className="vp-thread-body">
@@ -273,8 +273,8 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
                     </span>
                     <span className="vp-thread-name" style={{ fontWeight: item.read ? 500 : 600, fontSize: "0.75rem" }}>{item.subject}</span>
                     <span className="vp-thread-preview">{item.body.slice(0, 140)}</span>
-                    {when(item.at) ? <span className="vp-muted-note">{when(item.at)}</span> : null}
                   </span>
+                  {when(item.at) ? <span className="vp-row-stamp">{when(item.at)}</span> : null}
                 </button>
               ))}
             </div>

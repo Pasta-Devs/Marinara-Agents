@@ -75,6 +75,8 @@ historical design notes and implementation logs; they are intentionally removed 
 
 ## Engine Dependencies
 
+Detail, proposed API shapes, and priority order live in `virtual-phone-engine-requests.md`.
+
 The package can continue shipping its fallback behavior until these runtime capabilities exist:
 
 - `runtime.agents`: discover and invoke other agents.

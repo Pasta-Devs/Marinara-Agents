@@ -1,8 +1,10 @@
 import React from "react";
-import { Send } from "lucide-react";
+import { MessageSquare, Send } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
+import { useStoryClock } from "../../platform/story-clock";
+import { PhoneEmptyState } from "../../platform/empty-state";
 
 interface ThreadMessage {
   id: string;
@@ -34,6 +36,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
   const [sending, setSending] = React.useState(false);
   const bubblesRef = React.useRef<HTMLDivElement>(null);
   const avatars = useAvatarMap();
+  const clock = useStoryClock();
   const avatarFor = (contactPhoneId: string) => {
     const ownerId = data?.contacts.find((contact) => contact.phoneId === contactPhoneId)?.ownerId;
     return ownerId ? avatars?.get(ownerId) : null;
@@ -134,7 +137,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
             {activeThread.messages.map((message) => (
               <div key={message.id} className={`vp-bubble ${message.from === phoneId ? "vp-bubble--self" : "vp-bubble--other"}`}>
                 {message.text}
-                {message.at ? <span className="vp-bubble-time">{new Date(message.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span> : null}
+                {message.at ? <span className="vp-bubble-time">{clock.time(message.at)}</span> : null}
               </div>
             ))}
             {activeThread.reply?.status === "pending" ? (
@@ -154,26 +157,35 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
           </form>
         </div>
       ) : (
-        <div className="vp-stack" style={{ gap: "0.5rem" }}>
+        <div className="vp-list-group">
           {data.threads.length === 0 && newContacts.length === 0 ? (
-            <p className="vp-muted-note">No one else has a phone yet. Enable more phones in Agent Settings.</p>
+            <PhoneEmptyState
+              icon={MessageSquare}
+              title="No conversations"
+              body="Nobody else in this scene has a phone yet. Turn on more character phones in Agent Settings."
+            />
           ) : null}
-          {data.threads.map((thread) => {
-            const last = thread.messages.at(-1);
-            return (
-              <button key={thread.id} type="button" onClick={() => setActiveThreadId(thread.id)} className="vp-thread-row">
-                <PhoneAvatar name={thread.otherName} url={avatarFor(thread.otherPhoneId)} />
-                <span className="vp-thread-body">
-                 <span className="vp-thread-name">{thread.otherName}{thread.kind === "chat" ? <span className="vp-muted-note"> · {thread.mode ?? "roleplay"}</span> : null}</span>
-                  <span className="vp-thread-preview">{last ? `${last.from === phoneId ? "You: " : ""}${last.text}` : "No messages yet"}</span>
-                </span>
-                {thread.unread > 0 ? <span className="vp-badge" aria-label={`${thread.unread} unread`}>{thread.unread}</span> : null}
-              </button>
-            );
-          })}
+          {data.threads.length ? (
+            <div className="vp-list vp-list--inset-rules">
+              {data.threads.map((thread) => {
+                const last = thread.messages.at(-1);
+                return (
+                  <button key={thread.id} type="button" onClick={() => setActiveThreadId(thread.id)} className="vp-thread-row">
+                    <PhoneAvatar name={thread.otherName} url={avatarFor(thread.otherPhoneId)} />
+                    <span className="vp-thread-body">
+                     <span className="vp-thread-name">{thread.otherName}{thread.kind === "chat" ? <span className="vp-muted-note"> · {thread.mode ?? "roleplay"}</span> : null}</span>
+                      <span className="vp-thread-preview">{last ? `${last.from === phoneId ? "You: " : ""}${last.text}` : "No messages yet"}</span>
+                    </span>
+                    {last?.at ? <span className="vp-row-stamp">{clock.stamp(last.at)}</span> : null}
+                    {thread.unread > 0 ? <span className="vp-badge" aria-label={`${thread.unread} unread`}>{thread.unread}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           {newContacts.length ? (
-            <>
-              <h3 className="vp-section-label vp-section-label--spaced">Start a chat</h3>
+            <div className="vp-stack">
+              <h3 className="vp-section-label">Start a chat</h3>
               {newContacts.map((contact) => (
                 <form key={contact.phoneId} className="vp-composer" onSubmit={(event) => {
                   event.preventDefault();
@@ -187,7 +199,7 @@ export function MessagesShell({ phoneId, onBack, onClose }: { phoneId: string; o
                   <button type="submit" aria-label={`Send message to ${contact.ownerName}`} className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Send size="1rem" aria-hidden="true" /></button>
                 </form>
               ))}
-            </>
+            </div>
           ) : null}
         </div>
       )}
