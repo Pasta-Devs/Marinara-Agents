@@ -1861,7 +1861,7 @@ export default function MemoryVault({
                   </span>
                 </summary>
                 {group.map((note) => {
-                  const notePreview = preview(note, search);
+                  const notePreview = preview(note, search, localizeUi);
                   return (
                     <ClickSurface
                       key={note.id}

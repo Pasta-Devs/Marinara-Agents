@@ -1464,6 +1464,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                 </details>
                               </>
                             ) : null}
+                          </div>
                           {onboardingStep === 3 ? (
                             <>
                               <div
@@ -1506,7 +1507,6 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               ) : null}
                             </>
                           ) : null}
-                          </div>
                         </div>
                         <div data-ltm-onboarding-actions>
                           {onboardingStep > 0 ? (
