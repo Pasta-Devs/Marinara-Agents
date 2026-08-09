@@ -45,6 +45,7 @@ if (environment.NO_COLOR !== undefined) {
   environment.FORCE_COLOR = "0";
 }
 let serverProcess;
+let serverProcessError;
 
 function stopProcessTree(child, signal = "SIGTERM") {
   if (!child || child.exitCode !== null || child.killed) return;
@@ -69,9 +70,14 @@ async function waitForUrl(url) {
   const startedAt = Date.now();
   let lastError;
   while (Date.now() - startedAt < timeoutMs) {
-    if (serverProcess?.exitCode !== null) {
+    if (serverProcessError) {
       throw new Error(
-        `Package browser server exited with ${serverProcess?.exitCode}`,
+        `Package browser server exited with an error: ${serverProcessError.message}`,
+      );
+    }
+    if (serverProcess && serverProcess.exitCode !== null) {
+      throw new Error(
+        `Package browser server exited with ${serverProcess.exitCode}`,
       );
     }
     try {
@@ -107,6 +113,9 @@ try {
       windowsHide: true,
     },
   );
+  serverProcess.once("error", (error) => {
+    serverProcessError = error;
+  });
   await waitForUrl(process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5188");
 
   const testProcess = spawn(

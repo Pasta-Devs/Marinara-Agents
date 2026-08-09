@@ -8,6 +8,8 @@ on:
       - "artifacts/noodle-*.zip"
       - "artwork/agent-covers/noodle.png"
       - "artwork/sources/noodle-*"
+      - "catalog/catalog.json"
+      - "catalog/v*/catalog.json"
       - "package.json"
       - "package-lock.json"
       - "packages/noodle/**"
@@ -22,6 +24,9 @@ on:
 concurrency:
   group: noodle-browser-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   noodle-browser:

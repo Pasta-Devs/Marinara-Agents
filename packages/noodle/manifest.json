@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "noodle",
   "name": "Noodle",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
   "engine": {
     "min": "2.4.2",

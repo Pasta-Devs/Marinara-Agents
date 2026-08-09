@@ -11,6 +11,9 @@ const engineRoot = resolve(
 );
 const packageId = process.env.MARINARA_PACKAGE_ID;
 if (!packageId) throw new Error("MARINARA_PACKAGE_ID is required");
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(packageId)) {
+  throw new Error(`Invalid MARINARA_PACKAGE_ID: ${packageId}`);
+}
 if (!existsSync(resolve(engineRoot, "package.json"))) {
   throw new Error(
     `Compatible Marinara Engine checkout not found at ${engineRoot}`,
@@ -40,6 +43,12 @@ function spawnChild(command, args, options = {}) {
   });
   children.add(child);
   child.once("exit", () => children.delete(child));
+  child.once("error", (error) => {
+    children.delete(child);
+    console.error(
+      `Failed to start ${command}: ${error instanceof Error ? error.message : error}`,
+    );
+  });
   return child;
 }
 
@@ -59,6 +68,7 @@ function stopChildren(signal = "SIGTERM") {
 function runPnpm(args) {
   return new Promise((resolvePromise, reject) => {
     const child = spawnChild("pnpm", args);
+    child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) resolvePromise();
       else

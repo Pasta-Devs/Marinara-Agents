@@ -12,9 +12,10 @@ const baseURL =
 const mobileBaseURL =
   process.env.PLAYWRIGHT_MOBILE_BASE_URL ??
   `http://127.0.0.1:${mobileClientPort}`;
+const packageId = process.env.MARINARA_PACKAGE_ID ?? "noodle";
 
 export default defineConfig({
-  testDir: "..",
+  testDir: ".",
   testMatch: "**/package-*.e2e.ts",
   timeout: 60_000,
   expect: { timeout: 10_000 },
@@ -31,6 +32,7 @@ export default defineConfig({
       ? undefined
       : {
           command: "node ../scripts/start-package-browser-servers.mjs",
+          env: { MARINARA_PACKAGE_ID: packageId },
           url: baseURL,
           reuseExistingServer: false,
           timeout: 180_000,

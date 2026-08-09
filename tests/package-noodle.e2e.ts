@@ -909,26 +909,29 @@ test.describe("package-owned Noodle interface", () => {
     expect(professorMariAccount).toBeTruthy();
     expect(personaAccount).toBeTruthy();
 
-    const characterPollResponse = await page.request.post("/api/noodle/posts", {
-      data: {
-        authorKind: "character",
-        authorEntityId: "__professor_mari__",
-        content: "Help me choose the laboratory tea.",
-        poll: {
-          question: "Which tea should I brew?",
-          options: ["Jasmine", "Earl Grey"],
-        },
-      },
-    });
-    expect(characterPollResponse.ok()).toBe(true);
-    const characterPollPost = (await characterPollResponse.json()) as {
-      id: string;
-      metadata: { poll?: { options: Array<{ id: string; label: string }> } };
-    };
-    createdPostIds.push(characterPollPost.id);
-    expect(characterPollPost.metadata.poll?.options).toHaveLength(2);
-
     try {
+      const characterPollResponse = await page.request.post(
+        "/api/noodle/posts",
+        {
+          data: {
+            authorKind: "character",
+            authorEntityId: "__professor_mari__",
+            content: "Help me choose the laboratory tea.",
+            poll: {
+              question: "Which tea should I brew?",
+              options: ["Jasmine", "Earl Grey"],
+            },
+          },
+        },
+      );
+      expect(characterPollResponse.ok()).toBe(true);
+      const characterPollPost = (await characterPollResponse.json()) as {
+        id: string;
+        metadata: { poll?: { options: Array<{ id: string; label: string }> } };
+      };
+      createdPostIds.push(characterPollPost.id);
+      expect(characterPollPost.metadata.poll?.options).toHaveLength(2);
+
       await page.goto("/");
       await openNoodle(page);
 
@@ -1714,18 +1717,20 @@ test.describe("package-owned Noodle interface", () => {
       expect(activateResponse.ok()).toBe(true);
     }
 
-    await page.request.get("/api/noodle");
-    const postResponse = await page.request.post("/api/noodle/posts", {
-      data: {
-        authorKind: "persona",
-        authorEntityId: personaId,
-        content: `Notification focus regression ${Date.now()}`,
-      },
-    });
-    expect(postResponse.ok()).toBe(true);
-    const post = (await postResponse.json()) as { id: string };
-
+    const createdPostIds: string[] = [];
     try {
+      await page.request.get("/api/noodle");
+      const postResponse = await page.request.post("/api/noodle/posts", {
+        data: {
+          authorKind: "persona",
+          authorEntityId: personaId,
+          content: `Notification focus regression ${Date.now()}`,
+        },
+      });
+      expect(postResponse.ok()).toBe(true);
+      const post = (await postResponse.json()) as { id: string };
+      createdPostIds.push(post.id);
+
       const replyResponse = await page.request.post(
         `/api/noodle/posts/${post.id}/interactions`,
         {
@@ -1817,9 +1822,11 @@ test.describe("package-owned Noodle interface", () => {
 
       expect(errors).toEqual([]);
     } finally {
-      await page.request
-        .delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 })
-        .catch(() => undefined);
+      for (const postId of createdPostIds) {
+        await page.request
+          .delete(`/api/noodle/posts/${postId}`, { timeout: 5_000 })
+          .catch(() => undefined);
+      }
       if (createdPersonaId) {
         await page.request
           .delete(`/api/characters/personas/${createdPersonaId}`, {
@@ -1867,28 +1874,43 @@ test.describe("package-owned Noodle interface", () => {
       expect(activateResponse.ok()).toBe(true);
     }
 
-    await page.request.get("/api/noodle");
-    const olderPostResponse = await page.request.post("/api/noodle/posts", {
-      data: {
-        authorKind: "character",
-        authorEntityId: "__professor_mari__",
-        content: `Older timeline bump regression ${Date.now()}`,
-      },
-    });
-    expect(olderPostResponse.ok()).toBe(true);
-    const olderPost = (await olderPostResponse.json()) as { id: string };
-    await page.waitForTimeout(10);
-    const newerPostResponse = await page.request.post("/api/noodle/posts", {
-      data: {
-        authorKind: "character",
-        authorEntityId: "__professor_mari__",
-        content: `Newer timeline bump regression ${Date.now()}`,
-      },
-    });
-    expect(newerPostResponse.ok()).toBe(true);
-    const newerPost = (await newerPostResponse.json()) as { id: string };
-
+    const createdPostIds: string[] = [];
     try {
+      await page.request.get("/api/noodle");
+      const olderPostResponse = await page.request.post("/api/noodle/posts", {
+        data: {
+          authorKind: "character",
+          authorEntityId: "__professor_mari__",
+          content: `Older timeline bump regression ${Date.now()}`,
+        },
+      });
+      expect(olderPostResponse.ok()).toBe(true);
+      const olderPost = (await olderPostResponse.json()) as {
+        id: string;
+        createdAt: string;
+      };
+      createdPostIds.push(olderPost.id);
+      await expect
+        .poll(() => Date.now())
+        .toBeGreaterThan(Date.parse(olderPost.createdAt));
+
+      const newerPostResponse = await page.request.post("/api/noodle/posts", {
+        data: {
+          authorKind: "character",
+          authorEntityId: "__professor_mari__",
+          content: `Newer timeline bump regression ${Date.now()}`,
+        },
+      });
+      expect(newerPostResponse.ok()).toBe(true);
+      const newerPost = (await newerPostResponse.json()) as {
+        id: string;
+        createdAt: string;
+      };
+      createdPostIds.push(newerPost.id);
+      expect(Date.parse(newerPost.createdAt)).toBeGreaterThan(
+        Date.parse(olderPost.createdAt),
+      );
+
       const personaReplyResponse = await page.request.post(
         `/api/noodle/posts/${olderPost.id}/interactions`,
         {
@@ -1952,12 +1974,11 @@ test.describe("package-owned Noodle interface", () => {
         .toEqual([olderPost.id, newerPost.id]);
       expect(errors).toEqual([]);
     } finally {
-      await page.request
-        .delete(`/api/noodle/posts/${olderPost.id}`, { timeout: 5_000 })
-        .catch(() => undefined);
-      await page.request
-        .delete(`/api/noodle/posts/${newerPost.id}`, { timeout: 5_000 })
-        .catch(() => undefined);
+      for (const postId of createdPostIds) {
+        await page.request
+          .delete(`/api/noodle/posts/${postId}`, { timeout: 5_000 })
+          .catch(() => undefined);
+      }
       if (createdPersonaId) {
         await page.request
           .delete(`/api/characters/personas/${createdPersonaId}`, {
