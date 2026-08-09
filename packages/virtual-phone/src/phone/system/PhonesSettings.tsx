@@ -1,5 +1,25 @@
 import { useEffect, useState } from "react";
 import { phoneRequest } from "../platform/api";
+import { SettingsShell } from "../apps/settings/shell";
+import { phoneStylesheet } from "../device/styles";
+import { phoneThemeTokens } from "../device/theme";
+
+/** The device switcher gate is a client-global flag PhoneOverlay reads live; agent settings just toggles it. */
+const FREE_SWITCH_KEY = "marinara_vp_dev_switcher";
+const readFreeSwitch = () => { try { return localStorage.getItem(FREE_SWITCH_KEY) === "1"; } catch { return false; } };
+
+/** The full in-device editor, reused inline. It assumes the phone's vp-* styles and theme tokens, so scope both here. */
+function InlinePhoneEditor({ phone, onChange, onClose }: { phone: Phone; onChange(phone: Phone): void; onClose(): void }) {
+  return (
+    <div
+      className="vp-root"
+      style={{ position: "relative", inset: "auto", zIndex: "auto", height: "min(70vh, 32rem)", marginTop: "0.75rem", borderRadius: "0.75rem", overflow: "hidden", ...phoneThemeTokens(phone.settings?.theme ?? phone.baselineTheme) }}
+    >
+      <style data-virtual-phone-styles>{phoneStylesheet}</style>
+      <SettingsShell phone={phone} onPhoneChange={onChange} onBack={onClose} onClose={onClose} />
+    </div>
+  );
+}
 
 type BaselineTheme = "system" | "light" | "dark";
 export type Phone = {
@@ -78,10 +98,30 @@ function ThemeSelect({ phone, chatId, ownerType, onChange }: {
   );
 }
 
+function EditPhoneButton({ phoneId, editingId, setEditingId }: { phoneId: string; editingId: string | null; setEditingId(id: string | null): void }) {
+  const open = editingId === phoneId;
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={() => setEditingId(open ? null : phoneId)}
+      className="min-h-11 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-4 text-xs font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+    >
+      {open ? "Done" : "Edit phone"}
+    </button>
+  );
+}
+
 export function PhonesSettings({ chatId }: { chatId: string | null }) {
   const [data, setData] = useState<ProvisioningResponse | null>(null);
   const [error, setError] = useState("");
   const [pendingOwnerId, setPendingOwnerId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [freeSwitch, setFreeSwitch] = useState(readFreeSwitch);
+  const setFreeSwitchFlag = (on: boolean) => {
+    setFreeSwitch(on);
+    try { on ? localStorage.setItem(FREE_SWITCH_KEY, "1") : localStorage.removeItem(FREE_SWITCH_KEY); } catch { /* storage blocked — toggle is best-effort */ }
+  };
 
   async function load() {
     if (!chatId) return;
@@ -124,13 +164,25 @@ export function PhonesSettings({ chatId }: { chatId: string | null }) {
           <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">Choose which story participants have a phone in this chat.</p>
         </header>
 
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--border)] bg-[var(--card)] p-4">
+          <input type="checkbox" checked={freeSwitch} className="mt-0.5 h-5 w-5 accent-[var(--primary)]" onChange={(event) => setFreeSwitchFlag(event.target.checked)} />
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">Switch between phones freely</span>
+            <span className="block text-xs text-[var(--muted-foreground)]">Skip the in-story access check so you can open any enabled phone from the device switcher. Off by default: picking up someone else&apos;s phone asks whether your character could plausibly reach it.</span>
+          </span>
+        </label>
+
         {data.persona ? (
-          <article className="flex flex-wrap items-center gap-4 rounded-md border border-[var(--border)] bg-[var(--card)] p-4">
-            <div className="min-w-0 flex-1">
-              <h2 className="truncate text-sm font-semibold">{data.persona.ownerName}</h2>
-              <p className="text-xs text-[var(--muted-foreground)]">Your phone · Always enabled</p>
+          <article className="rounded-md border border-[var(--border)] bg-[var(--card)] p-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-sm font-semibold">{data.persona.ownerName}</h2>
+                <p className="text-xs text-[var(--muted-foreground)]">Your phone · Always enabled</p>
+              </div>
+              <ThemeSelect phone={data.persona} chatId={chatId} ownerType="persona" onChange={updatePhone} />
+              <EditPhoneButton phoneId={data.persona.phoneId} editingId={editingId} setEditingId={setEditingId} />
             </div>
-            <ThemeSelect phone={data.persona} chatId={chatId} ownerType="persona" onChange={updatePhone} />
+            {editingId === data.persona.phoneId ? <InlinePhoneEditor phone={data.persona} onChange={updatePhone} onClose={() => setEditingId(null)} /> : null}
           </article>
         ) : (
           <p className="rounded-md border border-dashed border-[var(--border)] p-4 text-sm text-[var(--muted-foreground)]">This chat has no persona.</p>
@@ -144,7 +196,8 @@ export function PhonesSettings({ chatId }: { chatId: string | null }) {
             const enabled = character.phone?.enabled === true;
             const inputId = `virtual-phone-enabled-${character.ownerId}`;
             return (
-              <article key={character.ownerId} className="flex flex-wrap items-center gap-4 rounded-md border border-[var(--border)] bg-[var(--card)] p-4">
+              <article key={character.ownerId} className="rounded-md border border-[var(--border)] bg-[var(--card)] p-4">
+                <div className="flex flex-wrap items-center gap-4">
                 <label htmlFor={inputId} className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3">
                   <input
                     id={inputId}
@@ -174,6 +227,9 @@ export function PhonesSettings({ chatId }: { chatId: string | null }) {
                   </span>
                 </label>
                 {character.phone ? <ThemeSelect phone={character.phone} chatId={chatId} ownerType="character" onChange={updatePhone} /> : null}
+                {enabled && character.phone ? <EditPhoneButton phoneId={character.phone.phoneId} editingId={editingId} setEditingId={setEditingId} /> : null}
+                </div>
+                {enabled && character.phone && editingId === character.phone.phoneId ? <InlinePhoneEditor phone={character.phone} onChange={updatePhone} onClose={() => setEditingId(null)} /> : null}
               </article>
             );
           })}

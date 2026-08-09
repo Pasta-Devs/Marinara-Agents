@@ -49,6 +49,9 @@ export const phoneStylesheet = `
 .vp-switcher-option:hover { background: color-mix(in srgb, var(--vp-text) 7%, var(--vp-surface)); }
 .vp-switcher-option[aria-selected="true"] { color: var(--vp-accent); }
 .vp-switcher-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-access-denied { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.375rem 0.75rem 0; padding: 0.5rem 0.625rem; border-radius: 0.75rem; background: color-mix(in srgb, #ff453a 18%, var(--vp-surface)); color: var(--vp-text); font-size: 0.6875rem; font-weight: 500; box-shadow: inset 0 0 0 1px color-mix(in srgb, #ff453a 45%, transparent); }
+.vp-access-denied span { flex: 1; }
+.vp-access-denied button { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; border-radius: 0.5rem; color: var(--vp-muted); }
 
 .vp-surface-area { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .vp-home-indicator { position: absolute; bottom: 0.375rem; left: 50%; translate: -50% 0; z-index: 30; height: 4px; width: 6.5rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 30%, var(--vp-bg)); pointer-events: none; }

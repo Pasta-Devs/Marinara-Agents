@@ -485,6 +485,13 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
                 </div>
               ) : null}
             </header>
+            {/* Denials happen while you're still on your own (unlocked) phone; the lock-screen copy below never shows there. */}
+            {accessDenied && session.surface !== "lock" ? (
+              <div role="alert" className="vp-access-denied">
+                <span>{accessDenied}</span>
+                <button type="button" aria-label="Dismiss" onClick={() => setAccessDenied(null)}><X size="0.75rem" aria-hidden="true" /></button>
+              </div>
+            ) : null}
             <main className="vp-surface-area" style={{ backgroundImage: `${patternBackground(deviceSettings.pattern, deviceSettings.patternIntensity)}, ${deviceSettings.wallpaperTint ? `linear-gradient(${deviceSettings.wallpaperTint}59, ${deviceSettings.wallpaperTint}59)` : "linear-gradient(rgb(0 0 0 / 0), rgb(0 0 0 / 0))"}, ${wallpaperBackground(deviceSettings.wallpaper)}`, backgroundSize: "16px 16px, cover, cover" }}>
               {session.surface === "lock" ? (
                 <div className="vp-lock">

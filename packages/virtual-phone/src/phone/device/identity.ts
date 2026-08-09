@@ -461,6 +461,61 @@ export class PhoneIdentityService {
   }
 
   /**
+   * Content the pregen orchestrator produced for a live app (mail inbox, marketplace, etc.), so
+   * those apps read a stored, in-character version instead of regenerating a fresh one every open.
+   * Stored under namespaces.phone.generated keyed by appId; shape is the app's own payload.
+   */
+  async getAppContent<T = unknown>(phoneId: string, appId: string): Promise<T | null> {
+    const phone = await this.requirePhone(phoneId);
+    const generated = phone.document.namespaces.phone.generated;
+    if (!generated || typeof generated !== "object") return null;
+    const value = (generated as Record<string, unknown>)[appId];
+    return value === undefined ? null : (value as T);
+  }
+
+  async setAppContent(phoneId: string, appId: string, value: unknown) {
+    const phone = await this.requirePhone(phoneId);
+    const current = phone.document.namespaces.phone.generated;
+    const generated = current && typeof current === "object" ? { ...(current as Record<string, unknown>) } : {};
+    generated[appId] = value;
+    const document: PhoneDocument = {
+      ...phone.document,
+      namespaces: { phone: { ...phone.document.namespaces.phone, generated } },
+    };
+    const updated = await this.documents.update({
+      id: phone.record.id,
+      packageId: PACKAGE_ID,
+      expectedRevision: phone.record.revision,
+      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      description: document.identity.ownerName,
+      data: document,
+      updatedAt: this.now(),
+    });
+    if (!updated) return this.setAppContent(phoneId, appId, value);
+    return parsePhoneRecord(updated);
+  }
+
+  /** Wipe pregenerated content and the cached owner profile so a regenerate starts from scratch. */
+  async clearGenerated(phoneId: string) {
+    const phone = await this.requirePhone(phoneId);
+    const namespaces = { ...phone.document.namespaces.phone };
+    delete namespaces.generated;
+    delete namespaces.ownerProfile;
+    const document: PhoneDocument = { ...phone.document, namespaces: { phone: namespaces } };
+    const updated = await this.documents.update({
+      id: phone.record.id,
+      packageId: PACKAGE_ID,
+      expectedRevision: phone.record.revision,
+      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      description: document.identity.ownerName,
+      data: document,
+      updatedAt: this.now(),
+    });
+    if (!updated) return this.clearGenerated(phoneId);
+    return parsePhoneRecord(updated);
+  }
+
+  /**
    * What the owner did on the phone that the story has not been told about yet.
    *
    * The phone is part of the roleplay, not a side panel: if you photograph something, look

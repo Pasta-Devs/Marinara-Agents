@@ -550,6 +550,130 @@ export async function activate({ api }: CapabilityContext) {
   }
 
   /**
+   * Apps the model may choose from when tailoring a character's loadout. The standard apps —
+   * Settings, the App Store and Goodle — are always installed and never listed here.
+   */
+  const LOADOUT_APPS: Array<{ id: string; blurb: string }> = [
+    { id: "messages", blurb: "texting with people they know" },
+    { id: "contacts", blurb: "saved people and numbers" },
+    { id: "mail", blurb: "email inbox" },
+    { id: "notes", blurb: "private notes" },
+    { id: "gallery", blurb: "photos" },
+    { id: "camera", blurb: "taking photos" },
+    { id: "noodler", blurb: "public social feed (like Twitter)" },
+    { id: "noodler-r", blurb: "adult creator subscriptions (like OnlyFans)" },
+    { id: "tindler", blurb: "dating/hookups" },
+    { id: "marketplace", blurb: "local classifieds buying/selling" },
+    { id: "azmoron", blurb: "online shopping (like Amazon)" },
+    { id: "banking", blurb: "money and payments" },
+    { id: "maps", blurb: "navigation" },
+    { id: "find", blurb: "locating people/devices" },
+    { id: "pastasafari", blurb: "a casual match-three game" },
+  ];
+
+  /** Live apps that normally regenerate per open; pregen stores an in-character batch under these keys. */
+  const SEED_APPS: Array<{ id: string; tier: "light" | "heavy"; field: string; maxItems: number; prompt: (phone: Awaited<ReturnType<typeof findPhone>>, ctx: string) => string }> = [
+    { id: "mail", tier: "heavy", field: "emails", maxItems: 25, prompt: (phone, ctx) =>
+      `You write the email inbox of ${phone.document.identity.ownerName}, a character in a roleplay world. Invent 4 to 6 emails that fit their life in this world: newsletters, spam, official notices, and the occasional personal message from minor side characters. Respond with only JSON: {"emails":["Sender Name | Subject line | short body text", ...]}. Every email uses that exact three-part format.${ctx}` },
+    { id: "marketplace", tier: "heavy", field: "listings", maxItems: 12, prompt: (_phone, ctx) =>
+      `You write the local classifieds of a fictional roleplay world — the place people sell the odd, the desperate and the mundane. Invent 5 to 7 listings that fit this world. Most sellers are strangers. Respond with only JSON: {"listings":["Seller Name | Price | Item title | description", ...]}. Every listing uses that exact four-part format and the description is one or two sentences in the seller's own voice.${ctx}` },
+  ];
+
+  /**
+   * Make a freshly enabled phone already feel like the character's: infer the owner profile, let the
+   * model pick a realistic app loadout, and pre-seed the live apps so their first open is in-character
+   * rather than empty. Runs in the background — every step is best-effort and independently guarded so
+   * one model hiccup never leaves the phone half-provisioned.
+   */
+  const pregeneratePhone = async (phoneId: string, requestedChatId?: string) => {
+    let phone = await findPhone(phoneId).catch(() => null);
+    if (!phone) return;
+    const chatId = targetChat(phone, requestedChatId);
+    // 1. Owner tech-profile — shapes every app's live and seeded output. Stores itself.
+    await ownerProfile(phone).catch(() => undefined);
+    phone = (await findPhone(phoneId).catch(() => null)) ?? phone;
+
+    // 2. Model-picked app loadout.
+    const model = await resolvePhoneModel(phone, "light");
+    if (model) {
+      try {
+        const catalog = LOADOUT_APPS.map((app) => `${app.id}: ${app.blurb}`).join("\n");
+        const completion = await model.chatComplete([
+          { role: "system", content: `Decide which apps this character realistically has installed on their phone, given who they are. Choose from this list only:\n${catalog}\n\nReturn the app ids they would plausibly have — most people have the everyday ones, but omit what does not fit them and keep any that do. Respond with only JSON: {"apps":["id", ...]}.${await ownerCard(phone, "About the phone owner")}${await customInstructions(phone)}` },
+          { role: "user", content: "Which apps does this character have?" },
+        ], { temperature: 0.6, maxTokens: 200 });
+        const picked = parseBoundedContent(completion.content, { fields: { apps: "string[]" }, defaults: { apps: [] as string[] }, limits: { maxString: 40, maxItems: 20 } }) as { apps: string[] };
+        const valid = new Set(LOADOUT_APPS.map((app) => app.id));
+        const chosen = picked.apps.filter((id) => valid.has(id));
+        // Only override the default loadout when the model actually decided; keep Goodle standard.
+        if (chosen.length) { await phones.updateSettings(phoneId, { installedApps: ["settings", "app-store", "goodle", ...chosen] }); phone = (await findPhone(phoneId).catch(() => null)) ?? phone; }
+      } catch { /* keep the default loadout if the model cannot decide */ }
+    }
+
+    const installed = new Set(normalizeDeviceSettings(phone.document.namespaces.phone.settings, phone.document.provisioning.baselineTheme).installedApps);
+
+    // 3. Seed the stateless live apps the character actually has.
+    for (const spec of SEED_APPS) {
+      if (!installed.has(spec.id)) continue;
+      const tierModel = await resolvePhoneModel(phone, spec.tier);
+      if (!tierModel) continue;
+      try {
+        const ctx = `${await worldContext(chatId, phone)}${await customInstructions(phone)}`;
+        const completion = await tierModel.chatComplete([
+          { role: "system", content: spec.prompt(phone, ctx) },
+          { role: "user", content: "Generate the current content." },
+        ], { temperature: 1, maxTokens: 1400 });
+        const parsed = parseBoundedContent(completion.content, { fields: { [spec.field]: "string[]" }, defaults: { [spec.field]: [] as string[] }, limits: { maxString: 1200, maxItems: spec.maxItems } }) as Record<string, string[]>;
+        if (parsed[spec.field]?.length) await phones.setAppContent(phoneId, spec.id, parsed[spec.field]);
+      } catch { /* skip this app's seed, the live route still generates on open */ }
+    }
+
+    // 3b. Seed Goodle's own state — the search history and bookmarks a real owner would already have.
+    if (installed.has("goodle")) {
+      const light = await resolvePhoneModel(phone, "light");
+      if (light) {
+        try {
+          const completion = await light.chatComplete([
+            { role: "system", content: `Invent the web-search history and bookmarks this character already has on their phone — the things they'd have looked up and saved, in character. Respond with only JSON: {"recents":["search term", ...],"bookmarks":["Page title | site.domain | one sentence summary", ...]}. 5 to 8 recents, 2 to 4 bookmarks; every bookmark uses that exact three-part format.${await ownerCard(phone, "About the phone owner")}${await customInstructions(phone)}` },
+            { role: "user", content: "What has this person searched and saved?" },
+          ], { temperature: 1, maxTokens: 500 });
+          const parsed = parseBoundedContent(completion.content, {
+            fields: { recents: "string[]", bookmarks: "string[]" },
+            defaults: { recents: [] as string[], bookmarks: [] as string[] },
+            limits: { maxString: 400, maxItems: 12 },
+          }) as { recents: string[]; bookmarks: string[] };
+          if (parsed.recents.length) await phones.setAppStorageKey(phoneId, "goodle", "recents", parsed.recents.slice(0, 8));
+          const pages = parsed.bookmarks
+            .map((line) => line.split("|").map((part) => part.trim()))
+            .filter(([title]) => title)
+            .slice(0, 4)
+            .map(([title, site, summary]) => {
+              const domain = site || "goodle.web";
+              return { site: domain, title, tagline: summary ?? "", kind: "official", links: [], sections: summary ? [summary] : [], url: `https://${domain}`, loading: false };
+            });
+          if (pages.length) await phones.setAppStorageKey(phoneId, "goodle", "bookmarks", pages);
+        } catch { /* Goodle starts blank if this call fails */ }
+      }
+    }
+
+    // 4. Seed the public feed, which already persists its own posts.
+    if (installed.has("noodler") && chatId) {
+      const heavy = await resolvePhoneModel(phone, "heavy");
+      if (heavy) {
+        try {
+          const storyContext = await worldContext(chatId, phone);
+          const completion = await heavy.chatComplete([
+            { role: "system", content: `You are Noodle, the social network inside a fictional roleplay world. Invent 4 to 6 short posts, mostly by fictional side characters reacting to life in this world. Respond with only JSON: {"posts":["Display Name @handle — post text", ...]}.${storyContext}${await customInstructions(phone)}` },
+            { role: "user", content: "Generate the opening batch of posts." },
+          ], { temperature: 1, maxTokens: 800 });
+          const generated = parseBoundedContent(completion.content, { fields: { posts: "string[]" }, defaults: fallbackFeed(), limits: { maxString: 600, maxItems: 20 } }) as { posts: string[] };
+          if (generated.posts.length) await noodle.addPosts(chatId, generated.posts.map(parseGeneratedPost));
+        } catch { /* feed stays empty until first open */ }
+      }
+    }
+  };
+
+  /**
    * Step 8.3 — a character texts because a thread has gone quiet, or because you left them on read.
    * Needs only the timestamp on the last message, which is what keeps it consistent with the
    * stateless decision in Step 3.2.
@@ -816,6 +940,12 @@ export async function activate({ api }: CapabilityContext) {
             ...(body.enabled === undefined ? {} : { enabled: body.enabled === true }),
             ...(body.baselineTheme === undefined ? {} : { baselineTheme: readTheme(body.baselineTheme) }),
           });
+          // First time a character phone is switched on: provision it in the background so it already
+          // feels like theirs. `ownerProfile` is only set once pregen has run, so this fires once.
+          if (body.enabled === true && ownerType === "character" && phone.document.namespaces.phone.ownerProfile === undefined) {
+            void pregeneratePhone(phone.document.identity.phoneId, chat.id).catch((cause) =>
+              api.runtime.logger?.error(cause, "[virtual-phone] pregeneration failed"));
+          }
           return { phone: phoneResponse(phone) };
         } catch (error) {
           return reply.status(400).send({ error: error instanceof Error ? error.message : "Invalid phone request" });
@@ -1351,6 +1481,9 @@ export async function activate({ api }: CapabilityContext) {
     app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/mail/inbox", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
+        // Pregen may have stored an in-character inbox; serve that instead of a fresh batch.
+        const seeded = await phones.getAppContent<string[]>(request.params.phoneId, "mail").catch(() => null);
+        if (seeded && seeded.length) return { emails: seeded };
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { emails: [] };
         const chatId = targetChat(phone, request.query.chatId);
@@ -1738,6 +1871,8 @@ export async function activate({ api }: CapabilityContext) {
     app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/marketplace/listings", async (request, reply) => {
       try {
         const phone = await findPhone(request.params.phoneId);
+        const seeded = await phones.getAppContent<string[]>(request.params.phoneId, "marketplace").catch(() => null);
+        if (seeded && seeded.length) return { listings: seeded };
         const model = await resolvePhoneModel(phone, "heavy");
         if (!model) return { listings: [] };
         const chatId = targetChat(phone, request.query.chatId);
@@ -1938,6 +2073,18 @@ export async function activate({ api }: CapabilityContext) {
         return { phone: phoneResponse(await phones.resetSettings(request.params.phoneId)) };
       } catch (error) {
         return reply.status(400).send({ error: error instanceof Error ? error.message : "Unable to reset device settings" });
+      }
+    });
+    // Wipe pregenerated content + cached profile and rebuild from scratch. Returns immediately; the
+    // work runs in the background so the button doesn't hang on a batch of model calls.
+    app.post<{ Params: { phoneId: string }; Querystring: { chatId?: string } }>("/phones/:phoneId/pregenerate", async (request, reply) => {
+      try {
+        await phones.clearGenerated(request.params.phoneId);
+        void pregeneratePhone(request.params.phoneId, request.query.chatId).catch((cause) =>
+          api.runtime.logger?.error(cause, "[virtual-phone] regeneration failed"));
+        return { started: true };
+      } catch (error) {
+        return reply.status(400).send({ error: error instanceof Error ? error.message : "Unable to regenerate phone" });
       }
     });
   };
