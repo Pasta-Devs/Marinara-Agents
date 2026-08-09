@@ -614,7 +614,7 @@ export async function activate({ api }: CapabilityContext) {
     if (model) {
       try {
         const completion = await model.chatComplete([
-          { role: "system", content: `Set up this character's phone hardware to fit who they are. Respond with only JSON: {"deviceName":"what they'd name it, or empty","wallpaper":"gradient|midnight|paper","wallpaperTint":"#hex or empty","caseColor":"#hex or empty","pattern":"none|dots|grid|noise|waves","patternIntensity":0-3,"screenEffect":"none|cracks|smudge|blood|scanlines","screenEffectIntensity":0-3,"batteryLevel":0-100,"cellularSignal":0-4}. A careless or rough character has a cracked or smudged screen and a low battery; a tidy one is clean and charged.${await ownerCard(phone, "About the phone owner")}${await customInstructions(phone)}` },
+          { role: "system", content: `Set up this character's phone hardware to fit who they are. Respond with only JSON: {"deviceName":"what they'd name it, or empty","wallpaper":"gradient|midnight|paper","wallpaperTint":"#hex or colour name or empty","caseColor":"the phone case colour as #hex or a colour name","pattern":"none|dots|grid|noise|waves","patternIntensity":0-3,"screenEffect":"none|cracks|smudge|blood|scanlines","screenEffectIntensity":0-3,"batteryLevel":0-100,"cellularSignal":0-4}. A careless or rough character has a cracked or smudged screen and a low battery; a tidy one is clean and charged.${await ownerCard(phone, "About the phone owner")}${await customInstructions(phone)}` },
           { role: "user", content: "Describe their phone." },
         ], { temperature: 0.8, maxTokens: 300 });
         const look = parseBoundedContent(completion.content, {
@@ -622,7 +622,23 @@ export async function activate({ api }: CapabilityContext) {
           defaults: { deviceName: "", wallpaper: "", wallpaperTint: "", caseColor: "", pattern: "", patternIntensity: 0, screenEffect: "", screenEffectIntensity: 0, batteryLevel: -1, cellularSignal: -1 },
           limits: { maxString: 60 },
         }) as Record<string, string | number>;
-        const hex = (value: unknown) => (typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : undefined);
+        // Models answer colour prompts with hex, #rgb shorthand, or a plain name — accept all three.
+        const NAMED_COLORS: Record<string, string> = {
+          black: "#101216", white: "#f5f5f7", gray: "#8e8e93", grey: "#8e8e93", silver: "#c7c7cc",
+          red: "#ff3b30", crimson: "#dc143c", orange: "#ff9500", gold: "#d4af37", yellow: "#ffcc00",
+          green: "#34c759", teal: "#30b0c7", cyan: "#32ade6", blue: "#0a84ff", navy: "#1c2a5e",
+          purple: "#af52de", violet: "#8f57d3", magenta: "#ff2d92", pink: "#ff6482", brown: "#8b5a2b",
+          rose: "#e0607e", mint: "#63e6be", lime: "#a8e05f", beige: "#e8dfcc",
+        };
+        const hex = (value: unknown): string | undefined => {
+          if (typeof value !== "string") return undefined;
+          const raw = value.trim().toLowerCase();
+          if (/^#[0-9a-f]{6}$/.test(raw)) return raw;
+          if (/^#[0-9a-f]{3}$/.test(raw)) return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
+          // Pick out a known colour word even inside "matte black" or "deep navy blue".
+          for (const word of raw.split(/[^a-z]+/).reverse()) if (NAMED_COLORS[word]) return NAMED_COLORS[word];
+          return undefined;
+        };
         const oneOf = (value: unknown, allowed: string[]) => (typeof value === "string" && allowed.includes(value) ? value : undefined);
         const range = (value: unknown, min: number, max: number) => (typeof value === "number" && value >= min && value <= max ? Math.round(value) : undefined);
         const patch: Partial<DeviceSettings> = {};
