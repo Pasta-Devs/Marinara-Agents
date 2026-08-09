@@ -453,6 +453,7 @@
   "ui.longTermMemory.memoryvault.savedMemoryRecallHelp": "When Long-Term Memory is active, this memory is considered only in matching scopes and modes, and is included in model context only when relevant.",
   "ui.longTermMemory.memoryvault.sourceNoteRecallHelp": "This source note preserves imported material as audit evidence. It is not recalled directly; accepted derived memories appear below.",
   "ui.longTermMemory.memoryvault.subjects": "Subjects",
+  "ui.longTermMemory.memoryvault.subjectLimitReached": "The subject limit has been reached.",
   "ui.longTermMemory.memoryvault.tags": "Tags",
   "ui.longTermMemory.memoryvault.theCharacterOrRelationshipIdentitiesDescribedByThisMemory": "The character or relationship identities described by this memory.",
   "ui.longTermMemory.memoryvault.thisCannotBeUndone": "This cannot be undone.",

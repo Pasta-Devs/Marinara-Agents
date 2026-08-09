@@ -450,6 +450,14 @@ export default function MemoryVault({
   const [sectionKey, setSectionKey] = useState("");
   const editorSession = useRef(0);
   const noteLoadSession = useRef(0);
+  const legacyGroupNoteId = useRef<string | null>(null);
+  const legacyGroupInitializedNoteId = useRef<string | null>(null);
+  const legacyGroupChatIds = useRef<Set<string>>(new Set());
+  const clearLegacyGroupTracking = () => {
+    legacyGroupNoteId.current = null;
+    legacyGroupInitializedNoteId.current = null;
+    legacyGroupChatIds.current.clear();
+  };
 
   const scopeTargets = useQuery({
     queryKey: queryKeys.scopeTargets(props.chatId),
@@ -523,12 +531,33 @@ export default function MemoryVault({
     setLinkTarget("");
     setLinkRelation("involves");
     setSectionKey("");
+    clearLegacyGroupTracking();
     setChecked(new Set());
     setMobilePaneAndFocus("navigator");
     // Context switches are the only reset boundary. Dedicated effects above
     // update chat labels without discarding an open draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextKey]);
+  useEffect(() => {
+    if (
+      legacyGroupNoteId.current !== draft?.id ||
+      legacyGroupInitializedNoteId.current === draft?.id ||
+      !scopeTargets.isSuccess
+    ) return;
+    const group = scopeTargets.data?.groups.find(
+      (item) => item.id === draft.scope.groupId,
+    );
+    const chatIds = draft.scope.chatIds ??
+      (draft.scope.chatId ? [draft.scope.chatId] : []);
+    const groupChatIds = new Set(group?.chatIds ?? []);
+    legacyGroupChatIds.current =
+      group &&
+      chatIds.length === groupChatIds.size &&
+      chatIds.every((id) => groupChatIds.has(id))
+        ? new Set(chatIds)
+        : new Set();
+    legacyGroupInitializedNoteId.current = draft.id;
+  }, [draft?.id, draft?.scope.chatId, draft?.scope.chatIds, draft?.scope.groupId, scopeTargets.data?.groups, scopeTargets.isSuccess]);
   useEffect(() => {
     if (
       target?.id === `chat:${props.chatId}` &&
@@ -612,7 +641,7 @@ export default function MemoryVault({
       label: localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
         group: group.label,
       }),
-      scope: { groupId: group.id, chatIds: group.chatIds },
+      scope: { groupId: group.id },
     })),
     ...(scopeTargets.data?.characters ?? []).map((character) => ({
       id: `character:${character.id}`,
@@ -784,6 +813,7 @@ export default function MemoryVault({
   useEffect(() => {
     if (!recoveryHandoff) return;
     const next = recoveredNote(recoveryHandoff, localizeUi);
+    clearLegacyGroupTracking();
     setDraft(next);
     setSaved("");
     setIsNew(true);
@@ -849,6 +879,7 @@ export default function MemoryVault({
     editorSession.current += 1;
     noteLoadSession.current += 1;
     setTarget(next);
+    clearLegacyGroupTracking();
     setDraft(null);
     setChecked(new Set());
     setSaved("");
@@ -874,6 +905,8 @@ export default function MemoryVault({
       return;
     if (expectedContextKey !== targetContextKey.current) return;
     const next = structuredClone(note);
+    legacyGroupNoteId.current = next.id;
+    legacyGroupInitializedNoteId.current = null;
     editorSession.current += 1;
     setDraft(next);
     setSaved(fingerprint(next));
@@ -901,6 +934,7 @@ export default function MemoryVault({
     )
       return;
     const next = newNote(target?.scope ?? {}, localizeUi);
+    clearLegacyGroupTracking();
     editorSession.current += 1;
     setDraft(next);
     setSaved("");
@@ -931,13 +965,13 @@ export default function MemoryVault({
     )
       return;
     editorSession.current += 1;
+    clearLegacyGroupTracking();
     setDraft(null);
     setSaved("");
     setIsNew(false);
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
-    setSubjectKey("");
     setSectionKey("");
     setMobilePaneAndFocus("navigator");
   }
@@ -1088,6 +1122,7 @@ export default function MemoryVault({
       setDeleteIds(null);
       setOpenActionNoteId(null);
       if (draft && result.deletedIds.includes(draft.id)) {
+        clearLegacyGroupTracking();
         setDraft(null);
         setSaved("");
         setMobilePaneAndFocus("navigator");
@@ -1286,6 +1321,7 @@ export default function MemoryVault({
       });
       if (session !== editorSession.current) return;
       if (result.deleted) {
+        clearLegacyGroupTracking();
         setDraft(null);
         setSaved("");
          setMobilePaneAndFocus("navigator");
@@ -1322,10 +1358,24 @@ export default function MemoryVault({
   }
   const update = <K extends keyof LtmNote>(key: K, value: LtmNote[K]) =>
     setDraft((current) => (current ? { ...current, [key]: value } : current));
+  const removeScopeGroup = () => {
+    if (!draft) return;
+    const chatIds = (draft.scope.chatIds ??
+      (draft.scope.chatId ? [draft.scope.chatId] : [])
+    ).filter((id) => !legacyGroupChatIds.current.has(id));
+    legacyGroupChatIds.current.clear();
+    mutateScope({
+      groupId: undefined,
+      ...(chatIds.length
+        ? { chatIds, chatId: chatIds[0] }
+        : { chatIds: undefined, chatId: undefined }),
+    });
+  };
   const mutateScope = (patch: Partial<LtmScope>) =>
     update("scope", { ...(draft?.scope ?? {}), ...patch });
   const removeScope = (key: "chatIds" | "characterIds", id: string) => {
     if (!draft) return;
+    if (key === "chatIds") legacyGroupChatIds.current.delete(id);
     const values = (draft.scope[key] ?? []).filter((value) => value !== id);
     const next = { ...draft.scope, [key]: values.length ? values : undefined };
     if (key === "chatIds") next.chatId = values[0];
@@ -1342,9 +1392,19 @@ export default function MemoryVault({
     if (!draft) return;
     if (target.kind === "group") {
       const group = scopeTargets.data?.groups.find((item) => item.id === target.id);
-      if (group)
-        mutateScope({ groupId: group.id, chatIds: group.chatIds, chatId: group.chatIds[0] });
+      if (group) {
+        const chatIds = (draft.scope.chatIds ??
+          (draft.scope.chatId ? [draft.scope.chatId] : [])
+        ).filter((id) => !legacyGroupChatIds.current.has(id));
+        legacyGroupChatIds.current.clear();
+        mutateScope({
+          groupId: group.id,
+          chatIds: chatIds.length ? chatIds : undefined,
+          chatId: chatIds[0],
+        });
+      }
     } else if (target.kind === "chat") {
+      legacyGroupChatIds.current.delete(target.id);
       mutateScope({
         chatIds: [
           ...new Set([
@@ -1368,16 +1428,20 @@ export default function MemoryVault({
       subject.ref ? `${subject.ref.kind}:${subject.ref.id}` : subject.key,
     ),
   );
+  const subjectLimit = draft?.type === "character" ? 1 : 2;
+  const subjectLimitReached =
+    Boolean(draft) && (draft?.subjects?.length ?? 0) >= subjectLimit;
   const selectSubjectTarget = (target: PickerTarget) => {
     if (!draft || (draft.type !== "character" && draft.type !== "relationship")) return;
     if (target.kind !== "character" && target.kind !== "persona") return;
+    if ((draft.subjects?.length ?? 0) >= subjectLimit) return;
     const ref = { kind: target.kind, id: target.id };
     const key = `${ref.kind}:${ref.id}`;
     if (subjectSelectionIds.has(key)) return;
     const subjects = [...(draft.subjects ?? []), { key, ref }].sort((left, right) =>
       left.key.localeCompare(right.key),
     );
-    if (subjects.length <= (draft.type === "character" ? 1 : 2)) update("subjects", subjects);
+    update("subjects", subjects);
   };
   const addSection = () => {
     const key = sectionKey
@@ -2562,7 +2626,7 @@ export default function MemoryVault({
                       ))}
                       {draft.scope.groupId ? (
                         <Pill
-                          onRemove={() => mutateScope({ groupId: undefined })}
+                          onRemove={removeScopeGroup}
                         >
                           {scopeTargetLabel(
                             "group",
@@ -2745,15 +2809,21 @@ export default function MemoryVault({
                           </Pill>
                         ))}
                       </div>
-                      <TargetPicker
-                        targets={pickerTargets}
-                        selectedIds={subjectSelectionIds}
-                        allowedKinds={new Set(["character", "persona"])}
-                        placeholder={localizeUi("ui.longTermMemory.memoryvault.chooseSubject")}
-                        emptyLabel={localizeUi("ui.longTermMemory.memoryvault.noSubjectTargets")}
-                        clearLabel={localizeUi("ui.longTermMemory.memoryvault.clearTargetSearch")}
-                        onSelect={selectSubjectTarget}
-                      />
+                      {subjectLimitReached ? (
+                        <p className="text-xs text-[var(--muted-foreground)]" role="status">
+                          {localizeUi("ui.longTermMemory.memoryvault.subjectLimitReached")}
+                        </p>
+                      ) : (
+                        <TargetPicker
+                          targets={pickerTargets}
+                          selectedIds={subjectSelectionIds}
+                          allowedKinds={new Set(["character", "persona"])}
+                          placeholder={localizeUi("ui.longTermMemory.memoryvault.chooseSubject")}
+                          emptyLabel={localizeUi("ui.longTermMemory.memoryvault.noSubjectTargets")}
+                          clearLabel={localizeUi("ui.longTermMemory.memoryvault.clearTargetSearch")}
+                          onSelect={selectSubjectTarget}
+                        />
+                      )}
                     </section>
                   ) : null}
                   {draft.conflicts?.length ? (

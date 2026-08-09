@@ -73,6 +73,7 @@ export async function request<TResponse, TBody = unknown>(
     const message =
       typeof payload?.error === "string" ? payload.error : response.statusText;
     const error = new Error(message || "Long-Term Memory request failed");
+    Object.assign(error, { status: response.status });
     if (typeof payload?.code === "string")
       Object.assign(error, { code: payload.code });
     throw error;
