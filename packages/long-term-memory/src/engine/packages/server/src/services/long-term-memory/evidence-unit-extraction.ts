@@ -1048,7 +1048,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
         parseErr instanceof LtmServiceError
           ? parseErr
           : new LtmServiceError(
-              "unusable_output: extraction model returned malformed JSON; the source remains retryable",
+              `unusable_output: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}; the source remains retryable`,
               400,
               "ltm_model_output_unusable",
             );

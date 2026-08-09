@@ -1085,7 +1085,7 @@ export default function SourcesWorkspace({
           : preview.refetch()
       ).catch(() => undefined);
       if (
-        action === "refresh" &&
+        contract.action === "refresh" &&
         !result.counts.failed &&
         !result.counts.cancelled &&
         !result.counts.missing &&

@@ -38,7 +38,7 @@ assert.match(workspace, /refreshSelectedSources/u);
 assert.match(workspace, /sourceRefreshCompletedWithFailures/u);
 assert.match(
   workspace,
-  /action === "refresh"[\s\S]*!result\.counts\.missing[\s\S]*!result\.counts\.sourceWriteFailed/u,
+  /contract\.action === "refresh"[\s\S]*!result\.counts\.missing[\s\S]*!result\.counts\.sourceWriteFailed/u,
 );
 assert.match(workspace, /sourceRefreshedExtractionNotRun/u);
 assert.match(workspace, /retry-cancelled/u);

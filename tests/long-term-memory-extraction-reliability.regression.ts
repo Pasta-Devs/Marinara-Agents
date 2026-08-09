@@ -104,6 +104,18 @@ async function main() {
     assert.equal(calls.length, 1, "malformed output must not trigger a repair call");
 
     calls.length = 0;
+    response = {
+      content: JSON.stringify({ units: Array.from({ length: 1_000 }, () => validUnit) }),
+      finishReason: "stop",
+    };
+    await assert.rejects(
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      (error: any) =>
+        error.code === "ltm_model_output_unusable" && /maximum is/u.test(error.message),
+    );
+    assert.equal(calls.length, 1, "oversized output must not trigger a repair call");
+
+    calls.length = 0;
     response = { content: '{"summary":"unfinished', finishReason: "length" };
     await assert.rejects(
       () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
