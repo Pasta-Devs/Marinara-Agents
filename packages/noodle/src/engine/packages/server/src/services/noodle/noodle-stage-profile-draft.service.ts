@@ -2,6 +2,7 @@ import {
   noodleStageProfileDraftResponseSchema,
   type APIProvider,
   type NoodleIdentityDisclosure,
+  type NoodlerSourceSnapshot,
   type NoodleStageProfileDraftRequest,
   type NoodleStageProfileInput,
 } from "@marinara-engine/shared";
@@ -28,6 +29,7 @@ import {
   stageProfileContainsPublicIdentity,
 } from "./noodle-noodler-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./noodle-noodler-source.js";
+import { hintedNoodlerSourceBrief } from "./noodle-prompt-safety.js";
 import { parseRecord } from "./noodle-public-support.js";
 
 type GenerationConnection = NonNullable<
@@ -69,6 +71,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   source: {
     data: string | ({ name?: unknown } & Record<string, unknown>);
   } | null;
+  sourceSnapshot: NoodlerSourceSnapshot | null;
 }): ChatMessage[] {
   const identity = buildNoodlerPublicIdentity(
     input.publicAccount,
@@ -104,14 +107,8 @@ export function buildNoodlerStageProfileDraftMessages(input: {
         ? [
             "# Non-identifying inspiration brief",
             "Use only broad temperament, creative interests, and non-identifying aesthetic direction.",
-            sourceDetails
-              .split("\n")
-              .filter(
-                (line) =>
-                  !line.startsWith("Name: ") &&
-                  !line.startsWith("Description: "),
-              )
-              .join("\n"),
+            "# Allowlisted source themes",
+            hintedNoodlerSourceBrief(input.sourceSnapshot),
           ].join("\n")
         : [
             "# Source character or persona",
@@ -220,10 +217,12 @@ export async function generateNoodlerStageProfileDraft(
           )
         : null;
   const identity = buildNoodlerPublicIdentity(publicAccount, source);
+  const sourceSnapshot = await resolveNoodlerSourceSnapshot(db, publicAccount);
   const messages = buildNoodlerStageProfileDraftMessages({
     request: input.request,
     publicAccount,
     source,
+    sourceSnapshot,
   });
   const debugMode = isDebugAgentsEnabled();
   logDebugOverride(
@@ -288,6 +287,6 @@ export async function generateNoodlerStageProfileDraft(
   }
   return {
     ...draft,
-    sourceSnapshot: await resolveNoodlerSourceSnapshot(db, publicAccount),
+    sourceSnapshot,
   };
 }
