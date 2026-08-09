@@ -669,6 +669,7 @@ async function main() {
             ],
             groups: [],
             characters: [{ id: "character-a", label: "Character A" }],
+            personas: [],
           });
         }
         if (request.method === "GET" && url.pathname.endsWith("/notes")) {
