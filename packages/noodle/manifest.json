@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "id": "noodle",
+  "name": "Noodle",
+  "version": "1.0.0",
+  "description": "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+  "engine": {
+    "min": "2.4.2",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Noodle",
+      "ariaLabel": "Open Noodle and NoodleR",
+      "iconPaths": [
+        "noodle-klusek.png",
+        "noodler-klusek.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "a2d57fb9c2d28f450878395f8eb40a5edff84ce812623999b73a1d8ca5ef51b2",
+      "bytes": 628
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "905bb2120740983f2cf8e404ebcaa2f823604adfb047ad3c9760ec4cfd134c69",
+      "bytes": 2379269
+    },
+    {
+      "path": "client.js",
+      "sha256": "40523d0fd169bbbe9df5d19b8d9f945b43da640652bca2a0f6edd069f9e7a1d6",
+      "bytes": 2454669
+    },
+    {
+      "path": "noodle-klusek.png",
+      "sha256": "003236ad2b83c5eb44731a48048c86b07aa8c1f9c411f881c15f7d4af3c68212",
+      "bytes": 28325
+    },
+    {
+      "path": "noodler-klusek.png",
+      "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
+      "bytes": 27664
+    }
+  ],
+  "permissions": [
+    "chat-read",
+    "chat-write",
+    "network",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

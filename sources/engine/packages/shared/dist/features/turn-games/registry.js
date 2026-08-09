@@ -1,5 +1,3 @@
-/** The base Engine intentionally ships no games. Installed packages populate the runtime registry. */
-export const BUNDLED_TURN_GAME_ENGINES = [];
 const activeEngines = new Map();
 export function registerTurnGameEngine(engine) {
     if (activeEngines.has(engine.gameType))
@@ -10,12 +8,8 @@ export function registerTurnGameEngine(engine) {
             activeEngines.delete(engine.gameType);
     };
 }
-export function resetTurnGameRegistry(includeBundled = false) {
+export function resetTurnGameRegistry() {
     activeEngines.clear();
-    if (includeBundled) {
-        for (const engine of BUNDLED_TURN_GAME_ENGINES)
-            activeEngines.set(engine.gameType, engine);
-    }
 }
 export function getTurnGameEngine(gameType) {
     return activeEngines.get(gameType) ?? null;
@@ -27,8 +21,5 @@ export function listTurnGames() {
         minPlayers: engine.minPlayers,
         maxPlayers: engine.maxPlayers,
     }));
-}
-export function listTurnGameTypes() {
-    return [...activeEngines.keys()];
 }
 //# sourceMappingURL=registry.js.map

@@ -1,3 +1,4 @@
+import { normalizeIconNameFormat } from "../utils/icon-name-format.js";
 export const DEFAULT_WORLD_CUSTOM_FIELD_ICON = "tag";
 export const SUPPORTED_WORLD_CUSTOM_FIELD_ICONS = [
     "activity",
@@ -66,20 +67,10 @@ export const SUPPORTED_WORLD_CUSTOM_FIELD_ICONS = [
     "zap",
 ];
 const SUPPORTED_WORLD_CUSTOM_FIELD_ICON_SET = new Set(SUPPORTED_WORLD_CUSTOM_FIELD_ICONS);
-function normalizeIconNameFormat(value) {
-    return value
-        .trim()
-        .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-        .replace(/[\s_]+/g, "-")
-        .replace(/-+/g, "-")
-        .toLowerCase();
-}
 export function normalizeWorldCustomFieldIcon(value) {
     if (typeof value !== "string")
         return null;
     const normalized = normalizeIconNameFormat(value);
-    if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(normalized))
-        return null;
     return SUPPORTED_WORLD_CUSTOM_FIELD_ICON_SET.has(normalized) ? normalized : null;
 }
 export function normalizeWorldCustomFields(value) {

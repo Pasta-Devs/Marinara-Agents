@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
-import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
@@ -41,6 +41,21 @@ const longTermMemoryOwnedSourcePaths = [
   "packages/client/src/features/long-term-memory",
 ];
 const longTermMemorySourceRoot = join(packagesDir, "long-term-memory/src/engine");
+const noodleSourceRoot = join(packagesDir, "noodle/src/engine");
+const noodleOwnedSourcePaths = [
+  "packages/client/src/components/noodle",
+  "packages/client/src/hooks/use-noodle.ts",
+  "packages/client/src/hooks/use-noodle-custom-emojis.ts",
+  "packages/client/src/lib/noodle-custom-emojis.ts",
+  "packages/client/src/localization/locales",
+  "packages/client/src/noodle-package-entry.tsx",
+  "packages/client/src/stores/noodle-package.store.ts",
+  "packages/server/src/db/schema/noodle.ts",
+  "packages/server/src/routes/noodle.routes.ts",
+  "packages/server/src/services/noodle",
+  "packages/server/src/services/prompt-overrides/registry/noodle.ts",
+  "packages/server/src/services/storage/noodle.storage.ts",
+];
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
   String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "")
@@ -54,6 +69,18 @@ const featureSource = (relativePath, buildRoot = sourceRoot) => {
 };
 
 async function prepareFeatureBuildRoot(feature) {
+  if (feature.id === "noodle") {
+    if (!existsSync(feature.packageSourceRoot)) {
+      throw new Error(`Missing package-owned ${feature.name} source`);
+    }
+    const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
+    await cp(sourceRoot, buildRoot, { recursive: true, force: true });
+    await cp(feature.packageSourceRoot, buildRoot, { recursive: true, force: true });
+    return {
+      buildRoot,
+      cleanup: () => rm(buildRoot, { recursive: true, force: true }),
+    };
+  }
   if (feature.id === "long-term-memory") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
@@ -126,6 +153,34 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 }
 
 const features = [
+  {
+    id: "noodle",
+    version: "1.0.0",
+    minEngineVersion: "2.4.2",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Noodle",
+    description:
+      "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    permissions: ["chat-read", "chat-write", "network", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/noodle/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/noodle-package-entry.tsx",
+    packageSourceRoot: noodleSourceRoot,
+    ownedSourcePaths: noodleOwnedSourcePaths,
+    libraryHidden: true,
+    assetPaths: ["noodle-klusek.png", "noodler-klusek.png"],
+    contributions: {
+      slots: ["home-browser-tab"],
+      homeBrowserTab: {
+        label: "Noodle",
+        ariaLabel: "Open Noodle and NoodleR",
+        iconPaths: ["noodle-klusek.png", "noodler-klusek.png"],
+      },
+    },
+  },
   {
     id: "long-term-memory",
     version: "1.2.3",
@@ -374,6 +429,7 @@ export async function selfCheck() {
         "--format=esm",
         "--target=node22",
         "--minify",
+        "--log-limit=0",
         "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
         "--external:@huggingface/transformers",
         "--external:onnxruntime-node",
@@ -395,7 +451,7 @@ export async function selfCheck() {
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
     }
-    if (feature.id === "long-term-memory") {
+    if (feature.id === "long-term-memory" || feature.id === "noodle") {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
     } else {
       await captureEngineSources(
@@ -469,6 +525,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
         "--format=esm",
         "--target=es2020",
         "--minify",
+        "--log-limit=0",
         "--jsx=automatic",
         '--define:process.env.NODE_ENV="production"',
         "--define:import.meta.env.DEV=false",
@@ -490,6 +547,49 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
+}
+
+async function buildNoodleStyles(buildRoot, temporary) {
+  const input = join(temporary, "noodle.css");
+  const outputDir = join(temporary, "noodle-css");
+  const config = join(temporary, "vite.noodle.config.mjs");
+  const globals = join(engineRoot, "packages/client/src/styles/globals.css");
+  const packageClientSources = join(buildRoot, "packages/client/src").split(sep).join("/");
+  await writeFile(
+    input,
+    `@import ${JSON.stringify(globals)};\n@source ${JSON.stringify(`${packageClientSources}/**/*.{ts,tsx}`)};\n`,
+  );
+  const viteModule = pathToFileURL(
+    realpathSync(join(engineRoot, "packages/client/node_modules/vite/dist/node/index.js")),
+  ).href;
+  const tailwindModule = pathToFileURL(
+    realpathSync(join(engineRoot, "packages/client/node_modules/@tailwindcss/vite/dist/index.mjs")),
+  ).href;
+  await writeFile(
+    config,
+    `import { defineConfig } from ${JSON.stringify(viteModule)};
+import tailwindcss from ${JSON.stringify(tailwindModule)};
+export default defineConfig({
+  root: ${JSON.stringify(join(engineRoot, "packages/client"))},
+  plugins: [tailwindcss()],
+  build: {
+    emptyOutDir: true,
+    outDir: ${JSON.stringify(outputDir)},
+    rollupOptions: { input: ${JSON.stringify(input)} },
+  },
+});
+`,
+  );
+  const result = spawnSync(
+    "pnpm",
+    ["--filter", "@marinara-engine/client", "exec", "vite", "build", "--config", config],
+    { cwd: engineRoot, encoding: "utf8", env: { ...process.env, SKIP_PWA: "1" } },
+  );
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Noodle stylesheet build failed");
+  const assets = join(outputDir, "assets");
+  const cssFile = (await readdir(assets)).find((filename) => filename.endsWith(".css"));
+  if (!cssFile) throw new Error("Noodle stylesheet build produced no CSS");
+  return readFile(join(assets, cssFile), "utf8");
 }
 
 async function bundleSpecialClient(feature, output) {
@@ -1156,6 +1256,18 @@ class Element extends HTMLElement { connectedCallback() { if (!this.__root) this
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.clientImport) {
       source = `import ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
+      if (feature.id === "noodle") {
+        const styles = await buildNoodleStyles(prepared.buildRoot, temporary);
+        source += `
+const noodleStyleId = "marinara-capability-noodle-styles";
+if (!document.getElementById(noodleStyleId)) {
+  const style = document.createElement("style");
+  style.id = noodleStyleId;
+  style.textContent = ${JSON.stringify(styles)};
+  document.head.appendChild(style);
+}
+`;
+      }
     } else return;
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
@@ -1171,6 +1283,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
         "--format=esm",
         "--target=es2020",
         "--minify",
+        "--log-limit=0",
         "--jsx=automatic",
         '--define:process.env.NODE_ENV="production"',
         "--define:import.meta.env.DEV=false",
@@ -1188,7 +1301,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     );
     if (result.status !== 0)
       throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
-    if (feature.id === "long-term-memory") {
+    if (feature.id === "long-term-memory" || feature.id === "noodle") {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
     } else {
       await captureEngineSources(
@@ -1224,6 +1337,7 @@ for (const feature of selectedFeatures) {
     enabledByDefault: false,
     category: feature.category ?? "misc",
     runtimeDisabled: true,
+    ...(feature.libraryHidden ? { libraryHidden: true } : {}),
     modeAllowlist: feature.modes,
     defaultTools: [],
     defaultSettings: {},
@@ -1255,6 +1369,15 @@ for (const feature of selectedFeatures) {
     throw new Error(`Missing package-owned client source for ${feature.id}`);
   }
   const clientBuffer = clientPath ? await readFile(clientPath) : null;
+  const assetPayloads = await Promise.all(
+    (feature.assetPaths ?? []).map(async (assetPath) => {
+      const assetFile = resolve(sourceDir, assetPath);
+      if (assetFile !== sourceDir && !assetFile.startsWith(`${sourceDir}${sep}`)) {
+        throw new Error(`Unsafe package asset path for ${feature.id}: ${assetPath}`);
+      }
+      return { path: assetPath, buffer: await readFile(assetFile) };
+    }),
+  );
   await writeFile(join(sourceDir, "agents.json"), agentsBuffer);
   const boundary =
     feature.id === "hierarchical-maps"
@@ -1333,6 +1456,11 @@ for (const feature of selectedFeatures) {
             },
           ]
         : []),
+      ...assetPayloads.map((asset) => ({
+        path: asset.path,
+        sha256: sha256(asset.buffer),
+        bytes: asset.buffer.byteLength,
+      })),
     ],
     permissions: feature.permissions,
     restartRequired: true,
@@ -1345,7 +1473,21 @@ for (const feature of selectedFeatures) {
     await writeFile(join(temporary, "agents.json"), agentsBuffer);
     await writeFile(join(temporary, "server.mjs"), serverBuffer);
     if (clientBuffer) await writeFile(join(temporary, "client.js"), clientBuffer);
-    const artifactFiles = ["manifest.json", "agents.json", "server.mjs", ...(clientBuffer ? ["client.js"] : [])];
+    for (const asset of assetPayloads) {
+      const destination = resolve(temporary, asset.path);
+      if (destination !== temporary && !destination.startsWith(`${temporary}${sep}`)) {
+        throw new Error(`Unsafe package asset path for ${feature.id}: ${asset.path}`);
+      }
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, asset.buffer);
+    }
+    const artifactFiles = [
+      "manifest.json",
+      "agents.json",
+      "server.mjs",
+      ...(clientBuffer ? ["client.js"] : []),
+      ...assetPayloads.map((asset) => asset.path),
+    ];
     for (const artifactFile of artifactFiles) {
       const artifactSource = join(temporary, artifactFile);
       await chmod(artifactSource, 0o644);
