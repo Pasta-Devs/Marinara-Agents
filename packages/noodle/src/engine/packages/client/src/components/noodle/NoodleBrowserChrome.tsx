@@ -1,14 +1,27 @@
-import { ChevronLeft, ChevronRight, Lock, RefreshCw, Search } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Lock,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 
-export function formatTime(value: string) {
+const timeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+export function formatTime(value: string, locale: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  let formatter = timeFormatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    timeFormatters.set(locale, formatter);
+  }
+  return formatter.format(date);
 }
 
 export function BrowserChrome({
@@ -39,10 +52,20 @@ export function BrowserChrome({
         </span>
       </div>
       <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--card)] px-3 text-xs shadow-sm">
-        <Lock size={13} className="hidden shrink-0 text-[var(--noodle-accent)] sm:block" />
-        <Search size={14} className="shrink-0 text-[var(--noodle-accent)] sm:hidden" />
-        <span className="truncate text-[var(--foreground)] sm:hidden">{mobileUrl}</span>
-        <span className="hidden truncate text-[var(--foreground)] sm:inline">{url}</span>
+        <Lock
+          size={13}
+          className="hidden shrink-0 text-[var(--noodle-accent)] sm:block"
+        />
+        <Search
+          size={14}
+          className="shrink-0 text-[var(--noodle-accent)] sm:hidden"
+        />
+        <span className="truncate text-[var(--foreground)] sm:hidden">
+          {mobileUrl}
+        </span>
+        <span className="hidden truncate text-[var(--foreground)] sm:inline">
+          {url}
+        </span>
         <span className="hidden rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 font-semibold text-[var(--noodle-accent)] sm:inline-flex">
           {badgeLabel}
         </span>

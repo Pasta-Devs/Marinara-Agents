@@ -2,7 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { sweepStagedImages } from "../image/image-generation.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
-import { prepareNextNoodlerReservePost, reconcileNoodlerReserve } from "./noodle-noodler-reserve.operation.js";
+import {
+  prepareNextNoodlerReservePost,
+  reconcileNoodlerReserve,
+} from "./noodle-noodler-reserve.operation.js";
 
 const INITIAL_DELAY_MS = 30_000;
 const POLL_MS = 60_000;
@@ -15,7 +18,9 @@ const POLL_MS = 60_000;
 let pauseDepth = 0;
 let activePoll: Promise<void> = Promise.resolve();
 
-export async function withNoodleAutoPostPaused<T>(run: () => Promise<T>): Promise<T> {
+export async function withNoodleAutoPostPaused<T>(
+  run: () => Promise<T>,
+): Promise<T> {
   pauseDepth += 1;
   try {
     await activePoll.catch(() => {});
@@ -60,10 +65,15 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
       // rather than materializing both tables once a minute for the server's lifetime.
       const noodle = createNoodleStorage(app.db);
       const settings = await noodle.getSettings();
-      if (noodlerReservePollIsIdle(settings) && !(await noodle.hasNoodlerPreparedPosts())) return;
+      if (
+        noodlerReservePollIsIdle(settings) &&
+        !(await noodle.hasNoodlerPreparedPosts())
+      )
+        return;
       await reconcileNoodlerReserve(app.db);
       const outcome = await prepareNextNoodlerReservePost(app.db);
-      if (outcome === "prepared") logger.info("[noodle-autopost] Prepared one future NoodleR post");
+      if (outcome === "prepared")
+        logger.info("[noodle-autopost] Prepared one future NoodleR post");
     } catch (error) {
       logger.error(error, "[noodle-autopost] Reserve poll failed");
     } finally {
@@ -76,10 +86,13 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
   running = (async () => {
     // Images staged by a process that was killed mid-preparation are referenced by nothing.
     const swept = sweepStagedImages();
-    if (swept > 0) logger.info("[noodle-autopost] Reclaimed %d staged image file(s)", swept);
+    if (swept > 0)
+      logger.info("[noodle-autopost] Reclaimed %d staged image file(s)", swept);
     await createNoodleStorage(app.db).ensureNoodlerReserveState();
     await reconcileNoodlerReserve(app.db);
-  })().catch((error) => logger.error(error, "[noodle-autopost] Startup reconciliation failed"));
+  })().catch((error) =>
+    logger.error(error, "[noodle-autopost] Startup reconciliation failed"),
+  );
   activePoll = running;
   schedule(INITIAL_DELAY_MS);
   app.addHook("onClose", async () => {
@@ -88,5 +101,12 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
     await running.catch(() => {});
   });
   logger.info("[noodle-autopost] Private reserve scheduler started");
-  return { stop: () => { stopped = true; if (timer) clearTimeout(timer); } };
+  return {
+    stop: async () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      await running.catch(() => {});
+    },
+  };
 }

@@ -1,12 +1,23 @@
-import type { NoodleAccount, NoodleIdentityDisclosure, NoodleSettings } from "@marinara-engine/shared";
+import type {
+  NoodleAccount,
+  NoodleIdentityDisclosure,
+  NoodleSettings,
+} from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { getErrorMessage } from "./noodle-public-support.js";
-import { NOODLER_MEDIA_PREFIX, noodlerPostMediaUrl } from "./noodle-noodler-media.js";
+import {
+  NOODLER_MEDIA_PREFIX,
+  noodlerPostMediaUrl,
+} from "./noodle-noodler-media.js";
 import { resolveImageConnectionFallback } from "../generation/media-connection-fallback.js";
-import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../image/image-generation.js";
+import {
+  generateImage,
+  stageImageToDisk,
+  type StagedGalleryImage,
+} from "../image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
 import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
 import { compileImagePrompt } from "../image/image-prompt-compiler.js";
@@ -18,8 +29,14 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./noodle-image-retry.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
-import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "./noodle-public-images.service.js";
-import type { NoodleImagePromptReviewItem, ReviewedNoodleImagePrompt } from "./noodle-public-images.service.js";
+import {
+  characterAppearanceFromRow,
+  characterNoodleImageContextFromRow,
+} from "./noodle-public-images.service.js";
+import type {
+  NoodleImagePromptReviewItem,
+  ReviewedNoodleImagePrompt,
+} from "./noodle-public-images.service.js";
 import { characterNameFromRow } from "./noodle-public-support.js";
 
 const REVIEWED_IMAGE_CLAIM_LEASE_MS = 2 * 60 * 1000;
@@ -29,7 +46,9 @@ function imageClaimLeaseUntil() {
   return new Date(Date.now() + REVIEWED_IMAGE_CLAIM_LEASE_MS).toISOString();
 }
 
-type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
+type ImageConnection = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
+>;
 
 /**
  * NoodleR analog of generateNoodlePostImage. The deliberate difference from public
@@ -64,7 +83,8 @@ export async function generateNoodlerPostImage(input: {
   const imageSettings = await loadImageGenerationUserSettings(input.db);
   const imageDefaults = resolveConnectionImageDefaults(input.imageConnection);
   const imageModel = input.imageConnection.model || "";
-  const imageBaseUrl = input.imageConnection.baseUrl || "https://image.pollinations.ai";
+  const imageBaseUrl =
+    input.imageConnection.baseUrl || "https://image.pollinations.ai";
   const imageSource = input.imageConnection.imageGenerationSource || imageModel;
   const imageServiceHint = input.imageConnection.imageService || imageSource;
   const imageFallback = await resolveImageConnectionFallback(
@@ -80,7 +100,8 @@ export async function generateNoodlerPostImage(input: {
   // on the linked public identity's appearance. Hinted/secret creators get no identifying
   // reference material.
   const referenceCharacter =
-    input.disclosureMode === "open" && input.linkedPublicAccount?.kind === "character"
+    input.disclosureMode === "open" &&
+    input.linkedPublicAccount?.kind === "character"
       ? input.linkedPublicAccount
       : null;
   if (referenceCharacter) {
@@ -90,48 +111,71 @@ export async function generateNoodlerPostImage(input: {
       characterPersonality = imageContext.personality;
       characterImageInstructions = imageContext.imageInstructions;
 
-      if (input.settings.imageGenerationIncludeDescriptions || input.settings.imageGenerationUseAvatarReferences) {
-        const referenceResolution = await resolveIllustratorCharacterReferences({
-          charactersStore: input.characters,
-          chatCharacters: [
-            {
-              id: row.id,
-              name: referenceCharacter.displayName || characterNameFromRow(row),
-              avatarPath: row.avatarPath ?? null,
-              appearance: characterAppearanceFromRow(row),
-            },
-          ],
-          persona: null,
-          requestedNames: [input.account.displayName],
-          promptText: [input.account.displayName, input.postContent, input.draftPrompt].join("\n"),
-          maxReferences: 6,
-        });
-        if (input.settings.imageGenerationIncludeDescriptions && referenceResolution.appearanceBlock) {
+      if (
+        input.settings.imageGenerationIncludeDescriptions ||
+        input.settings.imageGenerationUseAvatarReferences
+      ) {
+        const referenceResolution = await resolveIllustratorCharacterReferences(
+          {
+            charactersStore: input.characters,
+            chatCharacters: [
+              {
+                id: row.id,
+                name:
+                  referenceCharacter.displayName || characterNameFromRow(row),
+                avatarPath: row.avatarPath ?? null,
+                appearance: characterAppearanceFromRow(row),
+              },
+            ],
+            persona: null,
+            requestedNames: [input.account.displayName],
+            promptText: [
+              input.account.displayName,
+              input.postContent,
+              input.draftPrompt,
+            ].join("\n"),
+            maxReferences: 6,
+          },
+        );
+        if (
+          input.settings.imageGenerationIncludeDescriptions &&
+          referenceResolution.appearanceBlock
+        ) {
           characterDescription = referenceResolution.appearanceBlock;
         }
-        if (input.settings.imageGenerationUseAvatarReferences && referenceResolution.referenceImages.length > 0) {
-          referenceImages = Array.from(new Set(referenceResolution.referenceImages)).slice(0, 6);
+        if (
+          input.settings.imageGenerationUseAvatarReferences &&
+          referenceResolution.referenceImages.length > 0
+        ) {
+          referenceImages = Array.from(
+            new Set(referenceResolution.referenceImages),
+          ).slice(0, 6);
         }
       }
     }
   }
 
-  const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
-    authorName: input.account.displayName,
-    postContent: input.postContent,
-    draftPrompt: input.draftPrompt,
-    userInstructions: input.settings.imageGenerationPrompt,
-    characterDescription,
-    characterImageInstructions,
-    characterPersonality,
-  });
+  const postPrompt = await loadPrompt(
+    input.promptOverrides,
+    NOODLE_IMAGE_POST,
+    {
+      authorName: input.account.displayName,
+      postContent: input.postContent,
+      draftPrompt: input.draftPrompt,
+      userInstructions: input.settings.imageGenerationPrompt,
+      characterDescription,
+      characterImageInstructions,
+      characterPersonality,
+    },
+  );
   const compiledPrompt = compileImagePrompt({
     kind: "illustration",
     prompt: postPrompt,
     styleProfiles: imageSettings.styleProfiles,
     imageDefaults,
   });
-  const finalPrompt = input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
+  const finalPrompt =
+    input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
   const finalNegativePrompt = input.promptOverride
     ? input.promptOverride.negativePrompt?.trim() || undefined
     : compiledPrompt.negativePrompt || undefined;
@@ -167,20 +211,26 @@ export async function generateNoodlerPostImage(input: {
   const image = await generateNoodleImageWithRetry(
     async (attempt) => {
       await input.beforeProviderAttempt?.(attempt);
-      return generateImage(imageSource, imageBaseUrl, input.imageConnection.apiKey || "", imageServiceHint, {
-        prompt: finalPrompt,
-        negativePrompt: finalNegativePrompt,
-        model: imageModel,
-        width: imageSettings.noodle.width,
-        height: imageSettings.noodle.height,
-        imageEndpointId: input.imageConnection.imageEndpointId || undefined,
-        comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
-        imageDefaults,
-        referenceImages,
-        debugMode: input.debugMode,
-        admissionMode: input.admissionMode,
-        fallback: imageFallback,
-      });
+      return generateImage(
+        imageSource,
+        imageBaseUrl,
+        input.imageConnection.apiKey || "",
+        imageServiceHint,
+        {
+          prompt: finalPrompt,
+          negativePrompt: finalNegativePrompt,
+          model: imageModel,
+          width: imageSettings.noodle.width,
+          height: imageSettings.noodle.height,
+          imageEndpointId: input.imageConnection.imageEndpointId || undefined,
+          comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
+          imageDefaults,
+          referenceImages,
+          debugMode: input.debugMode,
+          admissionMode: input.admissionMode,
+          fallback: imageFallback,
+        },
+      );
     },
     async (error, attempt, maxAttempts) => {
       await input.onProviderAttemptFailure?.(attempt);
@@ -194,7 +244,11 @@ export async function generateNoodlerPostImage(input: {
     },
   );
   const provider = input.imageConnection.provider ?? "image_generation";
-  const file = stageImageToDisk(`${NOODLER_MEDIA_PREFIX}${input.account.id}`, image.base64, image.ext);
+  const file = stageImageToDisk(
+    `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
+    image.base64,
+    image.ext,
+  );
   return {
     metadata: {
       imageGenerated: true,
@@ -218,7 +272,10 @@ export function createNoodlerNoodleImagesService(db: DB) {
     async generateReviewedImages(input: {
       prompts: ReviewedNoodleImagePrompt[];
       debugMode: boolean;
-    }): Promise<{ ok: true; finalized: number } | { ok: false; error: "missing_connection"; message: string }> {
+    }): Promise<
+      | { ok: true; finalized: number }
+      | { ok: false; error: "missing_connection"; message: string }
+    > {
       const settings = await noodle.getSettings();
       const imageConnection = settings.imageGenerationConnectionId
         ? await connections.getWithKey(settings.imageGenerationConnectionId)
@@ -236,14 +293,25 @@ export function createNoodlerNoodleImagesService(db: DB) {
         const claimToken = newId();
         // Reuses the shared post-image claim; the NoodleR-account check below rejects any
         // non-NoodleR post so a public post id can never be finalized through this route.
-        const claimed = await noodle.claimPostImage(promptOverride.id, claimToken, imageClaimLeaseUntil());
+        const claimed = await noodle.claimPostImage(
+          promptOverride.id,
+          claimToken,
+          imageClaimLeaseUntil(),
+        );
         if (!claimed) continue;
-        const account = await noodle.getNoodlerAccountById(claimed.authorAccountId);
+        const account = await noodle.getNoodlerAccountById(
+          claimed.authorAccountId,
+        );
         if (!account) {
           await noodle.releasePostImageClaim(claimed.id, claimToken);
           continue;
         }
-        const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
+        if (!claimed.imagePrompt) {
+          await noodle.releasePostImageClaim(claimed.id, claimToken);
+          continue;
+        }
+        const disclosureMode =
+          account.settings.privacy.identityDisclosure ?? "secret";
         const linkedPublicAccount = account.noodleAccountId
           ? await noodle.getAccountById(account.noodleAccountId)
           : null;
@@ -252,13 +320,24 @@ export function createNoodlerNoodleImagesService(db: DB) {
         const renewClaim = async () => {
           if (!claimOwned) return;
           try {
-            claimOwned = await noodle.renewPostImageClaim(claimed.id, claimToken, imageClaimLeaseUntil());
+            claimOwned = await noodle.renewPostImageClaim(
+              claimed.id,
+              claimToken,
+              imageClaimLeaseUntil(),
+            );
           } catch (error) {
             claimOwned = false;
-            logger.warn(error, "[noodler] Failed to renew reviewed image claim for post %s", claimed.id);
+            logger.warn(
+              error,
+              "[noodler] Failed to renew reviewed image claim for post %s",
+              claimed.id,
+            );
           }
         };
-        const renewalTimer = setInterval(() => void renewClaim(), REVIEWED_IMAGE_CLAIM_RENEW_MS);
+        const renewalTimer = setInterval(
+          () => void renewClaim(),
+          REVIEWED_IMAGE_CLAIM_RENEW_MS,
+        );
         renewalTimer.unref?.();
 
         let image: Awaited<ReturnType<typeof generateNoodlerPostImage>>;
@@ -268,7 +347,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
             linkedPublicAccount,
             disclosureMode,
             postContent: claimed.content,
-            draftPrompt: claimed.imagePrompt!,
+            draftPrompt: claimed.imagePrompt,
             settings,
             characters,
             promptOverrides,
@@ -278,7 +357,11 @@ export function createNoodlerNoodleImagesService(db: DB) {
             promptOverride,
           });
         } catch (error) {
-          logger.warn(error, "[noodler] Failed to generate reviewed image for %s", account.displayName);
+          logger.warn(
+            error,
+            "[noodler] Failed to generate reviewed image for %s",
+            account.displayName,
+          );
           clearInterval(renewalTimer);
           await renewClaim();
           if (claimOwned) {
@@ -304,8 +387,11 @@ export function createNoodlerNoodleImagesService(db: DB) {
         // Re-read the profile before finalizing: if disclosure or the linked public identity
         // changed during the (potentially long) provider call, the staged image was built from a
         // now-stale appearance policy, so discard it and finalize as failed rather than publish it.
-        const fresh = await noodle.getNoodlerAccountById(claimed.authorAccountId);
-        const freshDisclosure = fresh?.settings.privacy.identityDisclosure ?? "secret";
+        const fresh = await noodle.getNoodlerAccountById(
+          claimed.authorAccountId,
+        );
+        const freshDisclosure =
+          fresh?.settings.privacy.identityDisclosure ?? "secret";
         if (
           !fresh ||
           freshDisclosure !== disclosureMode ||
@@ -317,17 +403,22 @@ export function createNoodlerNoodleImagesService(db: DB) {
             imagePrompt: null,
             metadata: {
               imageGenerationFailed: true,
-              imageGenerationError: "Stage profile identity changed during image generation.",
+              imageGenerationError:
+                "Stage profile identity changed during image generation.",
             },
           });
           continue;
         }
         try {
           image.stagedMedia?.promote();
-          const ok = await noodle.finalizePostImageClaim(claimed.id, claimToken, {
-            imageUrl: noodlerPostMediaUrl(claimed.id),
-            metadata: image.metadata,
-          });
+          const ok = await noodle.finalizePostImageClaim(
+            claimed.id,
+            claimToken,
+            {
+              imageUrl: noodlerPostMediaUrl(claimed.id),
+              metadata: image.metadata,
+            },
+          );
           if (!ok) {
             image.stagedMedia?.compensate();
             continue;
@@ -338,7 +429,11 @@ export function createNoodlerNoodleImagesService(db: DB) {
           try {
             await noodle.releasePostImageClaim(claimed.id, claimToken);
           } catch (releaseError) {
-            logger.warn(releaseError, "[noodler] Failed to release reviewed image claim for post %s", claimed.id);
+            logger.warn(
+              releaseError,
+              "[noodler] Failed to release reviewed image claim for post %s",
+              claimed.id,
+            );
           }
           throw error;
         }

@@ -1,9 +1,4 @@
-import {
-  NOODLER_REPLY_CONTENT_MAX_LENGTH,
-  isOpenAIGpt56Model,
-  NOODLER_POST_CONTENT_MAX_LENGTH,
-  NOODLER_POST_TITLE_MAX_LENGTH,
-} from "@marinara-engine/shared";
+import { isOpenAIGpt56Model } from "@marinara-engine/shared";
 
 export const NOODLE_JSON_OUTPUT_HEADING = "# JSON Output Format";
 
@@ -17,7 +12,7 @@ const pollSchema = {
       type: "object",
       properties: {
         question: { type: "string" },
-        options: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 4 },
+        options: { type: "array", items: { type: "string" } },
       },
       required: ["question", "options"],
       additionalProperties: false,
@@ -40,7 +35,14 @@ const timelineSchema = {
           attachGalleryImage: { type: "boolean" },
           poll: pollSchema,
         },
-        required: ["tempId", "authorHandle", "content", "imagePrompt", "attachGalleryImage", "poll"],
+        required: [
+          "tempId",
+          "authorHandle",
+          "content",
+          "imagePrompt",
+          "attachGalleryImage",
+          "poll",
+        ],
         additionalProperties: false,
       },
     },
@@ -112,8 +114,8 @@ const profilesSchema = {
 const noodlerPostSchema = {
   type: "object",
   properties: {
-    title: { type: ["string", "null"], maxLength: NOODLER_POST_TITLE_MAX_LENGTH },
-    content: { type: "string", maxLength: NOODLER_POST_CONTENT_MAX_LENGTH },
+    title: { type: ["string", "null"] },
+    content: { type: "string" },
     // strict mode has no optional properties — nullable + required is how optionality is spelled.
     imagePrompt: { type: ["string", "null"] },
   },
@@ -130,13 +132,19 @@ const noodlerProfileSchema = {
     stagePersonality: { type: "string" },
     disclosureMode: { type: "string", enum: ["open", "hinted", "secret"] },
   },
-  required: ["displayName", "handle", "bio", "stagePersonality", "disclosureMode"],
+  required: [
+    "displayName",
+    "handle",
+    "bio",
+    "stagePersonality",
+    "disclosureMode",
+  ],
   additionalProperties: false,
 } as const;
 
 const noodlerReplySchema = {
   type: "object",
-  properties: { content: { type: "string", maxLength: NOODLER_REPLY_CONTENT_MAX_LENGTH } },
+  properties: { content: { type: "string" } },
   required: ["content"],
   additionalProperties: false,
 } as const;
@@ -150,13 +158,25 @@ const noodlerFanActivitySchema = {
     type: { type: "string", enum: ["like", "reply", "repost"] },
     content: nullableString,
   },
-  required: ["actorHandle", "creatorAccountId", "targetPostId", "type", "content"],
+  required: [
+    "actorHandle",
+    "creatorAccountId",
+    "targetPostId",
+    "type",
+    "content",
+  ],
   additionalProperties: false,
 } as const;
 
 export function noodleResponseFormat(
   model: string,
-  kind: "timeline" | "profiles" | "noodler_post" | "noodler_profile" | "noodler_reply" | "noodler_fan_activity",
+  kind:
+    | "timeline"
+    | "profiles"
+    | "noodler_post"
+    | "noodler_profile"
+    | "noodler_reply"
+    | "noodler_fan_activity",
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };
   const schema =
@@ -171,7 +191,12 @@ export function noodleResponseFormat(
             : kind === "noodler_fan_activity"
               ? {
                   type: "object",
-                  properties: { activities: { type: "array", items: noodlerFanActivitySchema } },
+                  properties: {
+                    activities: {
+                      type: "array",
+                      items: noodlerFanActivitySchema,
+                    },
+                  },
                   required: ["activities"],
                   additionalProperties: false,
                 }

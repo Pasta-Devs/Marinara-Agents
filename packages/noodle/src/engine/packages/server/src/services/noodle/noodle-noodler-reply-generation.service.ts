@@ -11,7 +11,10 @@ import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
 import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
+import {
+  resolveStoredChatOptions,
+  resolveStoredMaxTokens,
+} from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
@@ -23,13 +26,16 @@ import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
   noodlerIdentityInstruction,
+  protectBoundedNoodlerGeneratedText,
   protectNoodlerGeneratedIdentity,
   resolveNoodlerPublicIdentity,
   type PublicIdentity,
 } from "./noodle-noodler-generation.service.js";
 import { noodleResponseFormat } from "./noodle-response-format.js";
 
-type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
+type GenerationConnection = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
+>;
 
 export function buildNoodlerCreatorReplyMessages(input: {
   creator: NoodleAccount;
@@ -41,7 +47,11 @@ export function buildNoodlerCreatorReplyMessages(input: {
   generationGuidance: string;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
-    protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+    protectNoodlerGeneratedIdentity(
+      value,
+      input.disclosureMode,
+      input.publicIdentity,
+    ) ?? "";
   const system = [
     "You write exactly one direct reply from one NoodleR creator to one real viewer comment on the creator's post.",
     "Write only as the supplied creator's stage persona. Address the viewer's comment naturally and do not write for the viewer.",
@@ -60,13 +70,24 @@ export function buildNoodlerCreatorReplyMessages(input: {
       bio: protect(input.creator.bio),
       stageVoice: protect(input.creator.settings.privacy.stagePersonality),
     },
-    post: { title: protect(input.post.title), content: protect(input.post.content) },
-    viewer: { displayName: protect(input.viewer.displayName), handle: protect(input.viewer.handle) },
-    viewerComment: protect(input.parent.content) || (input.parent.imageUrl ? "[image reply]" : ""),
+    post: {
+      title: protect(input.post.title),
+      content: protect(input.post.content),
+    },
+    viewer: {
+      displayName: protect(input.viewer.displayName),
+      handle: protect(input.viewer.handle),
+    },
+    viewerComment:
+      protect(input.parent.content) ||
+      (input.parent.imageUrl ? "[image reply]" : ""),
   };
   return [
     { role: "system", content: system },
-    { role: "user", content: `# Untrusted NoodleR data\n${JSON.stringify(data, null, 2)}` },
+    {
+      role: "user",
+      content: `# Untrusted NoodleR data\n${JSON.stringify(data, null, 2)}`,
+    },
   ];
 }
 
@@ -95,11 +116,17 @@ export async function generateNoodlerCreatorReply(input: {
     ),
     primaryConnectionId: input.connection.id,
     fallbackConnection,
-    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
+    fallbackBaseUrl: fallbackConnection
+      ? resolveBaseUrl(fallbackConnection)
+      : "",
     category: "main",
   });
-  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "secret";
-  const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
+  const disclosureMode =
+    input.creator.settings.privacy.identityDisclosure ?? "secret";
+  const publicIdentity = await resolveNoodlerPublicIdentity(
+    input.db,
+    input.creator,
+  );
   const settings = await createNoodleStorage(input.db).getSettings();
   const messages = buildNoodlerCreatorReplyMessages({
     ...input,
@@ -113,24 +140,51 @@ export async function generateNoodlerCreatorReply(input: {
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
       model: input.connection.model,
-      maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 512),
+      maxTokens: resolveStoredMaxTokens(
+        input.connection.defaultParameters,
+        512,
+      ),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     temperature: 0.9,
     topP: 0.95,
-    ...resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
+    ...resolveStoredChatOptions(
+      input.connection.defaultParameters,
+      input.connection.provider,
+      input.connection.model,
+    ),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_reply"),
+    responseFormat: noodleResponseFormat(
+      input.connection.model,
+      "noodler_reply",
+    ),
   } as const;
-  logDebugOverride(debugMode, "[debug/noodler-reply] Prompt sent to model:\n%s", formatNoodleMessagesForLog(messages));
+  logDebugOverride(
+    debugMode,
+    "[debug/noodler-reply] Prompt sent to model:\n%s",
+    formatNoodleMessagesForLog(messages),
+  );
   const response = await provider.chatComplete(messages, options);
   const content = response.content ?? "";
-  logDebugOverride(debugMode, "[debug/noodler-reply] Raw model response (attempt 1):\n%s", content);
-  const generated = noodleGeneratedNoodlerReplySchema.parse(parseGameJsonish(content));
-  const protectedContent = protectNoodlerGeneratedIdentity(generated.content, disclosureMode, publicIdentity);
-  if (!protectedContent) throw new Error("NoodleR creator reply generation returned no usable content.");
-  return protectedContent.length <= NOODLER_REPLY_CONTENT_MAX_LENGTH
-    ? protectedContent
-    : protectedContent.slice(0, NOODLER_REPLY_CONTENT_MAX_LENGTH).trimEnd();
+  logDebugOverride(
+    debugMode,
+    "[debug/noodler-reply] Raw model response (attempt 1):\n%s",
+    content,
+  );
+  const parsed = parseGameJsonish(content);
+  const generated = noodleGeneratedNoodlerReplySchema.parse(
+    Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed,
+  );
+  const protectedContent = protectBoundedNoodlerGeneratedText(
+    generated.content,
+    disclosureMode,
+    publicIdentity,
+    NOODLER_REPLY_CONTENT_MAX_LENGTH,
+  );
+  if (!protectedContent)
+    throw new Error(
+      "NoodleR creator reply generation returned no usable content.",
+    );
+  return protectedContent;
 }

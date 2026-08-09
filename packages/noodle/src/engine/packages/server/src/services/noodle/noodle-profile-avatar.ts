@@ -1,5 +1,12 @@
 import type { AvatarCrop } from "@marinara-engine/shared";
 
+/**
+ * Resolves the avatar crop to persist after a Noodle profile update.
+ *
+ * An AvatarCrop applies that crop, `null` clears the stored crop because the image
+ * changed, and `undefined` leaves the stored crop untouched. Callers must preserve
+ * the distinction between `null` and `undefined` by omitting an undefined field.
+ */
 export function resolveNoodleAvatarCropAfterProfileUpdate(input: {
   currentAvatarUrl: string | null;
   nextAvatarUrl: string | null | undefined;
@@ -9,11 +16,14 @@ export function resolveNoodleAvatarCropAfterProfileUpdate(input: {
 }): AvatarCrop | null | undefined {
   if (input.nextAvatarUrl === undefined) {
     if (input.currentCrop) return undefined;
-    return input.currentAvatarUrl && input.currentAvatarUrl === input.sourceAvatarUrl
-      ? input.sourceCrop ?? undefined
+    return input.currentAvatarUrl &&
+      input.currentAvatarUrl === input.sourceAvatarUrl
+      ? (input.sourceCrop ?? undefined)
       : undefined;
   }
   if (input.nextAvatarUrl !== input.currentAvatarUrl) return null;
   if (input.currentCrop) return input.currentCrop;
-  return input.nextAvatarUrl && input.nextAvatarUrl === input.sourceAvatarUrl ? (input.sourceCrop ?? null) : null;
+  return input.nextAvatarUrl && input.nextAvatarUrl === input.sourceAvatarUrl
+    ? (input.sourceCrop ?? null)
+    : null;
 }

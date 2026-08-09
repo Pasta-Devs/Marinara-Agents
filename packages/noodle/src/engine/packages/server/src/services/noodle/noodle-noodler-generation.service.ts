@@ -15,7 +15,10 @@ import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
+import {
+  resolveStoredChatOptions,
+  resolveStoredMaxTokens,
+} from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
@@ -53,7 +56,9 @@ export type PreparedNoodlerPostResult = {
   metadata: Record<string, unknown>;
 };
 
-type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
+type GenerationConnection = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
+>;
 
 export type NoodlerPostGenerationInput = {
   account: NoodleAccount;
@@ -99,13 +104,23 @@ function escapeRegExp(value: string): string {
 
 function containsIdentity(value: string, identifier: string): boolean {
   if (!identifier.trim()) return false;
-  return new RegExp(`(^|[^\\p{L}\\p{N}_])@?${escapeRegExp(identifier.trim())}(?=$|[^\\p{L}\\p{N}_])`, "iu").test(value);
+  return new RegExp(
+    `(^|[^\\p{L}\\p{N}_])@?${escapeRegExp(identifier.trim())}(?=$|[^\\p{L}\\p{N}_])`,
+    "iu",
+  ).test(value);
 }
 
 function protectedIdentityValues(publicIdentity: PublicIdentity): string[] {
-  return [publicIdentity.displayName, publicIdentity.handle, ...(publicIdentity.sourceIdentifiers ?? [])]
+  return [
+    publicIdentity.displayName,
+    publicIdentity.handle,
+    ...(publicIdentity.sourceIdentifiers ?? []),
+  ]
     .map((value) => value.trim())
-    .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index)
+    .filter(
+      (value, index, values) =>
+        value.length > 0 && values.indexOf(value) === index,
+    )
     .sort((left, right) => right.length - left.length);
 }
 
@@ -122,7 +137,9 @@ export function buildNoodlerPublicIdentity(
     }
   }
   const sourceName =
-    sourceData && typeof sourceData === "object" && typeof (sourceData as { name?: unknown }).name === "string"
+    sourceData &&
+    typeof sourceData === "object" &&
+    typeof (sourceData as { name?: unknown }).name === "string"
       ? (sourceData as { name: string }).name
       : "";
   return {
@@ -143,14 +160,13 @@ export async function noodlerPublicIdentityFor(
     publicAccount.kind === "character"
       ? await characters.getById(publicAccount.entityId)
       : publicAccount.kind === "persona"
-        ? await characters.getPersona(publicAccount.entityId).then((persona) =>
-            persona ? { data: { name: persona.name } } : null,
-          )
+        ? await characters
+            .getPersona(publicAccount.entityId)
+            .then((persona) =>
+              persona ? { data: { name: persona.name } } : null,
+            )
         : null;
-  return buildNoodlerPublicIdentity(
-    publicAccount,
-    source,
-  );
+  return buildNoodlerPublicIdentity(publicAccount, source);
 }
 
 export async function resolveNoodlerPublicIdentity(
@@ -158,7 +174,12 @@ export async function resolveNoodlerPublicIdentity(
   account: Pick<NoodleAccount, "noodleAccountId">,
 ): Promise<PublicIdentity | null> {
   const noodle = createNoodleStorage(db);
-  return noodlerPublicIdentityFor(db, account.noodleAccountId ? await noodle.getAccountById(account.noodleAccountId) : null);
+  return noodlerPublicIdentityFor(
+    db,
+    account.noodleAccountId
+      ? await noodle.getAccountById(account.noodleAccountId)
+      : null,
+  );
 }
 
 export function stageProfileContainsPublicIdentity(
@@ -166,9 +187,16 @@ export function stageProfileContainsPublicIdentity(
   publicIdentity: PublicIdentity,
 ): boolean {
   if (profile.disclosureMode === "open") return false;
-  const values = [profile.displayName, profile.handle, profile.bio, profile.stagePersonality];
+  const values = [
+    profile.displayName,
+    profile.handle,
+    profile.bio,
+    profile.stagePersonality,
+  ];
   const protectedValues = protectedIdentityValues(publicIdentity);
-  return values.some((value) => protectedValues.some((identifier) => containsIdentity(value, identifier)));
+  return values.some((value) =>
+    protectedValues.some((identifier) => containsIdentity(value, identifier)),
+  );
 }
 
 export function protectNoodlerGeneratedIdentity(
@@ -184,34 +212,54 @@ export function protectNoodlerGeneratedIdentity(
     .reduce(
       (current, identifier) =>
         current.replace(
-          new RegExp(`(^|[^\\p{L}\\p{N}_])@?${escapeRegExp(identifier)}(?=$|[^\\p{L}\\p{N}_])`, "giu"),
+          new RegExp(
+            `(^|[^\\p{L}\\p{N}_])@?${escapeRegExp(identifier)}(?=$|[^\\p{L}\\p{N}_])`,
+            "giu",
+          ),
           (_match, prefix: string) => `${prefix}${replacement}`,
         ),
       value,
     )
-    .replace(new RegExp(`(?:${replacement})(?:\\s*\\(@?${replacement}\\))?`, "giu"), replacement)
+    .replace(
+      new RegExp(`(?:${replacement})(?:\\s*\\(@?${replacement}\\))?`, "giu"),
+      replacement,
+    )
     .trim();
 }
 
-function protectBoundedNoodlerGeneratedText(
+export function protectBoundedNoodlerGeneratedText(
   value: string | null | undefined,
   mode: NoodleIdentityDisclosure,
   publicIdentity: PublicIdentity | null,
   maxLength: number,
 ): string | null {
-  const protectedValue = protectNoodlerGeneratedIdentity(value, mode, publicIdentity);
-  if (!protectedValue || protectedValue.length <= maxLength) return protectedValue;
+  const protectedValue = protectNoodlerGeneratedIdentity(
+    value,
+    mode,
+    publicIdentity,
+  );
+  if (!protectedValue || protectedValue.length <= maxLength)
+    return protectedValue;
   const lastCodeUnit = protectedValue.charCodeAt(maxLength - 1);
-  const safeEnd = lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? maxLength - 1 : maxLength;
+  const safeEnd =
+    lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff
+      ? maxLength - 1
+      : maxLength;
   return protectedValue.slice(0, safeEnd).trimEnd();
 }
 
-function formatNoodlerPostHistory(posts: NoodlerManagedPost[], protect: (value: string) => string): string {
+function formatNoodlerPostHistory(
+  posts: NoodlerManagedPost[],
+  protect: (value: string) => string,
+): string {
   if (posts.length === 0) return "No previous posts on this NoodleR page.";
   return posts
     .slice()
     .reverse()
-    .map((post) => `- ${post.createdAt}: ${post.title ? `${protect(post.title)} — ` : ""}${protect(post.content)}`)
+    .map(
+      (post) =>
+        `- ${post.createdAt}: ${post.title ? `${protect(post.title)} — ` : ""}${protect(post.content)}`,
+    )
     .join("\n");
 }
 
@@ -221,12 +269,19 @@ export function buildNoodlerPostMessages(input: {
   disclosureMode: NoodleIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
   recentPosts: NoodlerManagedPost[];
-  request: Pick<NoodlerGenerationRequest, "noodlerPostGuide" | "noodlerProjectWork">;
+  request: Pick<
+    NoodlerGenerationRequest,
+    "noodlerPostGuide" | "noodlerProjectWork"
+  >;
   allowImagePrompt: boolean;
   generationGuidance: string;
 }): ChatMessage[] {
   const protect = (value: string) =>
-    protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+    protectNoodlerGeneratedIdentity(
+      value,
+      input.disclosureMode,
+      input.publicIdentity,
+    ) ?? "";
   const guidance = input.generationGuidance.trim();
   const system = [
     "You write exactly one post for one NoodleR creator page in Marinara Engine.",
@@ -250,9 +305,15 @@ export function buildNoodlerPostMessages(input: {
     "",
     "# Recent NoodleR posts",
     formatNoodlerPostHistory(input.recentPosts, protect),
-    ...(input.request.noodlerPostGuide ? ["", "# Post direction", protect(input.request.noodlerPostGuide)] : []),
+    ...(input.request.noodlerPostGuide
+      ? ["", "# Post direction", protect(input.request.noodlerPostGuide)]
+      : []),
     ...(input.request.noodlerProjectWork
-      ? ["", "# Project work direction", protect(input.request.noodlerProjectWork)]
+      ? [
+          "",
+          "# Project work direction",
+          protect(input.request.noodlerProjectWork),
+        ]
       : []),
   ].join("\n");
   return [
@@ -305,15 +366,23 @@ export async function generateNoodlerPost(
     ),
     primaryConnectionId: input.connection.id,
     fallbackConnection,
-    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
+    fallbackBaseUrl: fallbackConnection
+      ? resolveBaseUrl(fallbackConnection)
+      : "",
     category: "main",
     admissionMode: input.admissionMode,
   });
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
-  const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
-  const linkedPublicAccount = account.noodleAccountId ? await noodle.getAccountById(account.noodleAccountId) : null;
+  const disclosureMode =
+    account.settings.privacy.identityDisclosure ?? "secret";
+  const linkedPublicAccount = account.noodleAccountId
+    ? await noodle.getAccountById(account.noodleAccountId)
+    : null;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
-  const publicIdentity = await noodlerPublicIdentityFor(db, linkedPublicAccount);
+  const publicIdentity = await noodlerPublicIdentityFor(
+    db,
+    linkedPublicAccount,
+  );
   const messages = buildNoodlerPostMessages({
     account,
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
@@ -325,13 +394,20 @@ export async function generateNoodlerPost(
     generationGuidance: settings.noodlerGenerationGuidance,
   });
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
-  logDebugOverride(debugMode, "[debug/noodler] Prompt sent to model:\n%s", formatNoodleMessagesForLog(messages));
+  logDebugOverride(
+    debugMode,
+    "[debug/noodler] Prompt sent to model:\n%s",
+    formatNoodleMessagesForLog(messages),
+  );
   const completionOptions = {
     model: input.connection.model,
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
       model: input.connection.model,
-      maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, NOODLER_POST_MAX_TOKENS),
+      maxTokens: resolveStoredMaxTokens(
+        input.connection.defaultParameters,
+        NOODLER_POST_MAX_TOKENS,
+      ),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     temperature: 0.9,
@@ -343,12 +419,19 @@ export async function generateNoodlerPost(
     ),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_post"),
+    responseFormat: noodleResponseFormat(
+      input.connection.model,
+      "noodler_post",
+    ),
   } as const;
 
   let response = await provider.chatComplete(messages, completionOptions);
   let content = response.content ?? "";
-  logDebugOverride(debugMode, "[debug/noodler] Raw model response (attempt 1):\n%s", content);
+  logDebugOverride(
+    debugMode,
+    "[debug/noodler] Raw model response (attempt 1):\n%s",
+    content,
+  );
   let generated;
   try {
     generated = parseNoodlerPost(content);
@@ -359,8 +442,9 @@ export async function generateNoodlerPost(
       { role: "assistant", content },
       {
         role: "user",
-        content:
-          "The response was not one valid NoodleR-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
+        content: input.imagesEnabled
+          ? "The response was not one valid NoodleR-post JSON object. Return exactly one object with title, content, and an optional imagePrompt. Do not include a poll. Return JSON only."
+          : "The response was not one valid NoodleR-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
       },
     ];
     logDebugOverride(
@@ -368,9 +452,16 @@ export async function generateNoodlerPost(
       "[debug/noodler] Correction prompt sent to model:\n%s",
       formatNoodleMessagesForLog(correctionMessages),
     );
-    response = await provider.chatComplete(correctionMessages, completionOptions);
+    response = await provider.chatComplete(
+      correctionMessages,
+      completionOptions,
+    );
     content = response.content ?? "";
-    logDebugOverride(debugMode, "[debug/noodler] Raw model response (attempt 2):\n%s", content);
+    logDebugOverride(
+      debugMode,
+      "[debug/noodler] Raw model response (attempt 2):\n%s",
+      content,
+    );
     generated = parseNoodlerPost(content);
   }
 
@@ -388,11 +479,16 @@ export async function generateNoodlerPost(
       NOODLER_POST_CONTENT_MAX_LENGTH,
     ),
   };
-  if (!protectedGenerated.content) throw new Error("NoodleR generation returned no usable post content.");
+  if (!protectedGenerated.content)
+    throw new Error("NoodleR generation returned no usable post content.");
 
   // Identity protection applies to the image prompt too, not only post text.
   const draftImagePrompt = imagesEnabled
-    ? protectNoodlerGeneratedIdentity(generated.imagePrompt, disclosureMode, publicIdentity)
+    ? protectNoodlerGeneratedIdentity(
+        generated.imagePrompt,
+        disclosureMode,
+        publicIdentity,
+      )
     : null;
 
   const baseInput = {
@@ -402,9 +498,15 @@ export async function generateNoodlerPost(
     source: "generated" as const,
     access: input.request.access,
     metadata: {
-      ...(input.request.executionId ? { noodlerWizardExecutionId: input.request.executionId } : {}),
-      ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {}),
-      ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),
+      ...(input.request.executionId
+        ? { noodlerWizardExecutionId: input.request.executionId }
+        : {}),
+      ...(input.request.poll
+        ? { poll: createNoodlePoll(input.request.poll) }
+        : {}),
+      ...(input.request.imageCrop
+        ? { imageCrop: input.request.imageCrop }
+        : {}),
     },
   };
 
@@ -419,7 +521,12 @@ export async function generateNoodlerPost(
   }
 
   const persist = async (
-    extra: { id?: string; imagePrompt?: string | null; imageUrl?: string | null; metadata?: Record<string, unknown> } = {},
+    extra: {
+      id?: string;
+      imagePrompt?: string | null;
+      imageUrl?: string | null;
+      metadata?: Record<string, unknown>;
+    } = {},
   ): Promise<NoodlerManagedPost> => {
     const post = await noodle.createNoodlerPost({
       ...baseInput,
@@ -432,18 +539,23 @@ export async function generateNoodlerPost(
 
   if (input.media) {
     const postId = newId();
-    const post = await persistNoodlerPostWithUploadedMedia(account.id, postId, input.media, (persistedMedia) =>
-      persist({
-        id: postId,
-        imageUrl: persistedMedia.imageUrl,
-        metadata: { noodlerMediaPath: persistedMedia.noodlerMediaPath },
-      }),
+    const post = await persistNoodlerPostWithUploadedMedia(
+      account.id,
+      postId,
+      input.media,
+      (persistedMedia) =>
+        persist({
+          id: postId,
+          imageUrl: persistedMedia.imageUrl,
+          metadata: { noodlerMediaPath: persistedMedia.noodlerMediaPath },
+        }),
     );
     if (!post) throw new Error("Failed to persist the generated NoodleR post.");
     return { post, imagePromptReview: null };
   }
 
-  if (!draftImagePrompt) return { post: await persist(), imagePromptReview: null };
+  if (!draftImagePrompt)
+    return { post: await persist(), imagePromptReview: null };
 
   const imageConnection = settings.imageGenerationConnectionId
     ? await connections.getWithKey(settings.imageGenerationConnectionId)
@@ -477,17 +589,32 @@ export async function generateNoodlerPost(
   // reviewed-image confirmation route to claim and finalize later.
   if (input.request.reviewImagePromptsBeforeSend === true) {
     try {
-      const preview = await generateNoodlerPostImage({ ...imageInput, previewOnly: true });
-      const post = await persist({ imagePrompt: draftImagePrompt, metadata: { imagePendingReview: true } });
+      const preview = await generateNoodlerPostImage({
+        ...imageInput,
+        previewOnly: true,
+      });
+      const post = await persist({
+        imagePrompt: draftImagePrompt,
+        metadata: { imagePendingReview: true },
+      });
       return {
         post,
-        imagePromptReview: preview.preview ? { id: post.id, ...preview.preview } : null,
+        imagePromptReview: preview.preview
+          ? { id: post.id, ...preview.preview }
+          : null,
       };
     } catch (err) {
-      logger.warn(err, "[noodler] Failed to prepare image prompt review for %s", account.displayName);
+      logger.warn(
+        err,
+        "[noodler] Failed to prepare image prompt review for %s",
+        account.displayName,
+      );
       return {
         post: await persist({
-          metadata: { imageGenerationFailed: true, imageGenerationError: getErrorMessage(err).slice(0, 500) },
+          metadata: {
+            imageGenerationFailed: true,
+            imageGenerationError: getErrorMessage(err).slice(0, 500),
+          },
         }),
         imagePromptReview: null,
       };
@@ -498,15 +625,25 @@ export async function generateNoodlerPost(
   // failures propagate so a single run can never both persist an image post and a text fallback.
   let image: Awaited<ReturnType<typeof generateNoodlerPostImage>>;
   try {
-    image = await generateNoodlerPostImage({ ...imageInput, previewOnly: false });
+    image = await generateNoodlerPostImage({
+      ...imageInput,
+      previewOnly: false,
+    });
   } catch (err) {
     // Same rule as the text leg: a busy connection is a deferral, so let it propagate to the
     // scheduler instead of persisting a post permanently marked as image-failed.
     if (isConnectionAdmissionFailure(err)) throw err;
-    logger.warn(err, "[noodler] Failed to generate image for %s", account.displayName);
+    logger.warn(
+      err,
+      "[noodler] Failed to generate image for %s",
+      account.displayName,
+    );
     return {
       post: await persist({
-        metadata: { imageGenerationFailed: true, imageGenerationError: getErrorMessage(err).slice(0, 500) },
+        metadata: {
+          imageGenerationFailed: true,
+          imageGenerationError: getErrorMessage(err).slice(0, 500),
+        },
       }),
       imagePromptReview: null,
     };

@@ -1,4 +1,11 @@
-import { existsSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
 import { join } from "path";
 import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
@@ -32,7 +39,10 @@ export const NOODLER_MEDIA_URL_PREFIX = "/api/noodle/noodler/posts/";
  * gates on the persona, so audience-facing projections must carry it; unrelated (uploaded
  * or external) image URLs are returned untouched.
  */
-export function noodlerPostMediaUrlForPersona(imageUrl: string | null, personaId: string): string | null {
+export function noodlerPostMediaUrlForPersona(
+  imageUrl: string | null,
+  personaId: string,
+): string | null {
   if (!imageUrl?.startsWith(NOODLER_MEDIA_URL_PREFIX)) return imageUrl;
   return `${imageUrl}?personaId=${encodeURIComponent(personaId)}`;
 }
@@ -45,7 +55,10 @@ export async function persistNoodlerPostWithUploadedMedia<T>(
   accountId: string,
   postId: string,
   upload: NoodlerPostMediaUpload,
-  persist: (media: { imageUrl: string; noodlerMediaPath: string }) => Promise<T | null>,
+  persist: (media: {
+    imageUrl: string;
+    noodlerMediaPath: string;
+  }) => Promise<T | null>,
 ): Promise<T | null> {
   const stagedMedia = stageImageToDisk(
     `${NOODLER_MEDIA_PREFIX}${accountId}`,
@@ -79,7 +92,9 @@ const TEASER_SUFFIX = ".teaser.jpg";
  * original. Null where `sharp` is unavailable (no Android prebuild) or the source cannot be
  * decoded — callers must fail closed and serve nothing rather than the original.
  */
-export async function readNoodlerLockedTeaser(absolutePath: string): Promise<Buffer | null> {
+export async function readNoodlerLockedTeaser(
+  absolutePath: string,
+): Promise<Buffer | null> {
   const teaserPath = `${absolutePath}${TEASER_SUFFIX}`;
   if (existsSync(teaserPath)) return readFileSync(teaserPath);
   const sharp = await getSharp();
@@ -90,22 +105,54 @@ export async function readNoodlerLockedTeaser(absolutePath: string): Promise<Buf
       .blur(2)
       .jpeg({ quality: 60 })
       .toBuffer();
-    writeFileSync(teaserPath, teaser);
+    const stagingPath = `${teaserPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+    try {
+      writeFileSync(stagingPath, teaser);
+      try {
+        renameSync(stagingPath, teaserPath);
+      } catch (error) {
+        // Another request may have won the race on platforms that do not replace an
+        // existing destination. Its complete file is just as valid as ours.
+        if (!existsSync(teaserPath)) throw error;
+      }
+    } finally {
+      if (existsSync(stagingPath)) unlinkSync(stagingPath);
+    }
     return teaser;
   } catch (error) {
-    logger.warn(error, "[noodler] Failed to build locked teaser for %s", absolutePath);
+    logger.warn(
+      error,
+      "[noodler] Failed to build locked teaser for %s",
+      absolutePath,
+    );
     return null;
   }
 }
 
-export function readNoodlerMediaPath(post: Pick<NoodlerManagedPost, "metadata">): string | null {
-  const value = (post.metadata as Record<string, unknown> | null | undefined)?.noodlerMediaPath;
-  return typeof value === "string" && value.startsWith(NOODLER_MEDIA_PREFIX) ? value : null;
+export function readNoodlerMediaPath(
+  post: Pick<NoodlerManagedPost, "metadata">,
+): string | null {
+  const value = (post.metadata as Record<string, unknown> | null | undefined)
+    ?.noodlerMediaPath;
+  return typeof value === "string" && value.startsWith(NOODLER_MEDIA_PREFIX)
+    ? value
+    : null;
 }
 
 /** Resolve a stored relative NoodleR-media path to an absolute path inside the gallery dir. */
-export function resolveNoodlerMediaAbsolutePath(relativePath: string): string | null {
+export function resolveNoodlerMediaAbsolutePath(
+  relativePath: string,
+): string | null {
   if (!relativePath.startsWith(NOODLER_MEDIA_PREFIX)) return null;
+  const segments = relativePath
+    .slice(NOODLER_MEDIA_PREFIX.length)
+    .split(/[\\/]/u);
+  if (
+    segments.length === 0 ||
+    segments.some((segment) => !segment || segment === "." || segment === "..")
+  ) {
+    return null;
+  }
   try {
     return assertInsideDir(GALLERY_DIR, join(GALLERY_DIR, relativePath));
   } catch {
@@ -121,19 +168,37 @@ export function unlinkNoodlerMedia(relativePath: string | null): void {
   try {
     if (existsSync(absolute)) unlinkSync(absolute);
     // The cached teaser is a derivative of the same bytes and must not outlive them.
-    if (existsSync(`${absolute}${TEASER_SUFFIX}`)) unlinkSync(`${absolute}${TEASER_SUFFIX}`);
+    if (existsSync(`${absolute}${TEASER_SUFFIX}`))
+      unlinkSync(`${absolute}${TEASER_SUFFIX}`);
   } catch (error) {
-    logger.warn(error, "[noodler] Failed to remove NoodleR media file %s", relativePath);
+    logger.warn(
+      error,
+      "[noodler] Failed to remove NoodleR media file %s",
+      relativePath,
+    );
   }
 }
 
 /** Best-effort removal of a creator's whole owned NoodleR media namespace on account deletion. */
 export function removeNoodlerAccountMedia(accountId: string): void {
-  const dir = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}${accountId}`);
+  if (
+    !accountId ||
+    accountId === "." ||
+    accountId === ".." ||
+    /[\\/]/u.test(accountId)
+  )
+    return;
+  const dir = resolveNoodlerMediaAbsolutePath(
+    `${NOODLER_MEDIA_PREFIX}${accountId}`,
+  );
   if (!dir) return;
   try {
     rmSync(dir, { recursive: true, force: true });
   } catch (error) {
-    logger.warn(error, "[noodler] Failed to remove NoodleR media dir for account %s", accountId);
+    logger.warn(
+      error,
+      "[noodler] Failed to remove NoodleR media dir for account %s",
+      accountId,
+    );
   }
 }

@@ -9,7 +9,10 @@ import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
 import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
+import {
+  resolveStoredChatOptions,
+  resolveStoredMaxTokens,
+} from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
@@ -25,23 +28,15 @@ import {
   stageProfileContainsPublicIdentity,
 } from "./noodle-noodler-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./noodle-noodler-source.js";
+import { parseRecord } from "./noodle-public-support.js";
 
-type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
-
-function record(value: unknown): Record<string, unknown> {
-  if (typeof value === "string") {
-    try {
-      return record(JSON.parse(value));
-    } catch {
-      return {};
-    }
-  }
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
+type GenerationConnection = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
+>;
 
 export function noodlerSourceText(data: unknown): string {
-  const source = record(data);
-  const extensions = record(source.extensions);
+  const source = parseRecord(data);
+  const extensions = parseRecord(source.extensions);
   return [
     `Name: ${typeof source.name === "string" ? source.name : ""}`,
     `Description: ${typeof source.description === "string" ? source.description : ""}`,
@@ -54,7 +49,10 @@ export function noodlerSourceText(data: unknown): string {
     .join("\n");
 }
 
-function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
+function disclosureRules(
+  mode: NoodleIdentityDisclosure,
+  publicIdentity: { displayName: string; handle: string },
+) {
   if (mode === "open")
     return `The public identity ${publicIdentity.displayName} (@${publicIdentity.handle}) may inspire and appear in the draft.`;
   if (mode === "hinted")
@@ -63,17 +61,29 @@ function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displ
 }
 
 export function buildNoodlerStageProfileDraftMessages(input: {
-  request: Pick<NoodleStageProfileDraftRequest, "disclosureMode" | "guidance" | "currentDraft">;
+  request: Pick<
+    NoodleStageProfileDraftRequest,
+    "disclosureMode" | "guidance" | "currentDraft"
+  >;
   publicAccount: { displayName: string; handle: string; bio: string };
-  source: { data: string | ({ name?: unknown } & Record<string, unknown>) } | null;
+  source: {
+    data: string | ({ name?: unknown } & Record<string, unknown>);
+  } | null;
 }): ChatMessage[] {
-  const identity = buildNoodlerPublicIdentity(input.publicAccount, input.source);
+  const identity = buildNoodlerPublicIdentity(
+    input.publicAccount,
+    input.source,
+  );
   const protectedDraft = input.request.currentDraft
     ? Object.fromEntries(
         Object.entries(input.request.currentDraft).map(([key, value]) => [
           key,
           typeof value === "string"
-            ? (protectNoodlerGeneratedIdentity(value, input.request.disclosureMode, identity) ?? "")
+            ? (protectNoodlerGeneratedIdentity(
+                value,
+                input.request.disclosureMode,
+                identity,
+              ) ?? "")
             : value,
         ]),
       )
@@ -81,7 +91,8 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   const sourceDetails = input.source
     ? noodlerSourceText(input.source.data)
     : "General temperament and creative interests from the source profile.";
-  const initialHintedDraft = input.request.disclosureMode === "hinted" && !input.request.currentDraft;
+  const initialHintedDraft =
+    input.request.disclosureMode === "hinted" && !input.request.currentDraft;
   const rawSourceContext =
     input.request.disclosureMode === "secret"
       ? [
@@ -96,7 +107,11 @@ export function buildNoodlerStageProfileDraftMessages(input: {
             "Use only broad temperament, creative interests, and non-identifying aesthetic direction.",
             sourceDetails
               .split("\n")
-              .filter((line) => !line.startsWith("Name: ") && !line.startsWith("Description: "))
+              .filter(
+                (line) =>
+                  !line.startsWith("Name: ") &&
+                  !line.startsWith("Description: "),
+              )
               .join("\n"),
           ].join("\n")
         : [
@@ -111,7 +126,14 @@ export function buildNoodlerStageProfileDraftMessages(input: {
       ? rawSourceContext
       : rawSourceContext
           .split("\n")
-          .map((line) => protectNoodlerGeneratedIdentity(line, input.request.disclosureMode, identity) ?? "")
+          .map(
+            (line) =>
+              protectNoodlerGeneratedIdentity(
+                line,
+                input.request.disclosureMode,
+                identity,
+              ) ?? "",
+          )
           .join("\n");
   return [
     {
@@ -127,10 +149,13 @@ export function buildNoodlerStageProfileDraftMessages(input: {
       role: "user",
       content: [
         sourceContext,
-        ...(protectedDraft ? ["", "# Current draft", JSON.stringify(protectedDraft)] : []),
+        ...(protectedDraft
+          ? ["", "# Current draft", JSON.stringify(protectedDraft)]
+          : []),
         "",
         "# Creator guidance",
-        input.request.guidance || "Create a compelling stage identity with a clear voice.",
+        input.request.guidance ||
+          "Create a compelling stage identity with a clear voice.",
       ].join("\n"),
     },
   ];
@@ -142,7 +167,8 @@ const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
 
 export function parseNoodlerStageProfileDraft(content: string) {
   const parsed = parseGameJsonish(content);
-  const candidate = Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
+  const candidate =
+    Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     return noodlerStageProfileDraftSchema.parse(candidate);
   }
@@ -155,8 +181,15 @@ export function parseNoodlerStageProfileDraft(content: string) {
 
 export async function generateNoodlerStageProfileDraft(
   db: DB,
-  input: { request: NoodleStageProfileDraftRequest; connection: GenerationConnection },
-): Promise<NoodleStageProfileInput & { sourceSnapshot?: Awaited<ReturnType<typeof resolveNoodlerSourceSnapshot>> }> {
+  input: {
+    request: NoodleStageProfileDraftRequest;
+    connection: GenerationConnection;
+  },
+): Promise<
+  NoodleStageProfileInput & {
+    sourceSnapshot?: Awaited<ReturnType<typeof resolveNoodlerSourceSnapshot>>;
+  }
+> {
   const noodle = createNoodleStorage(db);
   const noodlerAccount = input.request.noodlerAccountId
     ? await noodle.getNoodlerAccountById(input.request.noodlerAccountId)
@@ -188,7 +221,11 @@ export async function generateNoodlerStageProfileDraft(
           )
         : null;
   const identity = buildNoodlerPublicIdentity(publicAccount, source);
-  const messages = buildNoodlerStageProfileDraftMessages({ request: input.request, publicAccount, source });
+  const messages = buildNoodlerStageProfileDraftMessages({
+    request: input.request,
+    publicAccount,
+    source,
+  });
   const debugMode = isDebugAgentsEnabled();
   logDebugOverride(
     debugMode,
@@ -211,7 +248,9 @@ export async function generateNoodlerStageProfileDraft(
     ),
     primaryConnectionId: input.connection.id,
     fallbackConnection,
-    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
+    fallbackBaseUrl: fallbackConnection
+      ? resolveBaseUrl(fallbackConnection)
+      : "",
     category: "main",
   });
   const response = await provider.chatComplete(messages, {
@@ -219,22 +258,37 @@ export async function generateNoodlerStageProfileDraft(
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
       model: input.connection.model,
-      maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 1200),
+      maxTokens: resolveStoredMaxTokens(
+        input.connection.defaultParameters,
+        1200,
+      ),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     temperature: 0.7,
     topP: 0.9,
-    ...resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
+    ...resolveStoredChatOptions(
+      input.connection.defaultParameters,
+      input.connection.provider,
+      input.connection.model,
+    ),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_profile"),
+    responseFormat: noodleResponseFormat(
+      input.connection.model,
+      "noodler_profile",
+    ),
   });
   const draft = {
     ...parseNoodlerStageProfileDraft(response.content ?? ""),
     disclosureMode: input.request.disclosureMode,
   };
   if (stageProfileContainsPublicIdentity(draft, identity)) {
-    throw new Error("Generated stage draft included the linked public identity. Try again with different guidance.");
+    throw new Error(
+      "Generated stage draft included the linked public identity. Try again with different guidance.",
+    );
   }
-  return { ...draft, sourceSnapshot: await resolveNoodlerSourceSnapshot(db, publicAccount) };
+  return {
+    ...draft,
+    sourceSnapshot: await resolveNoodlerSourceSnapshot(db, publicAccount),
+  };
 }

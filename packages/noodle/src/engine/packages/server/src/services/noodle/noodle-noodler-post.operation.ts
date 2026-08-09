@@ -25,7 +25,11 @@ import { resolveNoodlerSourceSnapshot } from "./noodle-noodler-source.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../agents/agent-concurrency.js";
 
 export type GenerateAndApplyNoodlerPostResult =
-  | { status: "generated"; post: NoodlerManagedPost; imagePromptReview: NoodleImagePromptReviewItem | null }
+  | {
+      status: "generated";
+      post: NoodlerManagedPost;
+      imagePromptReview: NoodleImagePromptReviewItem | null;
+    }
   | { status: "disabled" }
   | { status: "busy" }
   | { status: "connection_required" }
@@ -42,6 +46,7 @@ export type UpdateNoodlerPostResult =
   | { status: "updated"; post: NoodlerManagedPost }
   | { status: "disabled" }
   | { status: "busy" }
+  | { status: "forbidden" }
   | { status: "noodler_post_not_found" };
 
 /**
@@ -58,7 +63,11 @@ async function invalidateNearFutureReserve(
   try {
     await noodle.discardPreparedPostsAfterManualPost(accountId, postedAt);
   } catch (error) {
-    logger.warn(error, "[noodler] Could not invalidate the reserve after posting for %s", accountId);
+    logger.warn(
+      error,
+      "[noodler] Could not invalidate the reserve after posting for %s",
+      accountId,
+    );
   }
 }
 
@@ -76,51 +85,85 @@ export async function generateAndApplyNoodlerPost(
   const settings = await noodle.getSettings();
   if (!settings.enableNoodler) return { status: "disabled" };
 
-  const locked = await tryNoodlerAccountOperation(request.targetAccountId, async () => {
-    const account = await noodle.getNoodlerAccountById(request.targetAccountId);
-    if (!account) {
-      return { status: "noodler_account_not_found" } as const;
-    }
-    const publicAccount = account.noodleAccountId ? await noodle.getAccountById(account.noodleAccountId) : null;
-    if (!publicAccount) {
-      return { status: "noodler_account_not_found" } as const;
-    }
-    if (request.executionId) {
-      const existing = await noodle.getNoodlerPostByWizardExecution(account.id, request.executionId);
-      if (existing) {
-        // A replay returns the post the first attempt created; the reserve it displaced still
-        // has to be invalidated, because the first attempt may have died before doing so.
-        await invalidateNearFutureReserve(noodle, account.id, existing.createdAt);
-        return { status: "generated", post: existing, imagePromptReview: null } as const;
+  const locked = await tryNoodlerAccountOperation(
+    request.targetAccountId,
+    async () => {
+      const account = await noodle.getNoodlerAccountById(
+        request.targetAccountId,
+      );
+      if (!account) {
+        return { status: "noodler_account_not_found" } as const;
       }
-    }
-    if (!(await resolveNoodlerSourceSnapshot(db, publicAccount))) {
-      return { status: "noodler_account_not_found" } as const;
-    }
-    const connectionId = request.connectionId ?? settings.generationConnectionId;
-    if (!connectionId) return { status: "connection_required" } as const;
-    const connection = await createConnectionsStorage(db).getWithKey(connectionId);
-    if (!connection) return { status: "connection_not_found" } as const;
-    const generated = await generateNoodlerPost(db, { account, request, connection, media, admissionMode });
-    await invalidateNearFutureReserve(noodle, account.id, generated.post.createdAt);
-    return {
-      status: "generated",
-      post: generated.post,
-      imagePromptReview: generated.imagePromptReview,
-    } as const;
-  });
+      const publicAccount = account.noodleAccountId
+        ? await noodle.getAccountById(account.noodleAccountId)
+        : null;
+      if (!publicAccount) {
+        return { status: "noodler_account_not_found" } as const;
+      }
+      if (request.executionId) {
+        const existing = await noodle.getNoodlerPostByWizardExecution(
+          account.id,
+          request.executionId,
+        );
+        if (existing) {
+          // A replay returns the post the first attempt created; the reserve it displaced still
+          // has to be invalidated, because the first attempt may have died before doing so.
+          await invalidateNearFutureReserve(
+            noodle,
+            account.id,
+            existing.createdAt,
+          );
+          return {
+            status: "generated",
+            post: existing,
+            imagePromptReview: null,
+          } as const;
+        }
+      }
+      if (!(await resolveNoodlerSourceSnapshot(db, publicAccount))) {
+        return { status: "noodler_account_not_found" } as const;
+      }
+      const connectionId =
+        request.connectionId ?? settings.generationConnectionId;
+      if (!connectionId) return { status: "connection_required" } as const;
+      const connection =
+        await createConnectionsStorage(db).getWithKey(connectionId);
+      if (!connection) return { status: "connection_not_found" } as const;
+      const generated = await generateNoodlerPost(db, {
+        account,
+        request,
+        connection,
+        media,
+        admissionMode,
+      });
+      await invalidateNearFutureReserve(
+        noodle,
+        account.id,
+        generated.post.createdAt,
+      );
+      return {
+        status: "generated",
+        post: generated.post,
+        imagePromptReview: generated.imagePromptReview,
+      } as const;
+    },
+  );
   return locked.acquired ? locked.value : { status: "busy" };
 }
 
 const MAX_CONCURRENT_MANUAL_REFRESH = 3;
 
-export type NoodlerRefreshNowResult = { status: "disabled" } | { status: "ok"; outcomes: NoodlerRefreshNowOutcome[] };
+export type NoodlerRefreshNowResult =
+  | { status: "disabled" }
+  | { status: "ok"; outcomes: NoodlerRefreshNowOutcome[] };
 
 /**
  * Global "Refresh NoodleR now": explicit user-authorized work, separate from the automatic
  * reserve budget and publication clock.
  */
-export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefreshNowResult> {
+export async function refreshAllNoodlerCreatorsNow(
+  db: DB,
+): Promise<NoodlerRefreshNowResult> {
   const noodle = createNoodleStorage(db);
   const settings = await noodle.getSettings();
   if (!settings.enableNoodler) return { status: "disabled" };
@@ -131,7 +174,9 @@ export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefre
   const activity = await noodle.getNoodlerCreatorActivityTimes();
   const activityOf = (accountId: string) => activity.get(accountId) ?? "";
   const prioritized = [...accounts].sort(
-    (a, b) => activityOf(a.id).localeCompare(activityOf(b.id)) || a.id.localeCompare(b.id),
+    (a, b) =>
+      activityOf(a.id).localeCompare(activityOf(b.id)) ||
+      a.id.localeCompare(b.id),
   );
   const settled = await settleAgentJobsWithConcurrencyLimit(
     prioritized,
@@ -144,14 +189,21 @@ export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefre
       });
       // "disabled"/"busy" are no-op refreshes, not failures; surface them as skipped so the
       // client doesn't lump a busy creator in with a real generation/connection failure.
-      const status = result.status === "disabled" || result.status === "busy" ? "skipped" : result.status;
+      const status =
+        result.status === "disabled" || result.status === "busy"
+          ? "skipped"
+          : result.status;
       return { accountId: account.id, status };
     },
   );
 
   const outcomes = settled.map((entry, index): NoodlerRefreshNowOutcome => {
     if (entry.status === "fulfilled") return entry.value;
-    logger.error(entry.reason, "[noodler] Global refresh failed for creator %s", prioritized[index]!.id);
+    logger.error(
+      entry.reason,
+      "[noodler] Global refresh failed for creator %s",
+      prioritized[index]!.id,
+    );
     return { accountId: prioritized[index]!.id, status: "error" };
   });
   return { status: "ok", outcomes };
@@ -179,13 +231,20 @@ export async function refreshTargetedNoodlerCreatorsNow(
         access: "locked",
         executionId,
       });
-      const status = result.status === "disabled" || result.status === "busy" ? "skipped" : result.status;
+      const status =
+        result.status === "disabled" || result.status === "busy"
+          ? "skipped"
+          : result.status;
       return { accountId, status };
     },
   );
   const outcomes = settled.map((entry, index): NoodlerRefreshNowOutcome => {
     if (entry.status === "fulfilled") return entry.value;
-    logger.error(entry.reason, "[noodler] Targeted refresh failed for creator %s", targetAccountIds[index]!);
+    logger.error(
+      entry.reason,
+      "[noodler] Targeted refresh failed for creator %s",
+      targetAccountIds[index]!,
+    );
     return { accountId: targetAccountIds[index]!, status: "error" };
   });
   return { status: "ok", outcomes };
@@ -200,48 +259,65 @@ export async function createNoodlerPost(
   const settings = await noodle.getSettings();
   if (!settings.enableNoodler) return { status: "disabled" };
 
-  const locked = await tryNoodlerAccountOperation(input.targetAccountId, async () => {
-    const postId = media ? newId() : undefined;
-    const persist = (persistedMedia?: { imageUrl: string; noodlerMediaPath: string }) =>
-      noodle.createNoodlerPost({
-        id: postId,
-        authorAccountId: input.targetAccountId,
-        title: input.title,
-        content: input.content,
-        source: "manual",
-        access: input.access,
-        imageUrl: persistedMedia?.imageUrl ?? null,
-        metadata: {
-          ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
-          ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
-          ...(persistedMedia ? { noodlerMediaPath: persistedMedia.noodlerMediaPath } : {}),
-        },
-      });
-    const post =
-      media && postId
-        ? await persistNoodlerPostWithUploadedMedia(input.targetAccountId, postId, media, persist)
-        : await persist();
-    if (!post) return { status: "noodler_account_not_found" } as const;
-    // The post is already persisted. Failing the request over cleanup would report a successful
-    // create as an error and invite a retry that posts twice; a stale prepared post is the
-    // cheaper problem, and the next reconciliation pass drops it anyway.
-    try {
-      await noodle.discardPreparedPostsAfterManualPost(input.targetAccountId, post.createdAt);
-    } catch (error) {
-      logger.warn(
-        error,
-        "[noodler] Failed to discard prepared posts after a manual post for %s",
-        input.targetAccountId,
-      );
-    }
-    return { status: "created", post } as const;
-  });
+  const locked = await tryNoodlerAccountOperation(
+    input.targetAccountId,
+    async () => {
+      const postId = media ? newId() : undefined;
+      const persist = (persistedMedia?: {
+        imageUrl: string;
+        noodlerMediaPath: string;
+      }) =>
+        noodle.createNoodlerPost({
+          id: postId,
+          authorAccountId: input.targetAccountId,
+          title: input.title,
+          content: input.content,
+          source: "manual",
+          access: input.access,
+          imageUrl: persistedMedia?.imageUrl ?? null,
+          metadata: {
+            ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
+            ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
+            ...(persistedMedia
+              ? { noodlerMediaPath: persistedMedia.noodlerMediaPath }
+              : {}),
+          },
+        });
+      const post =
+        media && postId
+          ? await persistNoodlerPostWithUploadedMedia(
+              input.targetAccountId,
+              postId,
+              media,
+              persist,
+            )
+          : await persist();
+      if (!post) return { status: "noodler_account_not_found" } as const;
+      // The post is already persisted. Failing the request over cleanup would report a successful
+      // create as an error and invite a retry that posts twice; a stale prepared post is the
+      // cheaper problem, and the next reconciliation pass drops it anyway.
+      try {
+        await noodle.discardPreparedPostsAfterManualPost(
+          input.targetAccountId,
+          post.createdAt,
+        );
+      } catch (error) {
+        logger.warn(
+          error,
+          "[noodler] Failed to discard prepared posts after a manual post for %s",
+          input.targetAccountId,
+        );
+      }
+      return { status: "created", post } as const;
+    },
+  );
   return locked.acquired ? locked.value : { status: "busy" };
 }
 
 export async function updateNoodlerPostWithMedia(
   db: DB,
   id: string,
+  accountId: string,
   input: NoodlerPostUpdateInput,
   media: NoodlerPostMediaUpload,
 ): Promise<UpdateNoodlerPostResult> {
@@ -251,18 +327,27 @@ export async function updateNoodlerPostWithMedia(
 
   const existing = await noodle.getNoodlerPostById(id);
   if (!existing) return { status: "noodler_post_not_found" };
+  if (existing.authorAccountId !== accountId) return { status: "forbidden" };
 
-  const locked = await tryNoodlerAccountOperation(existing.authorAccountId, async () => {
-    const current = await noodle.getNoodlerPostById(id);
-    if (!current) return { status: "noodler_post_not_found" } as const;
-    const oldPath = readNoodlerMediaPath(current);
-    const post = await persistNoodlerPostWithUploadedMedia(current.authorAccountId, id, media, (persistedMedia) =>
-      noodle.updateNoodlerPost(id, input, persistedMedia),
-    );
-    if (!post) return { status: "noodler_post_not_found" } as const;
-    const nextPath = readNoodlerMediaPath(post);
-    if (oldPath !== nextPath) unlinkNoodlerMedia(oldPath);
-    return { status: "updated", post } as const;
-  });
+  const locked = await tryNoodlerAccountOperation(
+    existing.authorAccountId,
+    async () => {
+      const current = await noodle.getNoodlerPostById(id);
+      if (!current) return { status: "noodler_post_not_found" } as const;
+      if (current.authorAccountId !== accountId)
+        return { status: "forbidden" } as const;
+      const oldPath = readNoodlerMediaPath(current);
+      const post = await persistNoodlerPostWithUploadedMedia(
+        current.authorAccountId,
+        id,
+        media,
+        (persistedMedia) => noodle.updateNoodlerPost(id, input, persistedMedia),
+      );
+      if (!post) return { status: "noodler_post_not_found" } as const;
+      const nextPath = readNoodlerMediaPath(post);
+      if (oldPath !== nextPath) unlinkNoodlerMedia(oldPath);
+      return { status: "updated", post } as const;
+    },
+  );
   return locked.acquired ? locked.value : { status: "busy" };
 }

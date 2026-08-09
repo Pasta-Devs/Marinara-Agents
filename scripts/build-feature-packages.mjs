@@ -451,7 +451,7 @@ export async function selfCheck() {
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
     }
-    if (feature.id === "long-term-memory" || feature.id === "noodle") {
+    if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
     } else {
       await captureEngineSources(
@@ -587,9 +587,17 @@ export default defineConfig({
   );
   if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Noodle stylesheet build failed");
   const assets = join(outputDir, "assets");
-  const cssFile = (await readdir(assets)).find((filename) => filename.endsWith(".css"));
-  if (!cssFile) throw new Error("Noodle stylesheet build produced no CSS");
-  return readFile(join(assets, cssFile), "utf8");
+  const cssFiles = (await readdir(assets)).filter((filename) => filename.endsWith(".css")).sort();
+  if (cssFiles.length !== 1) {
+    throw new Error(`Noodle stylesheet build produced ${cssFiles.length} CSS assets; expected exactly one`);
+  }
+  const [cssFile] = cssFiles;
+  const styles = await readFile(join(assets, cssFile), "utf8");
+  const scopedStyles = styles
+    .replaceAll(":root", ":scope")
+    .replaceAll("[data-theme=dark]", ":scope:where([data-theme=dark] *)")
+    .replaceAll("[data-theme=light]", ":scope:where([data-theme=light] *)");
+  return `@scope (marinara-capability-noodle){${scopedStyles}}`;
 }
 
 async function bundleSpecialClient(feature, output) {
@@ -1255,19 +1263,11 @@ function Root({ element }) {
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.clientImport) {
-      source = `import ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
       if (feature.id === "noodle") {
+        source = `import { setNoodlePackageStyles } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
         const styles = await buildNoodleStyles(prepared.buildRoot, temporary);
-        source += `
-const noodleStyleId = "marinara-capability-noodle-styles";
-if (!document.getElementById(noodleStyleId)) {
-  const style = document.createElement("style");
-  style.id = noodleStyleId;
-  style.textContent = ${JSON.stringify(styles)};
-  document.head.appendChild(style);
-}
-`;
-      }
+        source += `\nsetNoodlePackageStyles(${JSON.stringify(styles)});\n`;
+      } else source = `import ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
     } else return;
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
@@ -1301,7 +1301,7 @@ if (!document.getElementById(noodleStyleId)) {
     );
     if (result.status !== 0)
       throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
-    if (feature.id === "long-term-memory" || feature.id === "noodle") {
+    if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
     } else {
       await captureEngineSources(
@@ -1514,6 +1514,8 @@ for (const feature of selectedFeatures) {
       documentationUrl:
         feature.id === "hierarchical-maps"
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
+          : feature.id === "noodle"
+            ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
           : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });
   } finally {

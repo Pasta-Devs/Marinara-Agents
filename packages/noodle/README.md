@@ -10,4 +10,6 @@ Rebuild only this package from the repository root with a neighboring Engine che
 
 ```bash
 node scripts/build-feature-packages.mjs noodle
+node scripts/test-catalog-lanes.mjs
+node scripts/validate-catalog.mjs
 ```
