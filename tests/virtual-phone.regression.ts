@@ -29,6 +29,7 @@ import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
 import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
 import { buildTurnContext, sanitizeForPrompt, TURN_CONTEXT_CHARS, type TurnPhoneState } from "../packages/virtual-phone/src/phone/system/turn-context";
+import { lorebookScope } from "../packages/virtual-phone/src/phone/system/lorebook-scope";
 import { conditionOpacity, patternBackground } from "../packages/virtual-phone/src/phone/device/effects";
 import { projectConversationTexts } from "../packages/virtual-phone/src/phone/system/server-entry";
 
@@ -312,6 +313,18 @@ async function main() {
   assert.ok(!hostile.includes("\n"), hostile);
   assert.equal(sanitizeForPrompt("a [b] c\nd"), "a b c d");
   assert.ok(sanitizeForPrompt("x".repeat(400)).length <= 91);
+  // A capped block still ends as a finished sentence, not mid-quote: it is the one string the
+  // model reads every turn.
+  const overlong = buildTurnContext([{
+    ownerName: "Mara",
+    ownerType: "character",
+    unread: Array.from({ length: 3 }, (_, index) => ({ from: `Sender ${index}`, count: 1, latest: "c".repeat(120) })),
+    note: "d".repeat(200),
+  }])!;
+  assert.ok(overlong.length <= TURN_CONTEXT_CHARS, `overlong ${overlong.length}`);
+  assert.ok(overlong.endsWith("]"));
+  assert.ok(!overlong.includes('"]'), `block ends mid-quote: ${overlong.slice(-40)}`);
+
   // Every generation pays for this block, so it is capped whatever the phone has on it.
   const noisy = buildTurnContext(Array.from({ length: 6 }, (_, index) => ({
     ownerName: `Owner ${index}`,
@@ -321,6 +334,28 @@ async function main() {
   })))!;
   assert.ok(noisy.length <= TURN_CONTEXT_CHARS, `turn context ${noisy.length}`);
   assert.ok(noisy.endsWith("]"));
+
+  // Lorebook scope: a phone is grounded in this story's lore, not in every world installed.
+  const chatContext = {
+    chatId: "chat-1",
+    characterIds: ["char-1"],
+    personaId: "persona-1",
+    activeLorebookIds: ["book-active"],
+  };
+  assert.equal(lorebookScope({ id: "book-active", data: {} }, chatContext), "active");
+  assert.equal(lorebookScope({ id: "b", data: { chatId: "chat-1" } }, chatContext), "chat");
+  assert.equal(lorebookScope({ id: "b", data: { characterIds: ["char-1"] } }, chatContext), "character");
+  assert.equal(lorebookScope({ id: "b", data: { characterId: "char-1" } }, chatContext), "character");
+  assert.equal(lorebookScope({ id: "b", data: { personaIds: ["persona-1"] } }, chatContext), "persona");
+  // The one that mattered: a global book the chat has not switched on stays out of the phone.
+  assert.equal(lorebookScope({ id: "b", data: { isGlobal: true } }, chatContext), null);
+  assert.equal(lorebookScope({ id: "b", data: { chatId: "other-chat" } }, chatContext), null);
+  assert.equal(lorebookScope({ id: "b", data: { characterIds: ["someone-else"] } }, chatContext), null);
+  // A chat that never recorded an active list predates the field, so globals still apply there.
+  const legacyChat = { ...chatContext, activeLorebookIds: [] };
+  assert.equal(lorebookScope({ id: "b", data: { isGlobal: true } }, legacyChat), "global");
+  assert.equal(lorebookScope({ id: "b", data: {} }, legacyChat), null);
+  assert.equal(lorebookScope({ id: "b", data: null }, legacyChat), null);
 
   const conversationProjection = projectConversationTexts([
     { id: "ordinary-user", role: "user", extra: "{}" },

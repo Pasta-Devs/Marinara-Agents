@@ -83,5 +83,10 @@ export function buildTurnContext(phones: TurnPhoneState[]): string | null {
    * silently. Telling it otherwise would be instructing the model to do something with no effect.
    */
   const block = `[Phone — ${lines.join(" ")}]`;
-  return block.length > TURN_CONTEXT_CHARS ? `${block.slice(0, TURN_CONTEXT_CHARS - 1)}]` : block;
+  if (block.length <= TURN_CONTEXT_CHARS) return block;
+  // Cut back to the last complete sentence rather than mid-word: slicing blind could end the block
+  // on a half-quoted message, which is the one string the model reads every single turn.
+  const clipped = block.slice(0, TURN_CONTEXT_CHARS - 1);
+  const lastSentence = clipped.lastIndexOf(". ");
+  return `${lastSentence > 20 ? clipped.slice(0, lastSentence + 1) : clipped.replace(/\s+\S*$/u, "…")}]`;
 }

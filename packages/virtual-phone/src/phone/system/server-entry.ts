@@ -16,6 +16,7 @@ import { extractImageUrls } from "../apps/gallery/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
 import { applyTransaction, parseProposal, readAccount } from "../apps/banking/manifest";
 import { buildTurnContext, type TurnPhoneState } from "./turn-context";
+import { lorebookScope } from "./lorebook-scope";
 
 interface CapabilityContext {
   api: {
@@ -320,6 +321,26 @@ export async function activate({ api }: CapabilityContext) {
    * entry written for one character no longer bleeds into another character's phone. The fields are
    * optional, so on 2.4.1 every entry still passes and behaviour is unchanged.
    */
+  /** Names and scopes for this chat's lorebooks; the rule itself lives in lorebook-scope.ts. */
+  const lorebooksForChat = async (chatId?: string) => {
+    if (!api.runtime.resources.listLorebooks) return [];
+    const chat = chatId ? await api.runtime.persistence.getChat(chatId).catch(() => null) : null;
+    const metadata = chat?.metadata && typeof chat.metadata === "object" ? chat.metadata as Record<string, unknown> : {};
+    const context = {
+      chatId,
+      characterIds: chat?.characterIds ?? [],
+      personaId: chat?.personaId ?? null,
+      activeLorebookIds: Array.isArray(metadata.activeLorebookIds)
+        ? metadata.activeLorebookIds.filter((id): id is string => typeof id === "string")
+        : [],
+    };
+    return (await api.runtime.resources.listLorebooks()).map((book) => ({
+      id: book.id,
+      name: readName(book.data, "Lorebook"),
+      scope: lorebookScope(book, context),
+    }));
+  };
+
   const loreContext = async (phone?: Awaited<ReturnType<typeof findPhone>>, chatId?: string) => {
      try {
        if (!api.runtime.resources.listLorebooks || !api.runtime.resources.listEligibleLorebookEntries) return "";
@@ -327,42 +348,42 @@ export async function activate({ api }: CapabilityContext) {
         if (settings?.lorebookMode === "none") return "";
         const selectedOnly = settings?.lorebookMode === "selected";
         const attached = selectedOnly ? settings.lorebookIds : [];
-        const chat = chatId ? await api.runtime.persistence.getChat(chatId).catch(() => null) : null;
-        const books = (await api.runtime.resources.listLorebooks()).filter((book) => {
-          if (selectedOnly) return attached.includes(book.id);
-          const data = book.data && typeof book.data === "object" ? book.data as Record<string, unknown> : {};
-          const characterIds = [
-            ...(Array.isArray(data.characterIds) ? data.characterIds.filter((id): id is string => typeof id === "string") : []),
-            ...(typeof data.characterId === "string" ? [data.characterId] : []),
-          ];
-          const personaIds = [
-            ...(Array.isArray(data.personaIds) ? data.personaIds.filter((id): id is string => typeof id === "string") : []),
-            ...(typeof data.personaId === "string" ? [data.personaId] : []),
-          ];
-          const bookChatId = typeof data.chatId === "string" ? data.chatId : null;
-          const metadata = chat?.metadata && typeof chat.metadata === "object" ? chat.metadata as Record<string, unknown> : {};
-          const activeLorebookIds = Array.isArray(metadata.activeLorebookIds)
-            ? metadata.activeLorebookIds.filter((id): id is string => typeof id === "string")
-            : [];
-          return data.isGlobal === true
-            || activeLorebookIds.includes(book.id)
-            || bookChatId === chatId
-            || Boolean(chat && characterIds.some((id) => chat.characterIds.includes(id)))
-            || Boolean(chat?.personaId && personaIds.includes(chat.personaId));
-        });
+        const inChat = await lorebooksForChat(chatId);
+        const books = selectedOnly
+          ? inChat.filter((book) => attached.includes(book.id))
+          : inChat.filter((book) => book.scope !== null);
        if (!books.length) return "";
        const entries = await api.runtime.resources.listEligibleLorebookEntries({ lorebookIds: books.map((book) => book.id), entryIds: [] });
       const owner = phone?.document.identity.ownerType === "character" ? phone.document.identity.ownerId : null;
-      const scoped = entries.filter((entry) => {
-        const mode = entry.characterFilterMode;
+      // The entry's tag filter names tags, not ids, so the owner's own tags have to be read off the
+      // card. Cards store them as a comma-separated string.
+      const ownerTags = new Set<string>();
+      if (owner) {
+        const [card] = await api.runtime.resources.listCharacters([owner]).catch(() => []);
+        const data = card?.data && typeof card.data === "object" ? card.data as Record<string, unknown> : {};
+        const raw = typeof data.tags === "string" ? data.tags : Array.isArray(data.tags) ? data.tags.join(",") : "";
+        for (const tag of raw.split(",")) {
+          const trimmed = tag.trim().toLocaleLowerCase();
+          if (trimmed) ownerTags.add(trimmed);
+        }
+      }
+      /**
+       * An entry's own scope, which the Engine resolves but deliberately leaves for us to apply.
+       * A persona's phone has no character to match, so an entry scoped to specific characters is
+       * not for it; an exclude list, though, still lets it through.
+       */
+      const passesFilter = (mode: string | undefined, ids: string[] | undefined, matches: boolean) => {
         if (!mode || mode === "any") return true;
-        const ids = entry.characterFilterIds ?? [];
-        if (!ids.length) return true;
-        // A persona's phone has no character to match, so an entry scoped to specific characters
-        // is not for it; an exclude list, though, still lets it through.
-        const matches = owner !== null && ids.includes(owner);
+        if (!ids?.length) return true;
         return mode === "include" ? matches : !matches;
-      });
+      };
+      const scoped = entries.filter((entry) =>
+        passesFilter(entry.characterFilterMode, entry.characterFilterIds, owner !== null && (entry.characterFilterIds ?? []).includes(owner))
+        && passesFilter(
+          entry.characterTagFilterMode,
+          entry.characterTagFilterIds,
+          (entry.characterTagFilterIds ?? []).some((tag) => ownerTags.has(tag.trim().toLocaleLowerCase())),
+        ));
       return scoped.slice(0, 8)
         .map((entry) => `${entry.name}: ${(entry.content || entry.description || "").slice(0, 200)}`)
         .filter((line) => !line.endsWith(": "))
@@ -582,43 +603,67 @@ export async function activate({ api }: CapabilityContext) {
    * every generation, so it touches phone documents and threads and nothing else — no model calls,
    * no lorebook reads, no story history.
    */
+  /**
+   * The per-turn phone state handed to the story.
+   *
+   * Whose phone this may describe is the whole question. A phone is private until its owner shows
+   * it — that is what the Show button and the access-denial screen exist for — so contributing
+   * every phone in the chat would route around both: the character would learn what is on the
+   * user's phone without being shown it, and what is on another character's phone as well.
+   *
+   * So: never a persona's phone, and a character's only when the chat has exactly one character,
+   * because the Engine tells us the chat but not who is speaking. In a group scene there is no way
+   * to know whose phone the block would be read by, and the safe answer is silence.
+   *
+   * It also has to be cheap. This runs before every generation in every chat, including chats with
+   * no phone at all, under a deadline the Engine enforces — so it walks the phone list once and
+   * returns before touching threads or app storage when there is nothing to say.
+   */
   const turnPhoneStates = async (chatId: string): Promise<TurnPhoneState[]> => {
-    const states: TurnPhoneState[] = [];
-    for (const { document } of await phones.list()) {
-      if (!document.provisioning.enabled || !document.identity.chatScope.includes(chatId)) continue;
-      const phoneId = document.identity.phoneId;
-      const settings = normalizeDeviceSettings(document.namespaces.phone.settings, document.provisioning.baselineTheme);
-      const names = new Map<string, string>([
-        ...(await contactsFor(phoneId)).map((contact) => [contact.phoneId, contact.ownerName] as const),
-        ...(await phones.listContacts(phoneId)).flatMap(({ document: contact }) =>
-          contactThreadIds(contact).map((id) => [id, contact.name] as const)),
-      ]);
-      const unread: TurnPhoneState["unread"] = [];
-      for (const thread of await messaging.threadsFor(phoneId)) {
-        const pending = unreadMessages(thread.document, phoneId);
-        if (!pending.length) continue;
-        const other = thread.document.participants.find((participant) => participant !== phoneId) ?? "";
-        unread.push({
-          from: names.get(other) ?? "an unknown number",
-          count: pending.length,
-          latest: pending.at(-1)?.text ?? "",
-        });
-      }
-      const notes = await phones.getAppStorageKey(phoneId, "notes", "notes").catch(() => null);
-      const firstNote = Array.isArray(notes) ? (notes[0] as { text?: unknown } | undefined) : undefined;
-      states.push({
-        ownerName: document.identity.ownerName,
-        ownerType: document.identity.ownerType,
-        clock: settings.storyClockOffsetMinutes
-          ? new Date(Date.now() + settings.storyClockOffsetMinutes * 60_000)
-            .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-          : undefined,
-        unread,
-        note: typeof firstNote?.text === "string" && firstNote.text.trim() ? firstNote.text : undefined,
-        batteryLevel: settings.batteryLevel,
+    const owned = (await phones.list()).filter(({ document }) =>
+      document.provisioning.enabled
+      && document.identity.ownerType === "character"
+      && document.identity.chatScope.includes(chatId));
+    if (!owned.length) return [];
+
+    const chat = await api.runtime.persistence.getChat(chatId).catch(() => null);
+    if (!chat || chat.characterIds.length !== 1) return [];
+    const speaker = chat.characterIds[0];
+    const phone = owned.find(({ document }) => document.identity.ownerId === speaker);
+    if (!phone) return [];
+
+    const { document } = phone;
+    const phoneId = document.identity.phoneId;
+    const settings = normalizeDeviceSettings(document.namespaces.phone.settings, document.provisioning.baselineTheme);
+    const names = new Map<string, string>([
+      ...(await contactsFor(phoneId)).map((contact) => [contact.phoneId, contact.ownerName] as const),
+      ...(await phones.listContacts(phoneId)).flatMap(({ document: contact }) =>
+        contactThreadIds(contact).map((id) => [id, contact.name] as const)),
+    ]);
+    const unread: TurnPhoneState["unread"] = [];
+    for (const thread of await messaging.threadsFor(phoneId)) {
+      const pending = unreadMessages(thread.document, phoneId);
+      if (!pending.length) continue;
+      const other = thread.document.participants.find((participant) => participant !== phoneId) ?? "";
+      unread.push({
+        from: names.get(other) ?? "an unknown number",
+        count: pending.length,
+        latest: pending.at(-1)?.text ?? "",
       });
     }
-    return states;
+    const notes = await phones.getAppStorageKey(phoneId, "notes", "notes").catch(() => null);
+    const firstNote = Array.isArray(notes) ? (notes[0] as { text?: unknown } | undefined) : undefined;
+    return [{
+      ownerName: document.identity.ownerName,
+      ownerType: document.identity.ownerType,
+      clock: settings.storyClockOffsetMinutes
+        ? new Date(Date.now() + settings.storyClockOffsetMinutes * 60_000)
+          .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+        : undefined,
+      unread,
+      note: typeof firstNote?.text === "string" && firstNote.text.trim() ? firstNote.text : undefined,
+      batteryLevel: settings.batteryLevel,
+    }];
   };
 
   const routes: FastifyPluginAsync = async (app) => {
@@ -2093,12 +2138,20 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
     });
     // Feeds the Lorebooks picker in phone Settings. Optional on the runtime, so an older Engine
     // simply reports none available and the picker says so.
-    app.get("/lorebooks", async () => {
-      if (!api.runtime.resources.listLorebooks) return { lorebooks: [], supported: false };
-      const books = await api.runtime.resources.listLorebooks();
+    /**
+     * The lorebook picker. It used to list every lorebook in the installation with no indication of
+     * which had anything to do with this story, which is a poor way to choose what grounds a phone.
+     * Books in the chat come back first with the reason they qualify; everything else is still
+     * offered, but separately, because attaching an unrelated world to one phone is a real use.
+     */
+    app.get<{ Querystring: { phoneId?: string } }>("/lorebooks", async (request) => {
+      if (!api.runtime.resources.listLorebooks) return { lorebooks: [], others: [], supported: false };
+      const phone = request.query.phoneId ? await findPhone(request.query.phoneId).catch(() => null) : null;
+      const books = await lorebooksForChat(phone ? targetChat(phone) : undefined);
       return {
         supported: true,
-        lorebooks: books.map((book) => ({ id: book.id, name: readName(book.data, "Lorebook") })),
+        lorebooks: books.filter((book) => book.scope !== null),
+        others: books.filter((book) => book.scope === null).map(({ id, name }) => ({ id, name, scope: null })),
       };
     });
     /**
@@ -2492,7 +2545,16 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
     releases.push(api.registerConversationCommand({ commandType: PHONE_COMMAND_TAG, tags: [PHONE_COMMAND_TAG] }));
   }
 
-  const releaseRoutes = await api.registerPrivilegedRoutes(routes, { prefix: "/api/virtual-phone" });
+  // If route registration fails the package is not active, so the contributor and the command must
+  // not stay in the Engine's registries — a live contributor for a dead package would be called on
+  // every turn forever.
+  let releaseRoutes: () => Promise<void> | void;
+  try {
+    releaseRoutes = await api.registerPrivilegedRoutes(routes, { prefix: "/api/virtual-phone" });
+  } catch (error) {
+    for (const release of releases.reverse()) release();
+    throw error;
+  }
   return async () => {
     for (const release of releases.reverse()) release();
     await releaseRoutes();

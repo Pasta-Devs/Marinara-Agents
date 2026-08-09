@@ -6,6 +6,23 @@ import { PhoneAppHeader } from "../../platform/app-header";
 import { defaultDeviceSettings, offsetForStoryTime, storyNow } from "../../device/settings";
 import { WallpaperCropper } from "./wallpaper-cropper";
 
+type LorebookScope = "active" | "chat" | "character" | "persona" | "global" | null;
+
+interface LorebookOption {
+  id: string;
+  name: string;
+  scope: LorebookScope;
+}
+
+/** Why a lorebook is in this chat, said plainly enough to choose by. */
+const SCOPE_LABELS: Record<Exclude<LorebookScope, null>, string> = {
+  active: "Active in this chat",
+  chat: "Bound to this chat",
+  character: "On a character here",
+  persona: "On your persona",
+  global: "Global",
+};
+
 interface SettingsShellProps {
   phone: Phone;
   onPhoneChange: (phone: Phone) => void;
@@ -53,7 +70,8 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
   const storyClockValue = storyNow(settings.storyClockOffsetMinutes).toTimeString().slice(0, 5);
   const [about, setAbout] = React.useState<PhoneAbout | null>(null);
   const [connections, setConnections] = React.useState<EngineConnection[] | null>(null);
-  const [lorebooks, setLorebooks] = React.useState<Array<{ id: string; name: string }> | null>(null);
+  const [lorebooks, setLorebooks] = React.useState<LorebookOption[] | null>(null);
+  const [showOtherLorebooks, setShowOtherLorebooks] = React.useState(false);
   const [tab, setTab] = React.useState<"device" | "generation" | "about">("device");
   const [loreQuery, setLoreQuery] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -70,8 +88,11 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
 
   React.useEffect(() => {
     let active = true;
-    void phoneRequest<{ lorebooks: Array<{ id: string; name: string }> }>("/lorebooks")
-      .then((response) => { if (active) setLorebooks(response.lorebooks); })
+    // Scoped to this phone's chat, so the list leads with the lore this story actually uses.
+    void phoneRequest<{ lorebooks: LorebookOption[]; others: LorebookOption[] }>(
+      `/lorebooks?phoneId=${encodeURIComponent(phone.phoneId)}`,
+    )
+      .then((response) => { if (active) setLorebooks([...response.lorebooks, ...response.others]); })
       .catch((cause: unknown) => { if (active) { setLorebooks([]); setError(cause instanceof Error ? cause.message : "Lorebooks could not be loaded."); } });
     return () => { active = false; };
   }, []);
@@ -132,6 +153,7 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
     }
   };
   const visibleLorebooks = lorebooks?.filter((lorebook) => lorebook.name.toLocaleLowerCase().includes(loreQuery.trim().toLocaleLowerCase())) ?? [];
+  const otherLorebooks = visibleLorebooks.filter((lorebook) => lorebook.scope === null);
   const selectedLorebooks = settings.lorebookIds.length;
   const toggleRow = (label: string, description: string, checked: boolean, patch: Record<string, unknown>) => (
     <label className="vp-setting-toggle">
@@ -232,9 +254,25 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
                 {lorebooks === null ? <p className="vp-muted-note">Loading lorebooks...</p> : null}
                 {lorebooks?.length === 0 ? <p className="vp-muted-note">No lorebooks available.</p> : null}
                 {lorebooks && visibleLorebooks.length === 0 && lorebooks.length > 0 ? <p className="vp-muted-note">No matches.</p> : null}
-                {visibleLorebooks.map((lorebook) => <label key={lorebook.id} className="vp-lore-option"><span>{lorebook.name}</span><input type="checkbox" checked={settings.lorebookIds.includes(lorebook.id)} onChange={(event) => void update({ lorebookIds: event.target.checked ? [...new Set([...settings.lorebookIds, lorebook.id])] : settings.lorebookIds.filter((id) => id !== lorebook.id) })} /></label>)}
+                {visibleLorebooks.filter((lorebook) => lorebook.scope !== null).map((lorebook) => (
+                  <label key={lorebook.id} className="vp-lore-option">
+                    <span>{lorebook.name}<small>{SCOPE_LABELS[lorebook.scope!]}</small></span>
+                    <input type="checkbox" checked={settings.lorebookIds.includes(lorebook.id)} onChange={(event) => void update({ lorebookIds: event.target.checked ? [...new Set([...settings.lorebookIds, lorebook.id])] : settings.lorebookIds.filter((id) => id !== lorebook.id) })} />
+                  </label>
+                ))}
+                {otherLorebooks.length ? (
+                  <button type="button" className="vp-lore-more" onClick={() => setShowOtherLorebooks((current) => !current)} aria-expanded={showOtherLorebooks}>
+                    {showOtherLorebooks ? "Hide" : `Show ${otherLorebooks.length} lorebook${otherLorebooks.length === 1 ? "" : "s"} from other stories`}
+                  </button>
+                ) : null}
+                {showOtherLorebooks ? otherLorebooks.map((lorebook) => (
+                  <label key={lorebook.id} className="vp-lore-option">
+                    <span>{lorebook.name}<small>Not in this chat</small></span>
+                    <input type="checkbox" checked={settings.lorebookIds.includes(lorebook.id)} onChange={(event) => void update({ lorebookIds: event.target.checked ? [...new Set([...settings.lorebookIds, lorebook.id])] : settings.lorebookIds.filter((id) => id !== lorebook.id) })} />
+                  </label>
+                )) : null}
               </div>
-            </> : <p className="vp-lore-summary">{settings.lorebookMode === "all" ? "Every available lorebook can ground this phone." : "Lorebooks are excluded from phone generation."}</p>}
+            </> : <p className="vp-lore-summary">{settings.lorebookMode === "all" ? "Lorebooks active in this chat ground this phone." : "Lorebooks are excluded from phone generation."}</p>}
           </div>
         </section>
         <section><h3 className="vp-section-label">Instructions &amp; jailbreak</h3><div className="vp-group"><label className="vp-row vp-row--stacked"><span>System prompt / jailbreak</span>
