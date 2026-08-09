@@ -12,7 +12,7 @@ import { parseBoundedContent } from "../packages/virtual-phone/src/phone/platfor
 import { settingsManifest } from "../packages/virtual-phone/src/phone/apps/settings/manifest";
 import { appStoreManifest, modelUseLabel } from "../packages/virtual-phone/src/phone/apps/app-store/manifest";
 import { fallbackSearchResults, goodleManifest, looksLikeUrl, normalizeUrl, parseLinkedText, parseResultItem, slugify } from "../packages/virtual-phone/src/phone/apps/goodle/manifest";
-import { guessSiteKind, normalizeSiteKind, parseImageResult, parseMediaItem, parsePageSection, SITE_KINDS, SITE_TEMPLATES } from "../packages/virtual-phone/src/phone/apps/goodle/sites";
+import { glyphForSubject, guessSiteKind, normalizeSiteKind, pageMedia, parseImageResult, parseMediaItem, parsePageSection, SITE_KINDS, SITE_TEMPLATES } from "../packages/virtual-phone/src/phone/apps/goodle/sites";
 import { defaultDeviceSettings, normalizeDeviceSettings, offsetForStoryTime, storyNow } from "../packages/virtual-phone/src/phone/device/settings";
 import { messagesManifest } from "../packages/virtual-phone/src/phone/apps/messages/manifest";
 import { notesManifest } from "../packages/virtual-phone/src/phone/apps/notes/manifest";
@@ -220,6 +220,30 @@ async function main() {
   assert.deepEqual(parseMediaItem("no emoji here", "📰"), { glyph: "📰", caption: "no emoji here" });
   assert.deepEqual(parseImageResult("🌉 | the old bridge | herald.web/photos"),
     { glyph: "🌉", caption: "the old bridge", source: "herald.web/photos", title: "the old bridge" });
+
+  // Every page shows pictures, whether or not the model returned any: a page that came back
+  // without media used to render as a wall of text, which was most of them.
+  const bareSections = ["The bridge is shut :: Traffic stopped at midnight.", "Council :: They say avoid the east bank.", "Traders :: The closures cost them."];
+  for (const kind of SITE_KINDS) {
+    const filled = pageMedia(kind, [], bareSections);
+    assert.ok(filled.length >= SITE_TEMPLATES[kind].media[0], `${kind} media count`);
+    for (const shot of filled) {
+      assert.ok(shot.glyph.length > 0 && shot.caption.length > 0, `${kind} media content`);
+    }
+  }
+  // Captions are taken from the section each picture illustrates, and the emoji from its subject.
+  assert.equal(pageMedia("news", [], bareSections)[0]!.caption, "The bridge is shut");
+  assert.equal(pageMedia("news", [], bareSections)[0]!.glyph, "🌉");
+  assert.equal(glyphForSubject("the hospital was closed", "📰"), "🏥");
+  assert.equal(glyphForSubject("nothing in particular", "📰"), "📰");
+  // With a lead picture, each section's picture is still described by that section, not the next.
+  const withLead = pageMedia("news", [], ["Headline page", ...bareSections]);
+  assert.equal(withLead[1]!.caption, "The bridge is shut");
+  assert.equal(withLead[2]!.caption, "Council");
+  // Anything the model did supply is kept as-is, and only the gaps are filled.
+  const partial = pageMedia("shop", ["🏮 | red paper lantern"], bareSections);
+  assert.deepEqual(partial[0], { glyph: "🏮", caption: "red paper lantern" });
+  assert.ok(partial.length >= SITE_TEMPLATES.shop.media[0]);
   const customized = await concurrentRuntime.updateSettings(firstCharacter.document.identity.phoneId, {
     deviceName: "Mira's phone",
     wallpaper: "midnight",

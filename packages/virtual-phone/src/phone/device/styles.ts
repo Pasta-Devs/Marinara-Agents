@@ -437,8 +437,20 @@ export const phoneStylesheet = `
 .vp-media figcaption { font-size: 0.625rem; line-height: 1.35; color: var(--vp-muted); }
 /* A lead image is 16:9, not the 4:3 the shared thumb uses — at full column width that filled the
    screen and pushed the article itself below the fold. */
-.vp-media--lg .vp-emoji-thumb { aspect-ratio: 16 / 9; font-size: 2.5rem; }
-.vp-media--sm { margin: 0; }
+.vp-media--wide .vp-emoji-thumb, .vp-media--lg .vp-emoji-thumb { aspect-ratio: 16 / 9; width: 100%; height: auto; font-size: 2.5rem; border-radius: 0.75rem; }
+.vp-media--md .vp-emoji-thumb { aspect-ratio: 4 / 3; width: 100%; height: auto; font-size: 2rem; }
+.vp-media--sm { margin: 0 0 0.5rem; }
+/* A small picture inside a section floats beside its text the way a newspaper sets one. */
+.vp-media--inline { float: right; width: 6.25rem; margin: 0 0 0.5rem 0.625rem; }
+.vp-media--inline .vp-emoji-thumb { aspect-ratio: 4 / 3; width: 100%; height: auto; font-size: 1.75rem; border-radius: 0.5rem; }
+.vp-site-section, .vp-blog-post, .vp-thread-post { overflow: hidden; }
+.vp-official-head { display: flex; align-items: center; gap: 0.625rem; }
+.vp-official-head .vp-page-heading { margin: 0; flex: 1; }
+.vp-official-head .vp-media { width: 3rem; flex: 0 0 auto; margin: 0; }
+.vp-official-head .vp-emoji-thumb { aspect-ratio: 1; width: 100%; height: auto; font-size: 1.5rem; }
+.vp-official-head figcaption { display: none; }
+/* A place is not a person: listing thumbs are rounded squares, not the circular avatar shape. */
+.vp-listing-thumb { height: 2.75rem; width: 2.75rem; font-size: 1.25rem; border-radius: 0.625rem; }
 .vp-media--sm figcaption { font-size: 0.5625rem; }
 .vp-media-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
 .vp-media-row .vp-emoji-thumb { aspect-ratio: 1; width: 100%; height: auto; font-size: 1.5rem; border-radius: 0.625rem; }

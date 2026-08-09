@@ -22,6 +22,9 @@ export interface SiteTemplate {
   sections: [number, number];
   /** Whether the template draws a lead image box. */
   hero: boolean;
+  /** How many pictures this kind of page wants, and what they should be of. */
+  media: [number, number];
+  mediaHint: string;
   /** Emoji used for media placeholders when the page gives no better hint. */
   glyph: string;
 }
@@ -30,38 +33,47 @@ export const SITE_TEMPLATES: Record<SiteKind, SiteTemplate> = {
   news: {
     id: "news", label: "News", hero: true, glyph: "📰", sections: [3, 5],
     sectionFormat: "'Paragraph heading :: paragraph text'. Write it as a news article: the first section is the lede.",
+    media: [2, 4], mediaHint: "the lead photograph first, then photographs illustrating the later sections",
   },
   shop: {
     id: "shop", label: "Shop", hero: true, glyph: "🛍️", sections: [4, 6],
     sectionFormat: "'Product name :: price :: short description'. One product per section, price with a currency symbol.",
+    media: [4, 6], mediaHint: "one product shot per section, in the same order as the sections",
   },
   forum: {
     id: "forum", label: "Forum", hero: false, glyph: "💬", sections: [4, 6],
     sectionFormat: "'Poster handle :: post text'. The first section is the original post, the rest are replies arguing, helping, or derailing.",
+    media: [1, 3], mediaHint: "pictures posted in the thread — a phone photo, a screenshot, a map",
   },
   wiki: {
     id: "wiki", label: "Reference", hero: true, glyph: "📚", sections: [4, 6],
     sectionFormat: "'Section heading :: encyclopedic paragraph'. Neutral, factual tone about this world.",
+    media: [2, 3], mediaHint: "the infobox picture first, then a diagram or historical photograph",
   },
   profile: {
     id: "profile", label: "Profile", hero: true, glyph: "👤", sections: [3, 5],
     sectionFormat: "'Heading :: body'. An about-page for a person or organisation: who they are, what they do, history, contact.",
+    media: [2, 3], mediaHint: "a portrait or logo first, then premises, staff, or work",
   },
   blog: {
     id: "blog", label: "Blog", hero: false, glyph: "✍️", sections: [3, 5],
     sectionFormat: "'Post title :: date :: opening paragraph'. A list of posts, newest first, in one person's voice.",
+    media: [3, 5], mediaHint: "one picture per post, in the same order as the posts",
   },
   directory: {
     id: "directory", label: "Listings", hero: false, glyph: "📍", sections: [4, 6],
     sectionFormat: "'Place or business name :: rating and category :: one-line description'. A local listings page.",
+    media: [4, 6], mediaHint: "one photograph per listing, in the same order as the sections",
   },
   official: {
     id: "official", label: "Official", hero: false, glyph: "🏛️", sections: [3, 5],
     sectionFormat: "'Heading :: body'. Formal and bureaucratic: notices, procedures, opening hours, who to contact.",
+    media: [1, 2], mediaHint: "a crest, a notice board, a map of the affected area",
   },
   video: {
     id: "video", label: "Video", hero: false, glyph: "▶️", sections: [4, 6],
     sectionFormat: "'Video title :: duration like 12:04 :: channel name and view count'. A video listing page.",
+    media: [4, 6], mediaHint: "one thumbnail per video, in the same order as the sections",
   },
 };
 
@@ -147,4 +159,58 @@ export function parseImageResult(item: string) {
   const { glyph, caption } = parseMediaItem(parts.slice(0, 2).join(" | "));
   const source = parts[2] ?? "";
   return { glyph, caption, source: source || "goodle.web/images", title: caption };
+}
+
+/** Emoji picked from what a caption or heading is about, so a placeholder is not always the same box. */
+const SUBJECT_GLYPHS: Array<[RegExp, string]> = [
+  [/\b(bridge|crossing)\b/u, "🌉"], [/\b(flood|rain|storm|river|water)\b/u, "🌧️"],
+  [/\b(fire|burn|blaze)\b/u, "🔥"], [/\b(police|crime|arrest|investigat)/u, "🚓"],
+  [/\b(hospital|clinic|doctor|nurse|medical)\b/u, "🏥"], [/\b(school|university|student)\b/u, "🎓"],
+  [/\b(market|shop|store|price|sale|buy)\b/u, "🛒"], [/\b(food|meal|restaurant|cafe|kitchen|noodle)\b/u, "🍜"],
+  [/\b(bar|drink|pub|cocktail|beer)\b/u, "🍸"], [/\b(car|traffic|road|drive|bus)\b/u, "🚗"],
+  [/\b(train|rail|station)\b/u, "🚉"], [/\b(boat|ship|dock|harbour|harbor|port)\b/u, "⚓"],
+  [/\b(house|home|estate|property|building|office)\b/u, "🏢"], [/\b(map|route|location|street)\b/u, "🗺️"],
+  [/\b(money|bank|cost|debt|funding|budget)\b/u, "💷"], [/\b(council|government|official|notice|permit)\b/u, "🏛️"],
+  [/\b(book|library|archive|record|history)\b/u, "📚"], [/\b(photo|picture|camera|footage|video)\b/u, "📷"],
+  [/\b(night|dark|light|lamp|lantern)\b/u, "🏮"], [/\b(people|crowd|meeting|team|family)\b/u, "👥"],
+  [/\b(phone|call|message)\b/u, "📱"], [/\b(letter|mail|post|document|paper)\b/u, "📄"],
+];
+
+export function glyphForSubject(text: string, fallback: string) {
+  const haystack = text.toLowerCase();
+  for (const [pattern, glyph] of SUBJECT_GLYPHS) {
+    if (pattern.test(haystack)) return glyph;
+  }
+  return fallback;
+}
+
+export interface PageMedia { glyph: string; caption: string }
+
+/**
+ * The pictures a page shows, one per section the template wants illustrated.
+ *
+ * The model is asked for media, but "asked for" is not "given": a page that came back without any
+ * used to render as a wall of text, which is most of them. Anything missing is filled in here from
+ * the section it belongs to — an emoji chosen from what the section is about, and the heading as
+ * the alt text — so every page has its pictures whether or not the model cooperated.
+ */
+export function pageMedia(kind: SiteKind, media: string[], sections: string[]): PageMedia[] {
+  const template = SITE_TEMPLATES[kind] ?? SITE_TEMPLATES.official;
+  const supplied = media.map((item) => parseMediaItem(item, template.glyph));
+  /**
+   * One picture per section where the template can take that many, never fewer than the template's
+   * minimum, and never fewer than the model actually supplied. Clamping to the minimum instead left
+   * a four-product shop with two product shots.
+   */
+  const wanted = Math.max(supplied.length, Math.min(Math.max(sections.length, template.media[0]), template.media[1]));
+  return Array.from({ length: wanted }, (_, index) => {
+    const given = supplied[index];
+    if (given) return given;
+    const source = sections[index] ?? sections[0] ?? "";
+    const { heading, body } = parsePageSection(source);
+    // Cut to a word boundary: a caption sheared mid-word reads as broken, not as brief.
+    const summary = body.length > 52 ? `${body.slice(0, 52).replace(/\s+\S*$/u, "")}…` : body;
+    const caption = heading || summary || template.label;
+    return { glyph: glyphForSubject(`${heading} ${body}`, template.glyph), caption };
+  });
 }

@@ -290,7 +290,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
                         onClick={() => openPage(image.title, image.source)}
                         title={`${image.caption} — ${image.source}`}
                       >
-                        <MediaBox glyph={image.glyph} size="md" />
+                        <MediaBox glyph={image.glyph} alt={image.caption} caption="" size="md" />
                         <span className="vp-image-caption">{image.caption}</span>
                         <span className="vp-image-source">{image.source.split("/")[0]}</span>
                       </button>
