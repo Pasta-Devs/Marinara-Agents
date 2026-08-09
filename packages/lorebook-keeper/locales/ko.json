@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "로어북 키퍼 (Lorebook Keeper)",
+    "description": "중요한 이야기의 사실·캐릭터·장소·세계 변화를 바탕으로 장기적으로 유지되는 채팅 로어북 항목을 생성하고 갱신합니다. 롤플레이 및 게임 모드에서는 채팅 설정 → 에이전트 → 기타 에이전트/로어북 키퍼에서 이 에이전트를 추가하세요."
+  },
+  "agents": {
+    "lorebook-keeper": {
+      "name": "로어북 키퍼 (Lorebook Keeper)",
+      "description": "중요한 이야기의 사실·캐릭터·장소·세계 변화를 바탕으로 장기적으로 유지되는 채팅 로어북 항목을 생성하고 갱신합니다. 롤플레이 및 게임 모드에서는 채팅 설정 → 에이전트 → 기타 에이전트/로어북 키퍼에서 이 에이전트를 추가하세요."
+    }
+  }
+}
