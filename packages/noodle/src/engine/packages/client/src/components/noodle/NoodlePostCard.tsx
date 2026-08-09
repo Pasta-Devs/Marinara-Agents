@@ -530,6 +530,7 @@ export function NoodleAnchoredPopover({
       if (!anchor) return;
       const anchorRect = anchor.getBoundingClientRect();
       const panelWidth = panelRef.current?.offsetWidth ?? (wide ? 384 : 304);
+      const panelHeight = panelRef.current?.offsetHeight ?? 0;
       const padding = 16;
       const maxLeft = Math.max(
         padding,
@@ -537,9 +538,15 @@ export function NoodleAnchoredPopover({
       );
       const centeredLeft =
         anchorRect.left + anchorRect.width / 2 - panelWidth / 2;
+      const belowTop = anchorRect.bottom + 12;
+      const aboveTop = anchorRect.top - panelHeight - 12;
       setPosition({
         left: Math.min(Math.max(centeredLeft, padding), maxLeft),
-        top: anchorRect.bottom + 12,
+        top:
+          panelHeight > 0 &&
+          belowTop + panelHeight + padding > window.innerHeight
+            ? Math.max(padding, aboveTop)
+            : belowTop,
       });
     };
 
@@ -561,7 +568,7 @@ export function NoodleAnchoredPopover({
       ref={panelRef}
       data-noodle-compose-focus-portal={modalOwned ? "true" : undefined}
       className={cn(
-        "fixed max-w-[calc(100vw-2rem)]",
+        "fixed max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto",
         modalOwned ? "z-[10001]" : "z-[80]",
         NOODLE_ICON_SCOPE_CLASS,
         wide ? "w-[18rem] sm:w-[24rem]" : "w-[19rem]",

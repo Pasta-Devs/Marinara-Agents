@@ -8,5 +8,11 @@
   },
   "dependencies": {
     "chess.js": "1.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.0"
+  },
+  "scripts": {
+    "test:browser:noodle": "node scripts/run-package-browser-tests.mjs noodle tests/package-noodle.e2e.ts"
   }
 }
