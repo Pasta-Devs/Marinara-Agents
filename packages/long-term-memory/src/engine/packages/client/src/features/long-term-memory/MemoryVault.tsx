@@ -550,12 +550,9 @@ export default function MemoryVault({
     const chatIds = draft.scope.chatIds ??
       (draft.scope.chatId ? [draft.scope.chatId] : []);
     const groupChatIds = new Set(group?.chatIds ?? []);
-    legacyGroupChatIds.current =
-      group &&
-      chatIds.length === groupChatIds.size &&
-      chatIds.every((id) => groupChatIds.has(id))
-        ? new Set(chatIds)
-        : new Set();
+    legacyGroupChatIds.current = group
+      ? new Set(chatIds.filter((id) => groupChatIds.has(id)))
+      : new Set();
     legacyGroupInitializedNoteId.current = draft.id;
   }, [draft?.id, draft?.scope.chatId, draft?.scope.chatIds, draft?.scope.groupId, scopeTargets.data?.groups, scopeTargets.isSuccess]);
   useEffect(() => {
