@@ -390,6 +390,7 @@ async function activateHierarchicalMaps(page: Page, chatId: string) {
 }
 
 type HierarchicalMapsAgentConfig = {
+  id: string;
   type: string;
   description: string;
   phase: "pre_generation" | "parallel" | "post_processing";
@@ -397,13 +398,44 @@ type HierarchicalMapsAgentConfig = {
   settings?: unknown;
 };
 
-async function getOrCreateHierarchicalMapsAgentConfig(page: Page): Promise<HierarchicalMapsAgentConfig> {
+async function getOrCreateHierarchicalMapsAgentConfig(
+  page: Page,
+): Promise<{ config: HierarchicalMapsAgentConfig; created: boolean }> {
   const agentsResponse = await page.request.get("/api/agents");
   expect(agentsResponse.ok(), await agentsResponse.text()).toBeTruthy();
   const existing = ((await agentsResponse.json()) as HierarchicalMapsAgentConfig[]).find(
     (agent) => agent.type === "hierarchical-maps",
   );
-  if (existing) return existing;
+  if (existing) {
+    const settings = (() => {
+      if (typeof existing.settings !== "string") {
+        return existing.settings && typeof existing.settings === "object" && !Array.isArray(existing.settings)
+          ? { ...(existing.settings as Record<string, unknown>) }
+          : {};
+      }
+      try {
+        const parsed = JSON.parse(existing.settings) as unknown;
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? { ...(parsed as Record<string, unknown>) }
+          : {};
+      } catch {
+        return {};
+      }
+    })();
+    if (settings.deletedFromLibrary !== true) return { config: existing, created: false };
+
+    // Built-in agent deletion is a soft delete. Revive a suite-created row for this test,
+    // while retaining cleanup ownership so the original absent state is restored afterward.
+    delete settings.deletedFromLibrary;
+    const reviveAgentResponse = await page.request.patch(`/api/agents/${existing.id}`, {
+      data: { settings },
+    });
+    expect(reviveAgentResponse.ok(), await reviveAgentResponse.text()).toBeTruthy();
+    return {
+      config: (await reviveAgentResponse.json()) as HierarchicalMapsAgentConfig,
+      created: true,
+    };
+  }
 
   const createAgentResponse = await page.request.post("/api/agents", {
     data: {
@@ -419,7 +451,10 @@ async function getOrCreateHierarchicalMapsAgentConfig(page: Page): Promise<Hiera
     },
   });
   expect(createAgentResponse.ok(), await createAgentResponse.text()).toBeTruthy();
-  return (await createAgentResponse.json()) as HierarchicalMapsAgentConfig;
+  return {
+    config: (await createAgentResponse.json()) as HierarchicalMapsAgentConfig,
+    created: true,
+  };
 }
 
 async function openHierarchicalMapsAgentCategory(page: Page) {
@@ -950,7 +985,8 @@ test("global World Maps home activates and opens the current chat map", async ({
   });
   expect(response.ok(), await response.text()).toBeTruthy();
   const chat = (await response.json()) as { id: string };
-  const mapsAgentBefore = await getOrCreateHierarchicalMapsAgentConfig(page);
+  const { config: mapsAgentBefore, created: mapsAgentCreated } =
+    await getOrCreateHierarchicalMapsAgentConfig(page);
   const originalMapsAgentConfig: {
     description: string;
     phase: "pre_generation" | "parallel" | "post_processing";
@@ -982,20 +1018,20 @@ test("global World Maps home activates and opens the current chat map", async ({
   delete isolatedMapsAgentSettings.spatialMapGenerationPromptLibraries;
   delete isolatedMapsAgentSettings.spatialMapTurnPromptTemplates;
   const unavailableConnectionId = `missing-maps-connection-${testInfo.project.name}`;
-  const isolateSettingsResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
-    data: {
-      connectionId: unavailableConnectionId,
-      settings: isolatedMapsAgentSettings,
-    },
-  });
-  expect(isolateSettingsResponse.ok(), await isolateSettingsResponse.text()).toBeTruthy();
-  const resetMetadata = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
-    data: { enableAgents: false, activeAgentIds: [] },
-  });
-  expect(resetMetadata.ok(), await resetMetadata.text()).toBeTruthy();
   const mobile = testInfo.project.name.includes("mobile");
 
   try {
+    const isolateSettingsResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+      data: {
+        connectionId: unavailableConnectionId,
+        settings: isolatedMapsAgentSettings,
+      },
+    });
+    expect(isolateSettingsResponse.ok(), await isolateSettingsResponse.text()).toBeTruthy();
+    const resetMetadata = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: { enableAgents: false, activeAgentIds: [] },
+    });
+    expect(resetMetadata.ok(), await resetMetadata.text()).toBeTruthy();
     await page.addInitScript((chatId) => {
       localStorage.setItem("marinara-active-chat-id", chatId);
       localStorage.setItem(
@@ -1469,21 +1505,27 @@ test("global World Maps home activates and opens the current chat map", async ({
       "No map yet. Create one from Agents → World Maps; your message draft is unchanged.",
     );
   } finally {
-    const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
-      data: {
-        ...originalMapsAgentConfig,
-        settings: originalMapsAgentSettings,
-      },
-    });
-    expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
-    if (secondaryChat) await expectDeleted(page, `/api/chats/${secondaryChat.id}`);
-    await expectDeleted(page, `/api/chats/${chat.id}`);
+    if (!mapsAgentCreated) {
+      const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+        data: {
+          ...originalMapsAgentConfig,
+          settings: originalMapsAgentSettings,
+        },
+      });
+      expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
+    }
+    await expectDeletedInOrder(page, [
+      secondaryChat ? `/api/chats/${secondaryChat.id}` : null,
+      `/api/chats/${chat.id}`,
+      mapsAgentCreated ? `/api/agents/${mapsAgentBefore.id}` : null,
+    ]);
   }
 });
 
 test("World Maps editor changes the AI connection without losing the draft", async ({ page }, testInfo) => {
   test.setTimeout(60_000);
-  const mapsAgentBefore = await getOrCreateHierarchicalMapsAgentConfig(page);
+  const { config: mapsAgentBefore, created: mapsAgentCreated } =
+    await getOrCreateHierarchicalMapsAgentConfig(page);
   const originalSettings = (() => {
     if (typeof mapsAgentBefore.settings === "string") {
       try {
@@ -1512,32 +1554,33 @@ test("World Maps editor changes the AI connection without losing the draft", asy
     provider: "openai",
     model: "maps-editor-model",
   };
-  const chatResponse = await page.request.post("/api/chats", {
-    data: {
-      name: `Maps Editor Connection ${testInfo.project.name}`,
-      mode: "roleplay",
-      characterIds: [],
-    },
-  });
-  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
-  const chat = (await chatResponse.json()) as { id: string };
-  await activateHierarchicalMaps(page, chat.id);
-  const isolateResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
-    data: { connectionId: unavailableConnectionId },
-  });
-  expect(isolateResponse.ok(), await isolateResponse.text()).toBeTruthy();
-  await page.route("**/api/connections", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify([
-        editorConnection,
-        { id: "image-only", name: "Image only", provider: "image_generation", model: "image-model" },
-      ]),
-    });
-  });
+  let chat: { id: string } | null = null;
 
   try {
+    const chatResponse = await page.request.post("/api/chats", {
+      data: {
+        name: `Maps Editor Connection ${testInfo.project.name}`,
+        mode: "roleplay",
+        characterIds: [],
+      },
+    });
+    expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+    chat = (await chatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, chat.id);
+    const isolateResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+      data: { connectionId: unavailableConnectionId },
+    });
+    expect(isolateResponse.ok(), await isolateResponse.text()).toBeTruthy();
+    await page.route("**/api/connections", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          editorConnection,
+          { id: "image-only", name: "Image only", provider: "image_generation", model: "image-model" },
+        ]),
+      });
+    });
     await page.addInitScript((chatId) => {
       localStorage.setItem("marinara-active-chat-id", chatId);
       localStorage.setItem(
@@ -1604,11 +1647,16 @@ test("World Maps editor changes the AI connection without losing the draft", asy
     await expect(homeConnectionOverride).toHaveValue(editorConnection.id);
   } finally {
     await page.unroute("**/api/connections");
-    const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
-      data: originalConfig,
-    });
-    expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
-    await expectDeleted(page, `/api/chats/${chat.id}`);
+    if (!mapsAgentCreated) {
+      const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+        data: originalConfig,
+      });
+      expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
+    }
+    await expectDeletedInOrder(page, [
+      chat ? `/api/chats/${chat.id}` : null,
+      mapsAgentCreated ? `/api/agents/${mapsAgentBefore.id}` : null,
+    ]);
   }
 });
 
