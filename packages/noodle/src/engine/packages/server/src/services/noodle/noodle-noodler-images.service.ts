@@ -28,6 +28,7 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./noodle-image-retry.js";
+import { rewriteNoodleImagePrompt } from "./noodle-image-prompt-rewrite.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
   characterAppearanceFromRow,
@@ -174,8 +175,29 @@ export async function generateNoodlerPostImage(input: {
     styleProfiles: imageSettings.styleProfiles,
     imageDefaults,
   });
-  const finalPrompt =
+  const rawFinalPrompt =
     input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
+  const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
+  const instructionLine = imagePromptInstructions
+    ? `User image instructions: ${imagePromptInstructions.replace(/\s+/g, " ").slice(0, 5000)}`
+    : "";
+  const characterContext = [
+    characterDescription ? `Appearance:\n${characterDescription}` : "",
+    characterPersonality ? `Personality:\n${characterPersonality}` : "",
+    characterImageInstructions ? `Character image preferences:\n${characterImageInstructions}` : "",
+  ].filter(Boolean).join("\n\n");
+  const rewrittenPrompt = imagePromptInstructions && !input.promptOverride
+    ? await rewriteNoodleImagePrompt({
+        db: input.db,
+        prompt: rawFinalPrompt,
+        instructions: imagePromptInstructions,
+        characterContext,
+      })
+    : null;
+  const finalPrompt = rewrittenPrompt ??
+    (instructionLine && !input.promptOverride && !rawFinalPrompt.includes(instructionLine)
+      ? `${rawFinalPrompt}\n${instructionLine}`
+      : rawFinalPrompt);
   const finalNegativePrompt = input.promptOverride
     ? input.promptOverride.negativePrompt?.trim() || undefined
     : compiledPrompt.negativePrompt || undefined;
