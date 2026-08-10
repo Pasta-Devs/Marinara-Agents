@@ -122,6 +122,7 @@ import {
   mentionedCharacterAccounts,
   noodleDigestAccountLabel,
   parseRecord,
+  parseStringArray,
   resolvePersonaAccount,
 } from "../services/noodle/noodle-public-support.js";
 
@@ -1996,7 +1997,20 @@ export async function noodleRoutes(app: FastifyInstance) {
       noodle.listAccounts(),
       noodle.listNoodlerAccounts(),
     ]);
-    const uninvited = accounts.filter((account) => account.kind === "character" && !account.invited);
+    // A character pulled in by a selected folder is an eligible participant even though its
+    // account is not directly invited, so it must not count as uninvited for cleanup.
+    const selectedGroupIds = new Set(settings.invitedCharacterGroupIds ?? []);
+    const groupCharacterIds = new Set<string>();
+    if (selectedGroupIds.size > 0) {
+      for (const group of await characters.listGroups()) {
+        if (!selectedGroupIds.has(group.id)) continue;
+        for (const characterId of parseStringArray(group.characterIds)) groupCharacterIds.add(characterId);
+      }
+    }
+    const uninvited = accounts.filter(
+      (account) =>
+        account.kind === "character" && !account.invited && !groupCharacterIds.has(account.entityId),
+    );
     const uninvitedIds = new Set(uninvited.map((account) => account.id));
     const linkedAccountIds = new Set(noodlerAccounts.flatMap((account) => account.noodleAccountId ?? []));
 
