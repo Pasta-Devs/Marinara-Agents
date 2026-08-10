@@ -317,6 +317,7 @@ async function main() {
     ruleCount += 1;
     cursor = index;
   }
+  assert.ok(!phoneStylesheet.includes("`"), "a backtick inside the stylesheet would end its template literal");
   assert.ok(ruleCount > 200, `expected the phone stylesheet to have rules, saw ${ruleCount}`);
   /**
    * Selectors are compared exactly, not by substring. A selector left dangling does not break the

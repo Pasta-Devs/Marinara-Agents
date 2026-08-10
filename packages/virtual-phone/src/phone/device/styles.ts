@@ -134,6 +134,14 @@ export const phoneStylesheet = `
     linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(0 0 0 / 0.07));
   background-size: 100% 100%, 100% 100%, 3.5rem 3.5rem, 3.5rem 3.5rem, 100% 100%, 100% 100%, 100% 100%; background-position: 0 0, 0 0, -0.8rem 0, 0 -0.55rem, 0 0, 0 0, 0 0; box-shadow: inset 0 0 0 1px var(--vp-border), inset 0 0 3.5rem rgb(0 0 0 / 0.1); }
 .vp-map-canvas--detail { min-height: 9rem; }
+/* The map is the app: it fills everything under the search field, and the results ride over its
+   bottom edge on a sheet. Positioned rather than flexed — .vp-appview is already absolute with
+   inset 0, so it is both the full-height box and the containing block these two position against.
+   Giving .vp-maps its own position: relative took that inset away and collapsed the view to its content. */
+.vp-maps { padding-bottom: 0; overflow: hidden; }
+.vp-map-canvas--full { position: absolute; inset: 4.25rem 0.75rem 0; min-height: 0; border-radius: 1.1rem 1.1rem 0 0; }
+.vp-map-sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 60%; overflow-y: auto; padding: 0.5rem 0.75rem 1rem; border-radius: 1.25rem 1.25rem 0 0; background: color-mix(in srgb, var(--vp-text) 5%, var(--vp-bg)); box-shadow: 0 -10px 28px rgb(0 0 0 / 0.45), inset 0 1px 0 color-mix(in srgb, var(--vp-text) 14%, transparent); }
+.vp-sheet-grip { display: block; height: 4px; width: 2.25rem; margin: 0 auto 0.625rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 25%, transparent); }
 /* A bare emoji dropped on a map reads as clip art. Seat it in a circular marker with a tail and a
    shadow on the ground beneath, which is what makes a pin look placed rather than pasted. The tail
    is a pseudo-element rather than a rotated button, so the emoji inside stays upright. */
@@ -182,11 +190,13 @@ export const phoneStylesheet = `
 .vp-review-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .vp-viewfinder { display: flex; align-items: center; justify-content: center; min-height: 11rem; padding: 1rem; border-radius: 1rem; background: linear-gradient(160deg, #14161a, #05070b); color: #e8ecf2; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), inset 0 0 3rem rgb(0 0 0 / 0.6); }
 .vp-viewfinder-text { margin: 0; font-size: 0.8125rem; line-height: 1.5; text-align: center; font-style: italic; }
-/* The viewfinder was an empty rounded box with a sentence in it. Framing marks, a rule-of-thirds
-   grid and a focus reticle cost nothing and make the shutter button mean something. */
-.vp-viewfinder { position: relative; overflow: hidden; }
-.vp-viewfinder::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(90deg, transparent calc(33.33% - 0.5px), color-mix(in srgb, var(--vp-text) 12%, transparent) calc(33.33% - 0.5px) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)), linear-gradient(90deg, transparent calc(66.66% - 0.5px), color-mix(in srgb, var(--vp-text) 12%, transparent) calc(66.66% - 0.5px) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)), linear-gradient(0deg, transparent calc(33.33% - 0.5px), color-mix(in srgb, var(--vp-text) 12%, transparent) calc(33.33% - 0.5px) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)), linear-gradient(0deg, transparent calc(66.66% - 0.5px), color-mix(in srgb, var(--vp-text) 12%, transparent) calc(66.66% - 0.5px) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)); }
-.vp-viewfinder::after { content: ""; position: absolute; inset: 0.75rem; pointer-events: none; border-radius: 0.25rem; background:
+/* A camera is a viewfinder with the controls under your thumb, not a page with a button in the
+   middle of it. The viewfinder takes everything above the bar; framing marks, a rule-of-thirds
+   grid and a focus frame sit on top of it and get out of the way while a shot is being reviewed. */
+.vp-camera { padding-bottom: 0.875rem; }
+.vp-viewfinder { position: relative; flex: 1; min-height: 6rem; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 1rem; border-radius: 1rem; background: radial-gradient(120% 90% at 50% 40%, #171a1f, #08090b); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08); }
+.vp-viewfinder::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(90deg, transparent calc(33.33% - 0.5px), rgb(255 255 255 / 0.1) calc(33.33% - 0.5px) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)), linear-gradient(90deg, transparent calc(66.66% - 0.5px), rgb(255 255 255 / 0.1) calc(66.66% - 0.5px) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)), linear-gradient(0deg, transparent calc(33.33% - 0.5px), rgb(255 255 255 / 0.1) calc(33.33% - 0.5px) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)), linear-gradient(0deg, transparent calc(66.66% - 0.5px), rgb(255 255 255 / 0.1) calc(66.66% - 0.5px) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)); }
+.vp-viewfinder::after { content: ""; position: absolute; inset: 0.75rem; pointer-events: none; background:
   linear-gradient(var(--vp-accent), var(--vp-accent)) 0 0 / 1rem 2px no-repeat,
   linear-gradient(var(--vp-accent), var(--vp-accent)) 0 0 / 2px 1rem no-repeat,
   linear-gradient(var(--vp-accent), var(--vp-accent)) 100% 0 / 1rem 2px no-repeat,
@@ -195,10 +205,22 @@ export const phoneStylesheet = `
   linear-gradient(var(--vp-accent), var(--vp-accent)) 0 100% / 2px 1rem no-repeat,
   linear-gradient(var(--vp-accent), var(--vp-accent)) 100% 100% / 1rem 2px no-repeat,
   linear-gradient(var(--vp-accent), var(--vp-accent)) 100% 100% / 2px 1rem no-repeat;
-  opacity: 0.75; }
+  opacity: 0.8; }
 .vp-viewfinder--review::before, .vp-viewfinder--review::after { display: none; }
+.vp-viewfinder-text { max-width: 15rem; text-align: center; font-style: italic; }
+.vp-viewfinder-edit { width: 100%; height: 100%; padding: 0; border: 0; background: none; resize: none; color: #f2f4f8; font: inherit; font-size: 0.8125rem; line-height: 1.5; }
+.vp-camera-subject { display: block; margin-top: 0.625rem; }
+.vp-camera-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-shrink: 0; margin-top: 0.75rem; padding: 0 0.25rem; }
+/* Discard / Keep share the bar evenly instead of one of them wrapping onto two lines. */
+.vp-camera-bar > .vp-surface-btn, .vp-camera-bar > .vp-accent-btn { flex: 1; min-height: 2.5rem; white-space: nowrap; }
+/* The last shot, as a thumbnail you can press to open the roll. */
+.vp-camera-thumb { display: flex; align-items: flex-end; height: 2.75rem; width: 2.75rem; padding: 0.25rem; overflow: hidden; border-radius: 0.5rem; background: linear-gradient(180deg, #fffdf2, #efe6c8); color: #4a4433; font-size: 0.4375rem; line-height: 1.15; text-align: left; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25), 0 2px 6px rgb(0 0 0 / 0.35); }
+.vp-camera-thumb:disabled { background: color-mix(in srgb, var(--vp-text) 8%, var(--vp-bg)); box-shadow: inset 0 0 0 1px var(--vp-border); opacity: 1; }
+.vp-camera-count { min-width: 2.75rem; text-align: right; font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); font-variant-numeric: tabular-nums; }
+.vp-roll-grid { display: grid; gap: 0.625rem; overflow-y: auto; }
 .vp-shutter-row { display: flex; justify-content: center; margin-top: 0.875rem; }
-.vp-shutter { height: 3.5rem; width: 3.5rem; border-radius: 999px; background: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / 0.3), inset 0 0 0 3px rgb(0 0 0 / 0.15); transition: transform 120ms ease; }
+.vp-shutter { position: relative; height: 3.75rem; width: 3.75rem; flex-shrink: 0; border-radius: 999px; background: #fff; box-shadow: 0 0 0 3px rgb(255 255 255 / 0.35), 0 2px 10px rgb(0 0 0 / 0.4); transition: transform 120ms ease, background 120ms ease; }
+.vp-shutter:active:not(:disabled) { background: #d9d9d9; }
 .vp-shutter:active:not(:disabled) { transform: scale(0.9); }
 .vp-polaroid { display: grid; gap: 0.375rem; }
 .vp-polaroid p { margin: 0; font-size: 0.75rem; line-height: 1.5; font-style: italic; }

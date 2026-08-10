@@ -26,6 +26,8 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
    * Real image generation from this draft is Step 11.3.
    */
   const [draft, setDraft] = React.useState<string | null>(null);
+  /** The roll is a screen you go to from the thumbnail, the way a camera app works. */
+  const [view, setView] = React.useState<"camera" | "roll">("camera");
 
   React.useEffect(() => {
     let active = true;
@@ -80,56 +82,21 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
     persist(shots.filter((shot) => shot.id !== id));
   };
 
+  const latest = shots?.[0] ?? null;
+
   return (
-    <section aria-labelledby="camera-title" className="vp-appview">
-      <PhoneAppHeader title="Camera" titleId="camera-title" closeLabel="Close Camera" onBack={onBack} onClose={onClose} />
+    <section aria-labelledby="camera-title" className="vp-appview vp-appview--fixed vp-camera">
+      <PhoneAppHeader
+        title={view === "roll" ? "Camera roll" : "Camera"}
+        titleId="camera-title"
+        closeLabel="Close Camera"
+        onBack={() => view === "roll" ? setView("camera") : onBack()}
+        onClose={onClose}
+      />
       {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
-      <div className={`vp-viewfinder${draft !== null ? " vp-viewfinder--review" : ""}`} aria-live="polite" aria-label={draft !== null ? "Photo review" : "Camera viewfinder"}>
-        {shooting ? (
-          <span className="vp-skeleton vp-skeleton--line" style={{ width: "70%" }} />
-        ) : draft !== null ? (
-          <label style={{ width: "100%" }}>
-            <span className="vp-sr-only">What the photo shows</span>
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              maxLength={800}
-              autoFocus
-              className="vp-textarea"
-              style={{ width: "100%" }}
-            />
-          </label>
-        ) : (
-           <p className="vp-viewfinder-text vp-muted-note">A phone-camera snapshot, described from the current scene.</p>
-        )}
-      </div>
-      {draft !== null ? (
-        <div className="vp-shutter-row" style={{ gap: "0.5rem" }}>
-          <button type="button" onClick={() => setDraft(null)} className="vp-surface-btn">Discard</button>
-          <button type="button" onClick={commit} disabled={!draft.trim()} className="vp-accent-btn">Keep photo</button>
-        </div>
-      ) : (
-        <>
-          <label className="vp-row vp-row--stacked" style={{ marginTop: "0.5rem" }}>
-            <span className="vp-sr-only">What are you aiming at?</span>
-            <input
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              placeholder="Aim at something (optional)"
-              maxLength={200}
-              className="vp-input"
-            />
-          </label>
-          <div className="vp-shutter-row">
-            <button type="button" aria-label="Take photo" onClick={shoot} disabled={shooting} className="vp-shutter" />
-          </div>
-        </>
-      )}
-      {shots?.length ? (
-        <>
-          <h3 className="vp-section-label" style={{ marginTop: "0.75rem" }}>Camera roll ({shots.length}/{MAX_SHOTS})</h3>
-          {shots.length >= MAX_SHOTS ? <p className="vp-muted-note">The roll is full — delete a photo to make room.</p> : null}
-          <div className="vp-stack" style={{ gap: "0.5rem", marginTop: "0.625rem" }}>
+      {view === "roll" ? (
+        shots?.length ? (
+          <div className="vp-roll-grid">
             {shots.map((shot) => (
               <figure key={shot.id} className="vp-card vp-polaroid">
                 <p>{shot.text}</p>
@@ -140,8 +107,56 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
               </figure>
             ))}
           </div>
+        ) : (
+          <p className="vp-muted-note">Nothing on the roll yet.</p>
+        )
+      ) : (
+        <>
+          {/* The viewfinder is the app: it takes the whole screen above the controls. */}
+          <div className={`vp-viewfinder${draft !== null ? " vp-viewfinder--review" : ""}`} aria-live="polite" aria-label={draft !== null ? "Photo review" : "Camera viewfinder"}>
+            {shooting ? (
+              <span className="vp-skeleton vp-skeleton--line" style={{ width: "70%" }} />
+            ) : draft !== null ? (
+              <label style={{ width: "100%", height: "100%" }}>
+                <span className="vp-sr-only">What the photo shows</span>
+                <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={800} autoFocus className="vp-viewfinder-edit" />
+              </label>
+            ) : (
+              <p className="vp-viewfinder-text vp-muted-note">A phone-camera snapshot, described from the current scene.</p>
+            )}
+          </div>
+          {draft === null ? (
+            <label className="vp-camera-subject">
+              <span className="vp-sr-only">What are you aiming at?</span>
+              <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Aim at something (optional)" maxLength={200} className="vp-input" />
+            </label>
+          ) : null}
+          {/* Controls at the bottom, where a thumb is: last shot, shutter, roll. */}
+          <div className="vp-camera-bar">
+            {draft !== null ? (
+              <>
+                <button type="button" onClick={() => setDraft(null)} className="vp-surface-btn">Discard</button>
+                <button type="button" onClick={commit} disabled={!draft.trim()} className="vp-accent-btn">Keep photo</button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="vp-camera-thumb"
+                  disabled={!shots?.length}
+                  aria-label={shots?.length ? `Camera roll, ${shots.length} photos` : "Camera roll is empty"}
+                  onClick={() => setView("roll")}
+                >
+                  {latest ? <span>{latest.text.slice(0, 40)}</span> : null}
+                </button>
+                <button type="button" aria-label="Take photo" onClick={shoot} disabled={shooting} className="vp-shutter" />
+                <span className="vp-camera-count">{shots?.length ?? 0}/{MAX_SHOTS}</span>
+              </>
+            )}
+          </div>
+          {shots && shots.length >= MAX_SHOTS ? <p className="vp-muted-note">The roll is full — delete a photo to make room.</p> : null}
         </>
-      ) : null}
+      )}
     </section>
   );
 }

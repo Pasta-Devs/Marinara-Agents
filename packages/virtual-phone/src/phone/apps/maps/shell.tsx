@@ -39,7 +39,7 @@ export function MapsShell({ phoneId, chatId, onBack, onClose }: { phoneId: strin
   };
   const open = places.find((p) => p.name === openName) ?? null;
 
-  return <section aria-labelledby="maps-title" className="vp-appview">
+  return <section aria-labelledby="maps-title" className={`vp-appview${open ? "" : " vp-appview--fixed vp-maps"}`}>
     <PhoneAppHeader title={open ? open.name : "Maps"} titleId="maps-title" closeLabel="Close Maps" onBack={() => open ? setOpenName(null) : onBack()} onClose={onClose}
       actions={open ? [] : [{ id: "refresh", icon: "refresh", label: "Search", kind: "button", disabled: loading || !query.trim(), reason: "Type what to look for first" }]} onAction={() => search()} />
     {notice ? <p role="status" className="vp-muted-note">{notice}</p> : null}
@@ -51,19 +51,24 @@ export function MapsShell({ phoneId, chatId, onBack, onClose }: { phoneId: strin
     ) : (
       <>
         <form className="vp-composer" onSubmit={(e) => { e.preventDefault(); search(); }}><label style={{ flex: 1 }}><span className="vp-sr-only">Search Maps</span><input className="vp-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search places nearby" /></label><button className="vp-icon-btn" aria-label="Search" type="submit"><Search size="1rem" aria-hidden="true" /></button></form>
-        <div className="vp-map-canvas" role="img" aria-label="Map of nearby places">
+        {/* The map is the app. Results ride over it on a sheet, the way every maps app does it. */}
+        <div className="vp-map-canvas vp-map-canvas--full" role="img" aria-label="Map of nearby places">
           {places.map((p) => <button key={p.name} type="button" className="vp-map-pin" style={pin(p.name)} aria-label={`${p.name}, ${p.category}`} onClick={() => route(p)}>{emojiFor(`${p.category} ${p.name}`, "📍")}</button>)}
         </div>
-        {places.length === 0 && !loading ? (
-          <PhoneEmptyState icon={MapPinned} title="Nothing dropped yet" body="Search for what would be nearby in this world — a bar, a clinic, the street the scene is on." />
-        ) : null}
-        <div className="vp-stack" style={{ gap: "0.5rem" }}>{places.map((p) => (
-          <button key={p.name} type="button" className="vp-thread-row" onClick={() => route(p)}>
-            <span className="vp-emoji-thumb vp-emoji-thumb--sm" aria-hidden="true">{emojiFor(`${p.category} ${p.name}`, "📍")}</span>
-            <span className="vp-thread-body"><span className="vp-thread-name">{p.name}</span><span className="vp-thread-preview">{p.category}{p.detail ? ` · ${p.detail}` : ""}</span></span>
-            <Navigation size="0.9rem" aria-hidden="true" />
-          </button>
-        ))}</div>
+        <div className="vp-map-sheet">
+          <span className="vp-sheet-grip" aria-hidden="true" />
+          {places.length === 0 && !loading ? (
+            <PhoneEmptyState icon={MapPinned} title="Nothing dropped yet" body="Search for what would be nearby in this world — a bar, a clinic, the street the scene is on." />
+          ) : (
+            <div className="vp-list vp-list--inset-rules">{places.map((p) => (
+              <button key={p.name} type="button" className="vp-thread-row" onClick={() => route(p)}>
+                <span className="vp-emoji-thumb vp-listing-thumb" role="img" aria-label={`Picture: ${p.name}`}>{emojiFor(`${p.category} ${p.name}`, "📍")}</span>
+                <span className="vp-thread-body"><span className="vp-thread-name">{p.name}</span><span className="vp-thread-preview">{p.category}{p.detail ? ` · ${p.detail}` : ""}</span></span>
+                <Navigation size="0.9rem" aria-hidden="true" className="vp-row-chevron" />
+              </button>
+            ))}</div>
+          )}
+        </div>
       </>
     )}
   </section>;
