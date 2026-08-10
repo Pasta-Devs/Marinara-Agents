@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "연속성 검사 (Continuity Checker)",
+    "description": "이야기를 바꾸지 않으면서 최신 어시스턴트 메시지의 공간 관계·시간 흐름·물리 법칙상의 구체적인 오류를 바로잡는 사후 처리를 합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 글쓰기 에이전트에서 이 에이전트를 추가하세요."
+  },
+  "agents": {
+    "continuity": {
+      "name": "연속성 검사 (Continuity Checker)",
+      "description": "이야기를 바꾸지 않으면서 최신 어시스턴트 메시지의 공간 관계·시간 흐름·물리 법칙상의 구체적인 오류를 바로잡는 사후 처리를 합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 글쓰기 에이전트에서 이 에이전트를 추가하세요."
+    }
+  }
+}
