@@ -1988,6 +1988,22 @@ export async function noodleRoutes(app: FastifyInstance) {
     return account;
   });
 
+  app.delete("/accounts/uninvited", async () => {
+    const [accounts, noodlerAccounts] = await Promise.all([
+      noodle.listAccounts(),
+      noodle.listNoodlerAccounts(),
+    ]);
+    const linkedAccountIds = new Set(noodlerAccounts.flatMap((account) => account.noodleAccountId ?? []));
+    const targets = accounts.filter(
+      (account) => account.kind === "character" && !account.invited && !linkedAccountIds.has(account.id),
+    );
+    let deleted = 0;
+    for (const account of targets) {
+      if (await noodle.deleteAccountByEntity(account.kind, account.entityId)) deleted += 1;
+    }
+    return { deleted, bootstrap: await bootstrapVisibleNoodle(noodle, characters) };
+  });
+
   app.post("/posts", async (req, reply) => {
     if (req.body && typeof req.body === "object" && "title" in req.body) {
       return reply

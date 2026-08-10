@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-10T10:41:12.734Z",
+  "generatedAt": "2026-08-10T11:57:01.367Z",
   "packages": [
     {
       "manifest": {
@@ -996,7 +996,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1057,13 +1057,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "ed0c9c0b28f5e6360ccf001ed17be7074a4f9b768dc8800d20a38511dfc73eeb",
-            "bytes": 2387526
+            "sha256": "c0fe016133bed874263984c2a532ea5277542d01e42d454f1421be87369b70b5",
+            "bytes": 2387867
           },
           {
             "path": "client.js",
-            "sha256": "c1dfcb05055c3ffb3edff526984195ad213be0e1e702babec86ddf70b79fd255",
-            "bytes": 2475777
+            "sha256": "fd3605cea6b9b595d67d8395be059b017ad4184cbcabc9e40912760515179b9c",
+            "bytes": 2477539
           },
           {
             "path": "noodle-klusek.png",
@@ -1089,9 +1089,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.2.zip",
-        "sha256": "889f39f8a2d87d990987ad0cd3339ce7024439ed8a6c37a419a25d04ac93e3e0",
-        "bytes": 1227900
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.3.zip",
+        "sha256": "d4f0d0189ce2e96f6982d1167715f10d81e0fde7943b38f4e619356ab7222cec",
+        "bytes": 1231702
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },

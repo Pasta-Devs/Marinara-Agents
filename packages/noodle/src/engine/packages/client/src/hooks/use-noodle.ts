@@ -1134,6 +1134,14 @@ export function useClearNoodleInvites() {
   });
 }
 
+export function useDeleteUninvitedNoodleProfiles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<{ deleted: number; bootstrap: NoodleBootstrap }>("/noodle/accounts/uninvited"),
+    onSuccess: ({ bootstrap }) => qc.setQueryData<NoodleBootstrap>(noodleKeys.bootstrap(), bootstrap),
+  });
+}
+
 export function useCreateNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
