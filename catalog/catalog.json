@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-10T17:40:59.248Z",
+  "generatedAt": "2026-08-10T18:04:21.020Z",
   "packages": [
     {
       "manifest": {
@@ -1364,10 +1364,10 @@
         "schemaVersion": 1,
         "id": "storyboard",
         "name": "Storyboard",
-        "version": "1.1.1",
+        "version": "1.1.2",
         "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
         "engine": {
-          "min": "2.3.5",
+          "min": "2.4.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -1379,8 +1379,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "bf7699b1415d712515637cb1da9ca56b6a183dfab6c8a94bfe4b066b2dfd783c",
-            "bytes": 69315
+            "sha256": "dbb53569cff38b9b39575b4cec00e35a6c95758b1e94e2022be1e793c19edd19",
+            "bytes": 72073
           }
         ],
         "permissions": [
@@ -1395,9 +1395,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.1.zip",
-        "sha256": "99c7abe02c4be0a89eb095a6c53ac2b9639cd46439d96d2754643fdca67d2809",
-        "bytes": 13595
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.2.zip",
+        "sha256": "348a1ba3376325c31fe6c80148cf703e135ea25ca4d8fd62c117791655eb3e17",
+        "bytes": 14473
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
     },
