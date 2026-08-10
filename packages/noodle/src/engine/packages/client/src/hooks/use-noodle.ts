@@ -1134,6 +1134,20 @@ export function useClearNoodleInvites() {
   });
 }
 
+export function useDeleteUninvitedNoodleProfiles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (includeNoodler: boolean) =>
+      api.delete<{ deleted: number; deletedNoodler: number; bootstrap: NoodleBootstrap }>(
+        `/noodle/accounts/uninvited${includeNoodler ? "?includeNoodler=true" : ""}`,
+      ),
+    onSuccess: ({ bootstrap }) => {
+      qc.setQueryData<NoodleBootstrap>(noodleKeys.bootstrap(), bootstrap);
+      qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() });
+    },
+  });
+}
+
 export function useCreateNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
