@@ -241,7 +241,7 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
         <section><h3 className="vp-section-label">Models &amp; activity</h3><div className="vp-group">
           <label className="vp-row"><span>Replies</span><select value={settings.lightConnectionId} disabled={!connections} onChange={(event) => void update({ lightConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.lightConnectionId)}</select></label>
           <label className="vp-row"><span>Feeds &amp; sites</span><select value={settings.heavyConnectionId} disabled={!connections} onChange={(event) => void update({ heavyConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.heavyConnectionId)}</select></label>
-          {toggleRow("The story notices", "Adds one quiet summary when you put the phone down.", settings.storyNotices, { storyNotices: settings.storyNotices })}
+          {toggleRow("The story notices", "Phone events appear in the scene: what you did when you put it down, and a text arriving unasked.", settings.storyNotices, { storyNotices: settings.storyNotices })}
           {toggleRow("Characters text first", "Allows occasional background replies and uses tokens.", settings.unpromptedTexts, { unpromptedTexts: settings.unpromptedTexts })}
         </div></section>
         <section className="vp-lore-section"><div className="vp-settings-heading"><h3 className="vp-section-label">Lorebooks</h3><span>{settings.lorebookMode === "chat" ? "This chat" : settings.lorebookMode === "none" ? "Off" : `${selectedLorebooks} chosen`}</span></div>

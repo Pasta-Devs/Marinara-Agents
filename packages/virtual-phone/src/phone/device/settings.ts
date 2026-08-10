@@ -42,9 +42,13 @@ export interface DeviceSettings {
    */
   unpromptedTexts: boolean;
   /**
-   * When the phone is put down, one quiet line tells the scene what was done on it. This is what
-   * makes the phone part of the roleplay instead of a side panel, so it is on by default — but it
-   * writes a visible message into the chat, so it must be switchable off.
+   * Phone events appear in the story as narrator lines: what was done on the phone when it is put
+   * down, and a text arriving out of nowhere. This is what makes the phone part of the roleplay
+   * instead of a side panel, so it is on by default — but it writes visible messages into the
+   * chat, so it must be switchable off.
+   *
+   * Only events go here. What is merely *on* the phone right now — unread counts, the clock, a low
+   * battery — is contributed to each turn's prompt instead and leaves no trace in the transcript.
    */
   storyNotices: boolean;
   lightConnectionId: string;

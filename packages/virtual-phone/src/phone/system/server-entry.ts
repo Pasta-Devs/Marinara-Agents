@@ -15,7 +15,7 @@ import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
 import { applyTransaction, parseProposal, readAccount } from "../apps/banking/manifest";
-import { buildTurnContext, parseTrackedTime, type TurnPhoneState } from "./turn-context";
+import { buildTurnContext, parseTrackedTime, sanitizeForPrompt, type TurnPhoneState } from "./turn-context";
 import { lorebookScope } from "./lorebook-scope";
 
 interface CapabilityContext {
@@ -714,6 +714,45 @@ export async function activate({ api }: CapabilityContext) {
     }];
   };
 
+  /**
+   * A phone event, written into the story as a narrator line.
+   *
+   * There are two ways to tell the story something and they are not interchangeable.
+   *
+   * The per-turn prompt-context block is right for *state* — what is on the phone right now. It is
+   * recomputed every generation, costs nothing when there is nothing to say, and leaves no trace.
+   * But it is not history: a text that arrives, is reacted to, and is then read leaves no record of
+   * why the character bolted for the door three turns later.
+   *
+   * A narrator message is right for *events*. The Engine hands narrator messages to the model as
+   * system messages in transcript order, so it lands in the scene at the moment it happened, stays
+   * in history, survives regeneration, and the user can see it and delete it if they disagree.
+   *
+   * The two compose without double-telling, and by accident of the right design rather than by
+   * checking: writing this line moves the chat's lastMessageAt, so the same text stops counting as
+   * fresh for the turn context and is demoted to a standing fact on the next generation.
+   *
+   * The line names who can perceive it, because a phone in a pocket is not a public event.
+   */
+  const storyEvent = async (chatId: string, ownerName: string, detail: string) => {
+    if (!api.runtime.persistence.createMessageWithSwipe) return;
+    const owner = sanitizeForPrompt(ownerName, 40) || "Someone";
+    try {
+      await api.runtime.persistence.createMessageWithSwipe({
+        id: randomUUID(),
+        swipeId: randomUUID(),
+        chatId,
+        role: "narrator",
+        characterId: null,
+        content: `[${owner}'s phone — only ${owner} notices this: ${sanitizeForPrompt(detail, 160)}]`,
+        extra: { virtualPhone: "event" },
+        createdAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      api.runtime.logger?.error(error, "[virtual-phone] a phone event could not be written to the story");
+    }
+  };
+
   const routes: FastifyPluginAsync = async (app) => {
     app.get("/phones", async () => ({ phones: (await phones.list()).map(phoneResponse) }));
     app.get<{ Params: { ownerType: string; ownerId: string } }>("/phones/:ownerType/:ownerId", async (request, reply) => {
@@ -1111,7 +1150,18 @@ export async function activate({ api }: CapabilityContext) {
           defaults: { reply: "" },
           limits: { maxString: 400 },
         }) as { reply: string };
-        if (reply.trim()) await messaging.send(phoneId, otherPhoneId, reply);
+        if (reply.trim()) {
+          await messaging.send(phoneId, otherPhoneId, reply);
+          /**
+           * Only unprompted texts get a line. A reply the user asked for is already on the screen
+           * they are looking at, and the turn context carries it; a text arriving out of nowhere is
+           * the one phone event the scene genuinely cannot otherwise know about.
+           */
+          if (chatId && phoneGenSettings(other).storyNotices) {
+            await storyEvent(chatId, other.document.identity.ownerName,
+              `${phone.document.identity.ownerName} texts: "${reply.trim()}"`);
+          }
+        }
       } catch {
         // A character failing to think of something to say is not an error worth surfacing.
       }

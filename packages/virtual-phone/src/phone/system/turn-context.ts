@@ -5,6 +5,14 @@
  * nothing back, so a character could be texted for twenty turns and still not know it had happened.
  * `registerPromptContext` closes that, and this file decides what is worth saying.
  *
+ * This is the *state* channel, and it is half of the wiring. Events — a text arriving unasked, a
+ * phone put down after being used — are written into the transcript as narrator lines instead, so
+ * they land at the moment they happen and stay in history to explain what a character did next.
+ * What is merely true right now is recomputed here every turn and never persisted.
+ *
+ * The two do not double-tell: writing a narrator line moves the chat's lastMessageAt, which is what
+ * this file uses to decide whether something still counts as news.
+ *
  * Two rules shape everything here:
  *
  * 1. State, not instructions. The block describes what is on the character's phone right now. It
