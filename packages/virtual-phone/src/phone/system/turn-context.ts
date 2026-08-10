@@ -43,9 +43,16 @@ export interface TurnPhoneState {
   ownerType: "persona" | "character";
   /** The time this phone shows, when the user has set a story clock. */
   clock?: string;
-  unread: Array<{ from: string; count: number; latest: string }>;
-  /** The most recently written note, if there is one. */
-  note?: string;
+  /**
+   * `fresh` means it landed after the story last spoke, so this turn is the first the scene could
+   * know about it. Anything not fresh has already been offered once and is reported as a standing
+   * fact without its body — the block is rebuilt from scratch every turn, so without this the same
+   * text is handed to the model on every generation until someone opens Messages, and a character
+   * re-reacts to the same buzz turn after turn.
+   */
+  unread: Array<{ from: string; count: number; latest: string; fresh: boolean }>;
+  /** Only worth saying the turn after it is written; after that it is furniture. */
+  note?: { text: string; fresh: boolean };
   /** Set only when it is low enough to matter to a scene. */
   batteryLevel?: number;
 }
@@ -63,11 +70,11 @@ export function buildTurnContext(phones: TurnPhoneState[]): string | null {
     for (const thread of phone.unread.slice(0, MAX_THREADS)) {
       const from = sanitizeForPrompt(thread.from, 40) || "an unknown number";
       const latest = sanitizeForPrompt(thread.latest);
-      parts.push(
-        `${thread.count} unread from ${from}${latest ? `, latest: "${latest}"` : ""}`,
-      );
+      parts.push(thread.fresh
+        ? `${thread.count} new from ${from}${latest ? `: "${latest}"` : ""}`
+        : `${thread.count} still unread from ${from}`);
     }
-    if (phone.note) parts.push(`a note reads "${sanitizeForPrompt(phone.note)}"`);
+    if (phone.note?.fresh) parts.push(`a note just written reads "${sanitizeForPrompt(phone.note.text)}"`);
     if (typeof phone.batteryLevel === "number" && phone.batteryLevel <= 15) {
       parts.push(`battery ${Math.round(phone.batteryLevel)}%`);
     }
@@ -75,6 +82,16 @@ export function buildTurnContext(phones: TurnPhoneState[]): string | null {
     lines.push(`${owner}'s phone: ${parts.join("; ")}.`);
   }
   if (!lines.length) return null;
+  /**
+   * Standing facts alone are not worth saying again. If nothing arrived since the story last spoke
+   * and no phone is in a state the scene has to know about, the quietest thing is to say nothing.
+   */
+  const anythingNew = phones.some((phone) =>
+    phone.unread.some((thread) => thread.fresh)
+    || phone.note?.fresh
+    || (typeof phone.batteryLevel === "number" && phone.batteryLevel <= 15)
+    || phone.unread.length > 0);
+  if (!anythingNew) return null;
 
   /**
    * No "write [phone: …] to act on it" instruction here, deliberately. The Engine recognises the

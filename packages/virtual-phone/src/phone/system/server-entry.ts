@@ -29,6 +29,8 @@ interface CapabilityContext {
           personaId: string | null;
           characterIds: string[];
           metadata?: unknown;
+          /** When the story last spoke. Lets the turn context tell news from standing state. */
+          lastMessageAt?: string | null;
         } | null>;
         listMessages?(chatId: string): Promise<Array<{
           id: string;
@@ -640,15 +642,23 @@ export async function activate({ api }: CapabilityContext) {
       ...(await phones.listContacts(phoneId)).flatMap(({ document: contact }) =>
         contactThreadIds(contact).map((id) => [id, contact.name] as const)),
     ]);
+    /**
+     * Everything is measured against when the story last spoke. A text that landed after that is
+     * news the scene has not had a chance to react to; anything older has already been offered.
+     * A chat that has never had a message treats everything as new.
+     */
+    const storySpokeAt = chat.lastMessageAt ?? "";
     const unread: TurnPhoneState["unread"] = [];
     for (const thread of await messaging.threadsFor(phoneId)) {
       const pending = unreadMessages(thread.document, phoneId);
       if (!pending.length) continue;
       const other = thread.document.participants.find((participant) => participant !== phoneId) ?? "";
+      const latest = pending.at(-1);
       unread.push({
         from: names.get(other) ?? "an unknown number",
         count: pending.length,
-        latest: pending.at(-1)?.text ?? "",
+        latest: latest?.text ?? "",
+        fresh: !storySpokeAt || (latest?.at ?? "") > storySpokeAt,
       });
     }
     const notes = await phones.getAppStorageKey(phoneId, "notes", "notes").catch(() => null);
@@ -661,7 +671,9 @@ export async function activate({ api }: CapabilityContext) {
           .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
         : undefined,
       unread,
-      note: typeof firstNote?.text === "string" && firstNote.text.trim() ? firstNote.text : undefined,
+      note: typeof firstNote?.text === "string" && firstNote.text.trim()
+        ? { text: firstNote.text, fresh: !storySpokeAt || String((firstNote as { updatedAt?: unknown }).updatedAt ?? "") > storySpokeAt }
+        : undefined,
       batteryLevel: settings.batteryLevel,
     }];
   };

@@ -69,6 +69,15 @@ nothing can act on it: the words are gone before any package sees them.
 `registerTurnGameEngine` is not the answer either — it is a board-game contract (`legalMoves`,
 `applyMove`, `publicView`) that does not carry free text.
 
+**Confirmed unrecoverable after the fact.** `parseCharacterCommands` builds `cleanContent` with the
+tags stripped, and `generate.routes.ts` assigns `fullResponse = parsed.cleanContent` *before* the
+message is persisted. So the payload is not merely undelivered — it never reaches storage, and no
+package can recover it by reading the transcript afterwards.
+
+**The Engine also never tells the model the tag exists.** `conversation-command-runtime.ts` writes
+instruction lines for `selfie`, `call` and the rest; there is no line for `phone`. So nothing emits
+it today, which is why the package stays quiet about it too.
+
 **Smallest fix:** keep the captured group and hand it to the package —
 `{ type: "capability", commandType, payload }`, delivered either through the existing turn-game
 dispatch or a dedicated `registerConversationCommandHandler(commandType, handler)`. Until then the
@@ -119,6 +128,27 @@ api.runtime.images.attachToChat(chatId, { url, caption });
 Read access alone (`listChatImages`) already unlocks a real Gallery from the images a story already
 has, without any generation cost. That is a good first half if generation is far off.
 
+## 4b. Read access to the chat's world state (new)
+
+**Today.** The phone has a manual story clock: the user sets the time in the scene and every
+timestamp follows it. That is fine, and it is a second source of truth. A chat running the World
+State agent already tracks the scene's date, time, location and weather — and the phone cannot see
+any of it, so the two drift apart and the user maintains the clock by hand for no reason.
+
+World State writes to the `game_state` table, and the capability persistence host exposes
+`markGameStateSnapshotCommitted` but no read. `getChat().metadata` does not carry it either.
+
+**With it.** The phone clock follows the scene automatically: no setting to maintain, no drift, and
+the weather could reach the Maps and Camera surfaces for free.
+
+**Smallest API that works.** A read of the chat's current tracked state, whatever shape it has:
+
+```ts
+persistence.getGameState(chatId): Promise<Record<string, unknown> | null>;
+```
+
+Even a narrow `{ date, time }` would do. Read-only; the phone has no business writing it.
+
 ## 4. Conversation call-session access
 
 **Today.** Calls are not implemented. The Contacts detail view has no Call action, and the roadmap
@@ -168,6 +198,11 @@ Not blocked, already in: the story clock (per-phone time offset, applied to ever
 and told to every generation), Show/Reference sending real screen content into the chat, the
 awareness directory that tells the model who is a stranger, per-phone lorebook scope, per-phone
 jailbreak text, and unprompted texts as an opt-in.
+
+Worth noting what the injection hook does *not* need: it hands the contributor `chatId`, `chatMeta`
+and `mode`, and the chat record carries `lastMessageAt`, which is enough for the package to tell a
+text that just arrived from one the story has already been told about. That was the difference
+between a useful line and the same buzz repeated on every generation.
 
 The injection hook has landed and the phone uses it. The gap that remains is the **payload half of
 the phone command** (item 2) — without it a character still cannot actually do anything on their
