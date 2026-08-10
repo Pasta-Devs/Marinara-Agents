@@ -156,12 +156,41 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.0.1",
+    version: "1.0.2",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description:
       "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world.",
+    localizations: {
+      de: {
+        name: "Noodle",
+        description:
+          "Entdecke die vertraute öffentliche Noodle-Timeline und die private NoodleR-Plattform für Kreative als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+        homeBrowserTab: {
+          label: "Noodle",
+          ariaLabel: "Noodle und NoodleR öffnen",
+        },
+      },
+      ko: {
+        name: "Noodle",
+        description:
+          "익숙한 Noodle 공개 타임라인과 비공개 NoodleR 크리에이터 플랫폼을 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+        homeBrowserTab: {
+          label: "Noodle",
+          ariaLabel: "Noodle 및 NoodleR 열기",
+        },
+      },
+      pl: {
+        name: "Noodle",
+        description:
+          "Poznaj znaną publiczną oś czasu Noodle oraz prywatną platformę NoodleR dla twórców jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+        homeBrowserTab: {
+          label: "Noodle",
+          ariaLabel: "Otwórz Noodle i NoodleR",
+        },
+      },
+    },
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
@@ -1400,6 +1429,7 @@ for (const feature of selectedFeatures) {
     name: feature.name,
     version,
     description,
+    ...(feature.localizations ? { localizations: feature.localizations } : {}),
     engine: {
       min: feature.minEngineVersion ?? MIN_ENGINE_VERSION,
       maxExclusive: feature.maxEngineExclusive ?? MAX_ENGINE_EXCLUSIVE,

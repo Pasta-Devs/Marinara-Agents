@@ -24,6 +24,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { catalog, catalogsByMajor, legacyCatalog } = await readCatalogFamily(repoRoot);
 const MIN_ENGINE_VERSION = "2.3.0";
 const REQUIRED_MAX_ENGINE_EXCLUSIVE = "4.0.0";
+const ENGINE_CAPABILITY_API = Object.freeze({ major: 1, minor: 9 });
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
 const expectedCatalogsByMajor = createCatalogLanes(catalog);
 if (JSON.stringify([...catalogsByMajor.keys()].sort()) !== JSON.stringify([...expectedCatalogsByMajor.keys()].sort())) {
@@ -155,6 +156,14 @@ const expectedCategories = new Map([
   ["hierarchical-maps", "tracker"],
 ]);
 
+function assertLocalizedField(value, maximum, label) {
+  if (typeof value !== "string" || value.length === 0 || value.length > maximum) {
+    throw new Error(
+      `${label} does not match capability API ${ENGINE_CAPABILITY_API.major}.${ENGINE_CAPABILITY_API.minor}`,
+    );
+  }
+}
+
 function readZip(args, { packageId, artifactPath, member = null, purpose }) {
   const result = spawnSync("unzip", args, {
     encoding: member ? undefined : "utf8",
@@ -264,6 +273,43 @@ for (const entry of catalog.packages) {
     }
     if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(longTermMemoryBoundary.builtAgainst)) {
       throw new Error("Long-Term Memory build provenance does not match engine-boundary.json");
+    }
+  }
+  if (manifest.id === "noodle") {
+    const expectedLocales = ["de", "ko", "pl"];
+    const actualLocales = Object.keys(manifest.localizations ?? {}).sort();
+    if (JSON.stringify(actualLocales) !== JSON.stringify(expectedLocales)) {
+      throw new Error(`Noodle must provide maintained display metadata for ${expectedLocales.join(", ")}`);
+    }
+    for (const locale of expectedLocales) {
+      const localization = manifest.localizations[locale];
+      if (
+        !localization ||
+        JSON.stringify(Object.keys(localization).sort()) !==
+          JSON.stringify(["description", "homeBrowserTab", "name"])
+      ) {
+        throw new Error(`Noodle ${locale} must contain only package and Home tab display metadata`);
+      }
+      if (
+        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !==
+        JSON.stringify(["ariaLabel", "label"])
+      ) {
+        throw new Error(`Noodle ${locale} must localize its Home tab label and accessibility label`);
+      }
+      assertLocalizedField(localization.name, 120, `Noodle ${locale} name`);
+      assertLocalizedField(localization.description, 2_000, `Noodle ${locale} description`);
+      assertLocalizedField(localization.homeBrowserTab.label, 40, `Noodle ${locale} Home tab label`);
+      assertLocalizedField(
+        localization.homeBrowserTab.ariaLabel,
+        100,
+        `Noodle ${locale} Home tab accessibility label`,
+      );
+      if (
+        localization.description === manifest.description ||
+        localization.homeBrowserTab.ariaLabel === manifest.contributions?.homeBrowserTab?.ariaLabel
+      ) {
+        throw new Error(`Noodle ${locale} must not copy untranslated English display metadata`);
+      }
     }
   }
   ids.add(manifest.id);
