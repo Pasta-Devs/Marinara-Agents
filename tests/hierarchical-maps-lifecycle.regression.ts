@@ -92,7 +92,8 @@ function artifactFixture(version: string): ArtifactFixture {
     version === "1.3.1" ||
     version === "1.3.2" ||
     version === "1.3.3" ||
-    version === "1.3.4"
+    version === "1.3.4" ||
+    version === "1.3.5"
   ) {
     const clientSource = execFileSync("unzip", ["-p", path, "client.js"], { encoding: "utf8" });
     assert.ok(clientSource.includes(artifactWorldMapsGuideUrl));
@@ -106,7 +107,8 @@ function artifactFixture(version: string): ArtifactFixture {
       version === "1.3.1" ||
       version === "1.3.2" ||
       version === "1.3.3" ||
-      version === "1.3.4"
+      version === "1.3.4" ||
+      version === "1.3.5"
     ) {
       assert.match(
         clientSource,
@@ -119,25 +121,32 @@ function artifactFixture(version: string): ArtifactFixture {
       version === "1.3.1" ||
       version === "1.3.2" ||
       version === "1.3.3" ||
-      version === "1.3.4"
+      version === "1.3.4" ||
+      version === "1.3.5"
     ) {
       assert.match(
         clientSource,
         /\[data-marinara-maps-workspace-overlay\]\s+\[data-marinara-maps-editor-canvas\]\s*\{\s*aspect-ratio:\s*16\s*\/\s*9;\s*height:\s*auto;\s*width:\s*100%;\s*\}/u,
       );
     }
-    if (version === "1.3.1" || version === "1.3.2" || version === "1.3.3" || version === "1.3.4") {
+    if (
+      version === "1.3.1" ||
+      version === "1.3.2" ||
+      version === "1.3.3" ||
+      version === "1.3.4" ||
+      version === "1.3.5"
+    ) {
       assert.match(clientSource, /spatial_transition_rejected/u);
       assert.match(clientSource, /spatial_transition_committed/u);
       assert.match(clientSource, /marinara-capability-server-event/u);
       assert.match(clientSource, /The current location changed\. Review the available destinations\./u);
       assert.match(clientSource, /new Map\(\[\["spatial_transition_stale_definition"/u);
     }
-    if (version === "1.3.2" || version === "1.3.3" || version === "1.3.4") {
+    if (version === "1.3.2" || version === "1.3.3" || version === "1.3.4" || version === "1.3.5") {
       assert.match(clientSource, /Incoming one-way/u);
       assert.match(clientSource, /data-marinara-direct-link-direction/u);
     }
-    if (version === "1.3.3" || version === "1.3.4") {
+    if (version === "1.3.3" || version === "1.3.4" || version === "1.3.5") {
       assert.match(clientSource, /Break breadcrumb continuity and start a new map/u);
       assert.match(clientSource, /breakHistoryContinuity/u);
       const serverSource = execFileSync("unzip", ["-p", path, "server.mjs"], { encoding: "utf8" });
@@ -178,6 +187,7 @@ const fixtures = new Map(
     artifactFixture("1.3.2"),
     artifactFixture("1.3.3"),
     artifactFixture("1.3.4"),
+    artifactFixture("1.3.5"),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -202,7 +212,7 @@ assert.deepEqual(candidateFixture.manifest.builtAgainst, {
 });
 assert.deepEqual(candidateFixture.manifest.contributions?.agentDetail?.agentIds, ["hierarchical-maps"]);
 
-const currentFixture = fixtures.get("1.3.4");
+const currentFixture = fixtures.get("1.3.5");
 assert.ok(currentFixture);
 assert.deepEqual(currentFixture.manifest.builtAgainst, {
   engineVersion: "2.4.2",
@@ -272,7 +282,8 @@ function catalogFixture(version: string) {
           version === "1.3.1" ||
           version === "1.3.2" ||
           version === "1.3.3" ||
-          version === "1.3.4"
+          version === "1.3.4" ||
+          version === "1.3.5"
             ? catalogWorldMapsGuideUrl
             : "https://github.com/Pasta-Devs/Marinara-Agents#hierarchical-maps",
       },
@@ -2806,11 +2817,11 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.3.4";
+    catalogVersion = "1.3.5";
     catalogOnline = true;
-    const upgraded134 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded134.version, "1.3.4");
-    assert.equal(upgraded134.previousVersion, "1.1.7");
+    const upgraded135 = await capabilityPackageManager.install("hierarchical-maps");
+    assert.equal(upgraded135.version, "1.3.5");
+    assert.equal(upgraded135.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
@@ -3970,7 +3981,7 @@ async function main() {
     catalogOnline = true;
     const reinstalled =
       await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.3.4");
+    assert.equal(reinstalled.version, "1.3.5");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -4058,7 +4069,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.3.4", status: "active", readiness: "ready" }],
+      [{ version: "1.3.5", status: "active", readiness: "ready" }],
     );
 
     console.info(
