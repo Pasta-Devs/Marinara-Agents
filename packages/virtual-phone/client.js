@@ -147,7 +147,8 @@ ${B.body}`,replyTo:B.id}),children:"Reply"}):null,B.folder==="archive"?(0,re.jsx
    inset 0, so it is both the full-height box and the containing block these two position against.
    Giving .vp-maps its own position: relative took that inset away and collapsed the view to its content. */
 .vp-maps { padding-bottom: 0; overflow: hidden; }
-.vp-map-canvas--full { position: absolute; inset: 4.25rem 0.75rem 0; min-height: 0; border-radius: 1.1rem 1.1rem 0 0; }
+/* Flex, not absolute: an absolute map covered the search field it was supposed to sit under. */
+.vp-map-canvas--full { flex: 1; min-height: 6rem; margin-top: 0.625rem; border-radius: 1.1rem 1.1rem 0 0; }
 .vp-map-sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 60%; overflow-y: auto; padding: 0.5rem 0.75rem 1rem; border-radius: 1.25rem 1.25rem 0 0; background: color-mix(in srgb, var(--vp-text) 5%, var(--vp-bg)); box-shadow: 0 -10px 28px rgb(0 0 0 / 0.45), inset 0 1px 0 color-mix(in srgb, var(--vp-text) 14%, transparent); }
 .vp-sheet-grip { display: block; height: 4px; width: 2.25rem; margin: 0 auto 0.625rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 25%, transparent); }
 /* A bare emoji dropped on a map reads as clip art. Seat it in a circular marker with a tail and a
@@ -250,7 +251,8 @@ ${B.body}`,replyTo:B.id}),children:"Reply"}):null,B.folder==="archive"?(0,re.jsx
 .vp-app-header-mid { display: flex; align-items: center; justify-content: center; min-width: 0; }
 .vp-app-header h2 { min-width: 0; margin: 0; text-align: center; font-size: 1rem; font-weight: 650; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-app-header-actions { justify-self: end; }
-.vp-app-header-actions { display: flex; align-items: center; gap: 0.125rem; flex-shrink: 0; }
+/* Header icons need a gap you can see and aim between; 2px read as one wide button. */
+.vp-app-header-actions { display: flex; align-items: center; gap: 0.375rem; flex-shrink: 0; }
 .vp-app-error { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; text-align: center; font-size: 0.8125rem; font-weight: 500; }
 .vp-app-error .vp-surface-btn { width: auto; padding: 0 1.5rem; }
 .vp-app-title-spacer { width: 2.75rem; flex-shrink: 0; }
@@ -495,7 +497,11 @@ ${B.body}`,replyTo:B.id}),children:"Reply"}):null,B.folder==="archive"?(0,re.jsx
 .vp-post-time { margin-left: auto; flex-shrink: 0; font-size: 0.5625rem; font-weight: 500; color: var(--vp-muted); }
 .vp-post-handle { font-size: 0.6875rem; font-weight: 500; color: var(--vp-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-post-text { margin: 0; font-size: 0.8125rem; line-height: 1.4; overflow-wrap: anywhere; }
-.vp-post-footer { display: flex; gap: 1.25rem; align-items: center; font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); }
+/* Like, boost and reply are the most-pressed controls in the feed and were eleven pixels tall.
+   The row keeps its look; the targets around the numbers are now big enough to hit. */
+.vp-post-footer { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.25rem; font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); }
+.vp-post-footer > button { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 1.75rem; padding: 0 0.5rem; border-radius: 999px; transition: background 120ms ease; }
+.vp-post-footer > button:hover { background: color-mix(in srgb, var(--vp-text) 8%, transparent); }
 .vp-post-footer span { display: inline-flex; align-items: center; gap: 0.25rem; }
 
 .vp-goodle-logo { display: flex; justify-content: center; gap: 1px; margin: 1.5rem 0 1rem; font-size: 2.125rem; font-weight: 700; letter-spacing: -0.02em; text-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
@@ -572,7 +578,8 @@ ${B.body}`,replyTo:B.id}),children:"Reply"}):null,B.folder==="archive"?(0,re.jsx
 
 /* Goodle's own tabs, and the picture grid behind the Images one. */
 .vp-goodle-tabs { display: flex; gap: 1rem; margin: 0.875rem 0 0; padding: 0 0.25rem; border-bottom: 1px solid var(--vp-border); }
-.vp-goodle-tabs button { display: inline-flex; align-items: center; gap: 0.3125rem; padding: 0 0.125rem 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--vp-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+/* A tab is a target, not just a word: "All" was 21px wide to aim at. */
+.vp-goodle-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 0.3125rem; min-width: 3.25rem; min-height: 2rem; padding: 0 0.5rem 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--vp-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .vp-goodle-tabs button[aria-pressed="true"] { color: var(--vp-accent); border-bottom-color: var(--vp-accent); }
 .vp-image-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.875rem; }
 .vp-image-cell { display: grid; gap: 0.1875rem; text-align: left; }
@@ -592,7 +599,7 @@ ${B.body}`,replyTo:B.id}),children:"Reply"}):null,B.folder==="archive"?(0,re.jsx
 @keyframes vp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 @media (prefers-reduced-motion: reduce) { .vp-appview, .vp-switcher, .vp-skeleton, .vp-slide-up, .vp-slide-down { animation: none; } }
 .vp-search-go { position: relative; flex: 1; min-width: 0; }
-.vp-go-btn { position: absolute; right: 0.3125rem; top: 50%; translate: 0 -50%; display: inline-flex; align-items: center; justify-content: center; height: 2.125rem; width: 2.125rem; border-radius: 999px; background: var(--vp-accent); color: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 0.2); transition: transform 120ms ease; }
+.vp-go-btn { min-height: 1.875rem; min-width: 1.875rem; position: absolute; right: 0.3125rem; top: 50%; translate: 0 -50%; display: inline-flex; align-items: center; justify-content: center; height: 2.125rem; width: 2.125rem; border-radius: 999px; background: var(--vp-accent); color: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 0.2); transition: transform 120ms ease; }
 .vp-go-btn:active { transform: scale(0.94); }
 .vp-color-row { display: inline-flex; align-items: center; gap: 0.5rem; }
 .vp-color-input { height: 1.875rem; width: 2.75rem; padding: 0; border: 0; border-radius: 0.5rem; background: none; cursor: pointer; }
@@ -605,7 +612,7 @@ ${B.body}`,replyTo:B.id}),children:"Reply"}):null,B.folder==="archive"?(0,re.jsx
 .vp-store-get:hover { filter: brightness(1.1); }
 .vp-store-get:active { transform: scale(0.94); }
 .vp-store-actions { display: grid; gap: 0.25rem; justify-items: end; flex-shrink: 0; }
-.vp-store-remove { font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); padding: 0.125rem 0.375rem; border-radius: 0.375rem; }
+.vp-store-remove { min-height: 1.5rem; padding: 0 0.5rem; font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); border-radius: 0.375rem; }
 .vp-store-remove:hover { color: #ff3b30; }
 .vp-fx { position: absolute; inset: 0; z-index: 40; pointer-events: none; border-radius: 43px; }
 /* A real impact crack: eleven cracks radiating from one strike point, each kinked and of a
