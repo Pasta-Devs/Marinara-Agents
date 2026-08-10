@@ -1988,20 +1988,38 @@ export async function noodleRoutes(app: FastifyInstance) {
     return account;
   });
 
-  app.delete("/accounts/uninvited", async () => {
+  app.delete("/accounts/uninvited", async (req) => {
+    const { includeNoodler } = req.query as { includeNoodler?: string };
+    const settings = await noodle.getSettings();
+    const withNoodler = includeNoodler === "true" && settings.enableNoodler;
     const [accounts, noodlerAccounts] = await Promise.all([
       noodle.listAccounts(),
       noodle.listNoodlerAccounts(),
     ]);
+    const uninvited = accounts.filter((account) => account.kind === "character" && !account.invited);
+    const uninvitedIds = new Set(uninvited.map((account) => account.id));
     const linkedAccountIds = new Set(noodlerAccounts.flatMap((account) => account.noodleAccountId ?? []));
-    const targets = accounts.filter(
-      (account) => account.kind === "character" && !account.invited && !linkedAccountIds.has(account.id),
-    );
+
+    // NoodleR profiles must go through the per-account lock and media cleanup the single-delete
+    // route uses, so sweep them first and only then let their Noodle account become a target.
+    let deletedNoodler = 0;
+    if (withNoodler) {
+      for (const account of noodlerAccounts) {
+        if (!account.noodleAccountId || !uninvitedIds.has(account.noodleAccountId)) continue;
+        const locked = await tryNoodlerAccountOperation(account.id, () => noodle.deleteNoodlerAccount(account.id));
+        if (!locked.acquired || !locked.value) continue;
+        removeNoodlerAccountMedia(account.id);
+        linkedAccountIds.delete(account.noodleAccountId);
+        deletedNoodler += 1;
+      }
+    }
+
+    const targets = uninvited.filter((account) => !linkedAccountIds.has(account.id));
     let deleted = 0;
     for (const account of targets) {
       if (await noodle.deleteAccountByEntity(account.kind, account.entityId)) deleted += 1;
     }
-    return { deleted, bootstrap: await bootstrapVisibleNoodle(noodle, characters) };
+    return { deleted, deletedNoodler, bootstrap: await bootstrapVisibleNoodle(noodle, characters) };
   });
 
   app.post("/posts", async (req, reply) => {

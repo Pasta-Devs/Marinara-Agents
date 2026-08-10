@@ -888,6 +888,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [editingReplyContent, setEditingReplyContent] = useState("");
   const [confirmAction, setConfirmAction] =
     useState<NoodleConfirmAction | null>(null);
+  const [deleteLinkedNoodlerProfiles, setDeleteLinkedNoodlerProfiles] =
+    useState(false);
   const [noodlePromptEditorOpen, setNoodlePromptEditorOpen] = useState(false);
   const [noodlePromptDraft, setNoodlePromptDraft] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
@@ -3192,10 +3194,17 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       return;
     }
     if (confirmAction.kind === "delete-uninvited-profiles") {
-      deleteUninvitedProfiles.mutate(undefined, {
-        onSuccess: ({ deleted }) => {
+      deleteUninvitedProfiles.mutate(deleteLinkedNoodlerProfiles, {
+        onSuccess: ({ deleted, deletedNoodler }) => {
           setConfirmAction(null);
-          toast.success(localizeUi("ui.noodle.noodlehome.deletedUninvitedProfiles", { value1: deleted }));
+          toast.success(
+            deletedNoodler > 0
+              ? localizeUi("ui.noodle.noodlehome.deletedUninvitedProfilesWithNoodler", {
+                  value1: deleted,
+                  value2: deletedNoodler,
+                })
+              : localizeUi("ui.noodle.noodlehome.deletedUninvitedProfiles", { value1: deleted }),
+          );
         },
         onError: (error) => toast.error(error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotDeleteUninvitedProfiles")),
       });
@@ -3891,12 +3900,15 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setConfirmAction({
+                onClick={() => {
+                  setDeleteLinkedNoodlerProfiles(false);
+                  setConfirmAction({
                   kind: "delete-uninvited-profiles",
                   title: localizeUi("ui.noodle.noodlehome.deleteUninvitedProfiles"),
                   message: localizeUi("ui.noodle.noodlehome.deleteUninvitedProfilesDetail"),
                   confirmLabel: localizeUi("ui.noodle.noodlehome.deleteProfiles"),
-                })}
+                  });
+                }}
                 disabled={deleteUninvitedProfiles.isPending}
                 className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-[var(--destructive)]/40 px-3 text-[0.68rem] font-semibold text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -6782,6 +6794,23 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             <p className="text-sm leading-6 text-[var(--foreground)]">
               {confirmAction.message}
             </p>
+            {confirmAction.kind === "delete-uninvited-profiles" &&
+              settings?.enableNoodler && (
+                <label className="flex items-start gap-2 text-xs leading-5 text-[var(--foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={deleteLinkedNoodlerProfiles}
+                    disabled={confirmActionPending}
+                    onChange={(event) =>
+                      setDeleteLinkedNoodlerProfiles(event.target.checked)
+                    }
+                    className="mt-0.5 accent-[var(--destructive)]"
+                  />
+                  {localizeUi(
+                    "ui.noodle.noodlehome.alsoDeleteLinkedNoodlerProfiles",
+                  )}
+                </label>
+              )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
