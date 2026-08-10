@@ -107,3 +107,24 @@ export function buildTurnContext(phones: TurnPhoneState[]): string | null {
   const lastSentence = clipped.lastIndexOf(". ");
   return `${lastSentence > 20 ? clipped.slice(0, lastSentence + 1) : clipped.replace(/\s+\S*$/u, "…")}]`;
 }
+
+/**
+ * Minutes past midnight from a tracked time, or null when it is not a time at all.
+ *
+ * A tracker's time field is free text a model wrote, so it arrives as "21:40", "9:40 PM", "09:40"
+ * or as prose nobody can parse. Anything that does not clearly resolve returns null and the phone
+ * keeps its own clock rather than guessing.
+ */
+export function parseTrackedTime(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const match = /\b(\d{1,2})[:.](\d{2})\s*(am|pm)?/iu.exec(value.trim());
+  if (!match) return null;
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = match[3]?.toLowerCase();
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || minutes > 59) return null;
+  if (meridiem === "pm" && hours < 12) hours += 12;
+  if (meridiem === "am" && hours === 12) hours = 0;
+  if (hours > 23) return null;
+  return hours * 60 + minutes;
+}

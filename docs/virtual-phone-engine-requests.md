@@ -128,26 +128,52 @@ api.runtime.images.attachToChat(chatId, { url, caption });
 Read access alone (`listChatImages`) already unlocks a real Gallery from the images a story already
 has, without any generation cost. That is a good first half if generation is far off.
 
-## 4b. Read access to the chat's world state (new)
+## 4b. Read access to the chat's tracked world state — the phone is ready for it
 
-**Today.** The phone has a manual story clock: the user sets the time in the scene and every
-timestamp follows it. That is fine, and it is a second source of truth. A chat running the World
-State agent already tracks the scene's date, time, location and weather — and the phone cannot see
-any of it, so the two drift apart and the user maintains the clock by hand for no reason.
+**Today.** The phone keeps its own story clock, set by hand. A chat running the World State agent
+already tracks the scene's date, time, location and weather. Two sources of truth for the same fact,
+and the user maintains the second one for no reason.
 
-World State writes to the `game_state` table, and the capability persistence host exposes
-`markGameStateSnapshotCommitted` but no read. `getChat().metadata` does not carry it either.
+The values live in `game_state_snapshots` (`date`, `time`, `location`, `weather`, `temperature`).
+`capability-persistence.service.ts` already imports that table — but only to write
+`markGameStateSnapshotCommitted`. There is no read, and `getChat().metadata` does not carry it.
 
-**With it.** The phone clock follows the scene automatically: no setting to maintain, no drift, and
-the weather could reach the Maps and Camera surfaces for free.
+**The package side is already written.** `storyClockOffset()` feature-detects
+`persistence.getGameState`, uses the tracked time when it is there, and falls back to the manual
+offset otherwise — the same shape as the `listChatImages` fallback. Nothing is written back: one
+owner for the value, and it is not the phone. Ship the read and the phone follows the scene with no
+further change on this side.
 
-**Smallest API that works.** A read of the chat's current tracked state, whatever shape it has:
+**The patch, in the shape the package already expects.** In `capability-persistence.service.ts`,
+alongside `listChatImages`:
 
 ```ts
-persistence.getGameState(chatId): Promise<Record<string, unknown> | null>;
+async getGameState(chatId): Promise<CapabilityGameStateRecord | null> {
+  const [row] = await db
+    .select()
+    .from(gameStateSnapshots)
+    .where(eq(gameStateSnapshots.chatId, chatId))
+    .orderBy(desc(gameStateSnapshots.createdAt))
+    .limit(1);
+  return row
+    ? { date: row.date, time: row.time, location: row.location, weather: row.weather, temperature: row.temperature }
+    : null;
+},
 ```
 
-Even a narrow `{ date, time }` would do. Read-only; the phone has no business writing it.
+and on `CapabilityPersistenceSession`:
+
+```ts
+/** Read-only. Optional so packages feature-detect and degrade on older Engines. */
+getGameState?(chatId: string): Promise<CapabilityGameStateRecord | null>;
+```
+
+Read-only, no new permission, and the same optional-method convention the image read uses. The
+tracker's `time` is free text a model wrote, so the phone parses what it can ("21:40", "9:40 pm")
+and keeps its own clock for anything it cannot — the Engine does not need to normalise it.
+
+Location and weather are worth returning even though nothing uses them yet: Maps and Camera are the
+obvious next consumers, and a second round-trip to add fields is worse than sending them once.
 
 ## 4. Conversation call-session access
 

@@ -15,7 +15,7 @@ import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
 import { applyTransaction, parseProposal, readAccount } from "../apps/banking/manifest";
-import { buildTurnContext, type TurnPhoneState } from "./turn-context";
+import { buildTurnContext, parseTrackedTime, type TurnPhoneState } from "./turn-context";
 import { lorebookScope } from "./lorebook-scope";
 
 interface CapabilityContext {
@@ -40,6 +40,17 @@ interface CapabilityContext {
           extra: string;
           createdAt: string;
         }>>;
+        /**
+         * The scene's own tracked state, when the Engine exposes it. World State already tracks the
+         * date and time of the scene; the phone keeping a second clock by hand is a source of truth
+         * too many. Optional and feature-detected, so the manual clock stays the fallback.
+         */
+        getGameState?(chatId: string): Promise<{
+          date?: string | null;
+          time?: string | null;
+          location?: string | null;
+          weather?: string | null;
+        } | null>;
         /** Engine 2.4.2. Read-only view of the images the Engine generated for a chat. */
         listChatImages?(chatId: string): Promise<Array<{
           id: string;
@@ -425,9 +436,34 @@ export async function activate({ api }: CapabilityContext) {
    * inbox or a feed invents its own hour and produces breakfast newsletters during a midnight
    * scene — the screen said 03:00 and the content did not.
    */
-  const storyTimeContext = (phone?: Awaited<ReturnType<typeof findPhone>>) => {
+  /**
+   * The offset that puts this phone on the scene's clock.
+   *
+   * If another agent is already tracking what time it is in the story, that is the answer and the
+   * phone should not ask the user to maintain a second one. The tracked time wins when it is there;
+   * the per-phone manual offset is the fallback, which is also what every Engine without the read
+   * gets. Nothing is written back — one owner for the value, and it is not us.
+   */
+  const storyClockOffset = async (phone: Awaited<ReturnType<typeof findPhone>>, chatId?: string) => {
+    const manual = phoneGenSettings(phone).storyClockOffsetMinutes;
+    if (!chatId || !api.runtime.persistence.getGameState) return manual;
+    try {
+      const tracked = await api.runtime.persistence.getGameState(chatId);
+      const parsed = parseTrackedTime(tracked?.time);
+      if (parsed === null) return manual;
+      const now = new Date();
+      const wanted = new Date(now);
+      wanted.setHours(Math.floor(parsed / 60), parsed % 60, 0, 0);
+      const minuteStart = Math.floor(now.getTime() / 60_000) * 60_000;
+      return (wanted.getTime() - minuteStart) / 60_000;
+    } catch {
+      return manual;
+    }
+  };
+
+  const storyTimeContext = async (phone?: Awaited<ReturnType<typeof findPhone>>, chatId?: string) => {
     if (!phone) return "";
-    const offset = phoneGenSettings(phone).storyClockOffsetMinutes;
+    const offset = await storyClockOffset(phone, chatId);
     if (!offset) return "";
     const when = new Date(Date.now() + offset * 60_000);
     return `\n\nThe time on this phone right now is ${when.getHours().toString().padStart(2, "0")}:${when.getMinutes().toString().padStart(2, "0")}, ${when.toLocaleDateString("en-US", { weekday: "long" })}. Write what fits that hour.`;
@@ -458,7 +494,7 @@ export async function activate({ api }: CapabilityContext) {
         .slice(-STORY_BUDGET_CHARS);
     }
     const shared = chatId && phone ? await sharedPhoneContext(phone, chatId) : "";
-    return `${storyTimeContext(phone)}${lore ? `\n\nWorld lore to stay true to:\n${lore}` : ""}${story ? `\n\nRecent story events:\n${story}` : ""}${shared}`;
+    return `${await storyTimeContext(phone, chatId)}${lore ? `\n\nWorld lore to stay true to:\n${lore}` : ""}${story ? `\n\nRecent story events:\n${story}` : ""}${shared}`;
   };
 
   const generateCharacterReply = async (senderPhoneId: string, recipientPhoneId: string) => {
@@ -726,7 +762,7 @@ export async function activate({ api }: CapabilityContext) {
           : null;
         const mode = body.mode === "reference" ? "reference" : "show";
         const screen = detail ? `\n\nOn screen:\n${detail}` : "";
-        const offset = phoneGenSettings(phone).storyClockOffsetMinutes;
+        const offset = await storyClockOffset(phone, chat.id);
         const shownAt = offset
           ? new Date(Date.now() + offset * 60_000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
           : "";

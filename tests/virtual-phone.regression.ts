@@ -29,7 +29,7 @@ import { draftMail, mailFromLine, mailManifest, mergeMail, parseEmail, readStore
 import { extractImageUrls, galleryManifest } from "../packages/virtual-phone/src/phone/apps/gallery/manifest";
 import { parseProfile, tindlerManifest } from "../packages/virtual-phone/src/phone/apps/tindler/manifest";
 import { PhoneMessagingService, unreadCount, unreadMessages } from "../packages/virtual-phone/src/phone/system/messaging";
-import { buildTurnContext, sanitizeForPrompt, TURN_CONTEXT_CHARS, type TurnPhoneState } from "../packages/virtual-phone/src/phone/system/turn-context";
+import { buildTurnContext, parseTrackedTime, sanitizeForPrompt, TURN_CONTEXT_CHARS, type TurnPhoneState } from "../packages/virtual-phone/src/phone/system/turn-context";
 import { lorebookScope } from "../packages/virtual-phone/src/phone/system/lorebook-scope";
 import { conditionOpacity, patternBackground } from "../packages/virtual-phone/src/phone/device/effects";
 import { projectConversationTexts } from "../packages/virtual-phone/src/phone/system/server-entry";
@@ -331,6 +331,19 @@ async function main() {
   for (const required of [".vp-empty", ".vp-list", ".vp-fab", ".vp-contact-actions", ".vp-media", ".vp-thread-row", ".vp-appview"]) {
     assert.ok(selectors.has(required), `stylesheet has no rule for exactly "${required}" — did a deleted rule leave a dangling selector?`);
   }
+
+  // A tracker's time field is free text a model wrote, so the phone reads what it can and keeps
+  // its own clock for anything it cannot.
+  assert.equal(parseTrackedTime("21:40"), 21 * 60 + 40);
+  assert.equal(parseTrackedTime("9:40 pm"), 21 * 60 + 40);
+  assert.equal(parseTrackedTime("09:05"), 9 * 60 + 5);
+  assert.equal(parseTrackedTime("12:15 AM"), 15);
+  assert.equal(parseTrackedTime("12:15 PM"), 12 * 60 + 15);
+  assert.equal(parseTrackedTime("around midnight"), null);
+  assert.equal(parseTrackedTime("25:00"), null);
+  assert.equal(parseTrackedTime("10:75"), null);
+  assert.equal(parseTrackedTime(undefined), null);
+  assert.equal(parseTrackedTime(1740), null);
 
   // The turn context is what the story finally hears about the phone. Nothing to say costs nothing.
   assert.equal(buildTurnContext([]), null);
