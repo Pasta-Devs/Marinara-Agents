@@ -80,8 +80,17 @@
           "promptTemplate": "${narrationSummary}"
         }
       ],
+      "animationRefinementTemplates": [
+        {
+          "id": "image-aware-shot-planner",
+          "name": "Image-Aware Shot Planner",
+          "description": "Inspects the generated T=0 illustration, classifies its animation suitability, and grounds the final motion plan in the actual frame.",
+          "promptTemplate": "You are Marinara's image-aware Storyboard Shot Animation Planner. The attached generated illustration is the exact first frame at T=0 and is authoritative for visible subjects, pose, crop, camera angle, object placement, lighting, and feasible movement.\n\nStoryboard title: ${title}\nClip duration: ${durationSeconds} seconds\nAspect ratio: ${aspectRatio}\nVisible named characters: ${characters}\n\nSOURCE SECTIONS:\n${sourceSections}\n\nPRE-IMAGE MOTION INTENT:\n${motionIntent}\n\nORIGINAL FIRST-FRAME PLAN:\n${imagePrompt}\n\nInspect the actual illustration before planning motion. Preserve the source-supported action, emotional arc, camera feel, timing, and ending beat when the pixels make them feasible. Never invent an unseen character, off-frame object, missing limb, hidden prop, new location, or unsupported event. Do not restate the static frame unless a visible element moves or changes.\n\nClassify the frame as exactly one of:\n- suitable: the intended motion can proceed from the actual frame with only grounding details.\n- simplify: the intended action remains possible but must be reduced or adjusted for the actual pose, crop, or composition.\n- subtle: the frame only supports restrained motion such as gaze, expression, breathing, cloth, hair, atmosphere, or a small camera move.\n- regenerate: the frame is materially unsuitable for the intended action. Do not request or trigger another image generation; still return the safest subtle animation possible from the existing frame.\n\nWrite narrationBeat as the final provider-neutral animation plan. Begin exactly from the attached image; describe physically achievable subject motion, one coherent camera behavior, continuity constraints, supporting environmental motion, relevant source-supported audio or dialogue, and an ending pose or hold. Keep identity, face, hair, clothing, anatomy, equipment, setting, and art style stable. If PRE-IMAGE MOTION INTENT contains | timing separators, return exactly the same number of non-empty | separated segments in the same order.\n\nReturn strict JSON only with this shape:\n{\"classification\":\"suitable|simplify|subtle|regenerate\",\"narrationBeat\":\"final image-grounded animation plan\"}\nDo not add Markdown fences, labels, rationale, or text outside the JSON object."
+        }
+      ],
       "illustrationTemplateId": "game-scene-illustration",
       "videoTemplateId": "cinematic-scene-video",
+      "animationRefinementTemplateId": "image-aware-shot-planner",
       "imageConnectionId": null,
       "videoConnectionId": null,
       "autoGenerateMode": "illustration",
@@ -91,6 +100,7 @@
       "includeCharacterAppearance": true,
       "useAvatarReferences": true,
       "useNovelAiCharacterPrompts": true,
+      "imageAwareShotPlanningEnabled": true,
       "roleplayEpisodeTemplates": [
         {
           "id": "roleplay-completed-episode",
