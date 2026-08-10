@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "전투 (Combat)",
+    "description": "전투 조우, 이니셔티브, HP 추적, 턴제 행동을 관리합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 기타 에이전트에 추가하세요."
+  },
+  "agents": {
+    "combat": {
+      "name": "전투 (Combat)",
+      "description": "전투 조우, 이니셔티브, HP 추적, 턴제 행동을 관리합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 기타 에이전트에 추가하세요."
+    }
+  }
+}

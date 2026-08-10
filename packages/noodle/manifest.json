@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "noodle",
   "name": "Noodle",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
   "localizations": {
     "de": {
@@ -63,13 +63,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "01f3e41a956ac795270a8389c62c515a780c5345e5a9e36e110be3d8eb6fa0bc",
-      "bytes": 2382557
+      "sha256": "3b81aff0e5d6f92cafb40c27d0ad8e4c124c78a9c699ee1ce1b501293a3a7f39",
+      "bytes": 2389518
     },
     {
       "path": "client.js",
-      "sha256": "a60bb6487018c27c24d8c556f0b5215d07b5a2baf140dff4c281eef91a13f0c1",
-      "bytes": 2473078
+      "sha256": "b9d0ddc66f9a10528433c6942a21c8b17270d0bc31ce836a84ba8cdf113323ec",
+      "bytes": 2478649
     },
     {
       "path": "noodle-klusek.png",

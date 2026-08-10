@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "가위바위보 (Rock-Paper-Scissors)",
+    "description": "대화 캐릭터와 가위바위보를 즐기세요. 설치하면 아무 대화 채팅에서나 /rps를 직접 사용할 수 있습니다. 캐릭터가 먼저 시작하게 하려면 채팅 설정 → 에이전트 → Commands에서만 추가하세요."
+  },
+  "agents": {
+    "rock-paper-scissors": {
+      "name": "가위바위보 (Rock-Paper-Scissors)",
+      "description": "대화 캐릭터와 가위바위보를 즐기세요. 설치하면 아무 대화 채팅에서나 /rps를 직접 사용할 수 있습니다. 캐릭터가 먼저 시작하게 하려면 채팅 설정 → 에이전트 → Commands에서만 추가하세요."
+    }
+  }
+}

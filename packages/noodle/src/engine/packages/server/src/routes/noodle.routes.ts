@@ -122,6 +122,7 @@ import {
   mentionedCharacterAccounts,
   noodleDigestAccountLabel,
   parseRecord,
+  parseStringArray,
   resolvePersonaAccount,
 } from "../services/noodle/noodle-public-support.js";
 
@@ -1986,6 +1987,53 @@ export async function noodleRoutes(app: FastifyInstance) {
         .code(404)
         .send({ error: "Noodle character account not found" });
     return account;
+  });
+
+  app.delete("/accounts/uninvited", async (req) => {
+    const { includeNoodler } = req.query as { includeNoodler?: string };
+    const settings = await noodle.getSettings();
+    const withNoodler = includeNoodler === "true" && settings.enableNoodler;
+    const [accounts, noodlerAccounts] = await Promise.all([
+      noodle.listAccounts(),
+      noodle.listNoodlerAccounts(),
+    ]);
+    // A character pulled in by a selected folder is an eligible participant even though its
+    // account is not directly invited, so it must not count as uninvited for cleanup.
+    const selectedGroupIds = new Set(settings.invitedCharacterGroupIds ?? []);
+    const groupCharacterIds = new Set<string>();
+    if (selectedGroupIds.size > 0) {
+      for (const group of await characters.listGroups()) {
+        if (!selectedGroupIds.has(group.id)) continue;
+        for (const characterId of parseStringArray(group.characterIds)) groupCharacterIds.add(characterId);
+      }
+    }
+    const uninvited = accounts.filter(
+      (account) =>
+        account.kind === "character" && !account.invited && !groupCharacterIds.has(account.entityId),
+    );
+    const uninvitedIds = new Set(uninvited.map((account) => account.id));
+    const linkedAccountIds = new Set(noodlerAccounts.flatMap((account) => account.noodleAccountId ?? []));
+
+    // NoodleR profiles must go through the per-account lock and media cleanup the single-delete
+    // route uses, so sweep them first and only then let their Noodle account become a target.
+    let deletedNoodler = 0;
+    if (withNoodler) {
+      for (const account of noodlerAccounts) {
+        if (!account.noodleAccountId || !uninvitedIds.has(account.noodleAccountId)) continue;
+        const locked = await tryNoodlerAccountOperation(account.id, () => noodle.deleteNoodlerAccount(account.id));
+        if (!locked.acquired || !locked.value) continue;
+        removeNoodlerAccountMedia(account.id);
+        linkedAccountIds.delete(account.noodleAccountId);
+        deletedNoodler += 1;
+      }
+    }
+
+    const targets = uninvited.filter((account) => !linkedAccountIds.has(account.id));
+    let deleted = 0;
+    for (const account of targets) {
+      if (await noodle.deleteAccountByEntity(account.kind, account.entityId)) deleted += 1;
+    }
+    return { deleted, deletedNoodler, bootstrap: await bootstrapVisibleNoodle(noodle, characters) };
   });
 
   app.post("/posts", async (req, reply) => {
