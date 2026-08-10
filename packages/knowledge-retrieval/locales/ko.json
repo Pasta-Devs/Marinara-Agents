@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "지식 검색 (Knowledge Retrieval)",
+    "description": "지정한 로어북에서 현재 대화와 관련된 정보를 훑어 핵심 데이터를 요약한 뒤 프롬프트에 삽입합니다 — 벡터 데이터베이스가 없는 경량 RAG 파이프라인입니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 글쓰기 에이전트에서 이 에이전트를 추가하세요."
+  },
+  "agents": {
+    "knowledge-retrieval": {
+      "name": "지식 검색 (Knowledge Retrieval)",
+      "description": "지정한 로어북에서 현재 대화와 관련된 정보를 훑어 핵심 데이터를 요약한 뒤 프롬프트에 삽입합니다 — 벡터 데이터베이스가 없는 경량 RAG 파이프라인입니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 글쓰기 에이전트에서 이 에이전트를 추가하세요."
+    }
+  }
+}
