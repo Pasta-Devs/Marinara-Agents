@@ -3514,6 +3514,7 @@ export function SpatialMapWorkspace({
 
       <SpatialMapAiBuilder
         chatId={chatId ?? ""}
+        chatConnectionId={chat?.connectionId ?? null}
         standalone={templateMode}
         debugMode={debugMode}
         ownerMode={ownerMode}
