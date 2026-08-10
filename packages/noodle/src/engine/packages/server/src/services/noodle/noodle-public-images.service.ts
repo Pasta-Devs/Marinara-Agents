@@ -18,7 +18,10 @@ import {
 } from "../image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
 import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
-import { compileImagePrompt } from "../image/image-prompt-compiler.js";
+import {
+  compileImagePrompt,
+  resolveImageStyleGuidanceText,
+} from "../image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../image/image-prompt-review.js";
 import {
   normalizeIllustratorAppearance,
@@ -250,6 +253,10 @@ export async function generateNoodlePostImage(input: {
     styleProfiles: imageSettings.styleProfiles,
     imageDefaults,
   });
+  const styleGuidance = resolveImageStyleGuidanceText(
+    imageSettings.styleProfiles,
+    compiledPrompt.profile.id,
+  );
   const rawFinalPrompt =
     input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
   const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
@@ -261,12 +268,13 @@ export async function generateNoodlePostImage(input: {
     characterPersonality ? `Personality:\n${characterPersonality}` : "",
     characterImageInstructions ? `Character image preferences:\n${characterImageInstructions}` : "",
   ].filter(Boolean).join("\n\n");
-  const rewrittenPrompt = imagePromptInstructions && !input.promptOverride
+  const rewrittenPrompt = (imagePromptInstructions || styleGuidance) && !input.promptOverride
     ? await rewriteNoodleImagePrompt({
         db: input.db,
         prompt: rawFinalPrompt,
         instructions: imagePromptInstructions,
         characterContext,
+        styleGuidance,
       })
     : null;
   const finalPrompt = rewrittenPrompt ??

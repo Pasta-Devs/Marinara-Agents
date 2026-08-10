@@ -63,13 +63,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "c0fe016133bed874263984c2a532ea5277542d01e42d454f1421be87369b70b5",
-      "bytes": 2387867
+      "sha256": "119808e79482fdabd88e0186af429fb0139a716570574f36cac717ead32ae2e8",
+      "bytes": 2389339
     },
     {
       "path": "client.js",
-      "sha256": "fd3605cea6b9b595d67d8395be059b017ad4184cbcabc9e40912760515179b9c",
-      "bytes": 2477539
+      "sha256": "b9d0ddc66f9a10528433c6942a21c8b17270d0bc31ce836a84ba8cdf113323ec",
+      "bytes": 2478649
     },
     {
       "path": "noodle-klusek.png",
