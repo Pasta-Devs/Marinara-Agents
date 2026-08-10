@@ -330,6 +330,22 @@ export const phoneStylesheet = `
 .vp-az-product p { margin: 0; color: var(--vp-muted); font-size: 0.72rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .vp-az-buy { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-top: auto; padding-top: 0.35rem; }
 .vp-az-buy strong { color: var(--vp-accent); font-size: 0.95rem; }
+/* Notes look like notes. An earlier pass replaced the paper cards with a plain grouped list —
+   correct as structure, and it threw away the one app on the phone with any character. Paper is
+   fixed cream in both themes on purpose: a sticky note is not a surface that goes dark. */
+.vp-notes-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
+.vp-note-card { position: relative; display: grid; align-content: start; gap: 0.3rem; min-height: 6.75rem; padding: 0.7rem 0.7rem 1.1rem; border-radius: 0.35rem 0.9rem 0.9rem 0.35rem; text-align: left; background: linear-gradient(180deg, #fffdf2, #fdf3cf); color: #3a3320; box-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 8px 16px rgb(0 0 0 / 0.22); transition: transform 120ms ease, box-shadow 140ms ease; overflow: hidden; }
+/* The binding edge, so a card reads as torn from a pad rather than as a coloured rectangle. */
+.vp-note-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 0.3125rem; background: repeating-linear-gradient(180deg, #e8d9a4 0 3px, #f3e7bd 3px 7px); box-shadow: inset -1px 0 0 rgb(0 0 0 / 0.08); }
+.vp-note-card:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgb(0 0 0 / 0.2), 0 12px 22px rgb(0 0 0 / 0.26); }
+.vp-note-card:active { transform: scale(0.97); }
+.vp-note-card h3 { margin: 0 0 0 0.4rem; font-size: 0.82rem; font-weight: 650; line-height: 1.25; }
+.vp-note-card p { margin: 0 0 0 0.4rem; font-size: 0.72rem; line-height: 1.35; color: #6b6244; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.vp-note-card time { position: absolute; left: 1.1rem; bottom: 0.5rem; font-size: 0.6rem; color: #9a8f68; }
+/* The editor is the same sheet of paper, ruled. */
+.vp-note-paper { flex: 1; min-height: 0; width: 100%; padding: 0.75rem 0.9rem 0.75rem 1.15rem; border: 0; border-radius: 0.35rem 0.9rem 0.9rem 0.35rem; resize: none; font: inherit; font-size: 0.8125rem; line-height: 1.5rem; color: #3a3320; background-color: #fffdf2; background-image: repeating-linear-gradient(180deg, transparent 0 calc(1.5rem - 1px), rgb(58 51 32 / 0.12) calc(1.5rem - 1px) 1.5rem), linear-gradient(90deg, #e8d9a4 0 0.3125rem, transparent 0.3125rem); background-position: 0 0.6rem, 0 0; box-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 8px 16px rgb(0 0 0 / 0.22); }
+.vp-note-paper::placeholder { color: #a89c72; }
+.vp-note-paper:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
 .vp-result-list { list-style: none; margin: 0.875rem 0 0; padding: 0; display: grid; gap: 0.375rem; }
 .vp-result-card { display: grid; gap: 0.125rem; width: 100%; text-align: left; padding: 0.625rem 0.75rem; border-radius: 0.75rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 97%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
 .vp-result-card:active { transform: scale(0.98); }
@@ -404,9 +420,10 @@ export const phoneStylesheet = `
 .vp-bubble--other { align-self: flex-start; border-bottom-left-radius: 0.375rem; background: linear-gradient(180deg, color-mix(in srgb, var(--vp-surface) 96%, #ffffff), var(--vp-surface)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.07), inset 0 0 0 1px var(--vp-border); }
 .vp-bubble-time { display: block; margin-top: 0.125rem; font-size: 0.5625rem; opacity: 0.7; }
 .vp-composer { display: flex; align-items: center; gap: 0.5rem; }
-.vp-gallery-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.25rem; }
-.vp-gallery-cell { aspect-ratio: 1; overflow: hidden; border-radius: 0.5rem; background: var(--vp-surface); box-shadow: inset 0 0 0 1px var(--vp-border); transition: transform 120ms ease; }
-.vp-gallery-cell:active { transform: scale(0.96); }
+/* Photos sit shoulder to shoulder and run to the edges, the way every camera roll does. */
+.vp-gallery-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; margin: 0 -0.75rem; }
+.vp-gallery-cell { aspect-ratio: 1; overflow: hidden; border-radius: 0; background: color-mix(in srgb, var(--vp-text) 6%, var(--vp-bg)); transition: opacity 120ms ease; }
+.vp-gallery-cell:active { opacity: 0.7; }
 .vp-gallery-cell img { display: block; height: 100%; width: 100%; object-fit: cover; }
 .vp-gallery-skeleton { aspect-ratio: 1; border-radius: 0.5rem; }
 .vp-photo-view { margin: 0; }
@@ -553,6 +570,10 @@ export const phoneStylesheet = `
 .vp-color-input::-webkit-color-swatch { border: 1px solid var(--vp-border); border-radius: 0.375rem; }
 .vp-urlbar { display: inline-flex; align-items: center; gap: 0.375rem; max-width: 100%; min-height: 1.875rem; padding: 0 0.75rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 6%, var(--vp-bg)); font-size: 0.6875rem; font-weight: 500; color: var(--vp-muted); }
 .vp-urlbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The pill every app store uses: short, wide enough to read, and the same width installed or not. */
+.vp-store-get { min-width: 4.25rem; min-height: 1.75rem; padding: 0 0.75rem; border-radius: 999px; background: color-mix(in srgb, var(--vp-text) 10%, var(--vp-bg)); color: var(--vp-accent); font-size: 0.6875rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; transition: transform 120ms ease, filter 140ms ease; }
+.vp-store-get:hover { filter: brightness(1.1); }
+.vp-store-get:active { transform: scale(0.94); }
 .vp-store-actions { display: grid; gap: 0.25rem; justify-items: end; flex-shrink: 0; }
 .vp-store-remove { font-size: 0.625rem; font-weight: 600; color: var(--vp-muted); padding: 0.125rem 0.375rem; border-radius: 0.375rem; }
 .vp-store-remove:hover { color: #ff3b30; }

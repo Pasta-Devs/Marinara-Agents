@@ -89,7 +89,7 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
           onChange={(event) => updateActive(event.target.value)}
           placeholder="Write something…"
           autoFocus
-          className="vp-textarea vp-textarea--fill"
+          className="vp-note-paper"
         />
       ) : notes.length === 0 ? (
         <PhoneEmptyState
@@ -100,14 +100,12 @@ export function NotesShell({ phoneId, onBack, onClose }: { phoneId: string; onBa
         />
       ) : (
         <>
-          <div className="vp-list">
+          <div className="vp-notes-grid">
             {notes.map((note) => (
-              <button key={note.id} type="button" onClick={() => setActiveId(note.id)} className="vp-thread-row">
-                <span className="vp-thread-body">
-                  <span className="vp-thread-name">{noteTitle(note)}</span>
-                  <span className="vp-thread-preview">{note.text.split("\n").slice(1).join(" ").trim() || "No additional text"}</span>
-                </span>
-                <time dateTime={note.updatedAt} className="vp-row-stamp">{clock.shortDate(note.updatedAt)}</time>
+              <button key={note.id} type="button" onClick={() => setActiveId(note.id)} className="vp-note-card">
+                <h3>{noteTitle(note)}</h3>
+                <p>{note.text.split("\n").slice(1).join(" ").trim() || "No additional text"}</p>
+                <time dateTime={note.updatedAt}>{clock.shortDate(note.updatedAt)}</time>
               </button>
             ))}
           </div>

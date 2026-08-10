@@ -43,8 +43,8 @@ export function AppStoreShell({ apps, onInstalledChange, onOpenApp, onBack, onCl
       </button>
       <div className="vp-store-actions">
         {installed
-          ? <button type="button" onClick={() => onOpenApp(manifest.id)} className="vp-accent-btn">Open</button>
-          : <button type="button" onClick={() => onInstalledChange(manifest.id, true)} className="vp-accent-btn">Get</button>}
+          ? <button type="button" onClick={() => onOpenApp(manifest.id)} className="vp-store-get">Open</button>
+          : <button type="button" onClick={() => onInstalledChange(manifest.id, true)} className="vp-store-get">Get</button>}
         {installed && manifest.removable
           ? <button type="button" onClick={() => remove(manifest)} className="vp-store-remove">Remove</button>
           : null}
@@ -73,8 +73,8 @@ export function AppStoreShell({ apps, onInstalledChange, onOpenApp, onBack, onCl
           <p className="vp-page-body">{appDescription(open.manifest.id) || "No description available."}</p>
           <div className="vp-store-actions">
             {open.installed
-              ? <button type="button" onClick={() => onOpenApp(open.manifest.id)} className="vp-accent-btn">Open</button>
-              : <button type="button" onClick={() => onInstalledChange(open.manifest.id, true)} className="vp-accent-btn">Get</button>}
+              ? <button type="button" onClick={() => onOpenApp(open.manifest.id)} className="vp-store-get">Open</button>
+              : <button type="button" onClick={() => onInstalledChange(open.manifest.id, true)} className="vp-store-get">Get</button>}
             {open.installed && open.manifest.removable
               ? <button type="button" onClick={() => remove(open.manifest)} className="vp-store-remove">Remove</button>
               : null}
