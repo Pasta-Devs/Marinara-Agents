@@ -16,6 +16,7 @@ export interface NoodleImagePostCtx extends Record<string, string | number | und
 
 export type NoodleImageInterpretCtx = Record<string, string | number | undefined>;
 
+/** Defines the editable instruction used to interpret Noodle image art styles. */
 export const NOODLE_IMAGE_INTERPRET: PromptOverrideKeyDef<NoodleImageInterpretCtx> = {
   key: "noodle.imageInterpret",
   label: "Noodle Image Style Interpretation",
