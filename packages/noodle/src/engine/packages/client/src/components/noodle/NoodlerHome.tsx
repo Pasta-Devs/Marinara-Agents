@@ -1125,9 +1125,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     onOpenMobileHome: exitToPublic,
     onOpenNoodler: goToHub,
     onOpenSearch: goToNoodlerSearch,
-    onOpenNotifications: () => onNavigate({ mode: "noodler", view: "notifications" }),
-    onOpenProfile: () =>
-      onNavigate({ mode: "noodler", view: "profile", accountId: mainAuthorProfile?.id ?? null }),
+    onOpenNotifications: () => {
+      setMobileDrawerOpen(false);
+      onNavigate({ mode: "noodler", view: "notifications" });
+    },
+    onOpenProfile: () => {
+      setMobileDrawerOpen(false);
+      onNavigate({ mode: "noodler", view: "profile", accountId: mainAuthorProfile?.id ?? null });
+    },
     onOpenSettings: openSettings,
   } as const;
 

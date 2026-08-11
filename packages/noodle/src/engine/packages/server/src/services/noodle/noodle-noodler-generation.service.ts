@@ -678,9 +678,12 @@ export async function generateNoodlerPost(
     return { post: await persist(), imagePromptReview: null };
 
   const noodlerImageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
-  const imageConnection = noodlerImageConnectionId
-    ? await connections.getWithKey(noodlerImageConnectionId)
-    : await connections.getDefaultForImageGeneration();
+  // Fall back to the default image connection when a creator's mapped override
+  // was deleted (getWithKey returns null), rather than skipping image generation.
+  const imageConnection =
+    (noodlerImageConnectionId
+      ? await connections.getWithKey(noodlerImageConnectionId)
+      : null) ?? (await connections.getDefaultForImageGeneration());
   if (!imageConnection) {
     const post = await persist({
       metadata: {

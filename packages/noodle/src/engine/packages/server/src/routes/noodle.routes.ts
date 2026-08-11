@@ -1339,6 +1339,8 @@ export async function noodleRoutes(app: FastifyInstance) {
     try {
       return await generateInvitedNoodlePostDraft(app.db, account, connection, body.data);
     } catch (error) {
+      if (isConnectionAdmissionFailure(error))
+        return reply.code(409).send({ error: getErrorMessage(error) });
       logger.error(error, "[noodle] Invited post draft generation failed");
       return reply.code(500).send({ error: getErrorMessage(error) });
     }
@@ -2302,7 +2304,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
     if (!account)
       return reply.code(404).send({ error: "Noodle account not found" });
-    if (parsed.data.authorKind === "character" && account.invited !== true)
+    if (parsed.data.authorKind === "character" && !isDirectlyInvitedNoodleCharacter(account))
       return reply.code(403).send({ error: "Only directly invited characters can post publicly." });
     const mentionedAccounts = mentionedCharacterAccounts(
       await noodle.listAccounts(),

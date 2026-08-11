@@ -115,7 +115,10 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
             value={imageSettings?.defaultConnectionId ?? ""}
             disabled={updateImageConnections.isPending}
             onChange={(event) =>
-              updateImageConnections.mutate({ defaultConnectionId: event.target.value || null })
+              updateImageConnections.mutate(
+                { defaultConnectionId: event.target.value || null },
+                { onError: toastToggleFailure },
+              )
             }
             className="h-9 w-full rounded-md border border-[var(--border)] bg-transparent px-2 text-sm"
           >
@@ -466,10 +469,13 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
               value={imageSettings?.creatorConnectionIds[profile.id] ?? ""}
               disabled={updateImageConnections.isPending}
               onChange={(event) =>
-                updateImageConnections.mutate({
-                  creatorId: profile.id,
-                  connectionId: event.target.value || null,
-                })
+                updateImageConnections.mutate(
+                  {
+                    creatorId: profile.id,
+                    connectionId: event.target.value || null,
+                  },
+                  { onError: toastToggleFailure },
+                )
               }
               aria-label={t("ui.noodle.noodlerschedulemanagermodal.creatorImageConnection", {
                 creator: profile.displayName,

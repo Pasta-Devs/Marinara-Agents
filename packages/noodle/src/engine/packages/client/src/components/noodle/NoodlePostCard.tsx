@@ -479,8 +479,19 @@ function renderNoodleInlineMarkdown(
             ? text[index]!
             : null;
     if (delimiter) {
-      const end = text.indexOf(delimiter, index + delimiter.length);
-      if (end > index + delimiter.length) {
+      // CommonMark forbids intraword `_`/`__` emphasis (but allows `*`), so
+      // text like `noodle_post_id` must stay literal.
+      const isUnderscore = delimiter === "_" || delimiter === "__";
+      const openerOk =
+        !isUnderscore || index === 0 || !isMarkdownWordChar(text[index - 1]!);
+      const end = openerOk
+        ? text.indexOf(delimiter, index + delimiter.length)
+        : -1;
+      const closerOk =
+        !isUnderscore ||
+        end + delimiter.length >= text.length ||
+        !isMarkdownWordChar(text[end + delimiter.length]!);
+      if (end > index + delimiter.length && closerOk) {
         flushPlain();
         const children = renderNoodleInlineMarkdown(
           text.slice(index + delimiter.length, end),
@@ -507,6 +518,10 @@ function renderNoodleInlineMarkdown(
 
   flushPlain();
   return parts;
+}
+
+function isMarkdownWordChar(ch: string): boolean {
+  return /[\p{L}\p{N}]/u.test(ch);
 }
 
 function readNoodleMarkdownLabel(

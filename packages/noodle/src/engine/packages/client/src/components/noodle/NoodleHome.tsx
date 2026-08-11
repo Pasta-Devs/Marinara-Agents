@@ -2841,11 +2841,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   };
 
   const guideProfilePost = async () => {
-    if (
-      !composerAuthorAccount ||
-      composerAuthorAccount.kind !== "character" ||
-      !settings?.generationConnectionId
-    ) {
+    if (!composerAuthorAccount || composerAuthorAccount.kind !== "character") {
+      toast.error(localizeUi("ui.noodle.noodlehome.guideAiCharacterRequired"));
+      return;
+    }
+    if (!settings?.generationConnectionId) {
+      toast.error(localizeUi("ui.noodle.noodlehome.chooseAGenerationConnectionForNoodleFirst"));
       return;
     }
     try {

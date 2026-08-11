@@ -24,7 +24,7 @@ async function main() {
   assert.match(shell, /onOpenProfile/);
   assert.match(shell, /onOpenSettings/);
   assert.match(home, /onOpenSearch: goToNoodlerSearch/);
-  assert.match(home, /onOpenNotifications: \(\) => onNavigate\(\{ mode: "noodler", view: "notifications" \}\)/);
+  assert.match(home, /onNavigate\(\{ mode: "noodler", view: "notifications" \}\)/);
   assert.match(home, /onNavigate\(\{ mode: "noodler", view: "profile", accountId: mainAuthorProfile\?\.id \?\? null \}\)/);
   assert.match(home, /onOpenSettings: openSettings/);
   assert.doesNotMatch(home, /onNavigate\(\{ mode: "public", view: "profile"/);

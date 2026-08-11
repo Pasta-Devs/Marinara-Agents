@@ -327,9 +327,13 @@ export function createNoodlerNoodleImagesService(db: DB) {
           continue;
         }
         const imageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
-        const imageConnection = imageConnectionId
-          ? await connections.getWithKey(imageConnectionId)
-          : await connections.getDefaultForImageGeneration();
+        // Fall back to the default image connection when a creator's mapped
+        // override was deleted (getWithKey returns null), instead of silently
+        // disabling image generation for that creator.
+        const imageConnection =
+          (imageConnectionId
+            ? await connections.getWithKey(imageConnectionId)
+            : null) ?? (await connections.getDefaultForImageGeneration());
         if (!imageConnection) {
           await noodle.releasePostImageClaim(claimed.id, claimToken);
           continue;

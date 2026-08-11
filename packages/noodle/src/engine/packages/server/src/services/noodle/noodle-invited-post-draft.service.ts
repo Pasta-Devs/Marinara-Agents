@@ -12,7 +12,6 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { noodleGeneratedNoodlerPostSchema } from "@marinara-engine/shared";
 import { noodleResponseFormat } from "./noodle-response-format.js";
-import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { parseRecord } from "./noodle-public-support.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./noodle-noodler-generation.service.js";
 
@@ -88,7 +87,11 @@ export async function generateInvitedNoodlePostDraft(
     },
   ];
   const debugMode = request.debugMode === true;
-  logDebugOverride(debugMode, "[debug/noodle] Invited post draft prompt:\n%s", formatNoodleMessagesForLog(messages));
+  logDebugOverride(
+    debugMode,
+    "[debug/noodle] Invited post draft prompt prepared with %d messages; private prompt content is redacted.",
+    messages.length,
+  );
   const completionOptions = {
     model: connection.model,
     ...resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
@@ -113,7 +116,9 @@ export async function generateInvitedNoodlePostDraft(
     logger.warn(error, "[noodle] Correcting invalid invited post draft response");
     const correctionMessages: ChatMessage[] = [
       ...messages,
-      { role: "assistant", content: raw },
+      // Some providers reject an empty assistant turn; only echo the prior
+      // response back when it actually had content.
+      ...(raw.trim() ? [{ role: "assistant" as const, content: raw }] : []),
       { role: "user", content: "Return exactly one valid JSON object with title, content, and imagePrompt set to null. Return JSON only." },
     ];
     response = await provider.chatComplete(correctionMessages, completionOptions);

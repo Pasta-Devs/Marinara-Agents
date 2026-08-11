@@ -3569,7 +3569,13 @@ export function createNoodleStorage(db: DB) {
         .where(eq(noodleRefreshRuns.id, id));
       const rows = await db.select().from(noodleRefreshRuns).where(eq(noodleRefreshRuns.id, id));
       const finished = rows[0] ? mapRefreshRun(rows[0]) : null;
-      await pruneFinishedRefreshRuns();
+      // Retention cleanup is best-effort: never let a pruning failure make the
+      // caller treat already-completed generation work as failed and retry it.
+      try {
+        await pruneFinishedRefreshRuns();
+      } catch (error) {
+        console.error("Noodle refresh-run retention cleanup failed", error);
+      }
       return finished;
     },
 

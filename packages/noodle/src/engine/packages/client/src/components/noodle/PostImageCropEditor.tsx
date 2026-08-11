@@ -443,10 +443,14 @@ function isValidCrop(crop: NoodlePostImageCrop): boolean {
     crop.height > 0 &&
     crop.x >= 0 &&
     crop.y >= 0 &&
-    crop.x + crop.width <= 1 &&
-    crop.y + crop.height <= 1
+    // Allow a tiny IEEE-754 tolerance: resolveCrop clamps center to 1 - width/2,
+    // so x + width can exceed 1 by an ULP and wrongly reject a valid stored crop.
+    crop.x + crop.width <= 1 + CROP_BOUND_TOLERANCE &&
+    crop.y + crop.height <= 1 + CROP_BOUND_TOLERANCE
   );
 }
+
+const CROP_BOUND_TOLERANCE = 1e-6;
 
 function resolveCrop(
   size: ImageSize,

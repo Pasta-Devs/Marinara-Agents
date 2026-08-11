@@ -31,7 +31,7 @@ Manual refreshes run generation immediately. Automatic Noodle refreshes update t
 
 NoodleR is a beta feature. Generation can be inaccurate, can disclose source details, can ignore style or maturity guidance, and can fail or produce unsuitable text or images. Data is stored by the local Marinara Engine, but configured model and image providers receive the prompt context and media required for each request under their own privacy terms. Public and locked access, disclosure modes, local storage, and Noodle/NoodleR separation are application behavior only. They are not security or privacy boundaries. Review provider settings and generated content before use, and do not use NoodleR for secrets or real access control.
 
-Run `node scripts/evaluate-noodle-generation.mjs <samples.json>` against saved provider output to measure normal length, concentrated negative mood, duplicate text, and author coverage. The repository fixture proves the evaluator contract only. It does not replace evaluation with the models used by a local Engine profile.
+Run `node scripts/evaluate-noodle-generation.mjs path/to/samples.json` against saved provider output to measure normal length, concentrated negative mood, duplicate text, and author coverage. The repository fixture proves the evaluator contract only. It does not replace evaluation with the models used by a local Engine profile.
 
 ## Refresh diagnostics
 

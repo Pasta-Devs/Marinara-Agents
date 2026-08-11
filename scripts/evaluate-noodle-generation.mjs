@@ -23,7 +23,9 @@ const negativeWords = new Set([
 ]);
 const normalized = parsed.map((sample, index) => {
   if (!sample || typeof sample !== "object") throw new Error(`Sample ${index} must be an object.`);
-  const content = String(sample.content ?? "").trim();
+  if (typeof sample.content !== "string")
+    throw new Error(`Sample ${index} must have a string "content" field.`);
+  const content = sample.content.trim();
   const author = String(sample.author ?? sample.handle ?? "unknown");
   const kind = sample.kind === "reply" ? "reply" : sample.kind === "noodler" ? "noodler" : "post";
   const words = content.toLocaleLowerCase().match(/[a-z]+/gu) ?? [];
