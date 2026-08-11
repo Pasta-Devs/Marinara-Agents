@@ -128,7 +128,12 @@ interface CapabilityContext {
      * Engine 2.4.2. Claims the in-scene tags that route to this package. The Engine gates the
      * command on the package being installed and gives it a per-chat toggle; the payload is ours.
      */
-    registerConversationCommand?(registration: { commandType: string; tags: string[] }): () => void;
+    registerConversationCommand?(registration: {
+      commandType: string;
+      tags: string[];
+      maxPayloadChars?: number;
+      handler?: (action: { payload: string | null; chatId: string; characterId: string | null }) => void | Promise<void>;
+    }): () => void;
   };
 }
 
@@ -2669,7 +2674,33 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
     }));
   }
   if (api.registerConversationCommand) {
-    releases.push(api.registerConversationCommand({ commandType: PHONE_COMMAND_TAG, tags: [PHONE_COMMAND_TAG] }));
+    releases.push(api.registerConversationCommand({
+      commandType: PHONE_COMMAND_TAG,
+      tags: [PHONE_COMMAND_TAG],
+      maxPayloadChars: 1_200,
+      handler: async ({ payload, chatId, characterId }) => {
+        if (!payload || !characterId) return;
+        let action: { action?: unknown; contactId?: unknown; body?: unknown };
+        try {
+          const parsed = JSON.parse(payload) as unknown;
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+          action = parsed as typeof action;
+        } catch {
+          return;
+        }
+        if (action.action !== "send_message" || typeof action.contactId !== "string" || typeof action.body !== "string") return;
+        const phone = (await phones.list()).find(({ document }) =>
+          document.provisioning.enabled
+          && document.identity.ownerType === "character"
+          && document.identity.ownerId === characterId
+          && document.identity.chatScope.includes(chatId));
+        if (!phone) return;
+        const contact = (await phones.listContacts(phone.document.identity.phoneId)).find(({ document }) =>
+          document.phoneId === action.contactId || document.source === action.contactId);
+        if (!contact) return;
+        await messaging.send(phone.document.identity.phoneId, contact.document.phoneId, action.body);
+      },
+    }));
   }
 
   // If route registration fails the package is not active, so the contributor and the command must
