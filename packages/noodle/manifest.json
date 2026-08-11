@@ -63,8 +63,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "a5447dad95a81c5b0ca652ab586f954a14a2b494fd0c0d76d7197512a6f905af",
-      "bytes": 2407807
+      "sha256": "fbfe4c0714145a2a2b98f20b8ccb66def9dac2d4d41576f7454253b44b286d5f",
+      "bytes": 2407958
     },
     {
       "path": "client.js",

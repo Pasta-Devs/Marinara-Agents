@@ -126,7 +126,6 @@ import {
   unlinkNoodlerMedia,
 } from "../services/noodle/noodle-noodler-media.js";
 import {
-  readNoodlerAvatarMediaPath,
   resolveNoodlerAvatarAbsolutePath,
   stageNoodlerAvatar,
   unlinkNoodlerAvatar,
@@ -1623,7 +1622,7 @@ export async function noodleRoutes(app: FastifyInstance) {
         const currentMode =
           noodlerAccount.settings.privacy.identityDisclosure ?? "secret";
         const [publishedPosts, preparedPosts] = await Promise.all([
-          noodle.listNoodlerPostsByAccount(id, Number.MAX_SAFE_INTEGER),
+          noodle.listAllNoodlerPostsByAccount(id),
           noodle.listNoodlerPreparedPosts(),
         ]);
         const publicIdentity = publicAccount
@@ -1653,9 +1652,10 @@ export async function noodleRoutes(app: FastifyInstance) {
           nextMode: parsed.data.disclosureMode,
           postCount: identifyingPostCount,
           mediaCount: publishedPosts.filter((post) => Boolean(post.imageUrl)).length,
-          hasAvatar: Boolean(
-            readNoodlerAvatarMediaPath(id, noodlerAccount.avatarUrl),
-          ),
+          // Any avatar must trigger review, including one adopted from the linked
+          // source (whose URL lives outside the NoodleR media namespace, so
+          // readNoodlerAvatarMediaPath would return null and skip the check).
+          hasAvatar: Boolean(noodlerAccount.avatarUrl),
           preparedPostCount: 0,
         });
         const unresolvedReviewReasons = parsed.data.confirmAvatarReview

@@ -2380,6 +2380,20 @@ export function createNoodleStorage(db: DB) {
       return rows.map(mapManagedPost);
     },
 
+    // Unbounded — used by the disclosure-downgrade review, which must inspect every
+    // published post (the clamped list above would undercount and let old
+    // identifying posts slip through a privacy downgrade).
+    async listAllNoodlerPostsByAccount(accountId: string): Promise<NoodlerManagedPost[]> {
+      const account = await this.getNoodlerAccountById(accountId);
+      if (!account) return [];
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(eq(noodlePosts.authorAccountId, accountId))
+        .orderBy(desc(noodlePosts.createdAt));
+      return rows.map(mapManagedPost);
+    },
+
     async listNoodlerPostsByAccounts(accountIds: string[], limit = 8): Promise<Map<string, NoodlerManagedPost[]>> {
       const boundedLimit = Math.max(1, Math.min(50, Math.floor(limit)));
       const result = new Map<string, NoodlerManagedPost[]>();
