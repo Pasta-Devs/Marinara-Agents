@@ -70,6 +70,7 @@ import {
   SpatialHierarchyProfileFields,
   type SpatialHierarchyProfileDraft,
 } from "./components/SpatialHierarchyProfileFields";
+import { SpatialConnectionOverrideSelect } from "./components/SpatialConnectionOverrideSelect";
 import { WORLD_MAPS_GUIDE_URL } from "./package-utils";
 
 interface SpatialMapsHomeProps {
@@ -266,6 +267,7 @@ export function SpatialMapsHome({
   const [agentAuthor, setAgentAuthor] = useState(agentInfo?.author?.trim() || "Pasta Devs");
   const [agentConnectionId, setAgentConnectionId] = useState("");
   const [agentFieldsDirty, setAgentFieldsDirty] = useState(false);
+  const [agentConnectionDirty, setAgentConnectionDirty] = useState(false);
   const [agentFieldsSaved, setAgentFieldsSaved] = useState(false);
   const [agentFieldsError, setAgentFieldsError] = useState<string | null>(null);
   const updateSpatial = useUpdateSpatialContext();
@@ -335,9 +337,6 @@ export function SpatialMapsHome({
       : "Saved, map disabled";
   const packageReady =
     packageInfo?.status === "active" && (packageInfo.readiness === "ready" || packageInfo.readiness == null);
-  const availableConnections = (connections.data ?? []).filter(
-    (connection) => connection.provider !== "image_generation" && connection.provider !== "video_generation",
-  );
   const currentChatIdRef = useRef(chatId);
   currentChatIdRef.current = chatId;
   const promptPreviewRequestIdRef = useRef(0);
@@ -347,21 +346,24 @@ export function SpatialMapsHome({
   const resetSpatialUpdate = updateSpatial.reset;
   const resetPromptPreviewRequest = previewGenerationPrompt.reset;
   useEffect(() => {
-    if (!agentConfiguration.isSuccess || agentFieldsDirty) return;
+    if (!agentConfiguration.isSuccess) return;
     const configuration = agentConfiguration.data;
-    const settings = parseAgentSettings(configuration?.settings);
-    setAgentDescription(
-      configuration?.description?.trim() || agentInfo?.description?.trim() || DEFAULT_MAPS_DESCRIPTION,
-    );
-    setAgentAuthor(
-      (typeof settings.author === "string" && settings.author.trim()) ||
-        agentInfo?.author?.trim() ||
-        "Pasta Devs",
-    );
-    setAgentConnectionId(configuration?.connectionId ?? "");
+    if (!agentFieldsDirty) {
+      const settings = parseAgentSettings(configuration?.settings);
+      setAgentDescription(
+        configuration?.description?.trim() || agentInfo?.description?.trim() || DEFAULT_MAPS_DESCRIPTION,
+      );
+      setAgentAuthor(
+        (typeof settings.author === "string" && settings.author.trim()) ||
+          agentInfo?.author?.trim() ||
+          "Pasta Devs",
+      );
+    }
+    if (!agentConnectionDirty) setAgentConnectionId(configuration?.connectionId ?? "");
   }, [
     agentConfiguration.data,
     agentConfiguration.isSuccess,
+    agentConnectionDirty,
     agentFieldsDirty,
     agentInfo?.author,
     agentInfo?.description,
@@ -705,6 +707,7 @@ export function SpatialMapsHome({
       );
       setAgentConnectionId(saved.connectionId ?? "");
       setAgentFieldsDirty(false);
+      setAgentConnectionDirty(false);
       setAgentFieldsSaved(true);
     } catch (error) {
       setAgentFieldsError(
@@ -894,27 +897,18 @@ export function SpatialMapsHome({
           </MapsFieldGroup>
 
           <MapsFieldGroup label="Connection Override" icon={<Link2 size="0.875rem" />}>
-            <select
-              aria-label="Connection Override"
+            <SpatialConnectionOverrideSelect
+              ariaLabel="Connection Override"
               value={agentConnectionId}
-              onChange={(event) => {
-                setAgentConnectionId(event.target.value);
+              onChange={(connectionId) => {
+                setAgentConnectionId(connectionId);
+                setAgentConnectionDirty(true);
                 markAgentFieldsDirty();
               }}
+              connections={connections.data ?? []}
               disabled={!agentConfiguration.isSuccess || connections.isLoading}
               className="mari-editor-field w-full px-3 py-2.5 text-sm disabled:opacity-60"
-            >
-              <option value="">Use chat connection</option>
-              {agentConnectionId &&
-                !availableConnections.some((connection) => connection.id === agentConnectionId) && (
-                  <option value={agentConnectionId}>Saved connection (unavailable)</option>
-                )}
-              {availableConnections.map((connection) => (
-                <option key={connection.id} value={connection.id}>
-                  {connection.name} ({connection.provider})
-                </option>
-              ))}
-            </select>
+            />
             <p className="mt-1 text-[0.625rem] text-[var(--marinara-editor-muted)]">
               Used for AI map drafts and expansions. When empty, Maps uses the current chat connection.
             </p>

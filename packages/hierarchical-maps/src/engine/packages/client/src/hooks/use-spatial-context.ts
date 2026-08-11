@@ -164,6 +164,7 @@ export interface MapsConnectionRecord {
   id: string;
   name: string;
   provider: string;
+  model?: string | null;
 }
 
 export function parseAgentSettings(value: unknown): Record<string, unknown> {
