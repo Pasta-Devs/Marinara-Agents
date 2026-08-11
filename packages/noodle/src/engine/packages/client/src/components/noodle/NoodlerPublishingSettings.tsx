@@ -1,4 +1,4 @@
-import { RefreshCw, UsersRound } from "lucide-react";
+import { RefreshCw, Trash2, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -6,12 +6,17 @@ import {
   useNoodle,
   useNoodlerAccounts,
   useNoodlerReserveStatus,
+  useNoodlerImageConnections,
   useNoodlerFanActivityStatus,
   useRefreshAllNoodlerCreatorsNow,
   useRefreshNoodlerFanActivityNow,
   useUpdateNoodleSettings,
   useUpdateNoodlerAutoPosting,
+  useUpdateNoodlerImageConnections,
+  useDeleteNoodlerStageProfile,
+  useRemoveNoodleCharacter,
 } from "../../hooks/use-noodle";
+import { useConnections } from "../../hooks/use-connections";
 import { Avatar } from "./NoodleShell";
 import { summarizeRefreshOutcomes } from "./noodle-auto-post";
 import type { NoodleSettingsUpdateInput, NoodlerFanArchetypeWeights } from "@marinara-engine/shared";
@@ -62,20 +67,35 @@ function BoundedNumberInput({
 
 interface NoodlerPublishingSettingsProps {
   active: boolean;
+  view: "publishing" | "creators" | "audience";
   onOpenCreator?: (accountId: string) => void;
 }
 
-export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPublishingSettingsProps) {
+export function NoodlerPublishingSettings({ active, view, onOpenCreator }: NoodlerPublishingSettingsProps) {
   const { t } = useUiTranslation();
   const { data } = useNoodle();
   const settings = data?.settings;
   const accountsQuery = useNoodlerAccounts(settings?.enableNoodler === true);
   const accounts = accountsQuery.data ?? [];
+  const connectionsQuery = useConnections();
+  const connections = connectionsQuery.data ?? [];
+  const textConnection = connections.find(
+    (connection) => connection.id === settings?.generationConnectionId,
+  );
+  const imageConnections = connections.filter((connection) => connection.provider === "image_generation");
+  const imageSettingsQuery = useNoodlerImageConnections(active && settings?.enableNoodler === true);
+  const imageSettings = imageSettingsQuery.data;
+  const imageConnection = imageConnections.find(
+    (connection) => connection.id === imageSettings?.defaultConnectionId,
+  );
   const statusQuery = useNoodlerReserveStatus(active && settings?.enableNoodler === true);
   const fanStatusQuery = useNoodlerFanActivityStatus(active && settings?.enableNoodler === true);
   const status = statusQuery.data;
   const updateSettings = useUpdateNoodleSettings();
   const updateAuto = useUpdateNoodlerAutoPosting();
+  const updateImageConnections = useUpdateNoodlerImageConnections();
+  const deleteCreator = useDeleteNoodlerStageProfile();
+  const removeCharacter = useRemoveNoodleCharacter();
   const refreshAll = useRefreshAllNoodlerCreatorsNow();
   const refreshFans = useRefreshNoodlerFanActivityNow();
   // Toggles roll back on rejection, which is silent on its own: say so, or the user reads the
@@ -86,7 +106,51 @@ export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPubl
 
   return (
     <div className="space-y-4">
-      <section className="space-y-3 border-b border-[var(--border)] pb-4">
+      {view === "publishing" && <section className="space-y-3 border-b border-[var(--border)] pb-4">
+        <label className="block max-w-md space-y-1.5 text-xs font-semibold">
+          <span className="block text-[var(--muted-foreground)]">
+            {t("ui.noodle.noodlerschedulemanagermodal.defaultImageConnection")}
+          </span>
+          <select
+            value={imageSettings?.defaultConnectionId ?? ""}
+            disabled={updateImageConnections.isPending}
+            onChange={(event) =>
+              updateImageConnections.mutate({ defaultConnectionId: event.target.value || null })
+            }
+            className="h-9 w-full rounded-md border border-[var(--border)] bg-transparent px-2 text-sm"
+          >
+            <option value="">{t("ui.noodle.noodlerschedulemanagermodal.defaultImageModel")}</option>
+            {imageConnections.map((connection) => (
+              <option key={connection.id} value={connection.id}>
+                {connection.name ?? connection.model ?? connection.id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3 text-xs leading-5">
+          <p className="font-semibold">
+            {t("ui.noodle.noodlerschedulemanagermodal.generationRuntime")}
+          </p>
+          <p className="mt-1 text-[var(--muted-foreground)]">
+            {t("ui.noodle.noodlerschedulemanagermodal.textModelValue", {
+              model:
+                textConnection?.model ??
+                t("ui.noodle.noodlerschedulemanagermodal.notConfigured"),
+            })}
+          </p>
+          <p className="text-[var(--muted-foreground)]">
+            {t("ui.noodle.noodlerschedulemanagermodal.imageModelValue", {
+              model:
+                imageConnection?.model ??
+                t("ui.noodle.noodlerschedulemanagermodal.defaultImageModel"),
+            })}
+          </p>
+          <p className="mt-2 text-[var(--muted-foreground)]">
+            {t("ui.noodle.noodlerschedulemanagermodal.lifecycleHelp")}
+          </p>
+        </div>
+      </section>}
+      {view === "audience" && <section className="space-y-3 border-b border-[var(--border)] pb-4">
         <label className="flex items-center justify-between gap-3">
           <span className="min-w-0">
             <span className="block text-sm font-semibold">{t("ui.noodle.noodlerfanactivity.enabled")}</span>
@@ -227,8 +291,8 @@ export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPubl
             ? t("ui.noodle.noodlerfanactivity.running")
             : t("ui.noodle.noodlerfanactivity.refreshNow")}
         </button>
-      </section>
-      <section className="space-y-4 border-b border-[var(--border)] pb-4">
+      </section>}
+      {view === "publishing" && <section className="space-y-4 border-b border-[var(--border)] pb-4">
         <label className="flex items-center justify-between gap-3">
           <span className="min-w-0">
             <span className="block text-sm font-semibold">
@@ -254,6 +318,27 @@ export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPubl
             className="h-5 w-5 accent-[var(--noodle-accent)]"
           />
         </label>
+        <label className="block max-w-40 space-y-1 text-xs font-semibold">
+          <span className="block text-[var(--muted-foreground)]">
+            {t("ui.noodle.noodlerschedulemanagermodal.postsPerDay")}
+          </span>
+          <BoundedNumberInput
+            value={settings?.postsPerDay ?? 4}
+            min={1}
+            max={24}
+            onCommit={(value, revert) =>
+              updateSettings.mutate(
+                { postsPerDay: value },
+                {
+                  onError: (error) => {
+                    toastToggleFailure(error);
+                    revert();
+                  },
+                },
+              )
+            }
+          />
+        </label>
         {/* Counters read as authoritative, so a cold or failed status query must not render as zero. */}
         {statusQuery.isError ? (
           <p className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
@@ -274,10 +359,10 @@ export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPubl
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
             <div>
               <dt className="text-[var(--muted-foreground)]">
-                {t("ui.noodle.noodlerschedulemanagermodal.textAttemptsLabel")}
+                {t("ui.noodle.noodlerschedulemanagermodal.textClaimsLabel")}
               </dt>
               <dd className="mt-0.5 font-semibold tabular-nums">
-                {t("ui.noodle.noodlerschedulemanagermodal.textAttempts", {
+                {t("ui.noodle.noodlerschedulemanagermodal.providerClaims", {
                   used: status?.textAttemptsUsed ?? 0,
                   limit: status?.postsPerDay ?? settings?.postsPerDay ?? 4,
                 })}
@@ -285,10 +370,10 @@ export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPubl
             </div>
             <div>
               <dt className="text-[var(--muted-foreground)]">
-                {t("ui.noodle.noodlerschedulemanagermodal.imageAttemptsLabel")}
+                {t("ui.noodle.noodlerschedulemanagermodal.imageClaimsLabel")}
               </dt>
               <dd className="mt-0.5 font-semibold tabular-nums">
-                {t("ui.noodle.noodlerschedulemanagermodal.imageAttempts", {
+                {t("ui.noodle.noodlerschedulemanagermodal.providerClaims", {
                   used: status?.imageAttemptsUsed ?? 0,
                   limit: status?.postsPerDay ?? settings?.postsPerDay ?? 4,
                 })}
@@ -309,6 +394,9 @@ export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPubl
             </div>
           </dl>
         )}
+        <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+          {t("ui.noodle.noodlerschedulemanagermodal.attemptsHelp")}
+        </p>
         <button
           type="button"
           disabled={refreshAll.isPending}
@@ -327,9 +415,9 @@ export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPubl
           <RefreshCw size={13} className={refreshAll.isPending ? "animate-spin" : undefined} />{" "}
           {t("ui.noodle.noodlerschedulemanagermodal.refreshAllNow")}
         </button>
-      </section>
+      </section>}
 
-      <div className="space-y-2">
+      {view === "creators" && <div className="space-y-2">
         {accounts.map((profile) => (
           <div
             key={profile.id}
@@ -374,6 +462,49 @@ export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPubl
                 className="h-4 w-4 accent-[var(--noodle-accent)]"
               />
             </label>
+            <select
+              value={imageSettings?.creatorConnectionIds[profile.id] ?? ""}
+              disabled={updateImageConnections.isPending}
+              onChange={(event) =>
+                updateImageConnections.mutate({
+                  creatorId: profile.id,
+                  connectionId: event.target.value || null,
+                })
+              }
+              aria-label={t("ui.noodle.noodlerschedulemanagermodal.creatorImageConnection", {
+                creator: profile.displayName,
+              })}
+              className="h-8 min-w-36 rounded-md border border-[var(--border)] bg-transparent px-2 text-xs"
+            >
+              <option value="">{t("ui.noodle.noodlerschedulemanagermodal.useDefault")}</option>
+              {imageConnections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.name ?? connection.model ?? connection.id}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!window.confirm(t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorConfirm", {
+                  creator: profile.displayName,
+                }))) return;
+                try {
+                  const source = data?.accounts.find((account) => account.id === profile.noodleAccountId);
+                  if (source?.kind === "character" && source.invited) {
+                    await removeCharacter.mutateAsync(source.entityId);
+                  }
+                  await deleteCreator.mutateAsync(profile.id);
+                } catch (error) {
+                  toast.error(errorMessage(error, t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorFailed")));
+                }
+              }}
+              disabled={deleteCreator.isPending || removeCharacter.isPending}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--destructive)]/40 text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:opacity-40"
+              aria-label={t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName })}
+            >
+              <Trash2 size={14} />
+            </button>
             <label className="flex items-center gap-2 text-xs font-semibold">
               {t("ui.noodle.noodlerschedulemanagermodal.images")}
               <input
@@ -414,7 +545,7 @@ export function NoodlerPublishingSettings({ active, onOpenCreator }: NoodlerPubl
               {t("ui.noodle.noodlerschedulemanagermodal.loadingCreators")}
             </p>
           ))}
-      </div>
+      </div>}
     </div>
   );
 }

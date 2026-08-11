@@ -9,7 +9,7 @@ import {
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
+import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import type { ChatMessage } from "../llm/base-provider.js";
@@ -26,7 +26,6 @@ import {
   type NoodlerFanIdentity,
   type NoodlerFanIdentityProvider,
 } from "./noodle-fan-identity-provider.js";
-import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { noodleResponseFormat } from "./noodle-response-format.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
@@ -123,7 +122,7 @@ function buildFanActivityMessages(input: {
   const system = [
     "Propose quiet synthetic audience activity for the supplied public NoodleR posts.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
-    "Likes and reposts have null content. Replies are brief, natural, relevant, and not repetitive.",
+    "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
     "Return JSON only with an activities array.",
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
     `At most ${input.settings.fanLikesPerRefresh} likes, ${input.settings.fanRepliesPerRefresh} replies, and ${input.settings.fanRepostsPerRefresh} reposts total.`,
@@ -167,26 +166,30 @@ async function generateFanActivity(input: {
   const messages = buildFanActivityMessages(input);
   logDebugOverride(
     input.debugMode,
-    "[debug/noodler-fan] Prompt sent to model:\n%s",
-    formatNoodleMessagesForLog(messages),
+    "[debug/noodler-fan] Prompt prepared with %d messages; audience content is redacted.",
+    messages.length,
   );
   const response = await provider.chatComplete(messages, {
     model: input.connection.model,
+    ...resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider,
       model: input.connection.model,
-      maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 1024),
+      maxTokens: 1024,
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     temperature: 0.8,
     topP: 0.95,
-    ...resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
     stream: false,
     debugMode: input.debugMode,
     responseFormat: noodleResponseFormat(input.connection.model, "noodler_fan_activity"),
   });
   const content = response.content ?? "";
-  logDebugOverride(input.debugMode, "[debug/noodler-fan] Raw model response:\n%s", content);
+  logDebugOverride(
+    input.debugMode,
+    "[debug/noodler-fan] Model response received (%d characters); content is redacted.",
+    content.length,
+  );
   const parsed = parseGeneratedFanActivityResponse(parseGameJsonish(content));
   if (parsed.rejected > 0) {
     logger.warn("Ignored %d malformed generated NoodleR fan activities", parsed.rejected);

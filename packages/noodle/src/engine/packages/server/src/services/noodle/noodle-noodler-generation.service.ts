@@ -8,6 +8,7 @@ import {
   type NoodleIdentityDisclosure,
   type NoodlerGenerationRequest,
   type NoodleStageProfileInput,
+  type NoodlerSourceSnapshot,
   type NoodlerManagedPost,
 } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
@@ -15,10 +16,7 @@ import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import {
-  resolveStoredChatOptions,
-  resolveStoredMaxTokens,
-} from "../generation/generation-parameters.js";
+import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
@@ -28,11 +26,11 @@ import {
 } from "../generation/connection-admission.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
+import { resolveNoodlerImageConnectionId } from "./noodler-image-connections.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
-import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { generateNoodlerPostImage } from "./noodle-noodler-images.service.js";
 import {
   persistNoodlerPostWithUploadedMedia,
@@ -56,13 +54,43 @@ export type PreparedNoodlerPostResult = {
   metadata: Record<string, unknown>;
 };
 
+export type NoodlerContentFormat =
+  | "caption"
+  | "teaser"
+  | "announcement"
+  | "long_form";
+
+type FormattedNoodlerGenerationRequest = NoodlerGenerationRequest & {
+  format?: NoodlerContentFormat;
+  lockedFollowUpPostId?: string;
+  lockedFollowUp?: { title: string; content: string };
+};
+
+const NOODLER_FORMAT_PROMPTS: Record<NoodlerContentFormat, string> = {
+  caption:
+    "Format: caption. Return title as null. Target 40-500 characters in one short creator-feed caption.",
+  teaser:
+    "Format: teaser. Return title as null. Target 40-280 characters. Make the public text useful but leave a clear reason to open the linked locked follow-up.",
+  announcement:
+    "Format: announcement. Return a clear title. Target 80-1000 body characters with the important news first.",
+  long_form:
+    "Format: long_form. Return a clear title. Target 500-4000 body characters with readable paragraphs. Only this format can use long text.",
+};
+
+const NOODLER_FORMAT_MAX_LENGTH: Record<NoodlerContentFormat, number> = {
+  caption: 500,
+  teaser: 280,
+  announcement: 1000,
+  long_form: NOODLER_POST_CONTENT_MAX_LENGTH,
+};
+
 type GenerationConnection = NonNullable<
   Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
 >;
 
 export type NoodlerPostGenerationInput = {
   account: NoodleAccount;
-  request: NoodlerGenerationRequest;
+  request: FormattedNoodlerGenerationRequest;
   connection: GenerationConnection;
   media?: NoodlerPostMediaUpload;
   prepareOnly?: boolean;
@@ -199,6 +227,50 @@ export function stageProfileContainsPublicIdentity(
   );
 }
 
+function normalizedDisclosureWords(value: string): string[] {
+  return value
+    .toLocaleLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/u)
+    .filter((word) => word.length >= 4);
+}
+
+export function stageProfileContainsSourceDetails(
+  profile: NoodleStageProfileInput,
+  source: NoodlerSourceSnapshot,
+): boolean {
+  if (profile.disclosureMode === "open") return false;
+  const profileText = [
+    profile.displayName,
+    profile.handle,
+    profile.bio,
+    profile.stagePersonality,
+  ].join(" ");
+  const normalizedProfile = ` ${normalizedDisclosureWords(profileText).join(" ")} `;
+  const sourceFields = [
+    source.name,
+    source.description,
+    source.scenario,
+    source.appearance,
+    source.backstory,
+    ...(profile.disclosureMode === "secret" ? [source.personality] : []),
+  ];
+  return sourceFields.some((field) => {
+    const words = normalizedDisclosureWords(field);
+    if (words.length === 0) return false;
+    if (words.length <= 3) {
+      return words.every((word) => normalizedProfile.includes(` ${word} `));
+    }
+    for (let index = 0; index <= words.length - 4; index += 1) {
+      if (normalizedProfile.includes(` ${words.slice(index, index + 4).join(" ")} `)) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
 export function protectNoodlerGeneratedIdentity(
   value: string | null | undefined,
   mode: NoodleIdentityDisclosure,
@@ -270,8 +342,8 @@ export function buildNoodlerPostMessages(input: {
   publicIdentity: PublicIdentity | null;
   recentPosts: NoodlerManagedPost[];
   request: Pick<
-    NoodlerGenerationRequest,
-    "noodlerPostGuide" | "noodlerProjectWork"
+    FormattedNoodlerGenerationRequest,
+    "noodlerPostGuide" | "noodlerProjectWork" | "format"
   >;
   allowImagePrompt: boolean;
   generationGuidance: string;
@@ -283,6 +355,7 @@ export function buildNoodlerPostMessages(input: {
       input.publicIdentity,
     ) ?? "";
   const guidance = input.generationGuidance.trim();
+  const format = input.request.format ?? "caption";
   const system = [
     "You write exactly one post for one NoodleR creator page in Marinara Engine.",
     "Write only as the supplied NoodleR account. Do not create other accounts, interactions, follows, or public timeline activity.",
@@ -290,7 +363,10 @@ export function buildNoodlerPostMessages(input: {
     "Use the NoodleR stage profile as supplied.",
     ...(guidance ? [guidance] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
-    "Write a concise title and a body for the post.",
+    NOODLER_FORMAT_PROMPTS[format],
+    "Vary creator content across teasers, casual updates, behind-the-scenes moments, fan questions, humor, promotion, flirtation, and project updates. Low mood or conflict must be uncommon and character-specific.",
+    "This is an adult creator page: playful, flirty, suggestive teasing that plays to fans and hints at locked content is a normal and frequent part of the voice when it fits the character. Explicit content is allowed. Never force sexual content onto a character it does not suit, and keep the flirtation in that creator's own style rather than a generic come-on.",
+    "Recent posts provide continuity. Do not copy their length, format, or mood by default.",
     input.allowImagePrompt
       ? "Return one JSON object with title, content, and an optional imagePrompt (a short description of a single image to accompany the post, or null). Do not create a poll."
       : "Return one JSON object with title and content only. Do not create a poll or image prompt.",
@@ -302,6 +378,7 @@ export function buildNoodlerPostMessages(input: {
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    `Content format: ${format}`,
     "",
     "# Recent NoodleR posts",
     formatNoodlerPostHistory(input.recentPosts, protect),
@@ -396,32 +473,30 @@ export async function generateNoodlerPost(
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
   logDebugOverride(
     debugMode,
-    "[debug/noodler] Prompt sent to model:\n%s",
-    formatNoodleMessagesForLog(messages),
+    "[debug/noodler] Prompt prepared with %d messages; private prompt content is redacted.",
+    messages.length,
   );
   const completionOptions = {
     model: input.connection.model,
-    maxTokens: clampGenerationMaxOutputTokens({
-      provider: input.connection.provider as APIProvider,
-      model: input.connection.model,
-      maxTokens: resolveStoredMaxTokens(
-        input.connection.defaultParameters,
-        NOODLER_POST_MAX_TOKENS,
-      ),
-      maxTokensOverride: input.connection.maxTokensOverride,
-    }),
-    temperature: 0.9,
-    topP: 0.95,
     ...resolveStoredChatOptions(
       input.connection.defaultParameters,
       input.connection.provider,
       input.connection.model,
     ),
+    maxTokens: clampGenerationMaxOutputTokens({
+      provider: input.connection.provider as APIProvider,
+      model: input.connection.model,
+      maxTokens: NOODLER_POST_MAX_TOKENS,
+      maxTokensOverride: input.connection.maxTokensOverride,
+    }),
+    temperature: 0.9,
+    topP: 0.95,
     stream: false,
     debugMode,
     responseFormat: noodleResponseFormat(
       input.connection.model,
       "noodler_post",
+      { allowImagePrompt: imagesEnabled },
     ),
   } as const;
 
@@ -429,8 +504,8 @@ export async function generateNoodlerPost(
   let content = response.content ?? "";
   logDebugOverride(
     debugMode,
-    "[debug/noodler] Raw model response (attempt 1):\n%s",
-    content,
+    "[debug/noodler] Model response attempt 1 received (%d characters); content is redacted.",
+    content.length,
   );
   let generated;
   try {
@@ -449,8 +524,8 @@ export async function generateNoodlerPost(
     ];
     logDebugOverride(
       debugMode,
-      "[debug/noodler] Correction prompt sent to model:\n%s",
-      formatNoodleMessagesForLog(correctionMessages),
+      "[debug/noodler] Correction prompt prepared with %d messages; private prompt content is redacted.",
+      correctionMessages.length,
     );
     response = await provider.chatComplete(
       correctionMessages,
@@ -459,26 +534,32 @@ export async function generateNoodlerPost(
     content = response.content ?? "";
     logDebugOverride(
       debugMode,
-      "[debug/noodler] Raw model response (attempt 2):\n%s",
-      content,
+      "[debug/noodler] Model response attempt 2 received (%d characters); content is redacted.",
+      content.length,
     );
     generated = parseNoodlerPost(content);
   }
 
+  const format = input.request.format ?? "caption";
+  const formatUsesTitle = format === "announcement" || format === "long_form";
   const protectedGenerated = {
-    title: protectBoundedNoodlerGeneratedText(
-      generated.title,
-      disclosureMode,
-      publicIdentity,
-      NOODLER_POST_TITLE_MAX_LENGTH,
-    ),
+    title: formatUsesTitle
+      ? protectBoundedNoodlerGeneratedText(
+          generated.title,
+          disclosureMode,
+          publicIdentity,
+          NOODLER_POST_TITLE_MAX_LENGTH,
+        )
+      : null,
     content: protectBoundedNoodlerGeneratedText(
       generated.content,
       disclosureMode,
       publicIdentity,
-      NOODLER_POST_CONTENT_MAX_LENGTH,
+      NOODLER_FORMAT_MAX_LENGTH[format],
     ),
   };
+  if (formatUsesTitle && !protectedGenerated.title)
+    throw new Error(`NoodleR ${format} generation returned no usable title.`);
   if (!protectedGenerated.content)
     throw new Error("NoodleR generation returned no usable post content.");
 
@@ -491,6 +572,19 @@ export async function generateNoodlerPost(
       )
     : null;
 
+  let lockedFollowUpPostId = input.request.lockedFollowUpPostId;
+  const pendingLockedFollowUp = input.request.lockedFollowUp;
+  if (lockedFollowUpPostId) {
+    const followUp = await noodle.getNoodlerPostById(lockedFollowUpPostId);
+    if (
+      !followUp ||
+      followUp.authorAccountId !== account.id ||
+      followUp.access !== "locked"
+    ) {
+      throw new Error("The linked NoodleR follow-up must be a locked post from this creator.");
+    }
+  } else if (pendingLockedFollowUp) lockedFollowUpPostId = newId();
+
   const baseInput = {
     authorAccountId: account.id,
     title: protectedGenerated.title,
@@ -498,6 +592,10 @@ export async function generateNoodlerPost(
     source: "generated" as const,
     access: input.request.access,
     metadata: {
+      noodlerContentFormat: input.request.format ?? "caption",
+      ...(lockedFollowUpPostId
+        ? { noodlerLockedFollowUpPostId: lockedFollowUpPostId }
+        : {}),
       ...(input.request.executionId
         ? { noodlerWizardExecutionId: input.request.executionId }
         : {}),
@@ -528,13 +626,35 @@ export async function generateNoodlerPost(
       metadata?: Record<string, unknown>;
     } = {},
   ): Promise<NoodlerManagedPost> => {
-    const post = await noodle.createNoodlerPost({
-      ...baseInput,
-      ...extra,
-      metadata: { ...baseInput.metadata, ...extra.metadata },
-    });
-    if (!post) throw new Error("Failed to persist the generated NoodleR post.");
-    return post;
+    let createdFollowUp = false;
+    try {
+      if (pendingLockedFollowUp && lockedFollowUpPostId) {
+        const followUp = await noodle.createNoodlerPost({
+          id: lockedFollowUpPostId,
+          authorAccountId: account.id,
+          title: pendingLockedFollowUp.title,
+          content: pendingLockedFollowUp.content,
+          source: "manual",
+          access: "locked",
+          metadata: { noodlerContentFormat: "long_form" },
+        });
+        if (!followUp)
+          throw new Error("Failed to persist the locked NoodleR follow-up.");
+        createdFollowUp = true;
+      }
+      const post = await noodle.createNoodlerPost({
+        ...baseInput,
+        ...extra,
+        metadata: { ...baseInput.metadata, ...extra.metadata },
+      });
+      if (!post)
+        throw new Error("Failed to persist the generated NoodleR post.");
+      return post;
+    } catch (error) {
+      if (createdFollowUp && lockedFollowUpPostId)
+        await noodle.deleteNoodlerPost(lockedFollowUpPostId);
+      throw error;
+    }
   };
 
   if (input.media) {
@@ -557,8 +677,9 @@ export async function generateNoodlerPost(
   if (!draftImagePrompt)
     return { post: await persist(), imagePromptReview: null };
 
-  const imageConnection = settings.imageGenerationConnectionId
-    ? await connections.getWithKey(settings.imageGenerationConnectionId)
+  const noodlerImageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
+  const imageConnection = noodlerImageConnectionId
+    ? await connections.getWithKey(noodlerImageConnectionId)
     : await connections.getDefaultForImageGeneration();
   if (!imageConnection) {
     const post = await persist({

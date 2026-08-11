@@ -84,8 +84,35 @@ export const noodleKeys = {
     [...noodleKeys.noodlerViewers(), personaId] as const,
   noodlerReserveStatus: () =>
     [...noodleKeys.noodlerRoot(), "reserve-status"] as const,
+  noodlerImageConnections: () =>
+    [...noodleKeys.noodlerRoot(), "image-connections"] as const,
   noodlerFanStatus: () => [...noodleKeys.noodlerRoot(), "fan-status"] as const,
 };
+
+export type NoodlerImageConnections = {
+  defaultConnectionId: string | null;
+  creatorConnectionIds: Record<string, string>;
+};
+
+export function useNoodlerImageConnections(enabled = true) {
+  return useQuery({
+    queryKey: noodleKeys.noodlerImageConnections(),
+    queryFn: () => api.get<NoodlerImageConnections>("/noodle/noodler/image-connections"),
+    enabled,
+  });
+}
+
+export function useUpdateNoodlerImageConnections() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: {
+      defaultConnectionId?: string | null;
+      creatorId?: string;
+      connectionId?: string | null;
+    }) => api.patch<NoodlerImageConnections>("/noodle/noodler/image-connections", patch),
+    onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerImageConnections(), value),
+  });
+}
 
 function preservePollVotes(
   current: NoodleBootstrap | undefined,
@@ -292,6 +319,7 @@ export function useUpdateNoodlerStageProfile() {
       acceptSourceChanges?: boolean;
       sourceSnapshot?: NoodlerSourceSnapshot;
       sourceRevisionToken?: string;
+      confirmAvatarReview?: boolean;
     } & NoodleStageProfileInput) =>
       api.put<NoodlerStageProfile>(
         `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/stage-profile`,
@@ -306,6 +334,49 @@ export function useUpdateNoodlerStageProfile() {
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });
+}
+
+function useNoodlerAvatarMutation(
+  mutationFn: (input: { accountId: string; file?: File }) => Promise<NoodlerStageProfile>,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+      ]),
+  });
+}
+
+export function useUploadNoodlerAvatar() {
+  return useNoodlerAvatarMutation(({ accountId, file }) => {
+    const form = new FormData();
+    form.append("payload", "{}");
+    form.append("file", file!);
+    return api.upload<NoodlerStageProfile>(
+      `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/avatar`,
+      form,
+    );
+  });
+}
+
+export function useUseNoodlerSourceAvatar() {
+  return useNoodlerAvatarMutation(({ accountId }) =>
+    api.patch<NoodlerStageProfile>(
+      `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/avatar/source`,
+      {},
+    ),
+  );
+}
+
+export function useRemoveNoodlerAvatar() {
+  return useNoodlerAvatarMutation(({ accountId }) =>
+    api.delete<NoodlerStageProfile>(
+      `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/avatar`,
+    ),
+  );
 }
 
 function useNoodlerSourceAction(action: "dismiss" | "adopt-identity") {
@@ -372,6 +443,30 @@ export function useGenerateNoodlerStageProfileDraft() {
   });
 }
 
+export type NoodlePostDraft = {
+  title: string | null;
+  content: string;
+  imagePrompt: string | null;
+  access: "public";
+  authorAccountId: string;
+};
+
+export type NoodlePostDraftRequest = {
+  accountId: string;
+  guidance?: string;
+  connectionId?: string;
+};
+
+export function useGenerateNoodlePostDraft() {
+  return useMutation({
+    mutationFn: ({ accountId, ...input }: NoodlePostDraftRequest) =>
+      api.post<NoodlePostDraft>(
+        `/noodle/accounts/${encodeURIComponent(accountId)}/post-draft`,
+        { ...input, debugMode: useUIStore.getState().debugMode },
+      ),
+  });
+}
+
 export type GeneratedNoodlerNoodlePost = NoodlerManagedPost & {
   imagePromptReview?: ImagePromptReviewItem;
 };
@@ -381,19 +476,31 @@ export type NoodlerPostDraftImage = {
   crop: NoodlePostImageCrop | null;
 };
 
+export type NoodlerContentFormat =
+  | "caption"
+  | "teaser"
+  | "announcement"
+  | "long_form";
+
+type NoodlerFormatRequest = {
+  format?: NoodlerContentFormat;
+  lockedFollowUpPostId?: string;
+  lockedFollowUp?: { title: string; content: string };
+};
+
 type NoodlerCreatePostRequest = Omit<
   NoodlerPostCreateInput,
   "uploadedImageUrl" | "imageCrop"
 > & {
   image?: NoodlerPostDraftImage | null;
-};
+} & NoodlerFormatRequest;
 
 type NoodlerGeneratePostRequest = Omit<
   NoodlerGenerationRequest,
   "uploadedImageUrl" | "imageCrop"
 > & {
   image?: NoodlerPostDraftImage | null;
-};
+} & NoodlerFormatRequest;
 
 function postNoodlerRequestWithImage<T>(
   path: string,
@@ -1098,7 +1205,13 @@ export function useInviteNoodleCharacter() {
   return useMutation({
     mutationFn: (characterId: string) =>
       api.post<NoodleAccount>("/noodle/invites", { characterId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+      ]),
   });
 }
 
@@ -1118,7 +1231,13 @@ export function useRemoveNoodleCharacter() {
       api.delete<NoodleAccount>(
         `/noodle/invites/${encodeURIComponent(characterId)}`,
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+      ]),
   });
 }
 

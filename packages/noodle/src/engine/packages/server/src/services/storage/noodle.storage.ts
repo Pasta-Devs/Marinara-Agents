@@ -82,8 +82,14 @@ import {
   noodlerReserveState,
   noodlerFanActivityState,
 } from "../../db/schema/index.js";
+import { readNoodlerAvatarMediaPath } from "../noodle/noodle-noodler-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
-import { compareNoodlerSourceSnapshots, resolveNoodlerSourceSnapshot } from "../noodle/noodle-noodler-source.js";
+import {
+  compareMinimizedNoodlerSourceSnapshot,
+  isMinimizedNoodlerSourceSnapshot,
+  minimizeNoodlerSourceSnapshot,
+  resolveNoodlerSourceSnapshot,
+} from "../noodle/noodle-noodler-source.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import {
   clearNoodleRefreshFailure,
@@ -92,6 +98,7 @@ import {
   reconcileNoodleRefreshSchedule,
   type PersistedNoodleRefreshSchedule,
 } from "../noodle/noodle-refresh-schedule.js";
+import { pruneNoodleRefreshRuns } from "./noodle-refresh-run-retention.js";
 
 const NOODLE_SETTINGS_KEY = "noodle.settings";
 const NOODLE_REFRESH_SCHEDULE_KEY = "noodle.refresh-schedule";
@@ -752,6 +759,25 @@ export function createNoodleStorage(db: DB) {
   const settingsStore = createAppSettingsStorage(db);
   let publicHandleReconciliation: Promise<void> | null = null;
 
+  const pruneFinishedRefreshRuns = async () => {
+    await db.transaction(async (tx) => {
+      await pruneNoodleRefreshRuns({
+        list: () => tx.select().from(noodleRefreshRuns),
+        replace: async (rows) => {
+          await tx.delete(noodleRefreshRuns);
+          if (rows.length > 0) await tx.insert(noodleRefreshRuns).values(rows);
+        },
+        touch: async (row) => {
+          await tx
+            .update(noodleRefreshRuns)
+            .set({ updatedAt: row.updatedAt })
+            .where(eq(noodleRefreshRuns.id, row.id));
+        },
+        flush: () => tx._fileStore.flush(),
+      });
+    });
+  };
+
   const reconcilePublicHandles = () => {
     if (publicHandleReconciliation) return publicHandleReconciliation;
     publicHandleReconciliation = db
@@ -1296,9 +1322,18 @@ export function createNoodleStorage(db: DB) {
           const publicAccount = account.noodleAccountId ? await this.getAccountById(account.noodleAccountId) : null;
           const currentSource = publicAccount ? await resolveNoodlerSourceSnapshot(db, publicAccount) : null;
           let baseline = account.settings.profile.noodlerSourceSnapshot;
-          if (!baseline && currentSource) {
-            const updated = await this.updateNoodlerSourceSnapshot(account.id, currentSource);
-            baseline = updated?.settings.profile.noodlerSourceSnapshot ?? currentSource;
+          if (
+            currentSource &&
+            (!baseline ||
+              ((disclosureMode === "hinted" || disclosureMode === "secret") &&
+                !isMinimizedNoodlerSourceSnapshot(baseline)))
+          ) {
+            const minimized = minimizeNoodlerSourceSnapshot(
+              currentSource,
+              disclosureMode ?? "secret",
+            );
+            const updated = await this.updateNoodlerSourceSnapshot(account.id, minimized);
+            baseline = updated?.settings.profile.noodlerSourceSnapshot ?? minimized;
           }
           if (!currentSource && account.settings.scheduler.autoPosting?.enabled) {
             await this.patchAccountSettings(account.id, {
@@ -1323,7 +1358,11 @@ export function createNoodleStorage(db: DB) {
             fanActivity: account.settings.scheduler.fanActivity ?? null,
             sourceStatus: !currentSource
               ? { state: "missing" as const }
-              : compareNoodlerSourceSnapshots(baseline ?? currentSource, currentSource),
+              : compareMinimizedNoodlerSourceSnapshot(
+                  baseline ?? minimizeNoodlerSourceSnapshot(currentSource, disclosureMode ?? "secret"),
+                  currentSource,
+                  disclosureMode ?? "secret",
+                ),
             publicIdentity:
               publicAccount && (disclosureMode === "open" || disclosureMode === "hinted")
                 ? { displayName: publicAccount.displayName, handle: publicAccount.handle }
@@ -1340,6 +1379,7 @@ export function createNoodleStorage(db: DB) {
       stageProfile: NoodleStageProfileInput,
       wizardExecutionId?: string,
       sourceSnapshot?: NoodlerSourceSnapshot,
+      avatarUrl?: string | null,
     ): Promise<NoodleAccount | null> {
       const publicAccount = await this.getAccountById(noodleAccountId);
       if (!publicAccount || (publicAccount.kind !== "persona" && publicAccount.kind !== "character")) return null;
@@ -1366,7 +1406,7 @@ export function createNoodleStorage(db: DB) {
         handle: normalizeHandle(stageProfile.handle, publicAccount.entityId),
         displayName: stageProfile.displayName,
         bio: stageProfile.bio,
-        avatarUrl: null,
+        avatarUrl: stageProfile.disclosureMode === "open" ? (avatarUrl ?? null) : null,
         invited: "false",
         settings: JSON.stringify(accountSettings),
         platform: "noodler",
@@ -1399,6 +1439,10 @@ export function createNoodleStorage(db: DB) {
             handle: normalizeHandle(stageProfile.handle, row.entityId),
             displayName: stageProfile.displayName,
             bio: stageProfile.bio,
+            ...(stageProfile.disclosureMode !== "open" &&
+            !readNoodlerAvatarMediaPath(id, row.avatarUrl)
+              ? { avatarUrl: null }
+              : {}),
             settings: JSON.stringify({
               ...settings,
               profile: {
@@ -1419,6 +1463,14 @@ export function createNoodleStorage(db: DB) {
       });
     },
 
+    async updateNoodlerAvatar(id: string, avatarUrl: string | null): Promise<NoodleAccount | null> {
+      await db
+        .update(noodleAccounts)
+        .set({ avatarUrl, avatarCrop: null, updatedAt: now() })
+        .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodler")));
+      return this.getNoodlerAccountById(id);
+    },
+
     async updateNoodlerSourceSnapshot(
       id: string,
       sourceSnapshot: NoodlerSourceSnapshot,
@@ -1427,7 +1479,6 @@ export function createNoodleStorage(db: DB) {
         const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
         if (!row || row.platform !== "noodler") return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
-        if (settings.profile.noodlerSourceSnapshot) return mapAccount(row);
         await tx
           .update(noodleAccounts)
           .set({
@@ -3496,7 +3547,9 @@ export function createNoodleStorage(db: DB) {
         })
         .where(eq(noodleRefreshRuns.id, id));
       const rows = await db.select().from(noodleRefreshRuns).where(eq(noodleRefreshRuns.id, id));
-      return rows[0] ? mapRefreshRun(rows[0]) : null;
+      const finished = rows[0] ? mapRefreshRun(rows[0]) : null;
+      await pruneFinishedRefreshRuns();
+      return finished;
     },
 
     async subscribe(viewerAccountId: string, creatorAccountId: string): Promise<NoodleAccountSubscription | null> {

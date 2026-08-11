@@ -283,14 +283,14 @@ export function createPublicNoodleGenerationService(db: DB) {
         });
         const completionOptions = {
           model: input.connection.model,
-          maxTokens: timelineMaxTokens,
-          temperature: 0.9,
-          topP: 0.95,
           ...resolveStoredChatOptions(
             input.connection.defaultParameters,
             input.connection.provider,
             input.connection.model,
           ),
+          maxTokens: timelineMaxTokens,
+          temperature: 0.9,
+          topP: 0.95,
           stream: false,
           debugMode,
           responseFormat: noodleResponseFormat(input.connection.model, "timeline"),

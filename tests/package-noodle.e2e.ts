@@ -1055,6 +1055,143 @@ test.describe("package-owned Noodle interface", () => {
     }
   });
 
+  test("Noodle renders safe non-link Markdown and keeps known mentions interactive", async ({
+    page,
+  }) => {
+    const errors = collectUnexpectedErrors(page);
+    const activePersonaResponse = await page.request.get(
+      "/api/characters/personas/active",
+    );
+    const activePersona = activePersonaResponse.ok()
+      ? ((await activePersonaResponse.json()) as { id?: string } | null)
+      : null;
+    let personaId = activePersona?.id ?? null;
+    let createdPersonaId: string | null = null;
+    let createdPostId: string | null = null;
+
+    if (!personaId) {
+      const personaResponse = await page.request.post(
+        "/api/characters/personas",
+        {
+          data: {
+            name: "Noodle Markdown Regression",
+            description: "Temporary browser regression persona.",
+          },
+        },
+      );
+      expect(personaResponse.ok()).toBe(true);
+      const persona = (await personaResponse.json()) as { id: string };
+      personaId = persona.id;
+      createdPersonaId = persona.id;
+      const activateResponse = await page.request.put(
+        `/api/characters/personas/${persona.id}/activate`,
+      );
+      expect(activateResponse.ok()).toBe(true);
+    }
+
+    const bootstrapResponse = await page.request.get("/api/noodle");
+    expect(bootstrapResponse.ok()).toBe(true);
+    const bootstrap = (await bootstrapResponse.json()) as {
+      accounts: Array<{ entityId: string; handle: string }>;
+    };
+    const professorMariAccount = bootstrap.accounts.find(
+      (account) => account.entityId === "__professor_mari__",
+    );
+    expect(professorMariAccount?.handle).toBe("professor_mari");
+
+    const markdown = [
+      "# Markdown heading",
+      "",
+      "A paragraph with **bold**, *italic*, ~~removed~~, `inline code`, [link label](https://example.invalid/link), ![image alt](https://example.invalid/image.png), and @professor_mari.",
+      "",
+      "- Unordered one",
+      "- Unordered two",
+      "",
+      "3. Ordered three",
+      "4. Ordered four",
+      "",
+      "> Quoted **text**",
+      "",
+      "```html",
+      "<script>window.__noodleMarkdownExecuted = true</script>",
+      "```",
+      "",
+      '<img src="https://example.invalid/raw.png" onerror="window.__noodleMarkdownExecuted = true">',
+    ].join("\n");
+
+    try {
+      const postResponse = await page.request.post("/api/noodle/posts", {
+        data: {
+          actorKind: "persona",
+          actorEntityId: personaId,
+          content: markdown,
+        },
+      });
+      expect(postResponse.ok()).toBe(true);
+      const post = (await postResponse.json()) as { id: string };
+      createdPostId = post.id;
+
+      await page.goto("/");
+      await openNoodle(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      const article = noodle.locator(`[data-noodle-post-id="${post.id}"]`);
+      await expect(article).toBeVisible();
+      await expect(
+        article.getByRole("heading", { name: "Markdown heading" }),
+      ).toBeVisible();
+      await expect(article.locator("strong")).toContainText(["bold", "text"]);
+      await expect(article.locator("em")).toHaveText("italic");
+      await expect(article.locator("del")).toHaveText("removed");
+      await expect(article.locator("p code")).toHaveText("inline code");
+      await expect(article.locator("ul > li")).toHaveCount(2);
+      await expect(article.locator("ol")).toHaveAttribute("start", "3");
+      await expect(article.locator("ol > li")).toHaveCount(2);
+      await expect(article.locator("blockquote")).toContainText("Quoted text");
+      await expect(article.locator("pre code")).toContainText(
+        "<script>window.__noodleMarkdownExecuted = true</script>",
+      );
+      await expect(article).toContainText("link label");
+      await expect(article).toContainText("image alt");
+      await expect(article).toContainText(
+        '<img src="https://example.invalid/raw.png" onerror="window.__noodleMarkdownExecuted = true">',
+      );
+      await expect(article.locator("a")).toHaveCount(0);
+      await expect(
+        article.locator('img[src^="https://example.invalid"]'),
+      ).toHaveCount(0);
+      expect(
+        await page.evaluate(
+          () =>
+            (window as typeof window & { __noodleMarkdownExecuted?: boolean })
+              .__noodleMarkdownExecuted,
+        ),
+      ).toBeUndefined();
+
+      const mention = article.getByRole("button", {
+        name: "View @professor_mari profile",
+      });
+      await expect(mention).toBeVisible();
+      await mention.click();
+      await expect(
+        noodle.getByRole("heading", { name: "Professor Mari", exact: true }),
+      ).toBeVisible();
+      expect(errors).toEqual([]);
+    } finally {
+      if (createdPostId) {
+        await page.request
+          .delete(`/api/noodle/posts/${createdPostId}`, { timeout: 5_000 })
+          .catch(() => undefined);
+      }
+      if (createdPersonaId) {
+        await page.request
+          .delete(`/api/characters/personas/${createdPersonaId}`, {
+            timeout: 5_000,
+          })
+          .catch(() => undefined);
+      }
+    }
+  });
+
   test("Noodle polls support character creation and voting on both sides", async ({
     page,
   }) => {
@@ -1502,8 +1639,8 @@ test.describe("package-owned Noodle interface", () => {
           );
           return Boolean(
             control &&
-            element.compareDocumentPosition(control) &
-              Node.DOCUMENT_POSITION_FOLLOWING,
+              element.compareDocumentPosition(control) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
           );
         }, controlPostId),
       ).toBe(true);
@@ -2031,8 +2168,8 @@ test.describe("package-owned Noodle interface", () => {
           );
           return Boolean(
             target &&
-            target.compareDocumentPosition(composer) &
-              Node.DOCUMENT_POSITION_FOLLOWING,
+              target.compareDocumentPosition(composer) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
           );
         }, reply.id),
       ).toBe(true);

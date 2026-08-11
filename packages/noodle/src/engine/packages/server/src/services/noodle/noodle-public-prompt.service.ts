@@ -684,6 +684,7 @@ export async function buildRefreshPrompt(input: {
       `replies: at most ${input.settings.maxRepliesPerRefresh}`,
       `reposts: at most ${input.settings.maxRepostsPerRefresh}`,
       `likes: at most ${input.settings.maxLikesPerRefresh}`,
+      "Normal target: create 1-3 posts and only the interactions that fit current activity. These quotas are safety ceilings, not slots to fill.",
       "follows: optional; use sparingly when an account would naturally follow another active account after today's public activity.",
       input.settings.enableImagePrompts
         ? `image generation: at most ${input.settings.maxImagesPerRefresh} images this refresh; imagePrompt may request either a character image or a meme. For character images, describe concrete appearance, build, clothing, and scene composition. For memes, describe the meme format, visual gag, intended caption/text if any, and why it fits the author's personality.`

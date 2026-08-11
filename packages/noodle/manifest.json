@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "id": "noodle",
   "name": "Noodle",
-  "version": "1.0.3",
-  "description": "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+  "version": "1.0.4",
+  "description": "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
   "localizations": {
     "de": {
       "name": "Noodle",
-      "description": "Entdecke die vertraute öffentliche Noodle-Timeline und die private NoodleR-Plattform für Kreative als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+      "description": "Entdecke die öffentliche Noodle-Timeline und den lokalen NoodleR-Rollenspiel-Feed für Kreative und Fans als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
       "homeBrowserTab": {
         "label": "Noodle",
         "ariaLabel": "Noodle und NoodleR öffnen"
@@ -15,7 +15,7 @@
     },
     "ko": {
       "name": "Noodle",
-      "description": "익숙한 Noodle 공개 타임라인과 비공개 NoodleR 크리에이터 플랫폼을 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+      "description": "Noodle 공개 타임라인과 로컬 NoodleR 크리에이터 및 팬 역할극 피드를 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
       "homeBrowserTab": {
         "label": "Noodle",
         "ariaLabel": "Noodle 및 NoodleR 열기"
@@ -23,7 +23,7 @@
     },
     "pl": {
       "name": "Noodle",
-      "description": "Poznaj znaną publiczną oś czasu Noodle oraz prywatną platformę NoodleR dla twórców jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+      "description": "Poznaj publiczną oś czasu Noodle oraz lokalny kanał fabularny NoodleR dla twórców i fanów jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
       "homeBrowserTab": {
         "label": "Noodle",
         "ariaLabel": "Otwórz Noodle i NoodleR"
@@ -58,18 +58,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "a2d57fb9c2d28f450878395f8eb40a5edff84ce812623999b73a1d8ca5ef51b2",
-      "bytes": 628
+      "sha256": "650529c8995d40249a1870ffcc5f422c3f39cb4d3ec8601c5606c62a86882dfe",
+      "bytes": 634
     },
     {
       "path": "server.mjs",
-      "sha256": "3b81aff0e5d6f92cafb40c27d0ad8e4c124c78a9c699ee1ce1b501293a3a7f39",
-      "bytes": 2389518
+      "sha256": "121b88a79c6cb43a86215dd43b8e01bfd892999a0e97b9ef0ff8bb6608798dcc",
+      "bytes": 2407893
     },
     {
       "path": "client.js",
-      "sha256": "b9d0ddc66f9a10528433c6942a21c8b17270d0bc31ce836a84ba8cdf113323ec",
-      "bytes": 2478649
+      "sha256": "b12d8e749f9301e455825da797398d5a42af8a31dafa59699e1eb34fbdff9331",
+      "bytes": 2450410
     },
     {
       "path": "noodle-klusek.png",

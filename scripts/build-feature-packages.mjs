@@ -55,6 +55,7 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/routes/noodle.routes.ts",
   "packages/server/src/services/noodle",
   "packages/server/src/services/prompt-overrides/registry/noodle.ts",
+  "packages/server/src/services/storage/noodle-refresh-run-retention.ts",
   "packages/server/src/services/storage/noodle.storage.ts",
 ];
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
@@ -156,17 +157,17 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.0.3",
+    version: "1.0.4",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description:
-      "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world.",
+      "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world.",
     localizations: {
       de: {
         name: "Noodle",
         description:
-          "Entdecke die vertraute öffentliche Noodle-Timeline und die private NoodleR-Plattform für Kreative als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+          "Entdecke die öffentliche Noodle-Timeline und den lokalen NoodleR-Rollenspiel-Feed für Kreative und Fans als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
         homeBrowserTab: {
           label: "Noodle",
           ariaLabel: "Noodle und NoodleR öffnen",
@@ -175,7 +176,7 @@ const features = [
       ko: {
         name: "Noodle",
         description:
-          "익숙한 Noodle 공개 타임라인과 비공개 NoodleR 크리에이터 플랫폼을 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+          "Noodle 공개 타임라인과 로컬 NoodleR 크리에이터 및 팬 역할극 피드를 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
         homeBrowserTab: {
           label: "Noodle",
           ariaLabel: "Noodle 및 NoodleR 열기",
@@ -184,7 +185,7 @@ const features = [
       pl: {
         name: "Noodle",
         description:
-          "Poznaj znaną publiczną oś czasu Noodle oraz prywatną platformę NoodleR dla twórców jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+          "Poznaj publiczną oś czasu Noodle oraz lokalny kanał fabularny NoodleR dla twórców i fanów jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
         homeBrowserTab: {
           label: "Noodle",
           ariaLabel: "Otwórz Noodle i NoodleR",

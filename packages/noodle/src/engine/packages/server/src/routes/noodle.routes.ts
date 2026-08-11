@@ -71,6 +71,7 @@ import { createPublicNoodleImagesService } from "../services/noodle/noodle-publi
 import {
   buildNoodlerPublicIdentity,
   stageProfileContainsPublicIdentity,
+  stageProfileContainsSourceDetails,
 } from "../services/noodle/noodle-noodler-generation.service.js";
 import {
   createNoodlerPost,
@@ -90,15 +91,28 @@ import {
   isConnectionAdmissionFailure,
 } from "../services/generation/connection-admission.js";
 import { generateNoodlerStageProfileDraft } from "../services/noodle/noodle-stage-profile-draft.service.js";
+import {
+  generateInvitedNoodlePostDraft,
+} from "../services/noodle/noodle-invited-post-draft.service.js";
+import { isDirectlyInvitedNoodleCharacter } from "../services/noodle/noodle-invited-post-draft-access.js";
+import {
+  getNoodlerImageConnections,
+  saveNoodlerImageConnections,
+} from "../services/noodle/noodler-image-connections.js";
 import { verifyNoodlerSourceRevisionToken } from "../services/noodle/noodle-source-revision.js";
 import {
   compareNoodlerSourceSnapshots,
+  minimizeNoodlerSourceSnapshot,
   resolveNoodlerSourceSnapshot,
 } from "../services/noodle/noodle-noodler-source.js";
 import {
   canViewNoodlerPost,
   isNoodlerHiddenFromViewer,
 } from "../services/noodle/noodler-access.js";
+import {
+  noodlerDisclosureReviewReasons,
+  projectNoodlerAudienceProfile,
+} from "../services/noodle/noodler-disclosure.js";
 import { createNoodlerNoodleImagesService } from "../services/noodle/noodle-noodler-images.service.js";
 import { tryNoodleOperation } from "../services/noodle/noodle-operation-lock.js";
 import {
@@ -111,6 +125,12 @@ import {
   type NoodlerPostMediaUpload,
   unlinkNoodlerMedia,
 } from "../services/noodle/noodle-noodler-media.js";
+import {
+  readNoodlerAvatarMediaPath,
+  resolveNoodlerAvatarAbsolutePath,
+  stageNoodlerAvatar,
+  unlinkNoodlerAvatar,
+} from "../services/noodle/noodle-noodler-avatar.js";
 import {
   bootstrapVisibleNoodle,
   characterAvatarCrop,
@@ -147,6 +167,7 @@ const noodleImagePromptConfirmationSchema = z.object({
 
 const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.extend({
   sourceRevisionToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/u).optional(),
+  confirmAvatarReview: z.boolean().optional(),
 });
 
 /** The `identity` lock is shared by refresh, reroll, and profile edits, so the 409 stays operation-neutral. */
@@ -470,6 +491,90 @@ export async function noodleRoutes(app: FastifyInstance) {
     return noodle.listNoodlerStageProfiles();
   });
 
+  app.get("/noodler/accounts/:id/avatar/:fileName", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const { id, fileName } = req.params as { id: string; fileName: string };
+    const account = await noodle.getNoodlerAccountById(id);
+    const absolute = account
+      ? resolveNoodlerAvatarAbsolutePath(id, account.avatarUrl)
+      : null;
+    if (!absolute || basename(absolute) !== fileName || !existsSync(absolute)) {
+      return reply.code(404).send({ error: "Not Found" });
+    }
+    return reply
+      .header("Cache-Control", "private, no-store")
+      .sendFile(basename(absolute), dirname(absolute));
+  });
+
+  app.post("/noodler/accounts/:id/avatar", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const { id } = req.params as { id: string };
+    try {
+      const { media } = await readNoodlerMultipart(req);
+      const locked = await tryNoodlerAccountOperation(id, async () => {
+        const account = await noodle.getNoodlerAccountById(id);
+        if (!account) return null;
+        const staged = stageNoodlerAvatar(id, media);
+        try {
+          staged.promote();
+          const updated = await noodle.updateNoodlerAvatar(id, staged.avatarUrl);
+          if (!updated) {
+            staged.compensate();
+            return null;
+          }
+          unlinkNoodlerAvatar(id, account.avatarUrl);
+          return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
+        } catch (error) {
+          staged.compensate();
+          throw error;
+        }
+      });
+      if (!locked.acquired) return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
+      if (!locked.value) return reply.code(404).send({ error: "NoodleR stage profile not found" });
+      return locked.value;
+    } catch (error) {
+      return sendNoodlerMediaError(reply, error);
+    }
+  });
+
+  app.patch("/noodler/accounts/:id/avatar/source", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const { id } = req.params as { id: string };
+    const locked = await tryNoodlerAccountOperation(id, async () => {
+      const account = await noodle.getNoodlerAccountById(id);
+      if (!account || (account.settings.privacy.identityDisclosure ?? "secret") !== "open") return null;
+      const source = account.noodleAccountId ? await noodle.getAccountById(account.noodleAccountId) : null;
+      if (!source?.avatarUrl) return false;
+      const oldAvatarUrl = account.avatarUrl;
+      const updated = await noodle.updateNoodlerAvatar(id, source.avatarUrl);
+      if (updated) unlinkNoodlerAvatar(id, oldAvatarUrl);
+      return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
+    });
+    if (!locked.acquired) return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
+    if (locked.value === false) return reply.code(409).send({ error: "The linked source does not have an avatar." });
+    if (!locked.value) return reply.code(404).send({ error: "An Open NoodleR stage profile was not found." });
+    return locked.value;
+  });
+
+  app.delete("/noodler/accounts/:id/avatar", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const { id } = req.params as { id: string };
+    const locked = await tryNoodlerAccountOperation(id, async () => {
+      const account = await noodle.getNoodlerAccountById(id);
+      if (!account) return null;
+      const updated = await noodle.updateNoodlerAvatar(id, null);
+      if (updated) unlinkNoodlerAvatar(id, account.avatarUrl);
+      return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
+    });
+    if (!locked.acquired) return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
+    if (!locked.value) return reply.code(404).send({ error: "NoodleR stage profile not found" });
+    return locked.value;
+  });
+
   async function resolveViewerPersona(personaId: string) {
     const account = await noodle.getAccountByEntity("persona", personaId);
     return account?.platform === "noodle" ? account : null;
@@ -495,18 +600,10 @@ export async function noodleRoutes(app: FastifyInstance) {
     );
     const unlockedIds = new Set(unlocks.map((item) => item.postId));
     const profileById = new Map(
-      profiles.map(
-        ({ access: _access, sourceStatus: _sourceStatus, ...profile }) => [
-          profile.id,
-          {
-            ...profile,
-            noodleAccountId:
-              profile.disclosureMode === "open"
-                ? profile.noodleAccountId
-                : null,
-          },
-        ],
-      ),
+      profiles.map((profile) => [
+        profile.id,
+        projectNoodlerAudienceProfile(profile),
+      ]),
     );
     const visibleAccounts = accounts.filter(
       (account) =>
@@ -1222,6 +1319,32 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
   });
 
+  app.post("/accounts/:id/post-draft", async (req, reply) => {
+    const body = z
+      .object({
+        guidance: z.string().trim().max(20_000).optional(),
+        connectionId: z.string().trim().min(1).optional(),
+        debugMode: z.boolean().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const { id } = req.params as { id: string };
+    const account = await noodle.getAccountById(id);
+    if (!isDirectlyInvitedNoodleCharacter(account))
+      return reply.code(403).send({ error: "Only directly invited characters can generate post drafts." });
+    const settings = await noodle.getSettings();
+    const connectionId = body.data.connectionId ?? settings.generationConnectionId;
+    if (!connectionId) return reply.code(400).send({ error: "Select a Noodle generation connection first." });
+    const connection = await connections.getWithKey(connectionId);
+    if (!connection) return reply.code(404).send({ error: "Noodle generation connection not found" });
+    try {
+      return await generateInvitedNoodlePostDraft(app.db, account, connection, body.data);
+    } catch (error) {
+      logger.error(error, "[noodle] Invited post draft generation failed");
+      return reply.code(500).send({ error: getErrorMessage(error) });
+    }
+  });
+
   app.post("/accounts/:id/noodler", async (req, reply) => {
     const settings = await noodle.getSettings();
     if (!settings.enableNoodler)
@@ -1231,27 +1354,38 @@ export async function noodleRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const publicAccount = await noodle.getAccountById(id);
+    const sourceSnapshot = publicAccount
+      ? await resolveNoodlerSourceSnapshot(app.db, publicAccount)
+      : null;
     if (
       publicAccount &&
-      stageProfileContainsPublicIdentity(
-        parsed.data.stageProfile,
-        await resolveNoodlerPublicIdentity(publicAccount),
-      )
+      (stageProfileContainsPublicIdentity(
+          parsed.data.stageProfile,
+          await resolveNoodlerPublicIdentity(publicAccount),
+        ) ||
+        (sourceSnapshot &&
+          stageProfileContainsSourceDetails(
+            parsed.data.stageProfile,
+            sourceSnapshot,
+          )))
     ) {
       return reply.code(400).send({
         error:
-          "Hinted and secret stage profiles cannot use the linked public name or handle.",
+          "Hinted and secret stage profiles cannot use identifying source names or details.",
       });
     }
     try {
-      const sourceSnapshot = publicAccount
-        ? await resolveNoodlerSourceSnapshot(app.db, publicAccount)
-        : null;
       const created = await noodle.createNoodlerAccount(
         id,
         parsed.data.stageProfile,
         undefined,
-        sourceSnapshot ?? undefined,
+        sourceSnapshot
+          ? minimizeNoodlerSourceSnapshot(
+              sourceSnapshot,
+              parsed.data.stageProfile.disclosureMode,
+            )
+          : undefined,
+        publicAccount?.avatarUrl ?? null,
       );
       if (!created)
         return reply.code(404).send({ error: "Noodle account not found" });
@@ -1364,25 +1498,30 @@ export async function noodleRoutes(app: FastifyInstance) {
             },
             connection,
           });
+          const sourceSnapshot = await resolveNoodlerSourceSnapshot(
+            app.db,
+            publicAccount,
+          );
           // Belt-and-braces: the generator already enforces leak protection, but keep the guard.
           if (
             stageProfileContainsPublicIdentity(
               stageProfile,
               await resolveNoodlerPublicIdentity(publicAccount),
-            )
+            ) ||
+            (sourceSnapshot &&
+              stageProfileContainsSourceDetails(stageProfile, sourceSnapshot))
           ) {
             skipped.push(noodleAccountId);
             return;
           }
-          const sourceSnapshot = await resolveNoodlerSourceSnapshot(
-            app.db,
-            publicAccount,
-          );
           const account = await noodle.createNoodlerAccount(
             noodleAccountId,
             stageProfile,
             executionId,
-            sourceSnapshot ?? undefined,
+            sourceSnapshot
+              ? minimizeNoodlerSourceSnapshot(sourceSnapshot, accountDisclosure)
+              : undefined,
+            publicAccount.avatarUrl,
           );
           if (!account) {
             skipped.push(noodleAccountId);
@@ -1463,18 +1602,77 @@ export async function noodleRoutes(app: FastifyInstance) {
       const publicAccount = noodlerAccount?.noodleAccountId
         ? await noodle.getAccountById(noodlerAccount.noodleAccountId)
         : null;
-      if (
-        publicAccount &&
-        stageProfileContainsPublicIdentity(
-          parsed.data,
-          await resolveNoodlerPublicIdentity(publicAccount),
-        )
-      ) {
-        return { status: "identity_conflict" } as const;
-      }
       const currentSourceSnapshot = publicAccount
         ? await resolveNoodlerSourceSnapshot(app.db, publicAccount)
         : null;
+      if (
+        publicAccount &&
+        (stageProfileContainsPublicIdentity(
+            parsed.data,
+            await resolveNoodlerPublicIdentity(publicAccount),
+          ) ||
+          (currentSourceSnapshot &&
+            stageProfileContainsSourceDetails(
+              parsed.data,
+              currentSourceSnapshot,
+            )))
+      ) {
+        return { status: "identity_conflict" } as const;
+      }
+      if (noodlerAccount) {
+        const currentMode =
+          noodlerAccount.settings.privacy.identityDisclosure ?? "secret";
+        const [publishedPosts, preparedPosts] = await Promise.all([
+          noodle.listNoodlerPostsByAccount(id, Number.MAX_SAFE_INTEGER),
+          noodle.listNoodlerPreparedPosts(),
+        ]);
+        const publicIdentity = publicAccount
+          ? await resolveNoodlerPublicIdentity(publicAccount)
+          : null;
+        const preparedForCreator = preparedPosts.filter(
+          (post) => post.creatorAccountId === id && post.state === "prepared",
+        );
+        const identifyingPostCount = currentSourceSnapshot
+          ? publishedPosts.filter((post) => {
+              const candidate = {
+                displayName: "review",
+                handle: "review",
+                bio: [post.title, post.content].filter(Boolean).join(" "),
+                stagePersonality: "",
+                disclosureMode: parsed.data.disclosureMode,
+              };
+              return (
+                (publicIdentity &&
+                  stageProfileContainsPublicIdentity(candidate, publicIdentity)) ||
+                stageProfileContainsSourceDetails(candidate, currentSourceSnapshot)
+              );
+            }).length
+          : publishedPosts.length;
+        const reviewReasons = noodlerDisclosureReviewReasons({
+          currentMode,
+          nextMode: parsed.data.disclosureMode,
+          postCount: identifyingPostCount,
+          mediaCount: publishedPosts.filter((post) => Boolean(post.imageUrl)).length,
+          hasAvatar: Boolean(
+            readNoodlerAvatarMediaPath(id, noodlerAccount.avatarUrl),
+          ),
+          preparedPostCount: 0,
+        });
+        const unresolvedReviewReasons = parsed.data.confirmAvatarReview
+          ? reviewReasons.filter((reason) => reason !== "the current creator avatar")
+          : reviewReasons;
+        if (unresolvedReviewReasons.length > 0) {
+          return {
+            status: "disclosure_review_required",
+            reviewReasons: unresolvedReviewReasons,
+          } as const;
+        }
+        await Promise.all(
+          preparedForCreator.map((post) =>
+            noodle.discardNoodlerPreparedPost(post.id),
+          ),
+        );
+      }
       const submittedSnapshotIsCurrent =
         parsed.data.sourceSnapshot &&
         currentSourceSnapshot &&
@@ -1497,16 +1695,21 @@ export async function noodleRoutes(app: FastifyInstance) {
       if (parsed.data.acceptSourceChanges && !sourceRevisionIsCurrent) {
         return { status: "source_revision_conflict" } as const;
       }
-      const sourceSnapshot =
-        parsed.data.acceptSourceChanges &&
-        currentSourceSnapshot &&
-        sourceRevisionIsCurrent
-          ? currentSourceSnapshot
-          : undefined;
+      const currentMode =
+        noodlerAccount?.settings.privacy.identityDisclosure ?? "secret";
+      const sourceSnapshot = currentSourceSnapshot &&
+        (parsed.data.disclosureMode !== currentMode ||
+          (parsed.data.acceptSourceChanges && sourceRevisionIsCurrent))
+        ? minimizeNoodlerSourceSnapshot(
+            currentSourceSnapshot,
+            parsed.data.disclosureMode,
+          )
+        : undefined;
       const {
         acceptSourceChanges: _acceptSourceChanges,
         sourceSnapshot: _sourceSnapshot,
         sourceRevisionToken: _sourceRevisionToken,
+        confirmAvatarReview: _confirmAvatarReview,
         ...stageProfile
       } = parsed.data;
       const updated = await noodle.updateNoodlerStageProfile(
@@ -1533,7 +1736,14 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (locked.value.status === "identity_conflict") {
       return reply.code(400).send({
         error:
-          "Hinted and secret stage profiles cannot use the linked public name or handle.",
+          "Hinted and secret stage profiles cannot use identifying source names or details.",
+      });
+    }
+    if (locked.value.status === "disclosure_review_required") {
+      return reply.code(409).send({
+        error:
+          "Review or remove existing creator content before using a more private identity mode.",
+        reviewRequired: locked.value.reviewReasons,
       });
     }
     if (locked.value.status === "not_found") {
@@ -1562,7 +1772,13 @@ export async function noodleRoutes(app: FastifyInstance) {
         ? await resolveNoodlerSourceSnapshot(app.db, publicAccount)
         : null;
       if (!account || !sourceSnapshot) return false;
-      await noodle.updateNoodlerSourceSnapshot(id, sourceSnapshot);
+      await noodle.updateNoodlerSourceSnapshot(
+        id,
+        minimizeNoodlerSourceSnapshot(
+          sourceSnapshot,
+          account.settings.privacy.identityDisclosure ?? "secret",
+        ),
+      );
       return true;
     });
     if (!locked.acquired)
@@ -1634,6 +1850,11 @@ export async function noodleRoutes(app: FastifyInstance) {
     const deleted = locked.value;
     if (!deleted)
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
+    const imageConnections = await getNoodlerImageConnections(app.db);
+    if (imageConnections.creatorConnectionIds[id]) {
+      delete imageConnections.creatorConnectionIds[id];
+      await saveNoodlerImageConnections(app.db, imageConnections);
+    }
     removeNoodlerAccountMedia(id);
     return deleted;
   });
@@ -1788,6 +2009,29 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!settings.enableNoodler)
       return reply.code(404).send({ error: "Not Found" });
     return noodle.getNoodlerReserveStatus();
+  });
+
+  app.get("/noodler/image-connections", async () => getNoodlerImageConnections(app.db));
+
+  app.patch("/noodler/image-connections", async (req, reply) => {
+    const body = z
+      .object({
+        defaultConnectionId: z.string().min(1).nullable().optional(),
+        creatorId: z.string().min(1).optional(),
+        connectionId: z.string().min(1).nullable().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const current = await getNoodlerImageConnections(app.db);
+    if (body.data.defaultConnectionId !== undefined) {
+      current.defaultConnectionId = body.data.defaultConnectionId;
+    }
+    if (body.data.creatorId && body.data.connectionId !== undefined) {
+      if (body.data.connectionId) current.creatorConnectionIds[body.data.creatorId] = body.data.connectionId;
+      else delete current.creatorConnectionIds[body.data.creatorId];
+    }
+    await saveNoodlerImageConnections(app.db, current);
+    return current;
   });
 
   // Manual test trigger: runs one automatic-style post immediately, the same way the
@@ -2058,6 +2302,8 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
     if (!account)
       return reply.code(404).send({ error: "Noodle account not found" });
+    if (parsed.data.authorKind === "character" && account.invited !== true)
+      return reply.code(403).send({ error: "Only directly invited characters can post publicly." });
     const mentionedAccounts = mentionedCharacterAccounts(
       await noodle.listAccounts(),
       parsed.data.content,

@@ -1,0 +1,130 @@
+import type { APIProvider, NoodleAccount } from "@marinara-engine/shared";
+import type { DB } from "../../db/connection.js";
+import { logger, logDebugOverride } from "../../lib/logger.js";
+import { parseGameJsonish } from "../game/jsonish.js";
+import { resolveBaseUrl } from "../generation/connection-base-url.js";
+import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
+import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
+import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
+import type { ChatMessage } from "../llm/base-provider.js";
+import { createLLMProvider } from "../llm/provider-registry.js";
+import { createCharactersStorage } from "../storage/characters.storage.js";
+import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { noodleGeneratedNoodlerPostSchema } from "@marinara-engine/shared";
+import { noodleResponseFormat } from "./noodle-response-format.js";
+import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
+import { parseRecord } from "./noodle-public-support.js";
+import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./noodle-noodler-generation.service.js";
+
+export type InvitedNoodlePostDraftRequest = {
+  guidance?: string;
+  connectionId?: string;
+  debugMode?: boolean;
+};
+
+export type InvitedNoodlePostDraft = {
+  title: string | null;
+  content: string;
+  imagePrompt: string | null;
+  access: "public";
+  authorAccountId: string;
+};
+
+function parseDraft(content: string) {
+  const parsed = parseGameJsonish(content);
+  return noodleGeneratedNoodlerPostSchema.parse(
+    Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed,
+  );
+}
+
+export async function generateInvitedNoodlePostDraft(
+  db: DB,
+  account: NoodleAccount,
+  connection: NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>,
+  request: InvitedNoodlePostDraftRequest,
+): Promise<InvitedNoodlePostDraft> {
+  const characters = createCharactersStorage(db);
+  const character = await characters.getById(account.entityId);
+  if (!character) throw new Error("Noodle character not found.");
+  const data = parseRecord(character.data);
+  const connections = createConnectionsStorage(db);
+  const fallback = await connections.getFallbackForMain();
+  const provider = withConnectionFallbackProvider({
+    primary: createLLMProvider(
+      connection.provider,
+      resolveBaseUrl(connection),
+      connection.apiKey,
+      connection.maxContext,
+      connection.openrouterProvider,
+      connection.maxTokensOverride,
+      connection.claudeFastMode === "true",
+      connection.treatAsLocalEndpoint === "true",
+      connection.defaultParameters,
+    ),
+    primaryConnectionId: connection.id,
+    fallbackConnection: fallback,
+    fallbackBaseUrl: fallback ? resolveBaseUrl(fallback) : "",
+    category: "main",
+  });
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: [
+        "Write exactly one public Noodle post as the supplied character.",
+        "Keep it like a real social post: usually 40-280 characters. Use longer text only when the direction explicitly asks for long-form writing.",
+        NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
+        "Return one JSON object with title, content, and imagePrompt set to null.",
+        "Return JSON only. Do not create interactions or other accounts.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        `Character name: ${account.displayName}`,
+        `Character handle: @${account.handle}`,
+        `Character profile: ${JSON.stringify(data)}`,
+        ...(request.guidance?.trim() ? [`Post direction: ${JSON.stringify(request.guidance.trim())}`] : []),
+      ].join("\n"),
+    },
+  ];
+  const debugMode = request.debugMode === true;
+  logDebugOverride(debugMode, "[debug/noodle] Invited post draft prompt:\n%s", formatNoodleMessagesForLog(messages));
+  const completionOptions = {
+    model: connection.model,
+    ...resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
+    maxTokens: clampGenerationMaxOutputTokens({
+      provider: connection.provider as APIProvider,
+      model: connection.model,
+      maxTokens: 1024,
+      maxTokensOverride: connection.maxTokensOverride,
+    }),
+    temperature: 0.9,
+    topP: 0.95,
+    stream: false,
+    debugMode,
+    responseFormat: noodleResponseFormat(connection.model, "noodler_post"),
+  } as const;
+  let response = await provider.chatComplete(messages, completionOptions);
+  let raw = response.content ?? "";
+  let generated;
+  try {
+    generated = parseDraft(raw);
+  } catch (error) {
+    logger.warn(error, "[noodle] Correcting invalid invited post draft response");
+    const correctionMessages: ChatMessage[] = [
+      ...messages,
+      { role: "assistant", content: raw },
+      { role: "user", content: "Return exactly one valid JSON object with title, content, and imagePrompt set to null. Return JSON only." },
+    ];
+    response = await provider.chatComplete(correctionMessages, completionOptions);
+    generated = parseDraft(response.content ?? "");
+  }
+  if (!generated.content.trim()) throw new Error("Noodle draft generation returned no content.");
+  return {
+    title: generated.title?.trim() || null,
+    content: generated.content.trim(),
+    imagePrompt: null,
+    access: "public",
+    authorAccountId: account.id,
+  };
+}

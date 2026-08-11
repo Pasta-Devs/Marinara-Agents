@@ -147,7 +147,10 @@ export function LockedNoodlerPostCard({
             >
               {profile.displayName}
             </button>
-            <span className="inline-flex items-center gap-1 rounded-md bg-[var(--noodle-accent)]/12 px-2 py-1 text-[0.68rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20">
+            <span
+              title={localizeUi("ui.noodle.postaccess.locked.hint")}
+              className="inline-flex items-center gap-1 rounded-md bg-[var(--noodle-accent)]/12 px-2 py-1 text-[0.68rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20"
+            >
               <Lock size={11} />
               {revealed && demo
                 ? demo.unlockedLabel
@@ -479,6 +482,10 @@ export function NoodlerPostCard({
   const isEditingPost =
     Boolean(ctx.postManagement) && editingPostId === post.id;
   const imageCrop = readNoodlePostImageCrop(post.metadata);
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const displayedImageUrl =
+    post.imageUrl && post.imageUrl !== failedImageUrl ? post.imageUrl : null;
+  const editablePost = displayedImageUrl === post.imageUrl ? post : { ...post, imageUrl: null };
   const postInteractions = post.interactions;
   const rootPostInteractions = postInteractions.filter(
     (interaction) => !interaction.parentInteractionId,
@@ -848,7 +855,14 @@ export function NoodlerPostCard({
                   localizeUi("ui.noodle.noodlepostcard.noodleUser")}
               </button>
               {/* Locked cards reach this component only after access is granted; pre-unlock teasers use LockedNoodlerPostCard. */}
-              <span className="rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 text-[0.68rem] font-bold text-[var(--noodle-accent)]">
+              <span
+                title={localizeUi(
+                  post.access === "locked"
+                    ? "ui.noodle.postaccess.unlocked.hint"
+                    : "ui.noodle.postaccess.public.hint",
+                )}
+                className="rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 text-[0.68rem] font-bold text-[var(--noodle-accent)]"
+              >
                 {localizeUi(
                   post.access === "locked"
                     ? "ui.noodle.postaccess.unlocked"
@@ -882,7 +896,7 @@ export function NoodlerPostCard({
                 <div className="absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-32 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
                   <button
                     type="button"
-                    onClick={() => startEditingPost(post)}
+                    onClick={() => startEditingPost(editablePost)}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
                   >
                     <Pencil size={14} className="text-[var(--noodle-accent)]" />
@@ -904,14 +918,14 @@ export function NoodlerPostCard({
       </div>
       <div>
         {/* The image editor renders its own preview while editing, so hide the read-only one. */}
-        {isEditingPost && imageEditing ? null : post.imageUrl ? (
+        {isEditingPost && imageEditing ? null : displayedImageUrl ? (
           <button
             type="button"
             onClick={() =>
               setImageLightbox(
                 createNoodleLightboxImage(
                   post.id,
-                  post.imageUrl!,
+                  displayedImageUrl,
                   post.imagePrompt ?? "",
                 ),
               )
@@ -922,7 +936,8 @@ export function NoodlerPostCard({
           >
             {imageCrop ? (
               <PostImageFrame
-                src={post.imageUrl}
+                src={displayedImageUrl}
+                onError={() => setFailedImageUrl(displayedImageUrl)}
                 crop={imageCrop}
                 alt={localizeUi("ui.noodle.post.imageBy", {
                   name:
@@ -932,7 +947,8 @@ export function NoodlerPostCard({
               />
             ) : (
               <img
-                src={post.imageUrl}
+                src={displayedImageUrl}
+                onError={() => setFailedImageUrl(displayedImageUrl)}
                 alt={localizeUi("ui.noodle.post.imageBy", {
                   name:
                     author?.displayName ??
@@ -977,7 +993,7 @@ export function NoodlerPostCard({
             />
             {imageEditing && (
               <PostImageEditControls
-                post={post}
+                post={editablePost}
                 editing={imageEditing}
                 disabled={updatePostPending}
                 footer={editingExistingPoll ? null : postEditActions}

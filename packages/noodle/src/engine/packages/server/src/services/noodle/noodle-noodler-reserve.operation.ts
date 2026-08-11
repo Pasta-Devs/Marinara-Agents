@@ -1,5 +1,6 @@
 import type { DB } from "../../db/connection.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { resolveNoodlerImageConnectionId } from "./noodler-image-connections.js";
 import {
   createNoodleStorage,
   noodlerReservePolicyFingerprint,
@@ -137,6 +138,7 @@ export async function prepareNextNoodlerReservePost(
         request: {
           mode: "noodler",
           targetAccountId: account.id,
+          format: "caption",
           access: "locked",
           noodlerPostGuide: `Write a standalone post appropriate for publication at ${publishAt}. Do not refer to events after the current moment.`,
         },
@@ -147,10 +149,9 @@ export async function prepareNextNoodlerReservePost(
         account.settings.scheduler.autoPosting?.imagesEnabled &&
         payload.imagePrompt
       ) {
-        const imageConnection = settings.imageGenerationConnectionId
-          ? await createConnectionsStorage(db).getWithKey(
-              settings.imageGenerationConnectionId,
-            )
+        const imageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
+        const imageConnection = imageConnectionId
+          ? await createConnectionsStorage(db).getWithKey(imageConnectionId)
           : await createConnectionsStorage(db).getDefaultForImageGeneration();
         if (imageConnection) {
           try {
