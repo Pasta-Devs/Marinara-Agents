@@ -6640,6 +6640,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                           onChange={handleComposerChange}
                           onBlur={() => setComposer(composerValueRef.current)}
                           onKeyDown={handleComposerKeyDown}
+                          aria-autocomplete="list"
+                          aria-controls={activeMention ? "noodle-profile-mention-list" : undefined}
+                          aria-expanded={Boolean(activeMention)}
+                          aria-activedescendant={
+                            activeMention && mentionSuggestions.length > 0
+                              ? `noodle-profile-mention-list-option-${Math.min(activeMentionIndex, mentionSuggestions.length - 1)}`
+                              : undefined
+                          }
                           className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-sm leading-6 outline-none"
                           placeholder={localizeUi("ui.noodle.noodlehome.whatSSimmering")}
                         />
