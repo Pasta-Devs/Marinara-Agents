@@ -2702,21 +2702,23 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
       commandType: PHONE_COMMAND_TAG,
       tags: [PHONE_COMMAND_TAG],
       maxPayloadChars: 1_200,
-      description: "Use when you want to send a message from your character's Phone to a known contact. Do not use it for ordinary spoken dialogue.",
-      payloadExample: '{"action":"send_message","contactId":"CONTACT_PHONE_ID","body":"short message"}',
+      description: "Use when your character does something on their own Phone: text a known contact, jot a private note, or post publicly to Noodle. Do not use it for ordinary spoken dialogue.",
+      payloadExample: '{"action":"send_message","contact":"contact name","body":"short message"} or {"action":"note_to_self","body":"remember this"} or {"action":"post_noodle","body":"public post"}',
       validatePayload: (payload) => {
         if (!payload) return false;
         try {
           const value = JSON.parse(payload) as Record<string, unknown>;
-          return value.action === "send_message" && typeof value.contactId === "string"
-            && typeof value.body === "string" && value.body.trim().length > 0 && value.body.length <= 500;
+          const bodyOk = typeof value.body === "string" && value.body.trim().length > 0 && value.body.length <= 500;
+          if (value.action === "send_message") return bodyOk && typeof value.contact === "string" && value.contact.trim().length > 0;
+          if (value.action === "note_to_self" || value.action === "post_noodle") return bodyOk;
+          return false;
         } catch {
           return false;
         }
       },
       handler: async ({ payload, chatId, characterId, sourceMessageId, swipeIndex, branchChatId }) => {
         if (!payload || !characterId) return;
-        let action: { action?: unknown; contactId?: unknown; body?: unknown };
+        let action: { action?: unknown; contact?: unknown; body?: unknown };
         try {
           const parsed = JSON.parse(payload) as unknown;
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
@@ -2724,31 +2726,52 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
         } catch {
           return;
         }
-        if (action.action !== "send_message" || typeof action.contactId !== "string" || typeof action.body !== "string") return;
+        if (typeof action.body !== "string" || !action.body.trim()) return;
         const phone = (await phones.list()).find(({ document }) =>
           document.provisioning.enabled
           && document.identity.ownerType === "character"
           && document.identity.ownerId === characterId
           && document.identity.chatScope.includes(chatId));
         if (!phone) return;
-        const contact = (await phones.listContacts(phone.document.identity.phoneId)).find(({ document }) =>
-          document.phoneId === action.contactId || document.source === action.contactId);
-        if (!contact) return;
-        await messaging.send(phone.document.identity.phoneId, contact.document.phoneId, action.body);
-        await api.runtime.persistence.appendRoleplayEvent?.({
-          id: randomUUID(),
-          chatId: branchChatId,
-          messageId: sourceMessageId,
-          swipeIndex,
-          sourcePackageId: "virtual-phone",
-          eventType: "phone.message.sent",
-          subjectCharacterIds: [characterId],
-          audience: { characterIds: [characterId] },
-          text: `${phone.document.identity.ownerName}'s Phone sends a message to ${contact.document.name}.`,
-          data: { contactId: contact.document.phoneId },
-          createdAt: new Date().toISOString(),
-          idempotencyKey: `${branchChatId}:${sourceMessageId}:${swipeIndex}:phone.message.sent`,
-        });
+        const phoneId = phone.document.identity.phoneId;
+        const ownerName = phone.document.identity.ownerName;
+        // One event per action, so a regenerated turn is deduped by the Engine's idempotency key.
+        const event = async (eventType: string, text: string, audience: "public" | { characterIds: string[] }, data: unknown) => {
+          await api.runtime.persistence.appendRoleplayEvent?.({
+            id: randomUUID(), chatId: branchChatId, messageId: sourceMessageId, swipeIndex,
+            sourcePackageId: "virtual-phone", eventType, subjectCharacterIds: [characterId], audience, text, data,
+            createdAt: new Date().toISOString(),
+            idempotencyKey: `${branchChatId}:${sourceMessageId}:${swipeIndex}:${eventType}`,
+          });
+        };
+
+        if (action.action === "send_message" && typeof action.contact === "string") {
+          const wanted = action.contact.trim().toLowerCase();
+          const contact = (await phones.listContacts(phoneId)).find(({ document }) =>
+            document.contactId === action.contact || document.name.toLowerCase() === wanted);
+          if (!contact) return;
+          await messaging.send(phoneId, contactPhoneId(contact.document.contactId), action.body);
+          await event("phone.message.sent", `${ownerName}'s Phone sends a message to ${contact.document.name}.`,
+            { characterIds: [characterId] }, { contactId: contact.document.contactId });
+          return;
+        }
+        if (action.action === "note_to_self") {
+          const existing = await phones.getAppStorageKey(phoneId, "notes", "notes").catch(() => null);
+          const notes = Array.isArray(existing) ? existing : [];
+          await phones.setAppStorageKey(phoneId, "notes", "notes",
+            [{ id: randomUUID(), text: action.body, updatedAt: new Date().toISOString() }, ...notes].slice(0, 100));
+          await event("phone.note.written", `${ownerName} writes a private note on their Phone.`,
+            { characterIds: [characterId] }, {});
+          return;
+        }
+        if (action.action === "post_noodle") {
+          const scopeChat = phone.document.identity.chatScope.includes(chatId) ? chatId : phone.document.identity.chatScope[0];
+          if (!scopeChat) return;
+          await noodle.addPosts(scopeChat, [{ author: ownerName, handle: handleFor(ownerName), text: action.body }]);
+          // A public act: everyone in the scene can know.
+          await event("phone.noodle.posted", `${ownerName} posts publicly on Noodle: "${action.body.slice(0, 120)}"`,
+            "public", {});
+        }
       },
     }));
   }
