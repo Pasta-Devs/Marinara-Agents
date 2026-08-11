@@ -2678,6 +2678,8 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
       commandType: PHONE_COMMAND_TAG,
       tags: [PHONE_COMMAND_TAG],
       maxPayloadChars: 1_200,
+      description: "Use when you want to send a message from your character's Phone to a known contact. Do not use it for ordinary spoken dialogue.",
+      payloadExample: '{"action":"send_message","contactId":"CONTACT_PHONE_ID","body":"short message"}',
       handler: async ({ payload, chatId, characterId }) => {
         if (!payload || !characterId) return;
         let action: { action?: unknown; contactId?: unknown; body?: unknown };

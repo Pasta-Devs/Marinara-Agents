@@ -53,7 +53,7 @@ is deterministic routing, state, storage, UI, and prompt assembly.
 - [x] Add package action schemas and payload limits.
 - [ ] Add capability action handlers to the runtime API.
 - [x] Resolve actions only for packages enabled in the current chat.
-- [ ] Advertise enabled action names to the existing main generation.
+- [x] Advertise enabled action names to the existing main generation.
 - [ ] Support native tool providers and fallback bracket tags through one
   validated action type.
 - [x] Attach chat, source message, and target character to each
