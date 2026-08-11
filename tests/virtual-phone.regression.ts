@@ -375,6 +375,8 @@ async function main() {
   assert.ok(block.includes("are you still coming"), block);
   assert.ok(block.includes("battery 4%"), block);
   assert.ok(block.includes("03:14"), block);
+  const sceneBlock = buildTurnContext(busy, { time: "03:14", location: "South Station", weather: "rain" })!;
+  assert.ok(sceneBlock.includes("scene state: 03:14; South Station; rain"), sceneBlock);
   // A healthy battery is not a story beat and does not earn a place in every prompt.
   assert.ok(!buildTurnContext([{ ...busy[0]!, batteryLevel: 80 }])!.includes("battery"));
 

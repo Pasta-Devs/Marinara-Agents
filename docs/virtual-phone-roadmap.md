@@ -75,17 +75,18 @@ historical design notes and implementation logs; they are intentionally removed 
 
 ## Engine Dependencies
 
-Detail, proposed API shapes, and priority order live in `virtual-phone-engine-requests.md`.
+The shared Engine capability roadmap lives in `docs/engine-capability-roadmap.md`.
+It covers the Engine foundations needed by Virtual Phone, Maps, Calls, Noodle,
+World State, trackers, and future roleplay packages.
 
-The package can continue shipping its fallback behavior until these runtime capabilities exist:
+The Phone currently uses fallback behavior for features that need later Engine
+work:
 
-- `runtime.agents`: discover and invoke other agents.
-- Static package-authored pre-generation context injection.
-- Package-declared phone commands available to character generation.
-- `runtime.images.generate`.
-- Read/write access to Engine `chat_images`.
-- Conversation call-session access.
-- Lorebook entry filter fields for character and character-tag evaluation.
+- Structured conversation action payloads.
+- Engine-owned durable story events.
+- Image generation and shared media ownership.
+- Conversation call-session integration.
+- A shared typed package-service registry.
 
 ## Validation
 

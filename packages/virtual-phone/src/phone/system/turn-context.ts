@@ -65,11 +65,17 @@ export interface TurnPhoneState {
   batteryLevel?: number;
 }
 
+export interface TurnSceneState {
+  time?: string | null;
+  location?: string | null;
+  weather?: string | null;
+}
+
 /**
  * The block appended to the turn, or null when the phone has nothing worth saying — which is the
  * common case and must stay cheap, because silence costs no tokens.
  */
-export function buildTurnContext(phones: TurnPhoneState[]): string | null {
+export function buildTurnContext(phones: TurnPhoneState[], scene?: TurnSceneState): string | null {
   const lines: string[] = [];
   for (const phone of phones) {
     const owner = sanitizeForPrompt(phone.ownerName, 40) || "Someone";
@@ -100,6 +106,11 @@ export function buildTurnContext(phones: TurnPhoneState[]): string | null {
     || (typeof phone.batteryLevel === "number" && phone.batteryLevel <= 15)
     || phone.unread.length > 0);
   if (!anythingNew) return null;
+
+  const sceneParts = [scene?.time, scene?.location, scene?.weather]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => sanitizeForPrompt(value, 60));
+  if (sceneParts.length > 0) lines.unshift(`scene state: ${sceneParts.join("; ")}`);
 
   /**
    * No "write [phone: …] to act on it" instruction here, deliberately. The Engine recognises the

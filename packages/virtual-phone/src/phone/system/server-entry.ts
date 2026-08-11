@@ -15,7 +15,13 @@ import { fallbackFeed } from "../apps/noodler/manifest";
 import { extractImageUrls } from "../apps/gallery/manifest";
 import { handleFor, NoodleFeedService, NoodlerPageService, parseGeneratedPost, parsePagePost } from "./noodle";
 import { applyTransaction, parseProposal, readAccount } from "../apps/banking/manifest";
-import { buildTurnContext, parseTrackedTime, sanitizeForPrompt, type TurnPhoneState } from "./turn-context";
+import {
+  buildTurnContext,
+  parseTrackedTime,
+  sanitizeForPrompt,
+  type TurnPhoneState,
+  type TurnSceneState,
+} from "./turn-context";
 import { lorebookScope } from "./lorebook-scope";
 
 interface CapabilityContext {
@@ -46,6 +52,10 @@ interface CapabilityContext {
          * too many. Optional and feature-detected, so the manual clock stays the fallback.
          */
         getGameState?(chatId: string): Promise<{
+          snapshotId?: string;
+          chatId?: string;
+          messageId?: string;
+          swipeIndex?: number;
           date?: string | null;
           time?: string | null;
           location?: string | null;
@@ -105,7 +115,13 @@ interface CapabilityContext {
      * under a deadline the Engine enforces, and a throw is swallowed by the collector.
      */
     registerPromptContext?(
-      contributor: (request: { chatId: string; chatMeta: Record<string, unknown>; mode: string }) =>
+      contributor: (request: {
+        chatId: string;
+        chatMeta: Record<string, unknown>;
+        mode: string;
+        targetCharacterIds?: string[];
+        personaId?: string | null;
+      }) =>
         Promise<string | null> | string | null,
     ): () => void;
     /**
@@ -657,18 +673,23 @@ export async function activate({ api }: CapabilityContext) {
    * no phone at all, under a deadline the Engine enforces — so it walks the phone list once and
    * returns before touching threads or app storage when there is nothing to say.
    */
-  const turnPhoneStates = async (chatId: string): Promise<TurnPhoneState[]> => {
+  const turnPhoneStates = async (
+    chatId: string,
+    targetCharacterIds?: string[],
+  ): Promise<{ phones: TurnPhoneState[]; scene?: TurnSceneState }> => {
     const owned = (await phones.list()).filter(({ document }) =>
       document.provisioning.enabled
       && document.identity.ownerType === "character"
       && document.identity.chatScope.includes(chatId));
-    if (!owned.length) return [];
+    if (!owned.length) return { phones: [] };
 
     const chat = await api.runtime.persistence.getChat(chatId).catch(() => null);
-    if (!chat || chat.characterIds.length !== 1) return [];
-    const speaker = chat.characterIds[0];
+    if (!chat) return { phones: [] };
+    const targetIds = (targetCharacterIds ?? []).filter((id) => chat.characterIds.includes(id));
+    if (targetIds.length !== 1) return { phones: [] };
+    const speaker = targetIds[0];
     const phone = owned.find(({ document }) => document.identity.ownerId === speaker);
-    if (!phone) return [];
+    if (!phone) return { phones: [] };
 
     const { document } = phone;
     const phoneId = document.identity.phoneId;
@@ -699,7 +720,10 @@ export async function activate({ api }: CapabilityContext) {
     }
     const notes = await phones.getAppStorageKey(phoneId, "notes", "notes").catch(() => null);
     const firstNote = Array.isArray(notes) ? (notes[0] as { text?: unknown } | undefined) : undefined;
-    return [{
+    const tracked = api.runtime.persistence.getGameState
+      ? await api.runtime.persistence.getGameState(chatId).catch(() => null)
+      : null;
+    return { phones: [{
       ownerName: document.identity.ownerName,
       ownerType: document.identity.ownerType,
       clock: settings.storyClockOffsetMinutes
@@ -711,7 +735,11 @@ export async function activate({ api }: CapabilityContext) {
         ? { text: firstNote.text, fresh: !storySpokeAt || String((firstNote as { updatedAt?: unknown }).updatedAt ?? "") > storySpokeAt }
         : undefined,
       batteryLevel: settings.batteryLevel,
-    }];
+    }], scene: tracked ? {
+      time: tracked.time,
+      location: tracked.location,
+      weather: tracked.weather,
+    } : undefined };
   };
 
   /**
@@ -2630,9 +2658,10 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
    * it did everywhere before 2.4.2.
    */
   if (api.registerPromptContext) {
-    releases.push(api.registerPromptContext(async ({ chatId }) => {
+    releases.push(api.registerPromptContext(async ({ chatId, targetCharacterIds }) => {
       try {
-        return buildTurnContext(await turnPhoneStates(chatId));
+        const state = await turnPhoneStates(chatId, targetCharacterIds);
+        return buildTurnContext(state.phones, state.scene);
       } catch (error) {
         api.runtime.logger?.error(error, "[virtual-phone] prompt context failed; the turn continues without it");
         return null;
