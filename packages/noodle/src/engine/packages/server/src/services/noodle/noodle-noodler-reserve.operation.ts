@@ -150,9 +150,13 @@ export async function prepareNextNoodlerReservePost(
         payload.imagePrompt
       ) {
         const imageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
-        const imageConnection = imageConnectionId
-          ? await createConnectionsStorage(db).getWithKey(imageConnectionId)
-          : await createConnectionsStorage(db).getDefaultForImageGeneration();
+        // Fall back to the default image connection when a creator's mapped
+        // override was deleted (getWithKey returns null), instead of silently
+        // skipping scheduled image generation.
+        const imageConnection =
+          (imageConnectionId
+            ? await createConnectionsStorage(db).getWithKey(imageConnectionId)
+            : null) ?? (await createConnectionsStorage(db).getDefaultForImageGeneration());
         if (imageConnection) {
           try {
             const linkedPublicAccount = account.noodleAccountId

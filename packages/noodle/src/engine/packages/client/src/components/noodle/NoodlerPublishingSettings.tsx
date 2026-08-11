@@ -17,6 +17,7 @@ import {
   useRemoveNoodleCharacter,
 } from "../../hooks/use-noodle";
 import { useConnections } from "../../hooks/use-connections";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 import { Avatar } from "./NoodleShell";
 import { summarizeRefreshOutcomes } from "./noodle-auto-post";
 import type { NoodleSettingsUpdateInput, NoodlerFanArchetypeWeights } from "@marinara-engine/shared";
@@ -329,6 +330,9 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
             value={settings?.postsPerDay ?? 4}
             min={1}
             max={24}
+            onInvalid={() =>
+              toast.error(t("ui.noodle.noodlerfanactivity.boundedValueInvalid", { min: 1, max: 24 }))
+            }
             onCommit={(value, revert) =>
               updateSettings.mutate(
                 { postsPerDay: value },
@@ -492,15 +496,25 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
             <button
               type="button"
               onClick={async () => {
-                if (!window.confirm(t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorConfirm", {
-                  creator: profile.displayName,
-                }))) return;
+                const confirmed = await showConfirmDialog({
+                  title: t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName }),
+                  message: t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorConfirm", {
+                    creator: profile.displayName,
+                  }),
+                  confirmLabel: t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName }),
+                  tone: "destructive",
+                });
+                if (!confirmed) return;
                 try {
+                  // Delete the creator profile first: if the character-removal step
+                  // below then fails, the user still sees a consistent state (the
+                  // profile is gone) instead of a silently uninvited character with
+                  // a creator profile that still exists.
                   const source = data?.accounts.find((account) => account.id === profile.noodleAccountId);
+                  await deleteCreator.mutateAsync(profile.id);
                   if (source?.kind === "character" && source.invited) {
                     await removeCharacter.mutateAsync(source.entityId);
                   }
-                  await deleteCreator.mutateAsync(profile.id);
                 } catch (error) {
                   toast.error(errorMessage(error, t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorFailed")));
                 }

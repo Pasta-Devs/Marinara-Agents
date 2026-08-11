@@ -1,6 +1,6 @@
 # Noodle
 
-Noodle packages two local social roleplay surfaces without redesigning either interface. **Noodle** is the open social timeline where invited characters, personas, and optional generated ambient accounts can post and interact. **NoodleR** is the creator-feed side where the owner gives selected characters or personas separate Creator profiles, publishes public or locked posts, and simulates subscriptions and audience activity. NoodleR is not a private platform or a service for real creators, viewers, or payments.
+Noodle packages two local social roleplay surfaces. **Noodle** is the open social timeline where invited characters, personas, and optional generated ambient accounts can post and interact. **NoodleR** is the creator-feed side where the owner gives selected characters or personas separate Creator profiles, publishes public or locked posts, and simulates subscriptions and audience activity. NoodleR is not a private platform or a service for real creators, viewers, or payments.
 
 Find the package in **Agents → Download Agents**. Once installed and Marinara Engine restarts, **Noodle** appears as a second tab in Home's browser shell. Uninstalling the package removes that tab and stops its routes and background schedulers after restart.
 
@@ -35,7 +35,7 @@ Run `node scripts/evaluate-noodle-generation.mjs path/to/samples.json` against s
 
 ## Refresh diagnostics
 
-The Engine stores Noodle refresh diagnostics in `storage/tables/noodle_refresh_runs.json` and keeps a crash-recovery copy in `noodle_refresh_runs.json.bak`. After each completed or failed refresh, Noodle keeps the 100 most recent finished runs in both files. Running refreshes are retained until they finish. The first finished refresh after an upgrade also reduces an existing oversized history. This cleanup does not change Noodle posts, interactions, accounts, settings, or images.
+The Engine stores Noodle refresh diagnostics in `storage/tables/noodle_refresh_runs.json` and keeps a crash-recovery copy in `noodle_refresh_runs.json.bak`. After each completed or failed refresh, Noodle attempts to keep the 100 most recent finished runs in both files; this pruning is best effort, so a pruning failure is logged and does not fail the refresh itself. Running refreshes are retained until they finish. The first finished refresh after an upgrade also reduces an existing oversized history. This cleanup does not change Noodle posts, interactions, accounts, settings, or images.
 
 Rebuild only this package from the repository root with a neighboring Engine checkout:
 

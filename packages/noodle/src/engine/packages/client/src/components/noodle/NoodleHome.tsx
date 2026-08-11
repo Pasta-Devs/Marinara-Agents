@@ -2857,6 +2857,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       });
       composerValueRef.current = draft.content;
       composerHasTextRef.current = Boolean(draft.content.trim());
+      setComposerHasText(composerHasTextRef.current);
       setComposer(draft.content);
       if (modalComposerRef.current) modalComposerRef.current.value = draft.content;
       toast.success(localizeUi("ui.noodle.noodlehome.postDraftReady"));

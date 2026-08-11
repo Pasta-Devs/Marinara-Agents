@@ -1329,16 +1329,22 @@ export function createNoodleStorage(db: DB) {
           const publicAccount = account.noodleAccountId ? await this.getAccountById(account.noodleAccountId) : null;
           const currentSource = publicAccount ? await resolveNoodlerSourceSnapshot(db, publicAccount) : null;
           let baseline = account.settings.profile.noodlerSourceSnapshot;
-          if (
-            currentSource &&
-            (!baseline ||
-              ((disclosureMode === "hinted" || disclosureMode === "secret") &&
-                !isMinimizedNoodlerSourceSnapshot(baseline)))
-          ) {
+          const needsMinimization =
+            (disclosureMode === "hinted" || disclosureMode === "secret") &&
+            baseline &&
+            !isMinimizedNoodlerSourceSnapshot(baseline);
+          if (currentSource && (!baseline || needsMinimization)) {
             const minimized = minimizeNoodlerSourceSnapshot(
               currentSource,
               disclosureMode ?? "secret",
             );
+            const updated = await this.updateNoodlerSourceSnapshot(account.id, minimized);
+            baseline = updated?.settings.profile.noodlerSourceSnapshot ?? minimized;
+          } else if (!currentSource && needsMinimization && baseline) {
+            // The linked source account is gone, but a legacy full snapshot
+            // remains for a hinted/secret profile — minimize it in place rather
+            // than leaving it unminimized forever.
+            const minimized = minimizeNoodlerSourceSnapshot(baseline, disclosureMode ?? "secret");
             const updated = await this.updateNoodlerSourceSnapshot(account.id, minimized);
             baseline = updated?.settings.profile.noodlerSourceSnapshot ?? minimized;
           }

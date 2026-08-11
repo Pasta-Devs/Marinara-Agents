@@ -105,7 +105,9 @@ export async function generateInvitedNoodlePostDraft(
     topP: 0.95,
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(connection.model, "noodler_post"),
+    // The prompt always asks for imagePrompt (set to null); the strict schema
+    // must require the field too, or GPT-5.6 gets conflicting instructions.
+    responseFormat: noodleResponseFormat(connection.model, "noodler_post", { allowImagePrompt: true }),
   } as const;
   let response = await provider.chatComplete(messages, completionOptions);
   let raw = response.content ?? "";

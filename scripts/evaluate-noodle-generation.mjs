@@ -21,13 +21,17 @@ const negativeWords = new Set([
   "tired",
   "worthless",
 ]);
+const SAMPLE_KINDS = new Set(["post", "reply", "noodler"]);
 const normalized = parsed.map((sample, index) => {
   if (!sample || typeof sample !== "object") throw new Error(`Sample ${index} must be an object.`);
   if (typeof sample.content !== "string")
     throw new Error(`Sample ${index} must have a string "content" field.`);
   const content = sample.content.trim();
+  if (!content) throw new Error(`Sample ${index} has empty content.`);
+  if (sample.kind !== undefined && !SAMPLE_KINDS.has(sample.kind))
+    throw new Error(`Sample ${index} has an unsupported kind "${sample.kind}".`);
   const author = String(sample.author ?? sample.handle ?? "unknown");
-  const kind = sample.kind === "reply" ? "reply" : sample.kind === "noodler" ? "noodler" : "post";
+  const kind = sample.kind ?? "post";
   const words = content.toLocaleLowerCase().match(/[a-z]+/gu) ?? [];
   return {
     author,

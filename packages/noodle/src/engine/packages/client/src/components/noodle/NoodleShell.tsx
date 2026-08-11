@@ -505,7 +505,17 @@ export function NoodleShell({
                         activeView === "notifications" && "bg-[var(--noodle-accent)]/10",
                       )}
                     >
-                      <Bell size={23} />
+                      <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
+                        <Bell size={23} />
+                        {notificationCount > 0 && (
+                          <span
+                            data-component="NoodleView.NotificationBadge"
+                            className="absolute -right-2 -top-2 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.58rem] font-black leading-4 text-zinc-950 ring-2 ring-[var(--background)]"
+                          >
+                            {notificationBadgeLabel}
+                          </span>
+                        )}
+                      </span>
                       {localizeUi("settings.sections.notifications.title")}
                     </button>
                   )}
