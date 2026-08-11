@@ -1122,8 +1122,8 @@ test.describe("package-owned Noodle interface", () => {
     try {
       const postResponse = await page.request.post("/api/noodle/posts", {
         data: {
-          actorKind: "persona",
-          actorEntityId: personaId,
+          authorKind: "persona",
+          authorEntityId: personaId,
           content: markdown,
         },
       });
