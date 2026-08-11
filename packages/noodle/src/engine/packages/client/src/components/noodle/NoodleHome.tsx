@@ -192,6 +192,11 @@ type SocialSettingsSection = NonNullable<
   NoodleSettingsNavigationState["section"]
 >;
 
+// Package-owned default for the editable NoodleR generation guidance.
+// Keep in sync with NOODLER_DEFAULT_GENERATION_GUIDANCE in the server noodle.storage.ts.
+const NOODLER_DEFAULT_GENERATION_GUIDANCE =
+  "All NoodleR creators and viewers are adults (18+). NSFW and explicit content are allowed when appropriate to the creator's personality and current context, but never forced — stay true to each creator's voice rather than making every post sexual. This is an adult creator page: playful, flirty, suggestive teasing that plays to fans and hints at locked content is a normal, frequent part of the voice when it fits the creator. Vary content across teasers, casual updates, behind-the-scenes moments, fan questions, humor, promotion, flirtation, and project updates. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood — let each creator's own personality set the tone.";
+
 const SOCIAL_SETTINGS_SECTIONS: Record<
   SocialSettingsTab,
   Array<{ id: SocialSettingsSection; labelKey: string }>
@@ -5114,7 +5119,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-xs font-semibold">{localizeUi("ui.noodle.noodlehome.generationGuidance")}</p>
                       <span className="rounded-full border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--noodle-accent)]">
-                        {settings.noodlerGenerationGuidance === DEFAULT_NOODLE_SETTINGS.noodlerGenerationGuidance
+                        {settings.noodlerGenerationGuidance === NOODLER_DEFAULT_GENERATION_GUIDANCE
                           ? localizeUi("ui.noodle.noodlehome.default")
                           : localizeUi("settings.notifications.customSound.status.custom")}
                       </span>
@@ -5127,9 +5132,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 <div className="flex flex-wrap justify-end gap-2">
                   <button
                     type="button"
-                    disabled={updateSettings.isPending || settings.noodlerGenerationGuidance === DEFAULT_NOODLE_SETTINGS.noodlerGenerationGuidance}
+                    disabled={updateSettings.isPending || settings.noodlerGenerationGuidance === NOODLER_DEFAULT_GENERATION_GUIDANCE}
                     onClick={() => {
-                      const value = DEFAULT_NOODLE_SETTINGS.noodlerGenerationGuidance;
+                      const value = NOODLER_DEFAULT_GENERATION_GUIDANCE;
                       setNoodlerGenerationGuidanceDraft(value);
                       saveSettings({ noodlerGenerationGuidance: value });
                     }}
@@ -7034,7 +7039,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         title={localizeUi("ui.noodle.noodlehome.editNoodlerGuidance")}
         value={noodlerGenerationGuidanceDraft}
         onChange={setNoodlerGenerationGuidanceDraft}
-        placeholder={DEFAULT_NOODLE_SETTINGS.noodlerGenerationGuidance}
+        placeholder={NOODLER_DEFAULT_GENERATION_GUIDANCE}
         closeLabel={localizeUi("chat.delete.dialog.cancel")}
         overlayStyle={getNoodleAccentStyle(NOODLE_PINK)}
         footer={

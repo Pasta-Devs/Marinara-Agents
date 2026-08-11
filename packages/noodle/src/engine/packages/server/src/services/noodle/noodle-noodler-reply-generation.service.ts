@@ -55,7 +55,6 @@ export function buildNoodlerCreatorReplyMessages(input: {
     input.generationGuidance.trim(),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     "Keep the reply direct and brief: one or two short sentences, normally under 240 characters.",
-    "This is an adult creator page, so a little playful, flirty teasing toward the fan is welcome when it fits the creator's style. Keep it in that creator's own voice, and never force it where it does not suit them.",
     'Return exactly one JSON object with one string field named "content".',
     "Return JSON only. No prose outside the JSON object.",
   ]

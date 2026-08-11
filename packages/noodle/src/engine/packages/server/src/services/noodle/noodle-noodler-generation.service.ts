@@ -364,9 +364,9 @@ export function buildNoodlerPostMessages(input: {
     ...(guidance ? [guidance] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     NOODLER_FORMAT_PROMPTS[format],
-    "Vary creator content across teasers, casual updates, behind-the-scenes moments, fan questions, humor, promotion, flirtation, and project updates. Low mood or conflict must be uncommon and character-specific.",
-    "This is an adult creator page: playful, flirty, suggestive teasing that plays to fans and hints at locked content is a normal and frequent part of the voice when it fits the character. Explicit content is allowed. Never force sexual content onto a character it does not suit, and keep the flirtation in that creator's own style rather than a generic come-on.",
-    "Recent posts provide continuity. Do not copy their length, format, or mood by default.",
+    // Tone, mood balance, and the adult flirty lean are supplied by the editable
+    // generation guidance (see input.generationGuidance above), not hardcoded here.
+    "Recent posts provide continuity. Do not reuse their exact wording.",
     input.allowImagePrompt
       ? "Return one JSON object with title, content, and an optional imagePrompt (a short description of a single image to accompany the post, or null). Do not create a poll."
       : "Return one JSON object with title and content only. Do not create a poll or image prompt.",

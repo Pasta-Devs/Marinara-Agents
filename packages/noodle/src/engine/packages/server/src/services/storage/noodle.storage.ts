@@ -512,6 +512,13 @@ function isToggleInteractionType(type: NoodleInteractionType) {
   return type === "like" || type === "repost";
 }
 
+// Package-owned default for the editable NoodleR generation guidance. This is the
+// single tone prompt: creator personality, mood balance, and the adult flirty lean
+// all live here so they are visible and editable in NoodleR settings, not hardcoded.
+// Keep in sync with NOODLER_DEFAULT_GENERATION_GUIDANCE in the client NoodleHome.tsx.
+export const NOODLER_DEFAULT_GENERATION_GUIDANCE =
+  "All NoodleR creators and viewers are adults (18+). NSFW and explicit content are allowed when appropriate to the creator's personality and current context, but never forced — stay true to each creator's voice rather than making every post sexual. This is an adult creator page: playful, flirty, suggestive teasing that plays to fans and hints at locked content is a normal, frequent part of the voice when it fits the creator. Vary content across teasers, casual updates, behind-the-scenes moments, fan questions, humor, promotion, flirtation, and project updates. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood — let each creator's own personality set the tone.";
+
 export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
   const rawRecord = parseRecord(raw);
   const migratedMaxImagesPerRefresh =
@@ -521,7 +528,7 @@ export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
   const migratedNoodlerGenerationGuidance =
     rawRecord.noodlerGenerationGuidance ??
     rawRecord.privateGenerationGuidance ??
-    DEFAULT_NOODLE_SETTINGS.noodlerGenerationGuidance;
+    NOODLER_DEFAULT_GENERATION_GUIDANCE;
   const migratedImageCaptioningUseConnectionDefault =
     typeof rawRecord.imageCaptioningUseConnectionDefault === "boolean"
       ? rawRecord.imageCaptioningUseConnectionDefault
