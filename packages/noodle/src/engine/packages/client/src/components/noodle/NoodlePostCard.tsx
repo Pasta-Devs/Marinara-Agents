@@ -234,13 +234,12 @@ function renderNoodleMarkdown(
     if (fence) {
       const marker = fence[1]![0]!;
       const minimumLength = fence[1]!.length;
+      const closingFence = new RegExp(`^ {0,3}${marker}{${minimumLength},}\\s*$`);
       const codeLines: string[] = [];
       lineIndex += 1;
       while (
         lineIndex < lines.length &&
-        !new RegExp(`^ {0,3}${marker}{${minimumLength},}\\s*$`).test(
-          lines[lineIndex] ?? "",
-        )
+        !closingFence.test(lines[lineIndex] ?? "")
       ) {
         codeLines.push(lines[lineIndex] ?? "");
         lineIndex += 1;

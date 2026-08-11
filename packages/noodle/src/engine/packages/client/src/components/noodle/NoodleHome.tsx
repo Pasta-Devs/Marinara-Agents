@@ -5057,8 +5057,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               help={localizeUi("ui.noodle.socialsettings.noodlerGeneralHelp")}
             >
               <div className="space-y-4">
-                {/* Text and image connections are shared with Noodle. Editing them here
-                    writes the same settings so NoodleR does not need a separate surface. */}
+                {/* The text generation connection is shared with Noodle. Editing it here
+                    writes the same setting so NoodleR does not need a separate surface.
+                    The image connection is configured separately, in NoodlerPublishingSettings. */}
                 <div className="grid gap-4">
                   <label className="block space-y-1.5">
                     <FieldLabel

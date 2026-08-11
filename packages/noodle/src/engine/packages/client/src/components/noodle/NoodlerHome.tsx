@@ -1001,7 +1001,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     }
   };
 
-  const submitManualPost = async ({ profileId, title, body, access, image, poll, ...formatInput }: NoodlerPostSubmission) => {
+  const submitManualPost = async ({ profileId, title, body, access, image, poll, format }: NoodlerPostSubmission) => {
     await createPost.mutateAsync({
       targetAccountId: profileId,
       title,
@@ -1009,12 +1009,12 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       access,
       image,
       poll,
-      ...formatInput,
+      format,
     });
     toast.success(localizeUi("ui.noodle.noodlerhome.noodlerPostPublished"));
   };
 
-  const submitGuidedPost = async ({ profileId, title, body, access, image, poll, ...formatInput }: NoodlerPostSubmission) => {
+  const submitGuidedPost = async ({ profileId, title, body, access, image, poll, format }: NoodlerPostSubmission) => {
     const guide = serializeNoodlerPostGuide(title, body);
     const result = await generatePost.mutateAsync({
       mode: "noodler",
@@ -1023,7 +1023,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       access,
       image,
       poll,
-      ...formatInput,
+      format,
     });
     if (result.imagePromptReview) {
       setImagePromptReview({ accountId: profileId, items: [result.imagePromptReview] });
@@ -1465,7 +1465,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         <NoodlerFrame onBack={goToHub} title={localizeUi("settings.sections.notifications.title")}>
           <EmptyState
             title={localizeUi("settings.sections.notifications.title")}
-            detail={localizeUi("ui.noodle.viewerhub.noodlerCouldNotBeLoadedForThisPersona")}
+            detail={localizeUi("ui.noodle.noodlerhome.notificationsComingSoon")}
           />
         </NoodlerFrame>
       </NoodleShell>

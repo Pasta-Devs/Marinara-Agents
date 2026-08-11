@@ -99,6 +99,7 @@ export function useNoodlerImageConnections(enabled = true) {
     queryKey: noodleKeys.noodlerImageConnections(),
     queryFn: () => api.get<NoodlerImageConnections>("/noodle/noodler/image-connections"),
     enabled,
+    staleTime: 10_000,
   });
 }
 
@@ -336,8 +337,8 @@ export function useUpdateNoodlerStageProfile() {
   });
 }
 
-function useNoodlerAvatarMutation(
-  mutationFn: (input: { accountId: string; file?: File }) => Promise<NoodlerStageProfile>,
+function useNoodlerAvatarMutation<TInput extends { accountId: string }>(
+  mutationFn: (input: TInput) => Promise<NoodlerStageProfile>,
 ) {
   const qc = useQueryClient();
   return useMutation({
@@ -351,10 +352,10 @@ function useNoodlerAvatarMutation(
 }
 
 export function useUploadNoodlerAvatar() {
-  return useNoodlerAvatarMutation(({ accountId, file }) => {
+  return useNoodlerAvatarMutation(({ accountId, file }: { accountId: string; file: File }) => {
     const form = new FormData();
     form.append("payload", "{}");
-    form.append("file", file!);
+    form.append("file", file);
     return api.upload<NoodlerStageProfile>(
       `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/avatar`,
       form,
