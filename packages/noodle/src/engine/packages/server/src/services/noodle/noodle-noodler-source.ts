@@ -1,11 +1,69 @@
+import { createHash } from "node:crypto";
 import type {
   NoodleAccount,
+  NoodleIdentityDisclosure,
   NoodlerSourceSnapshot,
   NoodlerSourceStatus,
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { parseRecord } from "./noodle-public-support.js";
+
+const HINTED_THEME_TOKENS = [
+  "adventurous",
+  "artistic",
+  "bookish",
+  "calm",
+  "cheerful",
+  "creative",
+  "curious",
+  "friendly",
+  "gentle",
+  "inventive",
+  "kind",
+  "musical",
+  "outgoing",
+  "playful",
+  "reserved",
+  "scientific",
+  "sporty",
+  "technical",
+  "thoughtful",
+  "witty",
+] as const;
+
+function sourceDigest(value: string): string {
+  return createHash("sha256").update(value).digest("base64url");
+}
+
+function hintedThemes(value: string): string {
+  const words = new Set(value.toLocaleLowerCase().match(/[a-z]+/gu) ?? []);
+  return HINTED_THEME_TOKENS.filter((token) => words.has(token)).join(" ");
+}
+
+export function minimizeNoodlerSourceSnapshot(
+  snapshot: NoodlerSourceSnapshot,
+  mode: NoodleIdentityDisclosure,
+): NoodlerSourceSnapshot {
+  if (mode === "open") return snapshot;
+  return Object.fromEntries(
+    (Object.keys(snapshot) as Array<keyof NoodlerSourceSnapshot>).map((field) => {
+      const value = snapshot[field];
+      const themes = mode === "hinted" && field === "personality"
+        ? hintedThemes(value)
+        : "";
+      return [field, `${themes ? `${themes} ` : ""}revision:${sourceDigest(value)}`];
+    }),
+  ) as NoodlerSourceSnapshot;
+}
+
+export function isMinimizedNoodlerSourceSnapshot(
+  snapshot: NoodlerSourceSnapshot,
+): boolean {
+  return (Object.keys(snapshot) as Array<keyof NoodlerSourceSnapshot>).every(
+    (field) => /(?:^| )revision:[A-Za-z0-9_-]{43}$/u.test(snapshot[field]),
+  );
+}
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -66,4 +124,22 @@ export function compareNoodlerSourceSnapshots(
   return changes.length > 0
     ? { state: "changed", changes }
     : { state: "current" };
+}
+
+export function compareMinimizedNoodlerSourceSnapshot(
+  baseline: NoodlerSourceSnapshot,
+  current: NoodlerSourceSnapshot,
+  mode: NoodleIdentityDisclosure,
+): NoodlerSourceStatus {
+  const minimizedCurrent = minimizeNoodlerSourceSnapshot(current, mode);
+  const comparison = compareNoodlerSourceSnapshots(baseline, minimizedCurrent);
+  if (mode === "open" || comparison.state !== "changed") return comparison;
+  return {
+    state: "changed",
+    changes: comparison.changes.map((change) => ({
+      field: change.field,
+      previous: "Stored private revision",
+      current: "Current private revision",
+    })),
+  };
 }

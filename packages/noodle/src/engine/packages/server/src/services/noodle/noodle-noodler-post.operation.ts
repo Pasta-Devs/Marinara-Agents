@@ -13,6 +13,7 @@ import { newId } from "../../utils/id-generator.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { generateNoodlerPost } from "./noodle-noodler-generation.service.js";
+import type { NoodlerContentFormat } from "./noodle-noodler-generation.service.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
   persistNoodlerPostWithUploadedMedia,
@@ -77,7 +78,7 @@ async function invalidateNearFutureReserve(
  */
 export async function generateAndApplyNoodlerPost(
   db: DB,
-  request: NoodlerGenerationRequest,
+  request: NoodlerGenerationRequest & { format?: NoodlerContentFormat },
   media?: NoodlerPostMediaUpload,
   admissionMode?: ConnectionAdmissionMode,
 ): Promise<GenerateAndApplyNoodlerPostResult> {
@@ -185,6 +186,7 @@ export async function refreshAllNoodlerCreatorsNow(
       const result = await generateAndApplyNoodlerPost(db, {
         mode: "noodler",
         targetAccountId: account.id,
+        format: "caption",
         access: "locked",
       });
       // "disabled"/"busy" are no-op refreshes, not failures; surface them as skipped so the
@@ -228,6 +230,7 @@ export async function refreshTargetedNoodlerCreatorsNow(
       const result = await generateAndApplyNoodlerPost(db, {
         mode: "noodler",
         targetAccountId: accountId,
+        format: "caption",
         access: "locked",
         executionId,
       });
@@ -252,7 +255,11 @@ export async function refreshTargetedNoodlerCreatorsNow(
 
 export async function createNoodlerPost(
   db: DB,
-  input: NoodlerPostCreateInput,
+  input: NoodlerPostCreateInput & {
+    format?: NoodlerContentFormat;
+    lockedFollowUpPostId?: string;
+    lockedFollowUp?: { title: string; content: string };
+  },
   media?: NoodlerPostMediaUpload,
 ): Promise<CreateNoodlerPostResult> {
   const noodle = createNoodleStorage(db);
@@ -263,26 +270,69 @@ export async function createNoodlerPost(
     input.targetAccountId,
     async () => {
       const postId = media ? newId() : undefined;
+      let lockedFollowUpPostId = input.lockedFollowUpPostId;
+      const pendingLockedFollowUp = input.lockedFollowUp;
+      if (lockedFollowUpPostId) {
+        const followUp = await noodle.getNoodlerPostById(lockedFollowUpPostId);
+        if (
+          !followUp ||
+          followUp.authorAccountId !== input.targetAccountId ||
+          followUp.access !== "locked"
+        ) {
+          return { status: "noodler_account_not_found" } as const;
+        }
+      } else if (pendingLockedFollowUp) lockedFollowUpPostId = newId();
       const persist = (persistedMedia?: {
         imageUrl: string;
         noodlerMediaPath: string;
-      }) =>
-        noodle.createNoodlerPost({
-          id: postId,
-          authorAccountId: input.targetAccountId,
-          title: input.title,
-          content: input.content,
-          source: "manual",
-          access: input.access,
-          imageUrl: persistedMedia?.imageUrl ?? null,
-          metadata: {
-            ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
-            ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
-            ...(persistedMedia
-              ? { noodlerMediaPath: persistedMedia.noodlerMediaPath }
-              : {}),
-          },
-        });
+      }) => {
+        const create = async () => {
+          let createdFollowUp = false;
+          try {
+            if (pendingLockedFollowUp && lockedFollowUpPostId) {
+              const followUp = await noodle.createNoodlerPost({
+                id: lockedFollowUpPostId,
+                authorAccountId: input.targetAccountId,
+                title: pendingLockedFollowUp.title,
+                content: pendingLockedFollowUp.content,
+                source: "manual",
+                access: "locked",
+                metadata: { noodlerContentFormat: "long_form" },
+              });
+              if (!followUp) return null;
+              createdFollowUp = true;
+            }
+            const post = await noodle.createNoodlerPost({
+              id: postId,
+              authorAccountId: input.targetAccountId,
+              title: input.title,
+              content: input.content,
+              source: "manual",
+              access: input.access,
+              imageUrl: persistedMedia?.imageUrl ?? null,
+              metadata: {
+                noodlerContentFormat: input.format ?? "caption",
+                ...(lockedFollowUpPostId
+                  ? { noodlerLockedFollowUpPostId: lockedFollowUpPostId }
+                  : {}),
+                ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
+                ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
+                ...(persistedMedia
+                  ? { noodlerMediaPath: persistedMedia.noodlerMediaPath }
+                  : {}),
+              },
+            });
+            if (!post && createdFollowUp && lockedFollowUpPostId)
+              await noodle.deleteNoodlerPost(lockedFollowUpPostId);
+            return post;
+          } catch (error) {
+            if (createdFollowUp && lockedFollowUpPostId)
+              await noodle.deleteNoodlerPost(lockedFollowUpPostId);
+            throw error;
+          }
+        };
+        return create();
+      };
       const post =
         media && postId
           ? await persistNoodlerPostWithUploadedMedia(

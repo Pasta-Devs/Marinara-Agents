@@ -1,5 +1,6 @@
 import type { DB } from "../../db/connection.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { resolveNoodlerImageConnectionId } from "./noodler-image-connections.js";
 import {
   createNoodleStorage,
   noodlerReservePolicyFingerprint,
@@ -137,6 +138,7 @@ export async function prepareNextNoodlerReservePost(
         request: {
           mode: "noodler",
           targetAccountId: account.id,
+          format: "caption",
           access: "locked",
           noodlerPostGuide: `Write a standalone post appropriate for publication at ${publishAt}. Do not refer to events after the current moment.`,
         },
@@ -147,11 +149,14 @@ export async function prepareNextNoodlerReservePost(
         account.settings.scheduler.autoPosting?.imagesEnabled &&
         payload.imagePrompt
       ) {
-        const imageConnection = settings.imageGenerationConnectionId
-          ? await createConnectionsStorage(db).getWithKey(
-              settings.imageGenerationConnectionId,
-            )
-          : await createConnectionsStorage(db).getDefaultForImageGeneration();
+        const imageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
+        // Fall back to the default image connection when a creator's mapped
+        // override was deleted (getWithKey returns null), instead of silently
+        // skipping scheduled image generation.
+        const imageConnection =
+          (imageConnectionId
+            ? await createConnectionsStorage(db).getWithKey(imageConnectionId)
+            : null) ?? (await createConnectionsStorage(db).getDefaultForImageGeneration());
         if (imageConnection) {
           try {
             const linkedPublicAccount = account.noodleAccountId

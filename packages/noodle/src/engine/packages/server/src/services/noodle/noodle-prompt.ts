@@ -25,6 +25,12 @@ export const NOODLE_PERSONA_IDENTITY_INSTRUCTION =
   "- Every persona account is a separate user identity. Preserve the accountKey on historical posts and replies: changing the currently selected persona never changes, merges, or reattributes activity created by another persona.";
 export const NOODLE_UNIQUE_CONTENT_INSTRUCTION =
   "- Never reuse the same message text for more than one post or reply by the same account. In particular, do not copy a new post's content into a reply or duplicate a reply as a new post.";
+export const NOODLE_SOCIAL_LENGTH_INSTRUCTION =
+  "- Keep normal posts short: usually 40-280 characters. Keep replies to one or two short sentences. Use longer text only when the account and topic clearly call for an uncommon long-form post.";
+export const NOODLE_CONTENT_MIX_INSTRUCTION =
+  "- Vary the feed across casual updates, humor, questions, useful observations, teasing, affection, projects, promotion, and occasional conflict or low mood. Drama, hostility, anxiety, and sadness are possibilities, not the default mood or a quota.";
+export const NOODLE_HISTORY_MOOD_INSTRUCTION =
+  "- Use recent activity for facts, relationships, and continuity. Do not copy its length, format, or emotional mood by default; let each account's present personality and situation set the tone.";
 export const NOODLE_TIMELINE_BASE_DEFAULT_PROMPT = [
   "You write a fake social media timeline for Marinara Engine's in-app parody site called Noodle.",
   NOODLE_ADULT_PLATFORM_POLICY,
@@ -34,6 +40,9 @@ export const NOODLE_TIMELINE_BASE_DEFAULT_PROMPT = [
   "- Do not make an account interact with the same existing post again when it has already liked, reposted, voted, or replied there, unless that account was tagged or is answering a direct response to its own comment. Never make an account reply to its own comment.",
   "- Avoid repeating an account's recent post topic or phrasing. Continue an existing thread only when new activity gives the account a reason to return.",
   NOODLE_UNIQUE_CONTENT_INSTRUCTION,
+  NOODLE_SOCIAL_LENGTH_INSTRUCTION,
+  NOODLE_CONTENT_MIX_INSTRUCTION,
+  NOODLE_HISTORY_MOOD_INSTRUCTION,
   NOODLE_PERSONA_AUTHORSHIP_INSTRUCTION,
   NOODLE_PERSONA_IDENTITY_INSTRUCTION,
   "- For each interaction, set either targetTempId or targetPostId and set the unused target field to null.",
@@ -60,9 +69,6 @@ const NOODLE_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS = [
 export function noodleCreativeFormatInstructions(allowRandomUsers: boolean): readonly string[] {
   return allowRandomUsers ? NOODLE_CREATIVE_FORMAT_INSTRUCTIONS : NOODLE_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS;
 }
-/** Legacy single-line tone instruction, used when `enableEnhancedTimelineWriting` is off. */
-export const NOODLE_LEGACY_TONE_INSTRUCTION =
-  "- Characters should act in character but like people posting online: funny, messy, indirect, petty, affectionate, dramatic, vulgar, or casual as fits them.";
 export const NOODLE_TONE_INSTRUCTIONS = [
   "- Characters post like real people online (funny, messy, indirect, petty, affectionate, dramatic, vulgar, or casual) — but which of these fits, and how much, must come from each character's own Personality/Description/Backstory below, not a default upbeat voice. Do not make every account sound equally enthusiastic, chatty, or friendly.",
   "- Before writing each account's posts/replies, briefly ground yourself in that account's stated personality traits (guarded, blunt, anxious, arrogant, deadpan, etc.) and let sentence length, punctuation, capitalization, and emoji use vary accordingly. A withdrawn or hostile character should not sound like an enthusiastic extrovert.",
@@ -87,7 +93,7 @@ export const NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION =
  */
 export function noodleTimelineVoiceDefaultText(enhanced: boolean, allowRandomUsers = true): string {
   return [
-    ...(enhanced ? NOODLE_TONE_INSTRUCTIONS : [NOODLE_LEGACY_TONE_INSTRUCTION]),
+    ...NOODLE_TONE_INSTRUCTIONS,
     ...(allowRandomUsers ? [NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION] : []),
     ...noodleCreativeFormatInstructions(allowRandomUsers),
     ...(enhanced ? [NOODLE_CONGRUENCY_INSTRUCTION] : []),

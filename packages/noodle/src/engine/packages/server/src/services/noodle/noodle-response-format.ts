@@ -1,5 +1,9 @@
 import { isOpenAIGpt56Model } from "@marinara-engine/shared";
 
+const NOODLE_POST_HARD_MAX_LENGTH = 4000;
+const NOODLE_REPLY_HARD_MAX_LENGTH = 2000;
+const NOODLER_TITLE_HARD_MAX_LENGTH = 200;
+
 export const NOODLE_JSON_OUTPUT_HEADING = "# JSON Output Format";
 
 const nullableString = { type: ["string", "null"] } as const;
@@ -30,7 +34,7 @@ const timelineSchema = {
         properties: {
           tempId: { type: "string" },
           authorHandle: { type: "string" },
-          content: { type: "string" },
+          content: { type: "string", maxLength: NOODLE_POST_HARD_MAX_LENGTH },
           imagePrompt: nullableString,
           attachGalleryImage: { type: "boolean" },
           poll: pollSchema,
@@ -56,7 +60,7 @@ const timelineSchema = {
           targetPostId: nullableString,
           parentInteractionId: nullableString,
           type: { type: "string", enum: ["like", "repost", "reply", "vote"] },
-          content: nullableString,
+          content: { type: ["string", "null"], maxLength: NOODLE_REPLY_HARD_MAX_LENGTH },
           pollOptionIndex: nullableInteger,
         },
         required: [
@@ -111,17 +115,22 @@ const profilesSchema = {
   additionalProperties: false,
 } as const;
 
-const noodlerPostSchema = {
-  type: "object",
-  properties: {
-    title: { type: ["string", "null"] },
-    content: { type: "string" },
-    // strict mode has no optional properties — nullable + required is how optionality is spelled.
-    imagePrompt: { type: ["string", "null"] },
-  },
-  required: ["title", "content", "imagePrompt"],
-  additionalProperties: false,
-} as const;
+function noodlerPostSchema(allowImagePrompt: boolean) {
+  return {
+    type: "object",
+    properties: {
+      title: { type: ["string", "null"], maxLength: NOODLER_TITLE_HARD_MAX_LENGTH },
+      content: { type: "string", maxLength: NOODLE_POST_HARD_MAX_LENGTH },
+      ...(allowImagePrompt
+        ? { imagePrompt: { type: ["string", "null"], maxLength: NOODLE_REPLY_HARD_MAX_LENGTH } }
+        : {}),
+    },
+    required: allowImagePrompt
+      ? ["title", "content", "imagePrompt"]
+      : ["title", "content"],
+    additionalProperties: false,
+  } as const;
+}
 
 const noodlerProfileSchema = {
   type: "object",
@@ -144,7 +153,7 @@ const noodlerProfileSchema = {
 
 const noodlerReplySchema = {
   type: "object",
-  properties: { content: { type: "string" } },
+  properties: { content: { type: "string", maxLength: NOODLE_REPLY_HARD_MAX_LENGTH } },
   required: ["content"],
   additionalProperties: false,
 } as const;
@@ -177,6 +186,7 @@ export function noodleResponseFormat(
     | "noodler_profile"
     | "noodler_reply"
     | "noodler_fan_activity",
+  options: { allowImagePrompt?: boolean } = {},
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };
   const schema =
@@ -200,7 +210,7 @@ export function noodleResponseFormat(
                   required: ["activities"],
                   additionalProperties: false,
                 }
-              : noodlerPostSchema;
+              : noodlerPostSchema(options.allowImagePrompt === true);
   return {
     type: "json_schema",
     name:

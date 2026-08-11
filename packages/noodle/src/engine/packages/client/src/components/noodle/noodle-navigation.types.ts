@@ -30,8 +30,10 @@ export type NoodleSettingsNavigationState = {
 export type NoodlerNavigationState =
   /** `onboarding` is set by the opt-in gate so the hub opens the first-run wizard on arrival. */
   | { mode: "noodler"; view: "hub"; onboarding?: boolean }
+  | { mode: "noodler"; view: "search" }
+  | { mode: "noodler"; view: "notifications" }
   | { mode: "noodler"; view: "profiles"; returnToSettings?: NoodleSettingsNavigationState }
-  | { mode: "noodler"; view: "profile"; accountId: string; returnToSettings?: NoodleSettingsNavigationState }
+  | { mode: "noodler"; view: "profile"; accountId: string | null; returnToSettings?: NoodleSettingsNavigationState }
   | { mode: "noodler"; view: "create-profile"; noodleAccountId: string };
 
 export type NoodleNavigationState =

@@ -479,11 +479,55 @@ export function NoodleShell({
                     <Home size={23} />
                     {homeLabel}
                   </button>
+                  {onOpenSearch && (
+                    <button
+                      type="button"
+                      onClick={onOpenSearch}
+                      aria-current={activeView === "search" ? "page" : undefined}
+                      className={cn(
+                        "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        activeView === "search" && "bg-[var(--noodle-accent)]/10",
+                      )}
+                    >
+                      <Search size={23} />
+                      {noodlerActive
+                        ? localizeUi("ui.noodle.noodleshell.discover")
+                        : localizeUi("ui.noodle.noodlehome.searchNoodle")}
+                    </button>
+                  )}
+                  {onOpenNotifications && (
+                    <button
+                      type="button"
+                      onClick={onOpenNotifications}
+                      aria-current={activeView === "notifications" ? "page" : undefined}
+                      className={cn(
+                        "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        activeView === "notifications" && "bg-[var(--noodle-accent)]/10",
+                      )}
+                    >
+                      <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
+                        <Bell size={23} />
+                        {notificationCount > 0 && (
+                          <span
+                            data-component="NoodleView.NotificationBadge"
+                            className="absolute -right-2 -top-2 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.58rem] font-black leading-4 text-zinc-950 ring-2 ring-[var(--background)]"
+                          >
+                            {notificationBadgeLabel}
+                          </span>
+                        )}
+                      </span>
+                      {localizeUi("settings.sections.notifications.title")}
+                    </button>
+                  )}
                   {onOpenProfile && (
                     <button
                       type="button"
                       onClick={onOpenProfile}
-                      className="flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                      aria-current={activeView === "profile" ? "page" : undefined}
+                      className={cn(
+                        "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        activeView === "profile" && "bg-[var(--noodle-accent)]/10",
+                      )}
                     >
                       <User size={23} />
                       {localizeUi("ui.noodle.noodlehome.profile")}
@@ -492,7 +536,11 @@ export function NoodleShell({
                   <button
                     type="button"
                     onClick={onOpenSettings}
-                    className="flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)]"
+                    aria-current={activeView === "settings" ? "page" : undefined}
+                    className={cn(
+                      "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)]",
+                      activeView === "settings" && "bg-[var(--noodle-accent)]/10",
+                    )}
                   >
                     <Settings2 size={23} />
                     {localizeUi("navigation.topbar.settings")}

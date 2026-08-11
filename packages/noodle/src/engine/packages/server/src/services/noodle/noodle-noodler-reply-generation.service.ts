@@ -11,10 +11,7 @@ import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
 import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import {
-  resolveStoredChatOptions,
-  resolveStoredMaxTokens,
-} from "../generation/generation-parameters.js";
+import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
@@ -22,7 +19,6 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
-import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
   noodlerIdentityInstruction,
@@ -58,6 +54,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
+    "Keep the reply direct and brief: one or two short sentences, normally under 240 characters.",
     'Return exactly one JSON object with one string field named "content".',
     "Return JSON only. No prose outside the JSON object.",
   ]
@@ -137,22 +134,19 @@ export async function generateNoodlerCreatorReply(input: {
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {
     model: input.connection.model,
-    maxTokens: clampGenerationMaxOutputTokens({
-      provider: input.connection.provider as APIProvider,
-      model: input.connection.model,
-      maxTokens: resolveStoredMaxTokens(
-        input.connection.defaultParameters,
-        512,
-      ),
-      maxTokensOverride: input.connection.maxTokensOverride,
-    }),
-    temperature: 0.9,
-    topP: 0.95,
     ...resolveStoredChatOptions(
       input.connection.defaultParameters,
       input.connection.provider,
       input.connection.model,
     ),
+    maxTokens: clampGenerationMaxOutputTokens({
+      provider: input.connection.provider as APIProvider,
+      model: input.connection.model,
+      maxTokens: 512,
+      maxTokensOverride: input.connection.maxTokensOverride,
+    }),
+    temperature: 0.9,
+    topP: 0.95,
     stream: false,
     debugMode,
     responseFormat: noodleResponseFormat(
@@ -162,15 +156,15 @@ export async function generateNoodlerCreatorReply(input: {
   } as const;
   logDebugOverride(
     debugMode,
-    "[debug/noodler-reply] Prompt sent to model:\n%s",
-    formatNoodleMessagesForLog(messages),
+    "[debug/noodler-reply] Prompt prepared with %d messages; private prompt content is redacted.",
+    messages.length,
   );
   const response = await provider.chatComplete(messages, options);
   const content = response.content ?? "";
   logDebugOverride(
     debugMode,
-    "[debug/noodler-reply] Raw model response (attempt 1):\n%s",
-    content,
+    "[debug/noodler-reply] Model response received (%d characters); content is redacted.",
+    content.length,
   );
   const parsed = parseGameJsonish(content);
   const generated = noodleGeneratedNoodlerReplySchema.parse(

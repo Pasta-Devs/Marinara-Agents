@@ -29,6 +29,7 @@ import { resolveIllustratorCharacterReferences } from "../image/illustrator-refe
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
+import { resolveNoodlerImageConnectionId } from "./noodler-image-connections.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./noodle-image-retry.js";
 import { rewriteNoodleImagePrompt } from "./noodle-image-prompt-rewrite.js";
@@ -307,17 +308,6 @@ export function createNoodlerNoodleImagesService(db: DB) {
       | { ok: false; error: "missing_connection"; message: string }
     > {
       const settings = await noodle.getSettings();
-      const imageConnection = settings.imageGenerationConnectionId
-        ? await connections.getWithKey(settings.imageGenerationConnectionId)
-        : await connections.getDefaultForImageGeneration();
-      if (!imageConnection) {
-        return {
-          ok: false,
-          error: "missing_connection",
-          message: "Select a Noodle image generation connection first.",
-        };
-      }
-
       let finalized = 0;
       for (const promptOverride of input.prompts) {
         const claimToken = newId();
@@ -333,6 +323,18 @@ export function createNoodlerNoodleImagesService(db: DB) {
           claimed.authorAccountId,
         );
         if (!account) {
+          await noodle.releasePostImageClaim(claimed.id, claimToken);
+          continue;
+        }
+        const imageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
+        // Fall back to the default image connection when a creator's mapped
+        // override was deleted (getWithKey returns null), instead of silently
+        // disabling image generation for that creator.
+        const imageConnection =
+          (imageConnectionId
+            ? await connections.getWithKey(imageConnectionId)
+            : null) ?? (await connections.getDefaultForImageGeneration());
+        if (!imageConnection) {
           await noodle.releasePostImageClaim(claimed.id, claimToken);
           continue;
         }

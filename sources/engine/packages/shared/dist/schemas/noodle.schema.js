@@ -6,6 +6,14 @@ import { avatarCropSchema } from "./avatar-crop.schema.js";
 export const noodleAccountKindSchema = z.enum(["persona", "character", "random_user"]);
 export const noodleInteractionTypeSchema = z.enum(["like", "repost", "reply", "vote"]);
 export const noodlePostAccessSchema = z.enum(["public", "locked"]);
+export const noodlerContentFormatSchema = z.enum(["caption", "teaser", "announcement", "long_form"]);
+export const DEFAULT_NOODLER_CONTENT_FORMAT = "caption";
+export const NOODLER_CONTENT_FORMATS = {
+    caption: { title: "forbidden", targetMin: 40, targetMax: 500 },
+    teaser: { title: "forbidden", targetMin: 40, targetMax: 280 },
+    announcement: { title: "required", targetMin: 80, targetMax: 1000 },
+    long_form: { title: "required", targetMin: 500, targetMax: 4000 },
+};
 export const DEFAULT_NOODLE_WALLET_COINS = 999_999;
 export const noodleParticipantSelectionModeSchema = z.enum(["all", "random_range", "exact"]);
 export const noodleCarryoverModeSchema = z.enum(["off", "conversation", "roleplay", "game", "all"]);
@@ -472,17 +480,83 @@ const noodlerPostTitleSchema = noodlerPostTitleValueSchema.optional().transform(
 const noodlerPostTitleUpdateSchema = noodlerPostTitleValueSchema
     .optional()
     .transform((value) => (value === undefined ? undefined : value?.trim() || null));
+function validateNoodlerContentFormat(input, ctx) {
+    const controls = NOODLER_CONTENT_FORMATS[input.format];
+    if ("title" in input && controls.title === "required" && !input.title) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["title"],
+            message: `${input.format} posts require a title.`,
+        });
+    }
+    if ("title" in input && controls.title === "forbidden" && input.title) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["title"],
+            message: `${input.format} posts do not use a title.`,
+        });
+    }
+    if ("content" in input && input.format !== "long_form" && input.content.length > controls.targetMax) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.too_big,
+            maximum: controls.targetMax,
+            inclusive: true,
+            type: "string",
+            path: ["content"],
+            message: `Only long_form posts can exceed ${controls.targetMax} characters.`,
+        });
+    }
+    const hasFollowUp = Boolean(input.lockedFollowUpPostId || input.lockedFollowUp);
+    if (input.lockedFollowUpPostId && input.lockedFollowUp) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["lockedFollowUp"],
+            message: "Link an existing locked follow-up or create one, not both.",
+        });
+    }
+    if (input.format !== "teaser" && hasFollowUp) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["format"],
+            message: "Only teaser posts can link a locked follow-up.",
+        });
+    }
+    if (input.format === "teaser" && !hasFollowUp) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["lockedFollowUp"],
+            message: "Teaser posts require a locked follow-up.",
+        });
+    }
+    if (input.format === "teaser" && input.access !== "public") {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["access"],
+            message: "Teaser posts must be public.",
+        });
+    }
+}
 const noodlerPostCreateShape = {
     targetAccountId: z.string().min(1),
+    format: noodlerContentFormatSchema.default(DEFAULT_NOODLER_CONTENT_FORMAT),
     title: noodlerPostTitleSchema,
     content: z.string().trim().max(NOODLER_POST_CONTENT_MAX_LENGTH),
     uploadedImageUrl: z.string().trim().url().max(2000).optional(),
     imageCrop: noodlePostImageCropSchema.optional(),
     poll: noodlePollInputSchema.nullable().optional(),
+    lockedFollowUpPostId: z.string().min(1).optional(),
+    lockedFollowUp: z
+        .object({
+        title: z.string().trim().min(1).max(NOODLER_POST_TITLE_MAX_LENGTH),
+        content: z.string().trim().min(1).max(NOODLER_POST_CONTENT_MAX_LENGTH),
+    })
+        .strict()
+        .optional(),
 };
 export const noodlerPostCreateWithMediaSchema = z
     .object({ ...noodlerPostCreateShape, access: noodlePostAccessSchema.default("public") })
-    .strict();
+    .strict()
+    .superRefine(validateNoodlerContentFormat);
 export const noodlerPostCreateSchema = noodlerPostCreateWithMediaSchema.superRefine((input, ctx) => {
     if (!input.content && !input.poll && !input.uploadedImageUrl) {
         ctx.addIssue({
@@ -593,6 +667,7 @@ const noodlerGenerationRequestShape = {
     mode: z.literal("noodler"),
     ...noodleGenerationConnectionShape,
     targetAccountId: z.string().min(1),
+    format: noodlerContentFormatSchema.default(DEFAULT_NOODLER_CONTENT_FORMAT),
     executionId: z.string().min(1).max(128).optional(),
     noodlerPostGuide: noodlerPostGuideSchema.optional(),
     noodlerProjectWork: noodlerProjectWorkSchema.optional(),
@@ -602,10 +677,19 @@ const noodlerGenerationRequestShape = {
     uploadedImageUrl: z.string().trim().url().max(2000).optional(),
     imageCrop: noodlePostImageCropSchema.optional(),
     poll: noodlePollInputSchema.nullable().optional(),
+    lockedFollowUpPostId: z.string().min(1).optional(),
+    lockedFollowUp: z
+        .object({
+        title: z.string().trim().min(1).max(NOODLER_POST_TITLE_MAX_LENGTH),
+        content: z.string().trim().min(1).max(NOODLER_POST_CONTENT_MAX_LENGTH),
+    })
+        .strict()
+        .optional(),
 };
 export const noodlerGenerationRequestSchema = z
     .object({ ...noodlerGenerationRequestShape, access: noodlePostAccessSchema.default("public") })
-    .strict();
+    .strict()
+    .superRefine(validateNoodlerContentFormat);
 export const noodleGenerationRequestSchema = z.union([
     noodlePublicGenerationRequestSchema,
     noodlerGenerationRequestSchema,
