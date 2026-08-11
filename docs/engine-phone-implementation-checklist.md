@@ -51,7 +51,7 @@ is deterministic routing, state, storage, UI, and prompt assembly.
 
 - [x] Preserve the payload in registered capability commands.
 - [x] Add package action schemas and payload limits.
-- [ ] Add capability action handlers to the runtime API.
+- [x] Add capability action handlers to the runtime API.
 - [x] Resolve actions only for packages enabled in the current chat.
 - [x] Advertise enabled action names to the existing main generation.
 - [ ] Support native tool providers and fallback bracket tags through one
@@ -62,20 +62,20 @@ is deterministic routing, state, storage, UI, and prompt assembly.
 - [x] Persist assistant content before dispatching actions.
 - [ ] Keep valid prose when an optional action fails.
 - [ ] Record action status and error details.
-- [ ] Add action idempotency keys.
+- [x] Add action idempotency keys.
 - [ ] Do not retry actions automatically during regeneration.
 
 ### Durable Roleplay Events
 
-- [ ] Add Engine-owned roleplay event storage.
+- [x] Add Engine-owned roleplay event storage.
 - [ ] Support public, character-private, and user-only audiences.
 - [ ] Render events as narrator lines without exposing raw system-message
   creation to packages.
 - [ ] Add automatic, user-approval, and transient-only event modes.
-- [ ] Link events to source message and swipe.
+- [x] Link events to source message and swipe.
 - [ ] Make events visible, deletable, exportable, and branch-aware.
 - [ ] Prevent private events from entering multi-character prompts.
-- [ ] Add event idempotency keys.
+- [x] Add event idempotency keys.
 
 ### Package Runtime And Permissions
 
@@ -117,21 +117,21 @@ is deterministic routing, state, storage, UI, and prompt assembly.
 
 ### Character-Initiated Actions
 
-- [ ] Register a strict Phone action schema.
-- [ ] Support `send_message`.
+- [x] Register a strict Phone action schema.
+- [x] Support `send_message`.
 - [ ] Support `mark_notification`.
 - [ ] Support `incoming_call`.
 - [ ] Support `save_photo` after shared media exists.
-- [ ] Validate the target contact belongs to the active Phone directory.
-- [ ] Reject cross-chat and unrelated-phone targets.
-- [ ] Store incoming messages in the correct Phone thread.
+- [x] Validate the target contact belongs to the active Phone directory.
+- [x] Reject cross-chat and unrelated-phone targets.
+- [x] Store incoming messages in the correct Phone thread.
 - [ ] Add delivery and unread state.
 - [ ] Add action result feedback to the Engine.
 - [ ] Prevent duplicate delivery during regeneration.
 
 ### Durable Story Events
 
-- [ ] Publish a private Phone notification event.
+- [x] Publish a private Phone notification event.
 - [ ] Publish a private incoming-call event.
 - [ ] Publish a public Phone event only after explicit configuration.
 - [ ] Keep normal Phone state transient when no story event is needed.

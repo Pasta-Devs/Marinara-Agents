@@ -78,6 +78,20 @@ interface CapabilityContext {
           extra: Record<string, unknown>;
           createdAt: string;
         }): Promise<unknown>;
+        appendRoleplayEvent?(input: {
+          id: string;
+          chatId: string;
+          messageId: string;
+          swipeIndex: number;
+          sourcePackageId: string;
+          eventType: string;
+          subjectCharacterIds: string[];
+          audience: "public" | "user-only" | { characterIds: string[] };
+          text: string;
+          data: unknown;
+          createdAt: string;
+          idempotencyKey: string;
+        }): Promise<unknown>;
       };
       resources: {
         listCharacters(ids?: string[]): Promise<Array<{ id: string; data: unknown }>>;
@@ -132,7 +146,17 @@ interface CapabilityContext {
       commandType: string;
       tags: string[];
       maxPayloadChars?: number;
-      handler?: (action: { payload: string | null; chatId: string; characterId: string | null }) => void | Promise<void>;
+      description?: string;
+      payloadExample?: string;
+      validatePayload?: (payload: string | null) => boolean;
+      handler?: (action: {
+        payload: string | null;
+        chatId: string;
+        characterId: string | null;
+        sourceMessageId: string;
+        swipeIndex: number;
+        branchChatId: string;
+      }) => void | Promise<void>;
     }): () => void;
   };
 }
@@ -2680,7 +2704,17 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
       maxPayloadChars: 1_200,
       description: "Use when you want to send a message from your character's Phone to a known contact. Do not use it for ordinary spoken dialogue.",
       payloadExample: '{"action":"send_message","contactId":"CONTACT_PHONE_ID","body":"short message"}',
-      handler: async ({ payload, chatId, characterId }) => {
+      validatePayload: (payload) => {
+        if (!payload) return false;
+        try {
+          const value = JSON.parse(payload) as Record<string, unknown>;
+          return value.action === "send_message" && typeof value.contactId === "string"
+            && typeof value.body === "string" && value.body.trim().length > 0 && value.body.length <= 500;
+        } catch {
+          return false;
+        }
+      },
+      handler: async ({ payload, chatId, characterId, sourceMessageId, swipeIndex, branchChatId }) => {
         if (!payload || !characterId) return;
         let action: { action?: unknown; contactId?: unknown; body?: unknown };
         try {
@@ -2701,6 +2735,20 @@ Inside section bodies, wrap two to four names, places, products or events in [[d
           document.phoneId === action.contactId || document.source === action.contactId);
         if (!contact) return;
         await messaging.send(phone.document.identity.phoneId, contact.document.phoneId, action.body);
+        await api.runtime.persistence.appendRoleplayEvent?.({
+          id: randomUUID(),
+          chatId: branchChatId,
+          messageId: sourceMessageId,
+          swipeIndex,
+          sourcePackageId: "virtual-phone",
+          eventType: "phone.message.sent",
+          subjectCharacterIds: [characterId],
+          audience: { characterIds: [characterId] },
+          text: `${phone.document.identity.ownerName}'s Phone sends a message to ${contact.document.name}.`,
+          data: { contactId: contact.document.phoneId },
+          createdAt: new Date().toISOString(),
+          idempotencyKey: `${branchChatId}:${sourceMessageId}:${swipeIndex}:phone.message.sent`,
+        });
       },
     }));
   }
