@@ -194,19 +194,30 @@ export function NoodleTextContent({
   onOpenProfile: (account: NoodleAccount) => void;
   className?: string;
 }) {
-  const { t: localizeUi } = useUiTranslation();
-  return (
-    <div className={cn("text-sm [&>*+*]:mt-2", className)}>
-      {renderNoodleMarkdown(content, {
+  const { t: localizeUi, i18n } = useUiTranslation();
+  // The public timeline renders 150+ of these, and the parse ran on every render of
+  // every card — the reason returning to Noodle from NoodleR felt slow while the trip
+  // out did not. The parse output embeds these callbacks, so memoizing on them
+  // directly would either miss every time (they are fresh each render) or freeze a
+  // stale handler into the tree. Hold them in a ref and hand the parser a stable
+  // wrapper instead; then the only real inputs are the text and the handle map.
+  const handlers = useRef({ onOpenProfile, localizeUi });
+  handlers.current = { onOpenProfile, localizeUi };
+  const rendered = useMemo(
+    () =>
+      renderNoodleMarkdown(content, {
         accountByHandle,
-        onOpenProfile,
+        onOpenProfile: (account) => handlers.current.onOpenProfile(account),
         mentionLabel: (handle) =>
-          localizeUi("ui.noodle.noodletextcontent.viewValue1Profile", {
-            value1: handle,
-          }),
-      })}
-    </div>
+          handlers.current.localizeUi(
+            "ui.noodle.noodletextcontent.viewValue1Profile",
+            { value1: handle },
+          ),
+      }),
+    // The label text is baked in at parse time, so a language change has to reparse.
+    [content, accountByHandle, i18n.language],
   );
+  return <div className={cn("text-sm [&>*+*]:mt-2", className)}>{rendered}</div>;
 }
 
 type NoodleMarkdownContext = {
