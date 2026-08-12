@@ -147,6 +147,16 @@ type Target = { id: string; label: string; scope?: LtmScope };
 type NoteResponse = { note: LtmNote };
 
 const sessionTargets = new Map<string, Target>();
+type NavigatorState = {
+  search: string;
+  statusFilter: LtmStatus | "all";
+  typeFilter: LtmNoteType | "all";
+  sourceFilter: boolean;
+  availableEverywhereFilter: boolean;
+  sort: "updated" | "title" | "created";
+  scrollTop: number;
+};
+const navigatorStates = new Map<string, NavigatorState>();
 
 function fingerprint(note: LtmNote | null) {
   return note ? JSON.stringify(note) : "";
@@ -522,7 +532,11 @@ function MemoryAvailabilityWorkbench({
           </p>
         </div>
         {!entries.length ? (
-          <StatusSurface>{localizeUi("ui.longTermMemory.memoryvault.availableEverywhere")}</StatusSurface>
+          <StatusSurface>
+            {isNew
+              ? localizeUi("ui.longTermMemory.memoryvault.availabilityPlaceRequired")
+              : localizeUi("ui.longTermMemory.memoryvault.availableEverywhere")}
+          </StatusSurface>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {entries.map((entry) => (
@@ -637,6 +651,7 @@ function BulkAvailabilityWorkbench({
 export default function MemoryVault({
   props,
   onDirtyChange,
+  onSaveRequest,
   onOpenReview,
   openedNoteId,
   createMemoryRequest,
@@ -677,23 +692,25 @@ export default function MemoryVault({
   const statusInputId = useId();
   const vaultRef = useRef<HTMLElement>(null);
   const detailRef = useRef<HTMLElement>(null);
-  const [search, setSearch] = useState("");
   const contextKey = props.chatId ?? "__global__";
+  const initialNavigatorState = navigatorStates.get(contextKey);
+  const [search, setSearch] = useState(initialNavigatorState?.search ?? "");
   const [target, setTarget] = useState<Target | null>(
     () => sessionTargets.get(contextKey) ?? null,
   );
   const targetContextKey = useRef(contextKey);
-  const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">("all");
-  const [typeFilter, setTypeFilter] = useState<LtmNoteType | "all">("all");
-  const [sourceFilter, setSourceFilter] = useState(false);
-  const [availableEverywhereFilter, setAvailableEverywhereFilter] = useState(false);
-  const [sort, setSort] = useState<"updated" | "title" | "created">("updated");
+  const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">(initialNavigatorState?.statusFilter ?? "all");
+  const [typeFilter, setTypeFilter] = useState<LtmNoteType | "all">(initialNavigatorState?.typeFilter ?? "all");
+  const [sourceFilter, setSourceFilter] = useState(initialNavigatorState?.sourceFilter ?? false);
+  const [availableEverywhereFilter, setAvailableEverywhereFilter] = useState(initialNavigatorState?.availableEverywhereFilter ?? false);
+  const [sort, setSort] = useState<"updated" | "title" | "created">(initialNavigatorState?.sort ?? "updated");
   const [selectMode, setSelectMode] = useState(false);
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [mobilePane, setMobilePane] = useState<LtmWorkspacePane>("navigator");
   const [inspectorMount, setInspectorMount] = useState<HTMLDivElement | null>(
     null,
   );
+  const navigatorScrollRef = useRef<HTMLElement>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [draft, setDraft] = useState<LtmNote | null>(null);
   const [availabilityOpen, setAvailabilityOpen] = useState<"single" | "bulk" | null>(null);
@@ -726,6 +743,12 @@ export default function MemoryVault({
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
   const deleteTriggerRef = useRef<HTMLElement | null>(null);
+  const [unsavedNavigation, setUnsavedNavigation] = useState<string | null>(null);
+  const unsavedDialogRef = useRef<HTMLDialogElement>(null);
+  const unsavedTriggerRef = useRef<HTMLElement | null>(null);
+  const unsavedResolveRef = useRef<
+    ((decision: "save" | "discard" | "stay") => void) | null
+  >(null);
   const [openActionNoteId, setOpenActionNoteId] = useState<string | null>(null);
   const [retractExtracted, setRetractExtracted] = useState(false);
   const [linkTarget, setLinkTarget] = useState("");
@@ -735,8 +758,53 @@ export default function MemoryVault({
   const [renamingSectionKey, setRenamingSectionKey] = useState<string | null>(null);
   const [renamedSectionKey, setRenamedSectionKey] = useState("");
   const [validation, setValidation] = useState<string[]>([]);
+  const validationRef = useRef<HTMLDivElement>(null);
+  const navigatorContextRef = useRef<string | null>(null);
   const editorSession = useRef(0);
   const noteLoadSession = useRef(0);
+
+  useEffect(() => {
+    if (navigatorContextRef.current !== contextKey) return;
+    navigatorStates.set(contextKey, {
+      search,
+      statusFilter,
+      typeFilter,
+      sourceFilter,
+      availableEverywhereFilter,
+      sort,
+      scrollTop: navigatorScrollRef.current?.scrollTop ?? initialNavigatorState?.scrollTop ?? 0,
+    });
+  }, [availableEverywhereFilter, contextKey, initialNavigatorState?.scrollTop, search, sort, sourceFilter, statusFilter, typeFilter]);
+  useEffect(() => {
+    navigatorContextRef.current = contextKey;
+    const state = navigatorStates.get(contextKey) ?? {
+      search: "",
+      statusFilter: "all" as const,
+      typeFilter: "all" as const,
+      sourceFilter: false,
+      availableEverywhereFilter: false,
+      sort: "updated" as const,
+      scrollTop: 0,
+    };
+    navigatorStates.set(contextKey, state);
+    setSearch(state.search);
+    setStatusFilter(state.statusFilter);
+    setTypeFilter(state.typeFilter);
+    setSourceFilter(state.sourceFilter);
+    setAvailableEverywhereFilter(state.availableEverywhereFilter);
+    setSort(state.sort);
+    requestAnimationFrame(() => {
+      if (navigatorScrollRef.current) navigatorScrollRef.current.scrollTop = state.scrollTop;
+    });
+  }, [contextKey]);
+  useEffect(() => {
+    if (!validation.length) return;
+    requestAnimationFrame(() => validationRef.current?.focus({ preventScroll: true }));
+  }, [validation.length]);
+  useEffect(() => {
+    onSaveRequest?.(save);
+    return () => onSaveRequest?.(null);
+  });
 
   const scopeTargets = useQuery({
     queryKey: queryKeys.scopeTargets(props.chatId),
@@ -1103,29 +1171,39 @@ export default function MemoryVault({
     else detailRef.current?.focus();
     deleteTriggerRef.current = null;
   }, [busy, deleteIds]);
+  useEffect(() => {
+    if (!unsavedNavigation) return;
+    const dialog = unsavedDialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) {
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+    }
+    dialog.querySelector<HTMLElement>("[data-ltm-unsaved-stay]")?.focus();
+  }, [unsavedNavigation]);
+  useEffect(() => {
+    if (unsavedNavigation) return;
+    const trigger = unsavedTriggerRef.current;
+    if (trigger?.isConnected) trigger.focus();
+    unsavedTriggerRef.current = null;
+  }, [unsavedNavigation]);
+  function finishUnsavedDecision(decision: "save" | "discard" | "stay") {
+    const resolve = unsavedResolveRef.current;
+    unsavedResolveRef.current = null;
+    setUnsavedNavigation(null);
+    resolve?.(decision);
+  }
   async function confirm(next: string) {
     if (!dirtyRef.current) return true;
-    const options = {
-      title: localizeUi(
-        "ui.longTermMemory.memoryvault.discardUnsavedMemoryChanges",
-      ),
-      message: localizeUi(
-        "ui.longTermMemory.memoryvault.changesLostBeforeAction",
-        { action: next },
-      ),
-      confirmLabel: localizeUi(
-        "ui.longTermMemory.longtermmemorydetail.discardChanges",
-      ),
-      tone: "destructive" as const,
-    };
-    return props.confirmAction
-      ? await props.confirmAction(options)
-      : window.confirm(
-          localizeUi(
-            "ui.longTermMemory.longtermmemorydetail.confirmationWithMessage",
-            { title: options.title, message: options.message },
-          ),
-        );
+    const decision = await new Promise<"save" | "discard" | "stay">((resolve) => {
+      unsavedResolveRef.current = resolve;
+      unsavedTriggerRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+      setUnsavedNavigation(next);
+    });
+    if (decision === "save") return save();
+    return decision === "discard";
   }
   async function selectTarget(next: Target) {
     if (
@@ -1273,8 +1351,8 @@ export default function MemoryVault({
     setNotice(localizeUi("ui.longTermMemory.memoryvault.availabilitySaved"));
     await invalidate();
   }
-  async function save() {
-    if (!draft) return;
+  async function save(): Promise<boolean> {
+    if (!draft) return false;
     const errors: string[] = [];
     if (!draft.title?.trim()) errors.push(localizeUi("ui.longTermMemory.memoryvault.memoryTitleRequired"));
     if (!Object.keys(draft.sections).length) errors.push(localizeUi("ui.longTermMemory.memoryvault.detailRequired"));
@@ -1287,16 +1365,16 @@ export default function MemoryVault({
     if (errors.length) {
       setValidation(errors);
       setError(errors[0]!);
-      return;
+      return false;
     }
     setValidation([]);
     if (isNew && !hasExplicitScope(draft.scope)) {
       setError(localizeUi("ui.longTermMemory.memoryvault.availabilityPlaceRequired"));
-      return;
+      return false;
     }
     if (isNew && !draft.modes.length) {
       setError(localizeUi("ui.longTermMemory.memoryvault.availabilityModeRequired"));
-      return;
+      return false;
     }
     const savedNote = saved ? (JSON.parse(saved) as LtmNote) : null;
     if (
@@ -1310,13 +1388,14 @@ export default function MemoryVault({
           "ui.longTermMemory.memoryvault.clearingEveryScopeWouldMakeGlobal",
         ),
       );
-      return;
+      return false;
     }
     const session = editorSession.current;
     const submittedFingerprint = fingerprint(draft);
     setBusy("save");
     setSaveState("saving");
     setError("");
+    let succeeded = false;
     try {
       const response = isNew
         ? await request<
@@ -1346,8 +1425,9 @@ export default function MemoryVault({
             ),
           );
       const next = structuredClone(response.note);
-      if (session !== editorSession.current) return;
+      if (session !== editorSession.current) return false;
       const recoveryComplete = fingerprint(draftRef.current) === submittedFingerprint;
+      const savedCurrentDraft = fingerprint(draftRef.current) === submittedFingerprint;
       setDraft((current) => {
         if (session !== editorSession.current) return current;
         if (fingerprint(current) === submittedFingerprint) {
@@ -1407,6 +1487,7 @@ export default function MemoryVault({
         queryKeys.activity,
         ...(rejectedId && recoveryComplete ? [queryKeys.rejectedSuggestions] : []),
       ]).catch(() => {});
+      succeeded = savedCurrentDraft;
     } catch (cause) {
       setSaveState("idle");
       if (session === editorSession.current)
@@ -1418,6 +1499,7 @@ export default function MemoryVault({
     } finally {
       if (session === editorSession.current) setBusy("");
     }
+    return succeeded;
   }
   async function deleteSelected(ids: string[], retract = false) {
     const session = editorSession.current;
@@ -2049,6 +2131,57 @@ export default function MemoryVault({
           </>
         </section>
       ) : null}
+      {unsavedNavigation ? (
+        <dialog
+          ref={unsavedDialogRef}
+          aria-modal="true"
+          aria-labelledby="ltm-unsaved-title"
+          aria-describedby="ltm-unsaved-description"
+          onCancel={(event) => {
+            event.preventDefault();
+            finishUnsavedDecision("stay");
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Tab") return;
+            const focusable = Array.from(
+              event.currentTarget.querySelectorAll<HTMLElement>(
+                'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+              ),
+            );
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }}
+          className="fixed inset-0 z-50 m-0 grid h-full w-full place-items-center bg-black/50 p-4"
+        >
+          <section className="w-full max-w-md space-y-4 rounded-md border border-[var(--border)] bg-[var(--background)] p-5 shadow-xl">
+            <h3 id="ltm-unsaved-title" className="text-base font-semibold">
+              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationTitle")}
+            </h3>
+            <p id="ltm-unsaved-description" className="text-sm text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription", { action: unsavedNavigation })}
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button data-ltm-unsaved-stay onClick={() => finishUnsavedDecision("stay")}>
+                {localizeUi("ui.longTermMemory.memoryvault.stay")}
+              </Button>
+              <Button destructive onClick={() => finishUnsavedDecision("discard")}>
+                {localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}
+              </Button>
+              <Button primary onClick={() => finishUnsavedDecision("save")}>
+                {localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}
+              </Button>
+            </div>
+          </section>
+        </dialog>
+      ) : null}
       {deleteIds ? (
         <dialog
           ref={deleteDialogRef}
@@ -2133,9 +2266,15 @@ export default function MemoryVault({
         </dialog>
       ) : null}
         <section
+          ref={navigatorScrollRef}
           data-ltm-memory-list
           className="mari-editor-panel min-w-0"
           aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryList")}
+          style={{ maxHeight: "calc(100vh - 12rem)", overflowY: "auto" }}
+          onScroll={(event) => {
+            const state = navigatorStates.get(contextKey);
+            if (state) state.scrollTop = event.currentTarget.scrollTop;
+          }}
         >
           {notes.isLoading ? (
             <StatusSurface busy>
@@ -2442,7 +2581,7 @@ export default function MemoryVault({
                   </Button>
                 </div>
               </header>
-              {validation.length ? <StatusSurface tone="danger" data-ltm-validation-summary>{validation[0]}</StatusSurface> : null}
+              {validation.length ? <div ref={validationRef} tabIndex={-1} data-ltm-validation-summary><StatusSurface tone="danger">{validation[0]}</StatusSurface></div> : null}
               <div
                 data-ltm-note-layout
                 data-details-open={detailsOpen}
@@ -2602,8 +2741,14 @@ export default function MemoryVault({
                             id={`ltm-section-${key}`}
                             data-ltm-field="section"
                             className={`${inputClass} min-h-28 py-2`}
+                            style={{ maxHeight: "16rem", overflowY: "auto" }}
                             value={section.text}
                             aria-invalid={!section.text.trim()}
+                            onInput={(event) => {
+                              const textarea = event.currentTarget;
+                              textarea.style.height = "auto";
+                              textarea.style.height = `${Math.min(textarea.scrollHeight, 256)}px`;
+                            }}
                             onChange={(event) =>
                               update("sections", {
                                 ...draft.sections,

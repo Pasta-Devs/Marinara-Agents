@@ -74,6 +74,7 @@ export type LongTermMemoryDestinationProps = {
   selectedSource?: SourceTab;
   onSourceChange?: (source: SourceTab) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onSaveRequest?: (save: (() => Promise<boolean>) | null) => void;
   onOpenMemory?: (noteId: string) => void;
   onOpenVault?: () => void;
   onOpenSources?: () => void;

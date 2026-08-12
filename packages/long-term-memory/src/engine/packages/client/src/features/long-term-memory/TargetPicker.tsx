@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { IconButton, inputClass } from "./shared-controls";
 
@@ -32,7 +32,6 @@ export function TargetPicker({
   const listId = `${inputId}-list`;
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
   const available = useMemo(
     () =>
       targets.filter(
@@ -49,8 +48,6 @@ export function TargetPicker({
       [target.label, target.comment].filter(Boolean).join(" ").toLocaleLowerCase().includes(needle),
     );
   }, [available, query]);
-  useEffect(() => setActiveIndex(0), [query]);
-
   const select = (target: PickerTarget) => {
     onSelect(target);
     setQuery("");
@@ -72,25 +69,7 @@ export function TargetPicker({
           value={query}
           placeholder={placeholder}
           aria-label={placeholder}
-          aria-controls={listId}
-          aria-expanded="true"
-          aria-activedescendant={filtered[activeIndex] ? `${listId}-${filtered[activeIndex].kind}-${filtered[activeIndex].id}` : undefined}
-          role="combobox"
           onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setActiveIndex((index) => Math.min(index + 1, Math.max(0, filtered.length - 1)));
-            } else if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setActiveIndex((index) => Math.max(0, index - 1));
-            } else if (event.key === "Enter" && filtered[activeIndex]) {
-              event.preventDefault();
-              select(filtered[activeIndex]!);
-            } else if (event.key === "Escape") {
-              setQuery("");
-            }
-          }}
         />
         {query ? (
           <IconButton
@@ -101,7 +80,7 @@ export function TargetPicker({
           />
         ) : null}
       </label>
-      <div id={listId} role="listbox" className="max-h-52 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--background)]">
+      <div id={listId} className="max-h-52 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--background)]">
         {filtered.length ? (
           filtered.map((target, index) => (
             <div key={`${target.kind}:${target.id}`}>
@@ -113,9 +92,7 @@ export function TargetPicker({
               <button
                 id={`${listId}-${target.kind}-${target.id}`}
                 type="button"
-                role="option"
-                aria-selected={index === activeIndex}
-                className="block min-h-11 w-full border-b border-[var(--border)] px-3 py-2 text-left last:border-b-0 hover:bg-[var(--accent)] aria-selected:bg-[var(--accent)]"
+                className="block min-h-11 w-full border-b border-[var(--border)] px-3 py-2 text-left last:border-b-0 hover:bg-[var(--accent)]"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => select(target)}
               >

@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const workspace = readFileSync(
   new URL(
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/SourcesWorkspace.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const detail = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LongTermMemoryDetail.tsx",
     import.meta.url,
   ),
   "utf8",
@@ -32,6 +40,27 @@ const vault = readFileSync(
 const targetPicker = readFileSync(
   new URL(
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/TargetPicker.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const workspaceLayout = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LtmWorkspace.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const sharedControls = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/shared-controls.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const types = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/types.ts",
     import.meta.url,
   ),
   "utf8",
@@ -90,9 +119,63 @@ assert.match(vault, /data-ltm-detail-conflict/u);
 assert.equal(locale["ui.longTermMemory.memoryvault.memoryInfo"], "Memory info");
 assert.equal(locale["ui.longTermMemory.memoryvault.memoryOptions"], "Memory options");
 assert.equal(locale["ui.longTermMemory.memoryvault.renameDetails"], "Rename details");
+assert.equal(locale["ui.longTermMemory.memoryvault.groups"], "Groups");
+assert.equal(locale["ui.longTermMemory.memoryvault.unsavedNavigationTitle"], "Unsaved changes");
+assert.match(locale["ui.longTermMemory.memoryvault.unsavedNavigationDescription"], /save first/u);
+assert.equal(locale["ui.longTermMemory.memoryvault.stay"], "Stay");
+assert.equal(locale["ui.longTermMemory.memoryvault.discardAndContinue"], "Discard and continue");
+assert.equal(locale["ui.longTermMemory.memoryvault.saveAndContinue"], "Save and continue");
 assert.match(vault, /extractionImportance/u);
 assert.match(vault, /extractionConfidence/u);
 assert.match(vault, /data-ltm-validation-summary/u);
+assert.match(vault, /navigatorStates/u);
+assert.match(vault, /scrollTop/u);
+assert.match(vault, /overflowY: "auto"/u);
+assert.match(vault, /data-ltm-unsaved-stay/u);
+assert.match(vault, /finishUnsavedDecision\("save"\)/u);
+assert.match(vault, /aria-invalid=\{!draft\.title\?\.trim\(\)\}/u);
+assert.match(vault, /maxHeight: "16rem"/u);
+assert.match(vault, /onInput=\{\(event\) =>/u);
+assert.match(sharedControls, /aria-live="polite"/u);
+assert.match(targetPicker, /<button[\s\S]*type="button"/u);
+assert.doesNotMatch(targetPicker, /role="listbox"|role="option"|aria-activedescendant|ArrowDown|ArrowUp/u);
+assert.match(sharedControls, /Escape[\s\S]*closeRef\.current\(true\)/u);
+assert.match(sharedControls, /focus\(\{ preventScroll: true \}\)/u);
+assert.match(workspaceLayout, /minmax\(17rem, 20rem\)/u);
+assert.match(workspaceLayout, /minmax\(16rem, 22rem\)/u);
+assert.match(workspaceLayout, /prefers-reduced-motion/u);
+assert.match(types, /onSaveRequest\?: \(save:/u);
+assert.match(detail, /onSaveRequest=\{\(save\) =>/u);
+assert.match(detail, /navigationPrompt/u);
+assert.match(detail, /finishNavigationPrompt\("save"\)/u);
+assert.match(detail, /aria-modal="true"/u);
+assert.match(detail, /event\.key !== "Tab"/u);
+
+const localeRoot = new URL(
+  "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/",
+  import.meta.url,
+).pathname;
+const sourceFiles = [];
+const usedKeys = new Set();
+function collectSourceFiles(directory) {
+  for (const name of readdirSync(directory, { withFileTypes: true })) {
+    const file = join(directory, name.name);
+    if (name.isDirectory()) collectSourceFiles(file);
+    else if (/\.(ts|tsx)$/u.test(name.name)) sourceFiles.push(file);
+  }
+}
+collectSourceFiles(localeRoot);
+for (const file of sourceFiles) {
+  for (const match of readFileSync(file, "utf8").matchAll(/["'`](ui\.longTermMemory\.[A-Za-z0-9_.]+)["'`]/gu)) {
+    usedKeys.add(match[1]);
+  }
+}
+assert.deepEqual([...usedKeys].filter((key) => !(key in locale)).sort(), []);
+const vaultLocaleValues = Object.entries(locale)
+  .filter(([key]) => key.startsWith("ui.longTermMemory.memoryvault."))
+  .map(([, value]) => value)
+  .join(" ");
+assert.doesNotMatch(vaultLocaleValues, /\b(?:Metadata|Scope|Derived memories|Connections)\b/u);
 assert.match(workspace, /function SourceOperationWorkbench/u);
 assert.match(workspace, /data-ltm-linked-memory-selection/u);
 assert.match(workspace, /derivedNoteIds: selectedLinkedIds/u);

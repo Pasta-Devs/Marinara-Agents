@@ -134,6 +134,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     null,
   );
   const [destinationDirty, setDestinationDirty] = useState(false);
+  const destinationSaveRef = useRef<(() => Promise<boolean>) | null>(null);
+  const [navigationPrompt, setNavigationPrompt] = useState<string | null>(null);
+  const navigationDialogRef = useRef<HTMLDialogElement>(null);
+  const navigationResolveRef = useRef<((allow: boolean) => void) | null>(null);
+  const navigationTriggerRef = useRef<HTMLElement | null>(null);
   const [openedNoteId, setOpenedNoteId] = useState<string | null>(null);
   const [reviewSourceNoteId, setReviewSourceNoteId] = useState<string | null>(
     null,
@@ -172,6 +177,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [addOpen]);
+  useEffect(() => {
+    if (!navigationPrompt) return;
+    const dialog = navigationDialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    dialog.querySelector<HTMLElement>("[data-ltm-destination-stay]")?.focus();
+  }, [navigationPrompt]);
 
   useEffect(() => {
     props.onDirtyChange?.(destinationDirty);
@@ -219,6 +231,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
 
   const confirmDestinationChange = async (next: string) => {
     if (!destinationDirty) return true;
+    if (destinationSaveRef.current) {
+      return new Promise<boolean>((resolve) => {
+        navigationResolveRef.current = resolve;
+        navigationTriggerRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        setNavigationPrompt(next);
+      });
+    }
     const options = {
       title: localizeUi(
         "ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges",
@@ -240,6 +261,18 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             { title: options.title, message: options.message },
           ),
         );
+  };
+  const finishNavigationPrompt = async (decision: "save" | "discard" | "stay") => {
+    if (decision === "save") {
+      if (!(await destinationSaveRef.current?.())) return;
+    }
+    const resolve = navigationResolveRef.current;
+    navigationResolveRef.current = null;
+    navigationDialogRef.current?.close();
+    setNavigationPrompt(null);
+    resolve?.(decision !== "stay");
+    requestAnimationFrame(() => navigationTriggerRef.current?.focus({ preventScroll: true }));
+    navigationTriggerRef.current = null;
   };
   const selectDestination = async (next: LongTermMemoryDestination) => {
     if (next === destination) return true;
@@ -553,6 +586,51 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           }
         }
       `}</style>
+      {navigationPrompt ? (
+        <dialog
+          ref={navigationDialogRef}
+          aria-modal="true"
+          aria-labelledby="ltm-destination-unsaved-title"
+          aria-describedby="ltm-destination-unsaved-description"
+          onCancel={(event) => {
+            event.preventDefault();
+            void finishNavigationPrompt("stay");
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Tab") return;
+            const focusable = Array.from(
+              event.currentTarget.querySelectorAll<HTMLElement>(
+                'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+              ),
+            );
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }}
+          className="fixed inset-0 z-50 m-0 grid h-full w-full place-items-center bg-black/50 p-4"
+        >
+          <section className="w-full max-w-md space-y-4 rounded-md border border-[var(--border)] bg-[var(--background)] p-5 shadow-xl">
+            <h2 id="ltm-destination-unsaved-title" className="text-base font-semibold">
+              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationTitle")}
+            </h2>
+            <p id="ltm-destination-unsaved-description" className="text-sm text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription", { action: navigationPrompt })}
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button data-ltm-destination-stay onClick={() => void finishNavigationPrompt("stay")}>{localizeUi("ui.longTermMemory.memoryvault.stay")}</Button>
+              <Button destructive onClick={() => void finishNavigationPrompt("discard")}>{localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}</Button>
+              <Button primary onClick={() => void finishNavigationPrompt("save")}>{localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}</Button>
+            </div>
+          </section>
+        </dialog>
+      ) : null}
       <header className="mari-editor-header relative z-20">
         <div className="mari-editor-header-main">
           <button
@@ -1748,6 +1826,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   <Destination
                     props={props}
                     onDirtyChange={setDestinationDirty}
+                    onSaveRequest={(save) => {
+                      destinationSaveRef.current = save;
+                    }}
                     onOpenMemory={openMemory}
                     onOpenSources={openSources}
                     onOpenVault={() => void selectDestination("vault")}

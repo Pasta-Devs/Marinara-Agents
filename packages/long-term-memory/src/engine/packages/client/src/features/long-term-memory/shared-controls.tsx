@@ -117,16 +117,18 @@ export function InfoPopover({
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
-  const closeRef = useRef<() => void>(() => undefined);
+  const closeRef = useRef<(restoreFocus?: boolean) => void>(() => undefined);
 
   const clearCloseTimer = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
     closeTimer.current = null;
   };
-  const close = () => {
+  const close = (restoreFocus = false) => {
     clearCloseTimer();
     setOpen(false);
     setPinned(false);
+    if (restoreFocus)
+      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   };
   closeRef.current = close;
   const show = () => {
@@ -172,7 +174,7 @@ export function InfoPopover({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeRef.current();
+      if (event.key === "Escape") closeRef.current(true);
     };
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -231,7 +233,6 @@ export function InfoPopover({
             setPinned(true);
           }
         }}
-        onMouseDown={(event) => event.preventDefault()}
       >
         <Info aria-hidden="true" size="0.875rem" />
       </button>
