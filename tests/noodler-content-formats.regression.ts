@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+// The format rules live in the Engine's compiled shared schema, which imports zod,
+// and in the generation service, which imports the Engine's storage and provider
+// modules. Neither can be loaded from this repo — it pins no Engine dependencies —
+// so these stay source-text assertions. The rules that live in package-owned pure
+// modules are asserted by behaviour instead: see noodle-generation-policy and
+// noodler-disclosure-contract.
+
 const schemaPath = "sources/engine/packages/shared/dist/schemas/noodle.schema.js";
 const schema = readFileSync(schemaPath, "utf8");
 assert.match(
