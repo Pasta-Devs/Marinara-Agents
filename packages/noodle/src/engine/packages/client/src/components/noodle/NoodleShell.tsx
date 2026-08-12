@@ -477,6 +477,20 @@ export function NoodleShell({
   const onOpenMobileHomeDestination = noodlerActive
     ? onOpenNoodler
     : onOpenMobileHome;
+  const otherModeLabel = noodlerActive
+    ? localizeUi("navigation.topbar.noodle")
+    : localizeUi("ui.noodle.noodlemodetoggle.noodler");
+  // The bottom-nav wordmark doubles as the mode switch. The first tap navigates at
+  // once — holding it back to watch for a second would make every trip home feel
+  // late — and a second tap inside the window supersedes it with the switch.
+  const lastHomeTapAt = useRef(0);
+  const onMobileHomeTap = () => {
+    const now = Date.now();
+    const switching = enableNoodler && now - lastHomeTapAt.current < 320;
+    lastHomeTapAt.current = switching ? 0 : now;
+    if (switching) (noodlerActive ? onOpenHome : onOpenNoodler)();
+    else onOpenMobileHomeDestination();
+  };
   useDialogFocusScope(mobileDrawerOpen, mobileDrawerRef, mobileDrawerCloseRef);
 
   return (
@@ -1020,14 +1034,36 @@ export function NoodleShell({
             </button>
             <button
               type="button"
-              onClick={onOpenMobileHomeDestination}
-              aria-label={localizeUi("ui.noodle.noodleshell.noodleValue1", {
-                value1: homeLabel,
-              })}
+              onClick={onMobileHomeTap}
+              aria-label={
+                enableNoodler
+                  ? `${localizeUi("ui.noodle.noodleshell.noodleValue1", {
+                      value1: homeLabel,
+                    })}. ${localizeUi("ui.noodle.noodleshell.doubleTapToSwitchTo", {
+                      mode: otherModeLabel,
+                    })}`
+                  : localizeUi("ui.noodle.noodleshell.noodleValue1", {
+                      value1: homeLabel,
+                    })
+              }
+              title={
+                enableNoodler
+                  ? localizeUi("ui.noodle.noodleshell.doubleTapToSwitchTo", {
+                      mode: otherModeLabel,
+                    })
+                  : undefined
+              }
               aria-current={homeActive ? "page" : undefined}
               className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
             >
-              <Home size={22} strokeWidth={homeActive ? 2.8 : 2} />
+              {/* The wordmark says which of the two apps you are in; a house does not. */}
+              <NoodleLogo
+                src={noodlerActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
+                className={cn(
+                  "h-7 w-11 transition-opacity",
+                  homeActive ? "opacity-100" : "opacity-55",
+                )}
+              />
               {homeActive && (
                 <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
               )}

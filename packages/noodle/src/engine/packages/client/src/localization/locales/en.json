@@ -1044,6 +1044,7 @@
   "ui.noodle.noodleshell.closeNoodleAccountMenu": "Close Noodle account menu",
   "ui.noodle.noodleshell.discover": "Discover",
   "ui.noodle.noodleshell.discoverCreators": "Discover creators",
+  "ui.noodle.noodleshell.doubleTapToSwitchTo": "Double tap to switch to {{mode}}",
   "ui.noodle.noodleshell.home": "Home",
   "ui.noodle.noodleshell.hub": "Hub",
   "ui.noodle.noodleshell.noPersonaAccountsYet": "No persona accounts yet.",

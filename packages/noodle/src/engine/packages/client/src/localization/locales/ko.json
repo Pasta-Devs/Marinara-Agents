@@ -784,6 +784,7 @@
   "ui.noodle.noodlerschedulemanagermodal.useDefault": "기본값 사용",
   "ui.noodle.noodleshell.chooseAPersona": "페르소나 선택",
   "ui.noodle.noodleshell.closeNoodleAccountMenu": "Noodle 계정 메뉴 닫기",
+  "ui.noodle.noodleshell.doubleTapToSwitchTo": "두 번 탭하면 {{mode}}(으)로 전환합니다",
   "ui.noodle.noodleshell.noPersonaAccountsYet": "아직 페르소나 계정이 없습니다.",
   "ui.noodle.noodleshell.noodleAccountMenu": "Noodle 계정 메뉴",
   "ui.noodle.noodleshell.noodleAccountNavigation": "Noodle 계정 탐색",
