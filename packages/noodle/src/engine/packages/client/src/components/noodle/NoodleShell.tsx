@@ -58,8 +58,23 @@ export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 // mode was on screen last and let the new pair animate out of the old arrangement.
 let lastRenderedAppMode: NoodleShellMode | null = null;
 
-const BOW_FRONT = { x: 0, y: 0, scale: 1, opacity: 1, filter: "saturate(1)" };
-const BOW_BACK = { x: 5, y: 4, scale: 0.8, opacity: 0.55, filter: "saturate(0.65)" };
+// Plain CSS keyframes rather than a JS animation: transform and opacity are handed to
+// the compositor, so the swap costs no main-thread work per frame. 220ms, twice, on two
+// images the size of a fingernail.
+const BOW_REST_BACK = "translate3d(5px, 4px, 0) scale(0.8)";
+const BOW_SWAP_KEYFRAMES = `
+@keyframes noodle-bow-to-front {
+  from { transform: ${BOW_REST_BACK}; opacity: 0.55; filter: saturate(0.65); }
+  to { transform: none; opacity: 1; filter: saturate(1); }
+}
+@keyframes noodle-bow-to-back {
+  from { transform: none; opacity: 1; filter: saturate(1); }
+  to { transform: ${BOW_REST_BACK}; opacity: 0.55; filter: saturate(0.65); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-noodle-bow] { animation: none !important; }
+}
+`;
 
 export function getNoodleAccentStyle(
   accent: string,
@@ -1098,27 +1113,29 @@ export function NoodleShell({
                   screen — the dot below carries the active state. The back one is
                   smaller, tucked close, and eased off, so it reads as depth. */}
               <span className="relative flex h-8 w-12 items-center justify-center">
+                <style>{BOW_SWAP_KEYFRAMES}</style>
                 {[
                   { src: NOODLE_LOGO_SRC, front: !noodlerActive },
                   { src: NOODLER_LOGO_SRC, front: noodlerActive },
                 ].map((bow) => (
-                  <motion.img
+                  <img
                     key={bow.src}
                     src={bow.src}
                     alt=""
+                    data-noodle-bow=""
                     className={cn(
                       "absolute h-6 w-9 object-contain",
-                      bow.front && "z-10",
+                      bow.front
+                        ? "z-10 opacity-100"
+                        : "translate-x-[5px] translate-y-[4px] scale-[0.8] opacity-55 saturate-[0.65]",
                     )}
-                    initial={
-                      modeJustSwapped && !prefersReducedMotion
-                        ? bow.front
-                          ? BOW_BACK
-                          : BOW_FRONT
-                        : false
+                    style={
+                      modeJustSwapped
+                        ? {
+                            animation: `noodle-bow-to-${bow.front ? "front" : "back"} 220ms cubic-bezier(0.22, 1, 0.36, 1) both`,
+                          }
+                        : undefined
                     }
-                    animate={bow.front ? BOW_FRONT : BOW_BACK}
-                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                   />
                 ))}
               </span>
