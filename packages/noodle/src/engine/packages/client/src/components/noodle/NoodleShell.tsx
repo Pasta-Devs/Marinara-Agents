@@ -193,24 +193,6 @@ export function useHideOnScroll(scroller: HTMLElement | null) {
 /** Base classes for a sticky bar driven by {@link useHideOnScroll}. */
 export const HIDE_ON_SCROLL_CLASS = "will-change-transform";
 
-/**
- * The phone-width wordmark bar. It carries no account button: the bottom nav already
- * has that avatar, and two triggers for one drawer is one more than the row needs.
- */
-export function NoodleMobileHeader({ noodler = false }: { noodler?: boolean }) {
-  return (
-    <div
-      className="flex h-14 items-center justify-center border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-3 backdrop-blur @min-[1024px]:hidden"
-      data-component="NoodleView.MobileHeader"
-    >
-      <NoodleLogo
-        src={noodler ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
-        className="h-9 w-14"
-      />
-    </div>
-  );
-}
-
 // The count is the reason to come back, so it carries its own label rather than leaving a
 // bare number for screen readers to read out of context.
 function UnseenBadge({ count }: { count: number }) {
