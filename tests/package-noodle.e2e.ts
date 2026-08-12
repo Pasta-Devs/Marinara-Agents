@@ -2371,15 +2371,11 @@ test.describe("package-owned Noodle interface", () => {
     const desktopAccountSwitcher = noodle.locator(
       '[data-component="NoodleView.AccountSwitcher"]',
     );
-    const mobileHeader = noodle.locator(
-      '[data-component="NoodleView.MobileHeader"]',
-    );
     const mobileBottomNav = noodle.locator(
       '[data-component="NoodleView.MobileBottomNav"]',
     );
 
     await expect(desktopAccountSwitcher).toBeVisible();
-    await expect(mobileHeader).toBeHidden();
     await expect(mobileBottomNav).toBeHidden();
 
     await page.locator('[data-tour="sidebar-toggle"]').click();
@@ -2389,18 +2385,15 @@ test.describe("package-owned Noodle interface", () => {
         center.evaluate((element) => element.getBoundingClientRect().width),
       )
       .toBeLessThan(1024);
-    await expect(mobileHeader).toBeVisible();
     await expect(mobileBottomNav).toBeVisible();
     await expect(desktopAccountSwitcher).toBeHidden();
 
     await page.locator('[data-tour="panel-settings"]').click();
     await page.locator('[data-tour="sidebar-toggle"]').click();
     await expect(desktopAccountSwitcher).toBeVisible();
-    await expect(mobileHeader).toBeHidden();
     await expect(mobileBottomNav).toBeHidden();
 
     await page.setViewportSize({ width: 900, height: 800 });
-    await expect(mobileHeader).toBeVisible();
     await expect(mobileBottomNav).toBeVisible();
     await expect(desktopAccountSwitcher).toBeHidden();
     expect(errors).toEqual([]);
@@ -2419,13 +2412,12 @@ test.describe("package-owned Noodle interface", () => {
     await openNoodle(page);
 
     const noodle = page.locator('[data-component="NoodleView"]');
-    const header = noodle.locator('[data-component="NoodleView.MobileHeader"]');
     const bottomNav = noodle.locator(
       '[data-component="NoodleView.MobileBottomNav"]',
     );
-    await expect(header).toBeVisible();
     await expect(bottomNav).toBeVisible();
-    const headerLogo = header.locator('img[src$="/noodle-klusek.png"]');
+    // The wordmark is the bottom bar's middle button now; there is no top header.
+    const headerLogo = bottomNav.locator('img[src$="/noodle-klusek.png"]');
     await expect(headerLogo).toBeVisible();
     const bottomNavIconColors = await bottomNav
       .locator("svg:visible")
