@@ -9,12 +9,27 @@ const DISCLOSURE_RANK: Record<NoodleIdentityDisclosure, number> = {
   open: 2,
 };
 
-export type NoodlerAudienceProfile = Omit<
+// Explicit allow-list: the audience projection names every field it exposes, so a
+// new field on NoodlerManagedStageProfile is private until it is added here.
+const AUDIENCE_FIELDS = [
+  "id",
+  "handle",
+  "displayName",
+  "bio",
+  "avatarUrl",
+  "avatarCrop",
+  "disclosureMode",
+  "stagePersonality",
+  "autoPosting",
+  "fanActivity",
+  "createdAt",
+  "updatedAt",
+] as const;
+
+export type NoodlerAudienceProfile = Pick<
   NoodlerManagedStageProfile,
-  "access" | "sourceStatus" | "publicIdentity"
-> & {
-  publicIdentity: NoodlerManagedStageProfile["publicIdentity"];
-};
+  (typeof AUDIENCE_FIELDS)[number] | "noodleAccountId" | "publicIdentity"
+>;
 
 export function isNoodlerDisclosureDowngrade(
   current: NoodleIdentityDisclosure,
@@ -26,19 +41,22 @@ export function isNoodlerDisclosureDowngrade(
 export function projectNoodlerAudienceProfile(
   profile: NoodlerManagedStageProfile,
 ): NoodlerAudienceProfile {
-  const {
-    access: _access,
-    sourceStatus: _sourceStatus,
-    publicIdentity,
-    ...audienceProfile
-  } = profile;
   const open = profile.disclosureMode === "open";
   return {
-    ...audienceProfile,
+    ...(Object.fromEntries(
+      AUDIENCE_FIELDS.map((field) => [field, profile[field]]),
+    ) as Pick<NoodlerManagedStageProfile, (typeof AUDIENCE_FIELDS)[number]>),
     noodleAccountId: open ? profile.noodleAccountId : null,
-    publicIdentity: open ? publicIdentity : null,
+    publicIdentity: open ? profile.publicIdentity : null,
   };
 }
+
+export type NoodlerDisclosureReviewReason = {
+  // Stable code so callers can match a reason without parsing its English label.
+  code: "published_posts" | "published_media" | "creator_avatar" | "prepared_posts";
+  count: number;
+  label: string;
+};
 
 export function noodlerDisclosureReviewReasons(input: {
   currentMode: NoodleIdentityDisclosure;
@@ -47,18 +65,33 @@ export function noodlerDisclosureReviewReasons(input: {
   mediaCount: number;
   hasAvatar: boolean;
   preparedPostCount: number;
-}): string[] {
+}): NoodlerDisclosureReviewReason[] {
   if (!isNoodlerDisclosureDowngrade(input.currentMode, input.nextMode)) return [];
+  const plural = (count: number) => (count === 1 ? "" : "s");
   return [
     ...(input.postCount > 0
-      ? [`${input.postCount} published post${input.postCount === 1 ? "" : "s"}`]
+      ? [{
+          code: "published_posts" as const,
+          count: input.postCount,
+          label: `${input.postCount} published post${plural(input.postCount)}`,
+        }]
       : []),
     ...(input.mediaCount > 0
-      ? [`${input.mediaCount} published media item${input.mediaCount === 1 ? "" : "s"}`]
+      ? [{
+          code: "published_media" as const,
+          count: input.mediaCount,
+          label: `${input.mediaCount} published media item${plural(input.mediaCount)}`,
+        }]
       : []),
-    ...(input.hasAvatar ? ["the current creator avatar"] : []),
+    ...(input.hasAvatar
+      ? [{ code: "creator_avatar" as const, count: 1, label: "the current creator avatar" }]
+      : []),
     ...(input.preparedPostCount > 0
-      ? [`${input.preparedPostCount} prepared automatic post${input.preparedPostCount === 1 ? "" : "s"}`]
+      ? [{
+          code: "prepared_posts" as const,
+          count: input.preparedPostCount,
+          label: `${input.preparedPostCount} prepared automatic post${plural(input.preparedPostCount)}`,
+        }]
       : []),
   ];
 }

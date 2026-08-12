@@ -22,7 +22,7 @@ import {
   type NoodlerPostMediaUpload,
 } from "./noodle-noodler-media.js";
 import { tryNoodlerAccountOperation } from "./noodle-noodler-account-operation-lock.js";
-import { resolveNoodlerSourceSnapshot } from "./noodle-noodler-source.js";
+import { resolveNoodlerSourceSnapshot } from "./noodle-noodler-source-resolve.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../agents/agent-concurrency.js";
 
 export type GenerateAndApplyNoodlerPostResult =

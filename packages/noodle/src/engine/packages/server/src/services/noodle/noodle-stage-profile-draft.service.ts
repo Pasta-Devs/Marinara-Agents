@@ -28,7 +28,7 @@ import {
   protectNoodlerGeneratedIdentity,
   stageProfileContainsPublicIdentity,
 } from "./noodle-noodler-generation.service.js";
-import { resolveNoodlerSourceSnapshot } from "./noodle-noodler-source.js";
+import { resolveNoodlerSourceSnapshot } from "./noodle-noodler-source-resolve.js";
 import { hintedNoodlerSourceBrief } from "./noodle-prompt-safety.js";
 import { parseRecord } from "./noodle-public-support.js";
 import { createNoodlerSourceRevisionToken } from "./noodle-source-revision.js";

@@ -88,8 +88,8 @@ import {
   compareMinimizedNoodlerSourceSnapshot,
   isMinimizedNoodlerSourceSnapshot,
   minimizeNoodlerSourceSnapshot,
-  resolveNoodlerSourceSnapshot,
 } from "../noodle/noodle-noodler-source.js";
+import { resolveNoodlerSourceSnapshot } from "../noodle/noodle-noodler-source-resolve.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import {
   clearNoodleRefreshFailure,

@@ -103,8 +103,8 @@ import { verifyNoodlerSourceRevisionToken } from "../services/noodle/noodle-sour
 import {
   compareNoodlerSourceSnapshots,
   minimizeNoodlerSourceSnapshot,
-  resolveNoodlerSourceSnapshot,
 } from "../services/noodle/noodle-noodler-source.js";
+import { resolveNoodlerSourceSnapshot } from "../services/noodle/noodle-noodler-source-resolve.js";
 import {
   canViewNoodlerPost,
   isNoodlerHiddenFromViewer,
@@ -1661,7 +1661,7 @@ export async function noodleRoutes(app: FastifyInstance) {
           preparedPostCount: 0,
         });
         const unresolvedReviewReasons = parsed.data.confirmAvatarReview
-          ? reviewReasons.filter((reason) => reason !== "the current creator avatar")
+          ? reviewReasons.filter((reason) => reason.code !== "creator_avatar")
           : reviewReasons;
         if (unresolvedReviewReasons.length > 0) {
           return {
@@ -1745,7 +1745,8 @@ export async function noodleRoutes(app: FastifyInstance) {
       return reply.code(409).send({
         error:
           "Review or remove existing creator content before using a more private identity mode.",
-        reviewRequired: locked.value.reviewReasons,
+        reviewRequired: locked.value.reviewReasons.map((reason) => reason.label),
+        reviewRequiredCodes: locked.value.reviewReasons,
       });
     }
     if (locked.value.status === "not_found") {

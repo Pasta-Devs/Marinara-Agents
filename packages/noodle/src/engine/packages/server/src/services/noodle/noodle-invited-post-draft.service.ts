@@ -12,7 +12,7 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { noodleGeneratedNoodlerPostSchema } from "@marinara-engine/shared";
 import { noodleResponseFormat } from "./noodle-response-format.js";
-import { parseRecord } from "./noodle-public-support.js";
+import { noodlerSourceText } from "./noodle-stage-profile-draft.service.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./noodle-noodler-generation.service.js";
 
 export type InvitedNoodlePostDraftRequest = {
@@ -45,7 +45,6 @@ export async function generateInvitedNoodlePostDraft(
   const characters = createCharactersStorage(db);
   const character = await characters.getById(account.entityId);
   if (!character) throw new Error("Noodle character not found.");
-  const data = parseRecord(character.data);
   const connections = createConnectionsStorage(db);
   const fallback = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({
@@ -81,7 +80,9 @@ export async function generateInvitedNoodlePostDraft(
       content: [
         `Character name: ${account.displayName}`,
         `Character handle: @${account.handle}`,
-        `Character profile: ${JSON.stringify(data)}`,
+        // Only the profile fields the draft needs, never the whole stored record
+        // (which carries greetings, example dialogue, and unrelated extensions).
+        `Character profile:\n${noodlerSourceText(character.data)}`,
         ...(request.guidance?.trim() ? [`Post direction: ${JSON.stringify(request.guidance.trim())}`] : []),
       ].join("\n"),
     },

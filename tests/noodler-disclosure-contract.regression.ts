@@ -5,6 +5,11 @@ import {
   noodlerDisclosureReviewReasons,
   projectNoodlerAudienceProfile,
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodler-disclosure";
+import {
+  compareMinimizedNoodlerSourceSnapshot,
+  isMinimizedNoodlerSourceSnapshot,
+  minimizeNoodlerSourceSnapshot,
+} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-source";
 
 const managedProfile = {
   id: "creator",
@@ -51,17 +56,74 @@ assert.deepEqual(
     hasAvatar: true,
     preparedPostCount: 1,
   }),
-  ["2 published posts", "1 published media item", "the current creator avatar", "1 prepared automatic post"],
+  [
+    { code: "published_posts", count: 2, label: "2 published posts" },
+    { code: "published_media", count: 1, label: "1 published media item" },
+    { code: "creator_avatar", count: 1, label: "the current creator avatar" },
+    { code: "prepared_posts", count: 1, label: "1 prepared automatic post" },
+  ],
 );
 
-const sourcePrivacy = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-source.ts",
-  "utf8",
+const snapshot = {
+  publicDisplayName: "Source Name",
+  publicHandle: "source",
+  name: "Source Name",
+  description: "A quiet archivist",
+  personality: "thoughtful and witty",
+  scenario: "Runs a night library",
+  appearance: "Tall, grey coat",
+  backstory: "Left the city years ago",
+};
+
+// Open keeps the snapshot; hinted and secret store only salted digests.
+assert.deepEqual(minimizeNoodlerSourceSnapshot(snapshot, "open"), snapshot);
+const secret = minimizeNoodlerSourceSnapshot(snapshot, "secret");
+Object.values(secret).forEach((value) => {
+  assert.match(value, /^revision:[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}$/u);
+});
+Object.entries(snapshot).forEach(([field, value]) => {
+  assert.equal(secret[field as keyof typeof secret].includes(value), false);
+});
+assert.equal(isMinimizedNoodlerSourceSnapshot(secret), true);
+assert.equal(isMinimizedNoodlerSourceSnapshot(snapshot), false);
+// Legacy unsalted tokens are not accepted, so storage re-minimizes them.
+assert.equal(
+  isMinimizedNoodlerSourceSnapshot({
+    ...secret,
+    name: `revision:${"a".repeat(43)}`,
+  }),
+  false,
 );
-assert.match(sourcePrivacy, /createHash\("sha256"\)/u);
-assert.match(sourcePrivacy, /mode === "open"\) return snapshot/u);
-assert.match(sourcePrivacy, /mode === "hinted" && field === "personality"/u);
-assert.match(sourcePrivacy, /revision:/u);
+
+// Hinted mode keeps personality themes readable, and nothing else.
+const hinted = minimizeNoodlerSourceSnapshot(snapshot, "hinted");
+assert.match(hinted.personality, /^thoughtful witty revision:/u);
+assert.match(hinted.name, /^revision:/u);
+
+// Each minimization salts independently, so two stores of the same source do not
+// produce the same token — but a comparison against a baseline reuses its salt.
+assert.notEqual(minimizeNoodlerSourceSnapshot(snapshot, "secret").name, secret.name);
+assert.deepEqual(
+  compareMinimizedNoodlerSourceSnapshot(secret, snapshot, "secret"),
+  { state: "current" },
+);
+assert.deepEqual(
+  compareMinimizedNoodlerSourceSnapshot(
+    secret,
+    { ...snapshot, backstory: "Came back last spring" },
+    "secret",
+  ),
+  {
+    state: "changed",
+    changes: [
+      {
+        field: "backstory",
+        previous: "Stored private revision",
+        current: "Current private revision",
+      },
+    ],
+  },
+);
 
 const generationPrivacy = readFileSync(
   "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-generation.service.ts",
