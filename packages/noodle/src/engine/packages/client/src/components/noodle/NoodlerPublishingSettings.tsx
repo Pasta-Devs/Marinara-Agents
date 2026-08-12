@@ -14,7 +14,6 @@ import {
   useUpdateNoodlerAutoPosting,
   useUpdateNoodlerImageConnections,
   useDeleteNoodlerStageProfile,
-  useRemoveNoodleCharacter,
 } from "../../hooks/use-noodle";
 import { useConnections } from "../../hooks/use-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
@@ -96,13 +95,6 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
   const updateAuto = useUpdateNoodlerAutoPosting();
   const updateImageConnections = useUpdateNoodlerImageConnections();
   const deleteCreator = useDeleteNoodlerStageProfile();
-  const removeCharacter = useRemoveNoodleCharacter();
-  // Deleting a creator also uninvites the character it was linked to. Both the
-  // confirmation text and the handler ask this one question.
-  const deletionSource = (profile: { noodleAccountId: string | null }) => {
-    const source = data?.accounts.find((account) => account.id === profile.noodleAccountId);
-    return source?.kind === "character" && source.invited ? source : null;
-  };
   const refreshAll = useRefreshAllNoodlerCreatorsNow();
   const refreshFans = useRefreshNoodlerFanActivityNow();
   // Toggles roll back on rejection, which is silent on its own: say so, or the user reads the
@@ -521,31 +513,23 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
               onClick={async () => {
                 const confirmed = await showConfirmDialog({
                   title: t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName }),
-                  // The handler also uninvites a linked invited character, so the
-                  // dialog says so rather than promising only a profile deletion.
-                  message: t(
-                    deletionSource(profile)
-                      ? "ui.noodle.noodlerschedulemanagermodal.deleteCreatorConfirmWithCharacter"
-                      : "ui.noodle.noodlerschedulemanagermodal.deleteCreatorConfirm",
-                    { creator: profile.displayName },
-                  ),
+                  message: t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorConfirm", {
+                    creator: profile.displayName,
+                  }),
                   confirmLabel: t("ui.noodle.noodlerschedulemanagermodal.delete"),
                   tone: "destructive",
                 });
                 if (!confirmed) return;
                 try {
-                  // Delete the creator profile first: if the character-removal step
-                  // below then fails, the user still sees a consistent state (the
-                  // profile is gone) instead of a silently uninvited character with
-                  // a creator profile that still exists.
-                  const source = deletionSource(profile);
+                  // Only the Creator profile. The linked character keeps its Noodle
+                  // account, its invite, and its public posts: deleting a NoodleR
+                  // persona is not a reason to take someone off the public timeline.
                   await deleteCreator.mutateAsync(profile.id);
-                  if (source) await removeCharacter.mutateAsync(source.entityId);
                 } catch (error) {
                   toast.error(errorMessage(error, t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorFailed")));
                 }
               }}
-              disabled={deleteCreator.isPending || removeCharacter.isPending}
+              disabled={deleteCreator.isPending}
               className="ml-auto flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-md border border-[var(--destructive)]/40 text-[var(--destructive)] transition-[background-color,scale] hover:bg-[var(--destructive)]/10 active:scale-[0.96] disabled:opacity-40"
               aria-label={t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName })}
             >
