@@ -42,4 +42,21 @@ assert.deepEqual(
   ),
   { temperature: 0.2, topP: 0.1, presencePenalty: 0.5 },
 );
+// resolveStoredChatOptions returns the keys with an undefined value when the user set
+// nothing, which is how a plain spread lost the package default. Present-but-undefined
+// has to resolve the same as absent.
+assert.deepEqual(
+  noodleSamplingOptions(
+    { temperature: undefined, topP: undefined },
+    { temperature: 0.9, topP: 0.95 },
+  ),
+  { temperature: 0.9, topP: 0.95 },
+);
+assert.deepEqual(
+  noodleSamplingOptions(
+    { temperature: undefined, topP: 0.4 },
+    { temperature: 0.9, topP: 0.95 },
+  ),
+  { temperature: 0.9, topP: 0.4 },
+);
 console.log("Noodle generation policy regressions passed.");

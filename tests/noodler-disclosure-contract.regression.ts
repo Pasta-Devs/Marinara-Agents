@@ -99,6 +99,18 @@ assert.equal(
 const hinted = minimizeNoodlerSourceSnapshot(snapshot, "hinted");
 assert.match(hinted.personality, /^thoughtful witty revision:/u);
 assert.match(hinted.name, /^revision:/u);
+assert.equal(isMinimizedNoodlerSourceSnapshot(hinted), true);
+// The themes prefix pushes the token off the start of the string, so the salt has to be
+// read through the leading-space branch of the pattern. Without it a hinted personality
+// would draw a fresh salt on every comparison and report as changed forever.
+assert.deepEqual(
+  compareMinimizedNoodlerSourceSnapshot(hinted, snapshot, "hinted"),
+  { state: "current" },
+);
+assert.equal(
+  minimizeNoodlerSourceSnapshot(snapshot, "hinted", hinted).personality,
+  hinted.personality,
+);
 
 // Each minimization salts independently, so two stores of the same source do not
 // produce the same token — but a comparison against a baseline reuses its salt.

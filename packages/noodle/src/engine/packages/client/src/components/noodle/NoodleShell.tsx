@@ -127,13 +127,16 @@ export function NoodleLogo({
  * Takes the scrolling element as state, not a ref: surfaces that swap their scroller
  * for another view (NoodleR discovery) would otherwise keep listening to a detached node.
  *
- * @returns a ref for the sticky element itself.
+ * Takes the sticky element the same way, through a callback ref: NoodleHome keeps its
+ * scroller mounted while swapping the bar out with the view, so a plain ref would leave
+ * this driving a detached node and the new bar would never move.
+ *
+ * @returns a callback ref for the sticky element itself.
  */
 export function useHideOnScroll(scroller: HTMLElement | null) {
-  const barRef = useRef<HTMLDivElement | null>(null);
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
   const reduceMotion = useReducedMotion();
   useEffect(() => {
-    const bar = barRef.current;
     if (!scroller || !bar) return;
     // Reduced motion asks for no travel at all, not a faster version of it.
     if (reduceMotion) return;
@@ -186,8 +189,8 @@ export function useHideOnScroll(scroller: HTMLElement | null) {
       bar.style.transition = "";
       bar.style.transform = "";
     };
-  }, [scroller, reduceMotion]);
-  return barRef;
+  }, [scroller, bar, reduceMotion]);
+  return setBar;
 }
 
 /** Base classes for a sticky bar driven by {@link useHideOnScroll}. */

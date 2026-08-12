@@ -797,7 +797,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScroller, setTimelineScroller] = useState<HTMLDivElement | null>(null);
-  const stickyHeaderRef = useHideOnScroll(timelineScroller);
+  const setStickyHeader = useHideOnScroll(timelineScroller);
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const composerRestoreFocusRef = useRef<HTMLElement | null>(null);
   const profileDraftAccountIdRef = useRef<string | null>(null);
@@ -5972,7 +5972,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             // The wordmark and the tab row travel together, so the whole bar leaves
             // on the way down and comes back as one on the way up.
             <div
-              ref={stickyHeaderRef}
+              ref={setStickyHeader}
               className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
               data-component="NoodleView.StickyHeader"
             >

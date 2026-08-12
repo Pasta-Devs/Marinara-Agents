@@ -3351,7 +3351,7 @@ function ViewerHub({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
-  const stickyHeaderRef = useHideOnScroll(scroller);
+  const setStickyHeader = useHideOnScroll(scroller);
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
   // The visit counts once the feed itself is on screen and loaded — not on app entry, and not
   // while discovery search has replaced it. Declared above the early returns so hook order
@@ -3461,7 +3461,7 @@ function ViewerHub({
         data-component="NoodlerHome.Discover"
       >
         <div
-          ref={stickyHeaderRef}
+          ref={setStickyHeader}
           className={cn(
             "sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-2 py-3 backdrop-blur",
             HIDE_ON_SCROLL_CLASS,
@@ -3582,7 +3582,7 @@ function ViewerHub({
       {/* NoodleR opened straight onto its tab row while Noodle showed a wordmark bar;
           both surfaces now carry the same phone header, and it travels with the tabs. */}
       <div
-        ref={stickyHeaderRef}
+        ref={setStickyHeader}
         className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
         data-component="NoodlerHome.StickyHeader"
       >
@@ -4340,27 +4340,30 @@ function SubscriptionSections({
       <section aria-labelledby="noodler-discover-heading">
         {/* A phone shows one card and a half of the row, which is a lot of height for a
             side note. Fold it away, and remember the choice for this session. */}
-        <button
-          type="button"
-          onClick={() => onToggleCollapsed?.()}
-          aria-expanded={!collapsed}
-          aria-controls="noodler-discover-list"
-          className="flex min-h-11 w-full items-center justify-between gap-2 px-4 pb-2 text-left"
-        >
-          <h3 id="noodler-discover-heading" className="text-xs font-bold text-[var(--muted-foreground)]">
+        {/* The button sits inside the heading, not the other way round: a button may not
+            contain a heading, and the heading has to stay a heading for the landmark. */}
+        <h3 id="noodler-discover-heading" className="text-xs font-bold text-[var(--muted-foreground)]">
+          <button
+            type="button"
+            onClick={() => onToggleCollapsed?.()}
+            aria-expanded={!collapsed}
+            // Only claim to control the list while it is mounted.
+            {...(collapsed ? {} : { "aria-controls": "noodler-discover-list" })}
+            className="flex min-h-11 w-full items-center justify-between gap-2 px-4 pb-2 text-left"
+          >
             {localizeUi("ui.noodle.subscriptionsections.discoverCreators")}
-          </h3>
-          <span className="flex shrink-0 items-center gap-1.5 text-[0.6875rem] tabular-nums text-[var(--muted-foreground)]">
-            {creators.length}
-            <ChevronDown
-              size={16}
-              className={cn(
-                "transition-transform duration-200",
-                collapsed ? "-rotate-90" : "rotate-0",
-              )}
-            />
-          </span>
-        </button>
+            <span className="flex shrink-0 items-center gap-1.5 text-[0.6875rem] font-normal tabular-nums text-[var(--muted-foreground)]">
+              {creators.length}
+              <ChevronDown
+                size={16}
+                className={cn(
+                  "transition-transform duration-200",
+                  collapsed ? "-rotate-90" : "rotate-0",
+                )}
+              />
+            </span>
+          </button>
+        </h3>
         {collapsed ? null : creators.length > 0 ? (
           <div
             id="noodler-discover-list"
