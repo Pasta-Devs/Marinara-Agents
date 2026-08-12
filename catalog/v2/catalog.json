@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-11T22:40:31.481Z",
+  "generatedAt": "2026-08-12T06:06:01.660Z",
   "packages": [
     {
       "manifest": {
@@ -996,7 +996,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1089,8 +1089,8 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.4.zip",
-        "sha256": "f2acbbd663236c07ac0babb416c903256f4bac5f583b3a68c15bbf5610c96068",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.5.zip",
+        "sha256": "4072ee55fff4bfeb23bcf5afb8b854ee7d3982275a1f63302516548424d15c24",
         "bytes": 1233813
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
