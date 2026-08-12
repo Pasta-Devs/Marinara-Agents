@@ -9,6 +9,7 @@ import {
   ltmDraftMutationSchema,
   ltmDraftReviewResponseSchema,
   ltmDraftStatusSchema,
+  ltmEventSchema,
   ltmDebugPhaseSchema,
   ltmDebugStatusSchema,
   ltmExtractSourceNoteRequestSchema,
@@ -173,6 +174,12 @@ const scopeTargetsQuery = z
   .object({
     chatId: z.string().min(1).max(120).optional(),
     includeAllChats: queryBoolean,
+  })
+  .strict();
+const noteEventsQuery = z
+  .object({
+    noteId: ltmNoteIdSchema,
+    limit: z.coerce.number().int().min(1).max(20).default(5),
   })
   .strict();
 
@@ -399,12 +406,21 @@ function vaultNoteValidationError(note: {
   title?: string;
   type: string;
   subjects?: unknown[];
+  sections?: Record<string, { text?: string }>;
+  links?: Array<{ target?: string; relation?: string }>;
+  conflicts?: Array<{ resolution?: string }>;
 }) {
   if (!note.title?.trim()) return "A memory title is required.";
+  if (!note.sections || !Object.keys(note.sections).length)
+    return "A memory must include at least one detail.";
+  if (Object.values(note.sections).some((section) => !section.text?.trim()))
+    return "Every memory detail needs text.";
   if (note.type === "character" && note.subjects?.length !== 1)
     return "Character memories must have exactly one subject.";
   if (note.type === "relationship" && note.subjects?.length !== 2)
     return "Relationship memories must have exactly two subjects.";
+  if (note.links?.some((link) => !link.target || !link.relation))
+    return "Every linked memory needs a memory and relationship.";
   return null;
 }
 
@@ -415,14 +431,16 @@ export function createLongTermMemoryRoutes(runtime: {
 }): FastifyPluginAsync {
   return async (app) => {
     const { root, storage, draftStore } = runtime;
-    const rebuildAfterMutation = async () => {
+    const rebuildAfterMutation = async (ordinaryEditorMutation = false) => {
       try {
         const result = await rebuildLongTermMemoryIndexes({ root });
         return { status: "complete" as const, ...result };
       } catch (error) {
         logger.warn(
           error,
-          "[ltm] Deferred index rebuild after maintenance mutation",
+          ordinaryEditorMutation
+            ? "[ltm] Recall index rebuild failed after editor mutation"
+            : "[ltm] Deferred index rebuild after maintenance mutation",
         );
         return {
           status: "deferred" as const,
@@ -494,6 +512,29 @@ export function createLongTermMemoryRoutes(runtime: {
       if (!parsed.success)
         return reply.status(400).send({ error: parsed.error.message });
       return { events: await readLtmDebugLog(parsed.data, root) };
+    });
+    app.get<{ Querystring: unknown }>("/events", async (request, reply) => {
+      const parsed = noteEventsQuery.safeParse(request.query);
+      if (!parsed.success)
+        return reply.status(400).send({ error: parsed.error.message });
+      const content = await readFile(getLongTermMemoryDirectories(root).eventLog, "utf8").catch((error) => {
+        if (isEnoent(error)) return "";
+        throw error;
+      });
+      const events = content
+        .split("\n")
+        .filter(Boolean)
+        .flatMap((line) => {
+          try {
+            const event = ltmEventSchema.safeParse(JSON.parse(line));
+            return event.success && event.data.target === parsed.data.noteId ? [event.data] : [];
+          } catch {
+            return [];
+          }
+        })
+        .slice(-parsed.data.limit)
+        .reverse();
+      return { events };
     });
     app.get("/debug-log/export", async (_request, reply) =>
       reply
@@ -1078,7 +1119,7 @@ export function createLongTermMemoryRoutes(runtime: {
         if (validationError) return reply.status(400).send({ error: validationError });
         try {
           const note = await storage.createNote(parsed.data);
-          const rebuild = await rebuildAfterMutation();
+          const rebuild = await rebuildAfterMutation(true);
           return reply.status(201).send({ note, rebuild });
         } catch (error) {
           if (error instanceof LtmServiceError)
@@ -1132,7 +1173,7 @@ export function createLongTermMemoryRoutes(runtime: {
           const result = routeError(error, "Could not update note.");
           return reply.status(result.statusCode).send(result.body);
         }
-        const rebuild = await rebuildAfterMutation();
+        const rebuild = await rebuildAfterMutation(true);
         return { note, rebuild };
       },
     );
@@ -1155,7 +1196,7 @@ export function createLongTermMemoryRoutes(runtime: {
             parsedBody.data.fromSectionKey,
             parsedBody.data.toSectionKey,
           );
-          const rebuildResult = await rebuildAfterMutation();
+          const rebuildResult = await rebuildAfterMutation(true);
           return ltmRenameNoteSectionResponseSchema.parse({
             ...renamed,
             rebuild:
@@ -1215,6 +1256,19 @@ export function createLongTermMemoryRoutes(runtime: {
         .strict()
         .parse(request.body ?? {});
       try {
+        const requestedNotes = await Promise.all(body.ids.map((id) => storage.getNote(id)));
+        if (requestedNotes.some((note) => note?.type === "source") && (
+          !body.retractExtracted ||
+          !body.lineageSourceNoteId ||
+          !body.expectedLineageNoteIds
+        )) {
+          const result = routeError(new LtmServiceError(
+            "Source deletion requires a current lineage preview and explicit selected memories.",
+            400,
+            "ltm_source_lineage_preview_required",
+          ), "Could not permanently delete memories.");
+          return reply.status(result.statusCode).send(result.body);
+        }
         const result = await storage.deleteNotesPermanently(body.ids, {
           retractExtracted: body.retractExtracted,
           excludedNoteIds: body.excludedNoteIds,

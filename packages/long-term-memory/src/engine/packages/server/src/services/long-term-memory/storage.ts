@@ -24,6 +24,7 @@ import {
   getLtmScopeChatIds,
   isGlobalLtmScope,
   matchesLtmScope,
+  validateLtmExplicitAvailability,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { normalizeLtmKeywordIntent } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
@@ -338,6 +339,18 @@ export class LongTermMemoryStorage {
     await this.initializeLtmStore();
     const timestamp = nowIso();
     const draft = ltmDraftNoteInputSchema.parse(input);
+    if (draft.type !== "source") {
+      const availabilityError = validateLtmExplicitAvailability(
+        draft.scope,
+        draft.modes,
+      );
+      if (availabilityError)
+        throw new LtmServiceError(
+          availabilityError,
+          400,
+          "ltm_explicit_availability_required",
+        );
+    }
     const sections =
       draft.type === "source"
         ? draft.sections
@@ -1103,6 +1116,20 @@ export class LongTermMemoryStorage {
     return withLtmVaultLock(this.root, async () => {
       const notes = await this.listNotes();
       const lookup = new Map(notes.map((note) => [note.id, note]));
+      const requestedSources = wanted.filter((id) => lookup.get(id)?.type === "source");
+      if (requestedSources.length) {
+        if (
+          requestedSources.length !== 1 ||
+          !options.retractExtracted ||
+          !options.lineageSourceNoteId ||
+          !options.expectedLineageNoteIds
+        )
+          throw new LtmServiceError(
+            "Source deletion requires a current lineage preview and explicit selected memories.",
+            400,
+            "ltm_source_lineage_preview_required",
+          );
+      }
       if (options.lineageSourceNoteId || options.expectedLineageNoteIds) {
         if (!options.lineageSourceNoteId || !options.expectedLineageNoteIds)
           throw new LtmServiceError("Source deletion preview is incomplete. Refresh the preview before deleting.", 409, "ltm_source_lineage_stale");

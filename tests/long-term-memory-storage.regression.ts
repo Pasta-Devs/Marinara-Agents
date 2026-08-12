@@ -111,6 +111,9 @@ async function main() {
   const { validateLtmExplicitAvailability } = await import(
     "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/scope.ts"
   );
+  const { normalizeDetailName } = await import(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/detail-name.ts"
+  );
   const {
     exportLongTermMemoryData,
     replaceLongTermMemoryData,
@@ -135,7 +138,7 @@ async function main() {
     title: "Restart proof",
     type: "world",
     modes: ["roleplay"],
-    scope: {},
+    scope: { chatId: "chat-a", chatIds: ["chat-a"] },
     tags: [],
     keywords: ["restart"],
     links: [],
@@ -485,6 +488,13 @@ async function main() {
     assert.equal(
       validateLtmExplicitAvailability({ chatId: "chat-a" }, ["roleplay"]),
       null,
+    );
+    assert.equal(normalizeDetailName("Current state"), "current_state");
+    assert.equal(normalizeDetailName(" Important facts! "), "important_facts");
+    await assert.rejects(
+      storage.createNote({ ...noteInput, id: "world_storage_global_rejected", scope: {} }),
+      (error: any) => error.code === "ltm_explicit_availability_required",
+      "storage must reject new non-source global memories even when callers bypass routes",
     );
     const keywordIntent = await storage.createNote({
       ...noteInput,
@@ -1473,13 +1483,21 @@ async function main() {
       modes: ["roleplay"],
       scope: { chatId: "chat-a", chatIds: ["chat-a"] },
     });
-    const legacyGlobal = await storage.createNote({
-      ...noteInput,
-      id: "world_availability_global",
-      title: "Legacy global availability",
-      modes: ["conversation"],
-      scope: {},
-    });
+    const legacyGlobal = (await storage.projectNote(
+      "world_availability_global",
+      "world",
+      () => ({
+        ...noteInput,
+        id: "world_availability_global",
+        title: "Legacy global availability",
+        modes: ["conversation"],
+        scope: {},
+        status: "active",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      }),
+    )).note!;
     const availabilityAdded = await storage.bulkMutateNotes({
       noteIds: [availabilityNote.id, legacyGlobal.id],
       addScope: { characterIds: ["character-a"] },
@@ -1666,14 +1684,32 @@ async function main() {
       updatedAt: timestamp,
       version: 1,
     }));
-    await storage.deleteNotesPermanently([uncheckedSource.id]);
+    await assert.rejects(
+      storage.deleteNotesPermanently([uncheckedSource.id]),
+      (error: any) => error.code === "ltm_source_lineage_preview_required",
+    );
     const uncheckedMemory = await storage.getNote("world_retract_unchecked");
     assert.equal(uncheckedMemory?.sections.facts.text, "Unchecked fact.");
-    assert.deepEqual(uncheckedMemory?.links, []);
+    assert.deepEqual(uncheckedMemory?.links, [{ target: uncheckedSource.id, relation: "extracted_from" }]);
 
     const retracted = await storage.deleteNotesPermanently(
-      [retractSourceA.id],
-      { retractExtracted: true },
+      [retractSourceA.id, "world_retract_empty"],
+      {
+        retractExtracted: true,
+        excludedNoteIds: [
+          "world_retract_shared",
+          "world_retract_manual",
+          "rel_retract_fallback",
+        ],
+        lineageSourceNoteId: retractSourceA.id,
+        expectedLineageNoteIds: [
+          retractSourceA.id,
+          "world_retract_shared",
+          "world_retract_empty",
+          "world_retract_manual",
+          "rel_retract_fallback",
+        ],
+      },
     );
     assert.deepEqual(retracted.deletedIds.sort(), [
       retractSourceA.id,
@@ -1692,7 +1728,7 @@ async function main() {
     ]);
     assert.equal(
       (await storage.getNote("rel_retract_fallback"))?.sections.state.text,
-      "Earlier B state.",
+      "Latest A state.",
     );
     assert.equal(
       (await storage.getNote("world_retract_manual"))?.sections.facts.text,
@@ -1746,7 +1782,12 @@ async function main() {
     );
     const excludedDelete = await storage.deleteNotesPermanently(
       [excludedSource.id],
-      { retractExtracted: true, excludedNoteIds: [excludedChild.note!.id] },
+      {
+        retractExtracted: true,
+        excludedNoteIds: [excludedChild.note!.id],
+        lineageSourceNoteId: excludedSource.id,
+        expectedLineageNoteIds: [excludedSource.id, excludedChild.note!.id],
+      },
     );
     assert.deepEqual(excludedDelete.deletedIds, [excludedSource.id]);
     assert.equal(await storage.getNote(excludedSource.id), null);

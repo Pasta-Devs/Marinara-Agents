@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
@@ -475,6 +475,21 @@ async function main() {
       },
     });
     assert.equal(created.statusCode, 201, created.body);
+    const recentEvents = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/events?noteId=world_route_fixture&limit=5",
+      headers,
+    });
+    assert.equal(recentEvents.statusCode, 200, recentEvents.body);
+    assert.equal(recentEvents.json().events[0]?.target, "world_route_fixture");
+    const globalScopeRejected = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: { ...created.json().note, id: "world_route_global_rejected", title: "Global rejected", scope: {} },
+    });
+    assert.equal(globalScopeRejected.statusCode, 400, globalScopeRejected.body);
+    assert.match(globalScopeRejected.json().error, /place where this memory is available/u);
     const missingTitle = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",
@@ -549,6 +564,34 @@ async function main() {
       "The cobalt key is beneath the observatory.",
     );
     assert.equal(renamed.json().rebuild.status, "complete");
+    const rebuildPath = join(
+      dataDir,
+      "long-term-memory",
+      "indexes",
+      "recall.json",
+    );
+    await rm(rebuildPath, { force: true });
+    await mkdir(rebuildPath);
+    const savedWithStaleRecall = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/world_route_fixture",
+      headers,
+      payload: { title: "Route fixture saved while recall is stale" },
+    });
+    assert.equal(savedWithStaleRecall.statusCode, 200, savedWithStaleRecall.body);
+    assert.equal(savedWithStaleRecall.json().rebuild.status, "deferred");
+    assert.equal(
+      (await storageService.storage.getNote("world_route_fixture"))?.title,
+      "Route fixture saved while recall is stale",
+      "ordinary edits persist even when their required recall rebuild fails",
+    );
+    await rm(rebuildPath, { recursive: true, force: true });
+    const rebuiltAfterFailure = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/rebuild",
+      headers,
+    });
+    assert.equal(rebuiltAfterFailure.statusCode, 200, rebuiltAfterFailure.body);
     const renameCollision = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",
@@ -1474,11 +1517,9 @@ async function main() {
       headers,
       payload: { ids: ["source_delete_keep"], retractExtracted: false },
     });
-    assert.equal(keepSource.statusCode, 200, keepSource.body);
-    assert.equal(
-      await storageService.storage.getNote("source_delete_keep"),
-      null,
-    );
+    assert.equal(keepSource.statusCode, 400, keepSource.body);
+    assert.equal(keepSource.json().code, "ltm_source_lineage_preview_required");
+    assert.ok(await storageService.storage.getNote("source_delete_keep"));
     assert.ok(await storageService.storage.getNote("world_delete_keep"));
     await storageService.storage.createNote({
       id: "source_delete_stale",

@@ -550,6 +550,45 @@ async function main() {
       maxTokens: 4096,
     });
     assert.equal(keywordOnly.chunks[0]?.chunk.noteId, "world_keyword_exact");
+    await storage.updateNote("world_keyword_exact", {
+      suppressedKeywords: ["harrowmark obscryl oath"],
+    });
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const suppressedKeywordRecall = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "harrowmark obscryl oath",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 0,
+      lexicalWeight: 0,
+      graphWeight: 1,
+      keywordWeight: 1,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(
+      suppressedKeywordRecall.chunks.some((entry: any) => entry.chunk.noteId === "world_keyword_exact"),
+      false,
+      "a suppressed generated or text-derived keyword must not seed recall after rebuilding",
+    );
+    await storage.updateNote("world_keyword_exact", {
+      manualKeywords: ["harrowmark obscryl oath"],
+      suppressedKeywords: [],
+    });
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const restoredKeywordRecall = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "harrowmark obscryl oath",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 0,
+      lexicalWeight: 0,
+      graphWeight: 0,
+      keywordWeight: 1,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(restoredKeywordRecall.chunks[0]?.chunk.noteId, "world_keyword_exact");
     const keywordThresholded = await retrieveLongTermMemory({
       root: storage.root,
       queryText: "harrowmark obscryl oath",
