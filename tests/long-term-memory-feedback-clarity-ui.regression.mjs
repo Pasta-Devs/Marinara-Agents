@@ -22,6 +22,20 @@ const settings = readFileSync(
   ),
   "utf8",
 );
+const vault = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/MemoryVault.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const targetPicker = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/TargetPicker.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const locale = JSON.parse(
   readFileSync(
     new URL(
@@ -53,5 +67,31 @@ assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u)
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb"], undefined);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.refreshSelectedSources"], "Refresh selected sources");
 assert.equal(locale["ui.longTermMemory.activityview.totalTokens"], "Total: {{count}} tokens");
+assert.match(vault, /function MemoryAvailabilityWorkbench/u);
+assert.match(vault, /data-ltm-availability-workbench/u);
+assert.match(vault, /availabilityStaged/u);
+assert.match(vault, /lastPlaceRequired/u);
+assert.match(vault, /lastModeRequired/u);
+assert.match(vault, /function BulkAvailabilityWorkbench/u);
+assert.match(vault, /previewBulkAvailability/u);
+assert.doesNotMatch(vault, /selectScopeTarget|scopeSelectionIds|removeScopeGroup/u);
+assert.match(targetPicker, /groupLabels\?/u);
+assert.equal(locale["ui.longTermMemory.memoryvault.chooseWhereUsed"], "Choose where used");
+assert.equal(locale["ui.longTermMemory.memoryvault.saveAvailability"], "Save availability");
+assert.match(vault, /data-ltm-select-mode/u);
+assert.match(vault, /sourceFilter/u);
+assert.match(vault, /data-ltm-source-readonly/u);
+assert.match(vault, /data-ltm-memory-options/u);
+assert.match(vault, /data-ltm-keyword-editor/u);
+assert.match(vault, /getLtmKeywordIntent/u);
+assert.match(vault, /renameDetails/u);
+assert.match(vault, /beginRename/u);
+assert.match(vault, /data-ltm-detail-conflict/u);
+assert.equal(locale["ui.longTermMemory.memoryvault.memoryInfo"], "Memory info");
+assert.equal(locale["ui.longTermMemory.memoryvault.memoryOptions"], "Memory options");
+assert.equal(locale["ui.longTermMemory.memoryvault.renameDetails"], "Rename details");
+assert.match(vault, /extractionImportance/u);
+assert.match(vault, /extractionConfidence/u);
+assert.match(vault, /data-ltm-validation-summary/u);
 
 process.stdout.write("Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, and defaults ok\n");

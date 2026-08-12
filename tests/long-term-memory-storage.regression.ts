@@ -1577,7 +1577,12 @@ async function main() {
         facts: { text: "Manually preserved fact.", updatedAt: timestamp },
       },
     });
-    assert.equal(manual.sections.facts.contributions?.[0]?.owner, "manual");
+    assert.deepEqual(manual.sections.facts.contributions?.map((item) => item.owner), [
+      "source",
+      "manual",
+    ]);
+    assert.equal(manual.sections.facts.text, "Manually preserved fact.");
+    assert.deepEqual(manual.sections.facts.evidence, [`source_note:${retractSourceA.id}`]);
 
     await storage.projectNote("rel_retract_fallback", "relationship", () => ({
       ...noteInput,

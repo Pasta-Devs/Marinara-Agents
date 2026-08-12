@@ -16,6 +16,7 @@ export function TargetPicker({
   placeholder,
   emptyLabel,
   clearLabel,
+  groupLabels,
   onSelect,
 }: {
   targets: PickerTarget[];
@@ -24,6 +25,7 @@ export function TargetPicker({
   placeholder: string;
   emptyLabel: string;
   clearLabel: string;
+  groupLabels?: Partial<Record<PickerTarget["kind"], string>>;
   onSelect: (target: PickerTarget) => void;
 }) {
   const inputId = useId();
@@ -102,21 +104,27 @@ export function TargetPicker({
       <div id={listId} role="listbox" className="max-h-52 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--background)]">
         {filtered.length ? (
           filtered.map((target, index) => (
-            <button
-              key={`${target.kind}:${target.id}`}
-              id={`${listId}-${target.kind}-${target.id}`}
-              type="button"
-              role="option"
-              aria-selected={index === activeIndex}
-              className="block min-h-11 w-full border-b border-[var(--border)] px-3 py-2 text-left last:border-b-0 hover:bg-[var(--accent)] aria-selected:bg-[var(--accent)]"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => select(target)}
-            >
-              <span className="block text-sm">{target.label}</span>
-              {target.comment ? (
-                <span className="block text-xs text-[var(--muted-foreground)]">{target.comment}</span>
+            <div key={`${target.kind}:${target.id}`}>
+              {groupLabels && (index === 0 || filtered[index - 1]?.kind !== target.kind) ? (
+                <p className="border-b border-[var(--border)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold text-[var(--muted-foreground)]">
+                  {groupLabels[target.kind]}
+                </p>
               ) : null}
-            </button>
+              <button
+                id={`${listId}-${target.kind}-${target.id}`}
+                type="button"
+                role="option"
+                aria-selected={index === activeIndex}
+                className="block min-h-11 w-full border-b border-[var(--border)] px-3 py-2 text-left last:border-b-0 hover:bg-[var(--accent)] aria-selected:bg-[var(--accent)]"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => select(target)}
+              >
+                <span className="block text-sm">{target.label}</span>
+                {target.comment ? (
+                  <span className="block text-xs text-[var(--muted-foreground)]">{target.comment}</span>
+                ) : null}
+              </button>
+            </div>
           ))
         ) : (
           <p className="px-3 py-2 text-xs text-[var(--muted-foreground)]">{emptyLabel}</p>

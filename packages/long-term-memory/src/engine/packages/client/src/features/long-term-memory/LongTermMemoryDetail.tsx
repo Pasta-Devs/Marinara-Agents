@@ -1749,6 +1749,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     props={props}
                     onDirtyChange={setDestinationDirty}
                     onOpenMemory={openMemory}
+                    onOpenSources={openSources}
                     onOpenVault={() => void selectDestination("vault")}
                     onOpenReview={openReview}
                     onRecoverCandidate={recoverCandidate}

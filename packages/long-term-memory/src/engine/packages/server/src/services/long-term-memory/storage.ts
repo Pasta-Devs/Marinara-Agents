@@ -58,6 +58,7 @@ import { logger } from "./package-runtime.js";
 import {
   manualContribution,
   renderSectionContributions,
+  sectionContributions,
 } from "./section-contributions.js";
 import {
   extractionFingerprintForLtmSourceNote,
@@ -414,7 +415,7 @@ export class LongTermMemoryStorage {
                 return [
                   key,
                   renderSectionContributions(
-                    [manualContribution(section)],
+                    [...sectionContributions(previous), manualContribution(section)],
                     isAdditiveLtmSection(current, key),
                   )!,
                 ];
