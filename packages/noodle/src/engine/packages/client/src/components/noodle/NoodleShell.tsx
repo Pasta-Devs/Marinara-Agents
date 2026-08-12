@@ -22,7 +22,9 @@ import {
   type ReactNode,
   type RefObject,
   useContext,
+  useEffect,
   useRef,
+  useState,
 } from "react";
 import type { NoodleAccount } from "@marinara-engine/shared";
 import type { AvatarCrop } from "@marinara-engine/shared";
@@ -86,6 +88,101 @@ export function NoodleLogo({
   src?: string;
 }) {
   return <img src={src} alt="" className={cn("object-contain", className)} />;
+}
+
+/**
+ * Hides a sticky header once the reader scrolls down past a few pixels, and brings
+ * it back on the first upward movement. Hiding is animated; returning is not, so a
+ * flick upward puts the controls under the thumb at once.
+ *
+ * Takes the scrolling element as state, not a ref: surfaces that swap their scroller
+ * for a different view (NoodleR discovery) would otherwise keep listening to a
+ * detached node.
+ */
+export function useHideOnScroll(scroller: HTMLElement | null, threshold = 24) {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    if (!scroller) return;
+    let anchor = scroller.scrollTop;
+    const onScroll = () => {
+      const top = scroller.scrollTop;
+      // Never hide the header over the top of the feed, or it flickers on bounce.
+      if (top <= threshold) {
+        anchor = top;
+        setHidden(false);
+        return;
+      }
+      const delta = top - anchor;
+      // The anchor only moves when the state does, so a slow drag still accumulates
+      // to the threshold instead of being read as a series of tiny scrolls.
+      if (delta > threshold) {
+        anchor = top;
+        setHidden(true);
+      } else if (delta < 0) {
+        anchor = top;
+        setHidden(false);
+      }
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, [scroller, threshold]);
+  return hidden;
+}
+
+/** Class set for a sticky header driven by {@link useHideOnScroll}. */
+export function hideOnScrollClass(hidden: boolean) {
+  return cn(
+    "will-change-transform",
+    hidden
+      ? "-translate-y-full transition-transform duration-200 ease-out"
+      : "translate-y-0 transition-none",
+  );
+}
+
+/**
+ * The phone-width header: account menu on the left, wordmark in the middle. Shared so
+ * NoodleR shows the same bar as Noodle instead of opening straight onto its tab row.
+ */
+export function NoodleMobileHeader({
+  personaAccount,
+  onOpenDrawer,
+  triggerRef,
+  noodler = false,
+}: {
+  personaAccount: NoodleAccount | null;
+  onOpenDrawer: () => void;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
+  noodler?: boolean;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  return (
+    <div
+      className="grid h-14 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-3 backdrop-blur @min-[1024px]:hidden"
+      data-component="NoodleView.MobileHeader"
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={onOpenDrawer}
+        className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-[var(--accent)]"
+        title={localizeUi("ui.noodle.noodlehome.openAccountMenu")}
+        aria-label={localizeUi("ui.noodle.noodlehome.openNoodleAccountMenu")}
+      >
+        {personaAccount ? (
+          <Avatar account={personaAccount} size="sm" />
+        ) : (
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
+            <AtSign size={18} />
+          </span>
+        )}
+      </button>
+      <NoodleLogo
+        src={noodler ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
+        className="mx-auto h-9 w-14"
+      />
+      <span aria-hidden="true" />
+    </div>
+  );
 }
 
 // The count is the reason to come back, so it carries its own label rather than leaving a

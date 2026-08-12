@@ -110,8 +110,11 @@ import {
   Avatar,
   getNoodleAccentStyle,
   NewSinceLastVisitDivider,
+  hideOnScrollClass,
+  NoodleMobileHeader,
   NoodleShell,
   ProfileInitial,
+  useHideOnScroll,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
   NOODLE_PINK,
   useNoodleAccent,
@@ -1662,6 +1665,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   return (
     <NoodleShell {...shellProps} rightRail={feedRightRail}>
       <ViewerHub
+        personaAccount={shellPersonaAccount}
+        onOpenMobileDrawer={() => setMobileDrawerOpen(true)}
         personas={personas}
         personasLoading={personasQuery.isLoading}
         personasError={personasQuery.isError}
@@ -3262,6 +3267,8 @@ function StageProfileView({
 }
 
 function ViewerHub({
+  personaAccount,
+  onOpenMobileDrawer,
   personas,
   personasLoading,
   personasError,
@@ -3302,6 +3309,8 @@ function ViewerHub({
   newSinceAt,
   onFeedShown,
 }: {
+  personaAccount: NoodleAccount | null;
+  onOpenMobileDrawer: () => void;
   personas: Persona[];
   personasLoading: boolean;
   personasError: boolean;
@@ -3348,6 +3357,9 @@ function ViewerHub({
   togglePending: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const headerHidden = useHideOnScroll(scroller);
+  const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
   // The visit counts once the feed itself is on screen and loaded — not on app entry, and not
   // while discovery search has replaced it. Declared above the early returns so hook order
   // stays stable across the empty and error states below.
@@ -3450,8 +3462,17 @@ function ViewerHub({
 
   if (discoveryOpen) {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto" data-component="NoodlerHome.Discover">
-        <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-2 py-3 backdrop-blur">
+      <div
+        ref={setScroller}
+        className="min-h-0 flex-1 overflow-y-auto"
+        data-component="NoodlerHome.Discover"
+      >
+        <div
+          className={cn(
+            "sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-2 py-3 backdrop-blur",
+            hideOnScrollClass(headerHidden),
+          )}
+        >
           <button
             type="button"
             onClick={onCloseDiscovery}
@@ -3563,8 +3584,19 @@ function ViewerHub({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="sticky top-0 z-20 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
+    <div ref={setScroller} className="min-h-0 flex-1 overflow-y-auto">
+      {/* NoodleR opened straight onto its tab row while Noodle showed a wordmark bar;
+          both surfaces now carry the same phone header, and it travels with the tabs. */}
+      <div
+        className={cn("sticky top-0 z-30", hideOnScrollClass(headerHidden))}
+        data-component="NoodlerHome.StickyHeader"
+      >
+        <NoodleMobileHeader
+          personaAccount={personaAccount}
+          onOpenDrawer={onOpenMobileDrawer}
+          noodler
+        />
+        <div className="border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
         <div className="flex items-center pr-2">
           <div
             className="grid min-w-0 flex-1 grid-cols-2"
@@ -3596,6 +3628,7 @@ function ViewerHub({
             ))}
           </div>
         </div>
+        </div>
       </div>
       <div className="border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:px-4 @min-[1280px]:hidden">
         <SubscriptionSections
@@ -3604,6 +3637,8 @@ function ViewerHub({
           togglePending={togglePending}
           onOpenProfile={postCardCtx.openAuthorProfile}
           compact
+          collapsed={discoverCollapsed}
+          onToggleCollapsed={() => setDiscoverCollapsed((value) => !value)}
         />
       </div>
       {authorProfile ? (
@@ -4291,25 +4326,49 @@ function SubscriptionSections({
   togglePending,
   onOpenProfile,
   compact = false,
+  collapsed = false,
+  onToggleCollapsed,
 }: {
   creators: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"];
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
   onOpenProfile?: (accountId: string) => void;
   compact?: boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   if (compact) {
     return (
       <section aria-labelledby="noodler-discover-heading">
-        <div className="flex items-center justify-between px-4 pb-2">
+        {/* A phone shows one card and a half of the row, which is a lot of height for a
+            side note. Fold it away, and remember the choice for this session. */}
+        <button
+          type="button"
+          onClick={() => onToggleCollapsed?.()}
+          aria-expanded={!collapsed}
+          aria-controls="noodler-discover-list"
+          className="flex min-h-11 w-full items-center justify-between gap-2 px-4 pb-2 text-left"
+        >
           <h3 id="noodler-discover-heading" className="text-xs font-bold text-[var(--muted-foreground)]">
             {localizeUi("ui.noodle.subscriptionsections.discoverCreators")}
           </h3>
-          <span className="text-[0.6875rem] tabular-nums text-[var(--muted-foreground)]">{creators.length}</span>
-        </div>
-        {creators.length > 0 ? (
-          <div className="flex snap-x gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <span className="flex shrink-0 items-center gap-1.5 text-[0.6875rem] tabular-nums text-[var(--muted-foreground)]">
+            {creators.length}
+            <ChevronDown
+              size={16}
+              className={cn(
+                "transition-transform duration-200",
+                collapsed ? "-rotate-90" : "rotate-0",
+              )}
+            />
+          </span>
+        </button>
+        {collapsed ? null : creators.length > 0 ? (
+          <div
+            id="noodler-discover-list"
+            className="flex snap-x gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {creators.map((creator) => {
               const openProfile = onOpenProfile ? () => onOpenProfile(creator.profile.id) : undefined;
               return (
