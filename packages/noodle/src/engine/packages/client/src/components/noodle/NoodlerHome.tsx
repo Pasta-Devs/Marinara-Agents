@@ -111,7 +111,6 @@ import {
   getNoodleAccentStyle,
   NewSinceLastVisitDivider,
   HIDE_ON_SCROLL_CLASS,
-  NoodleMobileHeader,
   NoodleShell,
   ProfileInitial,
   useHideOnScroll,
@@ -3587,7 +3586,8 @@ function ViewerHub({
         className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
         data-component="NoodlerHome.StickyHeader"
       >
-        <NoodleMobileHeader noodler />
+        {/* See NoodleHome: the phone wordmark bar is off while the bottom bar
+            carries the branding. */}
         <div className="border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
         <div className="flex items-center pr-2">
           <div

@@ -1032,6 +1032,27 @@ export function NoodleShell({
                 </span>
               )}
             </button>
+            {onOpenSearch && (
+              <button
+                type="button"
+                onClick={onOpenSearch}
+                aria-label={
+                  noodlerActive
+                    ? localizeUi("ui.noodle.noodleshell.discoverCreators")
+                    : localizeUi("ui.noodle.noodlehome.searchNoodle")
+                }
+                aria-current={activeView === "search" ? "page" : undefined}
+                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+              >
+                <Search
+                  size={22}
+                  strokeWidth={activeView === "search" ? 2.8 : 2}
+                />
+                {activeView === "search" && (
+                  <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
+                )}
+              </button>
+            )}
             <button
               type="button"
               onClick={onMobileHomeTap}
@@ -1060,7 +1081,7 @@ export function NoodleShell({
               <NoodleLogo
                 src={noodlerActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
                 className={cn(
-                  "h-7 w-11 transition-opacity",
+                  "h-6 w-9 transition-opacity",
                   homeActive ? "opacity-100" : "opacity-55",
                 )}
               />
@@ -1068,27 +1089,6 @@ export function NoodleShell({
                 <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
               )}
             </button>
-            {onOpenSearch && (
-              <button
-                type="button"
-                onClick={onOpenSearch}
-                aria-label={
-                  noodlerActive
-                    ? localizeUi("ui.noodle.noodleshell.discoverCreators")
-                    : localizeUi("ui.noodle.noodlehome.searchNoodle")
-                }
-                aria-current={activeView === "search" ? "page" : undefined}
-                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-              >
-                <Search
-                  size={22}
-                  strokeWidth={activeView === "search" ? 2.8 : 2}
-                />
-                {activeView === "search" && (
-                  <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
-                )}
-              </button>
-            )}
             {onOpenNotifications && (
               <button
                 type="button"

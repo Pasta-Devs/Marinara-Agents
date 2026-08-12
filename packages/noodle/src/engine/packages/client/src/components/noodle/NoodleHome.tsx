@@ -145,7 +145,6 @@ import {
   NOODLE_ICON_SCOPE_CLASS,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
   HIDE_ON_SCROLL_CLASS,
-  NoodleMobileHeader,
   useHideOnScroll,
 } from "./NoodleShell";
 import type {
@@ -5959,7 +5958,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
               data-component="NoodleView.StickyHeader"
             >
-              <NoodleMobileHeader />
+              {/* Unmounted while the bottom-bar wordmark is on trial: it carries the
+                  same branding, and two of them is one too many. */}
               {isAccountSearch ? (
                 <div className="flex h-12 items-center gap-3 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-4 backdrop-blur">
                   <AtSign size={19} className="text-[var(--noodle-accent)]" />
