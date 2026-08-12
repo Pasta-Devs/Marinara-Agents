@@ -53,6 +53,14 @@ const NOODLER_LOGO_SRC =
   "/api/capability-packages/noodle/assets/noodler-klusek.png";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 
+// Switching apps unmounts the whole surface, so the bows come back as new elements with
+// nothing to transition from. The module outlives the remount, so it can remember which
+// mode was on screen last and let the new pair animate out of the old arrangement.
+let lastRenderedAppMode: NoodleShellMode | null = null;
+
+const BOW_FRONT = { x: 0, y: 0, scale: 1, opacity: 1, filter: "saturate(1)" };
+const BOW_BACK = { x: 5, y: 4, scale: 0.8, opacity: 0.55, filter: "saturate(0.65)" };
+
 export function getNoodleAccentStyle(
   accent: string,
   style: CSSProperties = {},
@@ -491,6 +499,12 @@ export function NoodleShell({
     if (switching) (noodlerActive ? onOpenHome : onOpenNoodler)();
     else onOpenMobileHomeDestination();
   };
+  const previousAppMode = useRef(lastRenderedAppMode).current;
+  const modeJustSwapped =
+    previousAppMode !== null && previousAppMode !== resolvedAppMode;
+  useEffect(() => {
+    lastRenderedAppMode = resolvedAppMode;
+  }, [resolvedAppMode]);
   useDialogFocusScope(mobileDrawerOpen, mobileDrawerRef, mobileDrawerCloseRef);
 
   return (
@@ -1088,15 +1102,23 @@ export function NoodleShell({
                   { src: NOODLE_LOGO_SRC, front: !noodlerActive },
                   { src: NOODLER_LOGO_SRC, front: noodlerActive },
                 ].map((bow) => (
-                  <NoodleLogo
+                  <motion.img
                     key={bow.src}
                     src={bow.src}
+                    alt=""
                     className={cn(
-                      "absolute transition-[transform,opacity,filter,height,width] duration-200 ease-out",
-                      bow.front
-                        ? "z-10 h-6 w-9 translate-x-0 translate-y-0 opacity-100"
-                        : "h-5 w-[1.7rem] translate-x-[5px] translate-y-[4px] opacity-55 saturate-[0.65]",
+                      "absolute h-6 w-9 object-contain",
+                      bow.front && "z-10",
                     )}
+                    initial={
+                      modeJustSwapped && !prefersReducedMotion
+                        ? bow.front
+                          ? BOW_BACK
+                          : BOW_FRONT
+                        : false
+                    }
+                    animate={bow.front ? BOW_FRONT : BOW_BACK}
+                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                   />
                 ))}
               </span>
