@@ -1665,8 +1665,6 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   return (
     <NoodleShell {...shellProps} rightRail={feedRightRail}>
       <ViewerHub
-        personaAccount={shellPersonaAccount}
-        onOpenMobileDrawer={() => setMobileDrawerOpen(true)}
         personas={personas}
         personasLoading={personasQuery.isLoading}
         personasError={personasQuery.isError}
@@ -3267,8 +3265,6 @@ function StageProfileView({
 }
 
 function ViewerHub({
-  personaAccount,
-  onOpenMobileDrawer,
   personas,
   personasLoading,
   personasError,
@@ -3309,8 +3305,6 @@ function ViewerHub({
   newSinceAt,
   onFeedShown,
 }: {
-  personaAccount: NoodleAccount | null;
-  onOpenMobileDrawer: () => void;
   personas: Persona[];
   personasLoading: boolean;
   personasError: boolean;
@@ -3593,11 +3587,7 @@ function ViewerHub({
         className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
         data-component="NoodlerHome.StickyHeader"
       >
-        <NoodleMobileHeader
-          personaAccount={personaAccount}
-          onOpenDrawer={onOpenMobileDrawer}
-          noodler
-        />
+        <NoodleMobileHeader noodler />
         <div className="border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
         <div className="flex items-center pr-2">
           <div

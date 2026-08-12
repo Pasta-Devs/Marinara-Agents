@@ -171,47 +171,19 @@ export function useHideOnScroll(scroller: HTMLElement | null) {
 export const HIDE_ON_SCROLL_CLASS = "will-change-transform";
 
 /**
- * The phone-width header: account menu on the left, wordmark in the middle. Shared so
- * NoodleR shows the same bar as Noodle instead of opening straight onto its tab row.
+ * The phone-width wordmark bar. It carries no account button: the bottom nav already
+ * has that avatar, and two triggers for one drawer is one more than the row needs.
  */
-export function NoodleMobileHeader({
-  personaAccount,
-  onOpenDrawer,
-  triggerRef,
-  noodler = false,
-}: {
-  personaAccount: NoodleAccount | null;
-  onOpenDrawer: () => void;
-  triggerRef?: RefObject<HTMLButtonElement | null>;
-  noodler?: boolean;
-}) {
-  const { t: localizeUi } = useUiTranslation();
+export function NoodleMobileHeader({ noodler = false }: { noodler?: boolean }) {
   return (
     <div
-      className="grid h-14 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-3 backdrop-blur @min-[1024px]:hidden"
+      className="flex h-14 items-center justify-center border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-3 backdrop-blur @min-[1024px]:hidden"
       data-component="NoodleView.MobileHeader"
     >
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={onOpenDrawer}
-        className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-[var(--accent)]"
-        title={localizeUi("ui.noodle.noodlehome.openAccountMenu")}
-        aria-label={localizeUi("ui.noodle.noodlehome.openNoodleAccountMenu")}
-      >
-        {personaAccount ? (
-          <Avatar account={personaAccount} size="sm" />
-        ) : (
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
-            <AtSign size={18} />
-          </span>
-        )}
-      </button>
       <NoodleLogo
         src={noodler ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
-        className="mx-auto h-9 w-14"
+        className="h-9 w-14"
       />
-      <span aria-hidden="true" />
     </div>
   );
 }
@@ -420,6 +392,8 @@ export interface NoodleShellProps {
   accountSwitcherRef: RefObject<HTMLDivElement | null>;
   mobileDrawerOpen: boolean;
   onMobileDrawerOpenChange: (open: boolean) => void;
+  /** The bottom-nav account button, so pages can return focus to what opened the drawer. */
+  mobileDrawerTriggerRef?: RefObject<HTMLButtonElement | null>;
   mobileAccountSwitcherOpen: boolean;
   onMobileAccountSwitcherOpenChange: (open: boolean) => void;
   notificationCount: number;
@@ -465,6 +439,7 @@ export function NoodleShell({
   accountSwitcherRef,
   mobileDrawerOpen,
   onMobileDrawerOpenChange,
+  mobileDrawerTriggerRef,
   mobileAccountSwitcherOpen,
   onMobileAccountSwitcherOpenChange,
   notificationCount,
@@ -1027,6 +1002,7 @@ export function NoodleShell({
         >
           <div className="grid h-[56px] grid-flow-col auto-cols-fr">
             <button
+              ref={mobileDrawerTriggerRef}
               type="button"
               onClick={() => onMobileDrawerOpenChange(true)}
               aria-label={localizeUi(
