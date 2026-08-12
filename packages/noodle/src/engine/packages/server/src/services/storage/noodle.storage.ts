@@ -2437,29 +2437,45 @@ export function createNoodleStorage(db: DB) {
     },
 
     async createNoodlerPost(input: NoodlerPostPersistenceInput): Promise<NoodlerManagedPost | null> {
-      const account = await this.getNoodlerAccountById(input.authorAccountId);
-      if (!account) return null;
+      const posts = await this.createNoodlerPosts([input]);
+      return posts?.[0] ?? null;
+    },
+
+    // One transaction for the whole batch: a post and its linked follow-up are
+    // either both stored or neither is, with no compensating delete to get wrong.
+    async createNoodlerPosts(
+      inputs: NoodlerPostPersistenceInput[],
+    ): Promise<NoodlerManagedPost[] | null> {
+      const accounts = await Promise.all(
+        inputs.map((input) => this.getNoodlerAccountById(input.authorAccountId)),
+      );
+      if (accounts.some((account) => !account)) return null;
       const timestamp = now();
-      const id = input.id ?? newId();
+      const rows = inputs.map((input, index) => ({
+        id: input.id ?? newId(),
+        authorAccountId: input.authorAccountId,
+        title: input.title?.trim() || null,
+        content: input.content,
+        imageUrl: input.imageUrl ?? null,
+        imagePrompt: input.imagePrompt ?? null,
+        parentPostId: null,
+        quotePostId: null,
+        source: input.source ?? "manual",
+        access: input.access ?? "public",
+        metadata: JSON.stringify(input.metadata ?? {}),
+        authorSnapshot: JSON.stringify(snapshotForAccount(accounts[index]!)),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }));
       return db.transaction(async (tx) => {
-        await tx.insert(noodlePosts).values({
-          id,
-          authorAccountId: input.authorAccountId,
-          title: input.title?.trim() || null,
-          content: input.content,
-          imageUrl: input.imageUrl ?? null,
-          imagePrompt: input.imagePrompt ?? null,
-          parentPostId: null,
-          quotePostId: null,
-          source: input.source ?? "manual",
-          access: input.access ?? "public",
-          metadata: JSON.stringify(input.metadata ?? {}),
-          authorSnapshot: JSON.stringify(snapshotForAccount(account)),
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        });
-        const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
-        return rows[0] ? mapManagedPost(rows[0]) : null;
+        for (const row of rows) await tx.insert(noodlePosts).values(row);
+        const stored = await tx
+          .select()
+          .from(noodlePosts)
+          .where(inArray(noodlePosts.id, rows.map((row) => row.id)));
+        const byId = new Map(stored.map((row) => [row.id, mapManagedPost(row)]));
+        const managed = rows.map((row) => byId.get(row.id));
+        return managed.every((post) => post) ? (managed as NoodlerManagedPost[]) : null;
       });
     },
 

@@ -97,7 +97,7 @@ import {
 import { isDirectlyInvitedNoodleCharacter } from "../services/noodle/noodle-invited-post-draft-access.js";
 import {
   getNoodlerImageConnections,
-  saveNoodlerImageConnections,
+  updateNoodlerImageConnections,
 } from "../services/noodle/noodler-image-connections.js";
 import { verifyNoodlerSourceRevisionToken } from "../services/noodle/noodle-source-revision.js";
 import {
@@ -1598,6 +1598,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!parsed.success)
       return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
+    let discardedPreparedPostCount = 0;
     const locked = await tryNoodlerAccountOperation(id, async () => {
       const noodlerAccount = await noodle.getNoodlerAccountById(id);
       const publicAccount = noodlerAccount?.noodleAccountId
@@ -1674,6 +1675,8 @@ export async function noodleRoutes(app: FastifyInstance) {
             noodle.discardNoodlerPreparedPost(post.id),
           ),
         );
+        // The downgrade throws away unreleased reserve posts; say how many.
+        discardedPreparedPostCount = preparedForCreator.length;
       }
       const submittedSnapshotIsCurrent =
         parsed.data.sourceSnapshot &&
@@ -1725,7 +1728,7 @@ export async function noodleRoutes(app: FastifyInstance) {
       );
       if (!profile)
         throw new Error("Failed to load the updated NoodleR stage profile.");
-      return { status: "updated", profile } as const;
+      return { status: "updated", profile, discardedPreparedPostCount } as const;
     });
     if (!locked.acquired) {
       return reply
@@ -1758,7 +1761,10 @@ export async function noodleRoutes(app: FastifyInstance) {
           "The linked source changed or this draft expired. Generate a fresh draft before accepting source changes.",
       });
     }
-    return locked.value.profile;
+    return {
+      ...locked.value.profile,
+      discardedPreparedPostCount: locked.value.discardedPreparedPostCount,
+    };
   });
 
   app.post("/noodler/accounts/:id/source/dismiss", async (req, reply) => {
@@ -1853,11 +1859,11 @@ export async function noodleRoutes(app: FastifyInstance) {
     const deleted = locked.value;
     if (!deleted)
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
-    const imageConnections = await getNoodlerImageConnections(app.db);
-    if (imageConnections.creatorConnectionIds[id]) {
-      delete imageConnections.creatorConnectionIds[id];
-      await saveNoodlerImageConnections(app.db, imageConnections);
-    }
+    await updateNoodlerImageConnections(app.db, (current) => {
+      const creatorConnectionIds = { ...current.creatorConnectionIds };
+      delete creatorConnectionIds[id];
+      return { ...current, creatorConnectionIds };
+    });
     removeNoodlerAccountMedia(id);
     return deleted;
   });
@@ -2025,16 +2031,28 @@ export async function noodleRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
-    const current = await getNoodlerImageConnections(app.db);
-    if (body.data.defaultConnectionId !== undefined) {
-      current.defaultConnectionId = body.data.defaultConnectionId;
+    const { creatorId, connectionId, defaultConnectionId } = body.data;
+    // A creatorId without a connectionId (or the reverse) silently did nothing.
+    if ((creatorId === undefined) !== (connectionId === undefined)) {
+      return reply.code(400).send({
+        error: "Set creatorId and connectionId together to map a Creator to an image connection.",
+      });
     }
-    if (body.data.creatorId && body.data.connectionId !== undefined) {
-      if (body.data.connectionId) current.creatorConnectionIds[body.data.creatorId] = body.data.connectionId;
-      else delete current.creatorConnectionIds[body.data.creatorId];
+    if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
+      return reply.code(404).send({ error: "NoodleR stage profile not found" });
     }
-    await saveNoodlerImageConnections(app.db, current);
-    return current;
+    return updateNoodlerImageConnections(app.db, (current) => {
+      const creatorConnectionIds = { ...current.creatorConnectionIds };
+      if (creatorId) {
+        if (connectionId) creatorConnectionIds[creatorId] = connectionId;
+        else delete creatorConnectionIds[creatorId];
+      }
+      return {
+        defaultConnectionId:
+          defaultConnectionId !== undefined ? defaultConnectionId : current.defaultConnectionId,
+        creatorConnectionIds,
+      };
+    });
   });
 
   // Manual test trigger: runs one automatic-style post immediately, the same way the

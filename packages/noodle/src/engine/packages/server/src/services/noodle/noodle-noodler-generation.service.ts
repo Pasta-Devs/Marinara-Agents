@@ -574,6 +574,11 @@ export async function generateNoodlerPost(
 
   let lockedFollowUpPostId = input.request.lockedFollowUpPostId;
   const pendingLockedFollowUp = input.request.lockedFollowUp;
+  if (lockedFollowUpPostId && pendingLockedFollowUp) {
+    throw new Error(
+      "A NoodleR post links either an existing follow-up or a new one, not both.",
+    );
+  }
   if (lockedFollowUpPostId) {
     const followUp = await noodle.getNoodlerPostById(lockedFollowUpPostId);
     if (
@@ -626,35 +631,30 @@ export async function generateNoodlerPost(
       metadata?: Record<string, unknown>;
     } = {},
   ): Promise<NoodlerManagedPost> => {
-    let createdFollowUp = false;
-    try {
-      if (pendingLockedFollowUp && lockedFollowUpPostId) {
-        const followUp = await noodle.createNoodlerPost({
-          id: lockedFollowUpPostId,
-          authorAccountId: account.id,
-          title: pendingLockedFollowUp.title,
-          content: pendingLockedFollowUp.content,
-          source: "manual",
-          access: "locked",
-          metadata: { noodlerContentFormat: "long_form" },
-        });
-        if (!followUp)
-          throw new Error("Failed to persist the locked NoodleR follow-up.");
-        createdFollowUp = true;
-      }
-      const post = await noodle.createNoodlerPost({
-        ...baseInput,
-        ...extra,
-        metadata: { ...baseInput.metadata, ...extra.metadata },
-      });
-      if (!post)
-        throw new Error("Failed to persist the generated NoodleR post.");
-      return post;
-    } catch (error) {
-      if (createdFollowUp && lockedFollowUpPostId)
-        await noodle.deleteNoodlerPost(lockedFollowUpPostId);
-      throw error;
-    }
+    const main = {
+      ...baseInput,
+      ...extra,
+      metadata: { ...baseInput.metadata, ...extra.metadata },
+    };
+    const posts = await noodle.createNoodlerPosts(
+      pendingLockedFollowUp && lockedFollowUpPostId
+        ? [
+            {
+              id: lockedFollowUpPostId,
+              authorAccountId: account.id,
+              title: pendingLockedFollowUp.title,
+              content: pendingLockedFollowUp.content,
+              source: "manual" as const,
+              access: "locked" as const,
+              metadata: { noodlerContentFormat: "long_form" },
+            },
+            main,
+          ]
+        : [main],
+    );
+    const post = posts?.at(-1);
+    if (!post) throw new Error("Failed to persist the generated NoodleR post.");
+    return post;
   };
 
   if (input.media) {

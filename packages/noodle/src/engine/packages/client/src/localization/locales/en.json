@@ -805,6 +805,7 @@
   "ui.noodle.noodlerhome.discardDrafts": "Discard drafts",
   "ui.noodle.noodlerhome.discardNoodlerDrafts": "Discard NoodleR drafts?",
   "ui.noodle.noodlerhome.discardProfileChanges": "Discard profile changes?",
+  "ui.noodle.noodlerhome.discardedPreparedPosts": "{{count}} prepared automatic post(s) were discarded for the more private identity mode.",
   "ui.noodle.noodlerhome.editStageProfile": "Edit Creator profile",
   "ui.noodle.noodlerhome.enabling": "Enabling...",
   "ui.noodle.noodlerhome.enabling_5c258f0": "Enabling…",

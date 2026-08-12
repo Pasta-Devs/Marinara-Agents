@@ -693,6 +693,7 @@
   "ui.noodle.noodlerhome.discardDrafts": "초안 폐기",
   "ui.noodle.noodlerhome.discardNoodlerDrafts": "NoodleR 초안을 폐기하시겠습니까?",
   "ui.noodle.noodlerhome.discardProfileChanges": "프로필 변경 사항을 취소하시겠습니까?",
+  "ui.noodle.noodlerhome.discardedPreparedPosts": "더 비공개인 신원 모드로 전환하면서 준비된 자동 게시물 {{count}}개가 삭제되었습니다.",
   "ui.noodle.noodlerhome.editStageProfile": "스테이지 프로필 편집",
   "ui.noodle.noodlerhome.enabling": "활성화하는 중...",
   "ui.noodle.noodlerhome.enabling_5c258f0": "활성화하는 중…",

@@ -918,7 +918,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       ...profileDraft,
       handle: profileDraft.handle.replace(/^@+/u, ""),
     };
-    const onSuccess = (profile: NoodlerStageProfile) => {
+    const onSuccess = (
+      profile: NoodlerStageProfile & { discardedPreparedPostCount?: number },
+    ) => {
       invalidateProfileDraftGeneration();
       setProfileDraft(null);
       setEditingProfileId(null);
@@ -940,6 +942,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           ? localizeUi("ui.noodle.noodlerhome.stageProfileUpdated")
           : localizeUi("ui.noodle.noodlerhome.stageProfileCreated"),
       );
+      // A privacy downgrade throws away unreleased reserve posts; do not do that silently.
+      if (profile.discardedPreparedPostCount) {
+        toast.info(
+          localizeUi("ui.noodle.noodlerhome.discardedPreparedPosts", {
+            count: profile.discardedPreparedPostCount,
+          }),
+        );
+      }
     };
     const onError = async (error: unknown) => {
       if (!editingProfileId && draftNoodleAccountId && error instanceof ApiError && error.status === 409) {
