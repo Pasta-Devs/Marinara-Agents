@@ -6,6 +6,7 @@ import { I18nextProvider, initReactI18next } from "react-i18next";
 import { Toaster } from "sonner";
 import english from "./localization/locales/en.json";
 import korean from "./localization/locales/ko.json";
+import { AppDialogRenderer } from "./components/ui/AppDialogRenderer";
 import { NoodleView } from "./components/noodle/NoodleView";
 import { configureNoodlePackageState } from "./stores/noodle-package.store";
 
@@ -84,6 +85,11 @@ function NoodlePackageRoot({ element }: { element: CapabilityElement }) {
       <QueryClientProvider client={client}>
         <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
           <NoodleView />
+          {/* The package bundles its own copy of the dialog store, so the host's
+              renderer never sees a dialog opened in here: showConfirmDialog would
+              resolve nothing and every confirmed action stopped silently. Render
+              the dialogs inside the package tree that opens them. */}
+          <AppDialogRenderer />
           <Toaster richColors />
         </div>
       </QueryClientProvider>

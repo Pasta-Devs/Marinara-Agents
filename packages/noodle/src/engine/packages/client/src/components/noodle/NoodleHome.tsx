@@ -144,6 +144,8 @@ import {
   NOODLE_PINK,
   NOODLE_ICON_SCOPE_CLASS,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
+  HIDE_ON_SCROLL_CLASS,
+  useHideOnScroll,
 } from "./NoodleShell";
 import type {
   NoodleNavigationState,
@@ -794,6 +796,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const replyMediaToolRef = useRef<HTMLDivElement | null>(null);
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
+  const [timelineScroller, setTimelineScroller] = useState<HTMLDivElement | null>(null);
+  const setStickyHeader = useHideOnScroll(timelineScroller);
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const composerRestoreFocusRef = useRef<HTMLElement | null>(null);
   const profileDraftAccountIdRef = useRef<string | null>(null);
@@ -3498,6 +3502,19 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     });
   };
 
+  // NoodleR settings borrows this shell. Its nav must not offer the public timeline's
+  // search, notifications, or profile — but dropping the handlers emptied the mobile
+  // bottom bar, which is driven by the same props. Point them at the NoodleR
+  // equivalents instead of removing them.
+  const openNoodlerView = (view: "search" | "notifications") => () => {
+    onNavigate({ mode: "noodler", view });
+    setMobileDrawerOpen(false);
+  };
+  const openNoodlerOwnProfile = () => {
+    onNavigate({ mode: "noodler", view: "profile", accountId: null });
+    setMobileDrawerOpen(false);
+  };
+
   const openNoodler = () => {
     if (!settings?.enableNoodler) {
       void openNoodlerVerification();
@@ -5885,6 +5902,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       onAccountSwitcherOpenChange={setAccountSwitcherOpen}
       accountSwitcherRef={accountSwitcherRef}
       mobileDrawerOpen={mobileDrawerOpen}
+      mobileDrawerTriggerRef={mobileDrawerTriggerRef}
       onMobileDrawerOpenChange={setMobileDrawerOpen}
       mobileAccountSwitcherOpen={mobileAccountSwitcherOpen}
       onMobileAccountSwitcherOpenChange={setMobileAccountSwitcherOpen}
@@ -5893,12 +5911,17 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       onOpenHome={openHomeTimeline}
       onOpenMobileHome={openMobileHomeTimeline}
       onOpenNoodler={openNoodler}
-      // NoodleR settings borrows this shell; its rail must not offer Noodle-only destinations.
-      onOpenSearch={noodlerSettingsActive ? undefined : openSearch}
-      onOpenNotifications={
-        noodlerSettingsActive ? undefined : openNotifications
+      onOpenSearch={
+        noodlerSettingsActive ? openNoodlerView("search") : openSearch
       }
-      onOpenProfile={noodlerSettingsActive ? undefined : openOwnProfile}
+      onOpenNotifications={
+        noodlerSettingsActive
+          ? openNoodlerView("notifications")
+          : openNotifications
+      }
+      onOpenProfile={
+        noodlerSettingsActive ? openNoodlerOwnProfile : openOwnProfile
+      }
       onOpenSettings={openSettings}
       onCompose={noodlerSettingsActive ? undefined : openComposeModal}
       rightRail={rightRail}
@@ -5936,78 +5959,64 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       }
     >
       <div
-        ref={timelineScrollRef}
+        ref={(node) => {
+          timelineScrollRef.current = node;
+          setTimelineScroller(node);
+        }}
         data-component="NoodleView.TimelineScroller"
         className="min-h-0 flex-1 overflow-y-auto"
         data-noodle-content-scroll="true"
       >
         <div className="min-h-full w-full border-x border-[var(--noodle-divider)] bg-[var(--background)]">
           {activeNoodleView === "home" && (
+            // The wordmark and the tab row travel together, so the whole bar leaves
+            // on the way down and comes back as one on the way up.
             <div
-              className="sticky top-0 z-30 grid h-14 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-3 backdrop-blur @min-[1024px]:hidden"
-              data-component="NoodleView.MobileHeader"
+              ref={setStickyHeader}
+              className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
+              data-component="NoodleView.StickyHeader"
             >
-              <button
-                ref={mobileDrawerTriggerRef}
-                type="button"
-                onClick={() => setMobileDrawerOpen(true)}
-                className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-[var(--accent)]"
-                title={localizeUi("ui.noodle.noodlehome.openAccountMenu")}
-                aria-label={localizeUi(
-                  "ui.noodle.noodlehome.openNoodleAccountMenu",
-                )}
-              >
-                {personaAccount ? (
-                  <Avatar account={personaAccount} size="sm" />
-                ) : (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
-                    <AtSign size={18} />
-                  </span>
-                )}
-              </button>
-              <NoodleLogo className="mx-auto h-9 w-14" />
-              <span aria-hidden="true" />
+              {/* Unmounted while the bottom-bar wordmark is on trial: it carries the
+                  same branding, and two of them is one too many. */}
+              {isAccountSearch ? (
+                <div className="flex h-12 items-center gap-3 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-4 backdrop-blur">
+                  <AtSign size={19} className="text-[var(--noodle-accent)]" />
+                  <div className="min-w-0">
+                    <h2 className="truncate text-sm font-bold">
+                      {localizeUi("ui.noodle.noodlehome.accounts")}
+                    </h2>
+                    <p className="truncate text-[0.68rem] text-[var(--muted-foreground)]">
+                      {accountSearchTerm
+                        ? localizeUi("ui.noodle.noodlehome.value1_0a5edda", {
+                            value1: accountSearchTerm,
+                          })
+                        : localizeUi("ui.noodle.noodlehome.typeAHandleAfter")}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
+                  {TIMELINE_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setTimelineTab(tab.id)}
+                      className={cn(
+                        "relative flex h-12 items-center justify-center text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+                        timelineTab === tab.id && "text-[var(--foreground)]",
+                      )}
+                      aria-pressed={timelineTab === tab.id}
+                    >
+                      {tab.label}
+                      {timelineTab === tab.id && (
+                        <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          {activeNoodleView === "home" &&
-            (isAccountSearch ? (
-              <div className="sticky top-14 z-20 flex h-12 items-center gap-3 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-4 backdrop-blur @min-[1024px]:top-0">
-                <AtSign size={19} className="text-[var(--noodle-accent)]" />
-                <div className="min-w-0">
-                  <h2 className="truncate text-sm font-bold">
-                    {localizeUi("ui.noodle.noodlehome.accounts")}
-                  </h2>
-                  <p className="truncate text-[0.68rem] text-[var(--muted-foreground)]">
-                    {accountSearchTerm
-                      ? localizeUi("ui.noodle.noodlehome.value1_0a5edda", {
-                          value1: accountSearchTerm,
-                        })
-                      : localizeUi("ui.noodle.noodlehome.typeAHandleAfter")}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="sticky top-14 z-20 grid grid-cols-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur @min-[1024px]:top-0">
-                {TIMELINE_TABS.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setTimelineTab(tab.id)}
-                    className={cn(
-                      "relative flex h-12 items-center justify-center text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
-                      timelineTab === tab.id && "text-[var(--foreground)]",
-                    )}
-                    aria-pressed={timelineTab === tab.id}
-                  >
-                    {tab.label}
-                    {timelineTab === tab.id && (
-                      <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            ))}
-
           {activeNoodleView === "home" && !isAccountSearch && !composeOpen && (
             <NoodleComposerShell
               dataComponent="NoodleView.InlineComposer"

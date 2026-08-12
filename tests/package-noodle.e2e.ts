@@ -2371,15 +2371,11 @@ test.describe("package-owned Noodle interface", () => {
     const desktopAccountSwitcher = noodle.locator(
       '[data-component="NoodleView.AccountSwitcher"]',
     );
-    const mobileHeader = noodle.locator(
-      '[data-component="NoodleView.MobileHeader"]',
-    );
     const mobileBottomNav = noodle.locator(
       '[data-component="NoodleView.MobileBottomNav"]',
     );
 
     await expect(desktopAccountSwitcher).toBeVisible();
-    await expect(mobileHeader).toBeHidden();
     await expect(mobileBottomNav).toBeHidden();
 
     await page.locator('[data-tour="sidebar-toggle"]').click();
@@ -2389,18 +2385,15 @@ test.describe("package-owned Noodle interface", () => {
         center.evaluate((element) => element.getBoundingClientRect().width),
       )
       .toBeLessThan(1024);
-    await expect(mobileHeader).toBeVisible();
     await expect(mobileBottomNav).toBeVisible();
     await expect(desktopAccountSwitcher).toBeHidden();
 
     await page.locator('[data-tour="panel-settings"]').click();
     await page.locator('[data-tour="sidebar-toggle"]').click();
     await expect(desktopAccountSwitcher).toBeVisible();
-    await expect(mobileHeader).toBeHidden();
     await expect(mobileBottomNav).toBeHidden();
 
     await page.setViewportSize({ width: 900, height: 800 });
-    await expect(mobileHeader).toBeVisible();
     await expect(mobileBottomNav).toBeVisible();
     await expect(desktopAccountSwitcher).toBeHidden();
     expect(errors).toEqual([]);
@@ -2419,13 +2412,17 @@ test.describe("package-owned Noodle interface", () => {
     await openNoodle(page);
 
     const noodle = page.locator('[data-component="NoodleView"]');
-    const header = noodle.locator('[data-component="NoodleView.MobileHeader"]');
     const bottomNav = noodle.locator(
       '[data-component="NoodleView.MobileBottomNav"]',
     );
-    await expect(header).toBeVisible();
     await expect(bottomNav).toBeVisible();
-    const headerLogo = header.locator('img[src$="/noodle-klusek.png"]');
+    // The wordmark is the bottom bar's middle button now; there is no top header.
+    const headerLogo = bottomNav.locator('img[src$="/noodle-klusek.png"]');
+    // The home timeline's own sticky bar stands in for the old header when a step
+    // needs to prove the reader landed back on the timeline.
+    const homeHeader = noodle.locator(
+      '[data-component="NoodleView.StickyHeader"]',
+    );
     await expect(headerLogo).toBeVisible();
     const bottomNavIconColors = await bottomNav
       .locator("svg:visible")
@@ -2597,7 +2594,7 @@ test.describe("package-owned Noodle interface", () => {
     await noodle
       .getByRole("button", { name: "Back to where you were", exact: true })
       .click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
 
     const timelineScroller = noodle.locator(
       '[data-component="NoodleView.TimelineScroller"]',
@@ -2611,7 +2608,7 @@ test.describe("package-owned Noodle interface", () => {
       await timelineScroller.evaluate((element) => element.scrollTop),
     ).toBeGreaterThan(0);
     await bottomNav.getByRole("button", { name: "Noodle home" }).click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
     await expect
       .poll(() => timelineScroller.evaluate((element) => element.scrollTop))
       .toBe(0);
@@ -2630,7 +2627,7 @@ test.describe("package-owned Noodle interface", () => {
     await noodle
       .getByRole("button", { name: "Back to Noodle timeline" })
       .click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
 
     await bottomNav
       .getByRole("button", { name: "Search", exact: true })
@@ -2647,7 +2644,7 @@ test.describe("package-owned Noodle interface", () => {
     await noodle
       .getByRole("button", { name: "Back to Noodle timeline" })
       .click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
 
     await bottomNav
       .getByRole("button", { name: "Search", exact: true })
@@ -2657,7 +2654,7 @@ test.describe("package-owned Noodle interface", () => {
       noodle.getByRole("heading", { name: "Search results" }),
     ).toBeVisible();
     await bottomNav.getByRole("button", { name: "Noodle home" }).click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
     await bottomNav
       .getByRole("button", { name: "Search", exact: true })
       .click();
@@ -2673,7 +2670,7 @@ test.describe("package-owned Noodle interface", () => {
     await noodle
       .getByRole("button", { name: "Back to Noodle timeline" })
       .click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
 
     expect(errors).toEqual([]);
   });

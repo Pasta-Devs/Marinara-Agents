@@ -194,19 +194,30 @@ export function NoodleTextContent({
   onOpenProfile: (account: NoodleAccount) => void;
   className?: string;
 }) {
-  const { t: localizeUi } = useUiTranslation();
-  return (
-    <div className={cn("text-sm [&>*+*]:mt-2", className)}>
-      {renderNoodleMarkdown(content, {
+  const { t: localizeUi, i18n } = useUiTranslation();
+  // The public timeline renders 150+ of these, and the parse ran on every render of
+  // every card — the reason returning to Noodle from NoodleR felt slow while the trip
+  // out did not. The parse output embeds these callbacks, so memoizing on them
+  // directly would either miss every time (they are fresh each render) or freeze a
+  // stale handler into the tree. Hold them in a ref and hand the parser a stable
+  // wrapper instead; then the only real inputs are the text and the handle map.
+  const handlers = useRef({ onOpenProfile, localizeUi });
+  handlers.current = { onOpenProfile, localizeUi };
+  const rendered = useMemo(
+    () =>
+      renderNoodleMarkdown(content, {
         accountByHandle,
-        onOpenProfile,
+        onOpenProfile: (account) => handlers.current.onOpenProfile(account),
         mentionLabel: (handle) =>
-          localizeUi("ui.noodle.noodletextcontent.viewValue1Profile", {
-            value1: handle,
-          }),
-      })}
-    </div>
+          handlers.current.localizeUi(
+            "ui.noodle.noodletextcontent.viewValue1Profile",
+            { value1: handle },
+          ),
+      }),
+    // The label text is baked in at parse time, so a language change has to reparse.
+    [content, accountByHandle, i18n.language],
   );
+  return <div className={cn("text-sm [&>*+*]:mt-2", className)}>{rendered}</div>;
 }
 
 type NoodleMarkdownContext = {
@@ -2793,9 +2804,14 @@ export function NoodleComposerShell({
         <div className="min-w-0">{children}</div>
       </div>
       <div className="mt-1 h-px w-full bg-[var(--noodle-divider)]" />
-      <div className="relative mt-3 flex items-center justify-between gap-2 pl-14">
+      {/* Tools and actions are two wrapping groups, not seven buttons in one row: on a
+          phone the old single row broke them apart mid-group. The avatar-width indent
+          is a wide-layout nicety and costs 3.5rem the narrow layout cannot spare. */}
+      <div className="relative mt-3 flex flex-wrap items-center gap-2 @min-[480px]:pl-14">
         <div className="flex min-w-0 flex-wrap items-center gap-1">{tools}</div>
-        {action}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {action}
+        </div>
         {popovers}
       </div>
       {footer}

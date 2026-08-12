@@ -28,8 +28,12 @@ async function main() {
   assert.doesNotMatch(home, /onClick=\{onDelete\}/);
   assert.match(publishingSettings, /useDeleteNoodlerStageProfile/);
   assert.match(publishingSettings, /deleteCreator\.mutateAsync\(profile\.id\)/);
-  assert.match(publishingSettings, /removeCharacter\.mutateAsync\(source\.entityId\)/);
-  assert.match(publishingSettings, /<Trash2 size=\{14\} \/>/);
+  // Deleting a Creator profile must not reach into Noodle: no character removal here.
+  assert.doesNotMatch(publishingSettings, /removeCharacter/);
+  assert.match(publishingSettings, /<Trash2 size=\{\d+\} \/>/);
+  // The delete control closes the row and keeps a touch-sized target on a phone.
+  assert.match(publishingSettings, /className="ml-auto flex h-9 w-9 shrink-0 touch-manipulation/);
+  assert.match(publishingSettings, /deleteCreatorConfirm/);
 
   console.log("NoodleR participant control regressions passed.");
 }

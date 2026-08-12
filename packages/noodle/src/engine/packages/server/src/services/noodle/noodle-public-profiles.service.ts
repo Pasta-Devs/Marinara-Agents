@@ -2,6 +2,7 @@ import { basename } from "path";
 import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
+import { noodleSamplingOptions } from "./noodle-sampling-options.js";
 import {
   resolveStoredChatOptions,
   resolveStoredMaxTokens,
@@ -157,12 +158,13 @@ export async function generateMissingNoodleProfiles(input: {
   const result = await input.provider.chatComplete(messages, {
     model: input.connection.model,
     maxTokens,
-    temperature: 0.55,
-    topP: 0.9,
-    ...resolveStoredChatOptions(
-      input.connection.defaultParameters,
-      input.connection.provider,
-      input.connection.model,
+    ...noodleSamplingOptions(
+      resolveStoredChatOptions(
+        input.connection.defaultParameters,
+        input.connection.provider,
+        input.connection.model,
+      ),
+      { temperature: 0.55, topP: 0.9 },
     ),
     stream: false,
     debugMode: input.debugMode,

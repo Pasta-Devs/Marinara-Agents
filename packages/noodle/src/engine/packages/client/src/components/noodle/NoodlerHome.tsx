@@ -110,8 +110,10 @@ import {
   Avatar,
   getNoodleAccentStyle,
   NewSinceLastVisitDivider,
+  HIDE_ON_SCROLL_CLASS,
   NoodleShell,
   ProfileInitial,
+  useHideOnScroll,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
   NOODLE_PINK,
   useNoodleAccent,
@@ -918,7 +920,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       ...profileDraft,
       handle: profileDraft.handle.replace(/^@+/u, ""),
     };
-    const onSuccess = (profile: NoodlerStageProfile) => {
+    const onSuccess = (
+      profile: NoodlerStageProfile & { discardedPreparedPostCount?: number },
+    ) => {
       invalidateProfileDraftGeneration();
       setProfileDraft(null);
       setEditingProfileId(null);
@@ -940,6 +944,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           ? localizeUi("ui.noodle.noodlerhome.stageProfileUpdated")
           : localizeUi("ui.noodle.noodlerhome.stageProfileCreated"),
       );
+      // A privacy downgrade throws away unreleased reserve posts; do not do that silently.
+      if (profile.discardedPreparedPostCount) {
+        toast.info(
+          localizeUi("ui.noodle.noodlerhome.discardedPreparedPosts", {
+            count: profile.discardedPreparedPostCount,
+          }),
+        );
+      }
     };
     const onError = async (error: unknown) => {
       if (!editingProfileId && draftNoodleAccountId && error instanceof ApiError && error.status === 409) {
@@ -3338,6 +3350,9 @@ function ViewerHub({
   togglePending: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const setStickyHeader = useHideOnScroll(scroller);
+  const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
   // The visit counts once the feed itself is on screen and loaded — not on app entry, and not
   // while discovery search has replaced it. Declared above the early returns so hook order
   // stays stable across the empty and error states below.
@@ -3440,8 +3455,18 @@ function ViewerHub({
 
   if (discoveryOpen) {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto" data-component="NoodlerHome.Discover">
-        <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-2 py-3 backdrop-blur">
+      <div
+        ref={setScroller}
+        className="min-h-0 flex-1 overflow-y-auto"
+        data-component="NoodlerHome.Discover"
+      >
+        <div
+          ref={setStickyHeader}
+          className={cn(
+            "sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-2 py-3 backdrop-blur",
+            HIDE_ON_SCROLL_CLASS,
+          )}
+        >
           <button
             type="button"
             onClick={onCloseDiscovery}
@@ -3553,8 +3578,17 @@ function ViewerHub({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="sticky top-0 z-20 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
+    <div ref={setScroller} className="min-h-0 flex-1 overflow-y-auto">
+      {/* NoodleR opened straight onto its tab row while Noodle showed a wordmark bar;
+          both surfaces now carry the same phone header, and it travels with the tabs. */}
+      <div
+        ref={setStickyHeader}
+        className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
+        data-component="NoodlerHome.StickyHeader"
+      >
+        {/* See NoodleHome: the phone wordmark bar is off while the bottom bar
+            carries the branding. */}
+        <div className="border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
         <div className="flex items-center pr-2">
           <div
             className="grid min-w-0 flex-1 grid-cols-2"
@@ -3586,6 +3620,7 @@ function ViewerHub({
             ))}
           </div>
         </div>
+        </div>
       </div>
       <div className="border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:px-4 @min-[1280px]:hidden">
         <SubscriptionSections
@@ -3594,6 +3629,8 @@ function ViewerHub({
           togglePending={togglePending}
           onOpenProfile={postCardCtx.openAuthorProfile}
           compact
+          collapsed={discoverCollapsed}
+          onToggleCollapsed={() => setDiscoverCollapsed((value) => !value)}
         />
       </div>
       {authorProfile ? (
@@ -4027,30 +4064,32 @@ function NoodlerPostComposer({
             disabled: composerBusy,
             onClick: () => toggleTool("media"),
           }}
+          trailing={
+            <div ref={accessToolRef} className="relative">
+              <button
+                type="button"
+                onClick={() => toggleTool("access")}
+                disabled={composerBusy}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
+                aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postVisibilityValue", {
+                  value: localizeUi(`ui.noodle.postaccess.${access}`),
+                })}
+                title={localizeUi(`ui.noodle.postaccess.${access}.hint`)}
+              >
+                <Lock size={13} />
+                {localizeUi(`ui.noodle.postaccess.${access}`)}
+              </button>
+            </div>
+          }
         />
       }
       action={
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div ref={accessToolRef} className="relative">
-            <button
-              type="button"
-              onClick={() => toggleTool("access")}
-              disabled={composerBusy}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
-              aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postVisibilityValue", {
-                value: localizeUi(`ui.noodle.postaccess.${access}`),
-              })}
-              title={localizeUi(`ui.noodle.postaccess.${access}.hint`)}
-            >
-              <Lock size={13} />
-              {localizeUi(`ui.noodle.postaccess.${access}`)}
-            </button>
-          </div>
+        <>
           <button
             type="button"
             onClick={() => void guidePost()}
             disabled={composerBusy || Boolean(pendingImage)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {guidePending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
             {guidePending
@@ -4062,7 +4101,7 @@ function NoodlerPostComposer({
               type="button"
               onClick={discardDraft}
               disabled={composerBusy}
-              className="inline-flex h-8 items-center rounded-md px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
+              className="inline-flex h-9 items-center rounded-md px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
             >
               {localizeUi("ui.agents.agenteditor.discard")}
             </button>
@@ -4071,14 +4110,14 @@ function NoodlerPostComposer({
             type="button"
             onClick={() => void publish()}
             disabled={composerBusy || Boolean(pendingImage) || (!body.trim() && !image && !pollIsValid)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-[opacity,scale] hover:opacity-90 active:scale-[0.96] [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-[opacity,scale] hover:opacity-90 active:scale-[0.96] [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {manualPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
             {manualPending
               ? localizeUi("ui.noodle.noodlerpostcomposer.posting")
               : localizeUi("ui.noodle.noodlerpostcomposer.publishPost")}
           </button>
-        </div>
+        </>
       }
       popovers={
         <>
@@ -4164,7 +4203,10 @@ function NoodlerPostComposer({
       }
       footer={
         (postError || guideError || attachmentError) && (
-          <div className="mt-2 space-y-1 pl-14 text-xs text-[var(--destructive)]" role="alert">
+          <div
+            className="mt-2 space-y-1 text-xs text-[var(--destructive)] @min-[480px]:pl-14"
+            role="alert"
+          >
             {postError && (
               <p>
                 {localizeUi("ui.noodle.noodlerpostcomposer.post")} {postError}
@@ -4281,25 +4323,52 @@ function SubscriptionSections({
   togglePending,
   onOpenProfile,
   compact = false,
+  collapsed = false,
+  onToggleCollapsed,
 }: {
   creators: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"];
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
   onOpenProfile?: (accountId: string) => void;
   compact?: boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   if (compact) {
     return (
       <section aria-labelledby="noodler-discover-heading">
-        <div className="flex items-center justify-between px-4 pb-2">
-          <h3 id="noodler-discover-heading" className="text-xs font-bold text-[var(--muted-foreground)]">
+        {/* A phone shows one card and a half of the row, which is a lot of height for a
+            side note. Fold it away, and remember the choice for this session. */}
+        {/* The button sits inside the heading, not the other way round: a button may not
+            contain a heading, and the heading has to stay a heading for the landmark. */}
+        <h3 id="noodler-discover-heading" className="text-xs font-bold text-[var(--muted-foreground)]">
+          <button
+            type="button"
+            onClick={() => onToggleCollapsed?.()}
+            aria-expanded={!collapsed}
+            // Only claim to control the list while it is mounted.
+            {...(collapsed ? {} : { "aria-controls": "noodler-discover-list" })}
+            className="flex min-h-11 w-full items-center justify-between gap-2 px-4 pb-2 text-left"
+          >
             {localizeUi("ui.noodle.subscriptionsections.discoverCreators")}
-          </h3>
-          <span className="text-[0.6875rem] tabular-nums text-[var(--muted-foreground)]">{creators.length}</span>
-        </div>
-        {creators.length > 0 ? (
-          <div className="flex snap-x gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <span className="flex shrink-0 items-center gap-1.5 text-[0.6875rem] font-normal tabular-nums text-[var(--muted-foreground)]">
+              {creators.length}
+              <ChevronDown
+                size={16}
+                className={cn(
+                  "transition-transform duration-200",
+                  collapsed ? "-rotate-90" : "rotate-0",
+                )}
+              />
+            </span>
+          </button>
+        </h3>
+        {collapsed ? null : creators.length > 0 ? (
+          <div
+            id="noodler-discover-list"
+            className="flex snap-x gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {creators.map((creator) => {
               const openProfile = onOpenProfile ? () => onOpenProfile(creator.profile.id) : undefined;
               return (

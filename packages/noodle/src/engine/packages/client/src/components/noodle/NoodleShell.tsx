@@ -22,7 +22,9 @@ import {
   type ReactNode,
   type RefObject,
   useContext,
+  useEffect,
   useRef,
+  useState,
 } from "react";
 import type { NoodleAccount } from "@marinara-engine/shared";
 import type { AvatarCrop } from "@marinara-engine/shared";
@@ -50,6 +52,29 @@ export const NOODLE_LOGO_SRC =
 const NOODLER_LOGO_SRC =
   "/api/capability-packages/noodle/assets/noodler-klusek.png";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
+
+// Switching apps unmounts the whole surface, so the bows come back as new elements with
+// nothing to transition from. The module outlives the remount, so it can remember which
+// mode was on screen last and let the new pair animate out of the old arrangement.
+let lastRenderedAppMode: NoodleShellMode | null = null;
+
+// Plain CSS keyframes rather than a JS animation: transform and opacity are handed to
+// the compositor, so the swap costs no main-thread work per frame. 220ms, twice, on two
+// images the size of a fingernail.
+const BOW_REST_BACK = "translate3d(5px, 4px, 0) scale(0.8)";
+const BOW_SWAP_KEYFRAMES = `
+@keyframes noodle-bow-to-front {
+  from { transform: ${BOW_REST_BACK}; opacity: 0.55; filter: saturate(0.65); }
+  to { transform: none; opacity: 1; filter: saturate(1); }
+}
+@keyframes noodle-bow-to-back {
+  from { transform: none; opacity: 1; filter: saturate(1); }
+  to { transform: ${BOW_REST_BACK}; opacity: 0.55; filter: saturate(0.65); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-noodle-bow] { animation: none !important; }
+}
+`;
 
 export function getNoodleAccentStyle(
   accent: string,
@@ -87,6 +112,89 @@ export function NoodleLogo({
 }) {
   return <img src={src} alt="" className={cn("object-contain", className)} />;
 }
+
+/**
+ * Ties a sticky header to the scroll position: it travels with the content instead of
+ * snapping between shown and hidden at a threshold, which reads as a jump. The bar
+ * moves pixel for pixel with the scroll, so it feels attached to the reader's finger,
+ * and once scrolling stops it settles to whichever edge it is nearest — biased open,
+ * so any upward movement finishes with the controls on screen.
+ *
+ * Writes the transform straight to the node rather than through state: a re-render per
+ * scroll event is exactly the stutter this is meant to remove. Overscroll past the top
+ * always shows the bar, or a rubber-band bounce leaves it stranded half-way.
+ *
+ * Takes the scrolling element as state, not a ref: surfaces that swap their scroller
+ * for another view (NoodleR discovery) would otherwise keep listening to a detached node.
+ *
+ * Takes the sticky element the same way, through a callback ref: NoodleHome keeps its
+ * scroller mounted while swapping the bar out with the view, so a plain ref would leave
+ * this driving a detached node and the new bar would never move.
+ *
+ * @returns a callback ref for the sticky element itself.
+ */
+export function useHideOnScroll(scroller: HTMLElement | null) {
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  const reduceMotion = useReducedMotion();
+  useEffect(() => {
+    if (!scroller || !bar) return;
+    // Reduced motion asks for no travel at all, not a faster version of it.
+    if (reduceMotion) return;
+    const SETTLE_MS = 140;
+    const EASE = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+    let tucked = 0;
+    let previousTop = scroller.scrollTop;
+    let rising = false;
+    let frame = 0;
+    let settleTimer = 0;
+
+    const move = (next: number, eased: boolean) => {
+      tucked = next;
+      bar.style.transition = eased ? EASE : "none";
+      bar.style.transform = `translate3d(0, ${-tucked}px, 0)`;
+    };
+
+    const settle = () => {
+      const height = bar.offsetHeight;
+      if (!height || tucked <= 0 || tucked >= height) return;
+      // A part-hidden bar is nobody's intent, so finish the movement the reader
+      // started: open if they were coming back up, closed if they were still going.
+      move(rising ? 0 : height, true);
+    };
+
+    const read = () => {
+      frame = 0;
+      const height = bar.offsetHeight;
+      if (!height) return;
+      const top = scroller.scrollTop;
+      const delta = top - previousTop;
+      previousTop = top;
+      if (delta !== 0) rising = delta < 0;
+      const next = top <= 0 ? 0 : Math.min(height, Math.max(0, tucked + delta));
+      if (next !== tucked) move(next, false);
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(settle, SETTLE_MS);
+    };
+
+    const onScroll = () => {
+      // One read per frame: scroll fires far more often than the screen redraws.
+      if (!frame) frame = window.requestAnimationFrame(read);
+    };
+
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
+      bar.style.transition = "";
+      bar.style.transform = "";
+    };
+  }, [scroller, bar, reduceMotion]);
+  return setBar;
+}
+
+/** Base classes for a sticky bar driven by {@link useHideOnScroll}. */
+export const HIDE_ON_SCROLL_CLASS = "will-change-transform";
 
 // The count is the reason to come back, so it carries its own label rather than leaving a
 // bare number for screen readers to read out of context.
@@ -292,6 +400,8 @@ export interface NoodleShellProps {
   accountSwitcherRef: RefObject<HTMLDivElement | null>;
   mobileDrawerOpen: boolean;
   onMobileDrawerOpenChange: (open: boolean) => void;
+  /** The bottom-nav account button, so pages can return focus to what opened the drawer. */
+  mobileDrawerTriggerRef?: RefObject<HTMLButtonElement | null>;
   mobileAccountSwitcherOpen: boolean;
   onMobileAccountSwitcherOpenChange: (open: boolean) => void;
   notificationCount: number;
@@ -337,6 +447,7 @@ export function NoodleShell({
   accountSwitcherRef,
   mobileDrawerOpen,
   onMobileDrawerOpenChange,
+  mobileDrawerTriggerRef,
   mobileAccountSwitcherOpen,
   onMobileAccountSwitcherOpenChange,
   notificationCount,
@@ -374,6 +485,26 @@ export function NoodleShell({
   const onOpenMobileHomeDestination = noodlerActive
     ? onOpenNoodler
     : onOpenMobileHome;
+  const otherModeLabel = noodlerActive
+    ? localizeUi("navigation.topbar.noodle")
+    : localizeUi("ui.noodle.noodlemodetoggle.noodler");
+  // The bottom-nav wordmark doubles as the mode switch. The first tap navigates at
+  // once — holding it back to watch for a second would make every trip home feel
+  // late — and a second tap inside the window supersedes it with the switch.
+  const lastHomeTapAt = useRef(0);
+  const onMobileHomeTap = () => {
+    const now = Date.now();
+    const switching = enableNoodler && now - lastHomeTapAt.current < 320;
+    lastHomeTapAt.current = switching ? 0 : now;
+    if (switching) (noodlerActive ? onOpenHome : onOpenNoodler)();
+    else onOpenMobileHomeDestination();
+  };
+  const previousAppMode = useRef(lastRenderedAppMode).current;
+  const modeJustSwapped =
+    previousAppMode !== null && previousAppMode !== resolvedAppMode;
+  useEffect(() => {
+    lastRenderedAppMode = resolvedAppMode;
+  }, [resolvedAppMode]);
   useDialogFocusScope(mobileDrawerOpen, mobileDrawerRef, mobileDrawerCloseRef);
 
   return (
@@ -899,6 +1030,7 @@ export function NoodleShell({
         >
           <div className="grid h-[56px] grid-flow-col auto-cols-fr">
             <button
+              ref={mobileDrawerTriggerRef}
               type="button"
               onClick={() => onMobileDrawerOpenChange(true)}
               aria-label={localizeUi(
@@ -912,20 +1044,6 @@ export function NoodleShell({
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
                   <AtSign size={18} />
                 </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={onOpenMobileHomeDestination}
-              aria-label={localizeUi("ui.noodle.noodleshell.noodleValue1", {
-                value1: homeLabel,
-              })}
-              aria-current={homeActive ? "page" : undefined}
-              className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-            >
-              <Home size={22} strokeWidth={homeActive ? 2.8 : 2} />
-              {homeActive && (
-                <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
               )}
             </button>
             {onOpenSearch && (
@@ -949,6 +1067,67 @@ export function NoodleShell({
                 )}
               </button>
             )}
+            <button
+              type="button"
+              onClick={onMobileHomeTap}
+              aria-label={
+                enableNoodler
+                  ? `${localizeUi("ui.noodle.noodleshell.noodleValue1", {
+                      value1: homeLabel,
+                    })}. ${localizeUi("ui.noodle.noodleshell.doubleTapToSwitchTo", {
+                      mode: otherModeLabel,
+                    })}`
+                  : localizeUi("ui.noodle.noodleshell.noodleValue1", {
+                      value1: homeLabel,
+                    })
+              }
+              title={
+                enableNoodler
+                  ? localizeUi("ui.noodle.noodleshell.doubleTapToSwitchTo", {
+                      mode: otherModeLabel,
+                    })
+                  : undefined
+              }
+              aria-current={homeActive ? "page" : undefined}
+              className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+            >
+              {/* Both bows, the back one offset to the bottom right: the front says which
+                  app you are in, the one behind says there is another to switch to. They
+                  trade places on the switch, which is the whole animation. A logo is not
+                  a state indicator, so the front bow keeps its own colour whatever is on
+                  screen — the dot below carries the active state. The back one is
+                  smaller, tucked close, and eased off, so it reads as depth. */}
+              <span className="relative flex h-8 w-12 items-center justify-center">
+                <style>{BOW_SWAP_KEYFRAMES}</style>
+                {[
+                  { src: NOODLE_LOGO_SRC, front: !noodlerActive },
+                  { src: NOODLER_LOGO_SRC, front: noodlerActive },
+                ].map((bow) => (
+                  <img
+                    key={bow.src}
+                    src={bow.src}
+                    alt=""
+                    data-noodle-bow=""
+                    className={cn(
+                      "absolute h-6 w-9 object-contain",
+                      bow.front
+                        ? "z-10 opacity-100"
+                        : "translate-x-[5px] translate-y-[4px] scale-[0.8] opacity-55 saturate-[0.65]",
+                    )}
+                    style={
+                      modeJustSwapped
+                        ? {
+                            animation: `noodle-bow-to-${bow.front ? "front" : "back"} 220ms cubic-bezier(0.22, 1, 0.36, 1) both`,
+                          }
+                        : undefined
+                    }
+                  />
+                ))}
+              </span>
+              {homeActive && (
+                <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
+              )}
+            </button>
             {onOpenNotifications && (
               <button
                 type="button"

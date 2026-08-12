@@ -14,7 +14,6 @@ import {
   useUpdateNoodlerAutoPosting,
   useUpdateNoodlerImageConnections,
   useDeleteNoodlerStageProfile,
-  useRemoveNoodleCharacter,
 } from "../../hooks/use-noodle";
 import { useConnections } from "../../hooks/use-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
@@ -96,7 +95,6 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
   const updateAuto = useUpdateNoodlerAutoPosting();
   const updateImageConnections = useUpdateNoodlerImageConnections();
   const deleteCreator = useDeleteNoodlerStageProfile();
-  const removeCharacter = useRemoveNoodleCharacter();
   const refreshAll = useRefreshAllNoodlerCreatorsNow();
   const refreshFans = useRefreshNoodlerFanActivityNow();
   // Toggles roll back on rejection, which is silent on its own: say so, or the user reads the
@@ -428,13 +426,15 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
         {accounts.map((profile) => (
           <div
             key={profile.id}
-            className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] px-1 py-3 last:border-b-0"
+            className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--border)] px-1 py-3 last:border-b-0"
           >
             <button
               type="button"
               onClick={() => onOpenCreator?.(profile.id)}
               disabled={!onOpenCreator}
-              className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left disabled:cursor-default"
+              // The identity takes the whole first line on a narrow screen; the
+              // controls wrap underneath instead of colliding with the name.
+              className="flex w-full min-w-0 items-center gap-3 rounded-md text-left disabled:cursor-default sm:w-auto sm:flex-1"
             >
               <Avatar account={profile} />
               <span className="min-w-0 flex-1">
@@ -493,38 +493,6 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              onClick={async () => {
-                const confirmed = await showConfirmDialog({
-                  title: t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName }),
-                  message: t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorConfirm", {
-                    creator: profile.displayName,
-                  }),
-                  confirmLabel: t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName }),
-                  tone: "destructive",
-                });
-                if (!confirmed) return;
-                try {
-                  // Delete the creator profile first: if the character-removal step
-                  // below then fails, the user still sees a consistent state (the
-                  // profile is gone) instead of a silently uninvited character with
-                  // a creator profile that still exists.
-                  const source = data?.accounts.find((account) => account.id === profile.noodleAccountId);
-                  await deleteCreator.mutateAsync(profile.id);
-                  if (source?.kind === "character" && source.invited) {
-                    await removeCharacter.mutateAsync(source.entityId);
-                  }
-                } catch (error) {
-                  toast.error(errorMessage(error, t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorFailed")));
-                }
-              }}
-              disabled={deleteCreator.isPending || removeCharacter.isPending}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--destructive)]/40 text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:opacity-40"
-              aria-label={t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName })}
-            >
-              <Trash2 size={14} />
-            </button>
             <label className="flex items-center gap-2 text-xs font-semibold">
               {t("ui.noodle.noodlerschedulemanagermodal.images")}
               <input
@@ -540,6 +508,33 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
                 className="h-4 w-4 accent-[var(--noodle-accent)]"
               />
             </label>
+            <button
+              type="button"
+              onClick={async () => {
+                const confirmed = await showConfirmDialog({
+                  title: t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName }),
+                  message: t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorConfirm", {
+                    creator: profile.displayName,
+                  }),
+                  confirmLabel: t("ui.noodle.noodlerschedulemanagermodal.delete"),
+                  tone: "destructive",
+                });
+                if (!confirmed) return;
+                try {
+                  // Only the Creator profile. The linked character keeps its Noodle
+                  // account, its invite, and its public posts: deleting a NoodleR
+                  // persona is not a reason to take someone off the public timeline.
+                  await deleteCreator.mutateAsync(profile.id);
+                } catch (error) {
+                  toast.error(errorMessage(error, t("ui.noodle.noodlerschedulemanagermodal.deleteCreatorFailed")));
+                }
+              }}
+              disabled={deleteCreator.isPending}
+              className="ml-auto flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-md border border-[var(--destructive)]/40 text-[var(--destructive)] transition-[background-color,scale] hover:bg-[var(--destructive)]/10 active:scale-[0.96] disabled:opacity-40"
+              aria-label={t("ui.noodle.noodlerschedulemanagermodal.deleteCreator", { creator: profile.displayName })}
+            >
+              <Trash2 size={15} />
+            </button>
           </div>
         ))}
         {/* "No creators yet" is only true after a successful load; a cold or failed query must not

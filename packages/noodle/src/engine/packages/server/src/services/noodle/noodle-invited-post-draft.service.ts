@@ -3,8 +3,9 @@ import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
+import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
+import { noodleSamplingOptions } from "./noodle-sampling-options.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -12,7 +13,7 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { noodleGeneratedNoodlerPostSchema } from "@marinara-engine/shared";
 import { noodleResponseFormat } from "./noodle-response-format.js";
-import { parseRecord } from "./noodle-public-support.js";
+import { noodlerSourceText } from "./noodle-stage-profile-draft.service.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./noodle-noodler-generation.service.js";
 
 export type InvitedNoodlePostDraftRequest = {
@@ -45,7 +46,6 @@ export async function generateInvitedNoodlePostDraft(
   const characters = createCharactersStorage(db);
   const character = await characters.getById(account.entityId);
   if (!character) throw new Error("Noodle character not found.");
-  const data = parseRecord(character.data);
   const connections = createConnectionsStorage(db);
   const fallback = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({
@@ -81,7 +81,9 @@ export async function generateInvitedNoodlePostDraft(
       content: [
         `Character name: ${account.displayName}`,
         `Character handle: @${account.handle}`,
-        `Character profile: ${JSON.stringify(data)}`,
+        // Only the profile fields the draft needs, never the whole stored record
+        // (which carries greetings, example dialogue, and unrelated extensions).
+        `Character profile:\n${noodlerSourceText(character.data)}`,
         ...(request.guidance?.trim() ? [`Post direction: ${JSON.stringify(request.guidance.trim())}`] : []),
       ].join("\n"),
     },
@@ -94,15 +96,20 @@ export async function generateInvitedNoodlePostDraft(
   );
   const completionOptions = {
     model: connection.model,
-    ...resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
+    ...noodleSamplingOptions(
+      resolveStoredChatOptions(
+        connection.defaultParameters,
+        connection.provider,
+        connection.model,
+      ),
+      { temperature: 0.9, topP: 0.95 },
+    ),
     maxTokens: clampGenerationMaxOutputTokens({
       provider: connection.provider as APIProvider,
       model: connection.model,
       maxTokens: 1024,
       maxTokensOverride: connection.maxTokensOverride,
     }),
-    temperature: 0.9,
-    topP: 0.95,
     stream: false,
     debugMode,
     // The prompt always asks for imagePrompt (set to null); the strict schema

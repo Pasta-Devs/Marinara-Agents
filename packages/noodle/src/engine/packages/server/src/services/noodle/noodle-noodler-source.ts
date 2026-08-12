@@ -1,13 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import type {
-  NoodleAccount,
   NoodleIdentityDisclosure,
   NoodlerSourceSnapshot,
   NoodlerSourceStatus,
 } from "@marinara-engine/shared";
-import type { DB } from "../../db/connection.js";
-import { createCharactersStorage } from "../storage/characters.storage.js";
-import { parseRecord } from "./noodle-public-support.js";
 
 const HINTED_THEME_TOKENS = [
   "adventurous",
@@ -32,8 +28,23 @@ const HINTED_THEME_TOKENS = [
   "witty",
 ] as const;
 
-function sourceDigest(value: string): string {
-  return createHash("sha256").update(value).digest("base64url");
+// Stored hinted/secret snapshots keep only a digest of each private field. A plain
+// hash of a short field (a name, a handle) is guessable, so each stored field carries
+// its own random salt and the digest is an HMAC under that salt: a reader of the
+// database can no longer confirm a guessed source identity from a precomputed table.
+// Comparison reuses the baseline's salt so the same value still digests to the same
+// token.
+const REVISION_TOKEN = /(?:^| )revision:([A-Za-z0-9_-]{22})\.[A-Za-z0-9_-]{43}$/u;
+
+function sourceDigest(value: string, salt: string): string {
+  return `${salt}.${createHmac("sha256", salt).update(value).digest("base64url")}`;
+}
+
+function saltFor(baselineField: string | undefined): string {
+  return (
+    (baselineField ? REVISION_TOKEN.exec(baselineField)?.[1] : undefined) ??
+    randomBytes(16).toString("base64url")
+  );
 }
 
 function hintedThemes(value: string): string {
@@ -44,6 +55,7 @@ function hintedThemes(value: string): string {
 export function minimizeNoodlerSourceSnapshot(
   snapshot: NoodlerSourceSnapshot,
   mode: NoodleIdentityDisclosure,
+  baseline?: NoodlerSourceSnapshot | null,
 ): NoodlerSourceSnapshot {
   if (mode === "open") return snapshot;
   return Object.fromEntries(
@@ -52,7 +64,8 @@ export function minimizeNoodlerSourceSnapshot(
       const themes = mode === "hinted" && field === "personality"
         ? hintedThemes(value)
         : "";
-      return [field, `${themes ? `${themes} ` : ""}revision:${sourceDigest(value)}`];
+      const digest = sourceDigest(value, saltFor(baseline?.[field]));
+      return [field, `${themes ? `${themes} ` : ""}revision:${digest}`];
     }),
   ) as NoodlerSourceSnapshot;
 }
@@ -60,54 +73,10 @@ export function minimizeNoodlerSourceSnapshot(
 export function isMinimizedNoodlerSourceSnapshot(
   snapshot: NoodlerSourceSnapshot,
 ): boolean {
+  // Unsalted legacy tokens deliberately fail this test, so storage re-minimizes them.
   return (Object.keys(snapshot) as Array<keyof NoodlerSourceSnapshot>).every(
-    (field) => /(?:^| )revision:[A-Za-z0-9_-]{43}$/u.test(snapshot[field]),
+    (field) => REVISION_TOKEN.test(snapshot[field]),
   );
-}
-
-function text(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-export async function resolveNoodlerSourceSnapshot(
-  db: DB,
-  publicAccount: Pick<
-    NoodleAccount,
-    "kind" | "entityId" | "displayName" | "handle"
-  >,
-): Promise<NoodlerSourceSnapshot | null> {
-  const characters = createCharactersStorage(db);
-  if (publicAccount.kind === "character") {
-    const source = await characters.getById(publicAccount.entityId);
-    if (!source) return null;
-    const data = parseRecord(source.data);
-    const extensions = parseRecord(data.extensions);
-    return {
-      publicDisplayName: publicAccount.displayName,
-      publicHandle: publicAccount.handle,
-      name: text(data.name),
-      description: text(data.description),
-      personality: text(data.personality),
-      scenario: text(data.scenario),
-      appearance: text(data.appearance) || text(extensions.appearance),
-      backstory: text(data.backstory) || text(extensions.backstory),
-    };
-  }
-  if (publicAccount.kind === "persona") {
-    const source = await characters.getPersona(publicAccount.entityId);
-    if (!source) return null;
-    return {
-      publicDisplayName: publicAccount.displayName,
-      publicHandle: publicAccount.handle,
-      name: text(source.name),
-      description: text(source.description),
-      personality: text(source.personality),
-      scenario: text(source.scenario),
-      appearance: text(source.appearance),
-      backstory: text(source.backstory),
-    };
-  }
-  return null;
 }
 
 export function compareNoodlerSourceSnapshots(
@@ -131,7 +100,7 @@ export function compareMinimizedNoodlerSourceSnapshot(
   current: NoodlerSourceSnapshot,
   mode: NoodleIdentityDisclosure,
 ): NoodlerSourceStatus {
-  const minimizedCurrent = minimizeNoodlerSourceSnapshot(current, mode);
+  const minimizedCurrent = minimizeNoodlerSourceSnapshot(current, mode, baseline);
   const comparison = compareNoodlerSourceSnapshots(baseline, minimizedCurrent);
   if (mode === "open" || comparison.state !== "changed") return comparison;
   return {
