@@ -15,6 +15,7 @@ import {
   resolveStoredMaxTokens,
 } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
+import { noodleSamplingOptions } from "./noodle-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
@@ -264,12 +265,13 @@ export async function generateNoodlerStageProfileDraft(
       ),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
-    temperature: 0.7,
-    topP: 0.9,
-    ...resolveStoredChatOptions(
-      input.connection.defaultParameters,
-      input.connection.provider,
-      input.connection.model,
+    ...noodleSamplingOptions(
+      resolveStoredChatOptions(
+        input.connection.defaultParameters,
+        input.connection.provider,
+        input.connection.model,
+      ),
+      { temperature: 0.7, topP: 0.9 },
     ),
     stream: false,
     debugMode,

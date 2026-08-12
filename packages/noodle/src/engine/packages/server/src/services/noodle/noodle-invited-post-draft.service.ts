@@ -3,8 +3,9 @@ import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
+import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
+import { noodleSamplingOptions } from "./noodle-sampling-options.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -95,15 +96,20 @@ export async function generateInvitedNoodlePostDraft(
   );
   const completionOptions = {
     model: connection.model,
-    ...resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
+    ...noodleSamplingOptions(
+      resolveStoredChatOptions(
+        connection.defaultParameters,
+        connection.provider,
+        connection.model,
+      ),
+      { temperature: 0.9, topP: 0.95 },
+    ),
     maxTokens: clampGenerationMaxOutputTokens({
       provider: connection.provider as APIProvider,
       model: connection.model,
       maxTokens: 1024,
       maxTokensOverride: connection.maxTokensOverride,
     }),
-    temperature: 0.9,
-    topP: 0.95,
     stream: false,
     debugMode,
     // The prompt always asks for imagePrompt (set to null); the strict schema

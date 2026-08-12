@@ -16,8 +16,9 @@ import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
+import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
+import { noodleSamplingOptions } from "./noodle-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import {
@@ -478,10 +479,13 @@ export async function generateNoodlerPost(
   );
   const completionOptions = {
     model: input.connection.model,
-    ...resolveStoredChatOptions(
-      input.connection.defaultParameters,
-      input.connection.provider,
-      input.connection.model,
+    ...noodleSamplingOptions(
+      resolveStoredChatOptions(
+        input.connection.defaultParameters,
+        input.connection.provider,
+        input.connection.model,
+      ),
+      { temperature: 0.9, topP: 0.95 },
     ),
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
@@ -489,8 +493,6 @@ export async function generateNoodlerPost(
       maxTokens: NOODLER_POST_MAX_TOKENS,
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
-    temperature: 0.9,
-    topP: 0.95,
     stream: false,
     debugMode,
     responseFormat: noodleResponseFormat(
