@@ -29,7 +29,11 @@ async function main() {
   assert.match(publishingSettings, /useDeleteNoodlerStageProfile/);
   assert.match(publishingSettings, /deleteCreator\.mutateAsync\(profile\.id\)/);
   assert.match(publishingSettings, /removeCharacter\.mutateAsync\(source\.entityId\)/);
-  assert.match(publishingSettings, /<Trash2 size=\{14\} \/>/);
+  assert.match(publishingSettings, /<Trash2 size=\{\d+\} \/>/);
+  // The delete control closes the row and keeps a touch-sized target on a phone.
+  assert.match(publishingSettings, /className="ml-auto flex h-9 w-9 shrink-0 touch-manipulation/);
+  // Deleting also uninvites a linked character, so the dialog must say which case it is.
+  assert.match(publishingSettings, /deleteCreatorConfirmWithCharacter/);
 
   console.log("NoodleR participant control regressions passed.");
 }
