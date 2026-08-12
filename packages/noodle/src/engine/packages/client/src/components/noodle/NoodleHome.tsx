@@ -144,7 +144,7 @@ import {
   NOODLE_PINK,
   NOODLE_ICON_SCOPE_CLASS,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
-  hideOnScrollClass,
+  HIDE_ON_SCROLL_CLASS,
   NoodleMobileHeader,
   useHideOnScroll,
 } from "./NoodleShell";
@@ -798,7 +798,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScroller, setTimelineScroller] = useState<HTMLDivElement | null>(null);
-  const headerHidden = useHideOnScroll(timelineScroller);
+  const stickyHeaderRef = useHideOnScroll(timelineScroller);
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const composerRestoreFocusRef = useRef<HTMLElement | null>(null);
   const profileDraftAccountIdRef = useRef<string | null>(null);
@@ -5954,10 +5954,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             // The wordmark and the tab row travel together, so the whole bar leaves
             // on the way down and comes back as one on the way up.
             <div
-              className={cn(
-                "sticky top-0 z-30",
-                hideOnScrollClass(headerHidden),
-              )}
+              ref={stickyHeaderRef}
+              className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
               data-component="NoodleView.StickyHeader"
             >
               <NoodleMobileHeader

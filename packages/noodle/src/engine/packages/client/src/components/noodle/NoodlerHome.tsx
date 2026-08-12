@@ -110,7 +110,7 @@ import {
   Avatar,
   getNoodleAccentStyle,
   NewSinceLastVisitDivider,
-  hideOnScrollClass,
+  HIDE_ON_SCROLL_CLASS,
   NoodleMobileHeader,
   NoodleShell,
   ProfileInitial,
@@ -3358,7 +3358,7 @@ function ViewerHub({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
-  const headerHidden = useHideOnScroll(scroller);
+  const stickyHeaderRef = useHideOnScroll(scroller);
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
   // The visit counts once the feed itself is on screen and loaded — not on app entry, and not
   // while discovery search has replaced it. Declared above the early returns so hook order
@@ -3468,9 +3468,10 @@ function ViewerHub({
         data-component="NoodlerHome.Discover"
       >
         <div
+          ref={stickyHeaderRef}
           className={cn(
             "sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-2 py-3 backdrop-blur",
-            hideOnScrollClass(headerHidden),
+            HIDE_ON_SCROLL_CLASS,
           )}
         >
           <button
@@ -3588,7 +3589,8 @@ function ViewerHub({
       {/* NoodleR opened straight onto its tab row while Noodle showed a wordmark bar;
           both surfaces now carry the same phone header, and it travels with the tabs. */}
       <div
-        className={cn("sticky top-0 z-30", hideOnScrollClass(headerHidden))}
+        ref={stickyHeaderRef}
+        className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
         data-component="NoodlerHome.StickyHeader"
       >
         <NoodleMobileHeader

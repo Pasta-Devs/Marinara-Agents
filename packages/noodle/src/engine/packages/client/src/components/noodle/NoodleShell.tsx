@@ -91,53 +91,84 @@ export function NoodleLogo({
 }
 
 /**
- * Hides a sticky header once the reader scrolls down past a few pixels, and brings
- * it back on the first upward movement. Hiding is animated; returning is not, so a
- * flick upward puts the controls under the thumb at once.
+ * Ties a sticky header to the scroll position: it travels with the content instead of
+ * snapping between shown and hidden at a threshold, which reads as a jump. The bar
+ * moves pixel for pixel with the scroll, so it feels attached to the reader's finger,
+ * and once scrolling stops it settles to whichever edge it is nearest — biased open,
+ * so any upward movement finishes with the controls on screen.
+ *
+ * Writes the transform straight to the node rather than through state: a re-render per
+ * scroll event is exactly the stutter this is meant to remove. Overscroll past the top
+ * always shows the bar, or a rubber-band bounce leaves it stranded half-way.
  *
  * Takes the scrolling element as state, not a ref: surfaces that swap their scroller
- * for a different view (NoodleR discovery) would otherwise keep listening to a
- * detached node.
+ * for another view (NoodleR discovery) would otherwise keep listening to a detached node.
+ *
+ * @returns a ref for the sticky element itself.
  */
-export function useHideOnScroll(scroller: HTMLElement | null, threshold = 24) {
-  const [hidden, setHidden] = useState(false);
+export function useHideOnScroll(scroller: HTMLElement | null) {
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const reduceMotion = useReducedMotion();
   useEffect(() => {
-    if (!scroller) return;
-    let anchor = scroller.scrollTop;
-    const onScroll = () => {
-      const top = scroller.scrollTop;
-      // Never hide the header over the top of the feed, or it flickers on bounce.
-      if (top <= threshold) {
-        anchor = top;
-        setHidden(false);
-        return;
-      }
-      const delta = top - anchor;
-      // The anchor only moves when the state does, so a slow drag still accumulates
-      // to the threshold instead of being read as a series of tiny scrolls.
-      if (delta > threshold) {
-        anchor = top;
-        setHidden(true);
-      } else if (delta < 0) {
-        anchor = top;
-        setHidden(false);
-      }
+    const bar = barRef.current;
+    if (!scroller || !bar) return;
+    // Reduced motion asks for no travel at all, not a faster version of it.
+    if (reduceMotion) return;
+    const SETTLE_MS = 140;
+    const EASE = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+    let tucked = 0;
+    let previousTop = scroller.scrollTop;
+    let rising = false;
+    let frame = 0;
+    let settleTimer = 0;
+
+    const move = (next: number, eased: boolean) => {
+      tucked = next;
+      bar.style.transition = eased ? EASE : "none";
+      bar.style.transform = `translate3d(0, ${-tucked}px, 0)`;
     };
+
+    const settle = () => {
+      const height = bar.offsetHeight;
+      if (!height || tucked <= 0 || tucked >= height) return;
+      // A part-hidden bar is nobody's intent, so finish the movement the reader
+      // started: open if they were coming back up, closed if they were still going.
+      move(rising ? 0 : height, true);
+    };
+
+    const read = () => {
+      frame = 0;
+      const height = bar.offsetHeight;
+      if (!height) return;
+      const top = scroller.scrollTop;
+      const delta = top - previousTop;
+      previousTop = top;
+      if (delta !== 0) rising = delta < 0;
+      const next = top <= 0 ? 0 : Math.min(height, Math.max(0, tucked + delta));
+      if (next !== tucked) move(next, false);
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(settle, SETTLE_MS);
+    };
+
+    const onScroll = () => {
+      // One read per frame: scroll fires far more often than the screen redraws.
+      if (!frame) frame = window.requestAnimationFrame(read);
+    };
+
     scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => scroller.removeEventListener("scroll", onScroll);
-  }, [scroller, threshold]);
-  return hidden;
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
+      bar.style.transition = "";
+      bar.style.transform = "";
+    };
+  }, [scroller, reduceMotion]);
+  return barRef;
 }
 
-/** Class set for a sticky header driven by {@link useHideOnScroll}. */
-export function hideOnScrollClass(hidden: boolean) {
-  return cn(
-    "will-change-transform",
-    hidden
-      ? "-translate-y-full transition-transform duration-200 ease-out"
-      : "translate-y-0 transition-none",
-  );
-}
+/** Base classes for a sticky bar driven by {@link useHideOnScroll}. */
+export const HIDE_ON_SCROLL_CLASS = "will-change-transform";
 
 /**
  * The phone-width header: account menu on the left, wordmark in the middle. Shared so
