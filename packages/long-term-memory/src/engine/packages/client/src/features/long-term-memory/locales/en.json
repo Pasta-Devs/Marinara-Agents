@@ -831,6 +831,7 @@
   "ui.longTermMemory.reviewqueue.contextUnbound": "Context unbound",
   "ui.longTermMemory.reviewqueue.createMemory": "Create memory",
   "ui.longTermMemory.reviewqueue.fresh": "Fresh",
+  "ui.longTermMemory.reviewqueue.invalidated": "Invalidated",
   "ui.longTermMemory.reviewqueue.mergeIntoMemory": "Merge into memory",
   "ui.longTermMemory.reviewqueue.newMemory": "New memory",
   "ui.longTermMemory.reviewqueue.notPending": "Not pending",

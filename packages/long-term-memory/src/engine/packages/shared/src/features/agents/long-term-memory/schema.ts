@@ -748,6 +748,7 @@ export const ltmNoteTransferPreviewItemSchema = z
     nextScope: ltmScopeSchema,
     derived: z.boolean().default(false),
     sourceNoteId: ltmNoteIdSchema.optional(),
+    sourceNoteIds: z.array(ltmNoteIdSchema).max(100).optional(),
     classification: z.enum(["ready", "no_op", "conflict"]),
     defaultIncluded: z.boolean(),
     reason: z.string().min(1).max(240).optional(),

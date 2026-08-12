@@ -18,13 +18,19 @@ import { nowIso, uniqueStrings } from "./ltm-utils.js";
 import { isLtmSourceExtractionFingerprintCurrent } from "./source-hash.js";
 import { LongTermMemoryStorage } from "./storage.js";
 
-export type ProjectLtmDraftReviewOptions = { root?: string; sourceNoteId?: string; chatId?: string; status?: LtmDraftStatus };
+export type ProjectLtmDraftReviewOptions = { root?: string; sourceNoteId?: string; chatId?: string; status?: LtmDraftStatus; includeInvalidated?: boolean };
 type MutableSource = { sourceNoteId: string; modes: Set<LtmNote["modes"][number]>; drafts: LtmDraftReviewDraft[]; targets: Map<string, LtmDraftReviewTarget> };
 
 export async function projectLongTermMemoryDraftReview(options: ProjectLtmDraftReviewOptions = {}): Promise<LtmDraftReviewResponse> {
   const store = new LongTermMemoryDraftStore(options.root);
   const storage = new LongTermMemoryStorage(options.root);
-  const drafts = (await store.listDrafts({ status: options.status ?? "pending", chatId: options.chatId })).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const drafts = (await store.listDrafts({ chatId: options.chatId }))
+    .filter((draft) =>
+      options.status
+        ? draft.status === options.status
+        : draft.status === "pending" || (options.includeInvalidated && draft.status === "invalidated"),
+    )
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const overlay = await storage.getNotesByIds(uniqueStrings(drafts.flatMap((draft) => draft.mutations.map(noteIdForLtmDraftMutation))));
   const sourceNotes = await storage.getNotesByIds(uniqueStrings(drafts.map((draft) => draft.source.sourceNoteId)));
   const sources = new Map<string, MutableSource>();

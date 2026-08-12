@@ -35,7 +35,6 @@ import {
   ltmIdentityRepairPreviewResponseSchema,
   ltmInteropPreviewRequestSchema,
   ltmInteropPreviewResponseSchema,
-  ltmDeleteNoteSectionResponseSchema,
   ltmRepairRequestSchema,
   ltmRepairResponseSchema,
   ltmRenameNoteSectionRequestSchema,
@@ -275,6 +274,14 @@ const updateNoteBody = z
     sections: z.record(ltmSectionKeySchema, ltmSectionSchema).optional(),
     conflicts: z.array(ltmConflictSchema).max(250).optional(),
     subjects: ltmSubjectsSchema.optional(),
+    removedSectionKeys: z
+      .array(ltmSectionKeySchema)
+      .max(100)
+      .refine(
+        (keys) => new Set(keys).size === keys.length,
+        "Removed section keys must be unique.",
+      )
+      .optional(),
   })
   .strict()
   .refine(
@@ -337,6 +344,7 @@ const draftReviewQuery = z
     sourceNoteId: ltmNoteIdSchema.optional(),
     chatId: z.string().min(1).max(120).optional(),
     status: ltmDraftStatusSchema.optional(),
+    includeInvalidated: queryBoolean,
   })
   .strict();
 const rejectedSuggestionsQuery = z
@@ -385,6 +393,19 @@ function routeError(error: unknown, fallback: string) {
       code: "ltm_unexpected_failure",
     },
   };
+}
+
+function vaultNoteValidationError(note: {
+  title?: string;
+  type: string;
+  subjects?: unknown[];
+}) {
+  if (!note.title?.trim()) return "A memory title is required.";
+  if (note.type === "character" && note.subjects?.length !== 1)
+    return "Character memories must have exactly one subject.";
+  if (note.type === "relationship" && note.subjects?.length !== 2)
+    return "Relationship memories must have exactly two subjects.";
+  return null;
 }
 
 export function createLongTermMemoryRoutes(runtime: {
@@ -1053,6 +1074,8 @@ export function createLongTermMemoryRoutes(runtime: {
         const parsed = createNoteBody.safeParse(request.body);
         if (!parsed.success)
           return reply.status(400).send({ error: parsed.error.message });
+        const validationError = vaultNoteValidationError(parsed.data);
+        if (validationError) return reply.status(400).send({ error: validationError });
         try {
           const note = await storage.createNote(parsed.data);
           const rebuild = await rebuildAfterMutation();
@@ -1086,6 +1109,8 @@ export function createLongTermMemoryRoutes(runtime: {
             .status(404)
             .send({ error: "Long-term memory note not found" });
         const patch = parsedBody.data;
+        const validationError = vaultNoteValidationError({ ...existing, ...patch });
+        if (validationError) return reply.status(400).send({ error: validationError });
         if (existing.type === "source" && patch.sections !== undefined)
           return reply.status(400).send({
             error:
@@ -1165,41 +1190,6 @@ export function createLongTermMemoryRoutes(runtime: {
         );
       },
     );
-    app.delete<{ Params: { id: string; sectionKey: string } }>(
-      "/notes/:id/sections/:sectionKey",
-      async (request, reply) => {
-        const parsedId = ltmNoteIdSchema.safeParse(request.params.id);
-        const parsedSectionKey = ltmSectionKeySchema.safeParse(request.params.sectionKey);
-        if (!parsedId.success || !parsedSectionKey.success) {
-          const result = routeError(
-            !parsedId.success ? parsedId.error : parsedSectionKey.error,
-            "Invalid detail deletion.",
-          );
-          return reply.status(result.statusCode).send(result.body);
-        }
-        try {
-          const deleted = await storage.deleteNoteSection(parsedId.data, parsedSectionKey.data);
-          const rebuildResult = await rebuildAfterMutation();
-          return ltmDeleteNoteSectionResponseSchema.parse({
-            ...deleted,
-            rebuild:
-              rebuildResult.status === "complete"
-                ? {
-                    status: rebuildResult.status,
-                    generatedAt: rebuildResult.generatedAt,
-                    noteCount: rebuildResult.noteCount,
-                    chunkCount: rebuildResult.chunkCount,
-                    embeddedChunkCount: rebuildResult.embeddedChunkCount,
-                    embeddingsAvailable: rebuildResult.embeddingsAvailable,
-                  }
-                : rebuildResult,
-          });
-        } catch (error) {
-          const result = routeError(error, "Could not delete memory detail.");
-          return reply.status(result.statusCode).send(result.body);
-        }
-      },
-    );
     app.delete<{ Params: { id: string } }>(
       "/notes/:id",
       async (request, reply) => {
@@ -1213,28 +1203,37 @@ export function createLongTermMemoryRoutes(runtime: {
         return { archived: true, note: notes[0], notes, rebuild };
       },
     );
-    app.post<{ Body: unknown }>("/notes/permanent-delete", async (request) => {
+    app.post<{ Body: unknown }>("/notes/permanent-delete", async (request, reply) => {
       const body = z
         .object({
-          ids: z.array(ltmNoteIdSchema).min(1).max(100),
+          ids: z.array(ltmNoteIdSchema).min(1).max(500),
           retractExtracted: z.boolean().optional().default(false),
-          excludedNoteIds: z.array(ltmNoteIdSchema).max(100).optional(),
+          excludedNoteIds: z.array(ltmNoteIdSchema).max(500).optional(),
+          lineageSourceNoteId: ltmNoteIdSchema.optional(),
+          expectedLineageNoteIds: z.array(ltmNoteIdSchema).max(500).optional(),
         })
         .strict()
         .parse(request.body ?? {});
-      const result = await storage.deleteNotesPermanently(body.ids, {
-        retractExtracted: body.retractExtracted,
-        excludedNoteIds: body.excludedNoteIds,
-      });
-      const rebuild = result.deletedIds.length
-        ? await rebuildAfterMutation()
-        : null;
-      return {
-        deletedIds: result.deletedIds,
-        failedIds: result.failedIds,
-        detachedNoteIds: result.detachedNoteIds,
-        rebuild,
-      };
+      try {
+        const result = await storage.deleteNotesPermanently(body.ids, {
+          retractExtracted: body.retractExtracted,
+          excludedNoteIds: body.excludedNoteIds,
+          lineageSourceNoteId: body.lineageSourceNoteId,
+          expectedLineageNoteIds: body.expectedLineageNoteIds,
+        });
+        const rebuild = result.deletedIds.length
+          ? await rebuildAfterMutation()
+          : null;
+        return {
+          deletedIds: result.deletedIds,
+          failedIds: result.failedIds,
+          detachedNoteIds: result.detachedNoteIds,
+          rebuild,
+        };
+      } catch (error) {
+        const result = routeError(error, "Could not permanently delete memories.");
+        return reply.status(result.statusCode).send(result.body);
+      }
     });
     app.delete<{ Params: { id: string }; Body: unknown }>(
       "/notes/:id/scope/current-chat",
@@ -1399,6 +1398,7 @@ export function createLongTermMemoryRoutes(runtime: {
           sourceNoteId: query.sourceNoteId,
           chatId: query.chatId,
           status: query.status,
+          includeInvalidated: query.includeInvalidated,
         }),
       );
     });

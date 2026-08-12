@@ -50,3 +50,28 @@ export function normalizeLtmKeywordIntent(note: LtmKeywordNote) {
     suppressedKeywords: suppressed,
   };
 }
+
+export function setLtmManualKeywords(note: LtmKeywordNote, keywords: readonly string[]) {
+  const { generated, suppressed } = getLtmKeywordIntent(note);
+  const generatedKeys = new Set(generated.map(ltmKeywordKey));
+  const requested = uniqueLtmKeywords(keywords);
+  const requestedKeys = new Set(requested.map(ltmKeywordKey));
+  return {
+    keywords: generated,
+    manualKeywords: requested.filter((keyword) => !generatedKeys.has(ltmKeywordKey(keyword))),
+    suppressedKeywords: suppressed.filter((keyword) => !requestedKeys.has(ltmKeywordKey(keyword))),
+  };
+}
+
+export function removeLtmKeyword(note: LtmKeywordNote, keyword: string) {
+  const { generated, manual, suppressed } = getLtmKeywordIntent(note);
+  const key = ltmKeywordKey(keyword);
+  const generatedKeyword = generated.find((value) => ltmKeywordKey(value) === key);
+  return {
+    keywords: generated,
+    manualKeywords: manual.filter((value) => ltmKeywordKey(value) !== key),
+    suppressedKeywords: generatedKeyword
+      ? uniqueLtmKeywords([...suppressed, generatedKeyword])
+      : suppressed,
+  };
+}

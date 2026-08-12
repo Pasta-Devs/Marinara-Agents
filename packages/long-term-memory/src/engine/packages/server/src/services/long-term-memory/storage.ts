@@ -10,10 +10,12 @@ import {
   ltmGlobalSettingsSchema,
   ltmNoteIdSchema,
   ltmNoteSchema,
+  ltmRejectedSuggestionSchema,
   ltmNoteTypeSchema,
   ltmRetentionConfigSchema,
   ltmSectionKeySchema,
   type LtmNote,
+  type LtmRejectedSuggestion,
   type LtmBulkNoteResult,
   type LtmNoteType,
   type LtmScope,
@@ -40,6 +42,7 @@ import {
   LTM_VAULT_FOLDERS,
   notePathForId,
   safeJoin,
+  ltmRejectedSuggestionsPath,
   vaultFolderForNoteType,
 } from "./paths.js";
 import { isLtmBackupRestoreActive, recoverInterruptedLtmBackupRestore } from "./restore-recovery.js";
@@ -67,7 +70,7 @@ import {
 
 export type UpdateLtmNotePatch = Partial<
   Omit<LtmNote, "id" | "createdAt" | "updatedAt" | "version">
->;
+> & { removedSectionKeys?: string[] };
 export type ListLtmNotesOptions = {
   type?: LtmNoteType;
   status?: LtmNote["status"];
@@ -139,6 +142,46 @@ function rewriteDraftMutationSectionKey(
   )
     next.sectionKey = toSectionKey;
   return next;
+}
+
+function extractedLineageIds(notes: LtmNote[], sourceNoteId: string) {
+  const ids = new Set([sourceNoteId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const note of notes) {
+      if (
+        ids.has(note.id) ||
+        !note.links.some(
+          (link) => link.relation === "extracted_from" && ids.has(link.target),
+        )
+      )
+        continue;
+      ids.add(note.id);
+      changed = true;
+    }
+  }
+  return ids;
+}
+
+async function rewriteRejectedSuggestions(
+  root: string,
+  rewrite: (suggestion: LtmRejectedSuggestion) => LtmRejectedSuggestion,
+) {
+  const path = ltmRejectedSuggestionsPath(root);
+  let before: unknown;
+  try {
+    before = JSON.parse(await readFile(path, "utf8"));
+  } catch (error) {
+    if (isEnoent(error)) return null;
+    throw error;
+  }
+  if (!Array.isArray(before))
+    throw new Error("Long-term memory rejected-suggestion ledger is not an array.");
+  const after = before.map((item) => rewrite(ltmRejectedSuggestionSchema.parse(item)));
+  return JSON.stringify(before) === JSON.stringify(after)
+    ? null
+    : { path, before, after };
 }
 
 function rewriteSectionContributionSourceIds(
@@ -385,24 +428,37 @@ export class LongTermMemoryStorage {
     return withLtmVaultLock(this.root, async () => {
       const current = await this.getNote(id);
       if (!current) throw new LtmServiceError(`Long-term memory note not found: ${id}`, 404, "ltm_note_not_found");
-      if (patch.type && patch.type !== current.type)
+      const { removedSectionKeys = [], ...notePatch } = patch;
+      if (notePatch.type && notePatch.type !== current.type)
         throw new Error(
           "Changing long-term memory note type is not supported by this package version.",
         );
       if (
-        patch.scope !== undefined &&
+        notePatch.scope !== undefined &&
         !isGlobalLtmScope(current.scope) &&
-        isGlobalLtmScope(patch.scope)
+        isGlobalLtmScope(notePatch.scope)
       )
         throw new LtmServiceError(
           "Clearing every scope would make this memory global. Remove scope links with the scope-removal action instead; it safely deletes the memory when no explicit scope remains.",
           400,
           "ltm_scope_removal_unsafe",
         );
+      if (removedSectionKeys.length && current.type === "source")
+        throw new LtmServiceError("Imported source sections cannot be deleted.", 400, "ltm_source_section_immutable");
+      const removed = new Set(removedSectionKeys.map((key) => ltmSectionKeySchema.parse(key)));
+      if ([...removed].some((key) => !Object.hasOwn(current.sections, key)))
+        throw new LtmServiceError("Long-term memory section not found.", 404, "ltm_section_not_found");
+      if (Object.keys(current.sections).length - removed.size < 1)
+        throw new LtmServiceError("A memory must keep at least one detail.", 400, "ltm_last_section");
       const sections =
-        patch.sections && current.type !== "source"
+        (notePatch.sections || removed.size) && current.type !== "source"
           ? Object.fromEntries(
-              Object.entries({ ...current.sections, ...patch.sections }).map(([key, section]) => {
+              Object.entries({
+                ...Object.fromEntries(
+                  Object.entries(current.sections).filter(([key]) => !removed.has(key)),
+                ),
+                ...(notePatch.sections ?? {}),
+              }).map(([key, section]) => {
                 const previous = current.sections[key];
                 const { contributions: _previousContributions, ...previousFields } =
                   previous ?? {};
@@ -421,11 +477,11 @@ export class LongTermMemoryStorage {
                 ];
               }),
             )
-          : patch.sections;
+          : notePatch.sections;
       const next = ltmNoteSchema.parse({
         ...current,
-        ...patch,
-        ...normalizeLtmKeywordIntent({ ...current, ...patch }),
+        ...notePatch,
+        ...normalizeLtmKeywordIntent({ ...current, ...notePatch }),
         ...(sections ? { sections } : {}),
         id: current.id,
         type: current.type,
@@ -438,8 +494,40 @@ export class LongTermMemoryStorage {
         ts: nowIso(),
         type: `${next.type}.updated`,
         target: next.id,
-        payload: { note: next, patch },
+        payload: { note: next, patch: notePatch },
       });
+      const draftFiles: Array<{ path: string; before: unknown; after: unknown }> = [];
+      if (removed.size) {
+        const timestamp = nowIso();
+        for (const entry of await readdir(getLongTermMemoryDirectories(this.root).drafts, { withFileTypes: true })) {
+          if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+          const path = safeJoin(getLongTermMemoryDirectories(this.root).drafts, entry.name);
+          const before = JSON.parse(await readFile(path, "utf8"));
+          const parsed = ltmExtractionDraftSchema.safeParse(before);
+          if (
+            !parsed.success ||
+            parsed.data.status !== "pending" ||
+            !parsed.data.mutations.some(
+              (mutation) =>
+                (mutation.kind === "append_section" || mutation.kind === "update_section") &&
+                mutation.noteId === current.id &&
+                removed.has(mutation.sectionKey),
+            )
+          )
+            continue;
+          draftFiles.push({
+            path,
+            before,
+            after: ltmExtractionDraftSchema.parse({
+              ...parsed.data,
+              status: "invalidated",
+              invalidatedAt: timestamp,
+              invalidationReason: `A targeted detail was removed from memory ${current.id}.`,
+              updatedAt: timestamp,
+            }),
+          });
+        }
+      }
       await commitLtmMutation(this.root, {
         files: [
           {
@@ -447,6 +535,7 @@ export class LongTermMemoryStorage {
             before: current,
             after: next,
           },
+          ...draftFiles,
         ],
         events: [event],
       });
@@ -851,6 +940,21 @@ export class LongTermMemoryStorage {
             }),
           });
       }
+      const rejectedFile = await rewriteRejectedSuggestions(this.root, (suggestion) => {
+        const source = suggestion.source.sourceNoteId === currentId
+          ? { ...suggestion.source, sourceNoteId: targetId }
+          : suggestion.source;
+        const recovery = suggestion.candidate.recovery;
+        return source === suggestion.source && recovery?.noteId !== currentId
+          ? suggestion
+          : {
+              ...suggestion,
+              source,
+              ...(recovery?.noteId === currentId
+                ? { candidate: { ...suggestion.candidate, recovery: { ...recovery, noteId: targetId } } }
+                : {}),
+            };
+      });
       await commitLtmMutation(this.root, {
         files: [
           {
@@ -869,6 +973,7 @@ export class LongTermMemoryStorage {
             after: note,
           })),
           ...draftFiles,
+          ...(rejectedFile ? [rejectedFile] : []),
         ],
         events: [
           ltmEventSchema.parse({
@@ -936,10 +1041,17 @@ export class LongTermMemoryStorage {
           }),
         });
       }
+      const rejectedFile = await rewriteRejectedSuggestions(this.root, (suggestion) => {
+        const recovery = suggestion.candidate.recovery;
+        return recovery?.noteId === noteId && recovery.sectionKey === from
+          ? { ...suggestion, candidate: { ...suggestion.candidate, recovery: { ...recovery, sectionKey: to } } }
+          : suggestion;
+      });
       await commitLtmMutation(this.root, {
         files: [
           { path: notePathForId(noteId, current.type, this.root), before: current, after: renamed },
           ...draftFiles,
+          ...(rejectedFile ? [rejectedFile] : []),
         ],
         events: [ltmEventSchema.parse({
           id: randomUUID(),
@@ -950,76 +1062,6 @@ export class LongTermMemoryStorage {
         })],
       });
       return { note: renamed, rewrittenDraftCount: draftFiles.length };
-    });
-  }
-  async deleteNoteSection(id: string, sectionKey: string) {
-    await this.initializeLtmStore();
-    const noteId = ltmNoteIdSchema.parse(id);
-    const key = ltmSectionKeySchema.parse(sectionKey);
-    return withLtmVaultLock(this.root, async () => {
-      const current = await this.getNote(noteId);
-      if (!current)
-        throw new LtmServiceError(`Long-term memory note not found: ${noteId}`, 404, "ltm_note_not_found");
-      if (current.type === "source")
-        throw new LtmServiceError("Imported source sections cannot be deleted.", 400, "ltm_source_section_immutable");
-      if (!Object.hasOwn(current.sections, key))
-        throw new LtmServiceError(`Long-term memory section not found: ${key}`, 404, "ltm_section_not_found");
-      if (Object.keys(current.sections).length === 1)
-        throw new LtmServiceError("A memory must keep at least one detail.", 400, "ltm_last_section");
-
-      const timestamp = nowIso();
-      const { [key]: _deleted, ...sections } = current.sections;
-      const note = ltmNoteSchema.parse({
-        ...current,
-        sections,
-        updatedAt: timestamp,
-        version: current.version + 1,
-      });
-      const invalidationReason = `The ${key} detail was deleted from memory ${noteId}.`;
-      const draftFiles: Array<{ path: string; before: unknown; after: unknown }> = [];
-      const drafts = getLongTermMemoryDirectories(this.root).drafts;
-      for (const entry of await readdir(drafts, { withFileTypes: true })) {
-        if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-        const path = safeJoin(drafts, entry.name);
-        const before = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-        const parsed = ltmExtractionDraftSchema.safeParse(before);
-        if (
-          !parsed.success ||
-          parsed.data.status !== "pending" ||
-          !parsed.data.mutations.some(
-            (mutation) =>
-              (mutation.kind === "append_section" || mutation.kind === "update_section") &&
-              mutation.noteId === noteId &&
-              mutation.sectionKey === key,
-          )
-        )
-          continue;
-        draftFiles.push({
-          path,
-          before,
-          after: ltmExtractionDraftSchema.parse({
-            ...parsed.data,
-            status: "invalidated",
-            invalidatedAt: timestamp,
-            invalidationReason,
-            updatedAt: timestamp,
-          }),
-        });
-      }
-      await commitLtmMutation(this.root, {
-        files: [
-          { path: notePathForId(noteId, current.type, this.root), before: current, after: note },
-          ...draftFiles,
-        ],
-        events: [ltmEventSchema.parse({
-          id: randomUUID(),
-          ts: timestamp,
-          type: `${current.type}.section_deleted`,
-          target: noteId,
-          payload: { note, sectionKey: key, invalidatedDraftCount: draftFiles.length },
-        })],
-      });
-      return { note, invalidatedDraftCount: draftFiles.length };
     });
   }
   async archiveSourceNoteWithDerived(id: string) {
@@ -1049,6 +1091,8 @@ export class LongTermMemoryStorage {
     options: {
       retractExtracted?: boolean;
       excludedNoteIds?: string[];
+      lineageSourceNoteId?: string;
+      expectedLineageNoteIds?: string[];
     } = {},
   ) {
     await this.initializeLtmStore();
@@ -1059,6 +1103,22 @@ export class LongTermMemoryStorage {
     return withLtmVaultLock(this.root, async () => {
       const notes = await this.listNotes();
       const lookup = new Map(notes.map((note) => [note.id, note]));
+      if (options.lineageSourceNoteId || options.expectedLineageNoteIds) {
+        if (!options.lineageSourceNoteId || !options.expectedLineageNoteIds)
+          throw new LtmServiceError("Source deletion preview is incomplete. Refresh the preview before deleting.", 409, "ltm_source_lineage_stale");
+        const sourceId = ltmNoteIdSchema.parse(options.lineageSourceNoteId);
+        if (lookup.get(sourceId)?.type !== "source" || !wanted.includes(sourceId))
+          throw new LtmServiceError("Source deletion preview is invalid.", 400, "ltm_source_lineage_invalid");
+        const expected = new Set(options.expectedLineageNoteIds.map((id) => ltmNoteIdSchema.parse(id)));
+        if (wanted.some((id) => excludedNoteIds.has(id)))
+          throw new LtmServiceError("Source deletion selection contains overlapping selected and excluded memories.", 400, "ltm_source_lineage_invalid");
+        const selectedAndExcluded = new Set([...wanted, ...excludedNoteIds]);
+        const currentLineage = extractedLineageIds(notes, sourceId);
+        const same = (left: Set<string>, right: Set<string>) =>
+          left.size === right.size && [...left].every((id) => right.has(id));
+        if (!same(expected, selectedAndExcluded) || !same(expected, currentLineage))
+          throw new LtmServiceError("Source lineage changed. Refresh the preview before deleting.", 409, "ltm_source_lineage_stale");
+      }
       const requestedNotes = wanted.flatMap((id) =>
         lookup.get(id) ? [lookup.get(id)!] : [],
       );

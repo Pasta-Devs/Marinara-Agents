@@ -85,6 +85,7 @@ const freshnessLabel: Record<string, string> = {
   missing: "ui.longTermMemory.reviewqueue.sourceMissing",
   invalid: "ui.longTermMemory.reviewqueue.sourceInvalid",
   superseded: "ui.longTermMemory.reviewqueue.superseded",
+  invalidated: "ui.longTermMemory.reviewqueue.invalidated",
   not_pending: "ui.longTermMemory.reviewqueue.notPending",
 };
 
@@ -96,6 +97,7 @@ function freshnessClass(freshness: string) {
     freshness === "missing" ||
     freshness === "invalid" ||
     freshness === "superseded" ||
+    freshness === "invalidated" ||
     freshness === "not_pending"
   )
     return "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]";
@@ -861,7 +863,7 @@ export default function ReviewQueue({
   const review = useQuery({
     queryKey: queryKeys.review,
     queryFn: () =>
-      request<LtmDraftReviewResponse>("/drafts/review?status=pending"),
+      request<LtmDraftReviewResponse>("/drafts/review?includeInvalidated=true"),
   });
   const rejectedSuggestions = useQuery({
     queryKey: queryKeys.rejectedSuggestions,

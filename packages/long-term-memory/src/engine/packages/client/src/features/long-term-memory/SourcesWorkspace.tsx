@@ -301,6 +301,7 @@ function SourceOperationWorkbench({
     null,
   );
   const [previewed, setPreviewed] = useState(false);
+  const [previewLineageNoteIds, setPreviewLineageNoteIds] = useState<string[] | null>(null);
   const [result, setResult] = useState<
     | { updated: string[]; skipped: string[]; deleted: string[]; detached: string[]; excluded: string[]; failed: string[] }
     | null
@@ -333,6 +334,7 @@ function SourceOperationWorkbench({
   const resetPreview = () => {
     setPreview(null);
     setPreviewed(false);
+    setPreviewLineageNoteIds(null);
     setResult(null);
     setError("");
   };
@@ -357,6 +359,8 @@ function SourceOperationWorkbench({
           ),
         );
       }
+      if (operation === "delete")
+        setPreviewLineageNoteIds([sourceNoteId, ...memories.map((memory) => memory.id)]);
       setPreviewed(true);
     } catch (error) {
       setError(
@@ -416,6 +420,8 @@ function SourceOperationWorkbench({
           ids: selectedIds,
           retractExtracted: true,
           excludedNoteIds: excludedMemories.map((memory) => memory.id),
+          lineageSourceNoteId: sourceNoteId,
+          expectedLineageNoteIds: previewLineageNoteIds ?? [sourceNoteId, ...memories.map((memory) => memory.id)],
         });
         setResult({
           updated: [],

@@ -26,7 +26,12 @@ import type {
   LtmStatus,
   LtmSubject,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { getLtmKeywordIntent, ltmKeywordKey } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
+import {
+  getLtmKeywordIntent,
+  ltmKeywordKey,
+  removeLtmKeyword,
+  setLtmManualKeywords,
+} from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 import {
   invalidateLtmQueries,
   queryKeys,
@@ -1420,9 +1425,16 @@ export default function MemoryVault({
               extracted,
               sections,
               ...note
-            }) => (draft.type === "source" ? note : { ...note, sections }))(
-              draft,
-            ),
+            }) =>
+              draft.type === "source"
+                ? note
+                : {
+                    ...note,
+                    sections,
+                    removedSectionKeys: Object.keys(savedNote?.sections ?? {}).filter(
+                      (key) => !Object.hasOwn(draft.sections, key),
+                    ),
+                  })(draft),
           );
       const next = structuredClone(response.note);
       if (session !== editorSession.current) return false;
@@ -1548,48 +1560,26 @@ export default function MemoryVault({
   async function deleteSection(key: string) {
     if (!draft || draft.type === "source" || Object.keys(draft.sections).length === 1) return;
     const session = editorSession.current;
-    const noteId = draft.id;
-    const unsavedWarning = dirty
-      ? localizeUi("ui.longTermMemory.memoryvault.unsavedEditsWillAlsoBeLost")
-      : "";
     const confirmed = props.confirmAction
       ? await props.confirmAction({
           title: localizeUi("ui.longTermMemory.memoryvault.deleteDetailTitle"),
           message: localizeUi("ui.longTermMemory.memoryvault.deleteDetailDescription", {
-            unsavedWarning,
+            unsavedWarning: "",
           }),
           confirmLabel: localizeUi("ui.longTermMemory.memoryvault.deleteDetail"),
           tone: "destructive",
         })
       : window.confirm(
           localizeUi("ui.longTermMemory.memoryvault.deleteDetailDescription", {
-            unsavedWarning,
+            unsavedWarning: "",
           }),
         );
     if (!confirmed) return;
     if (session !== editorSession.current) return;
-    setBusy("delete-section");
-    setError("");
-    try {
-      const result = await request<{ note: LtmNote }>(
-        `/notes/${encodeURIComponent(noteId)}/sections/${encodeURIComponent(key)}`,
-        "DELETE",
-      );
-      if (session !== editorSession.current) return;
-      setDraft(result.note);
-      setSaved(fingerprint(result.note));
-      setNotice(localizeUi("ui.longTermMemory.memoryvault.detailDeleted"));
-      await invalidate();
-    } catch (cause) {
-      if (session === editorSession.current)
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories"),
-        );
-    } finally {
-      if (session === editorSession.current) setBusy("");
-    }
+    if (session !== editorSession.current) return;
+    const { [key]: _removed, ...sections } = draft.sections;
+    update("sections", sections);
+    setNotice(localizeUi("ui.longTermMemory.memoryvault.detailDeleted"));
   }
   async function renameSection() {
     if (!draft || !renamingSectionKey || draft.type === "source") return;
@@ -2810,9 +2800,9 @@ export default function MemoryVault({
                       <h4 className="text-xs font-medium">{localizeUi("ui.longTermMemory.memoryvault.keywords")}</h4>
                       <div className="flex flex-wrap gap-1.5">{activeKeywordValues(draft).map((keyword) => {
                         const generated = getLtmKeywordIntent(draft).generated.some((value) => ltmKeywordKey(value) === ltmKeywordKey(keyword));
-                        return <Pill key={keyword} label={`${generated ? localizeUi("ui.longTermMemory.memoryvault.generated") : localizeUi("ui.longTermMemory.memoryvault.addedManually")}: ${keyword}`} onRemove={() => generated ? update("suppressedKeywords", [...(draft.suppressedKeywords ?? []), keyword]) : update("manualKeywords", (draft.manualKeywords ?? draft.keywords).filter((value) => ltmKeywordKey(value) !== ltmKeywordKey(keyword)))}><span className="font-medium">{generated ? localizeUi("ui.longTermMemory.memoryvault.generated") : localizeUi("ui.longTermMemory.memoryvault.addedManually")}</span>: {keyword}</Pill>;
+                        return <Pill key={keyword} label={`${generated ? localizeUi("ui.longTermMemory.memoryvault.generated") : localizeUi("ui.longTermMemory.memoryvault.addedManually")}: ${keyword}`} onRemove={() => setDraft((current) => current ? { ...current, ...removeLtmKeyword(current, keyword) } : current)}><span className="font-medium">{generated ? localizeUi("ui.longTermMemory.memoryvault.generated") : localizeUi("ui.longTermMemory.memoryvault.addedManually")}</span>: {keyword}</Pill>;
                       })}</div>
-                      <TokenEditor label={localizeUi("ui.longTermMemory.memoryvault.addKeyword")} values={draft.manualKeywords ?? draft.keywords} placeholder={localizeUi("ui.longTermMemory.memoryvault.addKeyword")} onChange={(values) => update("manualKeywords", values)} />
+                      <TokenEditor label={localizeUi("ui.longTermMemory.memoryvault.addKeyword")} values={draft.manualKeywords ?? draft.keywords} placeholder={localizeUi("ui.longTermMemory.memoryvault.addKeyword")} onChange={(values) => setDraft((current) => current ? { ...current, ...setLtmManualKeywords(current, values) } : current)} />
                     </section>
                     {(draft.type === "thread" || draft.type === "world" || draft.type === "tone") ? <section className="space-y-2 border-t border-[var(--border)] pt-3">{draft.type === "thread" ? <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={draft.tags.includes("quest")} onChange={(event) => update("tags", event.target.checked ? [...draft.tags, "quest"] : draft.tags.filter((tag) => tag !== "quest"))} />{localizeUi("ui.longTermMemory.memoryvault.questMemory")}</label> : null}{draft.type !== "thread" ? <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={draft.tags.includes("anchor")} onChange={(event) => update("tags", event.target.checked ? [...draft.tags, "anchor"] : draft.tags.filter((tag) => tag !== "anchor"))} />{localizeUi("ui.longTermMemory.memoryvault.recurringMemory")}</label> : null}</section> : null}
                     <details className="border-t border-[var(--border)] pt-3"><summary className="cursor-pointer text-xs font-medium">{localizeUi("ui.longTermMemory.memoryvault.renameDetails")}</summary><div className="mt-2 flex flex-wrap gap-2">{Object.keys(draft.sections).map((key) => <Button key={key} disabled={Boolean(busy) || isNew} onClick={() => void beginRename(key)}>{localizeUi("ui.longTermMemory.memoryvault.renameDetail")}: {noteTypeLabel(key)}</Button>)}</div></details>

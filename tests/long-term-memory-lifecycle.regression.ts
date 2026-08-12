@@ -236,7 +236,7 @@ async function main() {
       for (const copy of [
         "accepted proposals become recallable.",
         "Stable appearance can help the character remain visually consistent",
-        "This source note preserves imported material as audit evidence. It is not recalled directly; accepted derived memories appear below.",
+        "This source note preserves imported material as audit evidence. It is not recalled directly; accepted memories created from it appear below.",
         "Saving something does not mean it shows up in every reply.",
          "Import a character",
          "Note: You can use any summary.",
@@ -282,7 +282,7 @@ async function main() {
         "Back to Agents",
         "Add memories",
         "Clear memory search",
-        "Remove {{value1}} section",
+        "Remove {{value1}} detail",
         "{{mutation}}: {{title}}",
       ])
         assert.ok(
@@ -971,12 +971,7 @@ async function main() {
         document.body.append(element);
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
-      await page.waitForFunction(
-        () =>
-          document.querySelector("[data-ltm-browser-controls]") &&
-          document.querySelectorAll("[data-ltm-browser-controls] select")[1]
-            ?.value === "",
-      );
+      await page.locator('[data-ltm-browser-controls]').waitFor();
       await page.waitForFunction(() =>
         document.body.textContent?.includes("Second mobile review memory"),
       );
@@ -1519,21 +1514,10 @@ async function main() {
       assert.equal(lastInjectionRequests, 3);
       assert.equal(await lastInjection.getByText("Retained memory").count(), 0);
       assert.equal(await lastInjection.getByText("42 tokens").count(), 0);
-      await page
-        .locator('[aria-label="Character"]')
-        .selectOption("character-a");
-      await page.waitForFunction(
-        () =>
-          document.querySelector('[aria-label="Character"]')?.value ===
-          "character-a",
-      );
       await page.waitForFunction(() =>
         document.body.textContent?.includes("Second mobile review memory"),
       );
-      const characterNoteQuery = new URLSearchParams(noteQueries.at(-1));
-      assert.equal(characterNoteQuery.get("scopeCharacterIds"), "character-a");
-      assert.equal(characterNoteQuery.get("scopeChatIds"), "memory-chat");
-      assert.equal(characterNoteQuery.get("includeGlobal"), "false");
+      assert.equal(noteQueries.at(-1), "?&limit=500&offset=0");
       assert.equal(
         await page.locator('[data-ltm-surface="overview"]').count(),
         0,
@@ -1609,7 +1593,11 @@ async function main() {
         .locator('[data-ltm-review-source-select="source_mobile_review"]')
         .waitFor();
       assert.ok(reviewQueries.length > 0);
-      assert.ok(reviewQueries.every((query) => query === "?status=pending"));
+      assert.ok(
+        reviewQueries.every(
+          (query) => query === "?includeInvalidated=true",
+        ),
+      );
       assert.ok(rejectedSuggestionQueries.length > 0);
       assert.ok(rejectedSuggestionQueries.every((query) => query === ""));
       await page.setViewportSize({ width: 390, height: 844 });
@@ -2054,23 +2042,7 @@ async function main() {
         document.documentElement.style.fontSize = "";
       });
       await page.setViewportSize({ width: 1280, height: 900 });
-      page.once("dialog", (dialog) => void dialog.accept());
-      await page
-        .locator(
-          '[data-ltm-control="navigation"][data-ltm-destination="review"]',
-        )
-        .first()
-        .click();
-      await page.locator("[data-ltm-rejected-suggestions]").waitFor();
-      if (
-        !(await page
-          .locator("[data-ltm-rejected-suggestions]")
-          .evaluate((element) => (element as HTMLDetailsElement).open))
-      ) {
-        await page.locator("[data-ltm-rejected-suggestions] > summary").click();
-      }
-      await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
-      await page.locator("[data-ltm-note-editor]").waitFor();
+      await page.locator("[data-ltm-details-toggle]").click();
       assert.equal(
         await page
           .locator("[data-ltm-details-toggle]")
@@ -2081,6 +2053,9 @@ async function main() {
         await page.locator('[data-ltm-workspace-pane="inspector"]').count(),
         0,
       );
+      await page.getByRole("button", { name: "Choose where used" }).click();
+      await page.getByRole("button", { name: "Character A" }).click();
+      await page.getByRole("button", { name: "Save availability" }).click();
       const cleanupRequest = page.waitForRequest(
         (request) =>
           request.method() === "DELETE" &&
@@ -2785,7 +2760,7 @@ async function main() {
         type: "world",
         status: "active",
         modes: ["roleplay"],
-        scope: {},
+        scope: { characterIds: ["character-a"] },
         tags: ["artifact_lifecycle"],
         keywords: ["artifact", "lifecycle"],
         links: [],

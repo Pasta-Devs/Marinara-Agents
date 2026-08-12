@@ -698,6 +698,19 @@ async function main() {
       storage.renameNoteSection("world_legacy_target", "facts", "links"),
       (error: any) => error.code === "ltm_section_already_exists",
     );
+    await addRejectedSuggestions({
+      ...rejectionDraft,
+      source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
+      extractionOutcome: {
+        ...rejectionDraft.extractionOutcome,
+        droppedCandidates: [{
+          index: 0,
+          reason: "invalid_format",
+          message: "Renamed recovery.",
+          recovery: { noteId: "world_legacy_target", sectionKey: "facts" },
+        }],
+      },
+    }, root);
     assert.deepEqual(
       Object.keys((await storage.getNote("world_legacy_target"))!.sections),
       Object.keys(beforeRename!.sections),
@@ -713,6 +726,15 @@ async function main() {
       beforeRename?.sections.facts?.text,
     );
     assert.equal(renamedSection.rewrittenDraftCount, 1);
+    assert.equal(
+      (await listRejectedSuggestions({}, root)).some(
+        (suggestion) =>
+          suggestion.candidate.recovery?.noteId === "world_legacy_target" &&
+          suggestion.candidate.recovery?.sectionKey === "details",
+      ),
+      true,
+      "section rename must atomically preserve rejected-suggestion recovery targets",
+    );
     const sectionRenamedDraft = await draftStore.getDraft(pending.id);
     assert.equal(
       (sectionRenamedDraft?.mutations.find(
@@ -1787,14 +1809,32 @@ async function main() {
         }],
       },
     });
-    const deletedDetail = await storage.deleteNoteSection(deletionTarget.id, "facts");
-    assert.deepEqual(Object.keys(deletedDetail.note.sections), ["history"]);
-    assert.equal(deletedDetail.invalidatedDraftCount, 1);
+    const deletedDetail = await storage.updateNote(deletionTarget.id, {
+      sections: { history: deletionTarget.sections.history },
+      removedSectionKeys: ["facts"],
+    });
+    assert.deepEqual(Object.keys(deletedDetail.sections), ["history"]);
     const invalidatedDraft = await draftStore.getDraft(deletionDraft.id);
     assert.equal(invalidatedDraft?.status, "invalidated");
-    assert.match(invalidatedDraft?.invalidationReason ?? "", /facts detail was deleted/);
+    assert.match(invalidatedDraft?.invalidationReason ?? "", /targeted detail was removed/);
+    const invalidatedReview = await projectLongTermMemoryDraftReview({
+      root,
+      includeInvalidated: true,
+    });
+    assert.equal(
+      invalidatedReview.sources.some((source) =>
+        source.drafts.some(
+          (draft) =>
+            draft.draft.id === deletionDraft.id &&
+            draft.freshness === "invalidated" &&
+            draft.blockReasons.some((reason) => reason.code === "draft_invalidated"),
+        ),
+      ),
+      true,
+      "invalidated proposals must remain visible with their explicit blocking reason",
+    );
     await assert.rejects(
-      storage.deleteNoteSection(deletionTarget.id, "history"),
+      storage.updateNote(deletionTarget.id, { removedSectionKeys: ["history"] }),
       (error: any) => error.code === "ltm_last_section",
     );
 

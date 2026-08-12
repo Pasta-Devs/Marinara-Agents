@@ -113,6 +113,7 @@ assert.match(vault, /data-ltm-source-readonly/u);
 assert.match(vault, /data-ltm-memory-options/u);
 assert.match(vault, /data-ltm-keyword-editor/u);
 assert.match(vault, /getLtmKeywordIntent/u);
+assert.match(vault, /setLtmManualKeywords|removeLtmKeyword/u);
 assert.match(vault, /renameDetails/u);
 assert.match(vault, /beginRename/u);
 assert.match(vault, /data-ltm-detail-conflict/u);

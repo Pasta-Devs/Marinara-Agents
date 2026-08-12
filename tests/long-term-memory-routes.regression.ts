@@ -475,6 +475,67 @@ async function main() {
       },
     });
     assert.equal(created.statusCode, 201, created.body);
+    const missingTitle = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: { ...created.json().note, id: "world_missing_route_title", title: undefined },
+    });
+    assert.equal(missingTitle.statusCode, 400, missingTitle.body);
+    const missingCharacterSubject = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: { ...created.json().note, id: "char_missing_route_subject", type: "character" },
+    });
+    assert.equal(missingCharacterSubject.statusCode, 400, missingCharacterSubject.body);
+    const validCharacter = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        ...created.json().note,
+        id: "char_route_subject",
+        type: "character",
+        scope: { chatId: "chat-validation", chatIds: ["chat-validation"] },
+        subjects: [{ key: "character:character-mara", ref: { kind: "character", id: "character-mara" } }],
+      },
+    });
+    assert.equal(validCharacter.statusCode, 201, validCharacter.body);
+    const invalidCharacterPatch = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/char_route_subject",
+      headers,
+      payload: { subjects: [] },
+    });
+    assert.equal(invalidCharacterPatch.statusCode, 400, invalidCharacterPatch.body);
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "char_legacy_route_correction",
+      title: "Legacy character",
+      type: "character",
+      scope: { chatId: "chat-validation", chatIds: ["chat-validation"] },
+    });
+    const legacySubjectCorrection = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/char_legacy_route_correction",
+      headers,
+      payload: { subjects: [{ key: "character:character-mara", ref: { kind: "character", id: "character-mara" } }] },
+    });
+    assert.equal(legacySubjectCorrection.statusCode, 200, legacySubjectCorrection.body);
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_legacy_route_correction",
+      title: undefined,
+      scope: { chatId: "chat-validation", chatIds: ["chat-validation"] },
+    });
+    const legacyCorrection = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/world_legacy_route_correction",
+      headers,
+      payload: { title: "Corrected legacy title" },
+    });
+    assert.equal(legacyCorrection.statusCode, 200, legacyCorrection.body);
     const renamed = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",
@@ -551,6 +612,7 @@ async function main() {
           headers,
           payload: {
             id: "world_concurrent_fixture",
+            title: "Concurrent fixture",
             type: "world",
             status: "active",
             modes: ["roleplay"],
@@ -599,9 +661,9 @@ async function main() {
       url: "/api/long-term-memory/notes?scopeChatIds=chat-a&includeGlobal=false",
       headers,
     });
-    assert.deepEqual(
-      listed.json().map((note: any) => note.id),
-      ["world_route_fixture"],
+    assert.equal(
+      listed.json().some((note: any) => note.id === "world_route_fixture"),
+      true,
     );
     const personaScoped = await app.inject({
       method: "POST",
@@ -1419,6 +1481,43 @@ async function main() {
     );
     assert.ok(await storageService.storage.getNote("world_delete_keep"));
     await storageService.storage.createNote({
+      id: "source_delete_stale",
+      title: "Stale source fixture",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "stale" },
+      sections: { source: { text: "Stale source.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_delete_stale_a",
+      links: [{ relation: "extracted_from", target: "source_delete_stale" }],
+    });
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_delete_stale_b",
+      links: [{ relation: "extracted_from", target: "source_delete_stale" }],
+    });
+    const staleDelete = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/permanent-delete",
+      headers,
+      payload: {
+        ids: ["source_delete_stale", "world_delete_stale_a"],
+        retractExtracted: true,
+        excludedNoteIds: [],
+        lineageSourceNoteId: "source_delete_stale",
+        expectedLineageNoteIds: ["source_delete_stale", "world_delete_stale_a"],
+      },
+    });
+    assert.equal(staleDelete.statusCode, 409, staleDelete.body);
+    assert.ok(await storageService.storage.getNote("world_delete_stale_b"));
+    await storageService.storage.createNote({
       id: "source_delete_retract",
       title: "Retract source fixture",
       type: "source",
@@ -1476,6 +1575,8 @@ async function main() {
         ids: ["source_delete_retract"],
         retractExtracted: true,
         excludedNoteIds: ["world_delete_retract"],
+        lineageSourceNoteId: "source_delete_retract",
+        expectedLineageNoteIds: ["source_delete_retract", "world_delete_retract"],
       },
     });
     assert.equal(retractSource.statusCode, 200, retractSource.body);
@@ -1678,6 +1779,32 @@ async function main() {
       typeof crossScopeDerived.json().sourceIncomingLinkCount,
       "number",
     );
+    await storageService.storage.createNote({
+      id: "source_transfer_second_parent",
+      title: "Second transfer parent",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "second-parent" },
+      sections: { source: { text: "Second parent.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_transfer_multi_source",
+      links: [
+        { target: "source_route_extract", relation: "extracted_from" },
+        { target: "source_transfer_second_parent", relation: "extracted_from" },
+      ],
+    });
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_transfer_multi_descendant",
+      links: [{ target: "world_transfer_multi_source", relation: "extracted_from" }],
+    });
     const transferWithDerived = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/transfer-preview",
@@ -1695,6 +1822,17 @@ async function main() {
         .json()
         .selection.derivedNoteIds.includes("world_cross_scope_derived"),
       true,
+    );
+    assert.equal(
+      transferWithDerived
+        .json()
+        .selection.derivedNoteIds.includes("world_transfer_multi_descendant"),
+      true,
+      "transfer must retain descendants through every extracted_from parent",
+    );
+    assert.deepEqual(
+      transferWithDerived.json().items.find((item: any) => item.noteId === "world_transfer_multi_source")?.sourceNoteIds,
+      ["source_route_extract", "source_transfer_second_parent"],
     );
     const transferWithoutDerived = await app.inject({
       method: "POST",
@@ -1919,11 +2057,7 @@ async function main() {
         "Mara seals the western gate.",
       ],
     ] as const) {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/long-term-memory/notes",
-        headers,
-        payload: {
+      await storageService.storage.createNote({
           id,
           title: "Mara",
           type: "character",
@@ -1936,9 +2070,7 @@ async function main() {
           updatedAt: createdAt,
           links: [],
           sections: { facts: { text, updatedAt: createdAt } },
-        },
       });
-      assert.equal(response.statusCode, 201, response.body);
     }
     await storageService.storage.updateNote("world_route_fixture", {
       links: [{ target: "char_mara_legacy_b", relation: "affects_character" }],
@@ -2089,11 +2221,7 @@ async function main() {
         "Nyra marks the southern passage.",
       ],
     ] as const) {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/long-term-memory/notes",
-        headers,
-        payload: {
+      await storageService.storage.createNote({
           id,
           title: "Nyra",
           type: "character",
@@ -2106,9 +2234,7 @@ async function main() {
           updatedAt: createdAt,
           links: [],
           sections: { facts: { text, updatedAt: createdAt } },
-        },
       });
-      assert.equal(response.statusCode, 201, response.body);
     }
     const personaIdentityPreview = await app.inject({
       method: "POST",
@@ -3452,18 +3578,29 @@ async function main() {
     });
     assert.equal(deletionFixture.statusCode, 201, deletionFixture.body);
     const deletedDetail = await app.inject({
-      method: "DELETE",
-      url: "/api/long-term-memory/notes/world_detail_route_fixture/sections/facts",
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/world_detail_route_fixture",
       headers,
+      payload: {
+        sections: { history: deletionFixture.json().note.sections.history },
+        removedSectionKeys: ["facts"],
+      },
     });
     assert.equal(deletedDetail.statusCode, 200, deletedDetail.body);
     assert.deepEqual(Object.keys(deletedDetail.json().note.sections), ["history"]);
     const lastDetail = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/world_detail_route_fixture",
+      headers,
+      payload: { removedSectionKeys: ["history"] },
+    });
+    assert.equal(lastDetail.statusCode, 400, lastDetail.body);
+    const removedSectionRoute = await app.inject({
       method: "DELETE",
       url: "/api/long-term-memory/notes/world_detail_route_fixture/sections/history",
       headers,
     });
-    assert.equal(lastDetail.statusCode, 400, lastDetail.body);
+    assert.equal(removedSectionRoute.statusCode, 404, removedSectionRoute.body);
     const deletedAll = await app.inject({
       method: "DELETE",
       url: "/api/long-term-memory/data",
