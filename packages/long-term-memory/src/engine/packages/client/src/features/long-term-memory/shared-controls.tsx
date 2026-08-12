@@ -15,6 +15,8 @@ import { useLtmTranslation } from "./localization";
 let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
+export const compactInputClass =
+  "mari-editor-field min-h-8 w-full px-2.5 text-[0.6875rem]";
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -100,10 +102,12 @@ export function InfoPopover({
   label,
   content,
   wide = false,
+  compact = false,
 }: {
   label: string;
   content: ReactNode;
   wide?: boolean;
+  compact?: boolean;
 }) {
   const { t: localizeUi } = useLtmTranslation();
   const id = useId();
@@ -207,8 +211,12 @@ export function InfoPopover({
         aria-controls={open ? `${id}-panel` : undefined}
         aria-describedby={open && !pinned ? `${id}-panel` : undefined}
         data-ltm-info={label}
-        className="inline-grid h-11 w-11 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-        style={{ height: "2.75rem", width: "2.75rem", flexShrink: 0 }}
+        className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-grid shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
+        style={
+          compact
+            ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
+            : { height: "2.75rem", width: "2.75rem", flexShrink: 0 }
+        }
         onMouseEnter={show}
         onMouseLeave={scheduleClose}
         onFocus={show}
@@ -259,6 +267,7 @@ export function NumberField({
   onChange,
   disabled = false,
   help,
+  compact = false,
 }: {
   label: string;
   value: number;
@@ -268,6 +277,7 @@ export function NumberField({
   onChange: (value: number) => void;
   disabled?: boolean;
   help?: ReactNode;
+  compact?: boolean;
 }) {
   const id = useId();
   const [text, setText] = useState(String(value));
@@ -293,16 +303,20 @@ export function NumberField({
     committedText.current = String(value);
   }, [value]);
   return (
-    <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+    <div
+      className={`space-y-1 font-medium text-[var(--muted-foreground)] ${compact ? "text-[0.625rem]" : "text-xs"}`}
+    >
       <span className="flex items-center gap-1">
         <span id={`${id}-label`}>{label}</span>
-        {help ? <InfoPopover label={label} content={help} /> : null}
+        {help ? (
+          <InfoPopover label={label} content={help} compact={compact} />
+        ) : null}
       </span>
       <input
         id={id}
         aria-labelledby={`${id}-label`}
         data-ltm-control="number"
-        className={inputClass}
+        className={compact ? compactInputClass : inputClass}
         type="number"
         value={text}
         min={min}
