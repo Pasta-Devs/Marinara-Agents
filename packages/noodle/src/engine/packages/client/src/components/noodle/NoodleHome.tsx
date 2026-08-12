@@ -3502,6 +3502,19 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     });
   };
 
+  // NoodleR settings borrows this shell. Its nav must not offer the public timeline's
+  // search, notifications, or profile — but dropping the handlers emptied the mobile
+  // bottom bar, which is driven by the same props. Point them at the NoodleR
+  // equivalents instead of removing them.
+  const openNoodlerView = (view: "search" | "notifications") => () => {
+    onNavigate({ mode: "noodler", view });
+    setMobileDrawerOpen(false);
+  };
+  const openNoodlerOwnProfile = () => {
+    onNavigate({ mode: "noodler", view: "profile", accountId: null });
+    setMobileDrawerOpen(false);
+  };
+
   const openNoodler = () => {
     if (!settings?.enableNoodler) {
       void openNoodlerVerification();
@@ -5898,12 +5911,17 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       onOpenHome={openHomeTimeline}
       onOpenMobileHome={openMobileHomeTimeline}
       onOpenNoodler={openNoodler}
-      // NoodleR settings borrows this shell; its rail must not offer Noodle-only destinations.
-      onOpenSearch={noodlerSettingsActive ? undefined : openSearch}
-      onOpenNotifications={
-        noodlerSettingsActive ? undefined : openNotifications
+      onOpenSearch={
+        noodlerSettingsActive ? openNoodlerView("search") : openSearch
       }
-      onOpenProfile={noodlerSettingsActive ? undefined : openOwnProfile}
+      onOpenNotifications={
+        noodlerSettingsActive
+          ? openNoodlerView("notifications")
+          : openNotifications
+      }
+      onOpenProfile={
+        noodlerSettingsActive ? openNoodlerOwnProfile : openOwnProfile
+      }
       onOpenSettings={openSettings}
       onCompose={noodlerSettingsActive ? undefined : openComposeModal}
       rightRail={rightRail}
