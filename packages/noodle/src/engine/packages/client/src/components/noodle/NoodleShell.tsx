@@ -1083,7 +1083,7 @@ export function NoodleShell({
                   switch, which is the whole animation. */}
               <span
                 className={cn(
-                  "relative flex h-7 w-11 items-center justify-center transition-opacity",
+                  "relative flex h-8 w-12 items-center justify-center transition-opacity",
                   homeActive ? "opacity-100" : "opacity-55",
                 )}
               >
@@ -1098,7 +1098,7 @@ export function NoodleShell({
                       "absolute h-6 w-9 transition-[transform,opacity,filter] duration-200 ease-out",
                       bow.front
                         ? "z-10 translate-x-0 translate-y-0 rotate-0 opacity-100"
-                        : "translate-x-[3px] translate-y-[3px] rotate-[9deg] opacity-40 saturate-50",
+                        : "translate-x-[7px] translate-y-[6px] rotate-[12deg] opacity-40 saturate-50",
                     )}
                   />
                 ))}
