@@ -35,6 +35,40 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 export const NOODLE_BLUE = "#7EA7FF";
 export const NOODLE_PINK = "#FF7EC1";
 
+// The Engine viewport uses `viewport-fit=cover`, so `env(safe-area-inset-bottom)`
+// reports the Android system navigation bar as well. Gecko on Android keeps the
+// layout viewport above that bar, so honouring the inset there paints an empty
+// strip under the mobile nav. WebKit is the engine that really extends the
+// viewport under the home indicator, so reserve the inset only there.
+// ponytail: WebKit sniff, swap for a measured overhang if another engine ever
+// needs the real inset.
+const BOTTOM_SAFE_INSET =
+  typeof CSS !== "undefined" &&
+  CSS.supports?.("-webkit-touch-callout", "none") === true
+    ? "env(safe-area-inset-bottom)"
+    : "0px";
+
+const MOBILE_NAV_HEIGHT = "56px";
+
+// The bottom nav lives behind an `@container` query, but the shell fills the
+// viewport width on mobile, so a viewport media query tracks the same breakpoint.
+// ponytail: viewport width stands in for the container query.
+function useWideShell() {
+  const [wide, setWide] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 1024px)").matches,
+  );
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setWide(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+  return wide;
+}
+
 // The accent hex that drives `--noodle-accent` for every reused Noodle surface.
 // Provided at the shell root so descendants inherit via CSS var, and read here
 // so portaled popovers/modals (which escape the shell's CSS scope) can re-apply it.
@@ -469,6 +503,7 @@ export function NoodleShell({
   const mobileDrawerRef = useRef<HTMLElement | null>(null);
   const mobileDrawerCloseRef = useRef<HTMLButtonElement | null>(null);
   const prefersReducedMotion = Boolean(useReducedMotion());
+  const wideShell = useWideShell();
   const hasMorePersonaAccounts =
     visiblePersonaAccounts.length < sortedPersonaAccounts.length;
   const notificationBadgeLabel =
@@ -541,7 +576,8 @@ export function NoodleShell({
                   "ui.noodle.noodleshell.noodleAccountMenu",
                 )}
                 tabIndex={-1}
-                className="mari-chrome-token-scope flex h-full w-full flex-col overflow-y-auto bg-[var(--background)] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-5 text-[var(--foreground)]"
+                className="mari-chrome-token-scope flex h-full w-full flex-col overflow-y-auto bg-[var(--background)] px-5 pt-5 text-[var(--foreground)]"
+                style={{ paddingBottom: `max(1rem, ${BOTTOM_SAFE_INSET})` }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -1014,7 +1050,14 @@ export function NoodleShell({
               </div>
             </aside>
 
-            <main className="flex min-h-0 w-full flex-1 flex-col pb-[calc(56px+env(safe-area-inset-bottom))] @min-[1024px]:max-w-[640px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)] @min-[1024px]:pb-0">
+            <main
+              className="flex min-h-0 w-full flex-1 flex-col @min-[1024px]:max-w-[640px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]"
+              style={{
+                paddingBottom: wideShell
+                  ? undefined
+                  : `calc(${MOBILE_NAV_HEIGHT} + ${BOTTOM_SAFE_INSET})`,
+              }}
+            >
               {children}
             </main>
             {rightRail}
@@ -1022,7 +1065,8 @@ export function NoodleShell({
         </div>
 
         <nav
-          className="absolute inset-x-0 bottom-0 z-50 border-t border-[var(--noodle-divider)] bg-[var(--background)]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur @min-[1024px]:hidden"
+          className="absolute inset-x-0 bottom-0 z-50 border-t border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur @min-[1024px]:hidden"
+          style={{ paddingBottom: BOTTOM_SAFE_INSET }}
           aria-label={localizeUi(
             "ui.noodle.noodleshell.noodleMobileNavigation",
           )}
