@@ -1077,16 +1077,12 @@ export function NoodleShell({
               aria-current={homeActive ? "page" : undefined}
               className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
             >
-              {/* Both bows, stacked like two cards with the back one peeking out at the
-                  bottom right: the wordmark says which app you are in, and the one
-                  behind it says there is another to switch to. They trade places on the
-                  switch, which is the whole animation. */}
-              <span
-                className={cn(
-                  "relative flex h-8 w-12 items-center justify-center transition-opacity",
-                  homeActive ? "opacity-100" : "opacity-55",
-                )}
-              >
+              {/* Both bows, the back one offset to the bottom right: the front says which
+                  app you are in, the one behind says there is another to switch to. They
+                  trade places on the switch, which is the whole animation. A logo is not
+                  a state indicator, so the front bow keeps its own colour whatever is on
+                  screen — the dot below carries the active state. */}
+              <span className="relative flex h-8 w-12 items-center justify-center">
                 {[
                   { src: NOODLE_LOGO_SRC, front: !noodlerActive },
                   { src: NOODLER_LOGO_SRC, front: noodlerActive },
@@ -1095,10 +1091,10 @@ export function NoodleShell({
                     key={bow.src}
                     src={bow.src}
                     className={cn(
-                      "absolute h-6 w-9 transition-[transform,opacity,filter] duration-200 ease-out",
+                      "absolute h-6 w-9 transition-[transform,opacity] duration-200 ease-out",
                       bow.front
-                        ? "z-10 translate-x-0 translate-y-0 rotate-0 opacity-100"
-                        : "translate-x-[7px] translate-y-[6px] rotate-[12deg] opacity-40 saturate-50",
+                        ? "z-10 translate-x-0 translate-y-0 opacity-100"
+                        : "translate-x-[8px] translate-y-[7px] opacity-60",
                     )}
                   />
                 ))}
