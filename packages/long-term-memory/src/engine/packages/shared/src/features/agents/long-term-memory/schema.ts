@@ -760,9 +760,26 @@ export const ltmNoteTransferPreviewRequestSchema = z
     noteIds: z.array(ltmNoteIdSchema).min(1).max(500),
     mode: ltmNoteTransferModeSchema,
     destinationChatId: z.string().min(1).max(120),
+    derivedNoteIds: z
+      .array(ltmNoteIdSchema)
+      .max(500)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Derived note IDs must be unique.",
+      )
+      .optional(),
     includeDerived: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    const requested = new Set(value.noteIds);
+    if (value.derivedNoteIds?.some((id) => requested.has(id)))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["derivedNoteIds"],
+        message: "Requested and derived transfer IDs must be disjoint.",
+      });
+  });
 
 export const ltmNoteTransferPreviewResponseSchema = z
   .object({
@@ -850,12 +867,17 @@ export const ltmSourceDerivedMemorySchema = z
     type: ltmNoteTypeSchema,
     status: ltmStatusSchema,
     scope: ltmScopeSchema,
+    previewText: z.string().max(600),
+    incomingLinkCount: z.number().int().min(0),
+    outgoingLinkCount: z.number().int().min(0),
   })
   .strict();
 
 export const ltmSourceDerivedMemoriesResponseSchema = z
   .object({
     sourceNoteId: ltmNoteIdSchema,
+    sourceIncomingLinkCount: z.number().int().min(0),
+    sourceOutgoingLinkCount: z.number().int().min(0),
     memories: z.array(ltmSourceDerivedMemorySchema),
   })
   .strict();

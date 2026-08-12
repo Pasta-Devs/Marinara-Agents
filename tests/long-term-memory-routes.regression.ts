@@ -1472,9 +1472,16 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/notes/permanent-delete",
       headers,
-      payload: { ids: ["source_delete_retract"], retractExtracted: true },
+      payload: {
+        ids: ["source_delete_retract"],
+        retractExtracted: true,
+        excludedNoteIds: ["world_delete_retract"],
+      },
     });
     assert.equal(retractSource.statusCode, 200, retractSource.body);
+    assert.deepEqual(retractSource.json().detachedNoteIds, [
+      "world_delete_retract",
+    ]);
     assert.equal(
       await storageService.storage.getNote("source_delete_retract"),
       null,
@@ -1660,9 +1667,16 @@ async function main() {
           (note: any) =>
             note.id === "world_cross_scope_derived" &&
             note.scope.chatId === "chat-b" &&
-            note.sections === undefined,
+            note.sections === undefined &&
+            note.previewText === "A memory derived in another chat." &&
+            typeof note.incomingLinkCount === "number" &&
+            typeof note.outgoingLinkCount === "number",
         ),
       true,
+    );
+    assert.equal(
+      typeof crossScopeDerived.json().sourceIncomingLinkCount,
+      "number",
     );
     const transferWithDerived = await app.inject({
       method: "POST",
@@ -1702,6 +1716,25 @@ async function main() {
       transferWithoutDerived.json().selection.includedDerivedCount,
       0,
     );
+    const transferWithSelectedDerived = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer-preview",
+      headers,
+      payload: {
+        noteIds: ["source_route_extract"],
+        derivedNoteIds: ["world_cross_scope_derived"],
+        mode: "copy",
+        destinationChatId: "chat-b",
+      },
+    });
+    assert.equal(
+      transferWithSelectedDerived.statusCode,
+      200,
+      transferWithSelectedDerived.body,
+    );
+    assert.deepEqual(transferWithSelectedDerived.json().selection.derivedNoteIds, [
+      "world_cross_scope_derived",
+    ]);
     await storageService.storage.createNote({
       id: "source_transfer_noop_root",
       title: "No-op transfer root",

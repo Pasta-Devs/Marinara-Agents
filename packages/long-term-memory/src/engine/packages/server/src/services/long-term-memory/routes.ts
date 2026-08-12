@@ -776,42 +776,49 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply
             .status(404)
             .send({ error: "Long-term memory source note not found" });
-        const direct = notes.filter(
-          (note) =>
-            note.id !== sourceNoteId &&
-            note.links.some(
-              (link) =>
-                link.relation === "extracted_from" &&
-                link.target === sourceNoteId,
-            ),
-        );
-        const directIds = new Set(direct.map((note) => note.id));
-        const timelineIds = new Set(
-          direct
-            .filter((note) => note.type === "timeline_event")
-            .map((note) => note.id),
-        );
-        const related = [
-          ...direct,
-          ...notes.filter(
-            (note) =>
-              note.id !== sourceNoteId &&
-              !directIds.has(note.id) &&
-              note.links.some((link) => timelineIds.has(link.target)),
-          ),
-        ]
+        const linkedIds = new Set([sourceNoteId]);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const note of notes) {
+            if (
+              linkedIds.has(note.id) ||
+              !note.links.some(
+                (link) =>
+                  link.relation === "extracted_from" && linkedIds.has(link.target),
+              )
+            )
+              continue;
+            linkedIds.add(note.id);
+            changed = true;
+          }
+        }
+        const linkCounts = (id: string) => ({
+          incomingLinkCount: notes.filter((note) =>
+            note.links.some((link) => link.target === id),
+          ).length,
+          outgoingLinkCount: notes.find((note) => note.id === id)?.links.length ?? 0,
+        });
+        const related = notes
+          .filter((note) => note.id !== sourceNoteId && linkedIds.has(note.id))
           .sort((left, right) =>
             (left.title ?? left.id).localeCompare(right.title ?? right.id),
           )
-          .map(({ id, title, type, status, scope }) => ({
+          .map(({ id, title, type, status, scope, sections }) => ({
             id,
             ...(title ? { title } : {}),
             type,
             status,
             scope,
+            previewText:
+              Object.values(sections)[0]?.text.replace(/\s+/g, " ").trim().slice(0, 600) ??
+              "",
+            ...linkCounts(id),
           }));
         return ltmSourceDerivedMemoriesResponseSchema.parse({
           sourceNoteId,
+          sourceIncomingLinkCount: linkCounts(sourceNoteId).incomingLinkCount,
+          sourceOutgoingLinkCount: linkCounts(sourceNoteId).outgoingLinkCount,
           memories: related,
         });
       },
@@ -1211,11 +1218,13 @@ export function createLongTermMemoryRoutes(runtime: {
         .object({
           ids: z.array(ltmNoteIdSchema).min(1).max(100),
           retractExtracted: z.boolean().optional().default(false),
+          excludedNoteIds: z.array(ltmNoteIdSchema).max(100).optional(),
         })
         .strict()
         .parse(request.body ?? {});
       const result = await storage.deleteNotesPermanently(body.ids, {
         retractExtracted: body.retractExtracted,
+        excludedNoteIds: body.excludedNoteIds,
       });
       const rebuild = result.deletedIds.length
         ? await rebuildAfterMutation()
@@ -1223,6 +1232,7 @@ export function createLongTermMemoryRoutes(runtime: {
       return {
         deletedIds: result.deletedIds,
         failedIds: result.failedIds,
+        detachedNoteIds: result.detachedNoteIds,
         rebuild,
       };
     });

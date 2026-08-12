@@ -1064,13 +1064,9 @@ export class LongTermMemoryStorage {
       );
       const failedIds = wanted.filter((id) => !lookup.has(id));
       if (!requestedNotes.length)
-        return { deletedIds: [], failedIds, deletedNotes: [] };
+        return { deletedIds: [], failedIds, deletedNotes: [], detachedNoteIds: [] };
       const deleted = new Set(requestedNotes.map((note) => note.id));
-      const sourceIds = new Set(
-        requestedNotes
-          .filter((note) => note.type === "source")
-          .map((note) => note.id),
-      );
+      const sourceIds = new Set(requestedNotes.map((note) => note.id));
       const reprojected = new Map<string, LtmNote>();
       const detachedSourceIds = new Map<string, string[]>();
       if (options.retractExtracted && sourceIds.size)
@@ -1244,7 +1240,12 @@ export class LongTermMemoryStorage {
           }
         } catch {}
       }
-      return { deletedIds, failedIds, deletedNotes };
+      return {
+        deletedIds,
+        failedIds,
+        deletedNotes,
+        detachedNoteIds: [...detachedSourceIds.keys()],
+      };
     });
   }
   async removeNoteFromScope(

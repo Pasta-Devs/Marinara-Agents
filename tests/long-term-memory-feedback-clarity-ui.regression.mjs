@@ -93,5 +93,15 @@ assert.equal(locale["ui.longTermMemory.memoryvault.renameDetails"], "Rename deta
 assert.match(vault, /extractionImportance/u);
 assert.match(vault, /extractionConfidence/u);
 assert.match(vault, /data-ltm-validation-summary/u);
+assert.match(workspace, /function SourceOperationWorkbench/u);
+assert.match(workspace, /data-ltm-linked-memory-selection/u);
+assert.match(workspace, /derivedNoteIds: selectedLinkedIds/u);
+assert.match(workspace, /archive: "notes_only"/u);
+assert.match(workspace, /excludedNoteIds: excludedMemories/u);
+assert.match(workspace, /data-ltm-source-operation-preview/u);
+assert.match(workspace, /data-ltm-source-operation-excluded/u);
+assert.match(workspace, /data-ltm-source-operation-result/u);
+assert.equal(locale["ui.longTermMemory.sourceoperation.clearAll"], "Clear all");
+assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
 
 process.stdout.write("Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, and defaults ok\n");

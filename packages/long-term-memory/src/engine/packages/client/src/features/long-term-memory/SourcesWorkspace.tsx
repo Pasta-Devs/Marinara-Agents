@@ -15,13 +15,14 @@ import {
   Ellipsis,
   FileInput,
   Loader2,
+  ListChecks,
   RefreshCw,
   Send,
   Sparkles,
-  Trash2,
 } from "lucide-react";
 import type {
   LtmImportSourceNotesResponse,
+  LtmBulkNoteResult,
   LtmInteropPreviewResponse,
   LtmInteropPreviewSample,
   LtmLorebookPreviewEntry,
@@ -29,6 +30,7 @@ import type {
   LtmMode,
   LtmNoteTransferApplyResponse,
   LtmNoteTransferPreviewResponse,
+  LtmSourceDerivedMemoriesResponse,
   LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request } from "./api";
@@ -40,7 +42,12 @@ import {
   StatusSurface,
   inputClass,
 } from "./shared-controls";
-import { humanizeLabel, labelKeys, localizedLabel } from "./display-labels";
+import {
+  humanizeLabel,
+  labelKeys,
+  localizedLabel,
+  noteTypeLabel,
+} from "./display-labels";
 import type { LongTermMemoryDestinationProps, SourceTab } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace } from "./LtmWorkspace";
@@ -57,6 +64,7 @@ type Source = SourceTab;
 type FlatPanel = "available" | "imported";
 type PreviewRow = LtmInteropPreviewResponse["samples"][number];
 type LorebookCandidate = LtmInteropPreviewSample;
+type SourceOperation = "copy" | "move" | "archive" | "delete";
 type ImportContract = {
   source: Source;
   sourceIds: string[];
@@ -215,22 +223,6 @@ function extractionResultLabel(
   return localizeUi("ui.longTermMemory.sourcesworkspace.readyForReview");
 }
 
-async function confirmSourceAction(
-  props: LongTermMemoryDestinationProps["props"],
-  title: string,
-  message: string,
-  confirmLabel: string,
-) {
-  return props.confirmAction
-    ? props.confirmAction({
-        title,
-        message,
-        confirmLabel,
-        tone: "destructive",
-      })
-    : window.confirm(`${title}\n\n${message}`);
-}
-
 function handleTabKey<T extends string>(
   event: KeyboardEvent<HTMLButtonElement>,
   ids: readonly T[],
@@ -289,218 +281,304 @@ function EntrySelect({
   );
 }
 
-function TransferWorkbench({
-  destinationChatId,
+function SourceOperationWorkbench({
+  sourceNoteId,
+  sourceTitle,
   destinations,
-  noteCount,
-  mode,
-  includeDerived,
-  busy,
-  error,
-  preview,
-  result,
-  onModeChange,
-  onIncludeDerivedChange,
-  onDestinationChange,
-  onPreview,
-  onApply,
+  onComplete,
 }: {
-  destinationChatId?: string | null;
+  sourceNoteId: string;
+  sourceTitle: string;
   destinations: ScopeTargetChat[];
-  noteCount: number;
-  mode: "copy" | "move";
-  includeDerived: boolean;
-  busy: "preview" | "apply" | null;
-  error: string;
-  preview: LtmNoteTransferPreviewResponse | null;
-  result: LtmNoteTransferApplyResponse | null;
-  onModeChange: (mode: "copy" | "move") => void;
-  onIncludeDerivedChange: (includeDerived: boolean) => void;
-  onDestinationChange: (chatId: string) => void;
-  onPreview: () => void;
-  onApply: () => void;
+  onComplete: () => Promise<void>;
 }) {
   const { t: localizeUi } = useLtmTranslation();
+  const [operation, setOperation] = useState<SourceOperation>("copy");
+  const [destinationChatId, setDestinationChatId] = useState("");
+  const [selectedLinkedIds, setSelectedLinkedIds] = useState<string[]>([]);
+  const [initializedFor, setInitializedFor] = useState("");
+  const [preview, setPreview] = useState<LtmNoteTransferPreviewResponse | null>(
+    null,
+  );
+  const [previewed, setPreviewed] = useState(false);
+  const [result, setResult] = useState<
+    | { updated: string[]; skipped: string[]; deleted: string[]; detached: string[]; excluded: string[]; failed: string[] }
+    | null
+  >(null);
+  const [busy, setBusy] = useState<"preview" | "apply" | null>(null);
+  const [error, setError] = useState("");
+  const linked = useQuery({
+    queryKey: [...queryKeys.notes, "source-operation", sourceNoteId],
+    queryFn: () =>
+      request<LtmSourceDerivedMemoriesResponse>(
+        `/notes/${encodeURIComponent(sourceNoteId)}/derived`,
+      ),
+  });
+  const memories = linked.data?.memories ?? [];
+  const selected = new Set(selectedLinkedIds);
+  const selectedMemories = memories.filter((memory) => selected.has(memory.id));
+  const excludedMemories = memories.filter((memory) => !selected.has(memory.id));
+  const selectedIds = [sourceNoteId, ...selectedMemories.map((memory) => memory.id)];
+  const titleFor = (id: string) =>
+    id === sourceNoteId
+      ? sourceTitle
+      : memories.find((memory) => memory.id === id)?.title ?? id;
+
+  useEffect(() => {
+    if (!linked.data || initializedFor === sourceNoteId) return;
+    setSelectedLinkedIds(linked.data.memories.map((memory) => memory.id));
+    setInitializedFor(sourceNoteId);
+  }, [initializedFor, linked.data, sourceNoteId]);
+
+  const resetPreview = () => {
+    setPreview(null);
+    setPreviewed(false);
+    setResult(null);
+    setError("");
+  };
+  const previewOperation = async () => {
+    if ((operation === "copy" || operation === "move") && !destinationChatId)
+      return;
+    setBusy("preview");
+    setError("");
+    setResult(null);
+    try {
+      if (operation === "copy" || operation === "move") {
+        setPreview(
+          await request<LtmNoteTransferPreviewResponse>(
+            "/notes/transfer-preview",
+            "POST",
+            {
+              noteIds: [sourceNoteId],
+              derivedNoteIds: selectedLinkedIds,
+              mode: operation,
+              destinationChatId,
+            },
+          ),
+        );
+      }
+      setPreviewed(true);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : localizeUi("ui.longTermMemory.sourceoperation.previewCouldNotLoad"),
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+  const apply = async () => {
+    if (!previewed || busy) return;
+    setBusy("apply");
+    setError("");
+    try {
+      if ((operation === "copy" || operation === "move") && preview) {
+        const ready = preview.buckets.ready;
+        const applied = await request<LtmNoteTransferApplyResponse>(
+          "/notes/transfer",
+          "POST",
+          {
+            requestedNoteIds: [sourceNoteId],
+            derivedNoteIds: selectedLinkedIds,
+            applyNoteIds: ready,
+            mode: operation,
+            destinationChatId,
+          },
+        );
+        setResult({
+          updated: applied.updatedNoteIds,
+          skipped: [...applied.skippedNoteIds, ...preview.buckets.noOp, ...preview.buckets.conflict],
+          deleted: [],
+          detached: [],
+          excluded: excludedMemories.map((memory) => memory.id),
+          failed: [],
+        });
+      } else if (operation === "archive") {
+        const applied = await request<LtmBulkNoteResult>("/notes/batch", "POST", {
+          noteIds: selectedIds,
+          archive: "notes_only",
+        });
+        setResult({
+          updated: applied.updatedNoteIds,
+          skipped: applied.skippedNoteIds,
+          deleted: [],
+          detached: [],
+          excluded: excludedMemories.map((memory) => memory.id),
+          failed: applied.failedNoteIds,
+        });
+      } else if (operation === "delete") {
+        const applied = await request<{
+          deletedIds: string[];
+          failedIds: string[];
+          detachedNoteIds: string[];
+        }>("/notes/permanent-delete", "POST", {
+          ids: selectedIds,
+          retractExtracted: true,
+          excludedNoteIds: excludedMemories.map((memory) => memory.id),
+        });
+        setResult({
+          updated: [],
+          skipped: [],
+          deleted: applied.deletedIds,
+          detached: applied.detachedNoteIds,
+          excluded: excludedMemories.map((memory) => memory.id),
+          failed: applied.failedIds,
+        });
+      }
+      await onComplete();
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : localizeUi("ui.longTermMemory.sourceoperation.couldNotApply"),
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
   return (
     <div
-      id="ltm-source-transfer-workbench"
+      id="ltm-source-operation-workbench"
       role="region"
-      aria-labelledby="ltm-source-transfer-heading"
-      data-ltm-source-transfer
+      aria-labelledby="ltm-source-operation-heading"
+      data-ltm-source-operation={operation}
       className="space-y-3 border-b border-[var(--border)] bg-[var(--secondary)]/20 p-3"
     >
       <div className="flex items-center gap-1">
-        <h2 id="ltm-source-transfer-heading" className="text-sm font-semibold">
-          {localizeUi("ui.longTermMemory.transferworkbench.transferMemories")}
+        <h2 id="ltm-source-operation-heading" className="text-sm font-semibold">
+          {localizeUi("ui.longTermMemory.sourceoperation.manageSource")}
         </h2>
         <InfoPopover
-          label={localizeUi(
-            "ui.longTermMemory.transferworkbench.transferMemories",
-          )}
+          label={localizeUi("ui.longTermMemory.sourceoperation.manageSource")}
           wide
-          content={localizeUi(
-            "ui.longTermMemory.transferworkbench.previewACopyOrMoveIntoDestination",
-          )}
+          content={localizeUi("ui.longTermMemory.sourceoperation.description")}
         />
       </div>
-      {!destinations.length ? (
-        <StatusSurface tone="danger">
-          {localizeUi(
-            "ui.longTermMemory.transferworkbench.noChatsAvailableAsTransferDestinations",
-          )}
-        </StatusSurface>
+      <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+        {localizeUi("ui.longTermMemory.sourceoperation.operation")}
+        <select
+          value={operation}
+          onChange={(event) => {
+            setOperation(event.target.value as SourceOperation);
+            resetPreview();
+          }}
+          className={inputClass}
+          data-ltm-source-operation-select
+        >
+          {(["copy", "move", "archive", "delete"] as const).map((value) => (
+            <option key={value} value={value}>
+              {localizeUi(`ui.longTermMemory.sourceoperation.${value}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {(operation === "copy" || operation === "move") ? (
+        <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.transferworkbench.destination")}
+          <select
+            value={destinationChatId}
+            onChange={(event) => {
+              setDestinationChatId(event.target.value);
+              resetPreview();
+            }}
+            className={inputClass}
+            data-ltm-source-operation-destination
+          >
+            <option value="" disabled>
+              {localizeUi("ui.longTermMemory.transferworkbench.chooseDestination")}
+            </option>
+            {destinations.map((chat) => (
+              <option key={chat.id} value={chat.id}>{chat.label}</option>
+            ))}
+          </select>
+        </label>
       ) : null}
-      {noteCount ? (
-        <>
-          <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.transferworkbench.destination")}
-            <select
-              value={destinationChatId ?? ""}
-              onChange={(event) => onDestinationChange(event.target.value)}
-              className={inputClass}
-              data-ltm-transfer-destination
-            >
-              <option value="" disabled>
-                {localizeUi(
-                  "ui.longTermMemory.transferworkbench.chooseDestination",
-                )}
-              </option>
-              {destinations.map((chat) => (
-                <option key={chat.id} value={chat.id}>
-                  {chat.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.transferworkbench.mode")}
-            <select
-              value={mode}
-              onChange={(event) =>
-                onModeChange(event.target.value as "copy" | "move")
-              }
-              className={inputClass}
-              data-ltm-transfer-mode
-            >
-              <option value="copy">
-                {localizeUi(
-                  "ui.longTermMemory.transferworkbench.copyToDestination",
-                )}
-              </option>
-              <option value="move">
-                {localizeUi(
-                  "ui.longTermMemory.transferworkbench.moveToDestination",
-                )}
-              </option>
-            </select>
-          </label>
-          <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
+      <div className="space-y-2" data-ltm-linked-memory-selection>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
+          <span>{localizeUi("ui.longTermMemory.sourceoperation.linkedMemories")}</span>
+          <span>{selectedLinkedIds.length} {localizeUi("ui.longTermMemory.memoryvault.selected")}</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className="mari-editor-action--compact"
+            onClick={() => {
+              setSelectedLinkedIds(memories.map((memory) => memory.id));
+              resetPreview();
+            }}
+            disabled={!memories.length}
+            data-ltm-source-operation-select-all
+          >
+            {localizeUi("ui.longTermMemory.sourceoperation.selectAll")}
+          </Button>
+          <Button
+            className="mari-editor-action--compact"
+            onClick={() => {
+              setSelectedLinkedIds([]);
+              resetPreview();
+            }}
+            disabled={!selectedLinkedIds.length}
+            data-ltm-source-operation-clear-all
+          >
+            {localizeUi("ui.longTermMemory.sourceoperation.clearAll")}
+          </Button>
+        </div>
+        {linked.isLoading ? <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.longTermMemory.sourceoperation.loadingLinkedMemories")}</p> : null}
+        {memories.map((memory) => (
+          <label key={memory.id} className="flex min-h-11 items-start gap-2 rounded border border-[var(--border)] bg-[var(--background)]/50 p-2 text-xs">
             <input
               type="checkbox"
-              checked={includeDerived}
-              onChange={(event) => onIncludeDerivedChange(event.target.checked)}
-              data-ltm-transfer-include-derived
+              checked={selected.has(memory.id)}
+              onChange={(event) => {
+                setSelectedLinkedIds((ids) => event.target.checked ? [...ids, memory.id] : ids.filter((id) => id !== memory.id));
+                resetPreview();
+              }}
+              data-ltm-source-operation-memory={memory.id}
             />
-            {localizeUi(
-              "ui.longTermMemory.transferworkbench.includeAttachedDurableMemories",
-            )}
+            <span className="min-w-0">
+              <strong className="block truncate">{memory.title ?? memory.id}</strong>
+              <span className="text-[var(--muted-foreground)]">{noteTypeLabel(memory.type, localizeUi)} · {localizedLabel(memory.status, localizeUi, labelKeys.status)}</span>
+              <span className="block line-clamp-2 text-[var(--muted-foreground)]">{memory.previewText}</span>
+            </span>
           </label>
-        </>
-      ) : null}
-      {noteCount ? (
-        <Button
-          primary
-          disabled={!destinationChatId || busy !== null}
-          onClick={onPreview}
-          data-ltm-transfer-action="preview"
-        >
-          {busy === "preview" ? (
-            <Loader2
-              aria-hidden="true"
-              size="0.75rem"
-              className="animate-spin"
-            />
-          ) : (
-            <Send aria-hidden="true" size="0.75rem" />
-          )}
-          {localizeUi(
-            "ui.longTermMemory.transferworkbench.previewTransferCount",
-            { count: noteCount },
-          )}
-        </Button>
-      ) : null}
+        ))}
+      </div>
       {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
-      {preview ? (
-        <div data-ltm-transfer-preview className="space-y-2 text-xs">
-          <p role="status">
-            {localizeUi("ui.longTermMemory.transferworkbench.previewSummary", {
-              ready: preview.buckets.ready.length,
-              conflicts: preview.buckets.conflict.length,
-              alreadyApplicable: preview.buckets.noOp.length,
-            })}
-          </p>
-          <div role="list">
-            {preview.items.map((item) => (
-              <p
-                key={item.noteId}
-                role="listitem"
-                data-ltm-transfer-item={item.classification}
-                className="rounded bg-[var(--secondary)]/45 p-2"
-              >
-                <strong>{item.title}</strong>:{" "}
-                {localizedLabel(
-                  item.classification,
-                  localizeUi,
-                  labelKeys.transferClassification,
-                )}
-                {item.reason
-                  ? localizeUi("ui.longTermMemory.transferworkbench.value1", {
-                      value1: item.reason,
-                    })
-                  : ""}
-              </p>
-            ))}
-          </div>
+      <Button
+        primary
+        disabled={busy !== null || linked.isLoading || ((operation === "copy" || operation === "move") && !destinationChatId)}
+        onClick={() => void previewOperation()}
+        data-ltm-source-operation-action="preview"
+      >
+        {busy === "preview" ? <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" /> : <Send aria-hidden="true" size="0.75rem" />}
+        {localizeUi("ui.longTermMemory.sourceoperation.preview")}
+      </Button>
+      {previewed ? (
+        <div data-ltm-source-operation-preview className="space-y-2 text-xs">
+          <p role="status">{localizeUi("ui.longTermMemory.sourceoperation.previewSummary", { selected: selectedMemories.length, excluded: excludedMemories.length })}</p>
+          {operation === "delete" && excludedMemories.length ? <StatusSurface tone="warning">{localizeUi("ui.longTermMemory.sourceoperation.deleteDetachment", { count: excludedMemories.length })}</StatusSurface> : null}
+          {operation === "delete" ? <p className="text-[var(--muted-foreground)]">{localizeUi("ui.longTermMemory.sourceoperation.deleteLinks", { incoming: linked.data?.sourceIncomingLinkCount ?? 0, outgoing: linked.data?.sourceOutgoingLinkCount ?? 0 })}</p> : null}
+          {operation === "archive" || operation === "delete" ? <div role="list">{selectedIds.map((id) => <p key={id} role="listitem" className="rounded bg-[var(--secondary)]/45 p-2">{titleFor(id)}{id === sourceNoteId ? "" : ` - ${localizeUi("ui.longTermMemory.sourceoperation.links", { incoming: memories.find((memory) => memory.id === id)?.incomingLinkCount ?? 0, outgoing: memories.find((memory) => memory.id === id)?.outgoingLinkCount ?? 0 })}`}</p>)}</div> : null}
+          {operation === "delete" && excludedMemories.length ? <div role="list" data-ltm-source-operation-excluded>{excludedMemories.map((memory) => <p key={memory.id} role="listitem" className="rounded bg-[var(--secondary)]/45 p-2">{memory.title ?? memory.id} - {localizeUi("ui.longTermMemory.sourceoperation.links", { incoming: memory.incomingLinkCount, outgoing: memory.outgoingLinkCount })}</p>)}</div> : null}
+          {preview?.items.map((item) => (
+            <p key={item.noteId} data-ltm-source-operation-preview-item={item.classification} className="rounded bg-[var(--secondary)]/45 p-2"><strong>{item.title}</strong>: {localizedLabel(item.classification, localizeUi, labelKeys.transferClassification)}{item.reason ? ` - ${item.reason}` : ""}</p>
+          ))}
           <Button
-            primary
-            disabled={busy !== null || preview.buckets.ready.length === 0}
-            onClick={onApply}
-            data-ltm-transfer-action="apply-ready"
-            data-ltm-transfer-ready-count={preview.buckets.ready.length}
+            primary={operation !== "delete"}
+            destructive={operation === "delete"}
+            disabled={busy !== null || ((operation === "copy" || operation === "move") && !preview?.buckets.ready.length)}
+            onClick={() => void apply()}
+            data-ltm-source-operation-action="apply"
           >
-            {busy === "apply" ? (
-              <Loader2
-                aria-hidden="true"
-                size="0.75rem"
-                className="animate-spin"
-              />
-            ) : (
-              <Check aria-hidden="true" size="0.75rem" />
-            )}
-            {localizeUi(
-              preview.mode === "move"
-                ? "ui.longTermMemory.transferworkbench.moveMemoryCount"
-                : "ui.longTermMemory.transferworkbench.copyMemoryCount",
-              {
-                count: preview.buckets.ready.length,
-                memory:
-                  preview.buckets.ready.length === 1
-                    ? localizeUi("ui.longTermMemory.memoryvault.memory")
-                    : localizeUi("ui.longTermMemory.memoryvault.memories"),
-              },
-            )}
+            {busy === "apply" ? <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" /> : <Check aria-hidden="true" size="0.75rem" />}
+            {localizeUi(`ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`)}
           </Button>
         </div>
       ) : null}
       {result ? (
-        <div data-ltm-transfer-result={result.mode}>
-          <StatusSurface tone="success">
-            {localizeUi("ui.longTermMemory.transferworkbench.resultSummary", {
-              updated: result.updatedNoteIds.length,
-              skipped: result.skippedNoteIds.length,
-              derivedTouched: result.derivedNoteIdsTouched.length,
-            })}
-          </StatusSurface>
+        <div data-ltm-source-operation-result={operation} className="space-y-2">
+          <StatusSurface tone={result.failed.length ? "warning" : "success"}>{localizeUi("ui.longTermMemory.sourceoperation.resultSummary", { updated: result.updated.length, deleted: result.deleted.length, detached: result.detached.length, excluded: result.excluded.length, skipped: result.skipped.length, failed: result.failed.length })}</StatusSurface>
+          {[...new Set([...result.updated, ...result.deleted, ...result.detached, ...result.excluded, ...result.skipped, ...result.failed])].map((id) => <p key={id} className="rounded bg-[var(--secondary)]/45 p-2 text-xs" data-ltm-source-operation-result-memory={id}>{titleFor(id)}: {result.deleted.includes(id) ? localizeUi("ui.longTermMemory.sourceoperation.deleted") : result.detached.includes(id) ? localizeUi("ui.longTermMemory.sourceoperation.detached") : result.updated.includes(id) ? localizeUi("ui.longTermMemory.sourceoperation.updated") : result.excluded.includes(id) ? localizeUi("ui.longTermMemory.sourceoperation.excluded") : result.failed.includes(id) ? localizeUi("ui.longTermMemory.sourceoperation.failed") : localizeUi("ui.longTermMemory.sourceoperation.skipped")}</p>)}
         </div>
       ) : null}
     </div>
@@ -522,9 +600,6 @@ export default function SourcesWorkspace({
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
   const selectAllImportedRef = useRef<HTMLInputElement>(null);
-  const [transferResultKey, setTransferResultKey] = useState<string | null>(
-    null,
-  );
   const importControllerRef = useRef<AbortController | null>(null);
   const [source, setSource] = useState<Source>(selectedSource ?? "chats");
   const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(
@@ -552,23 +627,12 @@ export default function SourcesWorkspace({
   );
   const [extractingId, setExtractingId] = useState<string | null>(null);
   const [reviewMessage, setReviewMessage] = useState("");
-  const [transferOpen, setTransferOpen] = useState(false);
-  const [transferMode, setTransferMode] = useState<"copy" | "move">("copy");
-  const [includeDerived, setIncludeDerived] = useState(true);
-  const [transferPreview, setTransferPreview] =
-    useState<LtmNoteTransferPreviewResponse | null>(null);
-  const [transferResult, setTransferResult] =
-    useState<LtmNoteTransferApplyResponse | null>(null);
-  const [transferBusy, setTransferBusy] = useState<"preview" | "apply" | null>(
-    null,
-  );
-  const [transferError, setTransferError] = useState("");
+  const [sourceOperation, setSourceOperation] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const [openSourceActionId, setOpenSourceActionId] = useState<string | null>(
     null,
-  );
-  const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
-  const [transferDestinationId, setTransferDestinationId] = useState(
-    props.chatId ?? "",
   );
 
   const scopeTargets = useQuery({
@@ -781,22 +845,6 @@ export default function SourcesWorkspace({
     ...selectedLorebookImportIds,
     ...selectedLorebookRefreshIds,
   ]);
-  const selectedLorebookTransferNoteIds = new Set(
-    selectedLorebook?.entries
-      .flatMap((entry) => entry.candidates)
-      .filter(
-        (candidate) =>
-          candidate.status === "imported" &&
-          selectedLorebookRefreshIds.has(candidate.sourceId),
-      )
-      .map((candidate) => candidate.existingNoteId) ?? [],
-  );
-  const transferNoteIds = new Set(
-    source === "lorebooks"
-      ? selectedLorebookTransferNoteIds
-      : selectedImportedRows.map((row) => row.existingNoteId),
-  );
-  const transferSelectionKey = JSON.stringify([...transferNoteIds].sort());
   const activeFlatRows =
     flatPanel === "available" ? selectableRows : importedRows;
   const activeFlatSelection =
@@ -860,7 +908,6 @@ export default function SourcesWorkspace({
   useEffect(() => {
     setImportTargetId(props.chatId ? `chat:${props.chatId}` : "all");
     setImportCharacterId(null);
-    setTransferDestinationId(props.chatId ?? "");
   }, [props.chatId]);
 
   useEffect(() => {
@@ -897,19 +944,6 @@ export default function SourcesWorkspace({
         selectedImportedRows.length > 0 && !allImportedSelected;
   }, [allImportedSelected, selectedImportedRows.length]);
 
-  useEffect(() => {
-    const resultStillMatchesSelection =
-      transferResultKey === transferSelectionKey;
-    setTransferPreview(null);
-    setTransferError("");
-    if (!resultStillMatchesSelection) {
-      setTransferResult(null);
-      setTransferResultKey(null);
-    }
-    if (!transferNoteIds.size && !resultStillMatchesSelection)
-      setTransferOpen(false);
-  }, [transferResultKey, transferSelectionKey, transferNoteIds.size]);
-
   const invalidateAfterMutation = async () => {
     await invalidateLtmQueries(client, [
       queryKeys.notes,
@@ -930,11 +964,7 @@ export default function SourcesWorkspace({
     setCancelledImport(null);
     setImportError("");
     setReviewMessage("");
-    setTransferOpen(false);
-    setTransferPreview(null);
-    setTransferResult(null);
-    setTransferResultKey(null);
-    setTransferError("");
+    setSourceOperation(null);
   };
 
   const changeSource = (next: Source) => {
@@ -1142,150 +1172,6 @@ export default function SourcesWorkspace({
     }
   };
 
-  const deleteSource = async (noteId: string, title: string) => {
-    if (deletingSourceId) return;
-    const retract = await confirmSourceAction(
-      props,
-      localizeUi(
-        "ui.longTermMemory.sourcesworkspace.deleteExtractedMemoriesTitle",
-      ),
-      localizeUi(
-        "ui.longTermMemory.sourcesworkspace.deleteExtractedMemoriesMessage",
-        { value1: title },
-      ),
-      localizeUi("ui.longTermMemory.sourcesworkspace.deleteExtractedMemories"),
-    );
-    if (
-      !(await confirmSourceAction(
-        props,
-        localizeUi(
-          "ui.longTermMemory.sourcesworkspace.deleteImportedSourceTitle",
-        ),
-        localizeUi(
-          retract
-            ? "ui.longTermMemory.sourcesworkspace.deleteImportedSourceWithExtractedMessage"
-            : "ui.longTermMemory.sourcesworkspace.deleteImportedSourceKeepExtractedMessage",
-          { value1: title },
-        ),
-        localizeUi("ui.longTermMemory.sourcesworkspace.deletePermanently"),
-      ))
-    )
-      return;
-    setDeletingSourceId(noteId);
-    setImportError("");
-    try {
-      await request<{ deletedIds: string[] }>(
-        "/notes/permanent-delete",
-        "POST",
-        { ids: [noteId], retractExtracted: retract },
-      );
-      setSelections((current) =>
-        Object.fromEntries(
-          Object.entries(current).map(([key, ids]) => [
-            key,
-            ids.filter((id) => id !== noteId),
-          ]),
-        ),
-      );
-      setOpenSourceActionId(null);
-      await invalidateAfterMutation();
-      await (source === "lorebooks"
-        ? lorebookPreview.refetch()
-        : preview.refetch());
-    } catch (error) {
-      setImportError(
-        error instanceof Error
-          ? error.message
-          : localizeUi(
-              "ui.longTermMemory.sourcesworkspace.sourceCouldNotBeDeleted",
-            ),
-      );
-    } finally {
-      setDeletingSourceId(null);
-    }
-  };
-
-  const previewTransfer = async () => {
-    if (!transferDestinationId || transferNoteIds.size === 0 || transferBusy)
-      return;
-    setTransferBusy("preview");
-    setTransferError("");
-    setTransferResult(null);
-    try {
-      const result = await request<LtmNoteTransferPreviewResponse>(
-        "/notes/transfer-preview",
-        "POST",
-        {
-          noteIds: [...transferNoteIds],
-          mode: transferMode,
-          destinationChatId: transferDestinationId,
-          includeDerived,
-        },
-      );
-      setTransferPreview(result);
-    } catch (error) {
-      setTransferError(
-        error instanceof Error
-          ? error.message
-          : localizeUi(
-              "ui.longTermMemory.sourcesworkspace.transferPreviewCouldNotLoad",
-            ),
-      );
-    } finally {
-      setTransferBusy(null);
-    }
-  };
-
-  const applyTransfer = async () => {
-    const readyIds = transferPreview?.buckets.ready ?? [];
-    if (
-      !transferDestinationId ||
-      readyIds.length === 0 ||
-      transferBusy ||
-      !transferPreview
-    )
-      return;
-    setTransferBusy("apply");
-    setTransferError("");
-    try {
-      const result = await request<LtmNoteTransferApplyResponse>(
-        "/notes/transfer",
-        "POST",
-        {
-          // Do not send no-op or conflicting IDs from the preview back to apply.
-          requestedNoteIds: transferPreview.selection.requestedNoteIds,
-          derivedNoteIds: transferPreview.selection.derivedNoteIds.filter(
-            (id) => readyIds.includes(id),
-          ),
-          applyNoteIds: readyIds,
-          mode: transferPreview!.mode,
-          destinationChatId: transferDestinationId,
-        },
-      );
-      setTransferResult(result);
-      setTransferResultKey("[]");
-      setTransferPreview(null);
-      setSelections((current) => ({
-        ...current,
-        [source === "lorebooks"
-          ? lorebookRefreshSelectionKey
-          : importedSelectionKey]: [],
-      }));
-      setTransferOpen(true);
-      await invalidateAfterMutation();
-    } catch (error) {
-      setTransferError(
-        error instanceof Error
-          ? error.message
-          : localizeUi(
-              "ui.longTermMemory.sourcesworkspace.transferCouldNotBeApplied",
-            ),
-      );
-    } finally {
-      setTransferBusy(null);
-    }
-  };
-
   const stopRowAction = (event: {
     preventDefault: () => void;
     stopPropagation: () => void;
@@ -1335,16 +1221,15 @@ export default function SourcesWorkspace({
           data-ltm-review-query={noteId}
         />
         <IconButton
-          icon={deletingSourceId === noteId ? Loader2 : Trash2}
-          label={localizeUi("ui.longTermMemory.sourcesworkspace.deleteValue1", {
+          icon={ListChecks}
+          label={localizeUi("ui.longTermMemory.sourceoperation.manageValue1", {
             value1: title,
           })}
-          disabled={deletingSourceId !== null}
           onClick={(event) => {
             stopRowAction(event);
-            void deleteSource(noteId, title);
+            setSourceOperation({ id: noteId, title });
           }}
-          data-ltm-source-action="delete"
+          data-ltm-source-action="manage"
           data-ltm-source-note-id={noteId}
         />
       </div>
@@ -1378,20 +1263,17 @@ export default function SourcesWorkspace({
               }}
             />
             <IconButton
-              icon={deletingSourceId === noteId ? Loader2 : Trash2}
+              icon={ListChecks}
               label={localizeUi(
-                "ui.longTermMemory.sourcesworkspace.deleteValue1",
+                "ui.longTermMemory.sourceoperation.manageValue1",
                 { value1: title },
               )}
-              disabled={deletingSourceId !== null}
               onClick={(event) => {
                 stopRowAction(event);
                 setOpenSourceActionId(null);
-                void deleteSource(noteId, title);
+                setSourceOperation({ id: noteId, title });
               }}
-              className={
-                deletingSourceId === noteId ? "[&>svg]:animate-spin" : ""
-              }
+              data-ltm-source-action="manage"
             />
           </>
         ) : null}
@@ -1414,7 +1296,6 @@ export default function SourcesWorkspace({
       data-ltm-import-status={importing ? "pending" : "idle"}
       data-ltm-extraction-status={extractingId ? "pending" : "idle"}
       data-ltm-extraction-note-id={extractingId ?? undefined}
-      data-ltm-transfer-status={transferBusy ?? "idle"}
       className="space-y-4"
     >
       <style>{`
@@ -1429,6 +1310,19 @@ export default function SourcesWorkspace({
           }
         }
       `}</style>
+      {sourceOperation ? (
+        <SourceOperationWorkbench
+          sourceNoteId={sourceOperation.id}
+          sourceTitle={sourceOperation.title}
+          destinations={scopeTargets.data?.chats ?? []}
+          onComplete={async () => {
+            await invalidateAfterMutation();
+            await (source === "lorebooks"
+              ? lorebookPreview.refetch()
+              : preview.refetch());
+          }}
+        />
+      ) : null}
       <div
         className="mari-editor-tab-rail flex flex-wrap gap-1 rounded-lg border p-1"
         role="tablist"
@@ -1895,27 +1789,6 @@ export default function SourcesWorkspace({
                                 { count: selectedBookRefreshIds.length },
                               )}
                             </Button>
-                            {selectedLorebookTransferNoteIds.size ? (
-                              <Button
-                                primary
-                                onClick={() => setTransferOpen((open) => !open)}
-                                aria-expanded={transferOpen}
-                                aria-controls={
-                                  transferOpen
-                                    ? "ltm-source-transfer-workbench"
-                                    : undefined
-                                }
-                                data-ltm-lorebook-action="transfer-selected"
-                              >
-                                <Send aria-hidden="true" size="0.75rem" />{" "}
-                                {localizeUi(
-                                  "ui.longTermMemory.sourcesworkspace.transferSelectedCount",
-                                  {
-                                    count: selectedLorebookTransferNoteIds.size,
-                                  },
-                                )}
-                              </Button>
-                            ) : null}
                             {importing ? (
                               <Button
                                 destructive
@@ -1940,38 +1813,6 @@ export default function SourcesWorkspace({
                           <p className="text-xs text-[var(--muted-foreground)]">
                             {selectedLorebook.tags.join(", ")}
                           </p>
-                        ) : null}
-                        {transferOpen &&
-                        (selectedLorebookTransferNoteIds.size ||
-                          transferResult) ? (
-                          <TransferWorkbench
-                            destinationChatId={transferDestinationId}
-                            destinations={scopeTargets.data?.chats ?? []}
-                            noteCount={selectedLorebookTransferNoteIds.size}
-                            mode={transferMode}
-                            includeDerived={includeDerived}
-                            busy={transferBusy}
-                            error={transferError}
-                            preview={transferPreview}
-                            result={transferResult}
-                            onModeChange={(mode) => {
-                              setTransferMode(mode);
-                              setTransferPreview(null);
-                              setTransferResult(null);
-                            }}
-                            onIncludeDerivedChange={(includeDerived) => {
-                              setIncludeDerived(includeDerived);
-                              setTransferPreview(null);
-                              setTransferResult(null);
-                            }}
-                            onDestinationChange={(chatId) => {
-                              setTransferDestinationId(chatId);
-                              setTransferPreview(null);
-                              setTransferResult(null);
-                            }}
-                            onPreview={() => void previewTransfer()}
-                            onApply={() => void applyTransfer()}
-                          />
                         ) : null}
                       </header>
 
@@ -2270,25 +2111,6 @@ export default function SourcesWorkspace({
                       "ui.longTermMemory.sourcesworkspace.refreshSelectedSources",
                     )}
                   </Button>
-                  {transferNoteIds.size ? (
-                    <Button
-                      primary
-                      onClick={() => setTransferOpen((open) => !open)}
-                      aria-expanded={transferOpen}
-                      aria-controls={
-                        transferOpen
-                          ? "ltm-source-transfer-workbench"
-                          : undefined
-                      }
-                      data-ltm-source-action="transfer-selected"
-                    >
-                      <Send aria-hidden="true" size="0.75rem" />{" "}
-                      {localizeUi(
-                        "ui.longTermMemory.sourcesworkspace.transferSelectedCount",
-                        { count: transferNoteIds.size },
-                      )}
-                    </Button>
-                  ) : null}
                 </>
               )}
               {importing && flatPanel === "available" ? (
@@ -2301,38 +2123,6 @@ export default function SourcesWorkspace({
                 </Button>
               ) : null}
             </div>
-            {flatPanel === "imported" &&
-            transferOpen &&
-            (transferNoteIds.size || transferResult) ? (
-              <TransferWorkbench
-                destinationChatId={transferDestinationId}
-                destinations={scopeTargets.data?.chats ?? []}
-                noteCount={transferNoteIds.size}
-                mode={transferMode}
-                includeDerived={includeDerived}
-                busy={transferBusy}
-                error={transferError}
-                preview={transferPreview}
-                result={transferResult}
-                onModeChange={(mode) => {
-                  setTransferMode(mode);
-                  setTransferPreview(null);
-                  setTransferResult(null);
-                }}
-                onIncludeDerivedChange={(includeDerived) => {
-                  setIncludeDerived(includeDerived);
-                  setTransferPreview(null);
-                  setTransferResult(null);
-                }}
-                onDestinationChange={(chatId) => {
-                  setTransferDestinationId(chatId);
-                  setTransferPreview(null);
-                  setTransferResult(null);
-                }}
-                onPreview={() => void previewTransfer()}
-                onApply={() => void applyTransfer()}
-              />
-            ) : null}
             <div role="list" className="divide-y divide-[var(--border)]">
               {activeFlatRows.map((row) => (
                 <ClickSurface
