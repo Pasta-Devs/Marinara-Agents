@@ -4072,30 +4072,32 @@ function NoodlerPostComposer({
             disabled: composerBusy,
             onClick: () => toggleTool("media"),
           }}
+          trailing={
+            <div ref={accessToolRef} className="relative">
+              <button
+                type="button"
+                onClick={() => toggleTool("access")}
+                disabled={composerBusy}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
+                aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postVisibilityValue", {
+                  value: localizeUi(`ui.noodle.postaccess.${access}`),
+                })}
+                title={localizeUi(`ui.noodle.postaccess.${access}.hint`)}
+              >
+                <Lock size={13} />
+                {localizeUi(`ui.noodle.postaccess.${access}`)}
+              </button>
+            </div>
+          }
         />
       }
       action={
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div ref={accessToolRef} className="relative">
-            <button
-              type="button"
-              onClick={() => toggleTool("access")}
-              disabled={composerBusy}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
-              aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postVisibilityValue", {
-                value: localizeUi(`ui.noodle.postaccess.${access}`),
-              })}
-              title={localizeUi(`ui.noodle.postaccess.${access}.hint`)}
-            >
-              <Lock size={13} />
-              {localizeUi(`ui.noodle.postaccess.${access}`)}
-            </button>
-          </div>
+        <>
           <button
             type="button"
             onClick={() => void guidePost()}
             disabled={composerBusy || Boolean(pendingImage)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {guidePending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
             {guidePending
@@ -4107,7 +4109,7 @@ function NoodlerPostComposer({
               type="button"
               onClick={discardDraft}
               disabled={composerBusy}
-              className="inline-flex h-8 items-center rounded-md px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
+              className="inline-flex h-9 items-center rounded-md px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
             >
               {localizeUi("ui.agents.agenteditor.discard")}
             </button>
@@ -4116,14 +4118,14 @@ function NoodlerPostComposer({
             type="button"
             onClick={() => void publish()}
             disabled={composerBusy || Boolean(pendingImage) || (!body.trim() && !image && !pollIsValid)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-[opacity,scale] hover:opacity-90 active:scale-[0.96] [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-[opacity,scale] hover:opacity-90 active:scale-[0.96] [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {manualPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
             {manualPending
               ? localizeUi("ui.noodle.noodlerpostcomposer.posting")
               : localizeUi("ui.noodle.noodlerpostcomposer.publishPost")}
           </button>
-        </div>
+        </>
       }
       popovers={
         <>
@@ -4209,7 +4211,10 @@ function NoodlerPostComposer({
       }
       footer={
         (postError || guideError || attachmentError) && (
-          <div className="mt-2 space-y-1 pl-14 text-xs text-[var(--destructive)]" role="alert">
+          <div
+            className="mt-2 space-y-1 text-xs text-[var(--destructive)] @min-[480px]:pl-14"
+            role="alert"
+          >
             {postError && (
               <p>
                 {localizeUi("ui.noodle.noodlerpostcomposer.post")} {postError}

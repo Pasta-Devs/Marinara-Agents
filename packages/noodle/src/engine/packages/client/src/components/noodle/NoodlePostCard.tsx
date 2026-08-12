@@ -2793,9 +2793,14 @@ export function NoodleComposerShell({
         <div className="min-w-0">{children}</div>
       </div>
       <div className="mt-1 h-px w-full bg-[var(--noodle-divider)]" />
-      <div className="relative mt-3 flex items-center justify-between gap-2 pl-14">
+      {/* Tools and actions are two wrapping groups, not seven buttons in one row: on a
+          phone the old single row broke them apart mid-group. The avatar-width indent
+          is a wide-layout nicety and costs 3.5rem the narrow layout cannot spare. */}
+      <div className="relative mt-3 flex flex-wrap items-center gap-2 @min-[480px]:pl-14">
         <div className="flex min-w-0 flex-wrap items-center gap-1">{tools}</div>
-        {action}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {action}
+        </div>
         {popovers}
       </div>
       {footer}
