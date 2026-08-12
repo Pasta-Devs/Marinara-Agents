@@ -35,8 +35,11 @@ import {
   ltmIdentityRepairPreviewResponseSchema,
   ltmInteropPreviewRequestSchema,
   ltmInteropPreviewResponseSchema,
+  ltmDeleteNoteSectionResponseSchema,
   ltmRepairRequestSchema,
   ltmRepairResponseSchema,
+  ltmRenameNoteSectionRequestSchema,
+  ltmRenameNoteSectionResponseSchema,
   ltmStatusResponseSchema,
   ltmScopeSchema,
   ltmSectionKeySchema,
@@ -1087,6 +1090,46 @@ export function createLongTermMemoryRoutes(runtime: {
       },
     );
     app.post<{ Params: { id: string }; Body: unknown }>(
+      "/notes/:id/sections/rename",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        const parsedId = ltmNoteIdSchema.safeParse(request.params.id);
+        const parsedBody = ltmRenameNoteSectionRequestSchema.safeParse(request.body);
+        if (!parsedId.success || !parsedBody.success) {
+          const result = routeError(
+            !parsedId.success ? parsedId.error : parsedBody.error,
+            "Invalid section rename.",
+          );
+          return reply.status(result.statusCode).send(result.body);
+        }
+        try {
+          const renamed = await storage.renameNoteSection(
+            parsedId.data,
+            parsedBody.data.fromSectionKey,
+            parsedBody.data.toSectionKey,
+          );
+          const rebuildResult = await rebuildAfterMutation();
+          return ltmRenameNoteSectionResponseSchema.parse({
+            ...renamed,
+            rebuild:
+              rebuildResult.status === "complete"
+                ? {
+                    status: rebuildResult.status,
+                    generatedAt: rebuildResult.generatedAt,
+                    noteCount: rebuildResult.noteCount,
+                    chunkCount: rebuildResult.chunkCount,
+                    embeddedChunkCount: rebuildResult.embeddedChunkCount,
+                    embeddingsAvailable: rebuildResult.embeddingsAvailable,
+                  }
+                : rebuildResult,
+          });
+        } catch (error) {
+          const result = routeError(error, "Could not rename note section.");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
+    );
+    app.post<{ Params: { id: string }; Body: unknown }>(
       "/notes/:id/scope/apply-to-derived",
       async (request, reply) => {
         const result = await applyLtmScopeLinksToDerivedNotes(
@@ -1098,6 +1141,41 @@ export function createLongTermMemoryRoutes(runtime: {
           result ??
           reply.status(404).send({ error: "Long-term memory note not found" })
         );
+      },
+    );
+    app.delete<{ Params: { id: string; sectionKey: string } }>(
+      "/notes/:id/sections/:sectionKey",
+      async (request, reply) => {
+        const parsedId = ltmNoteIdSchema.safeParse(request.params.id);
+        const parsedSectionKey = ltmSectionKeySchema.safeParse(request.params.sectionKey);
+        if (!parsedId.success || !parsedSectionKey.success) {
+          const result = routeError(
+            !parsedId.success ? parsedId.error : parsedSectionKey.error,
+            "Invalid detail deletion.",
+          );
+          return reply.status(result.statusCode).send(result.body);
+        }
+        try {
+          const deleted = await storage.deleteNoteSection(parsedId.data, parsedSectionKey.data);
+          const rebuildResult = await rebuildAfterMutation();
+          return ltmDeleteNoteSectionResponseSchema.parse({
+            ...deleted,
+            rebuild:
+              rebuildResult.status === "complete"
+                ? {
+                    status: rebuildResult.status,
+                    generatedAt: rebuildResult.generatedAt,
+                    noteCount: rebuildResult.noteCount,
+                    chunkCount: rebuildResult.chunkCount,
+                    embeddedChunkCount: rebuildResult.embeddedChunkCount,
+                    embeddingsAvailable: rebuildResult.embeddingsAvailable,
+                  }
+                : rebuildResult,
+          });
+        } catch (error) {
+          const result = routeError(error, "Could not delete memory detail.");
+          return reply.status(result.statusCode).send(result.body);
+        }
       },
     );
     app.delete<{ Params: { id: string } }>(

@@ -536,6 +536,10 @@ async function main() {
       title: "Legacy target",
       scope: { chatId: "chat-a", chatIds: ["chat-a"] },
       links: [],
+      sections: {
+        facts: noteInput.sections.facts,
+        links: { text: "Existing links detail.", updatedAt: timestamp },
+      },
     });
     const draftStore = new LongTermMemoryDraftStore(root);
     let afterWriteRan = false;
@@ -672,8 +676,63 @@ async function main() {
               relation: "evidenced_by",
             },
           },
+          {
+            id: randomUUID(),
+            kind: "update_section",
+            risk: "low",
+            confidence: 0.9,
+            summary: "Keep the renamed section target current.",
+            evidence: [`source_note:${legacySource.id}`],
+            noteId: "world_legacy_target",
+            sectionKey: "facts",
+            section: {
+              text: "A pending section update.",
+              updatedAt: timestamp,
+            },
+          },
         ],
       },
+    });
+    const beforeRename = await storage.getNote("world_legacy_target");
+    await assert.rejects(
+      storage.renameNoteSection("world_legacy_target", "facts", "links"),
+      (error: any) => error.code === "ltm_section_already_exists",
+    );
+    assert.deepEqual(
+      Object.keys((await storage.getNote("world_legacy_target"))!.sections),
+      Object.keys(beforeRename!.sections),
+    );
+    const renamedSection = await storage.renameNoteSection(
+      "world_legacy_target",
+      "facts",
+      "details",
+    );
+    assert.deepEqual(Object.keys(renamedSection.note.sections), ["details", "links"]);
+    assert.equal(
+      renamedSection.note.sections.details?.text,
+      beforeRename?.sections.facts?.text,
+    );
+    assert.equal(renamedSection.rewrittenDraftCount, 1);
+    const sectionRenamedDraft = await draftStore.getDraft(pending.id);
+    assert.equal(
+      (sectionRenamedDraft?.mutations.find(
+        (mutation) =>
+          mutation.kind === "update_section" &&
+          mutation.noteId === "world_legacy_target",
+      ) as any).sectionKey,
+      "details",
+    );
+    const sectionRenameEvents = (await readFile(getLongTermMemoryDirectories(root).eventLog, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const sectionRenameEvent = sectionRenameEvents.find(
+      (event) => event.type === "world.section_renamed" && event.target === "world_legacy_target",
+    );
+    assert.deepEqual(sectionRenameEvent?.payload, {
+      note: renamedSection.note,
+      fromSectionKey: "facts",
+      toSectionKey: "details",
     });
     const canonicalSourceId = "source_chat_summary_1234567890abcdef";
     await storage.renameNoteId(legacySource.id, canonicalSourceId);
@@ -1575,6 +1634,119 @@ async function main() {
     assert.deepEqual(
       (await storage.getNote("world_retract_manual"))?.links,
       [],
+    );
+
+    const excludedSource = await storage.createNote({
+      ...noteInput,
+      id: "source_retract_excluded",
+      title: "Excluded source",
+      type: "source",
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "excluded" },
+      sections: { source: { text: "Excluded source evidence.", updatedAt: timestamp } },
+    });
+    const excludedChild = await storage.projectNote(
+      "world_retract_excluded",
+      "world",
+      () => ({
+        ...noteInput,
+        id: "world_retract_excluded",
+        title: "Excluded child",
+        status: "active",
+        links: [{ target: excludedSource.id, relation: "extracted_from" }],
+        sections: {
+          facts: renderSectionContributions(
+            [
+              {
+                owner: "source" as const,
+                sourceNoteId: excludedSource.id,
+                sourceHash: sourceHashForLtmSourceNote(excludedSource),
+                text: "Excluded content survives source deletion.",
+                updatedAt: timestamp,
+                evidence: [`source_note:${excludedSource.id}`],
+              },
+            ],
+            true,
+          )!,
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      }),
+    );
+    const excludedDelete = await storage.deleteNotesPermanently(
+      [excludedSource.id],
+      { retractExtracted: true, excludedNoteIds: [excludedChild.note!.id] },
+    );
+    assert.deepEqual(excludedDelete.deletedIds, [excludedSource.id]);
+    assert.equal(await storage.getNote(excludedSource.id), null);
+    const detachedChild = await storage.getNote(excludedChild.note!.id);
+    assert.equal(
+      detachedChild?.sections.facts.text,
+      "Excluded content survives source deletion.",
+    );
+    assert.deepEqual(detachedChild?.sections.facts.contributions, [
+      {
+        owner: "manual",
+        text: "Excluded content survives source deletion.",
+        updatedAt: timestamp,
+        evidence: [],
+      },
+    ]);
+    assert.equal(detachedChild?.sections.facts.evidence, undefined);
+    assert.deepEqual(detachedChild?.links, []);
+    const deletionEvents = (await readFile(
+      getLongTermMemoryDirectories(root).eventLog,
+      "utf8",
+    ))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.target === excludedChild.note!.id);
+    assert.deepEqual(deletionEvents.at(-1)?.payload.detachedFrom, [
+      excludedSource.id,
+    ]);
+    assert.equal(
+      deletionEvents.at(-1)?.payload.previousNote.sections.facts.text,
+      "Excluded content survives source deletion.",
+    );
+
+    const deletionTarget = await storage.createNote({
+      ...noteInput,
+      id: "world_detail_deletion",
+      title: "Detail deletion target",
+      sections: {
+        facts: { text: "A removable fact.", updatedAt: timestamp },
+        history: { text: "A retained history.", updatedAt: timestamp },
+      },
+    });
+    const deletionDraft = await draftStore.createDraft({
+      source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+      scope: deletionTarget.scope,
+      modes: deletionTarget.modes,
+      response: {
+        summary: "Update the removable fact.",
+        mutations: [{
+          id: randomUUID(),
+          kind: "update_section",
+          risk: "low",
+          confidence: 0.9,
+          summary: "Update the removable fact.",
+          evidence: [`source_note:${canonicalSourceId}`],
+          noteId: deletionTarget.id,
+          sectionKey: "facts",
+          section: { text: "A pending fact update.", updatedAt: timestamp },
+        }],
+      },
+    });
+    const deletedDetail = await storage.deleteNoteSection(deletionTarget.id, "facts");
+    assert.deepEqual(Object.keys(deletedDetail.note.sections), ["history"]);
+    assert.equal(deletedDetail.invalidatedDraftCount, 1);
+    const invalidatedDraft = await draftStore.getDraft(deletionDraft.id);
+    assert.equal(invalidatedDraft?.status, "invalidated");
+    assert.match(invalidatedDraft?.invalidationReason ?? "", /facts detail was deleted/);
+    await assert.rejects(
+      storage.deleteNoteSection(deletionTarget.id, "history"),
+      (error: any) => error.code === "ltm_last_section",
     );
 
     process.stdout.write(

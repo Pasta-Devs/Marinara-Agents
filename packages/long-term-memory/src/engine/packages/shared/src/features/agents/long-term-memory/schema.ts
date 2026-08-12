@@ -2008,11 +2008,73 @@ export const ltmNoteTransferApplyResponseSchema = z
   })
   .strict();
 
+export const ltmRenameNoteSectionRequestSchema = z
+  .object({
+    fromSectionKey: ltmSectionKeySchema,
+    toSectionKey: ltmSectionKeySchema,
+  })
+  .strict()
+  .refine(
+    (value) => value.fromSectionKey !== value.toSectionKey,
+    "Section keys must be different.",
+  );
+
+export const ltmRenameNoteSectionResponseSchema = z
+  .object({
+    note: ltmNoteSchema,
+    rewrittenDraftCount: z.number().int().min(0),
+    rebuild: z.discriminatedUnion("status", [
+      z
+        .object({
+          status: z.literal("complete"),
+          generatedAt: ltmIsoTimestampSchema,
+          noteCount: z.number().int().min(0),
+          chunkCount: z.number().int().min(0),
+          embeddedChunkCount: z.number().int().min(0),
+          embeddingsAvailable: z.boolean(),
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal("deferred"),
+          error: z.string().min(1),
+        })
+        .strict(),
+    ]),
+  })
+  .strict();
+
+export const ltmDeleteNoteSectionResponseSchema = z
+  .object({
+    note: ltmNoteSchema,
+    invalidatedDraftCount: z.number().int().min(0),
+    rebuild: z.discriminatedUnion("status", [
+      z
+        .object({
+          status: z.literal("complete"),
+          generatedAt: ltmIsoTimestampSchema,
+          noteCount: z.number().int().min(0),
+          chunkCount: z.number().int().min(0),
+          embeddedChunkCount: z.number().int().min(0),
+          embeddingsAvailable: z.boolean(),
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal("deferred"),
+          error: z.string().min(1),
+        })
+        .strict(),
+    ]),
+  })
+  .strict();
+
 export const ltmDraftStatusSchema = z.enum([
   "pending",
   "accepted",
   "auto_applied",
   "superseded",
+  "invalidated",
 ]);
 
 export const ltmDraftApplyStateSchema = z.enum([
@@ -2314,6 +2376,8 @@ export const ltmExtractionDraftSchema = z
     skippedMutationIds: z.array(z.string().uuid()).optional(),
     supersededAt: ltmIsoTimestampSchema.optional(),
     supersededByDraftId: z.string().uuid().optional(),
+    invalidatedAt: ltmIsoTimestampSchema.optional(),
+    invalidationReason: z.string().min(1).max(2_000).optional(),
   })
   .strip();
 
@@ -2324,6 +2388,7 @@ export const ltmDraftFreshnessSchema = z.enum([
   "missing",
   "invalid",
   "superseded",
+  "invalidated",
   "not_pending",
 ]);
 
@@ -2333,6 +2398,7 @@ export const ltmDraftBlockReasonCodeSchema = z.enum([
   "source_missing",
   "source_invalid",
   "draft_superseded",
+  "draft_invalidated",
   "draft_not_pending",
   "projection_failed",
   "no_mutations",
@@ -3018,6 +3084,15 @@ export type LtmTransferRebuildSummary = z.infer<
 >;
 export type LtmNoteTransferApplyResponse = z.infer<
   typeof ltmNoteTransferApplyResponseSchema
+>;
+export type LtmRenameNoteSectionRequest = z.infer<
+  typeof ltmRenameNoteSectionRequestSchema
+>;
+export type LtmRenameNoteSectionResponse = z.infer<
+  typeof ltmRenameNoteSectionResponseSchema
+>;
+export type LtmDeleteNoteSectionResponse = z.infer<
+  typeof ltmDeleteNoteSectionResponseSchema
 >;
 export type LtmDraftStatus = z.infer<typeof ltmDraftStatusSchema>;
 export type LtmDraftApplyState = z.infer<typeof ltmDraftApplyStateSchema>;

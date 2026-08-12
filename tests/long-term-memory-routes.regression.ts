@@ -467,10 +467,34 @@ async function main() {
             text: "The cobalt key is beneath the observatory.",
             updatedAt: "2026-07-17T00:00:00.000Z",
           },
+          history: {
+            text: "The observatory was sealed after the eclipse.",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+          },
         },
       },
     });
     assert.equal(created.statusCode, 201, created.body);
+    const renamed = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",
+      headers,
+      payload: { fromSectionKey: "facts", toSectionKey: "details" },
+    });
+    assert.equal(renamed.statusCode, 200, renamed.body);
+    assert.deepEqual(Object.keys(renamed.json().note.sections), ["details", "history"]);
+    assert.equal(
+      renamed.json().note.sections.details.text,
+      "The cobalt key is beneath the observatory.",
+    );
+    assert.equal(renamed.json().rebuild.status, "complete");
+    const renameCollision = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",
+      headers,
+      payload: { fromSectionKey: "details", toSectionKey: "details" },
+    });
+    assert.equal(renameCollision.statusCode, 400, renameCollision.body);
     const rebuiltStatus = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/status",
@@ -3351,6 +3375,40 @@ async function main() {
       (await storageService.storage.getNote("world_route_fixture"))?.id,
       "world_route_fixture",
     );
+    const deletionFixture = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        id: "world_detail_route_fixture",
+        title: "Detail route fixture",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: { text: "A removable fact.", updatedAt: "2026-07-17T00:00:00.000Z" },
+          history: { text: "A retained history.", updatedAt: "2026-07-17T00:00:00.000Z" },
+        },
+      },
+    });
+    assert.equal(deletionFixture.statusCode, 201, deletionFixture.body);
+    const deletedDetail = await app.inject({
+      method: "DELETE",
+      url: "/api/long-term-memory/notes/world_detail_route_fixture/sections/facts",
+      headers,
+    });
+    assert.equal(deletedDetail.statusCode, 200, deletedDetail.body);
+    assert.deepEqual(Object.keys(deletedDetail.json().note.sections), ["history"]);
+    const lastDetail = await app.inject({
+      method: "DELETE",
+      url: "/api/long-term-memory/notes/world_detail_route_fixture/sections/history",
+      headers,
+    });
+    assert.equal(lastDetail.statusCode, 400, lastDetail.body);
     const deletedAll = await app.inject({
       method: "DELETE",
       url: "/api/long-term-memory/data",

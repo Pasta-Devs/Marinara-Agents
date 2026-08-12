@@ -81,6 +81,7 @@ export async function projectLongTermMemoryDraftReview(options: ProjectLtmDraftR
 
 function draftFreshness(draft: LtmDraftReviewDraft["draft"], source: LtmNote | null): LtmDraftFreshness {
   if (draft.status === "superseded") return "superseded";
+  if (draft.status === "invalidated") return "invalidated";
   if (draft.status !== "pending") return "not_pending";
   if (!source) return "missing";
   if (!isLtmSourceLikeNote(source)) return "invalid";
@@ -95,6 +96,7 @@ function blockReasonsForDraft(draft: LtmDraftReviewDraft["draft"], freshness: Lt
     : freshness === "hashless" ? { code: "source_context_unbound" as const, message: "This legacy draft is not bound to its extraction context. Extract the source again before applying it." }
     : freshness === "stale" ? { code: "source_stale" as const, message: "The source or extraction context changed after this extraction." }
     : freshness === "superseded" ? { code: "draft_superseded" as const, message: "A newer extraction superseded this draft." }
+    : freshness === "invalidated" ? { code: "draft_invalidated" as const, message: draft.invalidationReason ?? "A targeted memory detail was deleted." }
     : freshness === "not_pending" ? { code: "draft_not_pending" as const, message: "This draft is no longer pending review." } : null;
   if (reason) reasons.push(reason);
   if (!draft.mutations.length) reasons.push({ code: "no_mutations", message: "No mutation survived extraction." });
