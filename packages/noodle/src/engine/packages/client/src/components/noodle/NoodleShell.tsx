@@ -1077,14 +1077,32 @@ export function NoodleShell({
               aria-current={homeActive ? "page" : undefined}
               className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
             >
-              {/* The wordmark says which of the two apps you are in; a house does not. */}
-              <NoodleLogo
-                src={noodlerActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
+              {/* Both bows, stacked like two cards with the back one peeking out at the
+                  bottom right: the wordmark says which app you are in, and the one
+                  behind it says there is another to switch to. They trade places on the
+                  switch, which is the whole animation. */}
+              <span
                 className={cn(
-                  "h-6 w-9 transition-opacity",
+                  "relative flex h-7 w-11 items-center justify-center transition-opacity",
                   homeActive ? "opacity-100" : "opacity-55",
                 )}
-              />
+              >
+                {[
+                  { src: NOODLE_LOGO_SRC, front: !noodlerActive },
+                  { src: NOODLER_LOGO_SRC, front: noodlerActive },
+                ].map((bow) => (
+                  <NoodleLogo
+                    key={bow.src}
+                    src={bow.src}
+                    className={cn(
+                      "absolute h-6 w-9 transition-[transform,opacity,filter] duration-200 ease-out",
+                      bow.front
+                        ? "z-10 translate-x-0 translate-y-0 rotate-0 opacity-100"
+                        : "translate-x-[3px] translate-y-[3px] rotate-[9deg] opacity-40 saturate-50",
+                    )}
+                  />
+                ))}
+              </span>
               {homeActive && (
                 <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
               )}
