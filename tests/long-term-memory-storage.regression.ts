@@ -1444,6 +1444,50 @@ async function main() {
     assert.equal(noChanges.status, "no_changes");
     assert.deepEqual(noChanges.skippedNoteIds, [bulkSource.id]);
 
+    const availabilityNote = await storage.createNote({
+      ...noteInput,
+      id: "world_availability_fixture",
+      title: "Availability fixture",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+    });
+    const legacyGlobal = await storage.createNote({
+      ...noteInput,
+      id: "world_availability_global",
+      title: "Legacy global availability",
+      modes: ["conversation"],
+      scope: {},
+    });
+    const availabilityAdded = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id, legacyGlobal.id],
+      addScope: { characterIds: ["character-a"] },
+      enableModes: ["game"],
+    });
+    assert.equal(availabilityAdded.status, "complete");
+    assert.deepEqual(
+      (await storage.getNote(availabilityNote.id))?.scope,
+      { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"] },
+    );
+    assert.deepEqual((await storage.getNote(availabilityNote.id))?.modes, ["roleplay", "game"]);
+    assert.deepEqual(
+      (await storage.getNote(legacyGlobal.id))?.scope,
+      { characterIds: ["character-a"] },
+    );
+    const availabilityRemoved = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id],
+      removeScope: { characterIds: ["character-a"] },
+      disableModes: ["game"],
+    });
+    assert.equal(availabilityRemoved.status, "complete");
+    assert.deepEqual((await storage.getNote(availabilityNote.id))?.modes, ["roleplay"]);
+    const finalAvailability = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id],
+      removeScope: { chatIds: ["chat-a"] },
+      disableModes: ["roleplay"],
+    });
+    assert.equal(finalAvailability.status, "no_changes");
+    assert.deepEqual(finalAvailability.skippedNoteIds, [availabilityNote.id]);
+
     const retractSourceA = await storage.createNote({
       ...noteInput,
       id: "source_retract_a",

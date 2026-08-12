@@ -554,7 +554,7 @@ async function main() {
             type: "world",
             status: "active",
             modes: ["roleplay"],
-            scope: {},
+            scope: { chatId: "chat-concurrent", chatIds: ["chat-concurrent"] },
             tags: [],
             keywords: [],
             links: [],
@@ -572,6 +572,28 @@ async function main() {
       concurrent.map((response) => response.statusCode).sort(),
       [201, 409],
     );
+    const globalCreate = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        id: "world_global_create_fixture",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {},
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: {
+            text: "New memories require an explicit place.",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+          },
+        },
+      },
+    });
+    assert.equal(globalCreate.statusCode, 400, globalCreate.body);
     const listed = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/notes?scopeChatIds=chat-a&includeGlobal=false",

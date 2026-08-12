@@ -245,7 +245,22 @@ const createNoteBody = z
     subjects: ltmSubjectsSchema.optional(),
     version: z.number().int().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((note, ctx) => {
+    if (
+      note.scope.chatId ||
+      note.scope.chatIds?.length ||
+      note.scope.groupId ||
+      note.scope.characterIds?.length ||
+      note.scope.personaId
+    )
+      return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["scope"],
+      message: "Choose at least one place where this memory is available.",
+    });
+  });
 const updateNoteBody = z
   .object({
     title: ltmNoteTitleSchema.optional(),

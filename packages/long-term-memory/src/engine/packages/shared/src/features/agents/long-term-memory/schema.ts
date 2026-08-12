@@ -1107,6 +1107,18 @@ export const ltmBulkNoteArchiveActionSchema = z.enum([
   "with_derived",
 ]);
 
+const ltmAvailabilityScopePatchSchema = ltmScopeSchema.refine(
+  (scope) =>
+    Boolean(
+      scope.chatId ||
+        scope.chatIds?.length ||
+        scope.groupId ||
+        scope.characterIds?.length ||
+        scope.personaId,
+    ),
+  "Choose at least one place.",
+);
+
 export const ltmBulkNoteRequestSchema = z
   .object({
     noteIds: z
@@ -1127,6 +1139,10 @@ export const ltmBulkNoteRequestSchema = z
         "Modes must be unique.",
       )
       .optional(),
+    enableModes: z.array(ltmModeSchema).min(1).max(8).optional(),
+    disableModes: z.array(ltmModeSchema).min(1).max(8).optional(),
+    addScope: ltmAvailabilityScopePatchSchema.optional(),
+    removeScope: ltmAvailabilityScopePatchSchema.optional(),
     addTags: z
       .array(ltmIdentifierSchema)
       .max(100)
@@ -1150,6 +1166,10 @@ export const ltmBulkNoteRequestSchema = z
     if (
       !request.status &&
       !request.modes &&
+      !request.enableModes?.length &&
+      !request.disableModes?.length &&
+      !request.addScope &&
+      !request.removeScope &&
       !request.addTags?.length &&
       !request.removeTags?.length &&
       !request.archive
@@ -1178,6 +1198,14 @@ export const ltmBulkNoteRequestSchema = z
         });
       }
     }
+    const enabledModes = new Set(request.enableModes ?? []);
+    for (const [index, mode] of (request.disableModes ?? []).entries())
+      if (enabledModes.has(mode))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["disableModes", index],
+          message: "A chat mode cannot be enabled and disabled in the same bulk request.",
+        });
   });
 
 export const ltmBulkNoteResultStatusSchema = z.enum([

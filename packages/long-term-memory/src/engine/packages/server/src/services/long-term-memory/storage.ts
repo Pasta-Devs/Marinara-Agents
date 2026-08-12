@@ -22,6 +22,7 @@ import {
   getLtmScopeChatIds,
   isGlobalLtmScope,
   matchesLtmScope,
+  withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { normalizeLtmKeywordIntent } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 import {
@@ -502,7 +503,44 @@ export class LongTermMemoryStorage {
             : (request.status ?? current.status);
         const modes = archiveDerived
           ? current.modes
-          : (request.modes ?? current.modes);
+          : request.modes ?? [
+              ...new Set([
+                ...current.modes,
+                ...(request.enableModes ?? []),
+              ].filter((mode) => !request.disableModes?.includes(mode))),
+            ];
+        const addScope = request.addScope;
+        const removeScope = request.removeScope;
+        const currentChatIds = getLtmScopeChatIds(current.scope);
+        const removeChatIds = new Set(getLtmScopeChatIds(removeScope));
+        const nextChatIds = currentChatIds
+          .filter((chatId) => !removeChatIds.has(chatId));
+        const nextScope = withMergedLtmScopeLinks(
+          {
+            ...current.scope,
+            ...(removeScope?.groupId === current.scope.groupId ? { groupId: undefined } : {}),
+            ...(removeScope?.personaId === current.scope.personaId ? { personaId: undefined } : {}),
+            characterIds: current.scope.characterIds?.filter(
+              (id) => !removeScope?.characterIds?.includes(id),
+            ),
+            chatIds: nextChatIds,
+            chatId: nextChatIds[0],
+          },
+          {
+            chatIds: getLtmScopeChatIds(addScope),
+            characterIds: addScope?.characterIds,
+            personaId: addScope?.personaId,
+          },
+        );
+        if (addScope?.groupId && current.scope.groupId && addScope.groupId !== current.scope.groupId) {
+          continue;
+        }
+        if (addScope?.personaId && current.scope.personaId && addScope.personaId !== current.scope.personaId) {
+          continue;
+        }
+        if (addScope?.groupId) nextScope.groupId = addScope.groupId;
+        const scope = addScope || removeScope ? nextScope : current.scope;
+        if (!modes.length || (removeScope && isGlobalLtmScope(scope))) continue;
         const tags =
           archiveDerived ||
           (!request.addTags?.length && !request.removeTags?.length)
@@ -520,7 +558,8 @@ export class LongTermMemoryStorage {
           modes.length === current.modes.length &&
           modes.every((mode, index) => mode === current.modes[index]) &&
           tags.length === current.tags.length &&
-          tags.every((tag, index) => tag === current.tags[index])
+          tags.every((tag, index) => tag === current.tags[index]) &&
+          JSON.stringify(scope) === JSON.stringify(current.scope)
         )
           continue;
         changes.push({
@@ -529,6 +568,7 @@ export class LongTermMemoryStorage {
             ...current,
             status,
             modes,
+            scope,
             tags,
             updatedAt: timestamp,
             version: current.version + 1,
@@ -556,6 +596,10 @@ export class LongTermMemoryStorage {
                 request: {
                   status: request.status,
                   modes: request.modes,
+                  enableModes: request.enableModes,
+                  disableModes: request.disableModes,
+                  addScope: request.addScope,
+                  removeScope: request.removeScope,
                   addTags: request.addTags,
                   removeTags: request.removeTags,
                   archive: request.archive,

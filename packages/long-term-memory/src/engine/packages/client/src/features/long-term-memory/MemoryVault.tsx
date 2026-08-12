@@ -443,6 +443,8 @@ export default function MemoryVault({
   const [recoverySuggestionId, setRecoverySuggestionId] = useState<string | null>(null);
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
   const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
+  const [bulkAvailabilityModes, setBulkAvailabilityModes] = useState<LtmMode[]>([]);
+  const [bulkAvailabilityTarget, setBulkAvailabilityTarget] = useState("");
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
   const deleteTriggerRef = useRef<HTMLElement | null>(null);
@@ -1152,7 +1154,7 @@ export default function MemoryVault({
   }
   async function runBatchForIds(
     ids: string[],
-    action: "status" | "modes" | "archive" | "delete",
+    action: "status" | "modes" | "availability" | "archive" | "delete",
     options?: { preserveSelection?: boolean },
   ) {
     if (!ids.length) return;
@@ -1197,11 +1199,32 @@ export default function MemoryVault({
     }
     setBusy(action);
     try {
+      const [availabilityKind, availabilityId] = bulkAvailabilityTarget.split(":", 2);
+      const addScope: Partial<LtmScope> | undefined =
+        !availabilityId
+          ? undefined
+          : availabilityKind === "chat"
+          ? { chatId: availabilityId, chatIds: [availabilityId!] }
+          : availabilityKind === "group"
+            ? { groupId: availabilityId }
+            : availabilityKind === "character"
+              ? { characterIds: [availabilityId!] }
+              : availabilityKind === "persona"
+                ? { personaId: availabilityId }
+                : undefined;
       const result = await request<LtmBulkNoteResult>("/notes/batch", "POST", {
         noteIds: ids,
         ...(action === "archive" ? { archive: "notes_only" } : {}),
         ...(action === "status" ? { status: bulkStatus } : {}),
         ...(action === "modes" ? { modes: bulkModes } : {}),
+        ...(action === "availability"
+          ? {
+              ...(addScope ? { addScope } : {}),
+              ...(bulkAvailabilityModes.length
+                ? { enableModes: bulkAvailabilityModes }
+                : {}),
+            }
+          : {}),
       });
       if (session !== editorSession.current) return;
       const unresolved = new Set([
@@ -1258,7 +1281,7 @@ export default function MemoryVault({
       if (session === editorSession.current) setBusy("");
     }
   }
-  async function batch(action: "status" | "modes" | "archive" | "delete") {
+  async function batch(action: "status" | "modes" | "availability" | "archive" | "delete") {
     await runBatchForIds([...checked], action);
   }
   const runNoteAction = async (
@@ -1841,6 +1864,48 @@ export default function MemoryVault({
             >
               {localizeUi("ui.longTermMemory.memoryvault.setModes")}
             </Button>
+            <fieldset className="flex flex-wrap items-center gap-2">
+              <legend className="sr-only">
+                {localizeUi("ui.longTermMemory.memoryvault.addAvailability")}
+              </legend>
+              <select
+                className={inputClass}
+                value={bulkAvailabilityTarget}
+                aria-label={localizeUi("ui.longTermMemory.memoryvault.addPlace")}
+                onChange={(event) => setBulkAvailabilityTarget(event.target.value)}
+              >
+                <option value="">
+                  {localizeUi("ui.longTermMemory.memoryvault.addPlace")}
+                </option>
+                {pickerTargets.map((target) => (
+                  <option key={`${target.kind}:${target.id}`} value={`${target.kind}:${target.id}`}>
+                    {target.label}
+                  </option>
+                ))}
+              </select>
+              {modes.map((mode) => (
+                <label key={`availability-${mode}`} className="flex min-h-8 items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={bulkAvailabilityModes.includes(mode)}
+                    onChange={() =>
+                      setBulkAvailabilityModes((current) =>
+                        current.includes(mode)
+                          ? current.filter((item) => item !== mode)
+                          : [...current, mode],
+                      )
+                    }
+                  />
+                  {modeLabel(mode)}
+                </label>
+              ))}
+              <Button
+                disabled={Boolean(busy) || (!bulkAvailabilityTarget && !bulkAvailabilityModes.length)}
+                onClick={() => void batch("availability")}
+              >
+                {localizeUi("ui.longTermMemory.memoryvault.addAvailability")}
+              </Button>
+            </fieldset>
             <Button
               disabled={Boolean(busy)}
               onClick={() => void batch("archive")}
