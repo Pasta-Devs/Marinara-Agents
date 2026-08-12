@@ -2418,6 +2418,11 @@ test.describe("package-owned Noodle interface", () => {
     await expect(bottomNav).toBeVisible();
     // The wordmark is the bottom bar's middle button now; there is no top header.
     const headerLogo = bottomNav.locator('img[src$="/noodle-klusek.png"]');
+    // The home timeline's own sticky bar stands in for the old header when a step
+    // needs to prove the reader landed back on the timeline.
+    const homeHeader = noodle.locator(
+      '[data-component="NoodleView.StickyHeader"]',
+    );
     await expect(headerLogo).toBeVisible();
     const bottomNavIconColors = await bottomNav
       .locator("svg:visible")
@@ -2589,7 +2594,7 @@ test.describe("package-owned Noodle interface", () => {
     await noodle
       .getByRole("button", { name: "Back to where you were", exact: true })
       .click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
 
     const timelineScroller = noodle.locator(
       '[data-component="NoodleView.TimelineScroller"]',
@@ -2603,7 +2608,7 @@ test.describe("package-owned Noodle interface", () => {
       await timelineScroller.evaluate((element) => element.scrollTop),
     ).toBeGreaterThan(0);
     await bottomNav.getByRole("button", { name: "Noodle home" }).click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
     await expect
       .poll(() => timelineScroller.evaluate((element) => element.scrollTop))
       .toBe(0);
@@ -2622,7 +2627,7 @@ test.describe("package-owned Noodle interface", () => {
     await noodle
       .getByRole("button", { name: "Back to Noodle timeline" })
       .click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
 
     await bottomNav
       .getByRole("button", { name: "Search", exact: true })
@@ -2639,7 +2644,7 @@ test.describe("package-owned Noodle interface", () => {
     await noodle
       .getByRole("button", { name: "Back to Noodle timeline" })
       .click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
 
     await bottomNav
       .getByRole("button", { name: "Search", exact: true })
@@ -2649,7 +2654,7 @@ test.describe("package-owned Noodle interface", () => {
       noodle.getByRole("heading", { name: "Search results" }),
     ).toBeVisible();
     await bottomNav.getByRole("button", { name: "Noodle home" }).click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
     await bottomNav
       .getByRole("button", { name: "Search", exact: true })
       .click();
@@ -2665,7 +2670,7 @@ test.describe("package-owned Noodle interface", () => {
     await noodle
       .getByRole("button", { name: "Back to Noodle timeline" })
       .click();
-    await expect(header).toBeVisible();
+    await expect(homeHeader).toBeVisible();
 
     expect(errors).toEqual([]);
   });
