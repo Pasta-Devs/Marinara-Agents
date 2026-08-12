@@ -101,6 +101,16 @@ async function main() {
   const { renderSectionContributions } = await import(
     `${source}/section-contributions.ts`
   );
+  const { extractNoteKeywords } = await import(`${source}/keyword-extract.ts`);
+  const {
+    getLtmActiveKeywords,
+    normalizeLtmKeywordIntent,
+  } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/keywords.ts"
+  );
+  const { validateLtmExplicitAvailability } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/scope.ts"
+  );
   const {
     exportLongTermMemoryData,
     replaceLongTermMemoryData,
@@ -455,6 +465,54 @@ async function main() {
     );
 
     const storage = new LongTermMemoryStorage(root);
+    assert.deepEqual(
+      normalizeLtmKeywordIntent({ keywords: ["Legacy keyword"] }),
+      {
+        keywords: [],
+        manualKeywords: ["Legacy keyword"],
+        suppressedKeywords: [],
+      },
+      "legacy keywords must remain editable after lazy migration",
+    );
+    assert.equal(
+      validateLtmExplicitAvailability({}, ["roleplay"]),
+      "Choose at least one place where this memory is available.",
+    );
+    assert.equal(
+      validateLtmExplicitAvailability({ chatId: "chat-a" }, []),
+      "Choose at least one chat mode.",
+    );
+    assert.equal(
+      validateLtmExplicitAvailability({ chatId: "chat-a" }, ["roleplay"]),
+      null,
+    );
+    const keywordIntent = await storage.createNote({
+      ...noteInput,
+      id: "world_keyword_intent",
+      keywords: ["Cobalt", "cobalt"],
+      sections: {
+        facts: { text: "Cobalt appears in this memory.", updatedAt: timestamp },
+      },
+    });
+    assert.deepEqual(keywordIntent.keywords, ["Cobalt"]);
+    assert.deepEqual(keywordIntent.manualKeywords, []);
+    const suppressedKeyword = await storage.updateNote(keywordIntent.id, {
+      manualKeywords: ["Manual", "manual"],
+      suppressedKeywords: ["cobalt"],
+    });
+    assert.deepEqual(getLtmActiveKeywords(suppressedKeyword), ["Manual"]);
+    assert.equal(
+      extractNoteKeywords(suppressedKeyword).some(
+        (keyword) => keyword.toLowerCase() === "cobalt",
+      ),
+      false,
+      "suppressed generated and text-derived keywords must stay out of recall indexing",
+    );
+    const restoredKeyword = await storage.updateNote(keywordIntent.id, {
+      manualKeywords: ["Manual", "Cobalt"],
+      suppressedKeywords: [],
+    });
+    assert.deepEqual(getLtmActiveKeywords(restoredKeyword), ["Cobalt", "Manual"]);
     const legacySource = await storage.createNote({
       id: "source_import_chat_legacy_draft",
       title: "Legacy draft source",

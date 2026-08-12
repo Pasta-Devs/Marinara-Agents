@@ -1,4 +1,5 @@
 import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { getLtmActiveKeywords, getLtmKeywordIntent, ltmKeywordKey } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 
 const TOKEN_PATTERN = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
 const SENTENCE_SPLIT_PATTERN = /[.!?\n\r]+/;
@@ -255,5 +256,10 @@ export function extractNoteKeywords(note: LtmNote) {
   const tfIdfKeywords = noteText
     ? extractKeywordsTfIdf(noteText, MAX_NOTE_KEYWORDS)
     : [];
-  return mergeKeywords(note.keywords, tfIdfKeywords, MAX_NOTE_KEYWORDS);
+  const suppressed = new Set(getLtmKeywordIntent(note).suppressed.map(ltmKeywordKey));
+  return mergeKeywords(
+    getLtmActiveKeywords(note),
+    tfIdfKeywords.filter((keyword) => !suppressed.has(ltmKeywordKey(keyword))),
+    MAX_NOTE_KEYWORDS,
+  );
 }

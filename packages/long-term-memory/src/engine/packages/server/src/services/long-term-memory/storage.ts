@@ -22,6 +22,7 @@ import {
   isGlobalLtmScope,
   matchesLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
+import { normalizeLtmKeywordIntent } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 import {
   DEFAULT_LTM_RETENTION_CONFIG,
 } from "./default-config.js";
@@ -287,6 +288,7 @@ export class LongTermMemoryStorage {
           );
     const note = ltmNoteSchema.parse({
       ...draft,
+      ...normalizeLtmKeywordIntent(draft),
       sections,
       createdAt: (draft as any).createdAt ?? timestamp,
       updatedAt: (draft as any).updatedAt ?? timestamp,
@@ -402,6 +404,7 @@ export class LongTermMemoryStorage {
       const next = ltmNoteSchema.parse({
         ...current,
         ...patch,
+        ...normalizeLtmKeywordIntent({ ...current, ...patch }),
         ...(sections ? { sections } : {}),
         id: current.id,
         type: current.type,

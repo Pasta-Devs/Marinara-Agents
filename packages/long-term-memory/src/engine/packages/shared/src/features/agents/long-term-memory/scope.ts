@@ -25,6 +25,19 @@ export function isGlobalLtmScope(scope: LtmScope | null | undefined): boolean {
   );
 }
 
+export function hasExplicitLtmAvailability(scope: LtmScope | null | undefined): boolean {
+  return !isGlobalLtmScope(scope);
+}
+
+export function validateLtmExplicitAvailability(
+  scope: LtmScope | null | undefined,
+  modes: readonly LtmMode[],
+) {
+  if (!hasExplicitLtmAvailability(scope)) return "Choose at least one place where this memory is available.";
+  if (modes.length === 0) return "Choose at least one chat mode.";
+  return null;
+}
+
 export function ltmScopesOverlap(
   noteScope: LtmScope | null | undefined,
   targetScope: LtmScope | null | undefined,
