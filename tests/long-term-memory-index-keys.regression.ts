@@ -110,6 +110,19 @@ async function main() {
     ),
     [...reservedKeys].sort((left, right) => left.localeCompare(right)),
   );
+  const bm25WithoutConstructor = {
+    ...parsedRecall.bm25,
+    terms: Object.fromEntries(
+      Object.entries(parsedRecall.bm25.terms).filter(
+        ([key]) => key !== "constructor",
+      ),
+    ),
+  };
+  assert.deepEqual(
+    searchLtmBm25(bm25WithoutConstructor, "constructor", { topK: 10 }),
+    [],
+    "BM25 must not read inherited constructor entries",
+  );
 
   assertOwnKeys(
     parsedRecall.keywords.byChunkId,
@@ -124,6 +137,21 @@ async function main() {
       topK: 10,
     }).map(({ chunkId }: { chunkId: string }) => chunkId),
     [...reservedKeys].sort((left, right) => left.localeCompare(right)),
+  );
+  const keywordsWithoutConstructor = {
+    ...parsedRecall.keywords,
+    byKeyword: Object.fromEntries(
+      Object.entries(parsedRecall.keywords.byKeyword).filter(
+        ([key]) => key !== "constructor",
+      ),
+    ),
+  };
+  assert.deepEqual(
+    searchLtmKeywordIndex(keywordsWithoutConstructor, "constructor", {
+      topK: 10,
+    }),
+    [],
+    "keyword search must not read inherited constructor entries",
   );
 
   assertOwnKeys(
@@ -141,6 +169,23 @@ async function main() {
       { topK: 10 },
     ).map(({ chunkId }: { chunkId: string }) => chunkId),
     ["__proto__", "constructor", "prototype"],
+  );
+  const metadataWithoutConstructor = {
+    ...parsedRecall.metadata,
+    byTag: Object.fromEntries(
+      Object.entries(parsedRecall.metadata.byTag).filter(
+        ([key]) => key !== "constructor",
+      ),
+    ),
+  };
+  assert.deepEqual(
+    getLtmMetadataMatches(
+      metadataWithoutConstructor,
+      { tags: ["constructor"] },
+      { topK: 10 },
+    ),
+    [],
+    "metadata search must not read inherited constructor entries",
   );
 
   const root = await mkdtemp(join(tmpdir(), "marinara-ltm-index-keys-"));

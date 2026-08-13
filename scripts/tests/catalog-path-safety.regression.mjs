@@ -31,6 +31,11 @@ for (const unsafePath of [
   "assets\\icon.png",
   "agents\0.json",
   "-T",
+  "assets/CON",
+  "assets/com1.txt",
+  "assets/file:stream",
+  "assets/name.",
+  "assets/name ",
 ]) {
   assert.throws(
     () => assertPortableRelativePath(unsafePath, "Fixture path"),
@@ -52,6 +57,9 @@ for (const unsafeComponent of [
   "agent name",
   "agent?name",
   "agent.",
+  "CON",
+  "nul.json",
+  "agent:stream",
 ]) {
   assert.throws(
     () => assertPortableFilenameComponent(unsafeComponent, "Fixture component"),

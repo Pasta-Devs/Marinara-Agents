@@ -404,7 +404,12 @@ for (const entry of catalog.packages) {
     manifest.id,
     `Package directory for ${manifest.id}`,
   );
-  const sourceManifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
+  const sourceManifestPath = await resolveContainedPortablePath(
+    packageRoot,
+    "manifest.json",
+    `Manifest for ${manifest.id}`,
+  );
+  const sourceManifest = JSON.parse(await readFile(sourceManifestPath, "utf8"));
   if (JSON.stringify(sourceManifest) !== JSON.stringify(manifest)) {
     throw new Error(`Catalog manifest does not match packages/${manifest.id}/manifest.json`);
   }

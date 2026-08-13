@@ -1,6 +1,20 @@
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
+const WINDOWS_RESERVED_COMPONENT =
+  /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu;
+
+function isUnsafePortableSegment(segment) {
+  return (
+    segment.length === 0 ||
+    segment === "." ||
+    segment === ".." ||
+    segment.includes(":") ||
+    /[. ]$/u.test(segment) ||
+    WINDOWS_RESERVED_COMPONENT.test(segment)
+  );
+}
+
 export function assertPortableRelativePath(value, label = "Path") {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${label} must be a non-empty relative path`);
@@ -13,8 +27,8 @@ export function assertPortableRelativePath(value, label = "Path") {
   if (value.startsWith("-")) throw new Error(`${label} must not look like a command-line option`);
 
   const segments = value.split("/");
-  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
-    throw new Error(`${label} must not contain empty or dot path segments`);
+  if (segments.some(isUnsafePortableSegment)) {
+    throw new Error(`${label} must not contain non-portable path segments`);
   }
   return value;
 }
