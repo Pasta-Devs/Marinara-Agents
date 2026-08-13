@@ -2070,6 +2070,15 @@ export const ltmRenameNoteSectionRequestSchema = z
     "Section keys must be different.",
   );
 
+export const ltmRenameNoteSectionPreviewResponseSchema = z
+  .object({
+    fromSectionKey: ltmSectionKeySchema,
+    toSectionKey: ltmSectionKeySchema,
+    rewrittenDraftCount: z.number().int().min(0),
+    rewrittenDraftIds: z.array(z.string().uuid()).max(10_000),
+  })
+  .strict();
+
 export const ltmRenameNoteSectionResponseSchema = z
   .object({
     note: ltmNoteSchema,
@@ -3138,6 +3147,9 @@ export type LtmNoteTransferApplyResponse = z.infer<
 >;
 export type LtmRenameNoteSectionRequest = z.infer<
   typeof ltmRenameNoteSectionRequestSchema
+>;
+export type LtmRenameNoteSectionPreviewResponse = z.infer<
+  typeof ltmRenameNoteSectionPreviewResponseSchema
 >;
 export type LtmRenameNoteSectionResponse = z.infer<
   typeof ltmRenameNoteSectionResponseSchema

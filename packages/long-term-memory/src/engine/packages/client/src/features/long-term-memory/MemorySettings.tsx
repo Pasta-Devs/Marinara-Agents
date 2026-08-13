@@ -270,6 +270,8 @@ export default function MemorySettings({
   props,
   onDirtyChange,
   onOpenMemory,
+  openActivityRequest,
+  onOpenActivityHandled,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const memorySettingsTitleId = useId();
@@ -316,6 +318,11 @@ export default function MemorySettings({
   const setMessage = (text: string, tone: "success" | "danger" = "success") =>
     setMessageState({ text, tone });
   const [activeTab, setActiveTab] = useState<SettingsTab>("recall");
+  useEffect(() => {
+    if (!openActivityRequest) return;
+    setActiveTab("debug");
+    onOpenActivityHandled?.();
+  }, [onOpenActivityHandled, openActivityRequest]);
   const [selectedActions, setSelectedActions] = useState<RepairAction[]>([]);
   const [identityPreview, setIdentityPreview] =
     useState<LtmIdentityRepairPreviewResponse | null>(null);

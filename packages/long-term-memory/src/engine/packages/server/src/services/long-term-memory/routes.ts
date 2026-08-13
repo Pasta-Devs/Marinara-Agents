@@ -39,6 +39,7 @@ import {
   ltmRepairRequestSchema,
   ltmRepairResponseSchema,
   ltmRenameNoteSectionRequestSchema,
+  ltmRenameNoteSectionPreviewResponseSchema,
   ltmRenameNoteSectionResponseSchema,
   ltmStatusResponseSchema,
   ltmScopeSchema,
@@ -1175,6 +1176,33 @@ export function createLongTermMemoryRoutes(runtime: {
         }
         const rebuild = await rebuildAfterMutation(true);
         return { note, rebuild };
+      },
+    );
+    app.post<{ Params: { id: string }; Body: unknown }>(
+      "/notes/:id/sections/rename-preview",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        const parsedId = ltmNoteIdSchema.safeParse(request.params.id);
+        const parsedBody = ltmRenameNoteSectionRequestSchema.safeParse(request.body);
+        if (!parsedId.success || !parsedBody.success) {
+          const result = routeError(
+            !parsedId.success ? parsedId.error : parsedBody.error,
+            "Invalid section rename.",
+          );
+          return reply.status(result.statusCode).send(result.body);
+        }
+        try {
+          return ltmRenameNoteSectionPreviewResponseSchema.parse(
+            await storage.previewNoteSectionRename(
+              parsedId.data,
+              parsedBody.data.fromSectionKey,
+              parsedBody.data.toSectionKey,
+            ),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not preview note section rename.");
+          return reply.status(result.statusCode).send(result.body);
+        }
       },
     );
     app.post<{ Params: { id: string }; Body: unknown }>(

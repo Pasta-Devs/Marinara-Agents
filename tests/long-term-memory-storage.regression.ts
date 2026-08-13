@@ -725,6 +725,17 @@ async function main() {
       Object.keys((await storage.getNote("world_legacy_target"))!.sections),
       Object.keys(beforeRename!.sections),
     );
+    const renamePreview = await storage.previewNoteSectionRename(
+      "world_legacy_target",
+      "facts",
+      "details",
+    );
+    assert.deepEqual(renamePreview, {
+      fromSectionKey: "facts",
+      toSectionKey: "details",
+      rewrittenDraftCount: 1,
+      rewrittenDraftIds: [pending.id],
+    });
     const renamedSection = await storage.renameNoteSection(
       "world_legacy_target",
       "facts",

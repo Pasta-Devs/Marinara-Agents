@@ -152,6 +152,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     source: SourceTab;
   } | null>(null);
   const [selectedSource, setSelectedSource] = useState<SourceTab>("chats");
+  const [openActivityRequest, setOpenActivityRequest] = useState(0);
   const [onboardingSource, setOnboardingSource] =
     useState<SourceTab>("chats");
   const Destination = destinations[destination];
@@ -337,6 +338,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     }
     setDestination("sources");
     return true;
+  };
+  const openActivity = async () => {
+    if (!(await confirmDestinationChange(destinationLabel("settings")))) return;
+    setDestinationDirty(false);
+    setOpenActivityRequest((value) => value + 1);
+    setDestination("settings");
   };
   const toggleActivation = async () => {
     if (!props.onEnabledForChatChange) return;
@@ -1833,6 +1840,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     onOpenSources={openSources}
                     onOpenVault={() => void selectDestination("vault")}
                     onOpenReview={openReview}
+                    onOpenActivity={destination === "vault" ? () => void openActivity() : undefined}
+                    openActivityRequest={openActivityRequest}
+                    onOpenActivityHandled={() => setOpenActivityRequest(0)}
                     onRecoverCandidate={recoverCandidate}
                     openedNoteId={openedNoteId}
                     createMemoryRequest={createMemoryRequest}

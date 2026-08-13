@@ -551,6 +551,19 @@ async function main() {
       payload: { title: "Corrected legacy title" },
     });
     assert.equal(legacyCorrection.statusCode, 200, legacyCorrection.body);
+    const renamePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/world_route_fixture/sections/rename-preview",
+      headers,
+      payload: { fromSectionKey: "facts", toSectionKey: "details" },
+    });
+    assert.equal(renamePreview.statusCode, 200, renamePreview.body);
+    assert.deepEqual(renamePreview.json(), {
+      fromSectionKey: "facts",
+      toSectionKey: "details",
+      rewrittenDraftCount: 0,
+      rewrittenDraftIds: [],
+    });
     const renamed = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",

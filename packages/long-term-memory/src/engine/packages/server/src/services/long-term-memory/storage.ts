@@ -1032,39 +1032,12 @@ export class LongTermMemoryStorage {
         updatedAt: timestamp,
         version: current.version + 1,
       });
-      const draftFiles: Array<{ path: string; before: unknown; after: unknown }> = [];
-      const drafts = getLongTermMemoryDirectories(this.root).drafts;
-      for (const entry of await readdir(drafts, { withFileTypes: true })) {
-        if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-        const path = safeJoin(drafts, entry.name);
-        const before = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-        const parsed = ltmExtractionDraftSchema.safeParse(before);
-        if (!parsed.success || parsed.data.status !== "pending") continue;
-        const mutations = parsed.data.mutations.map((mutation) =>
-          rewriteDraftMutationSectionKey(mutation, noteId, from, to),
-        );
-        if (JSON.stringify(mutations) === JSON.stringify(parsed.data.mutations)) continue;
-        draftFiles.push({
-          path,
-          before,
-          after: ltmExtractionDraftSchema.parse({
-            ...parsed.data,
-            mutations,
-            updatedAt: timestamp,
-          }),
-        });
-      }
-      const rejectedFile = await rewriteRejectedSuggestions(this.root, (suggestion) => {
-        const recovery = suggestion.candidate.recovery;
-        return recovery?.noteId === noteId && recovery.sectionKey === from
-          ? { ...suggestion, candidate: { ...suggestion.candidate, recovery: { ...recovery, sectionKey: to } } }
-          : suggestion;
-      });
+      const plan = await this.sectionRenamePlan(noteId, from, to, timestamp);
       await commitLtmMutation(this.root, {
         files: [
           { path: notePathForId(noteId, current.type, this.root), before: current, after: renamed },
-          ...draftFiles,
-          ...(rejectedFile ? [rejectedFile] : []),
+          ...plan.draftFiles,
+          ...(plan.rejectedFile ? [plan.rejectedFile] : []),
         ],
         events: [ltmEventSchema.parse({
           id: randomUUID(),
@@ -1074,8 +1047,63 @@ export class LongTermMemoryStorage {
           payload: { note: renamed, fromSectionKey: from, toSectionKey: to },
         })],
       });
-      return { note: renamed, rewrittenDraftCount: draftFiles.length };
+      return { note: renamed, rewrittenDraftCount: plan.draftFiles.length };
     });
+  }
+  async previewNoteSectionRename(id: string, fromSectionKey: string, toSectionKey: string) {
+    await this.initializeLtmStore();
+    const noteId = ltmNoteIdSchema.parse(id);
+    const from = ltmSectionKeySchema.parse(fromSectionKey);
+    const to = ltmSectionKeySchema.parse(toSectionKey);
+    if (from === to)
+      throw new LtmServiceError("Section keys must be different.", 400, "ltm_section_key_unchanged");
+    const current = await this.getNote(noteId);
+    if (!current)
+      throw new LtmServiceError(`Long-term memory note not found: ${noteId}`, 404, "ltm_note_not_found");
+    if (current.type === "source")
+      throw new LtmServiceError("Imported source sections cannot be renamed.", 400, "ltm_source_section_immutable");
+    if (!Object.hasOwn(current.sections, from))
+      throw new LtmServiceError(`Long-term memory section not found: ${from}`, 404, "ltm_section_not_found");
+    if (Object.hasOwn(current.sections, to))
+      throw new LtmServiceError(`Long-term memory section already exists: ${to}`, 409, "ltm_section_already_exists");
+    const plan = await this.sectionRenamePlan(noteId, from, to, nowIso());
+    return {
+      fromSectionKey: from,
+      toSectionKey: to,
+      rewrittenDraftCount: plan.draftFiles.length,
+      rewrittenDraftIds: plan.draftFiles.map((file) => ltmExtractionDraftSchema.parse(file.before).id),
+    };
+  }
+  private async sectionRenamePlan(noteId: string, from: string, to: string, timestamp: string) {
+    const draftFiles: Array<{ path: string; before: unknown; after: unknown }> = [];
+    const drafts = getLongTermMemoryDirectories(this.root).drafts;
+    for (const entry of await readdir(drafts, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      const path = safeJoin(drafts, entry.name);
+      const before = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+      const parsed = ltmExtractionDraftSchema.safeParse(before);
+      if (!parsed.success || parsed.data.status !== "pending") continue;
+      const mutations = parsed.data.mutations.map((mutation) =>
+        rewriteDraftMutationSectionKey(mutation, noteId, from, to),
+      );
+      if (JSON.stringify(mutations) === JSON.stringify(parsed.data.mutations)) continue;
+      draftFiles.push({
+        path,
+        before,
+        after: ltmExtractionDraftSchema.parse({
+          ...parsed.data,
+          mutations,
+          updatedAt: timestamp,
+        }),
+      });
+    }
+    const rejectedFile = await rewriteRejectedSuggestions(this.root, (suggestion) => {
+      const recovery = suggestion.candidate.recovery;
+      return recovery?.noteId === noteId && recovery.sectionKey === from
+        ? { ...suggestion, candidate: { ...suggestion.candidate, recovery: { ...recovery, sectionKey: to } } }
+        : suggestion;
+    });
+    return { draftFiles, rejectedFile };
   }
   async archiveSourceNoteWithDerived(id: string) {
     return withLtmVaultLock(this.root, async () => {
