@@ -53,7 +53,13 @@ export function resolveNoodlerFanActivityPolicy(
 export interface NoodlerFanCreatorCandidate {
   creator: NoodleAccount;
   policy: ResolvedNoodlerFanActivityPolicy;
-  posts: Array<{ id: string; creatorAccountId: string; title: string | null; content: string; access: "public" }>;
+  posts: Array<{
+    id: string;
+    creatorAccountId: string;
+    title: string | null;
+    content: string;
+    access: "public" | "locked";
+  }>;
   identities: NoodlerFanIdentity[];
 }
 
@@ -121,7 +127,8 @@ function buildFanActivityMessages(input: {
   settings: NoodleSettings;
 }): ChatMessage[] {
   const system = [
-    "Propose quiet synthetic audience activity for the supplied public NoodleR posts.",
+    "Propose quiet synthetic audience activity for the supplied NoodleR posts.",
+    "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
     "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
     "Return JSON only with an activities array.",
@@ -139,11 +146,14 @@ function buildFanActivityMessages(input: {
     actorHandles: weightedIdentitySequence(candidate.identities, candidate.policy.archetypeWeights).map(
       ({ identity, weight }) => ({ handle: identity.snapshot.handle, weight }),
     ),
-    posts: candidate.posts.map(({ id, title, content }) => ({ id, title, content })),
+    // Locked bodies stay out of the prompt: a fan reply must not restate paid content.
+    posts: candidate.posts.map(({ id, title, content, access }) =>
+      access === "locked" ? { id, title, access } : { id, title, content, access },
+    ),
   }));
   return [
     { role: "system", content: system },
-    { role: "user", content: `# Public NoodleR audience data\n${JSON.stringify({ creators }, null, 2)}` },
+    { role: "user", content: `# NoodleR audience data\n${JSON.stringify({ creators }, null, 2)}` },
   ];
 }
 
@@ -246,14 +256,13 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
     const policy = resolveNoodlerFanActivityPolicy(input.settings, creator);
     if (!policy.enabled) return [];
     const posts = (postsByCreator.get(creator.id) ?? [])
-      .filter((post) => post.access === "public")
       .slice(0, MAX_FAN_POSTS_PER_CREATOR)
       .map((post) => ({
         id: post.id,
         creatorAccountId: creator.id,
         title: post.title,
         content: post.content,
-        access: "public" as const,
+        access: post.access,
       }));
     const identities = provider.resolve(policy.archetypeWeights);
     return posts.length > 0 && identities.length > 0 ? [{ creator, policy, posts, identities }] : [];

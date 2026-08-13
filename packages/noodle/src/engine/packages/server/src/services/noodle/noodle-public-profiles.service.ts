@@ -1,5 +1,9 @@
 import { basename } from "path";
-import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
+import {
+  type APIProvider,
+  type NoodleAccount,
+  type NoodleIdentityDisclosure,
+} from "@marinara-engine/shared";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./noodle-sampling-options.js";
@@ -37,7 +41,7 @@ function shuffle<T>(items: T[]): T[] {
   return next;
 }
 
-async function pickRandomCharacterBannerUrl(
+export async function pickRandomCharacterBannerUrl(
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>,
   characterId: string,
 ) {
@@ -46,6 +50,33 @@ async function pickRandomCharacterBannerUrl(
   if (!image) return null;
   const filename = basename(image.filePath.replace(/\\/g, "/"));
   return `/api/characters/${encodeURIComponent(characterId)}/gallery/file/${encodeURIComponent(filename)}`;
+}
+
+
+/**
+ * Artwork a new NoodleR creator starts with. A secret creator gets none: its whole point is that
+ * nothing ties it to the source. Open and hinted creators inherit the source's face and a random
+ * gallery image as the banner, because a hinted creator is meant to be recognizable.
+ */
+export async function resolveNoodlerCreatorArtwork(input: {
+  characters: ReturnType<typeof createCharactersStorage>;
+  characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
+  publicAccount: Pick<NoodleAccount, "kind" | "entityId" | "avatarUrl">;
+  disclosureMode: NoodleIdentityDisclosure;
+}): Promise<{ avatarUrl: string | null; bannerUrl: string | null }> {
+  if (input.disclosureMode === "secret") return { avatarUrl: null, bannerUrl: null };
+  if (input.publicAccount.kind !== "character") {
+    return { avatarUrl: input.publicAccount.avatarUrl ?? null, bannerUrl: null };
+  }
+  const row = await input.characters.getById(input.publicAccount.entityId);
+  return {
+    // The Noodle account rarely carries its own avatar, so the character row is the real source.
+    avatarUrl: input.publicAccount.avatarUrl ?? row?.avatarPath ?? null,
+    bannerUrl: await pickRandomCharacterBannerUrl(
+      input.characterGallery,
+      input.publicAccount.entityId,
+    ),
+  };
 }
 
 function profileSetupMaxTokens(characterCount: number) {

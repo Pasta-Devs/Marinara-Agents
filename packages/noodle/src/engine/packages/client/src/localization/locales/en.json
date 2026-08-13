@@ -757,7 +757,7 @@
   "ui.noodle.noodlerfanactivity.dailyUsage": "Audience runs today: {{used}} / {{limit}}",
   "ui.noodle.noodlerfanactivity.enabled": "Synthetic audience activity",
   "ui.noodle.noodlerfanactivity.failed": "Could not run audience activity.",
-  "ui.noodle.noodlerfanactivity.help": "Let a small audience react to public NoodleR posts. Locked posts are excluded.",
+  "ui.noodle.noodlerfanactivity.help": "Let a small audience react to NoodleR posts, locked ones included. Fans only see the title of a locked post, and their replies stay hidden until you unlock it.",
   "ui.noodle.noodlerfanactivity.inherit": "Use global defaults",
   "ui.noodle.noodlerfanactivity.lastRun": "Last audience run: {{status}}",
   "ui.noodle.noodlerfanactivity.likes": "Likes per refresh",

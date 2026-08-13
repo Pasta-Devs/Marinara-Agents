@@ -146,4 +146,28 @@ assert.match(generationPrivacy, /source\.scenario/u);
 assert.match(generationPrivacy, /source\.appearance/u);
 assert.match(generationPrivacy, /source\.backstory/u);
 
+// Hinted is an open secret, not a near-secret: the posts tease the other life, the images keep
+// the same appearance, and only the name and handle stay protected.
+assert.match(generationPrivacy, /Disclosure is hinted\. The creator's other public life is an open secret\./u);
+assert.match(generationPrivacy, /Never confirm a guess/u);
+assert.match(generationPrivacy, /mode === "hinted" \? "you-know-who" : "someone"/u);
+
+const imagesPrivacy = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-images.service.ts",
+  "utf8",
+);
+assert.match(imagesPrivacy, /input\.disclosureMode !== "secret" &&\s+input\.linkedPublicAccount\?\.kind === "character"/u);
+
+const draftPrivacy = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-stage-profile-draft.service.ts",
+  "utf8",
+);
+assert.match(draftPrivacy, /# Open-secret inspiration brief/u);
+assert.match(draftPrivacy, /noodlerHintedSourceText\(input\.source\?\.data\)/u);
+// The hinted brief still withholds the canonical story beats.
+assert.doesNotMatch(
+  draftPrivacy.slice(draftPrivacy.indexOf("export function noodlerHintedSourceText"), draftPrivacy.indexOf("export function noodlerSourceText")),
+  /scenario|backstory|source\.name/u,
+);
+
 console.log("NoodleR disclosure contract regressions passed.");

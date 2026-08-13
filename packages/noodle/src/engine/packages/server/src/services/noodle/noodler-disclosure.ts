@@ -18,6 +18,7 @@ const AUDIENCE_FIELDS = [
   "bio",
   "avatarUrl",
   "avatarCrop",
+  "bannerUrl",
   "disclosureMode",
   "stagePersonality",
   "autoPosting",

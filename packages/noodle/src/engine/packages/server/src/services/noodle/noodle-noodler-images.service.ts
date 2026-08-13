@@ -101,11 +101,12 @@ export async function generateNoodlerPostImage(input: {
   let characterImageInstructions = "";
   let characterPersonality = "";
   let referenceImages: string[] | undefined;
-  // Identity protection applies to reference selection: only an OPEN disclosure may draw
-  // on the linked public identity's appearance. Hinted/secret creators get no identifying
-  // reference material.
+  // Identity protection applies to reference selection. A SECRET creator gets no identifying
+  // reference material at all. A HINTED creator does: the whole point of a hinted disclosure is
+  // that the same body, tattoos, and rooms keep showing up while the name never does, so the
+  // appearance carries over and only the textual identity stays protected.
   const referenceCharacter =
-    input.disclosureMode === "open" &&
+    input.disclosureMode !== "secret" &&
     input.linkedPublicAccount?.kind === "character"
       ? input.linkedPublicAccount
       : null;

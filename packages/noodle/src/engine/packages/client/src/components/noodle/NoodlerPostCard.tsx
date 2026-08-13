@@ -34,6 +34,7 @@ import {
 import { cn } from "../../lib/utils";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
+import { useNoodlerMediaSrc } from "../../hooks/use-noodler-media-src";
 import { Modal } from "../ui/Modal";
 import { Avatar, ProfileInitial } from "./NoodleShell";
 import { formatTime } from "./NoodleDateTime";
@@ -109,8 +110,9 @@ export function LockedNoodlerPostCard({
   const revealed = Boolean(demo && demoUnlocked);
   // A locked post's URL resolves to a server-blurred teaser, not the original bytes. Where no
   // teaser can be built the server sends nothing and only the frame renders.
-  const mediaSrc =
-    (revealed && demo?.unlockedImageUrl) || post.imageUrl || null;
+  const mediaSrc = useNoodlerMediaSrc(
+    (revealed && demo?.unlockedImageUrl) || post.imageUrl || null,
+  );
   // No teaser could be built (the route 404s), so drop the broken <img> and keep the frame.
   const [failedMediaSrc, setFailedMediaSrc] = useState<string | null>(null);
   const shownMediaSrc =
@@ -437,7 +439,7 @@ export function NoodlerPostCard({
   const disableReplyImage = !media;
   const setImageLightbox: React.Dispatch<
     React.SetStateAction<ChatImage | null>
-  > = media?.setImageLightbox ?? (() => {});
+  > = ctx.setImageLightbox ?? media?.setImageLightbox ?? (() => {});
   const replyImageUrl = media?.replyImageUrl ?? "";
   const setReplyImageUrl: React.Dispatch<React.SetStateAction<string>> =
     media?.setReplyImageUrl ?? (() => {});
@@ -483,9 +485,10 @@ export function NoodlerPostCard({
     Boolean(ctx.postManagement) && editingPostId === post.id;
   const imageCrop = readNoodlePostImageCrop(post.metadata);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const postImageSrc = useNoodlerMediaSrc(post.imageUrl);
   const displayedImageUrl =
-    post.imageUrl && post.imageUrl !== failedImageUrl ? post.imageUrl : null;
-  const editablePost = displayedImageUrl === post.imageUrl ? post : { ...post, imageUrl: null };
+    postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
+  const editablePost = post.imageUrl && displayedImageUrl ? post : { ...post, imageUrl: null };
   const postInteractions = post.interactions;
   const rootPostInteractions = postInteractions.filter(
     (interaction) => !interaction.parentInteractionId,

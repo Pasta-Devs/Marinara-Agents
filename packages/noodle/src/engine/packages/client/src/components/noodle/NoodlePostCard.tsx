@@ -1369,6 +1369,11 @@ export interface NoodlePostCardCtx {
   imageEditing?: NoodlePostCardImageEditingCap;
   /** Reply image/upload capability. Absent → the card hides all reply-image affordances. */
   media?: NoodlePostCardMediaCap;
+  /**
+   * Opening an image fullscreen is not the same capability as attaching one to a reply, so
+   * hosts without the reply-image cap (NoodleR) still get a lightbox by passing this.
+   */
+  setImageLightbox?: React.Dispatch<React.SetStateAction<ChatImage | null>>;
   /** Reply edit/delete capability. Absent → reply management UI stays hidden. */
   replyManagement?: NoodlePostCardReplyManagementCap;
   /** @mention autocomplete capability. Absent → no mention suggestions. */
@@ -1542,6 +1547,7 @@ export function useNoodlePostCardController(
   options: NoodlePostCardControllerOptions,
 ) {
   const [postMenuId, setPostMenuId] = useState<string | null>(null);
+  const [imageLightbox, setImageLightbox] = useState<ChatImage | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingPostContent, setEditingPostContent] = useState("");
   const [editingPostTitle, setEditingPostTitle] = useState("");
@@ -1654,6 +1660,7 @@ export function useNoodlePostCardController(
   };
 
   const ctx: NoodlePostCardCtx = {
+    setImageLightbox,
     personaAccount: options.personaAccount,
     postManagement: options.postManagement,
     postMenuId,
@@ -1706,7 +1713,7 @@ export function useNoodlePostCardController(
     },
     allowPollOnlyEdits: options.allowPollOnlyEdits,
   };
-  return { ctx, reset };
+  return { ctx, reset, imageLightbox, setImageLightbox };
 }
 
 export function NoodlePostCard({
@@ -1791,7 +1798,7 @@ export function NoodlePostCard({
   const disableReplyImage = !media;
   const setImageLightbox: React.Dispatch<
     React.SetStateAction<ChatImage | null>
-  > = media?.setImageLightbox ?? (() => {});
+  > = ctx.setImageLightbox ?? media?.setImageLightbox ?? (() => {});
   const replyImageUrl = media?.replyImageUrl ?? "";
   const setReplyImageUrl: React.Dispatch<React.SetStateAction<string>> =
     media?.setReplyImageUrl ?? (() => {});

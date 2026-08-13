@@ -31,12 +31,29 @@ import {
 } from "./noodle-noodler-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./noodle-noodler-source-resolve.js";
 import { hintedNoodlerSourceBrief } from "./noodle-prompt-safety.js";
+import { normalizeNoodlerStageProfileDraft } from "./noodler-stage-profile-normalize.js";
 import { parseRecord } from "./noodle-public-support.js";
 import { createNoodlerSourceRevisionToken } from "./noodle-source-revision.js";
 
 type GenerationConnection = NonNullable<
   Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
 >;
+
+/**
+ * Hinted drafts see look, temperament, and everyday texture — the material a follower would
+ * recognize — but not the name or the canonical story beats (scenario, backstory).
+ */
+export function noodlerHintedSourceText(data: unknown): string {
+  const source = parseRecord(data);
+  const extensions = parseRecord(source.extensions);
+  return [
+    `Description: ${typeof source.description === "string" ? source.description : ""}`,
+    `Personality: ${typeof source.personality === "string" ? source.personality : ""}`,
+    `Appearance: ${typeof source.appearance === "string" ? source.appearance : typeof extensions.appearance === "string" ? extensions.appearance : ""}`,
+  ]
+    .filter((line) => line.split(": ").slice(1).join(": ").trim())
+    .join("\n");
+}
 
 export function noodlerSourceText(data: unknown): string {
   const source = parseRecord(data);
@@ -60,7 +77,7 @@ function disclosureRules(
   if (mode === "open")
     return `The public identity ${publicIdentity.displayName} (@${publicIdentity.handle}) may inspire and appear in the draft.`;
   if (mode === "hinted")
-    return "Create an inspired alter ego. Broad personality, interests, and themes may carry over, but never use the exact public name or handle, or copy canonical biography sentences.";
+    return "Create the same person behind a stage name, as an open secret. Looks, voice, interests, and daily life carry over so a regular follower recognizes them, but never use the exact public name or handle, and never copy canonical biography sentences.";
   return "Create a separate persona. Treat the source only as confidential authoring inspiration. Do not use the public name, handle, canonical occupation, relationships, locations, signature phrases, or distinctive identifying details.";
 }
 
@@ -107,10 +124,11 @@ export function buildNoodlerStageProfileDraftMessages(input: {
         ].join("\n")
       : hintedBrief
         ? [
-            "# Non-identifying inspiration brief",
-            "Use only broad temperament, creative interests, and non-identifying aesthetic direction.",
-            "# Allowlisted source themes",
-            hintedNoodlerSourceBrief(input.sourceSnapshot),
+            "# Open-secret inspiration brief",
+            "The stage identity is the same person as the source. Carry over look, vibe, interests, and daily life so a regular follower can recognize them.",
+            "Never use the source name or handle, and never copy four or more consecutive words from the text below. Rewrite everything in the stage voice.",
+            noodlerHintedSourceText(input.source?.data) ||
+              hintedNoodlerSourceBrief(input.sourceSnapshot),
           ].join("\n")
         : [
             "# Source character or persona",
@@ -164,16 +182,7 @@ const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
   .strip();
 
 export function parseNoodlerStageProfileDraft(content: string) {
-  const parsed = parseGameJsonish(content);
-  const candidate =
-    Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
-  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-    return noodlerStageProfileDraftSchema.parse(candidate);
-  }
-  const normalized = { ...(candidate as Record<string, unknown>) };
-  if (typeof normalized.handle === "string") {
-    normalized.handle = normalized.handle.replace(/^@+/, "");
-  }
+  const normalized = normalizeNoodlerStageProfileDraft(parseGameJsonish(content));
   return noodlerStageProfileDraftSchema.parse(normalized);
 }
 
@@ -280,8 +289,39 @@ export async function generateNoodlerStageProfileDraft(
       "noodler_profile",
     ),
   });
+  let parsedDraft: ReturnType<typeof parseNoodlerStageProfileDraft>;
+  try {
+    parsedDraft = parseNoodlerStageProfileDraft(response.content ?? "");
+  } catch {
+    // One retry with the field names spelled out. Without it a single malformed answer fails
+    // the creator outright, which is what the wizard reported as "creation failed".
+    const retry = await provider.chatComplete(
+      [
+        ...messages,
+        { role: "assistant", content: response.content ?? "" },
+        {
+          role: "user",
+          content:
+            "That was not a valid stage profile object. Return exactly one JSON object with the keys displayName, handle, bio, and stagePersonality, all strings. No other keys, no prose.",
+        },
+      ],
+      {
+        model: input.connection.model,
+        maxTokens: clampGenerationMaxOutputTokens({
+          provider: input.connection.provider as APIProvider,
+          model: input.connection.model,
+          maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 1200),
+          maxTokensOverride: input.connection.maxTokensOverride,
+        }),
+        stream: false,
+        debugMode,
+        responseFormat: noodleResponseFormat(input.connection.model, "noodler_profile"),
+      },
+    );
+    parsedDraft = parseNoodlerStageProfileDraft(retry.content ?? "");
+  }
   const draft = {
-    ...parseNoodlerStageProfileDraft(response.content ?? ""),
+    ...parsedDraft,
     disclosureMode: input.request.disclosureMode,
   };
   if (stageProfileContainsPublicIdentity(draft, identity)) {
