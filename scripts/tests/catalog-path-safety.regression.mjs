@@ -71,6 +71,7 @@ for (const unsafeComponent of [
 assert.throws(() => packageArtifactName("../agent", "1.0.0"), /Package id must/u);
 assert.throws(() => packageArtifactName("agent", "../../payload"), /Package agent version must/u);
 assert.throws(() => packageArtifactName("agent", "latest"), /must be a semantic version/u);
+assert.throws(() => packageArtifactName("agent", "1.2.3-rc..1"), /must be a semantic version/u);
 
 let packageRoot = null;
 let outsideRoot = null;

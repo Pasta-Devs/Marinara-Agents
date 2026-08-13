@@ -114,7 +114,7 @@ export function assertPortableFilenameComponent(value, label = "Filename compone
 export function packageArtifactName(packageId, version) {
   const safeId = assertPortableFilenameComponent(packageId, "Package id");
   const safeVersion = assertPortableFilenameComponent(version, `Package ${safeId} version`);
-  if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/u.test(safeVersion)) {
+  if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(safeVersion)) {
     throw new Error(`Package ${safeId} version must be a semantic version`);
   }
   return `${safeId}-${safeVersion}.zip`;
